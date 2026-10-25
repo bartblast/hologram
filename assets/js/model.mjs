@@ -206,6 +206,15 @@ export default class Model {
     ]);
   }
 
+  // The type a chain of to-one relationships leads to from the given type - what a path's last
+  // name is an attribute of.
+  static pathTarget(type, relationshipNames) {
+    return relationshipNames.reduce(
+      (current, name) => Model.relationships(current)[name].type,
+      type,
+    );
+  }
+
   static relationships(type) {
     return Model.entry(type).relationships;
   }

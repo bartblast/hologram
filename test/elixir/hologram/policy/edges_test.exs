@@ -6,6 +6,9 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module17
+  alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
@@ -35,6 +38,43 @@ defmodule Hologram.Policy.EdgesTest do
                {Policy.Module1, :update} => [
                  {:attributes, [:priority]},
                  {:own_grants, [:editor, :owner]}
+               ]
+             }
+    end
+
+    test "derives the edges a path in a condition reads" do
+      defmodule PathFixture1 do
+        use Hologram.Entity
+
+        relationship :b, Module3
+
+        allow :read, when: b.c_id == nil
+      end
+
+      assert derive([PathFixture1]) == %{
+               {PathFixture1, :read} => [
+                 {:attributes, [:b_id]},
+                 {:relationship_attributes, [:b], Module3, [:c_id]}
+               ]
+             }
+    end
+
+    # Each reference field the path is followed through is an edge of its own, so a related row
+    # moving to another one re-evaluates what leans on it.
+    test "derives the edges of a path through two relationships" do
+      defmodule PathFixture2 do
+        use Hologram.Entity
+
+        relationship :d, Module3
+
+        allow :read, when: d.b.a == true
+      end
+
+      assert derive([PathFixture2]) == %{
+               {PathFixture2, :read} => [
+                 {:attributes, [:d_id]},
+                 {:relationship_attributes, [:d], Module3, [:b_id]},
+                 {:relationship_attributes, [:d, :b], Module2, [:a]}
                ]
              }
     end
@@ -123,6 +163,44 @@ defmodule Hologram.Policy.EdgesTest do
                  {:attributes, [:parent_id]},
                  {:relationship_attributes, [:parent], Policy.Module10, [:archived]},
                  {:relationship_grants, [:parent], Policy.Module10, [:editor]}
+               ]
+             }
+    end
+
+    # Every reference field a path is followed through is read, a condition's attribute where the
+    # path ends, and a delegation's target edges are lifted under the whole path.
+    test "derives the edges of a condition, a delegation and a grant reference through a path" do
+      assert derive([Policy.Module12]) == %{
+               {Policy.Module12, :archive} => [
+                 {:attributes, [:link_id]},
+                 {:relationship_attributes, [:link], Module17, [:priority]}
+               ],
+               {Policy.Module12, :delete} => [
+                 {:attributes, [:level, :parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:priority]}
+               ],
+               {Policy.Module12, :publish} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent, :parent], Policy.Module2,
+                  [:public]}
+               ],
+               {Policy.Module12, :read} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:public]}
+               ],
+               {Policy.Module12, :triage} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:created_at]}
+               ],
+               {Policy.Module12, :update} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_grants, [:parent, :parent], Policy.Module1, [:viewer]}
                ]
              }
     end

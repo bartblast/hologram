@@ -22,6 +22,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Entity.Model
   alias Hologram.Job
   alias Hologram.Policy
+  alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Query.Registry
   alias Hologram.Query.Stage
@@ -3547,12 +3548,16 @@ defmodule Hologram.Compiler do
 
   # The types a client checking permissions can be asked about: those declaring a rule, and those
   # declaring a role, since a role check validates and expands the role from the type's own
-  # declarations. RoleGrant's policy is framework-supplied rather than declared, so its empty
-  # __policies__ does not exclude it - it joins by name beside this set.
+  # declarations - and every type those rules read rows of through relationships. RoleGrant's
+  # policy is framework-supplied rather than declared, so its empty __policies__ does not exclude
+  # it - it joins by name beside this set.
   defp checked_entity_types(all_entity_types) do
-    all_entity_types
-    |> Enum.filter(&(&1.__policies__() != [] or &1.__roles__() != []))
-    |> MapSet.new()
+    checked_types =
+      all_entity_types
+      |> Enum.filter(&(&1.__policies__() != [] or &1.__roles__() != []))
+      |> MapSet.new()
+
+    MapSet.union(checked_types, related_checked_entity_types(checked_types))
   end
 
   # Read gives nil: not an Elixir module.
@@ -3596,6 +3601,22 @@ defmodule Hologram.Compiler do
     metafile_path
     |> File.read!()
     |> JSON.decode!()
+  end
+
+  # The types a checked rule reads rows of through relationships - a path in a condition, the chain
+  # of a delegation or of a grant reference - whose model a client needs to follow them, whether or
+  # not they declare a rule or a role of their own. The dependency edges name every one.
+  defp related_checked_entity_types(checked_types) do
+    checked_types
+    |> Enum.to_list()
+    |> Edges.derive()
+    |> Enum.flat_map(fn {_key, edges} -> edges end)
+    |> Enum.flat_map(fn
+      {:relationship_attributes, _chain, entity_type, _names} -> [entity_type]
+      {:relationship_grants, _chain, entity_type, _role_names} -> [entity_type]
+      _edge -> []
+    end)
+    |> MapSet.new()
   end
 
   # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states. A
@@ -3995,10 +4016,7 @@ defmodule Hologram.Compiler do
   end
 
   defp render_policy_clause(entity_type, {name, operator, value}) do
-    name_js =
-      name
-      |> Atom.to_string()
-      |> Jason.encode!()
+    name_js = render_policy_name(name)
 
     operator_js =
       operator
@@ -4014,15 +4032,10 @@ defmodule Hologram.Compiler do
     render_json_object([{"actor", "true"}])
   end
 
-  # Another attribute of the row, named rather than carried: the client reads it off the row at
-  # evaluation, the way the query kernel reads an attribute operand.
+  # Another attribute of the row, or of the row a path leads to, named rather than carried: the
+  # client reads it at evaluation, the way the query kernel reads an attribute operand.
   defp render_policy_value(_entity_type, _name, {:attribute, other}) do
-    other_js =
-      other
-      |> Atom.to_string()
-      |> Jason.encode!()
-
-    render_json_object([{"attribute", other_js}])
+    render_json_object([{"attribute", render_policy_name(other)}])
   end
 
   defp render_policy_value(entity_type, name, values) when is_list(values) do
@@ -4055,17 +4068,12 @@ defmodule Hologram.Compiler do
     render_policy_reference_entry("global", [render_policy_roles(role_modules)])
   end
 
-  defp render_policy_reference(entity_type, {:rel, relationship_name, role_names}) do
-    name_js =
-      relationship_name
-      |> Atom.to_string()
-      |> Jason.encode!()
-
-    {_name, target_type, _opts} =
-      List.keyfind(entity_type.__relationships__(), relationship_name, 0)
+  # The chain a role is held through, spelled the way a delegation spells its chain.
+  defp render_policy_reference(entity_type, {:rel, relationship_names, role_names}) do
+    target_type = Entity.path_target(entity_type, relationship_names)
 
     render_policy_reference_entry("rel", [
-      name_js,
+      render_policy_name(relationship_names),
       render_entity_type_label(target_type),
       render_policy_roles(role_names)
     ])
@@ -4097,8 +4105,27 @@ defmodule Hologram.Compiler do
   # Operation first, as the server's tuple holds it - the array shape grant references bake as.
   defp render_policy_delegation(nil), do: "null"
 
-  defp render_policy_delegation({operation, relationship_name}) do
-    Jason.encode!([Policy.operation_key(operation), Atom.to_string(relationship_name)])
+  defp render_policy_delegation({operation, relationship_names}) do
+    operation_js =
+      operation
+      |> Policy.operation_key()
+      |> Jason.encode!()
+
+    "[#{operation_js},#{render_policy_name(relationship_names)}]"
+  end
+
+  # An attribute as its name, and a path or the chain of a delegation or a grant reference as the
+  # array of its names - the spelling the query kernel reads a filter's path by.
+  defp render_policy_name(path) when is_list(path) do
+    path
+    |> Enum.map(&Atom.to_string/1)
+    |> Jason.encode!()
+  end
+
+  defp render_policy_name(name) do
+    name
+    |> Atom.to_string()
+    |> Jason.encode!()
   end
 
   # The client writes a creator's grants itself when it creates a row, so it has to be told which
@@ -4131,7 +4158,16 @@ defmodule Hologram.Compiler do
   end
 
   # A name matching no attribute definition is a to-one reference field, and every one of those
-  # carries an entity id - the fallback the query stages make.
+  # carries an entity id - the fallback the query stages make. A path has the type of the attribute
+  # it ends at.
+  defp policy_attribute_type(entity_type, path) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    entity_type
+    |> Entity.path_target(relationship_names)
+    |> policy_attribute_type(name)
+  end
+
   defp policy_attribute_type(entity_type, name) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
@@ -4525,6 +4561,10 @@ defmodule Hologram.Compiler do
     "the registered query in #{inspect(module)} includes #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny leaves the embed empty in every row. Add allow lines, or drop the include."
   end
 
+  defp dead_path_message(module, dead_entity_types) do
+    "the registered query in #{inspect(module)} filters through #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny reads every such row as missing. Add allow lines, or drop the path."
+  end
+
   defp dead_root_message(module, dead_entity_types) do
     "the registered query in #{inspect(module)} reads #{listing(dead_entity_types)}, which #{declare_verb(dead_entity_types)} no allow lines - default deny returns no rows to any session. Add allow lines, or drop the query."
   end
@@ -4542,6 +4582,23 @@ defmodule Hologram.Compiler do
 
   defp listing(entity_types) do
     Enum.map_join(entity_types, ", ", &inspect/1)
+  end
+
+  # The types a term's paths lead through, its includes' included: every type a hop reaches, which
+  # a policied read applies the read policy of.
+  defp path_entity_types(term) do
+    hop_types =
+      term.filter
+      |> Stage.predicate_references()
+      |> Enum.flat_map(fn {relationship_names, _name} ->
+        Enum.scan(relationship_names, term.entity, &Entity.relationship_target(&2, &1))
+      end)
+
+    term.include
+    |> Map.values()
+    |> Enum.flat_map(&path_entity_types/1)
+    |> Enum.concat(hop_types)
+    |> Enum.uniq()
   end
 
   # Registered whenever the app HAS a grant store, because this is a lookup table: what decides
@@ -4596,31 +4653,47 @@ defmodule Hologram.Compiler do
     "the registered query in #{inspect(module)} filters or orders on server_only attributes (#{server_only_listing(references)}) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API."
   end
 
-  # Pairs each term entity with the server-only attributes its own filter and order_by name,
-  # walking include sub-terms so a reference nested under an include is reached too.
+  # Pairs each entity type with the server-only attributes a term's filter and order_by name on it -
+  # the term's own type first, then the types its paths lead to - walking include sub-terms so a
+  # reference nested under an include is reached too.
   defp server_only_references(term) do
-    server_only_names = Entity.server_only_attribute_names(term.entity)
+    filter_references =
+      term.filter
+      |> Stage.predicate_references()
+      |> Enum.map(fn {relationship_names, name} ->
+        {Entity.path_target(term.entity, relationship_names), name}
+      end)
 
-    filter_names = Stage.predicate_names(term.filter)
+    order_by_references =
+      Enum.map(term.order_by, fn {name, _direction} -> {term.entity, name} end)
 
-    order_by_names = Enum.map(term.order_by, fn {name, _direction} -> name end)
+    references_by_type =
+      (filter_references ++ order_by_references)
+      |> Enum.filter(fn {entity_type, name} ->
+        name in Entity.server_only_attribute_names(entity_type)
+      end)
+      |> Enum.group_by(fn {entity_type, _name} -> entity_type end, fn {_type, name} -> name end)
 
-    referenced_names =
-      (filter_names ++ order_by_names)
-      |> Enum.filter(&(&1 in server_only_names))
-      |> Enum.uniq()
-      |> Enum.sort()
+    {own_references, path_references} = Map.split(references_by_type, [term.entity])
 
     nested_references =
       term.include
       |> Map.values()
       |> Enum.flat_map(&server_only_references/1)
 
-    if referenced_names == [] do
-      nested_references
-    else
-      [{term.entity, referenced_names} | nested_references]
-    end
+    sorted_path_references =
+      Enum.sort_by(path_references, fn {entity_type, _names} -> inspect(entity_type) end)
+
+    own_references
+    |> Enum.concat(sorted_path_references)
+    |> Enum.map(fn {entity_type, names} -> {entity_type, sorted_unique(names)} end)
+    |> Enum.concat(nested_references)
+  end
+
+  defp sorted_unique(names) do
+    names
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   defp trusted_query_message(module) do
@@ -4654,15 +4727,31 @@ defmodule Hologram.Compiler do
     :ok
   end
 
+  # A path through a type with no allow lines reads nothing on it: the policied read applies the
+  # hop type's read policy, so every such hop is missing for every session.
+  defp validate_readable_paths!(module, term) do
+    dead_entity_types =
+      term
+      |> path_entity_types()
+      |> Policy.dead_entity_types()
+
+    if dead_entity_types != [] do
+      raise Hologram.CompileError, message: dead_path_message(module, dead_entity_types)
+    end
+
+    :ok
+  end
+
   # A registered query naming an entity type with no allow lines is statically dead: the policied
-  # read path composes default deny into every statement it reaches. The root and an include target
-  # fail differently, so they are checked and reported apart - and a dead root is reported alone,
-  # because a query returning no rows produces no embeds to be empty either.
+  # read path composes default deny into every statement it reaches. The root, an include target and
+  # a type a path goes through fail differently, so they are checked and reported apart - and a dead
+  # root is reported alone, because a query returning no rows produces no embeds to be empty either.
   defp validate_readable_queries!({module, module_terms}) do
     Enum.each(module_terms, fn term ->
       case Policy.dead_entity_types([term.entity]) do
         [] ->
           validate_readable_includes!(module, term)
+          validate_readable_paths!(module, term)
 
         dead_entity_types ->
           raise Hologram.CompileError, message: dead_root_message(module, dead_entity_types)

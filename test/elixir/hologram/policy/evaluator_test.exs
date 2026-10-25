@@ -8,6 +8,7 @@ defmodule Hologram.Policy.EvaluatorTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Policy.Module1
+  alias Hologram.Test.Fixtures.Policy.Module12
 
   defp deny(_requirement, _entity, _actor_user_id), do: false
 
@@ -69,10 +70,10 @@ defmodule Hologram.Policy.EvaluatorTest do
     # one the checker hears.
     test "asks the checker the operation a delegation names" do
       checker = fn requirement, _entity, _actor_user_id ->
-        requirement == {:via, :update, :parent}
+        requirement == {:via, :update, [:parent]}
       end
 
-      policy = %{create: [rule(via: {:update, :parent})]}
+      policy = %{create: [rule(via: {:update, [:parent]})]}
 
       assert grants?(policy, :create, %Module1{}, "user_id_1", checker)
     end
@@ -496,6 +497,97 @@ defmodule Hologram.Policy.EvaluatorTest do
              )
     end
 
+    test "reads a path's attribute off the row its relationships lead to" do
+      rule = rule(predicates: [{[:parent, :parent, :public], :==, true}])
+
+      public_checker = fn {:related, [:parent, :parent]}, _entity, _actor_user_id ->
+        %Module1{public: true}
+      end
+
+      private_checker = fn {:related, [:parent, :parent]}, _entity, _actor_user_id ->
+        %Module1{public: false}
+      end
+
+      assert rule_matches?(rule, %Module12{}, nil, public_checker)
+      refute rule_matches?(rule, %Module12{}, nil, private_checker)
+    end
+
+    # The relationships lead nowhere, so the path reads nil, which compares the way a missing
+    # attribute does.
+    test "reads a path that ends nowhere as nil" do
+      checker = fn {:related, [:parent, :parent]}, _entity, _actor_user_id -> nil end
+
+      refute rule_matches?(
+               rule(predicates: [{[:parent, :parent, :public], :==, false}]),
+               %Module12{},
+               nil,
+               checker
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{[:parent, :parent, :public], :!=, true}]),
+               %Module12{},
+               nil,
+               checker
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{[:parent, :parent, :public], :==, nil}]),
+               %Module12{},
+               nil,
+               checker
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{[:parent, :parent, :priority], :>=, 3}]),
+               %Module12{},
+               nil,
+               checker
+             )
+    end
+
+    # High sorts before medium as an atom and after it in the declared list.
+    test "compares a path's enum by the declared position of the attribute it ends at" do
+      rule = rule(predicates: [{[:link, :priority], :>, :medium}])
+
+      high_checker = fn {:related, [:link]}, _entity, _actor_user_id ->
+        %Module17{priority: :high}
+      end
+
+      low_checker = fn {:related, [:link]}, _entity, _actor_user_id ->
+        %Module17{priority: :low}
+      end
+
+      assert rule_matches?(rule, %Module12{}, nil, high_checker)
+      refute rule_matches?(rule, %Module12{}, nil, low_checker)
+    end
+
+    test "compares a path's string by its sort key" do
+      rule = rule(predicates: [{[:link, :label], :>=, "m"}])
+
+      mango_checker = fn {:related, [:link]}, _entity, _actor_user_id ->
+        %Module17{label: "Mango"}
+      end
+
+      lodz_checker = fn {:related, [:link]}, _entity, _actor_user_id ->
+        %Module17{label: "Łódź"}
+      end
+
+      assert rule_matches?(rule, %Module12{}, nil, mango_checker)
+      refute rule_matches?(rule, %Module12{}, nil, lodz_checker)
+    end
+
+    test "compares an attribute with a path operand" do
+      rule = rule(predicates: [{:level, :<=, {:attribute, [:parent, :parent, :priority]}}])
+
+      checker = fn {:related, [:parent, :parent]}, _entity, _actor_user_id ->
+        %Module1{priority: 3}
+      end
+
+      assert rule_matches?(rule, %Module12{level: 3}, nil, checker)
+      refute rule_matches?(rule, %Module12{level: 4}, nil, checker)
+    end
+
     test "substitutes the actor in predicate values" do
       entity = %Module1{author_id: "user_id_1"}
       rule = rule(predicates: [{:author_id, :==, {:actor}}])
@@ -567,16 +659,27 @@ defmodule Hologram.Policy.EvaluatorTest do
     end
 
     test "delegates to the checker for a via requirement" do
-      rule = rule(via: {:read, :parent})
+      rule = rule(via: {:read, [:parent]})
 
       assert rule_matches?(rule, %Module1{}, "user_id_1", &grant/3)
       refute rule_matches?(rule, %Module1{}, "user_id_1", &deny/3)
     end
 
-    test "evaluates a delegating rule for an anonymous session" do
-      checker = fn {:via, :read, :parent}, _entity, actor_user_id -> is_nil(actor_user_id) end
+    test "asks the checker the chain a delegation follows" do
+      checker = fn {:via, :read, [:parent, :parent]}, _entity, _actor_user_id -> true end
 
-      assert rule_matches?(rule(via: {:read, :parent}), %Module1{}, nil, checker)
+      assert rule_matches?(
+               rule(via: {:read, [:parent, :parent]}),
+               %Module1{},
+               "user_id_1",
+               checker
+             )
+    end
+
+    test "evaluates a delegating rule for an anonymous session" do
+      checker = fn {:via, :read, [:parent]}, _entity, actor_user_id -> is_nil(actor_user_id) end
+
+      assert rule_matches?(rule(via: {:read, [:parent]}), %Module1{}, nil, checker)
     end
   end
 end

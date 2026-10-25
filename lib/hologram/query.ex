@@ -3,6 +3,7 @@ defmodule Hologram.Query do
 
   alias Hologram.Entity
   alias Hologram.Query.Expression
+  alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
 
   # A query term - what the stages build and the executors run. Each field is named for the stage
@@ -22,8 +23,9 @@ defmodule Hologram.Query do
             order_by: [],
             trust: false
 
-  # Another attribute of the same row, compared with the predicate's attribute.
-  @type attribute_operand :: {:attribute, atom}
+  # Another attribute of the same row, or a path to an attribute of a related row, compared with
+  # the predicate's attribute.
+  @type attribute_operand :: {:attribute, atom | path}
 
   @type bound :: non_neg_integer | placeholder | nil
 
@@ -39,10 +41,17 @@ defmodule Hologram.Query do
 
   @type ordering :: {atom | placeholder, :asc | :desc | placeholder}
 
+  # Two or more names: the to-one relationships followed from the queried type, in order, and an
+  # attribute of the row they lead to.
+  @type path :: list(atom)
+
   @type placeholder :: {:placeholder, atom}
 
+  # The data form a filter is given in: an attribute, a path or a placeholder paired with a value.
+  @type predicates :: list({atom | path | Placeholder.t(), any})
+
   # The operand is a literal, a placeholder, the acting user ({:actor}) or an attribute_operand.
-  @type predicate :: {atom | placeholder, operator, any}
+  @type predicate :: {atom | path | placeholder, operator, any}
 
   @type t :: %__MODULE__{
           cardinality: cardinality,
@@ -137,10 +146,12 @@ defmodule Hologram.Query do
 
   The query is an entity type module (starting a fresh query term) or an already built query
   term. The predicates are an Elixir expression in which a bare name is an attribute of the
-  queried entity - declared, system, or a to-one reference field (`<relationship name>_id`) - and
-  anything from the surrounding code is pinned with `^`. A literal - an atom (`nil`, `true` and
-  `false` included), a number, a string or a module name - needs no pin, and any other value is
-  pinned: a sigil, a list held in a variable, a struct, a call.
+  queried entity - declared, system, or a to-one reference field (`<relationship name>_id`) - a
+  dotted name is a path through to-one relationships to an attribute of the row at its end
+  (`project.archived`, `project.owner.email`), and anything from the surrounding code is pinned
+  with `^`. A literal - an atom (`nil`, `true` and `false` included), a number, a string or a
+  module name - needs no pin, and any other value is pinned: a sigil, a list held in a variable, a
+  struct, a call.
 
       Task
       |> filter(project_id: ^project_id, status: :todo)
@@ -149,14 +160,16 @@ defmodule Hologram.Query do
       |> filter(archived_at == nil)
       |> filter(owner_id == ^owner_id or shared == true)
       |> filter(due_on < starts_on)
+      |> filter(project.archived == false and project.owner.email == ^email)
 
   The predicates are one of:
 
     * a keyword list of equalities whose values are literals or pinned - `project_id: ^id` -
       where a value is always an equality operand: a comparison, a membership or a range is
       written as an expression, so `priority: {:>=, 3}` is refused in favour of `priority >= 3`
-    * a comparison of an attribute with a literal, a pinned value or another attribute of the
-      same row - `==`, `!=`, `<`, `<=`, `>`, `>=` - `due_on < starts_on`
+    * a comparison of an attribute or a path with a literal, a pinned value, another attribute of
+      the same row or a path - `==`, `!=`, `<`, `<=`, `>`, `>=` - `due_on < starts_on`,
+      `due_on <= project.ends_on`
     * a membership - `status in [:todo, :doing]`, `priority in 3..5`, `status in ^statuses`,
       `status not in [:done]`
     * comparisons and memberships joined with `and`
@@ -168,9 +181,10 @@ defmodule Hologram.Query do
       `{:in, list}`, `{:not_in, list}`), membership lists, lists of operator tuples applying
       all of them (`[{:>=, monday}, {:<, next_monday}]`), integer ranges or
       `{:attribute, name}` tuples naming another attribute of the row, bare or as the operand of
-      a comparison operator (`[due_on: {:<, {:attribute, :starts_on}}]`), and where an
-      `or:` entry holding two or more predicate lists is a disjunction, any one of which has to
-      hold (`[status: :todo, or: [[owner_id: id], [shared: true]]]`)
+      a comparison operator (`[due_on: {:<, {:attribute, :starts_on}}]`), where a path is the
+      list of its names, as a key or inside an attribute tuple (`[{[:project, :archived], false}]`),
+      and where an `or:` entry holding two or more predicate lists is a disjunction, any one of
+      which has to hold (`[status: :todo, or: [[owner_id: id], [shared: true]]]`)
 
   Each predicate becomes one or more `{attribute, operator, value}` triples, and a disjunction
   one `{:or, alternatives}` clause, appended in the given order. A query term is a Hologram.Query
@@ -181,6 +195,17 @@ defmodule Hologram.Query do
   matches missing values. Nil keeps its meaning inside a disjunction:
   `priority > 3 or shared == true` matches a shared row with no priority, since the comparison
   passes over nil and the other alternative holds.
+
+  A path reads the row its relationships lead to, and is checked by the attribute it ends at - its
+  type, its values, its order. A path that leads nowhere reads as nil: through an empty
+  relationship, a reference to a row that is gone, or a row the reading session may not read, which
+  an include of it embeds as nil too. Nil keeps its meaning there, so `project.archived != true`
+  matches a task with no project, and `project.archived == nil` finds it. A condition that wants the
+  related row to be there says so: `project.id != nil and project.archived != true` - `project.id`
+  reads nil exactly when there is no project the session may read, where `project_id != nil` asks
+  only whether the reference is set. Paths go through any number of to-one relationships, and the
+  rows along a path are downloaded and kept current with the query, whether or not it includes
+  them.
 
   Two attributes compare when they have the same type, or when one widens to the other - an
   integer to a float, compared as floats. Two enums compare when they declare the same values in
@@ -204,19 +229,22 @@ defmodule Hologram.Query do
 
   To-one reference fields take equality and membership, while ordering
   comparisons and ranges reject them like any other non-orderable type. To-many relationships
-  have no reference field, and neither relationship name itself is filterable.
+  have no reference field, and neither relationship name itself is filterable - a path names the
+  related row's attributes instead.
 
   Raises Hologram.CompileError, naming the location, when a keyword list or a pinned list stands
   as one side of `and` or `or`, or when the predicates take any other form - a bare name where
   only a value goes (a keyword value, a membership element, a range bound) is most likely a
   forgotten pin, and the error says so. Raises ArgumentError when the query is neither an entity
-  type module nor a query term, when pinned predicates are not a keyword list, when a predicate
-  names a relationship or an unknown attribute - on the right side of a comparison, which is how a
-  forgotten pin on a variable reads - when a disjunction holds fewer than two predicate lists or
-  one of them is empty or not a keyword list, when a comparison names an attribute with itself or
-  two attributes that do not compare, or when a value is invalid for its attribute or its
-  operator - a pinned keyword value holding a list, a tuple or a range is refused as an equality
-  operand, since membership and comparisons are written as expressions.
+  type module nor a query term, when pinned predicates are not a list of name and value pairs - a
+  name being an attribute or a path - when a predicate names a relationship or an unknown attribute
+  - on the right side of a comparison, which is how a forgotten pin on a variable reads - when a
+  path goes through a to-many relationship, an attribute or an unknown relationship, or ends at a
+  name the related type does not declare, when a disjunction holds fewer than two predicate lists
+  or one of them is empty or not such a list, when a comparison names an attribute with itself or
+  two attributes that do not compare, or when a value is invalid for its attribute or its operator
+  - a pinned keyword value holding a list, a tuple or a range is refused as an equality operand,
+  since membership and comparisons are written as expressions.
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)
@@ -253,8 +281,7 @@ defmodule Hologram.Query do
   pairs.
 
   To-one includes take no clauses (a single embedded entity has nothing to filter,
-  order, or slice) - nested includes are their only refinement. Traversal depth is
-  limited to 2 levels.
+  order, or slice) - nested includes are their only refinement. Includes nest to any depth.
 
   Including a relationship that is already included merges the two when neither narrows
   it with clauses: what each includes is included, by the same rule at every level, so
@@ -269,8 +296,7 @@ defmodule Hologram.Query do
   spec is invalid or empty, when a name is not a declared relationship - which is how a
   forgotten pin on a variable reads - when a relationship is included again and either include
   carries clauses, when a sub-builder is not a one-argument function or does not return a query
-  term for the related entity type, when a to-one include carries clauses, or when the include
-  depth exceeds 2 levels.
+  term for the related entity type, or when a to-one include carries clauses.
   """
   defmacro include(query, spec) do
     lowered = Expression.inclusion(spec, __CALLER__)

@@ -546,6 +546,30 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture71.__policies__() == [{:read, nil, nil, []}]
     end
 
+    test "accepts a condition through a path" do
+      defmodule InlineEntityFixture105 do
+        use Hologram.Entity
+
+        allow :read, when: parent.public == true
+      end
+
+      assert InlineEntityFixture105.__policies__() == [
+               {:read, nil, nil, [{[:parent, :public], {:==, true}}]}
+             ]
+    end
+
+    test "accepts a to option naming a role held through a path" do
+      defmodule InlineEntityFixture107 do
+        use Hologram.Entity
+
+        allow :update, to: {:owner, trip.user}
+      end
+
+      assert InlineEntityFixture107.__policies__() == [
+               {:update, {:owner, [:trip, :user]}, nil, []}
+             ]
+    end
+
     test "accepts a grant lifecycle operation naming a role" do
       defmodule InlineEntityFixture96 do
         use Hologram.Entity
@@ -662,7 +686,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a to option that is neither a role reference nor a list of them" do
       expected_msg =
-        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
+        "invalid to option \"owner\" for allow :update in Hologram.Entity.ValidatorTest.MalformedToOptionFixture - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedToOptionFixture do
@@ -677,7 +701,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a to option list holding a malformed reference" do
       expected_msg =
-        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
+        "invalid to option [{:a, :b, :c}] for allow :read in Hologram.Entity.ValidatorTest.MalformedToListFixture - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedToListFixture do
@@ -688,9 +712,22 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "rejects a to option whose path holds something other than a name" do
+      expected_msg =
+        "invalid to option {:editor, [:trip, \"user\"]} for allow :update in Hologram.Entity.ValidatorTest.InlineEntityFixture108 - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture108 do
+          use Hologram.Entity
+
+          allow :update, to: ^{:editor, [:trip, "user"]}
+        end
+      end
+    end
+
     test "rejects an empty to option list" do
       expected_msg =
-        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
+        "invalid to option [] for allow :read in Hologram.Entity.ValidatorTest.EmptyToListFixture - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule EmptyToListFixture do
@@ -701,15 +738,28 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects a pinned when option that is not a keyword list" do
+    test "rejects a pinned when option that is not a list of predicates" do
       expected_msg =
-        "invalid when option \"x\" for allow :read in Hologram.Entity.ValidatorTest.MalformedWhenOptionFixture - a pinned condition must be a keyword list of predicates"
+        "invalid when option \"x\" for allow :read in Hologram.Entity.ValidatorTest.MalformedWhenOptionFixture - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedWhenOptionFixture do
           use Hologram.Entity
 
           allow :read, when: ^"x"
+        end
+      end
+    end
+
+    test "rejects a pinned when option keyed by a one-element list" do
+      expected_msg =
+        "invalid when option [{[:public], true}] for allow :read in Hologram.Entity.ValidatorTest.InlineEntityFixture106 - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture106 do
+          use Hologram.Entity
+
+          allow :read, when: ^[{[:public], true}]
         end
       end
     end

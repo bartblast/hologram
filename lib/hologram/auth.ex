@@ -95,9 +95,10 @@ defmodule Hologram.Auth do
   # ask about.
   #
   # :held reads the store and share-locks the grant rows the answer rests on, and the related rows
-  # `via:` delegations read, until the enclosing transaction ends. It is what a write under an
+  # `via:` delegations, grant references through relationships and paths in conditions read - every
+  # row along a path included - until the enclosing transaction ends. It is what a write under an
   # acting user asks: a revocation of the authority the write rests on, or a change to a row a
-  # delegation read, then lands after the write, never between its evaluation and its commit.
+  # rule read, then lands after the write, never between its evaluation and its commit.
   # Outside a transaction the lock ends with the statement, so it holds nothing there.
   @doc false
   @spec can?(struct | String.t() | nil, atom | {atom, atom}, struct, list(struct) | :held) ::
@@ -109,26 +110,19 @@ defmodule Hologram.Auth do
   # The id of the row a chain of to-one relationships ends at, or nil when any hop along the way
   # is empty. The intermediate rows are read raw, the way a render's delegation reads its target:
   # what is being asked is where the chain LEADS, and a read that applied the intermediate row's
-  # own rules would answer nil for a chain the policy follows.
+  # own rules would answer nil for a chain the policy follows. They are read with the given
+  # options, so a write holding what its answer rests on holds them too.
   #
   # A hop naming a row that is gone answers nil the same way an empty reference does - a chain
   # that leads nowhere leads nowhere, however it got there.
   @doc false
-  @spec chain_target_id(struct, list(atom)) :: Entity.id() | nil
-  def chain_target_id(entity, [relationship_name]) do
-    related_id(entity, relationship_name)
-  end
+  @spec chain_target_id(struct, list(atom), keyword) :: Entity.id() | nil
+  def chain_target_id(entity, relationship_names, read_opts \\ []) do
+    {hops, [last_name]} = Enum.split(relationship_names, -1)
 
-  def chain_target_id(entity, [relationship_name | rest]) do
-    case related_id(entity, relationship_name) do
-      nil ->
-        nil
-
-      target_id ->
-        entity.__struct__
-        |> relationship_target(relationship_name)
-        |> EntityOperations.get(target_id)
-        |> chain_target_id_or_nil(rest)
+    case chain_row(entity, hops, read_opts) do
+      nil -> nil
+      row -> related_id(row, last_name)
     end
   end
 
@@ -511,21 +505,29 @@ defmodule Hologram.Auth do
     grant_exists?(actor_user_id, {:type, target_type}, role_names, source)
   end
 
+  # A role held on the row a chain of relationships leads to - the rows along the way read the way
+  # a delegation reads its target, held under a write.
   defp check_requirement(
-         {:rel, relationship_name, role_names},
+         {:rel, relationship_names, role_names},
          entity,
          actor_user_id,
          source
        ) do
-    case related_id(entity, relationship_name) do
+    case chain_target_id(entity, relationship_names, delegation_read_opts(source)) do
       nil ->
         false
 
       target_id ->
-        target_type = relationship_target(entity.__struct__, relationship_name)
+        target_type = Entity.path_target(entity.__struct__, relationship_names)
 
         grant_exists?(actor_user_id, {:instance, target_type, target_id}, role_names, source)
     end
+  end
+
+  # The row a path in a condition reads its attribute off - the rows along the way read the way a
+  # delegation reads its target, held under a write.
+  defp check_requirement({:related, relationship_names}, entity, _actor_user_id, source) do
+    chain_row(entity, relationship_names, delegation_read_opts(source))
   end
 
   # The grant store's own policy: a role held on the entity this grant row names.
@@ -544,26 +546,20 @@ defmodule Hologram.Auth do
     end
   end
 
-  # Delegation asks the related entity's policy for the operation the rule names. The related row
-  # is read raw, because a policy that could not see its own delegation target would deny
-  # everything. Under :held it is also share-locked until the transaction ends, so the delegation
-  # is judged against the row as it stands when the write commits.
+  # Delegation asks the related entity's policy for the operation the rule names, of the row its
+  # chain of relationships leads to. The rows are read raw, because a policy that could not see its
+  # own delegation target would deny everything. Under :held each is also share-locked until the
+  # transaction ends, so the delegation is judged against the rows as they stand when the write
+  # commits.
   defp check_requirement(
-         {:via, delegated_operation, relationship_name},
+         {:via, delegated_operation, relationship_names},
          entity,
          actor_user_id,
          source
        ) do
-    case related_id(entity, relationship_name) do
-      nil ->
-        false
-
-      target_id ->
-        entity.__struct__
-        |> relationship_target(relationship_name)
-        |> EntityOperations.get(target_id, delegation_read_opts(source))
-        |> delegates?(actor_user_id, delegated_operation, source)
-    end
+    entity
+    |> chain_row(relationship_names, delegation_read_opts(source))
+    |> delegates?(actor_user_id, delegated_operation, source)
   end
 
   # The gate a revocation passes, asked the same way by the verb and by a batch's revocation write
@@ -575,9 +571,24 @@ defmodule Hologram.Auth do
     check_authority!(entity, :revoke_role, role, actor_user_id)
   end
 
-  defp chain_target_id_or_nil(nil, _chain), do: nil
+  # The row a chain of to-one relationships leads to, read with the given options, or nil at the
+  # first reference that is empty or names a row that is gone.
+  defp chain_row(nil, _relationship_names, _read_opts), do: nil
 
-  defp chain_target_id_or_nil(entity, chain), do: chain_target_id(entity, chain)
+  defp chain_row(entity, [], _read_opts), do: entity
+
+  defp chain_row(entity, [relationship_name | rest], read_opts) do
+    case related_id(entity, relationship_name) do
+      nil ->
+        nil
+
+      target_id ->
+        entity.__struct__
+        |> relationship_target(relationship_name)
+        |> EntityOperations.get(target_id, read_opts)
+        |> chain_row(rest, read_opts)
+    end
+  end
 
   # The creator's own grant, arriving beside the create that earned it: the acting user taking a
   # role the type declares granted_to: :creator, on a row an earlier write of this same batch made.

@@ -14,13 +14,29 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
+  alias Hologram.Test.Fixtures.Entity.Module13
+  alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module24
+  alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
 
-  @entity_types [Module1, Module10, Module17, Module2, Module24, Module3, Module5]
+  @entity_types [
+    Module1,
+    Module10,
+    Module13,
+    Module15,
+    Module17,
+    Module2,
+    Module24,
+    Module25,
+    Module3,
+    Module4,
+    Module5
+  ]
 
   @mapping Mapper.derive!(@entity_types, [])
 
@@ -43,6 +59,15 @@ defmodule Hologram.Query.InterpreterTest do
     assert actual == expected
 
     actual
+  end
+
+  defp created(entity_type, attributes) do
+    {:ok, entity} =
+      attributes
+      |> entity_type.new()
+      |> create()
+
+    entity
   end
 
   # What the client holds, built from what the database holds - every row of every type keyed by
@@ -153,6 +178,23 @@ defmodule Hologram.Query.InterpreterTest do
   defp module_17_labels(rows), do: Enum.map(rows, & &1.label)
 
   defp names(rows), do: Enum.map(rows, & &1.username)
+
+  # What a client holds for the given actor: the rows each type's read policy admits, which is what
+  # a policied statement reads a path's hops through.
+  defp readable_database(actor_user_id) do
+    rows =
+      Map.new(@entity_types, fn entity_type ->
+        table =
+          entity_type
+          |> Stage.normalize()
+          |> QueryRunner.run_policied(@mapping, actor_user_id)
+          |> Map.new(&{&1.id, &1})
+
+        {entity_type, table}
+      end)
+
+    %{facts: %{}, rows: rows}
+  end
 
   defp titles(rows), do: Enum.map(rows, & &1.c)
 
@@ -711,6 +753,192 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
+  describe "run/3 - paths" do
+    setup do
+      early =
+        created(Module4, a: ~D[2026-01-01], b: ~U[2099-01-01 00:00:00.000000Z], c: :x, d: 1.5)
+
+      late =
+        created(Module4, a: ~D[2026-06-01], b: ~U[2001-01-01 00:00:00.000000Z], c: :y, d: 3.0)
+
+      high =
+        created(Module24,
+          ends_on: ~D[2026-02-01],
+          level: :low,
+          priority: :high,
+          starts_on: ~D[2026-01-01]
+        )
+
+      low = created(Module24, level: :low, priority: :low)
+
+      %{
+        first: created(Module25, e_id: high.id, f_id: early.id),
+        second: created(Module25, e_id: low.id, f_id: late.id),
+        third: created(Module25, f_id: early.id)
+      }
+    end
+
+    test "matches a value one hop away", %{second: second} do
+      assert matched_ids(agreed(filter(Module25, f.c == :y))) == [second.id]
+    end
+
+    test "matches a value two hops away" do
+      required = DB.create!(Module1.new())
+      target = module_2("the target")
+
+      {:ok, middle} =
+        %{b_id: target.id, c_id: required.id}
+        |> Module3.new()
+        |> create()
+
+      {:ok, source} =
+        %{a_id: middle.id}
+        |> Module5.new()
+        |> create()
+
+      assert matched_ids(agreed(filter(Module5, a.b.c == "the target"))) == [source.id]
+    end
+
+    test "compares a path's enum by its declared position", %{first: first} do
+      assert matched_ids(agreed(filter(Module25, e.priority >= :medium))) == [first.id]
+    end
+
+    test "compares a path's date", %{first: first, third: third} do
+      assert matched_ids(agreed(filter(Module25, f.a < ^~D[2026-03-01]))) ==
+               Enum.sort([first.id, third.id])
+    end
+
+    # The sort key folds case, so a bound reaches "Mango" the way the list sorts it - a path reads
+    # the key of the row it leads to.
+    test "compares a path's string by its sort key" do
+      early =
+        created(Module4, a: ~D[2026-01-01], b: ~U[2026-01-01 00:00:00.000000Z], c: :x, d: 1.5)
+
+      ids =
+        Map.new(["apple", "Mango", "zebra"], fn label ->
+          target = created(Module15, label: label, token: "tok")
+
+          {label, created(Module25, f_id: early.id, g_id: target.id).id}
+        end)
+
+      assert matched_ids(agreed(filter(Module25, g.label >= "M"))) ==
+               Enum.sort([ids["Mango"], ids["zebra"]])
+    end
+
+    test "compares a path with an attribute of the row", %{first: first, third: third} do
+      assert matched_ids(agreed(filter(Module25, created_at < f.b))) ==
+               Enum.sort([first.id, third.id])
+    end
+
+    # The third row has no e, so both sides read as missing there - equal, the way two missing
+    # attributes of a row are, and never ordered.
+    test "compares two paths", %{first: first, second: second, third: third} do
+      assert matched_ids(agreed(filter(Module25, e.priority == e.level))) ==
+               Enum.sort([second.id, third.id])
+
+      assert matched_ids(agreed(filter(Module25, e.starts_on < e.ends_on))) == [first.id]
+    end
+
+    test "binds a placeholder on a path", %{first: first} do
+      base_term = Stage.normalize(Module25)
+      term = %{base_term | filter: [{[:e, :priority], :==, {:placeholder, :priority}}]}
+
+      assert matched_ids(agreed(term, bindings: %{priority: :high})) == [first.id]
+    end
+
+    test "matches a path inside an alternative", %{first: first, second: second} do
+      assert matched_ids(agreed(filter(Module25, f.c == :y or e.priority == :high))) ==
+               Enum.sort([first.id, second.id])
+    end
+
+    # A path through an empty relationship reads as missing, so each operator answers for the third
+    # row what it answers for an attribute that holds nothing.
+    test "passes a path through an empty relationship to the nil rules", %{
+      first: first,
+      second: second,
+      third: third
+    } do
+      assert matched_ids(agreed(filter(Module25, e.priority == :low))) == [second.id]
+
+      assert matched_ids(agreed(filter(Module25, e.priority != :low))) ==
+               Enum.sort([first.id, third.id])
+
+      assert matched_ids(agreed(filter(Module25, e.priority == nil))) == [third.id]
+
+      assert matched_ids(agreed(filter(Module25, e.priority not in [:low]))) ==
+               Enum.sort([first.id, third.id])
+
+      assert matched_ids(agreed(filter(Module25, e.priority > :low))) == [first.id]
+    end
+
+    # The database never holds a reference to a row that is not there, but a client can - a fill
+    # arrives in pieces - so this one is the interpreter's alone.
+    test "reads a reference to a row the database does not hold as missing", %{
+      first: first,
+      second: second,
+      third: third
+    } do
+      database = put_in(database().rows[Module24], %{})
+
+      term =
+        Module25
+        |> filter(e.priority == nil)
+        |> Stage.normalize()
+
+      assert matched_ids(run(term, database)) == Enum.sort([first.id, second.id, third.id])
+    end
+  end
+
+  describe "run/3 - paths under a read policy" do
+    setup do
+      early =
+        created(Module4, a: ~D[2026-01-01], b: ~U[2026-01-01 00:00:00.000000Z], c: :x, d: 1.5)
+
+      shown = created(Module13, public: true, title: "shown")
+      hidden = created(Module13, public: false, title: "hidden")
+
+      %{
+        hidden_one: created(Module25, f_id: early.id, h_id: hidden.id),
+        no_one: created(Module25, f_id: early.id),
+        shown_one: created(Module25, f_id: early.id, h_id: shown.id)
+      }
+    end
+
+    # A row the session may not read is not in what it holds, so the path through it reads as
+    # missing on both tiers - the answer an include of it gives.
+    test "reads a row the read policy hides as missing", %{
+      hidden_one: hidden_one,
+      no_one: no_one,
+      shown_one: shown_one
+    } do
+      hidden_title =
+        Module25
+        |> filter(h.title == "hidden")
+        |> Stage.normalize()
+
+      missing_title =
+        Module25
+        |> filter(h.title == nil)
+        |> Stage.normalize()
+
+      shown_title =
+        Module25
+        |> filter(h.title == "shown")
+        |> Stage.normalize()
+
+      for term <- [hidden_title, missing_title, shown_title] do
+        assert run(term, readable_database(nil)) == QueryRunner.run_policied(term, @mapping, nil)
+      end
+
+      assert matched_ids(QueryRunner.run_policied(hidden_title, @mapping, nil)) == []
+
+      assert matched_ids(QueryRunner.run_policied(missing_title, @mapping, nil)) ==
+               Enum.sort([hidden_one.id, no_one.id])
+
+      assert matched_ids(QueryRunner.run_policied(shown_title, @mapping, nil)) == [shown_one.id]
+    end
+  end
+
   describe "run/3 - placeholders" do
     setup do
       %{
@@ -985,6 +1213,32 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert [row] = agreed(query)
       assert row.a.c.id == required.id
+    end
+
+    test "fills what an include includes, three levels down", %{source: source} do
+      rows =
+        Enum.reduce(1..4, [], fn _level, created ->
+          parent_id =
+            case created do
+              [] -> nil
+              [parent | _earlier] -> parent.id
+            end
+
+          {:ok, entity} =
+            %{a_id: source.id, b_id: parent_id}
+            |> Module5.new()
+            |> create()
+
+          [entity | created]
+        end)
+
+      [deepest | _rest] = rows
+      root = List.last(rows)
+
+      matched = agreed(include(Module5, b.b.b))
+      row = Enum.find(matched, &(&1.id == deepest.id))
+
+      assert row.b.b.b.id == root.id
     end
   end
 

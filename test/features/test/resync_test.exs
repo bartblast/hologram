@@ -83,16 +83,6 @@ defmodule HologramFeatureTests.ResyncTest do
     assert_script_result(session, @place_script, nil)
   end
 
-  # Proves the DOM changed without the page being fetched again: a reload would take this marker
-  # with it, so a passing assertion after one would say nothing.
-  defp mark_this_page_load(session) do
-    execute_script(session, "globalThis.__thisPageLoad = 'held';")
-  end
-
-  defp assert_same_page_load(session) do
-    assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
-  end
-
   defp truncate_oplog do
     {:ok, _result} = Connection.query(~s(TRUNCATE "hologram_system"."oplog"), [])
 

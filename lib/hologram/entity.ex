@@ -161,23 +161,31 @@ defmodule Hologram.Entity do
   An allow line grants the given operation, and every key on it is an option:
 
     * `to:` - who holds the operation: a role name (`:editor`), a global role module (`Admin`), a
-      role held on the row a to-one relationship points at as `{role, relationship}`
-      (`{:editor, project}`), a role held on a whole entity type as `{role, entity type}`
-      (`{:moderator, MyApp.Post}`), or a list of them, any one of which suffices.
-    * `via:` - a to-one relationship, written as a bare name (`via: project`): the operation is
-      granted when the same operation is granted on the related row. Written as
-      `{operation, relationship}` (`via: {:update, project}`), it is granted when the named
-      operation is granted on the related row. A create rule names one when the related type's
-      own create rule says nothing about who may add to an existing row, as on a type whose rows
-      nobody holds a role on before they exist.
+      role held on the row a to-one relationship, or a path of them, points at as
+      `{role, relationship}` (`{:editor, project}`, `{:owner, trip.user}`), a role held on a whole
+      entity type as `{role, entity type}` (`{:moderator, MyApp.Post}`), or a list of them, any
+      one of which suffices.
+    * `via:` - a to-one relationship, written as a bare name (`via: project`), or a path of them
+      (`via: trip.user`): the operation is granted when the same operation is granted on the row
+      it leads to. Written as `{operation, relationship}` (`via: {:update, project}`,
+      `via: {:update, stop.trip}`), it is granted when the named operation is granted on that
+      row. A create rule names one when the related type's own create rule says nothing about who
+      may add to an existing row, as on a type whose rows nobody holds a role on before they exist.
     * `when:` - a condition on the row: `when: priority < 3 and archived == false`,
       `when: owner_id == nil or owner_id == user_id()`. A bare name is an attribute of the row,
       on either side of a comparison, so `when: guests <= capacity` compares two attributes, `^`
       marks a value from the surrounding code (`^@max_priority`), literals need nothing, and
       `user_id()` is the acting user's entity id. The operators are `==`, `!=`, `<`, `<=`, `>`,
       `>=`, `in`, `not in`, `and` and `or`, `and` binding tighter and parentheses grouping. A
-      condition built from data goes in pinned, `when: ^predicates`, as a keyword list of
-      predicates, where an `or:` entry holding two or more predicate lists is a disjunction.
+      dotted name is a path through to-one relationships, read off the row they lead to,
+      `when: project.archived == false`, through as many relationships as it names. The rows along
+      a path are read as stored, whatever the acting user may read of them. A path that leads
+      nowhere - an empty relationship or a reference to a row that is gone - reads as nil, so `!=`
+      and `not in` admit a row whose path ends nowhere: `project.archived != true` holds for a task
+      with no project. A condition that wants the related row there says so,
+      `project.id != nil and project.archived != true`. A condition built from data goes in pinned,
+      `when: ^predicates`, as a list of predicates pairing names with values, where an `or:` entry
+      holding two or more predicate lists is a disjunction.
 
   The options on one line must all hold at once, and several lines for one operation are
   alternatives.
@@ -366,6 +374,12 @@ defmodule Hologram.Entity do
     quote do
       @__roles__ []
     end
+  end
+
+  @doc false
+  @spec path_target(module, list(atom)) :: module
+  def path_target(entity_type, relationship_names) do
+    Enum.reduce(relationship_names, entity_type, &relationship_target(&2, &1))
   end
 
   @doc false

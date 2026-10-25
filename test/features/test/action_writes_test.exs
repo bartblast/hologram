@@ -39,16 +39,6 @@ defmodule HologramFeatureTests.ActionWritesTest do
     end)
   end
 
-  # Proves the DOM changed without the page being fetched again - a reload would take this marker
-  # with it, so a passing assertion after one would say nothing.
-  defp mark_this_page_load(session) do
-    execute_script(session, "globalThis.__thisPageLoad = 'held';")
-  end
-
-  defp assert_same_page_load(session) do
-    assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
-  end
-
   defp page_replica_id(session) do
     script_result(session, "return globalThis.Hologram.replicaId;")
   end

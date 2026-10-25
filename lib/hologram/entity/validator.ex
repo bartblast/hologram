@@ -1273,7 +1273,7 @@ defmodule Hologram.Entity.Validator do
         if not to_value_valid?(to) do
           raise Hologram.CompileError,
             message:
-              "invalid to option #{inspect(to)} for allow #{inspect(operation)} in #{inspect(module)} - the to option must be a role name, a role module, a {role, entity type} or {role, relationship} tuple, or a non-empty list of them"
+              "invalid to option #{inspect(to)} for allow #{inspect(operation)} in #{inspect(module)} - the to option must be a role name, a role module, a {role, entity type}, {role, relationship} or {role, path} tuple, or a non-empty list of them"
         end
 
       :error ->
@@ -1294,6 +1294,11 @@ defmodule Hologram.Entity.Validator do
 
   defp to_reference_valid?({role_name, reference}) when is_atom(role_name) and is_atom(reference),
     do: true
+
+  # A path names the related row at its end: two or more relationship names.
+  defp to_reference_valid?({role_name, [_hop, _name | _later_names] = path})
+       when is_atom(role_name),
+       do: Enum.all?(path, &is_atom/1)
 
   defp to_reference_valid?(_value), do: false
 
@@ -1431,15 +1436,16 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  # A written-out condition is lowered to a keyword list where it is written, so only a pinned one
-  # reaches here in another shape - and the rule builders take it apart as one.
+  # A written-out condition is lowered where it is written to a list of predicates, each keyed by a
+  # name or a path, so only a pinned one reaches here in another shape - and the rule builders take
+  # it apart as one.
   defp validate_when_opt_shape!(module, operation, spec) do
     case Keyword.fetch(spec, :when) do
       {:ok, condition} ->
         if not when_value_valid?(condition) do
           raise Hologram.CompileError,
             message:
-              "invalid when option #{inspect(condition)} for allow #{inspect(operation)} in #{inspect(module)} - a pinned condition must be a keyword list of predicates"
+              "invalid when option #{inspect(condition)} for allow #{inspect(operation)} in #{inspect(module)} - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
         end
 
       :error ->
@@ -1490,9 +1496,12 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  # A predicate names an attribute with an atom, or a related row's attribute with a path of two or
+  # more atoms.
   defp when_value_valid?(condition) when is_list(condition) do
     Enum.all?(condition, fn
       {name, _value} when is_atom(name) -> true
+      {[_hop, _name | _rest] = path, _value} -> Enum.all?(path, &is_atom/1)
       _entry -> false
     end)
   end

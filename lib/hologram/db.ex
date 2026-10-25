@@ -90,12 +90,12 @@ defmodule Hologram.DB do
   for the operation the entity claims through authorize/2 - against the row being inserted, and
   raises Hologram.AccessDeniedError when no rule grants it. The grant rows the answer rests on
   are held until the write commits, so a revocation of one of them lands after the write, and a
-  grant made meanwhile is not seen - the write is refused where a moment later it would pass. A
-  related row a `via:` rule reads is held the same way, so a change to it lands after the write.
-  An entity claiming the server's own authority through trust/1 is written without evaluation.
-  Without an acting user an unclaimed write is raw - the trusted tier - and a claimed operation is
-  evaluated with the anonymous semantics. The returned entity carries no claim and no recorded
-  changes.
+  grant made meanwhile is not seen - the write is refused where a moment later it would pass.
+  Every related row a rule reads - a `via:` target, or a row along a path - is held the same way,
+  so a change to it lands after the write. An entity claiming the server's own authority through
+  trust/1 is written without evaluation. Without an acting user an unclaimed write is raw - the
+  trusted tier - and a claimed operation is evaluated with the anonymous semantics. The returned
+  entity carries no claim and no recorded changes.
 
   A write PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -152,8 +152,9 @@ defmodule Hologram.DB do
   claim, so delete/1 is the spelling for one on another operation's authority. The grant rows
   the answer rests on are held until the delete commits, so a revocation of one of them lands
   after the delete, and a grant made meanwhile is not seen - the delete is refused where a moment
-  later it would pass. A related row a `via:` rule reads is held the same way, so a change to it
-  lands after the delete. Without an acting user the delete is raw.
+  later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
+  is held the same way, so a change to it lands after the delete. Without an acting user the
+  delete is raw.
 
   A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -180,10 +181,11 @@ defmodule Hologram.DB do
   read FOR UPDATE, and raises Hologram.AccessDeniedError when no rule grants it. The grant rows
   the answer rests on are held until the delete commits, so a revocation of one of them lands
   after the delete, and a grant made meanwhile is not seen - the delete is refused where a moment
-  later it would pass. A related row a `via:` rule reads is held the same way, so a change to it
-  lands after the delete. An entity claiming the server's own authority through trust/1 is deleted
-  without evaluation, and without an acting user an unclaimed delete is raw. A struct whose id
-  names no row is not evaluated at all: there is nothing to authorize against.
+  later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
+  is held the same way, so a change to it lands after the delete. An entity claiming the server's
+  own authority through trust/1 is deleted without evaluation, and without an acting user an
+  unclaimed delete is raw. A struct whose id names no row is not evaluated at all: there is
+  nothing to authorize against.
 
   A delete PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -490,8 +492,9 @@ defmodule Hologram.DB do
   claim, so update/1 is the spelling for one on another operation's authority. The grant rows
   the answer rests on are held until the update commits, so a revocation of one of them lands
   after the update, and a grant made meanwhile is not seen - the update is refused where a moment
-  later it would pass. A related row a `via:` rule reads is held the same way, so a change to it
-  lands after the update. Without an acting user the update is raw.
+  later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
+  is held the same way, so a change to it lands after the update. Without an acting user the
+  update is raw.
 
   An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.
@@ -524,10 +527,10 @@ defmodule Hologram.DB do
   the way it reads in a template. Nothing can change the row between the evaluation and the
   write, and the grant rows the answer rests on are held until the write commits, so a
   revocation of one of them lands after the write, and a grant made meanwhile is not seen - the
-  write is refused where a moment later it would pass. A related row a `via:` rule reads is held
-  the same way, so a change to it lands after the write. An entity claiming the server's own
-  authority through trust/1 is written without evaluation, and without an acting user an unclaimed
-  write is raw.
+  write is refused where a moment later it would pass. Every related row a rule reads - a `via:`
+  target, or a row along a path - is held the same way, so a change to it lands after the write.
+  An entity claiming the server's own authority through trust/1 is written without evaluation, and
+  without an acting user an unclaimed write is raw.
 
   An update PostgreSQL aborts as a deadlock victim - its holds crossing another transaction's
   locks - is run again and answers the way it would have a moment later, a refusal included.

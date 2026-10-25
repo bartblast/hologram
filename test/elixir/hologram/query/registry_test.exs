@@ -64,6 +64,18 @@ defmodule Hologram.Query.RegistryTest do
       assert entity_types(term) == MapSet.new([Module2, Module3])
     end
 
+    test "returns the types a path in the filter goes through" do
+      term = %{Stage.normalize(Module5) | filter: [{[:a, :b, :c], :==, "x"}]}
+
+      assert entity_types(term) == MapSet.new([Module2, Module3, Module5])
+    end
+
+    test "returns the types a path operand goes through" do
+      term = %{Stage.normalize(Module3) | filter: [{:c_id, :==, {:attribute, [:b, :id]}}]}
+
+      assert entity_types(term) == MapSet.new([Module2, Module3])
+    end
+
     test "walks includes to any depth" do
       term =
         Module5
@@ -163,6 +175,18 @@ defmodule Hologram.Query.RegistryTest do
       }
 
       assert placeholder_shape(term) == %{min: :integer, search: :string}
+    end
+
+    test "derives placeholder types through a path from the attribute it ends at" do
+      term = %{
+        Stage.normalize(Module3)
+        | filter: [
+            {[:b, :b], :in, {:placeholder, :counts}},
+            {[:b, :c], :==, {:placeholder, :search}}
+          ]
+      }
+
+      assert placeholder_shape(term) == %{counts: {:list, :integer}, search: :string}
     end
 
     test "derives system attribute placeholder types" do

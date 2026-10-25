@@ -2,8 +2,8 @@ defmodule Hologram.Query.Stage do
   @moduledoc false
 
   # What Hologram.Query's stages run: the query stages and the entity-struct stages, over the data
-  # form - keyword lists of attribute names and predicate values, operator tuples, membership
-  # lists, ranges and placeholders. Hologram.Query delegates its stages here, or expands to them
+  # form - lists pairing attribute names or paths with predicate values, operator tuples,
+  # membership lists, ranges and placeholders. Hologram.Query delegates its stages here, or expands to them
   # from the stages written in the query syntax, and documents them there. Normalization,
   # placeholder listing and the predicate triples policies share are framework internals, called
   # on this module directly.
@@ -72,16 +72,22 @@ defmodule Hologram.Query.Stage do
     put_relationship_op(entity, relationship_name, target_id, :delete, "delete_relationship")
   end
 
-  # The data form a filter lowers to, and what filter(^predicates) passes as is: a keyword list of
-  # attribute names and predicate values - a plain value (equality), an operator tuple, a bare
-  # membership list, a list of operator tuples applying all of them (a conjunction), or an
-  # integer range. An or: entry holding a list of at least two predicate lists is a disjunction,
-  # which becomes one {:or, alternatives} clause, each alternative the clauses of its list.
+  # The data form a filter lowers to, and what filter(^predicates) passes as is: a list pairing
+  # attribute names - or paths, below - with predicate values: a plain value (equality), an
+  # operator tuple, a bare membership list, a list of operator tuples applying all of them (a
+  # conjunction), or an integer range. An or: entry holding a list of at least two predicate lists
+  # is a disjunction, which becomes one {:or, alternatives} clause, each alternative the clauses of
+  # its list.
   #
   # An {:attribute, name} tuple in a value position - bare (equality) or as the operand of a
   # comparison operator - names another attribute of the same row, which the triple stores as is.
   # The two attributes have to compare: the same type, or one widening to the other, two enums
   # declaring the same values in the same order, and never one attribute with itself.
+  #
+  # A path - a list of two or more names, to-one relationships followed in order and a filterable
+  # name of the row at the end - stands wherever an attribute name does, as a key or inside an
+  # {:attribute, path} operand, and the triple stores it as is. It is checked by the declaration
+  # of the name it ends at.
   #
   # A Hologram.Query.Placeholder struct in a value position - bare, as an operator-tuple operand,
   # or as a membership list element - stands for a runtime-bound value: the triple stores a
@@ -99,13 +105,14 @@ defmodule Hologram.Query.Stage do
   # leaf back to a value - both execution tiers call the builder with real values and normalize
   # THAT - so the name serves reading a term, never evaluating one.
   @doc false
-  @spec filter(module | Query.t(), keyword) :: Query.t()
+  @spec filter(module | Query.t(), Query.predicates()) :: Query.t()
   def filter(query, predicates) do
     term = to_term(query)
 
     if not filterable_predicates?(predicates) do
       raise ArgumentError,
-        message: "filter predicates must be a keyword list, got: #{inspect(predicates)}"
+        message:
+          "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: #{inspect(predicates)}"
     end
 
     triples = predicate_triples!(term.entity, predicates)
@@ -166,6 +173,13 @@ defmodule Hologram.Query.Stage do
   def increment(entity, name, amount) do
     put_delta(entity, name, amount, 1, "increment")
   end
+
+  # Returns a name as a message spells it: an attribute as inspect/1 does, a path as it is written.
+  @doc false
+  @spec inspect_name(atom | Query.path() | Query.placeholder()) :: String.t()
+  def inspect_name(path) when is_list(path), do: Enum.join(path, ".")
+
+  def inspect_name(name), do: inspect(name)
 
   @doc false
   @spec limit(module | Query.t(), non_neg_integer) :: Query.t()
@@ -283,22 +297,25 @@ defmodule Hologram.Query.Stage do
     filter_names ++ bound_names ++ order_names ++ include_names
   end
 
-  # Returns every attribute name the given filter clauses read, in order: the compared attribute of
-  # every triple, and the attribute an attribute operand names beside it - the alternatives of a
-  # disjunction included. For readers that need what a filter reads rather than how it compares.
+  # Returns every name the given filter clauses read, in order, as {relationships, name} pairs: the
+  # compared attribute of every triple, and the one an attribute operand names beside it - the
+  # alternatives of a disjunction included. An attribute of the row comes with no relationships, an
+  # attribute a path reaches with the relationships followed to it. For readers that need what a
+  # filter reads rather than how it compares.
   @doc false
-  @spec predicate_names(list(Query.clause())) :: list(atom | Query.placeholder())
-  def predicate_names(clauses) do
+  @spec predicate_references(list(Query.clause())) ::
+          list({list(atom), atom | Query.placeholder()})
+  def predicate_references(clauses) do
     clauses
     |> triples()
     |> Enum.flat_map(fn
-      {name, _operator, {:attribute, other}} -> [name, other]
-      {name, _operator, _value} -> [name]
+      {name, _operator, {:attribute, other}} -> [reference(name), reference(other)]
+      {name, _operator, _value} -> [reference(name)]
     end)
   end
 
   @doc false
-  @spec predicate_triples!(module, keyword) :: list(Query.clause())
+  @spec predicate_triples!(module, Query.predicates()) :: list(Query.clause())
   def predicate_triples!(entity_type, predicates) do
     Enum.flat_map(predicates, fn
       {%Placeholder{name: placeholder_name}, value} ->
@@ -385,6 +402,32 @@ defmodule Hologram.Query.Stage do
     %{term | trust: true}
   end
 
+  # Returns every name the given data-form predicates spell, in order, without judging any of them:
+  # each key, the name an {:attribute, name} operand carries bare or under an operator, and what the
+  # lists of an or: entry spell - a path as its list. For readers of predicates no entity type was
+  # asked about yet, such as the hint a build gives for a filter no entity type admits.
+  @doc false
+  @spec written_names(list) :: list(atom | Query.path())
+  def written_names(predicates) do
+    Enum.flat_map(predicates, fn
+      {:or, alternatives} when is_list(alternatives) ->
+        if Enum.all?(alternatives, &is_list/1) do
+          Enum.flat_map(alternatives, &written_names/1)
+        else
+          [:or]
+        end
+
+      {name, value} when is_atom(name) ->
+        [name | written_operand_names(value)]
+
+      {name, value} when is_list(name) ->
+        if path?(name), do: [name | written_operand_names(value)], else: []
+
+      _entry ->
+        []
+    end)
+  end
+
   defp attribute_names(entity_type) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 
@@ -393,10 +436,15 @@ defmodule Hologram.Query.Stage do
     |> Enum.sort()
   end
 
+  # A path is defined where it ends, so its last name is looked up on the type its relationships
+  # lead to.
   defp attribute_definition(entity_type, name) do
-    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+    {subject_type, subject_name} = subject(entity_type, name)
+    definitions = subject_type.__attributes__() ++ subject_type.__system_attributes__()
 
-    Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end)
+    Enum.find(definitions, fn {definition_name, _type, _opts} ->
+      definition_name == subject_name
+    end)
   end
 
   defp attribute_triple!(name, operator, other, entity_type) do
@@ -404,14 +452,14 @@ defmodule Hologram.Query.Stage do
       validate_orderable_attribute!(name, entity_type, operator)
     end
 
-    validate_filtered_name!(other, entity_type)
+    validate_operand_name!(other, entity_type)
     validate_comparable_attributes!(name, other, operator, entity_type)
 
     {name, operator, {:attribute, other}}
   end
 
   defp attribute_triples!(entity_type, {name, value}) do
-    validate_filtered_name!(name, entity_type)
+    validate_predicate_name!(name, entity_type)
 
     predicate_triples!(name, value, entity_type)
   end
@@ -451,18 +499,20 @@ defmodule Hologram.Query.Stage do
       if alternative == [] or not filterable_predicates?(alternative) do
         raise ArgumentError,
           message:
-            "an alternative of a disjunction is a non-empty keyword list of predicates, got: #{inspect(alternative)}"
+            "an alternative of a disjunction is a non-empty list of name and value pairs, got: #{inspect(alternative)}"
       end
     end)
 
     {:or, Enum.map(alternatives, &predicate_triples!(entity_type, &1))}
   end
 
-  # Keyword.keyword?/1 with placeholder keys admitted - a placeholder names an attribute nobody knows yet.
+  # Keyword.keyword?/1 with placeholder keys and paths admitted - a placeholder names an attribute
+  # nobody knows yet, and a path one of a related row.
   defp filterable_predicates?(predicates) when is_list(predicates) do
     Enum.all?(predicates, fn
       {%Placeholder{}, _value} -> true
       {name, _value} when is_atom(name) -> true
+      {name, _value} -> path?(name)
       _entry -> false
     end)
   end
@@ -473,6 +523,13 @@ defmodule Hologram.Query.Stage do
   # its operators and its operand's shape are all unknown with it. The triple records what was
   # written and Hologram.Query.Window drops it from the download, the real builder validating for
   # real once the attribute arrives.
+  #
+  # A bare attribute operand is an equality, as it is under an attribute's own name - read as an
+  # operator tuple, it would store :attribute where the operator goes.
+  defp placeholder_key_triple(placeholder_name, {:attribute, _other} = operand) do
+    {{:placeholder, placeholder_name}, :==, operand}
+  end
+
   defp placeholder_key_triple(placeholder_name, {operator, value}) when is_atom(operator) do
     {{:placeholder, placeholder_name}, operator, placeholder_operand(value)}
   end
@@ -516,24 +573,10 @@ defmodule Hologram.Query.Stage do
     if is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
       raise ArgumentError,
         message:
-          "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect(name)}"
+          "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)}"
     end
 
     {name, operator, operand}
-  end
-
-  defp include_depth(term) do
-    if term.include == %{} do
-      0
-    else
-      max_child_depth =
-        term.include
-        |> Map.values()
-        |> Enum.map(&include_depth/1)
-        |> Enum.max()
-
-      1 + max_child_depth
-    end
   end
 
   defp include_spec_entry!(term, name) when is_atom(name) do
@@ -564,7 +607,6 @@ defmodule Hologram.Query.Stage do
   # Two includes of one relationship are one include when neither narrows it: what each includes
   # merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
   # than the other, so a relationship included twice with clauses on either side is refused.
-  # Merging cannot deepen a traversal, so the depth each side was validated for still holds.
   defp merged_sub_term!(included, sub_term, name) do
     if sub_term_has_clauses?(included) or sub_term_has_clauses?(sub_term) do
       raise ArgumentError,
@@ -701,13 +743,17 @@ defmodule Hologram.Query.Stage do
 
   defp paginate_offset(page, size), do: (page - 1) * size
 
+  defp path?([_hop, _name | _rest] = names), do: Enum.all?(names, &is_atom/1)
+
+  defp path?(_name), do: false
+
   defp ordering_triple!(name, operator, operand, entity_type) do
     validate_orderable_attribute!(name, entity_type, operator)
 
     if is_nil(operand) or is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
       raise ArgumentError,
         message:
-          "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect(name)}"
+          "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)}"
     end
 
     validate_enum_operand!(name, operand, entity_type)
@@ -744,13 +790,14 @@ defmodule Hologram.Query.Stage do
     end
   end
 
-  defp predicate_triples!(name, {:attribute, other}, entity_type) when is_atom(other) do
+  defp predicate_triples!(name, {:attribute, other}, entity_type)
+       when is_atom(other) or is_list(other) do
     [attribute_triple!(name, :==, other, entity_type)]
   end
 
   defp predicate_triples!(name, {operator, {:attribute, other}}, entity_type)
        when (operator in @equality_operators or operator in @ordering_operators) and
-              is_atom(other) do
+              (is_atom(other) or is_list(other)) do
     [attribute_triple!(name, operator, other, entity_type)]
   end
 
@@ -786,14 +833,14 @@ defmodule Hologram.Query.Stage do
 
   defp predicate_triples!(name, value, _entity_type) when is_tuple(value) do
     raise ArgumentError,
-      message: "invalid filter value #{inspect(value)} for attribute #{inspect(name)}"
+      message: "invalid filter value #{inspect(value)} for attribute #{inspect_name(name)}"
   end
 
   defp predicate_triples!(name, values, entity_type) when is_list(values) do
     cond do
       values == [] ->
         raise ArgumentError,
-          message: "filter list for attribute #{inspect(name)} must not be empty"
+          message: "filter list for attribute #{inspect_name(name)} must not be empty"
 
       Enum.all?(values, &constraint_tuple?/1) ->
         Enum.flat_map(values, fn value -> predicate_triples!(name, value, entity_type) end)
@@ -805,7 +852,7 @@ defmodule Hologram.Query.Stage do
       true ->
         raise ArgumentError,
           message:
-            "invalid filter list #{inspect(values)} for attribute #{inspect(name)} - use either a membership list of plain values or a list of operator tuples"
+            "invalid filter list #{inspect(values)} for attribute #{inspect_name(name)} - use either a membership list of plain values or a list of operator tuples"
     end
   end
 
@@ -911,8 +958,16 @@ defmodule Hologram.Query.Stage do
   defp raise_unknown_operator!(operator, name) do
     raise ArgumentError,
       message:
-        "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
+        "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect_name(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
   end
+
+  defp reference(path) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    {relationship_names, name}
+  end
+
+  defp reference(name), do: {[], name}
 
   defp reference_field_names(entity_type) do
     entity_type
@@ -958,6 +1013,16 @@ defmodule Hologram.Query.Stage do
       sub_term.offset != nil
   end
 
+  # Where a name is declared: an attribute on the queried type, a path's last name on the type its
+  # relationships lead to. The path is validated before anything asks.
+  defp subject(entity_type, name) when is_list(name) do
+    {hops, [subject_name]} = Enum.split(name, -1)
+
+    {Entity.path_target(entity_type, hops), subject_name}
+  end
+
+  defp subject(entity_type, name), do: {entity_type, name}
+
   defp system_attribute_names(entity_type) do
     Enum.map(entity_type.__system_attributes__(), fn {name, _type, _opts} -> name end)
   end
@@ -994,7 +1059,7 @@ defmodule Hologram.Query.Stage do
     if type != :uuid do
       raise ArgumentError,
         message:
-          "user_id() requires a uuid attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+          "user_id() requires a uuid attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
     end
   end
 
@@ -1042,7 +1107,7 @@ defmodule Hologram.Query.Stage do
   defp validate_comparable_attributes!(name, name, operator, entity_type) do
     raise ArgumentError,
       message:
-        "operator #{inspect(operator)} compares attribute #{inspect(name)} in #{inspect(entity_type)} with itself"
+        "operator #{inspect(operator)} compares attribute #{inspect_name(name)} in #{inspect(entity_type)} with itself"
   end
 
   defp validate_comparable_attributes!(name, other, operator, entity_type) do
@@ -1053,12 +1118,12 @@ defmodule Hologram.Query.Stage do
       type != other_type and {type, other_type} not in @widenings ->
         raise ArgumentError,
           message:
-            "operator #{inspect(operator)} compares attribute #{inspect(name)} with attribute #{inspect(other)} in #{inspect(entity_type)}, which have different types (#{inspect(type)} and #{inspect(other_type)}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
+            "operator #{inspect(operator)} compares attribute #{inspect_name(name)} with attribute #{inspect_name(other)} in #{inspect(entity_type)}, which have different types (#{inspect(type)} and #{inspect(other_type)}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
 
       type == :enum and enum_values(entity_type, name) != enum_values(entity_type, other) ->
         raise ArgumentError,
           message:
-            "operator #{inspect(operator)} compares attribute #{inspect(name)} with attribute #{inspect(other)} in #{inspect(entity_type)}, which declare different values (#{inspect(enum_values(entity_type, name))} and #{inspect(enum_values(entity_type, other))}) - two enum attributes compare only when they declare the same values in the same order"
+            "operator #{inspect(operator)} compares attribute #{inspect_name(name)} with attribute #{inspect_name(other)} in #{inspect(entity_type)}, which declare different values (#{inspect(enum_values(entity_type, name))} and #{inspect(enum_values(entity_type, other))}) - two enum attributes compare only when they declare the same values in the same order"
 
       true ->
         :ok
@@ -1167,7 +1232,7 @@ defmodule Hologram.Query.Stage do
         if operand not in values do
           raise ArgumentError,
             message:
-              "#{inspect(operand)} is not a value of attribute #{inspect(name)} in #{inspect(entity_type)} - the values are #{inspect(values)}"
+              "#{inspect(operand)} is not a value of attribute #{inspect_name(name)} in #{inspect(entity_type)} - the values are #{inspect(values)}"
         end
 
       _other ->
@@ -1178,19 +1243,19 @@ defmodule Hologram.Query.Stage do
   defp validate_membership_list!(values, name, _operator) when is_list(values) do
     if values == [] do
       raise ArgumentError,
-        message: "membership list for attribute #{inspect(name)} must not be empty"
+        message: "membership list for attribute #{inspect_name(name)} must not be empty"
     end
 
     Enum.each(values, fn
       value when is_list(value) or is_tuple(value) ->
         raise ArgumentError,
           message:
-            "invalid membership list element #{inspect(value)} for attribute #{inspect(name)} - membership lists hold plain values"
+            "invalid membership list element #{inspect(value)} for attribute #{inspect_name(name)} - membership lists hold plain values"
 
       %Range{} = value ->
         raise ArgumentError,
           message:
-            "invalid membership list element #{inspect(value)} for attribute #{inspect(name)} - membership lists hold plain values"
+            "invalid membership list element #{inspect(value)} for attribute #{inspect_name(name)} - membership lists hold plain values"
 
       _value ->
         :ok
@@ -1200,7 +1265,7 @@ defmodule Hologram.Query.Stage do
   defp validate_membership_list!(operand, name, operator) do
     raise ArgumentError,
       message:
-        "operator #{inspect(operator)} on attribute #{inspect(name)} requires a list operand, got: #{inspect(operand)}"
+        "operator #{inspect(operator)} on attribute #{inspect_name(name)} requires a list operand, got: #{inspect(operand)}"
   end
 
   defp validate_membership_range!(range, name, entity_type) do
@@ -1209,20 +1274,36 @@ defmodule Hologram.Query.Stage do
     if type != :integer do
       raise ArgumentError,
         message:
-          "range #{inspect(range)} requires an integer attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
+          "range #{inspect(range)} requires an integer attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
     end
 
     if range.step != 1 do
       raise ArgumentError,
         message:
-          "stepped range #{inspect(range)} for attribute #{inspect(name)} is not supported - membership ranges use step 1"
+          "stepped range #{inspect(range)} for attribute #{inspect_name(name)} is not supported - membership ranges use step 1"
     end
 
     if Range.size(range) == 0 do
       raise ArgumentError,
         message:
-          "range #{inspect(range)} for attribute #{inspect(name)} is empty - it would match nothing"
+          "range #{inspect(range)} for attribute #{inspect_name(name)} is empty - it would match nothing"
     end
+  end
+
+  # What an attribute operand names - another attribute of the row, or a path to one - refused in
+  # the words a predicate's own name is.
+  defp validate_operand_name!(name, entity_type) when is_atom(name) do
+    validate_filtered_name!(name, entity_type)
+  end
+
+  defp validate_operand_name!(name, entity_type) do
+    if not path?(name) do
+      raise ArgumentError,
+        message:
+          "invalid attribute operand #{inspect({:attribute, name})} - an attribute is named by an atom, and a path by a list of two or more atoms"
+    end
+
+    validate_path!(name, entity_type)
   end
 
   defp validate_orderable_attribute!(name, entity_type, operator) do
@@ -1231,7 +1312,7 @@ defmodule Hologram.Query.Stage do
     if type not in @orderable_types do
       raise ArgumentError,
         message:
-          "operator #{inspect(operator)} requires an orderable attribute - attribute #{inspect(name)} in #{inspect(entity_type)} has type #{inspect(type)}, and boolean and uuid attributes have no order to compare by"
+          "operator #{inspect(operator)} requires an orderable attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}, and boolean and uuid attributes have no order to compare by"
     end
   end
 
@@ -1251,6 +1332,53 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError, message: "paginate requires the #{inspect(key)} option"
     end
   end
+
+  # A path is followed hop by hop from the queried type, each hop a to-one relationship of the type
+  # the hops before it lead to, and its last name is filterable on the type it ends at - so every
+  # refusal names the type it was asked of.
+  defp validate_path!(path, entity_type) do
+    {hops, [name]} = Enum.split(path, -1)
+
+    end_type = Enum.reduce(hops, entity_type, &validate_path_hop!/2)
+
+    validate_filtered_name!(name, end_type)
+  end
+
+  defp validate_path_hop!(hop, entity_type) do
+    definitions = entity_type.__relationships__()
+
+    case Enum.find(definitions, fn {name, _type, _opts} -> name == hop end) do
+      {_name, [_target], _opts} ->
+        raise ArgumentError,
+          message:
+            "#{inspect(hop)} is a to-many relationship in #{inspect(entity_type)} - a path in a condition goes through to-one relationships only"
+
+      {_name, target, _opts} ->
+        target
+
+      nil ->
+        if hop in attribute_names(entity_type) do
+          raise ArgumentError,
+            message:
+              "#{inspect(hop)} is an attribute in #{inspect(entity_type)} - a path goes through relationships, and only its last name is an attribute"
+        end
+
+        known =
+          entity_type
+          |> relationship_names()
+          |> Enum.map_join(", ", &inspect/1)
+
+        raise ArgumentError,
+          message:
+            "unknown relationship #{inspect(hop)} in #{inspect(entity_type)} - known relationships: #{known}"
+    end
+  end
+
+  defp validate_predicate_name!(name, entity_type) when is_atom(name) do
+    validate_filtered_name!(name, entity_type)
+  end
+
+  defp validate_predicate_name!(name, entity_type), do: validate_path!(name, entity_type)
 
   # What DB.update/3 accepts as a change name - a declared attribute or a to-one reference field -
   # refused where it is written rather than at the write, with the fix named for the mistakes a
@@ -1332,11 +1460,6 @@ defmodule Hologram.Query.Stage do
         message:
           "to-one relationship #{inspect(name)} takes no clauses - clauses apply to to-many includes"
     end
-
-    if include_depth(sub_term) > 1 do
-      raise ArgumentError,
-        message: "including #{inspect(name)} exceeds the traversal depth limit of 2 levels"
-    end
   end
 
   defp validate_sub_term_entity!(%Query{entity: target}, _name, target), do: :ok
@@ -1359,4 +1482,14 @@ defmodule Hologram.Query.Stage do
     do: Enum.flat_map(values, &value_placeholder_names/1)
 
   defp value_placeholder_names(_value), do: []
+
+  defp written_operand_name(name) when is_atom(name), do: [name]
+
+  defp written_operand_name(name), do: if(path?(name), do: [name], else: [])
+
+  defp written_operand_names({:attribute, name}), do: written_operand_name(name)
+
+  defp written_operand_names({_operator, {:attribute, name}}), do: written_operand_name(name)
+
+  defp written_operand_names(_value), do: []
 end

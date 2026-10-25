@@ -363,11 +363,11 @@ defmodule Hologram.PolicyTest do
                  %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: nil}
                ],
                :delete => [
-                 %{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}
+                 %{predicates: [], to: [{:rel, [:parent], [:admin]}], via: nil}
                ],
                :grant_role => [owner_rule, owner_rule],
                :publish => [
-                 %{predicates: [], to: nil, via: {:publish, :parent}}
+                 %{predicates: [], to: nil, via: {:publish, [:parent]}}
                ],
                :read => [
                  %{predicates: [{:public, :==, true}], to: nil, via: nil},
@@ -390,7 +390,32 @@ defmodule Hologram.PolicyTest do
 
     test "keeps the operation a delegation names" do
       assert build(Policy.Module11) == %{
-               create: [%{predicates: [], to: nil, via: {:update, :parent}}]
+               create: [%{predicates: [], to: nil, via: {:update, [:parent]}}]
+             }
+    end
+
+    test "follows a path in a condition, a delegation and a grant reference" do
+      assert build(Policy.Module12) == %{
+               archive: [%{predicates: [{[:link, :priority], :==, :high}], to: nil, via: nil}],
+               delete: [
+                 %{
+                   predicates: [{:level, :<=, {:attribute, [:parent, :parent, :priority]}}],
+                   to: nil,
+                   via: nil
+                 }
+               ],
+               publish: [%{predicates: [], to: nil, via: {:publish, [:parent, :parent]}}],
+               read: [
+                 %{predicates: [{[:parent, :parent, :public], :==, true}], to: nil, via: nil}
+               ],
+               triage: [
+                 %{
+                   predicates: [{[:parent, :parent, :created_at], :>=, ~U[2026-01-01 00:00:00Z]}],
+                   to: nil,
+                   via: nil
+                 }
+               ],
+               update: [%{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}]
              }
     end
   end
@@ -567,11 +592,19 @@ defmodule Hologram.PolicyTest do
     end
 
     test "asks the same operation through a relationship" do
-      assert delegation(:read, :parent) == {:read, :parent}
+      assert delegation(:read, :parent) == {:read, [:parent]}
+    end
+
+    test "asks the same operation through a path" do
+      assert delegation(:read, [:trip, :user]) == {:read, [:trip, :user]}
     end
 
     test "keeps the operation a tuple names" do
-      assert delegation(:create, {:update, :parent}) == {:update, :parent}
+      assert delegation(:create, {:update, :parent}) == {:update, [:parent]}
+    end
+
+    test "keeps the operation a tuple around a path names" do
+      assert delegation(:create, {:update, [:stop, :trip]}) == {:update, [:stop, :trip]}
     end
   end
 

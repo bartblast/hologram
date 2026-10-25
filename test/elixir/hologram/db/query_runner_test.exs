@@ -482,6 +482,25 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert id == first.id
     end
 
+    test "binds a placeholder on a path with the type of the attribute it ends at" do
+      required = DB.create!(Module1.new())
+
+      target =
+        %{a: true, c: "banana"}
+        |> Module2.new()
+        |> DB.create!()
+
+      source =
+        %{b_id: target.id, c_id: required.id}
+        |> Module3.new()
+        |> DB.create!()
+
+      term = %{Stage.normalize(Module3) | filter: [{[:b, :c], :==, {:placeholder, :search}}]}
+
+      assert [%{id: id}] = run(term, @mapping, %{search: "banana"})
+      assert id == source.id
+    end
+
     test "counts matching entities" do
       create_module_2_entities()
 
@@ -891,6 +910,16 @@ defmodule Hologram.DB.QueryRunnerTest do
 
     test "raises on a placeholder value of the wrong type" do
       term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
+
+      expected_msg = "invalid value 123 for placeholder :search - expected a :string value"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{search: 123})
+      end
+    end
+
+    test "raises on a placeholder value on a path of the wrong type for the attribute it ends at" do
+      term = %{Stage.normalize(Module3) | filter: [{[:b, :c], :==, {:placeholder, :search}}]}
 
       expected_msg = "invalid value 123 for placeholder :search - expected a :string value"
 

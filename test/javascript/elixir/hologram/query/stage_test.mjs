@@ -188,8 +188,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
           relationships: {},
           serverOnly: ["balance"],
         },
+        // A path ends at one of these - an enum, an integer, a boolean and a date pair beside the
+        // string and the id the user stages read.
         [USER]: {
-          attributes: {email: "string", id: "uuid"},
+          attributes: {
+            active: "boolean",
+            email: "string",
+            ends_on: "date",
+            id: "uuid",
+            level: "enum",
+            logins: "integer",
+            starts_on: "date",
+          },
+          enumValues: {level: ["low", "medium", "high"]},
           relationships: {
             manager: {toMany: false, type: USER},
             projects: {toMany: true, type: PROJECT},
@@ -1086,6 +1097,12 @@ describe("Elixir_Hologram_Query_Stage", () => {
   });
 
   describe("filter/2", () => {
+    // A path as the lowering hands it over: its names, in order, as a list of atoms.
+    const path = (...names) => Type.list(names.map(Type.atom));
+
+    const pathPredicates = (names, value) =>
+      Type.list([Type.tuple([path(...names), value])]);
+
     const range = (first, last, step = 1) =>
       Type.map([
         [Type.atom("__struct__"), Type.alias("Range")],
@@ -1293,8 +1310,12 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(query.filter, [["id", "==", {actor: true}]]);
     });
 
+    // The operand is the same {:actor} tuple the bare leaf is.
     it("reads the actor leaf under an equality operator", () => {
-      const value = Type.tuple([Type.atom("!="), Type.atom("actor")]);
+      const value = Type.tuple([
+        Type.atom("!="),
+        Type.tuple([Type.atom("actor")]),
+      ]);
       const query = filter(task, predicates([["id", value]]));
 
       assert.deepStrictEqual(query.filter, [["id", "!=", {actor: true}]]);
@@ -1382,6 +1403,119 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    it("reads a path to an attribute of the related row", () => {
+      const query = filter(
+        booking,
+        pathPredicates(["owner", "email"], Type.bitstring("ada@example.com")),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        [["owner", "email"], "==", "ada@example.com"],
+      ]);
+    });
+
+    it("reads a path through two relationships", () => {
+      const query = filter(
+        booking,
+        pathPredicates(
+          ["owner", "manager", "email"],
+          Type.bitstring("ada@example.com"),
+        ),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        [["owner", "manager", "email"], "==", "ada@example.com"],
+      ]);
+    });
+
+    it("reads a path operand", () => {
+      const operand = Type.tuple([
+        Type.atom("attribute"),
+        path("assignee", "id"),
+      ]);
+
+      const query = filter(booking, predicates([["owner_id", operand]]));
+
+      assert.deepStrictEqual(query.filter, [
+        ["owner_id", "==", {attribute: ["assignee", "id"]}],
+      ]);
+    });
+
+    it("reads an ordering comparison on a path to a string attribute", () => {
+      const value = Type.tuple([Type.atom(">="), Type.bitstring("m")]);
+      const query = filter(booking, pathPredicates(["owner", "email"], value));
+
+      assert.deepStrictEqual(query.filter, [[["owner", "email"], ">=", "m"]]);
+    });
+
+    it("reads a membership on a path", () => {
+      const value = Type.tuple([
+        Type.atom("in"),
+        Type.list([Type.bitstring("a"), Type.bitstring("b")]),
+      ]);
+
+      const query = filter(booking, pathPredicates(["owner", "email"], value));
+
+      assert.deepStrictEqual(query.filter, [
+        [["owner", "email"], "in", ["a", "b"]],
+      ]);
+    });
+
+    it("reads an attribute triple between two paths", () => {
+      const value = Type.tuple([
+        Type.atom("<"),
+        Type.tuple([Type.atom("attribute"), path("owner", "starts_on")]),
+      ]);
+
+      const query = filter(
+        booking,
+        pathPredicates(["owner", "ends_on"], value),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        [["owner", "ends_on"], "<", {attribute: ["owner", "starts_on"]}],
+      ]);
+    });
+
+    it("reads an ordering comparison on a path to an enum attribute", () => {
+      const value = Type.tuple([Type.atom(">="), Type.atom("medium")]);
+      const query = filter(booking, pathPredicates(["owner", "level"], value));
+
+      assert.deepStrictEqual(query.filter, [
+        [["owner", "level"], ">=", "medium"],
+      ]);
+    });
+
+    it("reads an ordering comparison on a path to an integer attribute", () => {
+      const value = Type.tuple([Type.atom(">="), Type.integer(3)]);
+      const query = filter(booking, pathPredicates(["owner", "logins"], value));
+
+      assert.deepStrictEqual(query.filter, [[["owner", "logins"], ">=", 3]]);
+    });
+
+    it("reads a range on a path as its two bounds", () => {
+      const query = filter(
+        booking,
+        pathPredicates(["owner", "logins"], range(1, 3)),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        [["owner", "logins"], ">=", 1],
+        [["owner", "logins"], "<=", 3],
+      ]);
+    });
+
+    it("reads the actor leaf on a path to a uuid attribute", () => {
+      const query = filter(
+        booking,
+        pathPredicates(["owner", "id"], Type.tuple([Type.atom("actor")])),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        [["owner", "id"], "==", {actor: true}],
+      ]);
+    });
+
     it("reads an or entry as a disjunction of its alternatives", () => {
       const value = disjunction(
         [["done", Type.boolean(true)]],
@@ -1435,11 +1569,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
     });
 
-    it("raises on predicates that are not a keyword list", () => {
+    it("raises on predicates that are not a list of name and value pairs", () => {
       assert.throw(
         () => filter(task, Type.integer(123)),
         HologramBoxedError,
-        "filter predicates must be a keyword list, got: 123",
+        "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: 123",
       );
     });
 
@@ -1453,6 +1587,134 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     // A to-one relationship names a reference the predicate can read instead, and the message
     // says which - a to-many has none to offer.
+    it("raises on a one-element list as a predicate name", () => {
+      assert.throw(
+        () => filter(booking, pathPredicates(["owner"], Type.bitstring("x"))),
+        HologramBoxedError,
+        'filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: [{[:owner], "x"}]',
+      );
+    });
+
+    it("raises on a one-element list as an attribute operand", () => {
+      const operand = Type.tuple([Type.atom("attribute"), path("name")]);
+
+      assert.throw(
+        () => filter(booking, predicates([["note", operand]])),
+        HologramBoxedError,
+        "invalid attribute operand {:attribute, [:name]} - an attribute is named by an atom, and a path by a list of two or more atoms",
+      );
+    });
+
+    it("raises on a path compared with itself", () => {
+      const value = Type.tuple([
+        Type.atom("<"),
+        Type.tuple([Type.atom("attribute"), path("owner", "email")]),
+      ]);
+
+      assert.throw(
+        () => filter(booking, pathPredicates(["owner", "email"], value)),
+        HologramBoxedError,
+        "operator :< compares attribute owner.email in MyApp.Booking with itself",
+      );
+    });
+
+    it("raises on a path through a to-many relationship", () => {
+      assert.throw(
+        () =>
+          filter(
+            booking,
+            pathPredicates(["owner", "projects", "name"], Type.bitstring("x")),
+          ),
+        HologramBoxedError,
+        ":projects is a to-many relationship in MyApp.User - a path in a condition goes through to-one relationships only",
+      );
+    });
+
+    it("raises on a path through an attribute", () => {
+      assert.throw(
+        () =>
+          filter(
+            booking,
+            pathPredicates(["owner", "email", "x"], Type.bitstring("x")),
+          ),
+        HologramBoxedError,
+        ":email is an attribute in MyApp.User - a path goes through relationships, and only its last name is an attribute",
+      );
+    });
+
+    it("raises on a path through an unknown relationship", () => {
+      assert.throw(
+        () =>
+          filter(
+            booking,
+            pathPredicates(["boss", "email"], Type.bitstring("x")),
+          ),
+        HologramBoxedError,
+        "unknown relationship :boss in MyApp.Booking - known relationships: :assignee, :owner",
+      );
+    });
+
+    it("raises on a path to an unknown attribute", () => {
+      assert.throw(
+        () => filter(booking, pathPredicates(["owner", "x"], Type.integer(1))),
+        HologramBoxedError,
+        "unknown attribute :x in MyApp.User - known attributes: :active, :email, :ends_on, :id, :level, :logins, :manager_id, :starts_on",
+      );
+    });
+
+    it("raises on an ordering comparison on a path to a boolean attribute", () => {
+      const value = Type.tuple([Type.atom(">"), Type.boolean(true)]);
+
+      assert.throw(
+        () => filter(booking, pathPredicates(["owner", "active"], value)),
+        HologramBoxedError,
+        "operator :> requires an orderable attribute - attribute owner.active in MyApp.Booking has type :boolean, and boolean and uuid attributes have no order to compare by",
+      );
+    });
+
+    it("raises on a comparison against a value the enum a path ends at does not declare", () => {
+      const value = Type.tuple([Type.atom(">="), Type.atom("urgent")]);
+
+      assert.throw(
+        () => filter(booking, pathPredicates(["owner", "level"], value)),
+        HologramBoxedError,
+        ":urgent is not a value of attribute owner.level in MyApp.Booking - the values are [:low, :medium, :high]",
+      );
+    });
+
+    it("raises on a path and an attribute of different types", () => {
+      const operand = Type.tuple([
+        Type.atom("attribute"),
+        path("assignee", "email"),
+      ]);
+
+      assert.throw(
+        () => filter(booking, predicates([["owner_id", operand]])),
+        HologramBoxedError,
+        "operator :== compares attribute :owner_id with attribute assignee.email in MyApp.Booking, which have different types (:uuid and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
+      );
+    });
+
+    it("raises on a path through an unknown relationship on a later hop", () => {
+      assert.throw(
+        () =>
+          filter(
+            booking,
+            pathPredicates(["owner", "boss", "email"], Type.bitstring("x")),
+          ),
+        HologramBoxedError,
+        "unknown relationship :boss in MyApp.User - known relationships: :manager, :projects",
+      );
+    });
+
+    it("raises on a path to a relationship", () => {
+      assert.throw(
+        () => filter(booking, pathPredicates(["owner", "manager"], Type.nil())),
+        HologramBoxedError,
+        ":manager is a relationship in MyApp.User - only attributes can be filtered - filter its reference via :manager_id",
+      );
+    });
+
     it("raises on a to-one relationship, naming its reference field", () => {
       assert.throw(
         () =>
@@ -1678,7 +1940,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
-    it("raises on an alternative that is not a keyword list", () => {
+    it("raises on an alternative that is not a list of name and value pairs", () => {
       const value = Type.list([
         predicates([["done", Type.boolean(true)]]),
         Type.list([Type.integer(1)]),
@@ -1687,7 +1949,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.throw(
         () => filter(task, predicates([["or", value]])),
         HologramBoxedError,
-        "an alternative of a disjunction is a non-empty keyword list of predicates, got: [1]",
+        "an alternative of a disjunction is a non-empty list of name and value pairs, got: [1]",
       );
     });
 
@@ -1697,7 +1959,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.throw(
         () => filter(task, predicates([["or", value]])),
         HologramBoxedError,
-        "an alternative of a disjunction is a non-empty keyword list of predicates, got: []",
+        "an alternative of a disjunction is a non-empty list of name and value pairs, got: []",
       );
     });
 
@@ -1777,6 +2039,31 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(query.include, {
         owner: baseTerm(USER),
         tasks: freshTerm,
+      });
+    });
+
+    it("includes three levels deep", () => {
+      const query = include(
+        user,
+        Type.atom("manager"),
+        subBuilder((levelOne) =>
+          include(
+            levelOne,
+            Type.atom("manager"),
+            subBuilder((levelTwo) =>
+              include(levelTwo, Type.atom("manager"), Type.nil()),
+            ),
+          ),
+        ),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        manager: {
+          ...baseTerm(USER),
+          include: {
+            manager: {...baseTerm(USER), include: {manager: baseTerm(USER)}},
+          },
+        },
       });
     });
 
@@ -2162,27 +2449,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
           ),
         HologramBoxedError,
         "to-one relationship :owner takes no clauses - clauses apply to to-many includes",
-      );
-    });
-
-    it("raises on excessive traversal depth", () => {
-      assert.throw(
-        () =>
-          include(
-            user,
-            Type.atom("manager"),
-            subBuilder((levelOne) =>
-              include(
-                levelOne,
-                Type.atom("manager"),
-                subBuilder((levelTwo) =>
-                  include(levelTwo, Type.atom("manager"), Type.nil()),
-                ),
-              ),
-            ),
-          ),
-        HologramBoxedError,
-        "including :manager exceeds the traversal depth limit of 2 levels",
       );
     });
   });

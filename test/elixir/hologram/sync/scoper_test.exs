@@ -11,7 +11,9 @@ defmodule Hologram.Sync.ScoperTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
   defp events(entity_types) do
     events = Enum.map(entity_types, &%{op: :patch_entity, type: &1})
@@ -52,6 +54,12 @@ defmodule Hologram.Sync.ScoperTest do
       windows = [{:board, term(Module3, %{a: term(Module3, %{a: term(Module2)})})}]
 
       assert affected(events([Module2]), windows, %{}) == [:board]
+    end
+
+    test "includes a window whose query reads the changed type through a path" do
+      window = %{term(Module3, %{b: term(Module2)}) | filter: [{[:b, :a], :==, true}]}
+
+      assert affected(events([Module2]), [{:board, window}], %{}) == [:board]
     end
 
     test "returns every window a transaction reached, and only those" do
@@ -104,6 +112,19 @@ defmodule Hologram.Sync.ScoperTest do
       windows = [{:board, term(Module2)}]
 
       assert affected(events([PolicyModule1]), windows, edges) == [:board]
+    end
+
+    # The row in between holds the reference the path is followed through, so a change to it can
+    # move where the path ends.
+    test "includes a window whose policy reads an intermediate row of a path when that type changes" do
+      edges =
+        [PolicyModule12]
+        |> Edges.derive()
+        |> Map.take([{PolicyModule12, :read}])
+
+      windows = [{:board, term(PolicyModule12)}]
+
+      assert affected(events([PolicyModule5]), windows, edges) == [:board]
     end
 
     test "ignores an entity type this node has never compiled" do

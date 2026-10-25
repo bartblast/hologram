@@ -12,7 +12,10 @@ import SortKey from "./sort_key.mjs";
 // A filter is a list of clauses that all hold. A clause is a triple array - [name, operator,
 // operand] - or a disjunction, {or: alternatives}, holding when one of its alternatives does, each
 // alternative a clause list of its own. An operand is a value, the acting user ({actor: true}), a
-// placeholder ({placeholder: name}) or another attribute of the same row ({attribute: name}).
+// placeholder ({placeholder: name}) or another attribute of the same row ({attribute: name}). A
+// name - in a triple or an attribute operand - is an attribute, or a path: an array of the to-one
+// relationships followed from the row and the attribute of the row they lead to, read out of the
+// related type's table and missing when a reference is empty or names a row not held.
 //
 // Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
@@ -37,7 +40,8 @@ export default class QueryKernel {
     const ranks = QueryKernel.#ranksFor(term.entity, term.filter);
 
     const matched = Object.values(LocalDatabase.getTable(term.entity)).filter(
-      (row) => QueryKernel.#matches(row, term.filter, context, ranks),
+      (row) =>
+        QueryKernel.#matches(row, term.filter, context, ranks, term.entity),
     );
 
     switch (term.cardinality) {
@@ -62,11 +66,21 @@ export default class QueryKernel {
 
   // The entity type is what an enum predicate is answered by: its declared value list decides
   // which of two labels comes first, and a caller that names its type gets the same answer run()
-  // gives. Left out, nothing is ranked and labels compare as they are spelled.
+  // gives. Left out, nothing is ranked and labels compare as they are spelled - and a path cannot
+  // be followed at all, since what its relationships lead to is a fact about the type.
   static matches(row, filter, context = {}, entityType = null) {
+    if (
+      (entityType === null || entityType === undefined) &&
+      QueryKernel.#namesPath(filter)
+    ) {
+      throw new HologramRuntimeError(
+        "a filter with a path needs the entity type of the rows it matches",
+      );
+    }
+
     const ranks = QueryKernel.#ranksFor(entityType, filter);
 
-    return QueryKernel.#matches(row, filter, context, ranks);
+    return QueryKernel.#matches(row, filter, context, ranks, entityType);
   }
 
   // Every predicate triple of the filter, in order, the ones inside a disjunction's alternatives
@@ -168,6 +182,35 @@ export default class QueryKernel {
     return QueryKernel.#compare(left[name], right[name]);
   }
 
+  // The row a name is read off and the attribute read there: the row itself for an attribute, and
+  // for a path the row its relationships lead to - none when a reference is empty or names a row
+  // the database does not hold, since a fill arrives in pieces.
+  static #endOf(row, name, entityType) {
+    if (!Array.isArray(name)) {
+      return {name, row};
+    }
+
+    let current = row;
+    let currentType = entityType;
+
+    for (const relationshipName of name.slice(0, -1)) {
+      const targetId = current[`${relationshipName}_id`] ?? null;
+      const targetType =
+        Model.relationships(currentType)[relationshipName].type;
+
+      current =
+        targetId === null ? null : LocalDatabase.getRow(targetType, targetId);
+
+      if (current === null) {
+        return {name: name[name.length - 1], row: null};
+      }
+
+      currentType = targetType;
+    }
+
+    return {name: name[name.length - 1], row: current};
+  }
+
   // What an enum compares by: each declared value against its position in the list the type
   // declares, built once per run and only for the names that need it - the ordering keys and the
   // filtered attributes alike. A name of any other type is absent, and its comparison is the
@@ -211,7 +254,13 @@ export default class QueryKernel {
       .filter(
         (target) =>
           target !== null &&
-          QueryKernel.#matches(target, subTerm.filter, context, ranks),
+          QueryKernel.#matches(
+            target,
+            subTerm.filter,
+            context,
+            ranks,
+            subTerm.entity,
+          ),
       );
 
     return QueryKernel.#arrange(targets, subTerm).map((target) =>
@@ -238,39 +287,67 @@ export default class QueryKernel {
   // A visitor has no acting user, and each triple naming one answers false on its own - so a
   // disjunction needs no case for it: the alternative asking about nobody fails, and the others
   // still answer.
-  static #matches(row, filter, context, ranks) {
+  static #matches(row, filter, context, ranks, entityType) {
     return filter.every((clause) =>
       Array.isArray(clause)
-        ? QueryKernel.#matchesTriple(row, clause, context, ranks)
+        ? QueryKernel.#matchesTriple(row, clause, context, ranks, entityType)
         : clause.or.some((alternative) =>
-            QueryKernel.#matches(row, alternative, context, ranks),
+            QueryKernel.#matches(row, alternative, context, ranks, entityType),
           ),
     );
   }
 
-  // Another attribute of the same row is read off the row, and compared by the predicate's
-  // attribute's ranks - two enums compare only when they declare the same list, so one serves both.
-  static #matchesTriple(row, [name, operator, operand], context, ranks) {
-    const ranksForKey = ranks[name];
+  // Another attribute of the same row, or one a path reaches, is read the way the predicate's own
+  // side is, and compared by the predicate's attribute's ranks - two enums compare only when they
+  // declare the same list, so one serves both.
+  static #matchesTriple(
+    row,
+    [name, operator, operand],
+    context,
+    ranks,
+    entityType,
+  ) {
+    const ranksForKey = ranks[QueryKernel.#nameKey(name)];
 
     const value = QueryKernel.#isAttribute(operand)
-      ? (row[operand.attribute] ?? null)
+      ? QueryKernel.#read(row, operand.attribute, entityType)
       : QueryKernel.#resolve(operand, context, ranksForKey);
-    const sortName = `${name}_sort`;
+
+    const end = QueryKernel.#endOf(row, name, entityType);
+    const sortName = `${end.name}_sort`;
 
     // A row filed by ingest carries the key beside every string attribute, so the presence of
     // the field is what says "this is a string" - no model lookup.
-    const pair = sortName in row ? [row[sortName], row[name] ?? null] : null;
+    const pair =
+      end.row !== null && sortName in end.row
+        ? [end.row[sortName], end.row[end.name] ?? null]
+        : null;
 
     return value === QueryKernel.#NO_ACTOR
       ? false
       : QueryKernel.#satisfies(
           operator,
-          row[name] ?? null,
+          end.row === null ? null : (end.row[end.name] ?? null),
           value,
           ranksForKey,
           pair,
         );
+  }
+
+  // Whether a filter reads a path anywhere - on either side of a comparison, in any alternative -
+  // which only a caller naming the rows' type can follow.
+  static #namesPath(filter) {
+    return QueryKernel.triples(filter).some(
+      ([name, _operator, operand]) =>
+        Array.isArray(name) ||
+        (QueryKernel.#isAttribute(operand) && Array.isArray(operand.attribute)),
+    );
+  }
+
+  // The key a name's ranks are kept under - a path's names joined, which no attribute name can
+  // spell.
+  static #nameKey(name) {
+    return Array.isArray(name) ? name.join(".") : name;
   }
 
   static #node(row, term, context) {
@@ -289,7 +366,8 @@ export default class QueryKernel {
     return {includes: includes, row: row};
   }
 
-  // The ranks a filter's own predicates compare by, keyed by the attribute each names - the ones
+  // The ranks a filter's own predicates compare by, keyed by the name each predicate is written
+  // with - an attribute or a path, whose ranks are those of the attribute it ends at - the ones
   // inside a disjunction's alternatives included. A caller that names no type ranks nothing, which
   // is what the raw comparison already was.
   static #ranksFor(entityType, filter) {
@@ -297,10 +375,29 @@ export default class QueryKernel {
       return {};
     }
 
-    return QueryKernel.#enumRanks(
-      entityType,
-      QueryKernel.triples(filter).map(([name]) => name),
-    );
+    const ranks = {};
+
+    for (const [name] of QueryKernel.triples(filter)) {
+      const declaringType = Array.isArray(name)
+        ? Model.pathTarget(entityType, name.slice(0, -1))
+        : entityType;
+
+      const declaredName = Array.isArray(name) ? name[name.length - 1] : name;
+
+      const declared = QueryKernel.#enumRanks(declaringType, [declaredName]);
+
+      if (declared[declaredName]) {
+        ranks[QueryKernel.#nameKey(name)] = declared[declaredName];
+      }
+    }
+
+    return ranks;
+  }
+
+  static #read(row, name, entityType) {
+    const end = QueryKernel.#endOf(row, name, entityType);
+
+    return end.row === null ? null : (end.row[end.name] ?? null);
   }
 
   static #resolve(operand, context, ranksForKey) {

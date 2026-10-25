@@ -20,8 +20,9 @@ defmodule Hologram.Sync.Scoper do
   than derived here, so a caller reading it once can hand it to every batch.
 
   A window depends on the entity types its query reads, its own and through everything it
-  includes, and on the types its policies consult to decide who sees those rows: the grant store,
-  for any rule granting by role, and a related type whose attributes a delegated rule reads.
+  includes - the relationships a filter's paths go through among them - and on the types its
+  policies consult to decide who sees those rows: the grant store, for any rule granting by role,
+  and a related type whose attributes a delegated rule reads.
 
   Attribute names on the edges are deliberately not used to narrow further. A query result is
   whole entities, so a client holding a row wants any change to it - which makes an attribute

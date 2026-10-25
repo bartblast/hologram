@@ -9,6 +9,7 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Leg
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Stop
@@ -17,16 +18,17 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias HologramFeatureTests.Policies.Page2
   alias HologramFeatureTests.Policies.Page3
   alias HologramFeatureTests.Policies.Page5
+  alias HologramFeatureTests.Policies.Page6
   alias HologramFeatureTests.PoliciesPage
   alias HologramFeatureTests.Roles.Admin
 
   # The tables truncate in one statement: the memo, note and role grant tables' foreign keys to the
-  # user table, and the stop table's to the trip table, make Postgres reject truncating the
-  # referenced table alone.
+  # user table, the stop table's to the trip table and the leg table's to the stop table make
+  # Postgres reject truncating the referenced table alone.
   setup do
     tables =
       Enum.map_join(
-        [Booking, Document, Folder, Memo, Note, RoleGrant, Stop, Trip, User],
+        [Booking, Document, Folder, Leg, Memo, Note, RoleGrant, Stop, Trip, User],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
@@ -38,14 +40,28 @@ defmodule HologramFeatureTests.PoliciesTest do
     :ok
   end
 
-  # Proves the DOM changed without the page being fetched again - a reload would take the marker
-  # with it, so a passing assertion after one would say nothing.
-  defp assert_same_page_load(session) do
-    assert_script_result(session, "return globalThis.__thisPageLoad;", "held")
-  end
+  # Three trips, one archived, each with a stop and a leg on it. Each feature makes the session user
+  # an editor of the archived trip and the own trip, so a refusal on the archived one comes from the
+  # trip being archived - its update rule for a new leg, the rename rule's condition for a rename -
+  # and a refusal on the other trip from the role it does not hold there.
+  defp seed_legs do
+    Map.new(["archived", "other", "own"], fn prefix ->
+      trip =
+        %{archived: prefix == "archived", name: "#{prefix}_trip"}
+        |> Trip.new()
+        |> DB.create!()
 
-  defp mark_this_page_load(session) do
-    execute_script(session, "globalThis.__thisPageLoad = 'held';")
+      stop =
+        %{name: "#{prefix}_stop", trip_id: trip.id}
+        |> Stop.new()
+        |> DB.create!()
+
+      %{name: "#{prefix}_leg", stop_id: stop.id}
+      |> Leg.new()
+      |> DB.create!()
+
+      {"#{prefix}_trip", trip}
+    end)
   end
 
   defp seed_trips do
@@ -354,6 +370,88 @@ defmodule HologramFeatureTests.PoliciesTest do
 
     session
     |> assert_text(css("#stoppable_trips"), ~r/^own_trip$/)
+    |> assert_same_page_load()
+  end
+
+  feature "adds a leg through the trip's update rule two rows away", %{session: session} do
+    trips = seed_legs()
+
+    session
+    |> visit(Page6)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+
+    Auth.grant_role(session_user(), :editor, trips["archived_trip"])
+    Auth.grant_role(session_user(), :editor, trips["own_trip"])
+
+    session
+    |> click(button("Add leg to own stop"))
+    |> assert_text(css("#result"), "added_leg_to_own_stop")
+    |> click(button("Add leg to archived stop"))
+    |> assert_text(css("#result"), "refused_leg_on_archived_stop")
+
+    names =
+      Leg
+      |> DB.read()
+      |> Enum.map(& &1.name)
+      |> Enum.sort()
+
+    assert names == ["archived_leg", "other_leg", "own_leg", "own_stop_leg"]
+  end
+
+  feature "renames a leg through a role and a condition two rows away", %{session: session} do
+    trips = seed_legs()
+
+    session
+    |> visit(Page6)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+
+    Auth.grant_role(session_user(), :editor, trips["archived_trip"])
+    Auth.grant_role(session_user(), :editor, trips["own_trip"])
+
+    session
+    |> click(button("Rename own leg"))
+    |> assert_text(css("#result"), "renamed_own_leg")
+    |> click(button("Rename other leg"))
+    |> assert_text(css("#result"), "refused_rename_of_other_leg")
+    |> click(button("Rename archived leg"))
+    |> assert_text(css("#result"), "refused_rename_of_archived_leg")
+
+    names =
+      Leg
+      |> DB.read()
+      |> Enum.map(& &1.name)
+      |> Enum.sort()
+
+    assert names == ["archived_leg", "other_leg", "own_leg_renamed"]
+  end
+
+  # The grants arrive on the stream and the browser answers again over the rows it holds, following
+  # each leg's stop to its trip: the create rule asks the trip's update rule, the rename rule a role
+  # on the trip and the trip's archived flag. The archived trip's grant goes first, so by the time
+  # the own trip's rows show, the browser has already answered for the archived one, and the other
+  # trip's rows stay out for want of a role there. The reload renders the page for the session user:
+  # a login sets no context until a page renders.
+  feature "checks a path through two rows in the browser", %{session: session} do
+    trips = seed_legs()
+
+    session =
+      session
+      |> visit(Page6)
+      |> click(button("Log in"))
+      |> assert_text(css("#result"), "logged_in")
+      |> reload()
+      |> assert_text(css("#leggable_stops"), ~r/^$/)
+      |> assert_text(css("#renamable_legs"), ~r/^$/)
+      |> mark_this_page_load()
+
+    Auth.grant_role(session_user(), :editor, trips["archived_trip"])
+    Auth.grant_role(session_user(), :editor, trips["own_trip"])
+
+    session
+    |> assert_text(css("#leggable_stops"), ~r/^own_stop$/)
+    |> assert_text(css("#renamable_legs"), ~r/^own_leg$/)
     |> assert_same_page_load()
   end
 end

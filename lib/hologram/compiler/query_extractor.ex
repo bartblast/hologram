@@ -803,8 +803,11 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp asked_for(variants) do
     case Enum.find_value(variants, &filtered_names/1) do
-      nil -> {"", nil}
-      {names, line} -> {" - it filters on #{Enum.map_join(names, ", ", &inspect/1)}", line}
+      nil ->
+        {"", nil}
+
+      {names, line} ->
+        {" - it filters on #{Enum.map_join(names, ", ", &Stage.inspect_name/1)}", line}
     end
   end
 
@@ -819,39 +822,13 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp filter_stage_names({:filter, [predicates], line}) when is_list(predicates) do
     names =
       predicates
-      |> predicate_names()
+      |> Stage.written_names()
       |> Enum.uniq()
 
     if names == [], do: nil, else: {names, line}
   end
 
   defp filter_stage_names(_stage), do: nil
-
-  # The attributes a data-form filter names, a disjunction's alternatives walked - an or: entry
-  # holding predicate lists names what they name, the way the stage reads it - and the attribute an
-  # attribute operand names beside the one it is compared with.
-  defp predicate_names(predicates) do
-    Enum.flat_map(predicates, fn
-      {:or, alternatives} when is_list(alternatives) ->
-        if Enum.all?(alternatives, &is_list/1) do
-          Enum.flat_map(alternatives, &predicate_names/1)
-        else
-          [:or]
-        end
-
-      {name, {:attribute, other}} when is_atom(name) and is_atom(other) ->
-        [name, other]
-
-      {name, {_operator, {:attribute, other}}} when is_atom(name) and is_atom(other) ->
-        [name, other]
-
-      {name, _value} when is_atom(name) ->
-        [name]
-
-      _entry ->
-        []
-    end)
-  end
 
   # An include name the build cannot enumerate is not an unknowable position - its candidate set is
   # simply empty, which only the entity it was asked of can explain.

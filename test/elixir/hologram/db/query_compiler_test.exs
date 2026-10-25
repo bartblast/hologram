@@ -12,8 +12,10 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module24
+  alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -24,6 +26,22 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyModule8
   alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
   alias Hologram.Test.Fixtures.Role
+
+  defp hop(number, entity_type, selected, correlated_on) do
+    ~s|(SELECT #{selected} FROM #{table(entity_type)} AS "$p#{number}" | <>
+      ~s|WHERE "$p#{number}"."id" = #{correlated_on})|
+  end
+
+  # Every path test reads its hops out of these mappings - a hop's table has to be mapped to be read.
+  defp path_mapping(entity_types), do: Mapper.derive!(entity_types, [])
+
+  defp path_term(entity_type, predicates) do
+    entity_type
+    |> Stage.filter(predicates)
+    |> Stage.normalize()
+  end
+
+  defp table(entity_type), do: ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
 
   describe "compile/2" do
     test "assigns placeholders to placeholder slots" do
@@ -508,7 +526,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}]
+      rules = [%{predicates: [], to: [{:rel, [:parent], [:admin]}], via: nil}]
 
       assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{rules: rules})
@@ -523,6 +541,39 @@ defmodule Hologram.DB.QueryCompilerTest do
                sql,
                ~s|AND "$rg"."entity_id" = "test_fixtures_policy_module1"."parent_id")|
              )
+    end
+
+    # The role is held on the row the chain ends at, whose id the last reference holds - read off
+    # the row before it, raw, the way a policy reads the rows it is followed through.
+    test "composes a relationship grant reference two hops away through a scalar subquery" do
+      mapping =
+        Mapper.derive!(
+          [Module14, PolicyModule1, PolicyModule2, PolicyModule5, PolicyModule8, RoleGrant],
+          []
+        )
+
+      term = Stage.normalize(PolicyModule8)
+
+      rules = [%{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}]
+
+      assert %{params: placeholders, sql: sql} =
+               compile(term, mapping, %{rules: rules})
+
+      assert placeholders == [
+               :actor,
+               {:value, ["viewer"]},
+               {:value, "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+
+      target_id_sql =
+        hop(
+          1,
+          PolicyModule5,
+          ~s|"$p1"."parent_id"|,
+          ~s|"test_fixtures_policy_module8"."parent_id"|
+        )
+
+      assert String.contains?(sql, ~s|AND "$rg"."entity_id" = #{target_id_sql})|)
     end
 
     test "composes grant references and predicates as one conjunction" do
@@ -554,7 +605,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: nil, via: {:publish, :parent}}]
+      rules = [%{predicates: [], to: nil, via: {:publish, [:parent]}}]
 
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}],
@@ -565,6 +616,38 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
                    ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
                    ~s|AND "public" = $1) ORDER BY "id" ASC|
+             }
+    end
+
+    test "composes a delegation two hops away, joined through a scalar subquery" do
+      mapping =
+        Mapper.derive!(
+          [Module14, PolicyModule1, PolicyModule2, PolicyModule5, PolicyModule8, RoleGrant],
+          []
+        )
+
+      term = Stage.normalize(PolicyModule8)
+
+      rules = [%{predicates: [], to: nil, via: {:publish, [:parent, :parent]}}]
+
+      target_id_sql =
+        hop(
+          1,
+          PolicyModule5,
+          ~s|"$p1"."parent_id"|,
+          ~s|"test_fixtures_policy_module8"."parent_id"|
+        )
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module8" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module1" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = #{target_id_sql} | <>
+                   ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
+                   ~s|AS "$d2" WHERE "$d2"."id" = "$d1"."parent_id" AND "public" = $1)) | <>
+                   ~s|ORDER BY "id" ASC|
              }
     end
 
@@ -672,7 +755,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: nil, via: {:delete, :parent}}]
+      rules = [%{predicates: [], to: nil, via: {:delete, [:parent]}}]
 
       assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
@@ -686,7 +769,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: {:publish, :parent}}]
+      rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: {:publish, [:parent]}}]
 
       assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{rules: rules})
@@ -701,7 +784,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [
         %{predicates: [], to: [{:own, [:owner]}], via: nil},
-        %{predicates: [], to: nil, via: {:read, :parent}}
+        %{predicates: [], to: nil, via: {:read, [:parent]}}
       ]
 
       assert %{params: placeholders, sql: sql} =
@@ -1406,6 +1489,327 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(sql, ~s( WHERE "id" = $1))
       assert String.contains?(sql, ~s( AND "a" = $2))
+    end
+  end
+
+  describe "compile/2 - paths" do
+    # Shared by several tests, so defined once here rather than inside the first test reaching them -
+    # tests run in any order.
+    defmodule PathTarget1 do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :public, :boolean, default: false
+
+      allow :read, when: public == true
+    end
+
+    defmodule PathSource1 do
+      use Hologram.Entity
+
+      relationship :target, PathTarget1, optional: true
+
+      allow :read
+    end
+
+    defmodule PathTarget2 do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :owner, Module14, optional: true
+
+      allow :read, when: owner_id == user_id()
+    end
+
+    defmodule PathSource2 do
+      use Hologram.Entity
+
+      relationship :target, PathTarget2, optional: true
+
+      allow :read
+    end
+
+    defmodule PathMiddle3 do
+      use Hologram.Entity
+
+      relationship :target, PathTarget1, optional: true
+
+      allow :read, when: target.public == true
+    end
+
+    defmodule PathSource3 do
+      use Hologram.Entity
+
+      relationship :middle, PathMiddle3, optional: true
+
+      allow :read, via: middle
+    end
+
+    defmodule PathSource4 do
+      use Hologram.Entity
+
+      relationship :middle, PathMiddle3, optional: true
+
+      allow :read
+    end
+
+    test "compiles a one-hop path to a scalar subquery" do
+      mapping = path_mapping([Module1, Module2, Module3])
+      term = path_term(Module3, [{[:b, :a], true}])
+
+      b_a = hop(1, Module2, ~s("$p1"."a"), ~s("test_fixtures_entity_module3"."b_id"))
+
+      assert compile(term, mapping) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s(SELECT "id", "b_id", "c_id", "created_at", "updated_at", "$revisions" ) <>
+                   ~s(FROM "hologram_data"."test_fixtures_entity_module3" ) <>
+                   ~s(WHERE #{b_a} = $1 ORDER BY "id" ASC)
+             }
+    end
+
+    test "nests a hop inside the one before it" do
+      mapping = path_mapping([Module1, Module2, Module3, Module5])
+      term = path_term(Module5, [{[:a, :b, :c], "x"}])
+
+      a_b_c =
+        hop(
+          1,
+          Module3,
+          hop(2, Module2, ~s("$p2"."c"), ~s("$p1"."b_id")),
+          ~s("test_fixtures_entity_module5"."a_id")
+        )
+
+      assert %{params: [{:value, "x"}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s( WHERE #{a_b_c} = $1 ORDER BY))
+    end
+
+    test "compiles a path operand" do
+      mapping = path_mapping([Module1, Module2, Module3])
+      term = path_term(Module3, c_id: {:attribute, [:b, :id]})
+
+      b_id = hop(1, Module2, ~s("$p1"."id"), ~s("test_fixtures_entity_module3"."b_id"))
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s( WHERE "c_id" IS NOT DISTINCT FROM #{b_id} ORDER BY))
+    end
+
+    test "compares two string paths by their sort-key pairs" do
+      mapping = path_mapping([Module1, Module2, Module3, Module5])
+      term = path_term(Module5, [{[:a, :b, :c], {:<, {:attribute, [:b, :a, :b, :c]}}}])
+
+      key = fn column, outer -> hop(2, Module2, ~s("$p2"."#{column}"), outer) end
+
+      subject_key =
+        hop(
+          1,
+          Module3,
+          key.("c_$sort", ~s("$p1"."b_id")),
+          ~s("test_fixtures_entity_module5"."a_id")
+        )
+
+      subject =
+        hop(1, Module3, key.("c", ~s("$p1"."b_id")), ~s("test_fixtures_entity_module5"."a_id"))
+
+      operand_key =
+        hop(
+          1,
+          Module5,
+          hop(
+            2,
+            Module3,
+            hop(3, Module2, ~s("$p3"."c_$sort"), ~s("$p2"."b_id")),
+            ~s("$p1"."a_id")
+          ),
+          ~s("test_fixtures_entity_module5"."b_id")
+        )
+
+      operand =
+        hop(
+          1,
+          Module5,
+          hop(2, Module3, hop(3, Module2, ~s("$p3"."c"), ~s("$p2"."b_id")), ~s("$p1"."a_id")),
+          ~s("test_fixtures_entity_module5"."b_id")
+        )
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE (#{subject_key}, #{subject}) < (#{operand_key}, #{operand}) ORDER BY|
+             )
+    end
+
+    test "compares a string path with a bound by its sort-key pair" do
+      mapping = path_mapping([Module1, Module2, Module3])
+      term = path_term(Module3, [{[:b, :c], {:>=, "M"}}])
+
+      key = hop(1, Module2, ~s("$p1"."c_$sort"), ~s("test_fixtures_entity_module3"."b_id"))
+      value = hop(1, Module2, ~s("$p1"."c"), ~s("test_fixtures_entity_module3"."b_id"))
+
+      assert %{params: [{:value, "m"}, {:value, "M"}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| WHERE (#{key}, #{value}) >= ($1, $2) ORDER BY|)
+    end
+
+    test "casts a path's enum operand to the compared attribute's type" do
+      mapping = path_mapping([Module4, Module15, Module24, Module25])
+      term = path_term(Module25, [{[:e, :priority], {:attribute, [:e, :level]}}])
+
+      priority =
+        hop(1, Module24, ~s("$p1"."priority"), ~s("test_fixtures_entity_module25"."e_id"))
+
+      level = hop(1, Module24, ~s("$p1"."level"), ~s("test_fixtures_entity_module25"."e_id"))
+
+      cast = ~s|::text::"hologram_data"."test_fixtures_entity_module24_priority_$enum"|
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE #{priority} IS NOT DISTINCT FROM #{level}#{cast} ORDER BY|
+             )
+    end
+
+    test "compiles a nil equality on a path to IS NULL" do
+      mapping = path_mapping([Module1, Module2, Module3])
+      term = path_term(Module3, [{[:b, :c], nil}])
+
+      b_c = hop(1, Module2, ~s("$p1"."c"), ~s("test_fixtures_entity_module3"."b_id"))
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| WHERE #{b_c} IS NULL ORDER BY|)
+    end
+
+    # The column the path ends at is required, and a missing related row reads as missing anyway.
+    test "widens an inequality on a path to a missing value whatever the column declares" do
+      mapping = path_mapping([Module1, Module2, Module3])
+      term = path_term(Module3, [{[:b, :a], {:!=, true}}])
+
+      b_a = hop(1, Module2, ~s("$p1"."a"), ~s("test_fixtures_entity_module3"."b_id"))
+
+      assert %{params: [{:value, true}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| WHERE (#{b_a} != $1 OR #{b_a} IS NULL) ORDER BY|)
+    end
+
+    test "widens a negated membership on a path to a missing value" do
+      mapping = path_mapping([Module1, Module2, Module3])
+      term = path_term(Module3, [{[:b, :c], {:not_in, ["x"]}}])
+
+      b_c = hop(1, Module2, ~s("$p1"."c"), ~s("test_fixtures_entity_module3"."b_id"))
+
+      assert %{params: [{:value, ["x"]}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| WHERE (#{b_c} != ALL($1) OR #{b_c} IS NULL) ORDER BY|)
+    end
+
+    test "binds a placeholder on a path with the type of the attribute it ends at" do
+      mapping = path_mapping([Module1, Module2, Module3])
+      base_term = Stage.normalize(Module3)
+      term = %{base_term | filter: [{[:b, :c], :==, {:placeholder, :name}}]}
+
+      assert %{params: [{:placeholder, :name, :string}]} = compile(term, mapping)
+    end
+
+    test "applies the hop type's read policy to the row a hop reads under a policied read" do
+      mapping = path_mapping([PathSource1, PathTarget1])
+      term = path_term(PathSource1, [{[:target, :name], "x"}])
+      rules = Policy.build(PathSource1)[:read]
+
+      target_name =
+        ~s|(SELECT "$p1"."name" FROM #{table(PathTarget1)} AS "$p1" | <>
+          ~s|WHERE "$p1"."id" = "#{Mapper.table_name(PathSource1)}"."target_id" AND "public" = $1)|
+
+      assert %{params: [{:value, true}, {:value, "x"}], sql: sql} =
+               compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE #{target_name} = $2 ORDER BY|)
+    end
+
+    test "reads every row a hop reaches when compiled without a policy" do
+      mapping = path_mapping([PathSource1, PathTarget1])
+      term = path_term(PathSource1, [{[:target, :name], "x"}])
+
+      assert %{params: [{:value, "x"}], sql: sql} = compile(term, mapping)
+      refute String.contains?(sql, ~s("public"))
+    end
+
+    # Nobody is the actor, so the hop's actor-naming rule admits no row and the hop reads nothing.
+    test "folds an actor-naming hop policy away for an anonymous statement" do
+      mapping = path_mapping([Module14, PathSource2, PathTarget2])
+      term = path_term(PathSource2, [{[:target, :name], "x"}])
+      rules = Policy.build(PathSource2)[:read]
+
+      assert %{params: [{:value, "x"}], sql: sql} =
+               compile(term, mapping, %{anonymous?: true, rules: rules})
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "$p1"."id" = "#{Mapper.table_name(PathSource2)}"."target_id" AND FALSE) = $1|
+             )
+    end
+
+    # A policy decides by the rows as stored, so the hop of a rule's own condition applies no read
+    # policy even inside a policied statement.
+    test "reads a path inside a policy rule raw" do
+      mapping = path_mapping([PathSource1, PathTarget1])
+      term = Stage.normalize(PathSource1)
+      rules = [%{predicates: [{[:target, :name], :==, "x"}], to: nil, via: nil}]
+
+      target_name =
+        ~s|(SELECT "$p1"."name" FROM #{table(PathTarget1)} AS "$p1" | <>
+          ~s|WHERE "$p1"."id" = "#{Mapper.table_name(PathSource1)}"."target_id")|
+
+      assert %{params: [{:value, "x"}], sql: sql} = compile(term, mapping, %{rules: rules})
+      assert String.contains?(sql, ~s| WHERE #{target_name} = $1 ORDER BY|)
+    end
+
+    test "correlates a path inside a delegated policy on the delegation's alias" do
+      mapping = path_mapping([PathMiddle3, PathSource3, PathTarget1])
+      term = Stage.normalize(PathSource3)
+      rules = Policy.build(PathSource3)[:read]
+
+      target_public =
+        ~s|(SELECT "$p1"."public" FROM #{table(PathTarget1)} AS "$p1" | <>
+          ~s|WHERE "$p1"."id" = "$d1"."target_id")|
+
+      assert %{params: [{:value, true}], sql: sql} = compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "$d1"."id" = "#{Mapper.table_name(PathSource3)}"."middle_id" AND #{target_public} = $1)|
+             )
+    end
+
+    # The hop's read policy is evaluated on the hop's row, so a path inside it starts from the hop's
+    # alias and takes the next number.
+    test "numbers a path inside a hop's read policy past the hop" do
+      mapping = path_mapping([PathMiddle3, PathTarget1, PathSource4])
+
+      term = path_term(PathSource4, [{[:middle, :id], {:!=, nil}}])
+      rules = Policy.build(PathSource4)[:read]
+
+      middle_id =
+        ~s|(SELECT "$p1"."id" FROM #{table(PathMiddle3)} AS "$p1" | <>
+          ~s|WHERE "$p1"."id" = "#{Mapper.table_name(PathSource4)}"."middle_id" | <>
+          ~s|AND (SELECT "$p2"."public" FROM #{table(PathTarget1)} AS "$p2" | <>
+          ~s|WHERE "$p2"."id" = "$p1"."target_id") = $1)|
+
+      assert %{params: [{:value, true}], sql: sql} = compile(term, mapping, %{rules: rules})
+      assert String.contains?(sql, ~s| WHERE #{middle_id} IS NOT NULL ORDER BY|)
+    end
+
+    test "correlates a path inside a to-many include's filter on the include's row" do
+      mapping = path_mapping([Module1, Module2, Module3, Module6])
+
+      term =
+        Module6
+        |> Stage.include(:a, &Stage.filter(&1, [{[:b, :a], true}]))
+        |> Stage.normalize()
+
+      b_a = hop(1, Module2, ~s("$p1"."a"), ~s("$t1"."b_id"))
+
+      assert %{params: [{:value, true}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| AND #{b_a} = $1|)
     end
   end
 end

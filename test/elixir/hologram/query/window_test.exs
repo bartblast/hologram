@@ -10,6 +10,8 @@ defmodule Hologram.Query.WindowTest do
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module5
+  alias Hologram.Test.Fixtures.Entity.Module6
 
   defp term(entity_type, filter) do
     %{Stage.normalize(entity_type) | filter: filter}
@@ -32,6 +34,12 @@ defmodule Hologram.Query.WindowTest do
       window = derive(term(Module2, [{:updated_at, :>, {:attribute, :created_at}}]))
 
       assert window.filter == [{:updated_at, :>, {:attribute, :created_at}}]
+    end
+
+    test "keeps a path predicate comparing to a literal" do
+      window = derive(term(Module3, [{[:b, :a], :==, true}]))
+
+      assert window.filter == [{[:b, :a], :==, true}]
     end
 
     test "drops a predicate comparing to a placeholder" do
@@ -70,6 +78,18 @@ defmodule Hologram.Query.WindowTest do
       window = derive(term(Module2, filter))
 
       assert window.filter == []
+    end
+
+    # The query answers for every value the placeholder takes, over the rows the path reads - so
+    # they are downloaded even when nothing about them bounds the download.
+    test "drops a path predicate comparing to a placeholder and embeds its relationships" do
+      window = derive(term(Module5, [{[:a, :b, :c], :==, {:placeholder, :search}}]))
+
+      assert window.filter == []
+
+      assert window.include == %{
+               a: %Query{entity: Module3, include: %{b: %Query{entity: Module2}}}
+             }
     end
 
     test "drops a membership predicate holding a placeholder among its values" do
@@ -177,6 +197,53 @@ defmodule Hologram.Query.WindowTest do
       assert is_list(QueryRunner.run(window, DB.mapping()))
     end
 
+    test "embeds the relationships of a path operand" do
+      window = derive(term(Module3, [{:c_id, :==, {:attribute, [:b, :id]}}]))
+
+      assert window.include == %{b: %Query{entity: Module2}}
+    end
+
+    test "embeds the relationships of a path inside an alternative" do
+      filter = [{:or, [[{[:b, :a], :==, true}], [{:c_id, :==, nil}]]}]
+
+      assert derive(term(Module3, filter)).include == %{b: %Query{entity: Module2}}
+    end
+
+    test "embeds the relationships a path goes through inside an included query's window" do
+      base_term =
+        Module6
+        |> include(a)
+        |> Stage.normalize()
+
+      sub_term = %{base_term.include.a | filter: [{[:b, :a], :==, true}]}
+      term = %{base_term | include: %{a: sub_term}}
+
+      assert derive(term).include.a.include == %{b: %Query{entity: Module2}}
+    end
+
+    test "merges a path's relationships into the query's own includes" do
+      base_term =
+        Module5
+        |> include(a)
+        |> Stage.normalize()
+
+      term = %{base_term | filter: [{[:a, :b, :c], :==, "x"}]}
+
+      assert derive(term).include == %{
+               a: %Query{entity: Module3, include: %{b: %Query{entity: Module2}}}
+             }
+    end
+
+    test "is a query term, runnable as one, with the relationships its paths embed" do
+      window =
+        Module5
+        |> Stage.filter([{[:a, :b, :c], {:>=, "M"}}])
+        |> Stage.normalize()
+        |> derive()
+
+      assert is_list(QueryRunner.run(window, DB.mapping()))
+    end
+
     test "derives the window of an included query too" do
       base_term =
         Module3
@@ -208,6 +275,45 @@ defmodule Hologram.Query.WindowTest do
       window = derive(term(Module2, filter))
 
       assert window.filter == [{:c, :==, "channel-1"}]
+    end
+  end
+
+  describe "embed_paths/1" do
+    test "leaves a term with no path in its filters as it is" do
+      term =
+        Module3
+        |> filter(c_id == nil)
+        |> include(a)
+        |> Stage.normalize()
+
+      assert embed_paths(term) == term
+    end
+
+    # It is the query itself, read with more of the rows it reads - so what it answers stays.
+    test "embeds a path's relationships beside the term's own clauses" do
+      term =
+        Module5
+        |> filter(a.b.c == "x")
+        |> order_by(id: :desc)
+        |> limit(3)
+        |> Stage.normalize()
+
+      assert embed_paths(term) == %{
+               term
+               | include: %{a: %Query{entity: Module3, include: %{b: %Query{entity: Module2}}}}
+             }
+    end
+
+    test "embeds a path inside an included query's filter into that include" do
+      base_term =
+        Module6
+        |> include(a)
+        |> Stage.normalize()
+
+      sub_term = %{base_term.include.a | filter: [{[:b, :a], :==, true}]}
+      term = %{base_term | include: %{a: sub_term}}
+
+      assert embed_paths(term).include.a == %{sub_term | include: %{b: %Query{entity: Module2}}}
     end
   end
 end

@@ -37,11 +37,14 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module29, as: ComponentModule29
   alias Hologram.Test.Fixtures.Component.Module30, as: ComponentModule30
   alias Hologram.Test.Fixtures.Component.Module31, as: ComponentModule31
+  alias Hologram.Test.Fixtures.Component.Module32, as: ComponentModule32
+  alias Hologram.Test.Fixtures.Component.Module33, as: ComponentModule33
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
+  alias Hologram.Test.Fixtures.Entity.Module17, as: Entity17
   alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
@@ -54,6 +57,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
@@ -1592,6 +1596,21 @@ defmodule Hologram.CompilerTest do
       end
     end
 
+    test "raises for a registered query whose path goes through a type declaring no allow lines",
+         %{entity_types: entity_types} do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module33 filters through " <>
+          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+          "default deny reads every such row as missing. Add allow lines, or drop the path."
+
+      component_queries =
+        extract_component_queries([ComponentModule33], entity_types, PLT.start())
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, entity_types)
+      end
+    end
+
     test "raises for a registered query filtering on a server-only attribute", %{
       entity_types: entity_types
     } do
@@ -1603,6 +1622,23 @@ defmodule Hologram.CompilerTest do
 
       component_queries =
         extract_component_queries([ComponentModule17], entity_types, PLT.start())
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, entity_types)
+      end
+    end
+
+    test "raises for a registered query filtering on a server-only attribute through a path", %{
+      entity_types: entity_types
+    } do
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module32 filters or orders on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      component_queries =
+        extract_component_queries([ComponentModule32], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types)
@@ -1834,6 +1870,18 @@ defmodule Hologram.CompilerTest do
         derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
 
       assert MapSet.member?(sync_constants.entity_types, Entity12)
+    end
+
+    # A type a rule reads through a relationship declares nothing a check asks about, and the client
+    # still needs its model to follow the relationship.
+    test "names a type a checked rule reaches through a relationship", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert MapSet.member?(sync_constants.entity_types, Entity17)
     end
 
     test "leaves an unqueried type declaring roles out when no page checks permissions on the client",
@@ -3623,8 +3671,8 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      # A predicate rule, a grant reference on the entity itself and one on its whole type, and a
-      # delegating rule - one of each kind the evaluator has to read.
+      # A predicate rule, a grant reference on the entity itself, one on its whole type and one on
+      # a related row, and a delegating rule - one of each kind the evaluator has to read.
       assert String.contains?(
                js,
                ~s/"read":[{"predicates":[["public","==",true]],"to":null,"via":null}/
@@ -3637,7 +3685,12 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"publish":[{"predicates":[],"to":null,"via":["publish","parent"]}]/
+               ~s/"delete":[{"predicates":[],"to":[["rel",["parent"],"Hologram.Test.Fixtures.Policy.Module2",["admin"]]],"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[],"to":null,"via":["publish",["parent"]]}]/
              )
     end
 
@@ -3766,6 +3819,138 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"update":[{"predicates":[["guests","<=",{"attribute":"capacity"}]],"to":null,"via":null}]/
+             )
+    end
+
+    test "bakes a delegation and a grant reference through a path", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[],"to":null,"via":["publish",["parent","parent"]]}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[],"to":[["rel",["parent","parent"],"Hologram.Test.Fixtures.Policy.Module1",["viewer"]]],"via":null}]/
+             )
+    end
+
+    test "bakes a path in a condition", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[[["parent","parent","public"],"==",true]],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"archive":[{"predicates":[[["link","priority"],"==","high"]],"to":null,"via":null}]/
+             )
+    end
+
+    # A datetime spelled by its own type carries microseconds, which a value spelled as an id would
+    # not.
+    test "encodes a path's literal with the type of the attribute it ends at", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"triage":[{"predicates":[[["parent","parent","created_at"],">=","2026-01-01T00:00:00.000000Z"]],"to":null,"via":null}]/
+             )
+    end
+
+    test "bakes a path operand", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"delete":[{"predicates":[["level","<=",{"attribute":["parent","parent","priority"]}]],"to":null,"via":null}]/
              )
     end
 

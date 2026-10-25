@@ -20,6 +20,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module10
   alias Hologram.Test.Fixtures.Policy.Module11
+  alias Hologram.Test.Fixtures.Policy.Module12
   alias Hologram.Test.Fixtures.Policy.Module2
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
@@ -36,6 +37,22 @@ defmodule Hologram.AuthTest do
     %{public: public}
     |> Module2.new()
     |> DB.create!()
+  end
+
+  # A Module5 row whose parent is a Module1 row with the given parent - the row two hops away from
+  # a Module12 row pointing at the Module5 row is the Module1 row.
+  defp create_path_rows(parent_id) do
+    resource =
+      %{parent_id: parent_id}
+      |> Module1.new()
+      |> DB.create!()
+
+    middle =
+      %{parent_id: resource.id}
+      |> Module5.new()
+      |> DB.create!()
+
+    {resource, middle}
   end
 
   defp create_resource do
@@ -254,6 +271,36 @@ defmodule Hologram.AuthTest do
       refute can?("user_id_3", :archive, entity)
     end
 
+    test "grants a condition on a path" do
+      public_resource =
+        %{public: true}
+        |> Module1.new()
+        |> DB.create!()
+
+      private_resource = create_resource()
+
+      public_middle =
+        %{parent_id: public_resource.id}
+        |> Module5.new()
+        |> DB.create!()
+
+      private_middle =
+        %{parent_id: private_resource.id}
+        |> Module5.new()
+        |> DB.create!()
+
+      assert can?(nil, :read, %Module12{id: Entity.generate_id(), parent_id: public_middle.id})
+      refute can?(nil, :read, %Module12{id: Entity.generate_id(), parent_id: private_middle.id})
+    end
+
+    # The path leads nowhere, so it reads nil, and nil is not true.
+    test "denies a condition on a path that ends nowhere" do
+      middle = DB.create!(Module5.new())
+
+      refute can?(nil, :read, %Module12{id: Entity.generate_id(), parent_id: middle.id})
+      refute can?(nil, :read, %Module12{id: Entity.generate_id(), parent_id: nil})
+    end
+
     test "takes the user entity" do
       user = Module14.new(email: "user_1@example.com")
 
@@ -357,6 +404,27 @@ defmodule Hologram.AuthTest do
       refute can?(user, :delete, %Module1{id: Entity.generate_id(), parent_id: nil})
     end
 
+    test "matches a grant on the row a path ends at" do
+      user = create_user("user_161@example.com")
+      {resource, middle} = create_path_rows(nil)
+      entity = %Module12{id: Entity.generate_id(), parent_id: middle.id}
+
+      refute can?(user, :update, entity)
+
+      grant_role(user, :viewer, resource)
+
+      assert can?(user, :update, entity)
+    end
+
+    test "denies a grant reference whose path ends nowhere" do
+      user = create_user("user_162@example.com")
+      middle = DB.create!(Module5.new())
+
+      grant_role(user, :viewer, Module1)
+
+      refute can?(user, :update, %Module12{id: Entity.generate_id(), parent_id: middle.id})
+    end
+
     test "delegates to the related entity's policy" do
       public_parent = create_parent(true)
       private_parent = create_parent()
@@ -367,6 +435,32 @@ defmodule Hologram.AuthTest do
 
     test "denies delegation without the reference" do
       refute can?(nil, :publish, %Module1{id: Entity.generate_id(), parent_id: nil})
+    end
+
+    test "delegates through a path" do
+      public_parent = create_parent(true)
+      private_parent = create_parent()
+      {_resource, public_middle} = create_path_rows(public_parent.id)
+      {_resource, private_middle} = create_path_rows(private_parent.id)
+
+      assert can?(nil, :publish, %Module12{id: Entity.generate_id(), parent_id: public_middle.id})
+
+      refute can?(nil, :publish, %Module12{id: Entity.generate_id(), parent_id: private_middle.id})
+    end
+
+    test "denies a delegation whose path ends nowhere" do
+      middle = DB.create!(Module5.new())
+
+      refute can?(nil, :publish, %Module12{id: Entity.generate_id(), parent_id: middle.id})
+    end
+
+    test "reads the rows along a path without a lock" do
+      parent = create_parent(true)
+      {_resource, middle} = create_path_rows(parent.id)
+
+      assert can?(nil, :publish, %Module12{id: Entity.generate_id(), parent_id: middle.id})
+
+      refute "RowShareLock" in relation_lock_modes(Module5)
     end
 
     # A render's question takes no lock - a lock held from a render would make every page load a
@@ -876,6 +970,49 @@ defmodule Hologram.AuthTest do
       assert "RowShareLock" in relation_lock_modes(Module10)
     end
 
+    # As for a chain of delegations, only the first row is asserted: the inserts of the rows past it
+    # already hold RowShareLock on their tables through their foreign key checks.
+    test "with :held holds the first row a delegation path reads" do
+      parent = create_parent(true)
+      {_resource, middle} = create_path_rows(parent.id)
+      entity = %Module12{id: Entity.generate_id(), parent_id: middle.id}
+
+      assert can?(create_user("user_163@example.com"), :publish, entity, :held)
+
+      assert "RowShareLock" in relation_lock_modes(Module5)
+    end
+
+    test "with :held holds the row a grant reference path reads on its way" do
+      user = create_user("user_164@example.com")
+      {resource, middle} = create_path_rows(nil)
+
+      grant_role(user, :viewer, resource)
+
+      assert can?(user, :update, %Module12{id: Entity.generate_id(), parent_id: middle.id}, :held)
+
+      assert "RowShareLock" in relation_lock_modes(Module5)
+    end
+
+    # Only the row in between is asserted: the end row's table already holds RowShareLock through
+    # the foreign key check of the middle row's insert.
+    test "with :held holds the row a condition's path reads on its way" do
+      resource =
+        %{public: true}
+        |> Module1.new()
+        |> DB.create!()
+
+      middle =
+        %{parent_id: resource.id}
+        |> Module5.new()
+        |> DB.create!()
+
+      entity = %Module12{id: Entity.generate_id(), parent_id: middle.id}
+
+      assert can?(create_user("user_165@example.com"), :read, entity, :held)
+
+      assert "RowShareLock" in relation_lock_modes(Module5)
+    end
+
     test "with :held matches a grant for the grant store's own rows" do
       user = create_user("user_153@example.com")
       other_user = create_user("user_154@example.com")
@@ -899,7 +1036,7 @@ defmodule Hologram.AuthTest do
     end
   end
 
-  describe "chain_target_id/2" do
+  describe "chain_target_id/3" do
     test "answers nil for a hop naming a row that is gone" do
       entity = %Module5{parent_id: Entity.generate_id()}
 
@@ -931,6 +1068,35 @@ defmodule Hologram.AuthTest do
         |> DB.create!()
 
       assert chain_target_id(%Module5{parent_id: middle.id}, [:parent, :parent]) == target.id
+    end
+
+    # The chain's end row is not read: its id is the middle row's reference.
+    test "reads the rows along the chain with the given options" do
+      target = create_parent()
+
+      middle =
+        %{parent_id: target.id}
+        |> Module1.new()
+        |> DB.create!()
+
+      entity = %Module5{parent_id: middle.id}
+
+      assert chain_target_id(entity, [:parent, :parent], lock: :share) == target.id
+
+      assert "RowShareLock" in relation_lock_modes(Module1)
+    end
+
+    test "reads the rows along the chain unlocked by default" do
+      target = create_parent()
+
+      middle =
+        %{parent_id: target.id}
+        |> Module1.new()
+        |> DB.create!()
+
+      assert chain_target_id(%Module5{parent_id: middle.id}, [:parent, :parent]) == target.id
+
+      refute "RowShareLock" in relation_lock_modes(Module1)
     end
   end
 

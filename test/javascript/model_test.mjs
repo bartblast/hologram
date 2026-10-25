@@ -1076,6 +1076,24 @@ describe("Model", () => {
     });
   });
 
+  describe("pathTarget()", () => {
+    beforeEach(() => {
+      globalThis.Hologram.sync.model[PROJECT].relationships = {
+        owner: {optional: false, toMany: false, type: "MyApp.User"},
+      };
+
+      Model.reset();
+    });
+
+    it("follows one relationship", () => {
+      assert.equal(Model.pathTarget(TASK, ["project"]), PROJECT);
+    });
+
+    it("follows several relationships", () => {
+      assert.equal(Model.pathTarget(TASK, ["project", "owner"]), "MyApp.User");
+    });
+  });
+
   describe("relationships()", () => {
     it("returns the type's relationships with their cardinality and target", () => {
       assert.deepEqual(Model.relationships(TASK), {
