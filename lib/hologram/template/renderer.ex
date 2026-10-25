@@ -17,9 +17,11 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.DB.QueryCache
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
+  alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.Validator
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
@@ -1029,6 +1031,22 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
+  # What the template is handed is what the query asked for: a relationship read only for the rows
+  # a path reads keeps the sentinel saying nobody asked for it, as it would had it not been read.
+  defp included_as_asked(rows, term) when is_list(rows),
+    do: Enum.map(rows, &included_as_asked(&1, term))
+
+  defp included_as_asked(%entity_type{} = row, term) do
+    Enum.reduce(entity_type.__relationships__(), row, fn {name, _target, _opts}, acc ->
+      case Map.fetch(term.include, name) do
+        {:ok, sub_term} -> Map.update!(acc, name, &included_as_asked(&1, sub_term))
+        :error -> Map.put(acc, name, %NotIncluded{relationship: name})
+      end
+    end)
+  end
+
+  defp included_as_asked(result, _term), do: result
+
   defp init_component(module, props, server_struct) do
     initial_component_struct = %Component{props: props}
 
@@ -1410,8 +1428,13 @@ defmodule Hologram.Template.Renderer do
       |> apply(args)
       |> Stage.normalize()
 
+    # A path reads rows the query does not return, and the client answers the query over what it
+    # holds - so the rows along the paths are read with it, the read policy deciding which, and
+    # carried beside the rows it returns. A count is answered by the number alone.
+    read_term = if term.cardinality == :count, do: term, else: Window.embed_paths(term)
+
     result =
-      term
+      read_term
       |> QueryRunner.run_policied(DB.mapping(), Auth.user_id())
       |> Entity.strip_server_only_deep()
 
@@ -1426,7 +1449,7 @@ defmodule Hologram.Template.Renderer do
       Carry.collect_count(module, prop_name, args, result)
     end
 
-    result
+    if read_term == term, do: result, else: included_as_asked(result, term)
   end
 
   defp spread_entries(value)

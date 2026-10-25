@@ -14,14 +14,19 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.DB
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
+  alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Server
+  alias Hologram.Sync.Carry
   alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Template.Renderer.Module100
   alias Hologram.Test.Fixtures.Template.Renderer.Module101
@@ -32,6 +37,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module107
   alias Hologram.Test.Fixtures.Template.Renderer.Module108
   alias Hologram.Test.Fixtures.Template.Renderer.Module109
+  alias Hologram.Test.Fixtures.Template.Renderer.Module110
+  alias Hologram.Test.Fixtures.Template.Renderer.Module111
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
   alias Hologram.Test.Fixtures.Template.Renderer.Module97
   alias Hologram.Test.Fixtures.Template.Renderer.Module98
@@ -321,6 +328,75 @@ defmodule Hologram.Template.RendererFromQueryTest do
       html = render_page_html(Module99)
 
       assert String.contains?(html, "actorUserId: null")
+    end
+  end
+
+  describe "the rows a query's paths read" do
+    # One row reaches a public row, one a row nobody signed out may read, one nothing - the path
+    # reads the first as a value and the other two as missing.
+    setup do
+      {:ok, required} =
+        %{a: ~D[2026-01-01], b: ~U[2026-01-01 00:00:00.000000Z], c: :x, d: 1.5}
+        |> Module4.new()
+        |> create()
+
+      {:ok, shown} =
+        %{public: true, title: "shown"}
+        |> Module13.new()
+        |> create()
+
+      {:ok, hidden} =
+        %{public: false, title: "hidden"}
+        |> Module13.new()
+        |> create()
+
+      Enum.each([shown.id, hidden.id, nil], fn h_id ->
+        {:ok, _entity} =
+          %{f_id: required.id, h_id: h_id}
+          |> Module25.new()
+          |> create()
+      end)
+
+      Carry.start()
+
+      %{hidden: hidden, shown: shown}
+    end
+
+    defp carried_titles do
+      %{put_entity: rows} = Carry.take()
+
+      rows
+      |> Map.get("Hologram.Test.Fixtures.Entity.Module13", [])
+      |> Enum.map(& &1.title)
+    end
+
+    # The client answers the query over the rows it holds, so the row a path reads is handed over
+    # beside the rows the query returns - the one the session may read, and no other.
+    test "carries the rows a path reads that the session may read" do
+      node = {:component, Module110, [], []}
+
+      render_dom(node, @env, @server)
+
+      assert carried_titles() == ["shown"]
+    end
+
+    test "hands the template no relationship the query did not include" do
+      node = {:component, Module110, [], []}
+
+      {html, _component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      not_included = inspect(%NotIncluded{relationship: :h})
+
+      assert String.contains?(html, "h = #{not_included},#{not_included},#{not_included}")
+    end
+
+    test "hands the template a relationship the query included through a path" do
+      node = {:component, Module111, [], []}
+
+      {html, _component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert String.contains?(html, "titles = shown,,")
+      assert carried_titles() == ["shown"]
     end
   end
 

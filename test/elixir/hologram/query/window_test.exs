@@ -277,4 +277,43 @@ defmodule Hologram.Query.WindowTest do
       assert window.filter == [{:c, :==, "channel-1"}]
     end
   end
+
+  describe "embed_paths/1" do
+    test "leaves a term with no path in its filters as it is" do
+      term =
+        Module3
+        |> filter(c_id == nil)
+        |> include(a)
+        |> Stage.normalize()
+
+      assert embed_paths(term) == term
+    end
+
+    # It is the query itself, read with more of the rows it reads - so what it answers stays.
+    test "embeds a path's relationships beside the term's own clauses" do
+      term =
+        Module5
+        |> filter(a.b.c == "x")
+        |> order_by(id: :desc)
+        |> limit(3)
+        |> Stage.normalize()
+
+      assert embed_paths(term) == %{
+               term
+               | include: %{a: %Query{entity: Module3, include: %{b: %Query{entity: Module2}}}}
+             }
+    end
+
+    test "embeds a path inside an included query's filter into that include" do
+      base_term =
+        Module6
+        |> include(a)
+        |> Stage.normalize()
+
+      sub_term = %{base_term.include.a | filter: [{[:b, :a], :==, true}]}
+      term = %{base_term | include: %{a: sub_term}}
+
+      assert embed_paths(term).include.a == %{sub_term | include: %{b: %Query{entity: Module2}}}
+    end
+  end
 end

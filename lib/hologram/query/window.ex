@@ -69,6 +69,23 @@ defmodule Hologram.Query.Window do
     %Query{entity: term.entity, filter: filter, include: include}
   end
 
+  @doc """
+  Returns the given query term with the relationships its filters' paths go through embedded as
+  to-one includes, merged with its own, the sub-terms of its includes embedded the same way - the
+  term that reads the rows a path reads alongside the rows it returns.
+
+  A term with no path in any filter comes back unchanged.
+  """
+  @spec embed_paths(Query.t()) :: Query.t()
+  def embed_paths(term) do
+    include =
+      term.include
+      |> Map.new(fn {name, sub_term} -> {name, embed_paths(sub_term)} end)
+      |> put_path_includes(term)
+
+    %{term | include: include}
+  end
+
   defp placeholder?({:placeholder, _name}), do: true
 
   defp placeholder?(values) when is_list(values), do: Enum.any?(values, &placeholder?/1)
