@@ -150,9 +150,10 @@ export default class Sse {
         const target = Erlang_Maps["get/2"](Type.atom("target"), action);
 
         // Hologram realtime is fire-and-forget: silently drop actions
-        // targeting cids that are not mounted on this client. Keeps the
-        // dispatcher's strict contract intact for command responses (where
-        // a missing cid is a real bug worth surfacing).
+        // targeting cids that are not mounted on this client, as Client.sendCommand
+        // drops a reply's self echoes. Keeps the dispatcher's strict contract
+        // intact for a reply's next action (where a missing cid is a real bug
+        // worth surfacing).
         if (!ComponentRegistry.isCidRegistered(target)) {
           return;
         }

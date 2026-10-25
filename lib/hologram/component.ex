@@ -360,6 +360,7 @@ defmodule Hologram.Component do
   @doc """
   Puts the given command spec to the component's next_command field.
   Next command will be sent asynchronously to the server.
+  The action the command's reply puts is dropped when the page the command was sent from is left before the reply arrives, so it never runs against the page navigated to; the command itself still runs on the server.
   """
   @spec put_command(Component.t(), atom | keyword) :: Component.t()
   def put_command(component, name_or_spec)
@@ -379,6 +380,7 @@ defmodule Hologram.Component do
   @doc """
   Puts the given command spec to the component's next_command field.
   Next command will be sent asynchronously to the server.
+  The action the command's reply puts is dropped when the page the command was sent from is left before the reply arrives, so it never runs against the page navigated to; the command itself still runs on the server.
   """
   @spec put_command(Component.t(), atom, keyword | map) :: Component.t()
   def put_command(%Component{} = component, name, params) do

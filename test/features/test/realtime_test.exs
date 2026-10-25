@@ -19,6 +19,8 @@ defmodule HologramFeatureTests.RealtimeTest do
   alias HologramFeatureTests.Realtime.Page20
   alias HologramFeatureTests.Realtime.Page21
   alias HologramFeatureTests.Realtime.Page23
+  alias HologramFeatureTests.Realtime.Page24
+  alias HologramFeatureTests.Realtime.Page25
   alias HologramFeatureTests.Realtime.Page3
   alias HologramFeatureTests.Realtime.Page4
   alias HologramFeatureTests.Realtime.Page5
@@ -30,6 +32,7 @@ defmodule HologramFeatureTests.RealtimeTest do
   @channel_1 {:room, 1}
   @channel_2 {:room, 2}
   @channel_23 {:room, 23}
+  @channel_24 {:room, 24}
   @channel_9 {:room, 9}
 
   describe "broadcasting" do
@@ -551,6 +554,19 @@ defmodule HologramFeatureTests.RealtimeTest do
       session
       |> click(button("Broadcast"))
       |> assert_text(css("#received-shared"), "delivered")
+    end
+
+    # The command's reply lands after the navigation, and the self echo in it belongs to the
+    # layout's subscription, which Page 25 re-declares, not to the page that was left.
+    feature "shared layout subscription receives the sender's own late echo",
+            %{session: session} do
+      session
+      |> visit(Page24)
+      |> wait_for_own_subscription(@channel_24)
+      |> click(button("Broadcast slowly"))
+      |> click(link("Go to Page 25"))
+      |> assert_page(Page25)
+      |> assert_text(css("#received-echo"), "echoed")
     end
 
     feature "survive history back from an external page", %{session: session} do

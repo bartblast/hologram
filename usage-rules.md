@@ -144,7 +144,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Update context: `put_context(component, :key, value)`.
 - Chain another action: `put_action(component, :action_name)` or `put_action(component, :action_name, param: value)`. A chained action with no `delay` runs right after the current one, before the browser paints. The browser paints once the chain has finished, or while one of its actions awaits a task. To update the page between other steps, give the chained action a `delay`.
 - Delays are available for actions only (not commands): `put_action(component, name: :my_action, delay: 750)`.
-- A component's actions run one at a time, in dispatch order, and each sees the state the previous one left. An action that awaits a `Task` holds back later actions for that component only - other components keep running.
+- A component's actions run one at a time, in dispatch order, and each sees the state the previous one left. An action that awaits a `Task` holds back later actions for that component only - other components keep running. If the user has moved to another page by the time an awaiting action finishes, its whole result is dropped. That includes its state update and what it put with `put_action`, `put_command` or `put_page`, even when the new page has a component with the same cid, such as `"page"` or `"layout"`.
 
 ## Commands
 
@@ -152,6 +152,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Commands must return a `%Server{}` struct. Chain operations with `|>`.
 - Commands are always executed asynchronously.
 - Trigger a client action from a command: `put_action(server, :action_name)` or `put_action(server, :action_name, param: value)`.
+- The action a command puts runs on the page the command was sent from; it is dropped if the user navigates to another page before it runs. The command's server-side effects (session, cookies, broadcasts) still apply.
 - Manage session: `put_session(server, :key, value)`, `get_session(server, :key)`, `delete_session(server, :key)`.
 - Manage cookies: `put_cookie(server, "key", value)`, `get_cookie(server, "key")`, `delete_cookie(server, "key")`.
 - Commands can be triggered from templates via longhand event syntax or from actions via `put_command/2`/`put_command/3`.
