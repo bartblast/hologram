@@ -5,6 +5,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.DB.Codec
   alias Hologram.DB.Mapper
   alias Hologram.DB.SortKey
+  alias Hologram.Entity
   alias Hologram.Policy
   alias Hologram.Query
 
@@ -73,6 +74,16 @@ defmodule Hologram.DB.QueryCompiler do
   either side missing. Two strings compare their sort-key pairs, `("a_$sort", "a") <
   ("b_$sort", "b")`, and an enum operand is cast to the compared attribute's enum type by
   label.
+
+  A path - on either side of a comparison - compiles to nested scalar subqueries, one per
+  relationship it follows, each aliased `"$p<n>"` and correlated on the row before it, the
+  innermost selecting the column the path ends at. A subquery finding no row yields NULL, so a
+  path through an empty relationship, a row that is gone or one the read policy hides reads as a
+  missing value, and the nil rules above apply to it as to an optional attribute. When a policy
+  is given, each hop ANDs its type's :read policy, keyed on its alias, the way an include does - a
+  policy rule's own condition reads the rows its paths reach raw. A hop's policy binds its own
+  slots inside the hop, so under a policy a comparison on a path binds them even where the same
+  comparison on an attribute binds none.
   """
   @spec compile(Query.t(), %{module => %{atom => any}}, %{atom => any} | nil) ::
           %{atom => any}
@@ -403,12 +414,25 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # Where a condition is rendered: the row it is about - its type, its mapping, and the name the
-  # statement gives it - and the policy the statement is read under, nil inside a policy rule.
-  defp condition_scope(entity_type, mapping, quoted_row_prefix, policy) do
+  # statement gives it - and how a path reads a related row there. Under a statement's policy a
+  # hop applies the hop type's read policy, so an unreadable related row reads as a missing one,
+  # and inside a policy rule (no policy) hops read the related rows raw, as delegation does. The
+  # depths name the aliases a nested path or delegation takes, so none shadows a row an enclosing
+  # subquery correlates on.
+  defp condition_scope(
+         entity_type,
+         mapping,
+         quoted_row_prefix,
+         policy,
+         path_depth \\ 0,
+         delegation_depth \\ 0
+       ) do
     %{
+      delegation_depth: delegation_depth,
       entity_mapping: Map.fetch!(mapping, entity_type),
       entity_type: entity_type,
       mapping: mapping,
+      path_depth: path_depth,
       policy: policy,
       row_prefix: quoted_row_prefix
     }
@@ -448,10 +472,103 @@ defmodule Hologram.DB.QueryCompiler do
     {"#{placeholder}::#{enum_type(column)}", new_params}
   end
 
+  # A hop of a path is a scalar subquery reading one related row - the first correlated on the row
+  # the condition is about, each later one on the hop before it - and the last selects the column
+  # the path ends at. A hop that finds no row selects NULL, so a path through an empty relationship,
+  # a row that is gone or one the read policy hides reads as a missing value, the way an attribute
+  # with none does. Under a statement's policy each hop applies its type's read policy to the row
+  # it reads, and inside a policy rule it reads raw.
+  defp path_hop_sql(
+         scope,
+         quoted_prefix,
+         entity_type,
+         [hop | later_hops],
+         leaf,
+         hop_index,
+         reversed_params
+       ) do
+    reference =
+      scope.mapping
+      |> Map.fetch!(entity_type)
+      |> reference_column(hop)
+
+    target_type = relationship_target(entity_type, hop)
+    target_mapping = Map.fetch!(scope.mapping, target_type)
+    number = scope.path_depth + hop_index
+    quoted_alias = Mapper.quote_identifier("$p#{number}")
+
+    {selected_sql, column, params_after_select} =
+      case later_hops do
+        [] ->
+          {name, select_column} = leaf
+          column = select_column.(target_mapping, name)
+
+          {"#{quoted_alias}.#{Mapper.quote_identifier(column.name)}", column, reversed_params}
+
+        _later_hops ->
+          path_hop_sql(
+            scope,
+            quoted_alias,
+            target_type,
+            later_hops,
+            leaf,
+            hop_index + 1,
+            reversed_params
+          )
+      end
+
+    {policy_conditions, new_params} =
+      path_policy_conditions(scope, target_type, quoted_alias, number, params_after_select)
+
+    join_sql =
+      ~s|#{quoted_alias}."id" = #{quoted_prefix}.#{Mapper.quote_identifier(reference.name)}|
+
+    where_sql = Enum.join([join_sql | policy_conditions], " AND ")
+
+    hop_sql =
+      "(SELECT #{selected_sql} FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} " <>
+        "WHERE #{where_sql})"
+
+    {hop_sql, column, new_params}
+  end
+
+  # The hop type's read policy, keyed on the hop's alias, nested paths numbered past it and a nested
+  # delegation past the enclosing ones.
+  defp path_policy_conditions(%{policy: nil}, _hop_type, _quoted_alias, _number, reversed_params),
+    do: {[], reversed_params}
+
+  defp path_policy_conditions(scope, hop_type, quoted_alias, number, reversed_params) do
+    hop_policy = include_policy(scope.policy, hop_type)
+
+    hop_context =
+      hop_type
+      |> policy_context(scope.mapping, hop_policy, quoted_alias)
+      |> Map.merge(%{delegation_depth: scope.delegation_depth, path_depth: number})
+
+    policy_conditions(hop_policy, hop_context, reversed_params)
+  end
+
+  # The SQL reading what a path ends at - the column the given function picks off the mapping of
+  # the type its relationships lead to.
+  defp path_sql(scope, path, select_column, reversed_params) do
+    {hops, [name]} = Enum.split(path, -1)
+
+    path_hop_sql(
+      scope,
+      scope.row_prefix,
+      scope.entity_type,
+      hops,
+      {name, select_column},
+      1,
+      reversed_params
+    )
+  end
+
   # The row prefix qualifies references to the row a policy is evaluated for. It is the entity's
   # table name at statement level, and the subquery's alias inside an include or a delegation -
   # where the table name would resolve to the outer row for a relationship back to its own type.
-  # The delegation depth counts the delegations the policy is nested in, naming each one's alias.
+  # The delegation depth counts the delegations the policy is nested in, naming each one's alias,
+  # and the path depth the path hops, so a path inside it takes aliases no enclosing hop has.
   # Every alias the compiler gives a table begins with a $, which no derived table name begins
   # with, so an alias never names a table the statement also reads.
   defp policy_context(entity_type, mapping, policy, quoted_row_prefix \\ nil)
@@ -467,6 +584,7 @@ defmodule Hologram.DB.QueryCompiler do
       entity_mapping: entity_mapping,
       entity_type: entity_type,
       mapping: mapping,
+      path_depth: 0,
       row_prefix: quoted_row_prefix || Mapper.quote_identifier(entity_mapping.table)
     }
   end
@@ -629,7 +747,7 @@ defmodule Hologram.DB.QueryCompiler do
     target_context =
       target_type
       |> policy_context(context.mapping, target_policy, quoted_alias)
-      |> Map.put(:delegation_depth, depth)
+      |> Map.merge(%{delegation_depth: depth, path_depth: context.path_depth})
 
     {target_conditions, new_params} =
       policy_conditions(target_policy, target_context, reversed_params)
@@ -646,10 +764,19 @@ defmodule Hologram.DB.QueryCompiler do
     {[condition], new_params}
   end
 
-  # A rule's own condition is about the row the policy is evaluated for, under no policy of its
-  # own.
+  # A rule's own condition is about the row the policy is evaluated for, and reads the rows its paths
+  # reach as stored, the way its delegation does - a hop applying a read policy inside a rule could
+  # reach that rule again.
   defp rule_condition(rule, context, reversed_params) do
-    scope = condition_scope(context.entity_type, context.mapping, context.row_prefix, nil)
+    scope =
+      condition_scope(
+        context.entity_type,
+        context.mapping,
+        context.row_prefix,
+        nil,
+        context.path_depth,
+        context.delegation_depth
+      )
 
     {predicate_conditions, params_after_predicates} =
       conditions(rule.predicates, scope, reversed_params)
@@ -887,11 +1014,27 @@ defmodule Hologram.DB.QueryCompiler do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
 
-  # A string's sort key - its companion column - or nil for a value of any other type.
-  defp sort_key_sql(scope, name, reversed_params) do
+  # A string's sort key - its companion column, read through the path when the string is a related
+  # row's - or nil for a value of any other type.
+  defp sort_key_sql(scope, name, reversed_params) when is_atom(name) do
     case companion_column(scope.entity_mapping, name) do
       nil -> {nil, reversed_params}
       companion -> {Mapper.quote_identifier(companion.name), reversed_params}
+    end
+  end
+
+  defp sort_key_sql(scope, path, reversed_params) do
+    {hops, [name]} = Enum.split(path, -1)
+    end_type = Entity.path_target(scope.entity_type, hops)
+    end_mapping = Map.fetch!(scope.mapping, end_type)
+
+    if companion_column(end_mapping, name) do
+      {key_sql, _companion, new_params} =
+        path_sql(scope, path, &companion_column/2, reversed_params)
+
+      {key_sql, new_params}
+    else
+      {nil, reversed_params}
     end
   end
 
@@ -927,11 +1070,19 @@ defmodule Hologram.DB.QueryCompiler do
       where_sql <> order_sql <> bounds_clause(term)
   end
 
-  # What a condition compares, and the column that says how its values bind.
-  defp subject_sql(scope, name, reversed_params) do
+  # What a condition compares, and the column that says how its values bind: an attribute of the
+  # row, or what a path reads - which can always be missing, whatever the column at its end
+  # declares, so its column reads as nullable.
+  defp subject_sql(scope, name, reversed_params) when is_atom(name) do
     column = fetch_column!(scope.entity_mapping, name)
 
     {Mapper.quote_identifier(column.name), column, reversed_params}
+  end
+
+  defp subject_sql(scope, path, reversed_params) do
+    {path_sql, column, new_params} = path_sql(scope, path, &fetch_column!/2, reversed_params)
+
+    {path_sql, Map.put(column, :null, true), new_params}
   end
 
   defp to_many_include_expression(
