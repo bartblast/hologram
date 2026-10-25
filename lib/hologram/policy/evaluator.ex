@@ -37,7 +37,9 @@ defmodule Hologram.Policy.Evaluator do
   reference must be held, and the related entity must grant the operation the delegation names.
   Predicate values compare as they do in the database: nil is a regular value for equality and
   membership, while ordering comparisons never match it. An attribute operand reads the row's other
-  attribute, compared the way a literal is.
+  attribute, compared the way a literal is. A path, as a predicate's name or an attribute operand,
+  reads its last name off the row its relationships lead to, and reads nil when they lead nowhere -
+  so `!=` and `not in` hold for a path that ends nowhere, and an ordering comparison does not.
 
   For an anonymous session a user_id() predicate is false, whichever way it points, and a grant
   reference is held by nobody - the actor is nobody rather than nil, since a nil actor would make
@@ -46,24 +48,25 @@ defmodule Hologram.Policy.Evaluator do
   still grants a visitor the shared rows. A delegating rule is evaluated as any other, because the
   entity type it delegates to answers its own actor-referencing rules the same way.
 
-  Grant references and delegations are resolved by the given checker function, called as
-  checker.(requirement, entity, actor user id) with the rule's grant reference or a
-  {:via, operation, chain} tuple - the chain of to-one relationships followed to the related row -
-  and returning a boolean.
+  Grant references, delegations and the rows a path reads are resolved by the given checker
+  function, called as checker.(requirement, entity, actor user id). For the rule's grant reference
+  or a {:via, operation, chain} tuple - the chain of to-one relationships followed to the related
+  row - it returns a boolean. For a {:related, relationship names} tuple it returns the row those
+  relationships lead to, or nil when one of them is empty or names a row that is gone.
   """
   @spec rule_matches?(map, struct, String.t() | nil, fun) :: boolean
   def rule_matches?(rule, entity, actor_user_id, checker) do
-    predicates_hold?(rule.predicates, entity, actor_user_id) and
+    predicates_hold?(rule.predicates, entity, actor_user_id, checker) and
       to_holds?(rule.to, entity, actor_user_id, checker) and
       via_holds?(rule.via, entity, actor_user_id, checker)
   end
 
-  defp clause_holds?({:or, alternatives}, entity, actor_user_id) do
-    Enum.any?(alternatives, &predicates_hold?(&1, entity, actor_user_id))
+  defp clause_holds?({:or, alternatives}, entity, actor_user_id, checker) do
+    Enum.any?(alternatives, &predicates_hold?(&1, entity, actor_user_id, checker))
   end
 
-  defp clause_holds?(triple, entity, actor_user_id) do
-    predicate_holds?(triple, entity, actor_user_id)
+  defp clause_holds?(triple, entity, actor_user_id, checker) do
+    predicate_holds?(triple, entity, actor_user_id, checker)
   end
 
   defp compare(%Date{} = left, %Date{} = right), do: Date.compare(left, right)
@@ -103,7 +106,16 @@ defmodule Hologram.Policy.Evaluator do
   end
 
   # What an enum predicate compares by, or nil for an attribute of any other type - a name
-  # matching no attribute definition is a reference field, which carries an entity id.
+  # matching no attribute definition is a reference field, which carries an entity id. A path's
+  # ranks are those of the attribute it ends at.
+  defp enum_ranks(entity_type, [_hop | _later_names] = path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    entity_type
+    |> Entity.path_target(relationship_names)
+    |> enum_ranks(name)
+  end
+
   defp enum_ranks(entity_type, name) do
     case List.keyfind(entity_type.__attributes__(), name, 0) do
       {_name, :enum, opts} ->
@@ -147,29 +159,43 @@ defmodule Hologram.Policy.Evaluator do
 
   # Nobody is equal to no attribute and unequal to none - asking about the actor of an anonymous
   # session is asking about nobody, which no row answers.
-  defp predicate_holds?({_name, _operator, {:actor}}, _entity, nil), do: false
+  defp predicate_holds?({_name, _operator, {:actor}}, _entity, nil, _checker), do: false
 
   # Another attribute of the row, compared the way a literal is - by the predicate's attribute's
   # ranks, since two enums compare only when they declare the same list.
-  defp predicate_holds?({name, operator, {:attribute, other}}, entity, _actor_user_id) do
+  defp predicate_holds?({name, operator, {:attribute, other}}, entity, actor_user_id, checker) do
     ranks = enum_ranks(entity.__struct__, name)
+    other_value = read_value(entity, other, actor_user_id, checker)
 
     entity
-    |> Map.fetch!(name)
-    |> holds?(operator, Map.fetch!(entity, other), ranks)
+    |> read_value(name, actor_user_id, checker)
+    |> holds?(operator, other_value, ranks)
   end
 
-  defp predicate_holds?({name, operator, value}, entity, actor_user_id) do
+  defp predicate_holds?({name, operator, value}, entity, actor_user_id, checker) do
     ranks = enum_ranks(entity.__struct__, name)
 
     entity
-    |> Map.fetch!(name)
+    |> read_value(name, actor_user_id, checker)
     |> holds?(operator, resolve_value(value, actor_user_id), ranks)
   end
 
-  defp predicates_hold?(clauses, entity, actor_user_id) do
-    Enum.all?(clauses, &clause_holds?(&1, entity, actor_user_id))
+  defp predicates_hold?(clauses, entity, actor_user_id, checker) do
+    Enum.all?(clauses, &clause_holds?(&1, entity, actor_user_id, checker))
   end
+
+  # A path's value is its last name read off the row the relationships before it lead to, and nil
+  # when they lead nowhere.
+  defp read_value(entity, [_hop | _later_names] = path, actor_user_id, checker) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    case checker.({:related, relationship_names}, entity, actor_user_id) do
+      nil -> nil
+      row -> Map.fetch!(row, name)
+    end
+  end
+
+  defp read_value(entity, name, _actor_user_id, _checker), do: Map.fetch!(entity, name)
 
   defp resolve_value({:actor}, actor_user_id), do: actor_user_id
 

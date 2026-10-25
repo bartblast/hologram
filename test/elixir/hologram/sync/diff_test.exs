@@ -14,6 +14,7 @@ defmodule Hologram.Sync.DiffTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
@@ -631,6 +632,26 @@ defmodule Hologram.Sync.DiffTest do
       child = child_of(parent)
 
       named = [named_effect(parent.id, PolicyModule1, %{"public" => 1})]
+
+      reach = reach(result([child]), user.id, named, edges)
+
+      assert reach.appeared == [child]
+      assert reach.vanished == []
+    end
+
+    # The rule reads the row two hops away through a path in its condition, so naming that row
+    # reaches the row that leans on it, through the row in between.
+    test "lists a row leaning on a named row two hops away through a condition", %{user: user} do
+      resource = public_parent()
+      middle = child_of(resource)
+
+      child =
+        %{parent_id: middle.id}
+        |> PolicyModule12.new()
+        |> DB.create!()
+
+      edges = Edges.derive([PolicyModule12])
+      named = [named_effect(resource.id, PolicyModule1, %{"public" => 1})]
 
       reach = reach(result([child]), user.id, named, edges)
 

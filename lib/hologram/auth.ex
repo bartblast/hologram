@@ -95,10 +95,10 @@ defmodule Hologram.Auth do
   # ask about.
   #
   # :held reads the store and share-locks the grant rows the answer rests on, and the related rows
-  # `via:` delegations and grant references through relationships read - every row along a path
-  # included - until the enclosing transaction ends. It is what a write under an
+  # `via:` delegations, grant references through relationships and paths in conditions read - every
+  # row along a path included - until the enclosing transaction ends. It is what a write under an
   # acting user asks: a revocation of the authority the write rests on, or a change to a row a
-  # delegation read, then lands after the write, never between its evaluation and its commit.
+  # rule read, then lands after the write, never between its evaluation and its commit.
   # Outside a transaction the lock ends with the statement, so it holds nothing there.
   @doc false
   @spec can?(struct | String.t() | nil, atom | {atom, atom}, struct, list(struct) | :held) ::
@@ -522,6 +522,12 @@ defmodule Hologram.Auth do
 
         grant_exists?(actor_user_id, {:instance, target_type, target_id}, role_names, source)
     end
+  end
+
+  # The row a path in a condition reads its attribute off - the rows along the way read the way a
+  # delegation reads its target, held under a write.
+  defp check_requirement({:related, relationship_names}, entity, _actor_user_id, source) do
+    chain_row(entity, relationship_names, delegation_read_opts(source))
   end
 
   # The grant store's own policy: a role held on the entity this grant row names.

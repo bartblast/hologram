@@ -394,9 +394,27 @@ defmodule Hologram.PolicyTest do
              }
     end
 
-    test "follows a path in a delegation and a grant reference" do
+    test "follows a path in a condition, a delegation and a grant reference" do
       assert build(Policy.Module12) == %{
+               archive: [%{predicates: [{[:link, :priority], :==, :high}], to: nil, via: nil}],
+               delete: [
+                 %{
+                   predicates: [{:level, :<=, {:attribute, [:parent, :parent, :priority]}}],
+                   to: nil,
+                   via: nil
+                 }
+               ],
                publish: [%{predicates: [], to: nil, via: {:publish, [:parent, :parent]}}],
+               read: [
+                 %{predicates: [{[:parent, :parent, :public], :==, true}], to: nil, via: nil}
+               ],
+               triage: [
+                 %{
+                   predicates: [{[:parent, :parent, :created_at], :>=, ~U[2026-01-01 00:00:00Z]}],
+                   to: nil,
+                   via: nil
+                 }
+               ],
                update: [%{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}]
              }
     end

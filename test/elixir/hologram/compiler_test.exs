@@ -44,6 +44,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
+  alias Hologram.Test.Fixtures.Entity.Module17, as: Entity17
   alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
@@ -1869,6 +1870,18 @@ defmodule Hologram.CompilerTest do
         derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
 
       assert MapSet.member?(sync_constants.entity_types, Entity12)
+    end
+
+    # A type a rule reads through a relationship declares nothing a check asks about, and the client
+    # still needs its model to follow the relationship.
+    test "names a type a checked rule reaches through a relationship", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert MapSet.member?(sync_constants.entity_types, Entity17)
     end
 
     test "leaves an unqueried type declaring roles out when no page checks permissions on the client",
@@ -3836,6 +3849,103 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"update":[{"predicates":[],"to":[["rel",["parent","parent"],"Hologram.Test.Fixtures.Policy.Module1",["viewer"]]],"via":null}]/
+             )
+    end
+
+    test "bakes a path in a condition", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[[["parent","parent","public"],"==",true]],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"archive":[{"predicates":[[["link","priority"],"==","high"]],"to":null,"via":null}]/
+             )
+    end
+
+    # A datetime spelled by its own type carries microseconds, which a value spelled as an id would
+    # not.
+    test "encodes a path's literal with the type of the attribute it ends at", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"triage":[{"predicates":[[["parent","parent","created_at"],">=","2026-01-01T00:00:00.000000Z"]],"to":null,"via":null}]/
+             )
+    end
+
+    test "bakes a path operand", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"delete":[{"predicates":[["level","<=",{"attribute":["parent","parent","priority"]}]],"to":null,"via":null}]/
              )
     end
 

@@ -177,8 +177,15 @@ defmodule Hologram.Entity do
       marks a value from the surrounding code (`^@max_priority`), literals need nothing, and
       `user_id()` is the acting user's entity id. The operators are `==`, `!=`, `<`, `<=`, `>`,
       `>=`, `in`, `not in`, `and` and `or`, `and` binding tighter and parentheses grouping. A
-      condition built from data goes in pinned, `when: ^predicates`, as a list of predicates pairing
-      names with values, where an `or:` entry holding two or more predicate lists is a disjunction.
+      dotted name is a path through to-one relationships, read off the row they lead to,
+      `when: project.archived == false`, through as many relationships as it names. The rows along
+      a path are read as stored, whatever the acting user may read of them. A path that leads
+      nowhere - an empty relationship or a reference to a row that is gone - reads as nil, so `!=`
+      and `not in` admit a row whose path ends nowhere: `project.archived != true` holds for a task
+      with no project. A condition that wants the related row there says so,
+      `project.id != nil and project.archived != true`. A condition built from data goes in pinned,
+      `when: ^predicates`, as a list of predicates pairing names with values, where an `or:` entry
+      holding two or more predicate lists is a disjunction.
 
   The options on one line must all hold at once, and several lines for one operation are
   alternatives.

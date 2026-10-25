@@ -6,6 +6,7 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
+  alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy
@@ -166,16 +167,35 @@ defmodule Hologram.Policy.EdgesTest do
              }
     end
 
-    # Every reference field the path is followed through is read, and the target's edges are lifted
-    # under the whole path.
-    test "derives the edges of a delegation and a grant reference through a path" do
+    # Every reference field a path is followed through is read, a condition's attribute where the
+    # path ends, and a delegation's target edges are lifted under the whole path.
+    test "derives the edges of a condition, a delegation and a grant reference through a path" do
       assert derive([Policy.Module12]) == %{
+               {Policy.Module12, :archive} => [
+                 {:attributes, [:link_id]},
+                 {:relationship_attributes, [:link], Module17, [:priority]}
+               ],
+               {Policy.Module12, :delete} => [
+                 {:attributes, [:level, :parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:priority]}
+               ],
                {Policy.Module12, :publish} => [
                  {:attributes, [:parent_id]},
                  {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
                  {:relationship_attributes, [:parent, :parent], Policy.Module1, [:parent_id]},
                  {:relationship_attributes, [:parent, :parent, :parent], Policy.Module2,
                   [:public]}
+               ],
+               {Policy.Module12, :read} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:public]}
+               ],
+               {Policy.Module12, :triage} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:created_at]}
                ],
                {Policy.Module12, :update} => [
                  {:attributes, [:parent_id]},

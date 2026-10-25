@@ -22,6 +22,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Entity.Model
   alias Hologram.Job
   alias Hologram.Policy
+  alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Query.Registry
   alias Hologram.Query.Stage
@@ -3547,12 +3548,16 @@ defmodule Hologram.Compiler do
 
   # The types a client checking permissions can be asked about: those declaring a rule, and those
   # declaring a role, since a role check validates and expands the role from the type's own
-  # declarations. RoleGrant's policy is framework-supplied rather than declared, so its empty
-  # __policies__ does not exclude it - it joins by name beside this set.
+  # declarations - and every type those rules read rows of through relationships. RoleGrant's
+  # policy is framework-supplied rather than declared, so its empty __policies__ does not exclude
+  # it - it joins by name beside this set.
   defp checked_entity_types(all_entity_types) do
-    all_entity_types
-    |> Enum.filter(&(&1.__policies__() != [] or &1.__roles__() != []))
-    |> MapSet.new()
+    checked_types =
+      all_entity_types
+      |> Enum.filter(&(&1.__policies__() != [] or &1.__roles__() != []))
+      |> MapSet.new()
+
+    MapSet.union(checked_types, related_checked_entity_types(checked_types))
   end
 
   # Read gives nil: not an Elixir module.
@@ -3596,6 +3601,22 @@ defmodule Hologram.Compiler do
     metafile_path
     |> File.read!()
     |> JSON.decode!()
+  end
+
+  # The types a checked rule reads rows of through relationships - a path in a condition, the chain
+  # of a delegation or of a grant reference - whose model a client needs to follow them, whether or
+  # not they declare a rule or a role of their own. The dependency edges name every one.
+  defp related_checked_entity_types(checked_types) do
+    checked_types
+    |> Enum.to_list()
+    |> Edges.derive()
+    |> Enum.flat_map(fn {_key, edges} -> edges end)
+    |> Enum.flat_map(fn
+      {:relationship_attributes, _chain, entity_type, _names} -> [entity_type]
+      {:relationship_grants, _chain, entity_type, _role_names} -> [entity_type]
+      _edge -> []
+    end)
+    |> MapSet.new()
   end
 
   # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states. A
@@ -3995,10 +4016,7 @@ defmodule Hologram.Compiler do
   end
 
   defp render_policy_clause(entity_type, {name, operator, value}) do
-    name_js =
-      name
-      |> Atom.to_string()
-      |> Jason.encode!()
+    name_js = render_policy_name(name)
 
     operator_js =
       operator
@@ -4014,15 +4032,10 @@ defmodule Hologram.Compiler do
     render_json_object([{"actor", "true"}])
   end
 
-  # Another attribute of the row, named rather than carried: the client reads it off the row at
-  # evaluation, the way the query kernel reads an attribute operand.
+  # Another attribute of the row, or of the row a path leads to, named rather than carried: the
+  # client reads it at evaluation, the way the query kernel reads an attribute operand.
   defp render_policy_value(_entity_type, _name, {:attribute, other}) do
-    other_js =
-      other
-      |> Atom.to_string()
-      |> Jason.encode!()
-
-    render_json_object([{"attribute", other_js}])
+    render_json_object([{"attribute", render_policy_name(other)}])
   end
 
   defp render_policy_value(entity_type, name, values) when is_list(values) do
@@ -4116,6 +4129,20 @@ defmodule Hologram.Compiler do
     "[#{operation_js},#{render_policy_chain(relationship_names)}]"
   end
 
+  # An attribute as its name, and a path as the array of its names - the spelling the query kernel
+  # reads a filter's path by.
+  defp render_policy_name(path) when is_list(path) do
+    path
+    |> Enum.map(&Atom.to_string/1)
+    |> Jason.encode!()
+  end
+
+  defp render_policy_name(name) do
+    name
+    |> Atom.to_string()
+    |> Jason.encode!()
+  end
+
   # The client writes a creator's grants itself when it creates a row, so it has to be told which
   # of the type's roles those are.
   defp render_creator_roles(entity_type) do
@@ -4146,7 +4173,16 @@ defmodule Hologram.Compiler do
   end
 
   # A name matching no attribute definition is a to-one reference field, and every one of those
-  # carries an entity id - the fallback the query stages make.
+  # carries an entity id - the fallback the query stages make. A path has the type of the attribute
+  # it ends at.
+  defp policy_attribute_type(entity_type, path) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    entity_type
+    |> Entity.path_target(relationship_names)
+    |> policy_attribute_type(name)
+  end
+
   defp policy_attribute_type(entity_type, name) do
     definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
 

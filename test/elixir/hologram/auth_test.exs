@@ -271,6 +271,36 @@ defmodule Hologram.AuthTest do
       refute can?("user_id_3", :archive, entity)
     end
 
+    test "grants a condition on a path" do
+      public_resource =
+        %{public: true}
+        |> Module1.new()
+        |> DB.create!()
+
+      private_resource = create_resource()
+
+      public_middle =
+        %{parent_id: public_resource.id}
+        |> Module5.new()
+        |> DB.create!()
+
+      private_middle =
+        %{parent_id: private_resource.id}
+        |> Module5.new()
+        |> DB.create!()
+
+      assert can?(nil, :read, %Module12{id: Entity.generate_id(), parent_id: public_middle.id})
+      refute can?(nil, :read, %Module12{id: Entity.generate_id(), parent_id: private_middle.id})
+    end
+
+    # The path leads nowhere, so it reads nil, and nil is not true.
+    test "denies a condition on a path that ends nowhere" do
+      middle = DB.create!(Module5.new())
+
+      refute can?(nil, :read, %Module12{id: Entity.generate_id(), parent_id: middle.id})
+      refute can?(nil, :read, %Module12{id: Entity.generate_id(), parent_id: nil})
+    end
+
     test "takes the user entity" do
       user = Module14.new(email: "user_1@example.com")
 
@@ -959,6 +989,26 @@ defmodule Hologram.AuthTest do
       grant_role(user, :viewer, resource)
 
       assert can?(user, :update, %Module12{id: Entity.generate_id(), parent_id: middle.id}, :held)
+
+      assert "RowShareLock" in relation_lock_modes(Module5)
+    end
+
+    # Only the row in between is asserted: the end row's table already holds RowShareLock through
+    # the foreign key check of the middle row's insert.
+    test "with :held holds the row a condition's path reads on its way" do
+      resource =
+        %{public: true}
+        |> Module1.new()
+        |> DB.create!()
+
+      middle =
+        %{parent_id: resource.id}
+        |> Module5.new()
+        |> DB.create!()
+
+      entity = %Module12{id: Entity.generate_id(), parent_id: middle.id}
+
+      assert can?(create_user("user_165@example.com"), :read, entity, :held)
 
       assert "RowShareLock" in relation_lock_modes(Module5)
     end

@@ -8,6 +8,7 @@ defmodule Hologram.Policy.EvaluatorTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Policy.Module1
+  alias Hologram.Test.Fixtures.Policy.Module12
 
   defp deny(_requirement, _entity, _actor_user_id), do: false
 
@@ -494,6 +495,82 @@ defmodule Hologram.Policy.EvaluatorTest do
                nil,
                &deny/3
              )
+    end
+
+    test "reads a path's attribute off the row its relationships lead to" do
+      rule = rule(predicates: [{[:parent, :parent, :public], :==, true}])
+
+      public_checker = fn {:related, [:parent, :parent]}, _entity, _actor_user_id ->
+        %Module1{public: true}
+      end
+
+      private_checker = fn {:related, [:parent, :parent]}, _entity, _actor_user_id ->
+        %Module1{public: false}
+      end
+
+      assert rule_matches?(rule, %Module12{}, nil, public_checker)
+      refute rule_matches?(rule, %Module12{}, nil, private_checker)
+    end
+
+    # The relationships lead nowhere, so the path reads nil, which compares the way a missing
+    # attribute does.
+    test "reads a path that ends nowhere as nil" do
+      checker = fn {:related, [:parent, :parent]}, _entity, _actor_user_id -> nil end
+
+      refute rule_matches?(
+               rule(predicates: [{[:parent, :parent, :public], :==, false}]),
+               %Module12{},
+               nil,
+               checker
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{[:parent, :parent, :public], :!=, true}]),
+               %Module12{},
+               nil,
+               checker
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{[:parent, :parent, :public], :==, nil}]),
+               %Module12{},
+               nil,
+               checker
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{[:parent, :parent, :priority], :>=, 3}]),
+               %Module12{},
+               nil,
+               checker
+             )
+    end
+
+    # High sorts before medium as an atom and after it in the declared list.
+    test "compares a path's enum by the declared position of the attribute it ends at" do
+      rule = rule(predicates: [{[:link, :priority], :>, :medium}])
+
+      high_checker = fn {:related, [:link]}, _entity, _actor_user_id ->
+        %Module17{priority: :high}
+      end
+
+      low_checker = fn {:related, [:link]}, _entity, _actor_user_id ->
+        %Module17{priority: :low}
+      end
+
+      assert rule_matches?(rule, %Module12{}, nil, high_checker)
+      refute rule_matches?(rule, %Module12{}, nil, low_checker)
+    end
+
+    test "compares an attribute with a path operand" do
+      rule = rule(predicates: [{:level, :<=, {:attribute, [:parent, :parent, :priority]}}])
+
+      checker = fn {:related, [:parent, :parent]}, _entity, _actor_user_id ->
+        %Module1{priority: 3}
+      end
+
+      assert rule_matches?(rule, %Module12{level: 3}, nil, checker)
+      refute rule_matches?(rule, %Module12{level: 4}, nil, checker)
     end
 
     test "substitutes the actor in predicate values" do
