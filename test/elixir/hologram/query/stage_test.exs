@@ -865,7 +865,8 @@ defmodule Hologram.Query.StageTest do
     end
 
     test "raises on a one-element list as a predicate name" do
-      expected_msg = "filter predicates must be a keyword list, got: [{[:a], true}]"
+      expected_msg =
+        "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: [{[:a], true}]"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, [{[:a], true}])
@@ -1050,9 +1051,9 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
-    test "raises on an alternative that is not a keyword list" do
+    test "raises on an alternative that is not a list of name and value pairs" do
       expected_msg =
-        "an alternative of a disjunction is a non-empty keyword list of predicates, got: [1]"
+        "an alternative of a disjunction is a non-empty list of name and value pairs, got: [1]"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, or: [[a: true], [1]])
@@ -1088,7 +1089,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an empty alternative" do
       expected_msg =
-        "an alternative of a disjunction is a non-empty keyword list of predicates, got: []"
+        "an alternative of a disjunction is a non-empty list of name and value pairs, got: []"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, or: [[a: true], []])
@@ -1210,8 +1211,9 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
-    test "raises on non-keyword predicates" do
-      expected_msg = "filter predicates must be a keyword list, got: [:a]"
+    test "raises on predicates that are not a list of name and value pairs" do
+      expected_msg =
+        "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: [:a]"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, [:a])

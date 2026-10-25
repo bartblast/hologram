@@ -1440,7 +1440,7 @@ defmodule Hologram.Entity.Validator do
         if not when_value_valid?(condition) do
           raise Hologram.CompileError,
             message:
-              "invalid when option #{inspect(condition)} for allow #{inspect(operation)} in #{inspect(module)} - a pinned condition must be a keyword list of predicates"
+              "invalid when option #{inspect(condition)} for allow #{inspect(operation)} in #{inspect(module)} - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
         end
 
       :error ->

@@ -2,8 +2,8 @@ defmodule Hologram.Query.Stage do
   @moduledoc false
 
   # What Hologram.Query's stages run: the query stages and the entity-struct stages, over the data
-  # form - keyword lists of attribute names and predicate values, operator tuples, membership
-  # lists, ranges and placeholders. Hologram.Query delegates its stages here, or expands to them
+  # form - lists pairing attribute names or paths with predicate values, operator tuples,
+  # membership lists, ranges and placeholders. Hologram.Query delegates its stages here, or expands to them
   # from the stages written in the query syntax, and documents them there. Normalization,
   # placeholder listing and the predicate triples policies share are framework internals, called
   # on this module directly.
@@ -72,11 +72,12 @@ defmodule Hologram.Query.Stage do
     put_relationship_op(entity, relationship_name, target_id, :delete, "delete_relationship")
   end
 
-  # The data form a filter lowers to, and what filter(^predicates) passes as is: a keyword list of
-  # attribute names and predicate values - a plain value (equality), an operator tuple, a bare
-  # membership list, a list of operator tuples applying all of them (a conjunction), or an
-  # integer range. An or: entry holding a list of at least two predicate lists is a disjunction,
-  # which becomes one {:or, alternatives} clause, each alternative the clauses of its list.
+  # The data form a filter lowers to, and what filter(^predicates) passes as is: a list pairing
+  # attribute names - or paths, below - with predicate values: a plain value (equality), an
+  # operator tuple, a bare membership list, a list of operator tuples applying all of them (a
+  # conjunction), or an integer range. An or: entry holding a list of at least two predicate lists
+  # is a disjunction, which becomes one {:or, alternatives} clause, each alternative the clauses of
+  # its list.
   #
   # An {:attribute, name} tuple in a value position - bare (equality) or as the operand of a
   # comparison operator - names another attribute of the same row, which the triple stores as is.
@@ -110,7 +111,8 @@ defmodule Hologram.Query.Stage do
 
     if not filterable_predicates?(predicates) do
       raise ArgumentError,
-        message: "filter predicates must be a keyword list, got: #{inspect(predicates)}"
+        message:
+          "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: #{inspect(predicates)}"
     end
 
     triples = predicate_triples!(term.entity, predicates)
@@ -497,7 +499,7 @@ defmodule Hologram.Query.Stage do
       if alternative == [] or not filterable_predicates?(alternative) do
         raise ArgumentError,
           message:
-            "an alternative of a disjunction is a non-empty keyword list of predicates, got: #{inspect(alternative)}"
+            "an alternative of a disjunction is a non-empty list of name and value pairs, got: #{inspect(alternative)}"
       end
     end)
 

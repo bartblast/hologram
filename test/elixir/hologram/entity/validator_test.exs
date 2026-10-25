@@ -713,9 +713,9 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects a pinned when option that is not a keyword list" do
+    test "rejects a pinned when option that is not a list of predicates" do
       expected_msg =
-        "invalid when option \"x\" for allow :read in Hologram.Entity.ValidatorTest.MalformedWhenOptionFixture - a pinned condition must be a keyword list of predicates"
+        "invalid when option \"x\" for allow :read in Hologram.Entity.ValidatorTest.MalformedWhenOptionFixture - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule MalformedWhenOptionFixture do
@@ -728,7 +728,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects a pinned when option keyed by a one-element list" do
       expected_msg =
-        "invalid when option [{[:public], true}] for allow :read in Hologram.Entity.ValidatorTest.InlineEntityFixture106 - a pinned condition must be a keyword list of predicates"
+        "invalid when option [{[:public], true}] for allow :read in Hologram.Entity.ValidatorTest.InlineEntityFixture106 - a pinned condition must be a list of predicates, each pairing a name or a path with a value"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture106 do

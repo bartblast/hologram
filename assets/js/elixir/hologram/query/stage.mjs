@@ -52,10 +52,10 @@ function attributeTriple(name, operator, other, entityType) {
     validateOrderableAttribute(name, entityType, operator);
   }
 
-  validateFilteredName(other, entityType);
+  validateOperandName(other, entityType);
   validateComparableAttributes(name, other, operator, entityType);
 
-  return [name.value, operator, {attribute: other.value}];
+  return [nameValue(name), operator, {attribute: nameValue(other)}];
 }
 
 // A name matching no attribute definition is a to-one reference field, and every one of those
@@ -75,8 +75,11 @@ function byKey(keyOf) {
 function clauseKey(clause) {
   if (Array.isArray(clause)) {
     const [name, operator, operand] = clause;
+    const spelledName = Array.isArray(name) ? JSON.stringify(name) : name;
 
-    return [name, operator, JSON.stringify(operand ?? null)].join("\u0000");
+    return [spelledName, operator, JSON.stringify(operand ?? null)].join(
+      "\u0000",
+    );
   }
 
   return ["or", JSON.stringify(clause.or)].join("\u0000");
@@ -102,9 +105,9 @@ function disjunctionClause(alternatives, entityType) {
   }
 
   for (const alternative of alternatives.data) {
-    if (!Type.isKeywordList(alternative) || alternative.data.length === 0) {
+    if (!isPredicateList(alternative) || alternative.data.length === 0) {
       Interpreter.raiseArgumentError(
-        `an alternative of a disjunction is a non-empty keyword list of predicates, got: ${Interpreter.inspect(alternative)}`,
+        `an alternative of a disjunction is a non-empty list of name and value pairs, got: ${Interpreter.inspect(alternative)}`,
       );
     }
   }
@@ -144,7 +147,11 @@ function entryClauses(pair, entityType) {
     return [disjunctionClause(value, entityType)];
   }
 
-  validateFilteredName(name, entityType);
+  if (isPath(name)) {
+    validatePath(name, entityType);
+  } else {
+    validateFilteredName(name, entityType);
+  }
 
   return predicateTriples(name, value, entityType);
 }
@@ -288,18 +295,26 @@ function inspectEnumValues(values) {
   return Interpreter.inspect(Type.list(atoms));
 }
 
+// A name as a refusal spells it: an attribute as the interpreter inspects it, a path as it is
+// written.
+function inspectName(name) {
+  return isPath(name)
+    ? name.data.map((atom) => atom.value).join(".")
+    : Interpreter.inspect(name);
+}
+
 function isActor(value) {
   return Type.isAtom(value) && value.value === "actor";
 }
 
-// The {:attribute, name} tuple a bare name on the right side of a comparison lowers to.
+// The {:attribute, name} tuple a bare name or a path on the right side of a comparison lowers to.
 function isAttributeOperand(value) {
   return (
     Type.isTuple(value) &&
     value.data.length === 2 &&
     Type.isAtom(value.data[0]) &&
     value.data[0].value === "attribute" &&
-    Type.isAtom(value.data[1])
+    (Type.isAtom(value.data[1]) || Type.isList(value.data[1]))
   );
 }
 
@@ -311,9 +326,30 @@ function isConstraintTuple(value) {
   );
 }
 
+// Two or more names: the to-one relationships followed from the queried type, then an attribute of
+// the row they lead to.
+function isPath(name) {
+  return (
+    Type.isList(name) && name.data.length >= 2 && name.data.every(Type.isAtom)
+  );
+}
+
 function isPlainValue(value) {
   return (
     !Type.isTuple(value) && !Type.isList(value) && !isStruct(value, "Range")
+  );
+}
+
+// A list pairing names - attributes or paths - with predicate values, the data form a filter takes.
+function isPredicateList(value) {
+  return (
+    Type.isList(value) &&
+    value.data.every(
+      (entry) =>
+        Type.isTuple(entry) &&
+        entry.data.length === 2 &&
+        (Type.isAtom(entry.data[0]) || isPath(entry.data[0])),
+    )
   );
 }
 
@@ -340,7 +376,7 @@ function listTriples(name, list, entityType) {
 
   if (values.length === 0) {
     Interpreter.raiseArgumentError(
-      `filter list for attribute ${Interpreter.inspect(name)} must not be empty`,
+      `filter list for attribute ${inspectName(name)} must not be empty`,
     );
   }
 
@@ -352,12 +388,12 @@ function listTriples(name, list, entityType) {
     validateMembershipList(list, name, "in");
 
     return [
-      [name.value, "in", membershipValues(values, name.value, entityType)],
+      [nameValue(name), "in", membershipValues(values, name, entityType)],
     ];
   }
 
   Interpreter.raiseArgumentError(
-    `invalid filter list ${Interpreter.inspect(list)} for attribute ${Interpreter.inspect(name)} - use either a membership list of plain values or a list of operator tuples`,
+    `invalid filter list ${Interpreter.inspect(list)} for attribute ${inspectName(name)} - use either a membership list of plain values or a list of operator tuples`,
   );
 }
 
@@ -365,7 +401,7 @@ function membershipValues(values, name, entityType) {
   return values.map((value) =>
     isStruct(value, "Hologram.Query.Placeholder")
       ? placeholderLeaf(value)
-      : Model.unbox(value, attributeType(entityType, name)),
+      : Model.unbox(value, nameType(entityType, name)),
   );
 }
 
@@ -386,6 +422,18 @@ function mergedSubTerm(included, subTerm, name) {
   );
 
   return {...included, include};
+}
+
+// The type of what a name reads: an attribute's, or the one a path ends at.
+function nameType(entityType, name) {
+  const declared = subject(entityType, name);
+
+  return attributeType(declared.entityType, declared.name);
+}
+
+// A name as a triple spells it: an attribute's name, or a path's names in order.
+function nameValue(name) {
+  return isPath(name) ? name.data.map((atom) => atom.value) : name.value;
 }
 
 // The nested-spec shorthand is the sub-builder that includes through the nested spec, boxed the
@@ -456,7 +504,7 @@ function operatorTriples(name, tuple, entityType) {
       raiseUnknownOperator(operator, name);
     }
 
-    return [[name.value, operator, placeholderLeaf(operand)]];
+    return [[nameValue(name), operator, placeholderLeaf(operand)]];
   }
 
   if (
@@ -470,7 +518,7 @@ function operatorTriples(name, tuple, entityType) {
   if (EQUALITY_OPERATORS.includes(operator) && isActor(operand)) {
     validateActorAttribute(name, entityType);
 
-    return [[name.value, operator, {actor: true}]];
+    return [[nameValue(name), operator, {actor: true}]];
   }
 
   if (EQUALITY_OPERATORS.includes(operator)) {
@@ -478,9 +526,9 @@ function operatorTriples(name, tuple, entityType) {
 
     return [
       [
-        name.value,
+        nameValue(name),
         operator,
-        Model.unbox(operand, attributeType(entityType, name.value)),
+        Model.unbox(operand, nameType(entityType, name)),
       ],
     ];
   }
@@ -490,9 +538,9 @@ function operatorTriples(name, tuple, entityType) {
 
     return [
       [
-        name.value,
+        nameValue(name),
         operator,
-        membershipValues(operand.data, name.value, entityType),
+        membershipValues(operand.data, name, entityType),
       ],
     ];
   }
@@ -504,9 +552,9 @@ function operatorTriples(name, tuple, entityType) {
 
     return [
       [
-        name.value,
+        nameValue(name),
         operator,
-        Model.unbox(operand, attributeType(entityType, name.value)),
+        Model.unbox(operand, nameType(entityType, name)),
       ],
     ];
   }
@@ -527,7 +575,7 @@ function predicateTriples(name, value, entityType) {
   }
 
   if (isStruct(value, "Hologram.Query.Placeholder")) {
-    return [[name.value, "==", placeholderLeaf(value)]];
+    return [[nameValue(name), "==", placeholderLeaf(value)]];
   }
 
   if (
@@ -537,7 +585,7 @@ function predicateTriples(name, value, entityType) {
   ) {
     validateActorAttribute(name, entityType);
 
-    return [[name.value, "==", {actor: true}]];
+    return [[nameValue(name), "==", {actor: true}]];
   }
 
   if (isAttributeOperand(value)) {
@@ -550,7 +598,7 @@ function predicateTriples(name, value, entityType) {
 
   if (Type.isTuple(value)) {
     Interpreter.raiseArgumentError(
-      `invalid filter value ${Interpreter.inspect(value)} for attribute ${Interpreter.inspect(name)}`,
+      `invalid filter value ${Interpreter.inspect(value)} for attribute ${inspectName(name)}`,
     );
   }
 
@@ -559,17 +607,13 @@ function predicateTriples(name, value, entityType) {
   }
 
   return [
-    [
-      name.value,
-      "==",
-      Model.unbox(value, attributeType(entityType, name.value)),
-    ],
+    [nameValue(name), "==", Model.unbox(value, nameType(entityType, name))],
   ];
 }
 
 function raiseUnknownOperator(operator, name) {
   Interpreter.raiseArgumentError(
-    `unknown operator :${operator} in the filter predicate for attribute ${Interpreter.inspect(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in`,
+    `unknown operator :${operator} in the filter predicate for attribute ${inspectName(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in`,
   );
 }
 
@@ -579,8 +623,8 @@ function rangeTriples(name, range, entityType) {
   validateMembershipRange(range, name, entityType);
 
   return [
-    [name.value, ">=", Number(field(range, "first").value)],
-    [name.value, "<=", Number(field(range, "last").value)],
+    [nameValue(name), ">=", Number(field(range, "first").value)],
+    [nameValue(name), "<=", Number(field(range, "last").value)],
   ];
 }
 
@@ -668,6 +712,21 @@ function sortedClause(clause) {
 // ever needed here, it comes from the server.
 function sortedFilter(filter) {
   return filter.map(sortedClause).sort(byKey(clauseKey));
+}
+
+// Where a name is declared: an attribute on the queried type, a path's last name on the type its
+// relationships lead to. The path is validated before anything asks.
+function subject(entityType, name) {
+  if (!isPath(name)) {
+    return {entityType, name: name.value};
+  }
+
+  const names = name.data.map((atom) => atom.value);
+
+  return {
+    entityType: Model.pathTarget(entityType, names.slice(0, -1)),
+    name: names[names.length - 1],
+  };
 }
 
 // A stage takes either the module a query starts from or the term a previous stage returned. A
@@ -881,11 +940,11 @@ function putPairs(values, stage) {
 }
 
 function validateActorAttribute(name, entityType) {
-  const type = attributeType(entityType, name.value);
+  const type = nameType(entityType, name);
 
   if (type !== "uuid") {
     Interpreter.raiseArgumentError(
-      `user_id() requires a uuid attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}`,
+      `user_id() requires a uuid attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}`,
     );
   }
 }
@@ -914,14 +973,14 @@ function validateAttributeName(name, entityType, usage) {
 // the same type, or a widening - and two enums have to declare the same values in the same order,
 // since a comparison reads positions. An attribute compared with itself says nothing anyone means.
 function validateComparableAttributes(name, other, operator, entityType) {
-  if (name.value === other.value) {
+  if (JSON.stringify(nameValue(name)) === JSON.stringify(nameValue(other))) {
     Interpreter.raiseArgumentError(
-      `operator :${operator} compares attribute ${Interpreter.inspect(name)} in ${entityType} with itself`,
+      `operator :${operator} compares attribute ${inspectName(name)} in ${entityType} with itself`,
     );
   }
 
-  const type = attributeType(entityType, name.value);
-  const otherType = attributeType(entityType, other.value);
+  const type = nameType(entityType, name);
+  const otherType = nameType(entityType, other);
 
   const widens = WIDENINGS.some(
     ([from, to]) => from === type && to === otherType,
@@ -929,7 +988,7 @@ function validateComparableAttributes(name, other, operator, entityType) {
 
   if (type !== otherType && !widens) {
     Interpreter.raiseArgumentError(
-      `operator :${operator} compares attribute ${Interpreter.inspect(name)} with attribute ${Interpreter.inspect(other)} in ${entityType}, which have different types (:${type} and :${otherType}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)`,
+      `operator :${operator} compares attribute ${inspectName(name)} with attribute ${inspectName(other)} in ${entityType}, which have different types (:${type} and :${otherType}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)`,
     );
   }
 
@@ -937,9 +996,13 @@ function validateComparableAttributes(name, other, operator, entityType) {
     return;
   }
 
-  const {enumValues} = Model.entry(entityType);
-  const values = enumValues[name.value];
-  const otherValues = enumValues[other.value];
+  const declared = subject(entityType, name);
+  const otherDeclared = subject(entityType, other);
+  const values = Model.entry(declared.entityType).enumValues[declared.name];
+
+  const otherValues = Model.entry(otherDeclared.entityType).enumValues[
+    otherDeclared.name
+  ];
 
   const sameValues =
     values.length === otherValues.length &&
@@ -947,7 +1010,7 @@ function validateComparableAttributes(name, other, operator, entityType) {
 
   if (!sameValues) {
     Interpreter.raiseArgumentError(
-      `operator :${operator} compares attribute ${Interpreter.inspect(name)} with attribute ${Interpreter.inspect(other)} in ${entityType}, which declare different values (${inspectEnumValues(values)} and ${inspectEnumValues(otherValues)}) - two enum attributes compare only when they declare the same values in the same order`,
+      `operator :${operator} compares attribute ${inspectName(name)} with attribute ${inspectName(other)} in ${entityType}, which declare different values (${inspectEnumValues(values)} and ${inspectEnumValues(otherValues)}) - two enum attributes compare only when they declare the same values in the same order`,
     );
   }
 }
@@ -984,15 +1047,16 @@ function validateFilteredName(name, entityType) {
 // rather than where it is run: the database refuses an undeclared label too, but only once the
 // statement reaches it, and by then nothing can name the values there were to choose from.
 function validateEnumOperand(name, operand, entityType) {
-  if (attributeType(entityType, name.value) !== "enum") {
+  if (nameType(entityType, name) !== "enum") {
     return;
   }
 
-  const values = Model.entry(entityType).enumValues[name.value];
+  const declared = subject(entityType, name);
+  const values = Model.entry(declared.entityType).enumValues[declared.name];
 
   if (!values.includes(Model.unbox(operand, "enum"))) {
     Interpreter.raiseArgumentError(
-      `${Interpreter.inspect(operand)} is not a value of attribute ${Interpreter.inspect(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
+      `${Interpreter.inspect(operand)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
     );
   }
 }
@@ -1000,58 +1064,117 @@ function validateEnumOperand(name, operand, entityType) {
 function validateMembershipList(operand, name, operator) {
   if (!Type.isList(operand)) {
     Interpreter.raiseArgumentError(
-      `operator :${operator} on attribute ${Interpreter.inspect(name)} requires a list operand, got: ${Interpreter.inspect(operand)}`,
+      `operator :${operator} on attribute ${inspectName(name)} requires a list operand, got: ${Interpreter.inspect(operand)}`,
     );
   }
 
   if (operand.data.length === 0) {
     Interpreter.raiseArgumentError(
-      `membership list for attribute ${Interpreter.inspect(name)} must not be empty`,
+      `membership list for attribute ${inspectName(name)} must not be empty`,
     );
   }
 
   operand.data.forEach((value) => {
     if (Type.isList(value) || Type.isTuple(value) || isStruct(value, "Range")) {
       Interpreter.raiseArgumentError(
-        `invalid membership list element ${Interpreter.inspect(value)} for attribute ${Interpreter.inspect(name)} - membership lists hold plain values`,
+        `invalid membership list element ${Interpreter.inspect(value)} for attribute ${inspectName(name)} - membership lists hold plain values`,
       );
     }
   });
 }
 
 function validateMembershipRange(range, name, entityType) {
-  const type = attributeType(entityType, name.value);
+  const type = nameType(entityType, name);
 
   if (type !== "integer") {
     Interpreter.raiseArgumentError(
-      `range ${Interpreter.inspect(range)} requires an integer attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}`,
+      `range ${Interpreter.inspect(range)} requires an integer attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}`,
     );
   }
 
   if (field(range, "step").value !== 1n) {
     Interpreter.raiseArgumentError(
-      `stepped range ${Interpreter.inspect(range)} for attribute ${Interpreter.inspect(name)} is not supported - membership ranges use step 1`,
+      `stepped range ${Interpreter.inspect(range)} for attribute ${inspectName(name)} is not supported - membership ranges use step 1`,
     );
   }
 
   if (field(range, "last").value < field(range, "first").value) {
     Interpreter.raiseArgumentError(
-      `range ${Interpreter.inspect(range)} for attribute ${Interpreter.inspect(name)} is empty - it would match nothing`,
+      `range ${Interpreter.inspect(range)} for attribute ${inspectName(name)} is empty - it would match nothing`,
     );
   }
+}
+
+// What an attribute operand names - another attribute of the row, or a path to one - refused in the
+// words a predicate's own name is.
+function validateOperandName(name, entityType) {
+  if (Type.isAtom(name)) {
+    validateFilteredName(name, entityType);
+
+    return;
+  }
+
+  if (!isPath(name)) {
+    Interpreter.raiseArgumentError(
+      `invalid attribute operand ${Interpreter.inspect(Type.tuple([Type.atom("attribute"), name]))} - an attribute is named by an atom, and a path by a list of two or more atoms`,
+    );
+  }
+
+  validatePath(name, entityType);
 }
 
 // The types an ordering line can be drawn through: every type but boolean and uuid has an order
 // to compare by. An enum's is the list it declares, on every tier. A string's is the same derived
 // key its ordering uses, which the kernel reads off the row.
 function validateOrderableAttribute(name, entityType, operator) {
-  const type = attributeType(entityType, name.value);
+  const type = nameType(entityType, name);
 
   if (!ORDERABLE_TYPES.includes(type)) {
     Interpreter.raiseArgumentError(
-      `operator :${operator} requires an orderable attribute - attribute ${Interpreter.inspect(name)} in ${entityType} has type :${type}, and boolean and uuid attributes have no order to compare by`,
+      `operator :${operator} requires an orderable attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}, and boolean and uuid attributes have no order to compare by`,
     );
   }
+}
+
+// A path is followed hop by hop from the queried type, each hop a to-one relationship of the type
+// the hops before it lead to, and its last name is filterable on the type it ends at - so every
+// refusal names the type it was asked of, as on the server.
+function validatePath(path, entityType) {
+  const names = path.data;
+
+  const endType = names
+    .slice(0, -1)
+    .reduce((type, hop) => validatePathHop(hop, type), entityType);
+
+  validateFilteredName(names[names.length - 1], endType);
+}
+
+function validatePathHop(hop, entityType) {
+  const relationship = Model.entry(entityType).relationships[hop.value];
+
+  if (relationship && relationship.toMany) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(hop)} is a to-many relationship in ${entityType} - a path in a condition goes through to-one relationships only`,
+    );
+  }
+
+  if (relationship) {
+    return relationship.type;
+  }
+
+  if (attributeNames(entityType).includes(hop.value)) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(hop)} is an attribute in ${entityType} - a path goes through relationships, and only its last name is an attribute`,
+    );
+  }
+
+  const known = relationshipNames(entityType)
+    .map((relationshipName) => `:${relationshipName}`)
+    .join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown relationship ${Interpreter.inspect(hop)} in ${entityType} - known relationships: ${known}`,
+  );
 }
 
 function validateRelationshipName(name, entityType) {
@@ -1088,7 +1211,7 @@ function validateScalarOperand(name, operator, operand, refuseNil = false) {
 
   if (invalid) {
     Interpreter.raiseArgumentError(
-      `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${Interpreter.inspect(name)}`,
+      `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)}`,
     );
   }
 }
@@ -1282,9 +1405,9 @@ const Elixir_Hologram_Query_Stage = {
   "filter/2": (query, predicates) => {
     const term = toTerm(query);
 
-    if (!Type.isKeywordList(predicates)) {
+    if (!isPredicateList(predicates)) {
       Interpreter.raiseArgumentError(
-        `filter predicates must be a keyword list, got: ${Interpreter.inspect(predicates)}`,
+        `filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: ${Interpreter.inspect(predicates)}`,
       );
     }
 
