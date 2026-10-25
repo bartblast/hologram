@@ -12,7 +12,9 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
@@ -642,6 +644,35 @@ defmodule HologramFeatureTests.Helpers do
         |> DB.create!()
       end
     )
+  end
+
+  @doc """
+  Creates three trips and the stops on them, and returns the trips by name.
+
+  Trips alpha and beta are active and trip gamma is archived. Stops a1 and a2 are on alpha, b1 on
+  beta and g1 on gamma, so a filter through a stop's trip answers differently from one on the
+  stops alone.
+  """
+  @spec seed_stops() :: %{String.t() => struct}
+  def seed_stops do
+    trips =
+      Map.new(["alpha", "beta", "gamma"], fn name ->
+        trip =
+          %{archived: name == "gamma", name: name}
+          |> Trip.new()
+          |> DB.create!()
+
+        {name, trip}
+      end)
+
+    Enum.each([{"a1", "alpha"}, {"a2", "alpha"}, {"b1", "beta"}, {"g1", "gamma"}], fn
+      {stop_name, trip_name} ->
+        %{name: stop_name, trip_id: trips[trip_name].id}
+        |> Stop.new()
+        |> DB.create!()
+    end)
+
+    trips
   end
 
   @doc """
