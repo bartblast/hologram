@@ -1821,6 +1821,10 @@ A component's actions run one at a time, in the order they were dispatched. Each
 
 An action that awaits a `Task` (see JavaScript Interop) holds back later actions for the same component until it finishes. Actions for other components keep running. A delayed action takes its place in the order when its delay elapses.
 
+#### Leaving the Page Before an Action Finishes
+
+An action's result belongs to the page it ran on. If the visitor has moved to another page by the time an action that awaits a `Task` finishes, Hologram drops its whole result. That covers the state update and anything the action put with `put_action`, `put_command` or `put_page`. None of it reaches the page the visitor moved to, even when that page has a component with the same cid, such as its page or layout component. The browser console notes the drop.
+
 #### Putting It All Together
 
 Here's a simple example that demonstrates how actions work in Hologram. The counter component shows:
@@ -1983,6 +1987,10 @@ end
 #### Command Targets
 
 By default, commands are executed on the component that contains them. If the component is stateless (doesn't have a CID specified), the closest stateful component higher in the hierarchy is used. You can specify a different component for execution using the `target` parameter. For more information about event targets, see the Events documentation.
+
+#### Leaving the Page Before the Reply
+
+The action a command puts with `put_action` runs on the page the command was sent from. If the visitor navigates to another page before that action runs, it is dropped and the browser console notes it. The command's server-side effects, such as session and cookie changes, database writes and broadcasts to other tabs, still apply.
 
 ### Navigation
 

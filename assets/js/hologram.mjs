@@ -75,6 +75,10 @@ export default class Hologram {
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
 
   // Made public to make tests easier
+  // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
+  static deadEpochs = new Set();
+
+  // Made public to make tests easier
   // The epoch of the page whose markup is on screen.
   static domEpoch = 0;
 
@@ -126,9 +130,6 @@ export default class Hologram {
   // The digests of the chunks this document was told of: the ones the document the server sent
   // carries and the ones requested since. A snapshot saves the loaded ones.
   static #chunkDigests = new Set();
-
-  // Epochs whose navigation failed before it could mount - nothing can ever answer for them.
-  static #deadEpochs = new Set();
 
   // The snapshot of the history entry this document was loaded for, found while the runtime was
   // starting and restored by run() once its chunks are in. Null when there is none to restore, and
@@ -214,8 +215,9 @@ export default class Hologram {
   // synchronous "error" event. Async action errors are caught separately via the
   // "unhandledrejection" event listener in #init().
   //
-  // Returns the promise of an asynchronous action, settled once its result has been processed, so
-  // that a caller can wait for the commit. A synchronous action returns nothing.
+  // Returns the promise of an asynchronous action, settled once its result has been processed - or
+  // dropped, when the page it ran on has been left - so that a caller can wait for the commit. A
+  // synchronous action returns nothing.
   // TODO: make private (tested implicitely in feature tests)
   // Deps: [:maps.get/2]
   static executeAction(action, epoch = $.registryEpoch) {
@@ -257,9 +259,28 @@ export default class Hologram {
     );
 
     if (resultComponentStruct instanceof Promise) {
-      return resultComponentStruct.then((resolved) =>
-        Hologram.#processActionResult(resolved, name, target, startTime, epoch),
-      );
+      return resultComponentStruct.then((resolved) => {
+        // The await can span a navigation, and the result belongs to the page the action ran on.
+        // Its target may resolve on the destination too - "page", "layout", a cid both pages use -
+        // to an instance that never produced it, and when it does not resolve the registry write
+        // faults. So the result is dropped whole: the struct, the next command, the render, the
+        // next page, as the queue would drop the next action. The synchronous path needs no such
+        // check: the queue compared the epoch just before running the action, and nothing can
+        // navigate inside a synchronous call. Resolved rather than rejected, so that the queue's
+        // finally releases the component and goes on.
+        if ($.#hasPageBeenLeft(epoch)) {
+          globalThis.Hologram.isProfilingEnabled = false;
+
+          console.warn(
+            "Hologram: dropped the result of an action whose page has been left:",
+            Interpreter.inspect(name),
+          );
+
+          return;
+        }
+
+        Hologram.#processActionResult(resolved, name, target, startTime, epoch);
+      });
     }
 
     Hologram.#processActionResult(
@@ -377,7 +398,7 @@ export default class Hologram {
   // currentTarget once dispatch returns) - run synchronously here. Callers invoke the returned
   // dispatch immediately, or hand it to the debouncer so that only the dispatch is deferred
   // while preventDefault still takes effect on every event.
-  // Deps: [:maps.get/3]
+  // Deps: [:maps.get/2, :maps.get/3]
   static handleUiEvent(
     event,
     eventType,
@@ -460,7 +481,27 @@ export default class Hologram {
           }
         }
       } else {
-        Client.sendCommand(operation);
+        // Only a page that has been left can dispatch a command while a transition is open. The
+        // markup a navigation patches in carries no bindings until the mount's first render wires
+        // them, so every binding live in that time is the left page's: after a history restore
+        // has moved the registry on, and through the mount that follows it, up to the render that
+        // replaces the left page's markup. Sent then, the command would name the left page's
+        // components to the page the registry answers for - so it is dropped, as the queue drops
+        // an action whose page has been left.
+        if (
+          $.#hasPageBeenLeft(epoch) ||
+          $.domEpoch !== $.registryEpoch ||
+          $.isMounting
+        ) {
+          console.warn(
+            "Hologram: dropped a command dispatched on a page that has been left:",
+            Interpreter.inspect(
+              Erlang_Maps["get/2"](Type.atom("name"), operation),
+            ),
+          );
+        } else {
+          Client.sendCommand(operation, epoch);
+        }
       }
     };
   }
@@ -735,9 +776,9 @@ export default class Hologram {
   // Runs the action once its delay has elapsed. The timer's callback is a new task, so the browser
   // can paint before the action runs, with no delay too.
   // Deps: [:maps.get/3]
-  // The default stamp covers every caller that reasoned about the registry rather than about the
-  // markup - server-pushed actions and command responses. A caller whose action came from the DOM
-  // passes the displayed page's epoch instead.
+  // The stamp is the page the action belongs to, which every caller knows better than this
+  // default does: a DOM dispatch passes the displayed page's epoch, a next action its parent's,
+  // and a pushed action the page it was sent to (see schedulePushedAction).
   static scheduleAction(action, epoch = $.registryEpoch) {
     const delay = Erlang_Maps["get/3"](
       Type.atom("delay"),
@@ -762,12 +803,13 @@ export default class Hologram {
   //
   // Realtime promises no order, so two pushed actions can run in the other order than the one
   // they were sent in, when the first of them waits for a chunk.
+  //
+  // The epoch is the page the action belongs to: a command reply's next action carries the page
+  // the command was sent from, and a broadcast - one that came over SSE, or a command reply's self
+  // echo - takes the page the registry answers for when it arrives. A navigation while the chunks
+  // are fetched leaves the action stamped with that page, so that the queue drops it as stale.
   // Deps: [:maps.get/2]
-  static schedulePushedAction(action, chunkDigests) {
-    // Captured on arrival: a navigation while the chunks are fetched must leave the action stamped
-    // with the page it was sent to, so that the queue drops it as stale.
-    const epoch = $.registryEpoch;
-
+  static schedulePushedAction(action, chunkDigests, epoch = $.registryEpoch) {
     $.requestChunks(chunkDigests);
 
     if (ScriptRegistry.isLoaded(chunkDigests)) {
@@ -1348,7 +1390,7 @@ export default class Hologram {
       },
       (_resp) => {
         // The mount that would have closed this transition is never going to run.
-        $.#deadEpochs.add(epoch);
+        $.deadEpochs.add(epoch);
 
         throw new HologramRuntimeError(
           "Failed to fetch page bundle path for: " +
@@ -1379,13 +1421,24 @@ export default class Hologram {
   static #handleScriptFailure(digest) {
     if (MountGate.requires(digest)) {
       MountGate.cancel();
-      $.#deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
+      $.deadEpochs.add(Math.max($.domEpoch, $.registryEpoch));
 
       return false;
     }
 
     return Array.from($.#restoresInFlight).some((digests) =>
       digests.includes(digest),
+    );
+  }
+
+  // Whether the page an epoch names is gone: left for another page, or never mounted because its
+  // navigation failed. The one definition behind every drop - the queue's, a command's, an
+  // asynchronous action's result - so that they cannot disagree about it. Equality means the page
+  // has not been left: a navigation away from it always moves one side past it, and a mount only
+  // brings the two level.
+  static #hasPageBeenLeft(epoch) {
+    return (
+      epoch < Math.max($.domEpoch, $.registryEpoch) || $.deadEpochs.has(epoch)
     );
   }
 
@@ -1635,7 +1688,7 @@ export default class Hologram {
     } catch (error) {
       // The mount that would have closed this transition is never going to run.
       if (!isSuperseded()) {
-        $.#deadEpochs.add(epoch);
+        $.deadEpochs.add(epoch);
       }
 
       throw error;
@@ -1674,9 +1727,13 @@ export default class Hologram {
     // the user leaves instead - in #showNewPage and handlePopstateEvent - which is the last
     // point at which every pending timer provably belongs to the page being left.
     //
-    // Whichever pointer ran ahead during the transition, the mount is where they converge: from
-    // here the page on screen and the page the registry answers for are the same page.
-    $.domEpoch = $.registryEpoch = Math.max($.domEpoch, $.registryEpoch);
+    // Whichever pointer ran ahead during the transition, the mount is where they converge. The
+    // registry answers for the mounted page from here. The epoch of what is displayed follows in
+    // the frame of the mount's first render, which is what replaces the markup on screen: after a
+    // history restore the left page's markup stays up, with its bindings, until then, and a click
+    // on it must still carry the left page's epoch.
+    const epoch = Math.max($.domEpoch, $.registryEpoch);
+    $.registryEpoch = epoch;
 
     // Nothing runs until the first render below has written the props - see the flag.
     $.isMounting = true;
@@ -1718,6 +1775,14 @@ export default class Hologram {
     ActionQueue.append(waitingEntries);
 
     window.requestAnimationFrame(() => {
+      // The render below is what puts the mounted page's markup on screen (see the top of
+      // #mountPage), so the displayed epoch catches up here. Before the render rather than after
+      // it: the patch runs the inline scripts it inserts, and what they dispatch is the mounted
+      // page's. A click on the left page's markup happened before this frame and carries its own
+      // epoch. A navigation started since may have moved the displayed epoch further on, and
+      // keeps it.
+      $.domEpoch = Math.max($.domEpoch, epoch);
+
       // The registry arrives with every struct's props empty - this render is what writes them, so
       // that the payload doesn't carry each prop value a second time - which is one more reason
       // nothing above may run a handler before this call, and why the queue is held until it is
@@ -1961,7 +2026,9 @@ export default class Hologram {
         );
       }
 
-      Client.sendCommand(nextCommand);
+      // A next command belongs to the page its action belonged to, like a next action below, so
+      // its reply is dropped if that page has been left by the time it lands.
+      Client.sendCommand(nextCommand, epoch);
     }
 
     let savedComponentStruct = Erlang_Maps["put/3"](
@@ -2005,9 +2072,10 @@ export default class Hologram {
       );
 
       // A next action belongs to whatever page its parent belonged to, so it inherits the
-      // parent's stamp rather than reading the epoch afresh. That matters most when the parent
-      // was asynchronous: its promise can resolve after a navigation, and the inherited stamp is
-      // what makes the next action drop instead of landing on a page that never produced it.
+      // parent's stamp rather than reading the epoch afresh. That matters when the next action
+      // has a delay: its timer can fire after a navigation, and the inherited stamp is what makes
+      // it drop instead of landing on a page that never produced it. (A parent that settles after
+      // a navigation never gets this far - executeAction drops its whole result.)
       //
       // A next action with no delay runs before the browser paints, so that two components a
       // chain changes are never painted disagreeing. The browser paints between tasks, and a
@@ -2086,8 +2154,8 @@ export default class Hologram {
 
     // A restore swaps the registry while the previous page is still on screen - the mirror of a
     // forward navigation, where the markup runs ahead instead. The epoch of what the registry
-    // answers for was advanced when the restore was decided on; the mount brings the displayed
-    // side level.
+    // answers for was advanced when the restore was decided on; the frame of the mount's first
+    // render brings the displayed side level, as that render replaces the previous page's markup.
     ComponentRegistry.populate(componentRegistryEntries);
 
     App.instanceId = instanceId;
@@ -2135,10 +2203,9 @@ export default class Hologram {
 
       while (index < ActionQueue.entries.length) {
         const {action, epoch} = ActionQueue.entries[index];
-        const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
 
         // Dropped whatever the page is doing: a stale entry has nothing to wait for.
-        if (epoch < currentEpoch || $.#deadEpochs.has(epoch)) {
+        if ($.#hasPageBeenLeft(epoch)) {
           ActionQueue.removeAt(index);
 
           console.warn(
