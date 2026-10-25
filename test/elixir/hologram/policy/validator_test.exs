@@ -7,6 +7,7 @@ defmodule Hologram.Policy.ValidatorTest do
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Role
 
   describe "validate_model!/2" do
@@ -115,6 +116,18 @@ defmodule Hologram.Policy.ValidatorTest do
       assert validate_model!([Module14, InlinePolicyFixture17], []) == :ok
     end
 
+    test "returns :ok for a to option referencing a role on the row a path ends at" do
+      defmodule InlinePolicyFixture54 do
+        use Hologram.Entity
+
+        relationship :item, Module25
+
+        allow :update, to: {:editor, item.h}
+      end
+
+      assert validate_model!([Module14, InlinePolicyFixture54], []) == :ok
+    end
+
     test "returns :ok for a via option delegating to a to-one relationship" do
       defmodule InlinePolicyFixture21 do
         use Hologram.Entity
@@ -151,6 +164,19 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       assert validate_model!([InlinePolicyFixture47], []) == :ok
+    end
+
+    test "returns :ok for a via option following a path, alone or naming its operation" do
+      defmodule InlinePolicyFixture52 do
+        use Hologram.Entity
+
+        relationship :item, Module25
+
+        allow :publish, via: item.h
+        allow :delete, via: {:read, item.h}
+      end
+
+      assert validate_model!([InlinePolicyFixture52], []) == :ok
     end
 
     # Each create asks the other type's update, and neither update delegates, so no chain returns
@@ -364,6 +390,63 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a to option through a path with a to-many relationship on a later hop" do
+      defmodule InlinePolicyFixture56 do
+        use Hologram.Entity
+
+        relationship :children, [Module13]
+      end
+
+      defmodule InlinePolicyFixture55 do
+        use Hologram.Entity
+
+        relationship :group, Hologram.Policy.ValidatorTest.InlinePolicyFixture56
+
+        allow :update, to: {:editor, group.children}
+      end
+
+      expected_msg =
+        "invalid to option {:editor, group.children} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture55 - relationship :children in Hologram.Policy.ValidatorTest.InlinePolicyFixture56 is to-many, but a role reference requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, InlinePolicyFixture55, InlinePolicyFixture56], [])
+      end
+    end
+
+    test "rejects a to option through a path with an unknown relationship on a later hop" do
+      defmodule InlinePolicyFixture57 do
+        use Hologram.Entity
+
+        relationship :item, Module25
+
+        allow :update, to: {:editor, item.project}
+      end
+
+      expected_msg =
+        "unknown relationship :project in Hologram.Test.Fixtures.Entity.Module25 in the to option of allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture57 - declared relationships of Hologram.Test.Fixtures.Entity.Module25 are: :e, :f, :g, :h"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, InlinePolicyFixture57], [])
+      end
+    end
+
+    test "rejects a to option naming a role the type a path ends at does not declare" do
+      defmodule InlinePolicyFixture58 do
+        use Hologram.Entity
+
+        relationship :item, Module25
+
+        allow :update, to: {:publisher, item.h}
+      end
+
+      expected_msg =
+        "unknown role :publisher in the to option of allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture58 - declared roles of Hologram.Test.Fixtures.Entity.Module13 are: :editor, :owner"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, InlinePolicyFixture58], [])
+      end
+    end
+
     test "rejects a via option naming an unknown relationship" do
       defmodule InlinePolicyFixture22 do
         use Hologram.Entity
@@ -398,6 +481,23 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a via option through a path starting with a to-many relationship" do
+      defmodule InlinePolicyFixture65 do
+        use Hologram.Entity
+
+        relationship :children, [Module13]
+
+        allow :read, via: children.parent
+      end
+
+      expected_msg =
+        "invalid via option children.parent for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture65 - relationship :children is to-many, but delegation requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture65], [])
+      end
+    end
+
     test "rejects a via option that is not a relationship name" do
       defmodule InlinePolicyFixture24 do
         use Hologram.Entity
@@ -408,10 +508,27 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture24 - the via option must be a relationship name or an {operation, relationship} tuple"
+        "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture24 - the via option must be a relationship name, a path, or an {operation, relationship} tuple"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture24], [])
+      end
+    end
+
+    test "rejects a via option that is a list of one relationship name" do
+      defmodule InlinePolicyFixture53 do
+        use Hologram.Entity
+
+        relationship :parent, Module13
+
+        allow :read, via: ^[:parent]
+      end
+
+      expected_msg =
+        "invalid via option [:parent] for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture53 - the via option must be a relationship name, a path, or an {operation, relationship} tuple"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture53], [])
       end
     end
 
@@ -442,7 +559,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        ~s(invalid via option {"update", :parent} for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture44 - the via option must be a relationship name or an {operation, relationship} tuple)
+        ~s(invalid via option {"update", :parent} for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture44 - the via option must be a relationship name, a path, or an {operation, relationship} tuple)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture44], [])
@@ -480,6 +597,63 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture49], [])
+      end
+    end
+
+    test "rejects a via option through a path with a to-many relationship on a later hop" do
+      defmodule InlinePolicyFixture61 do
+        use Hologram.Entity
+
+        relationship :children, [Module13]
+      end
+
+      defmodule InlinePolicyFixture60 do
+        use Hologram.Entity
+
+        relationship :group, Hologram.Policy.ValidatorTest.InlinePolicyFixture61
+
+        allow :read, via: group.children
+      end
+
+      expected_msg =
+        "invalid via option group.children for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture60 - relationship :children in Hologram.Policy.ValidatorTest.InlinePolicyFixture61 is to-many, but delegation requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture60, InlinePolicyFixture61], [])
+      end
+    end
+
+    test "rejects a via option through a path with an unknown relationship on a later hop" do
+      defmodule InlinePolicyFixture59 do
+        use Hologram.Entity
+
+        relationship :item, Module25
+
+        allow :read, via: item.project
+      end
+
+      expected_msg =
+        "unknown relationship :project in Hologram.Test.Fixtures.Entity.Module25 in the via option of allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture59 - declared relationships of Hologram.Test.Fixtures.Entity.Module25 are: :e, :f, :g, :h"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture59], [])
+      end
+    end
+
+    test "rejects a via option through a path asking an operation the type it ends at can't be asked about" do
+      defmodule InlinePolicyFixture62 do
+        use Hologram.Entity
+
+        relationship :item, Module13
+
+        allow :publish, via: item.parent
+      end
+
+      expected_msg =
+        "invalid via option item.parent for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture62 - unknown operation :publish for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture62], [])
       end
     end
 
@@ -537,6 +711,32 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture45, InlinePolicyFixture46], [])
+      end
+    end
+
+    test "rejects a delegation cycle through a path" do
+      defmodule InlinePolicyFixture63 do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.InlinePolicyFixture64, optional: true
+
+        allow :read, via: peer.peer
+      end
+
+      defmodule InlinePolicyFixture64 do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.InlinePolicyFixture63, optional: true
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        cyclic policy delegation for allow :read - a via chain can't return to the entity type it starts from:
+          * Hologram.Policy.ValidatorTest.InlinePolicyFixture63 (via peer.peer) -> Hologram.Policy.ValidatorTest.InlinePolicyFixture63\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture63, InlinePolicyFixture64], [])
       end
     end
 
@@ -1004,7 +1204,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.TakenNonAtomViaEntity, taken from Hologram.Policy.ValidatorTest.TakenNonAtomViaPolicy - the via option must be a relationship name or an {operation, relationship} tuple"
+        "invalid via option \"parent\" for allow :read in Hologram.Policy.ValidatorTest.TakenNonAtomViaEntity, taken from Hologram.Policy.ValidatorTest.TakenNonAtomViaPolicy - the via option must be a relationship name, a path, or an {operation, relationship} tuple"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([TakenNonAtomViaEntity], [])
@@ -1326,6 +1526,23 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a reference through a path the gate cannot honor" do
+      defmodule PathRelationshipGateFixture do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Test.Fixtures.Policy.Module5, optional: true
+
+        allow :grant_role, to: {:viewer, parent.parent}
+      end
+
+      expected_msg =
+        "invalid to option {:viewer, parent.parent} for allow :grant_role in Hologram.Policy.ValidatorTest.PathRelationshipGateFixture - :grant_role is checked without loading the row, so it takes own role names and global role modules only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, PathRelationshipGateFixture], [])
+      end
+    end
+
     test "rejects a predicate the gate cannot honor" do
       defmodule PredicateGateFixture do
         use Hologram.Entity
@@ -1416,6 +1633,23 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, DelegatedGateFixture], [])
+      end
+    end
+
+    test "rejects a delegation through a path the gate cannot honor" do
+      defmodule PathDelegatedGateFixture do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Test.Fixtures.Policy.Module5, optional: true
+
+        allow :read_roles, via: {:read, parent.parent}
+      end
+
+      expected_msg =
+        "invalid via option {:read, parent.parent} for allow :read_roles in Hologram.Policy.ValidatorTest.PathDelegatedGateFixture - :read_roles is checked without loading the row, so it takes own role names and global role modules only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, PathDelegatedGateFixture], [])
       end
     end
 

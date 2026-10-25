@@ -161,15 +161,16 @@ defmodule Hologram.Entity do
   An allow line grants the given operation, and every key on it is an option:
 
     * `to:` - who holds the operation: a role name (`:editor`), a global role module (`Admin`), a
-      role held on the row a to-one relationship points at as `{role, relationship}`
-      (`{:editor, project}`), a role held on a whole entity type as `{role, entity type}`
-      (`{:moderator, MyApp.Post}`), or a list of them, any one of which suffices.
-    * `via:` - a to-one relationship, written as a bare name (`via: project`): the operation is
-      granted when the same operation is granted on the related row. Written as
-      `{operation, relationship}` (`via: {:update, project}`), it is granted when the named
-      operation is granted on the related row. A create rule names one when the related type's
-      own create rule says nothing about who may add to an existing row, as on a type whose rows
-      nobody holds a role on before they exist.
+      role held on the row a to-one relationship, or a path of them, points at as
+      `{role, relationship}` (`{:editor, project}`, `{:owner, trip.user}`), a role held on a whole
+      entity type as `{role, entity type}` (`{:moderator, MyApp.Post}`), or a list of them, any
+      one of which suffices.
+    * `via:` - a to-one relationship, written as a bare name (`via: project`), or a path of them
+      (`via: trip.user`): the operation is granted when the same operation is granted on the row
+      it leads to. Written as `{operation, relationship}` (`via: {:update, project}`,
+      `via: {:update, stop.trip}`), it is granted when the named operation is granted on that
+      row. A create rule names one when the related type's own create rule says nothing about who
+      may add to an existing row, as on a type whose rows nobody holds a role on before they exist.
     * `when:` - a condition on the row: `when: priority < 3 and archived == false`,
       `when: owner_id == nil or owner_id == user_id()`. A bare name is an attribute of the row,
       on either side of a comparison, so `when: guests <= capacity` compares two attributes, `^`

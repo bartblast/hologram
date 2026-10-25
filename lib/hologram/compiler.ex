@@ -4089,11 +4089,18 @@ defmodule Hologram.Compiler do
     |> then(&"[#{&1}]")
   end
 
-  # TODO: bake the chain as an array of names once the browser's policy checks follow a chain.
-  # Until then a chain of one bakes as the relationship's name, the spelling the browser reads.
+  # TODO: bake a chain of one as an array too once the browser's policy checks follow a chain.
+  # Until then it bakes as the relationship's name, the spelling the browser reads.
   defp render_policy_chain([relationship_name]) do
     relationship_name
     |> Atom.to_string()
+    |> Jason.encode!()
+  end
+
+  # A path bakes as the array of its names.
+  defp render_policy_chain(relationship_names) do
+    relationship_names
+    |> Enum.map(&Atom.to_string/1)
     |> Jason.encode!()
   end
 

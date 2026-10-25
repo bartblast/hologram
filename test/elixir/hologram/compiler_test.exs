@@ -56,6 +56,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
@@ -3800,6 +3801,41 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"update":[{"predicates":[["guests","<=",{"attribute":"capacity"}]],"to":null,"via":null}]/
+             )
+    end
+
+    test "bakes a delegation and a grant reference through a path", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types = MapSet.new([PathPolicyEntity, RoleGrant])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[],"to":null,"via":["publish",["parent","parent"]]}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[],"to":[["rel",["parent","parent"],"Hologram.Test.Fixtures.Policy.Module1",["viewer"]]],"via":null}]/
              )
     end
 

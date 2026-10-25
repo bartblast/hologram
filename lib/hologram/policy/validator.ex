@@ -86,11 +86,28 @@ defmodule Hologram.Policy.Validator do
       end)
   end
 
+  # An option as a message quotes it: written as it was, a relationship as inspect/1 spells it and
+  # a path dotted - {:update, stop.trip}, {:owner, trip.user}.
+  defp describe_reference({role, relationship}),
+    do: "{#{inspect(role)}, #{describe_relationship(relationship)}}"
+
+  defp describe_reference(reference), do: inspect(reference)
+
+  defp describe_relationship(relationship_names) when is_list(relationship_names),
+    do: Enum.join(relationship_names, ".")
+
+  defp describe_relationship(relationship_name), do: inspect(relationship_name)
+
   defp describe_role_cycle([first_role_module | _later_hops] = cycle) do
     hops = Enum.map_join(cycle, " -> ", &inspect/1)
 
     "  * #{hops} -> #{inspect(first_role_module)}"
   end
+
+  defp describe_via({operation, relationship}),
+    do: "{#{inspect(operation)}, #{describe_relationship(relationship)}}"
+
+  defp describe_via(via), do: describe_relationship(via)
 
   defp describe_via_cycle([{first_entity_type, _operation, _via, _source} | _later_hops] = cycle) do
     hops = Enum.map_join(cycle, " -> ", &describe_via_cycle_hop/1)
@@ -103,11 +120,11 @@ defmodule Hologram.Policy.Validator do
   # did, and one taken from a policy names it, so a cycle formed out of a shared delegation says
   # where the line lives.
   defp describe_via_cycle_hop({entity_type, _operation, via, entity_type}) do
-    "#{inspect(entity_type)} (via #{inspect(via)})"
+    "#{inspect(entity_type)} (via #{describe_via(via)})"
   end
 
   defp describe_via_cycle_hop({entity_type, _operation, via, source}) do
-    "#{inspect(entity_type)} (via #{inspect(via)}, from #{inspect(source)})"
+    "#{inspect(entity_type)} (via #{describe_via(via)}, from #{inspect(source)})"
   end
 
   # Depth-first traversal over the extends edges. The path holds the roles walked to reach the
@@ -227,10 +244,54 @@ defmodule Hologram.Policy.Validator do
         "cyclic policy delegation for allow #{inspect(operation)} - a via chain can't return to the entity type it starts from:\n#{descriptions}"
   end
 
+  # A relationship name, or a path - two or more of them.
+  defp relationship_shape?(relationship_name) when is_atom(relationship_name), do: true
+
+  defp relationship_shape?([_hop, _name | _later_names] = path), do: Enum.all?(path, &is_atom/1)
+
+  defp relationship_shape?(_relationship), do: false
+
   # An attribute of the row as inspect/1 spells it, a path as it is written.
   defp server_only_spelling([name]), do: inspect(name)
 
   defp server_only_spelling(path), do: Stage.inspect_name(path)
+
+  # Follows a relationship, or each relationship of a path, from the given type and returns the type
+  # it leads to. Every hop is a to-one relationship of the type the hops before it lead to, and a
+  # refusal past the first hop names that type, so the message says where along the path it broke.
+  defp validate_chain!(entity_type, relationship, context) do
+    relationship
+    |> List.wrap()
+    |> Enum.with_index()
+    |> Enum.reduce(entity_type, fn {relationship_name, index}, type ->
+      validate_chain_hop!(type, relationship_name, index, context)
+    end)
+  end
+
+  defp validate_chain_hop!(entity_type, relationship_name, index, context) do
+    definitions = entity_type.__relationships__()
+    in_type = if index == 0, do: "", else: " in #{inspect(entity_type)}"
+
+    case Enum.find(definitions, fn {name, _type, _opts} -> name == relationship_name end) do
+      {_name, [_target], _opts} ->
+        raise Hologram.CompileError,
+          message:
+            "invalid #{context.option} option #{context.written} for allow #{inspect(context.operation)} in #{context.location} - relationship #{inspect(relationship_name)}#{in_type} is to-many, but #{context.requirement}"
+
+      {_name, target_type, _opts} ->
+        target_type
+
+      nil ->
+        declared_relationships =
+          Enum.map_join(definitions, ", ", fn {name, _type, _opts} -> inspect(name) end)
+
+        declared_of = if index == 0, do: "", else: " of #{inspect(entity_type)}"
+
+        raise Hologram.CompileError,
+          message:
+            "unknown relationship #{inspect(relationship_name)}#{in_type} in the #{context.option} option of allow #{inspect(context.operation)} in #{context.location} - declared relationships#{declared_of} are: #{declared_relationships}"
+    end
+  end
 
   # A line asks the related type an operation it has to be askable about, the way can? refuses one
   # it is not, so a typo or an operation the type never declares fails the build rather than every
@@ -252,7 +313,7 @@ defmodule Hologram.Policy.Validator do
   rescue
     error in ArgumentError ->
       message =
-        "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{Exception.message(error)}"
+        "invalid via option #{describe_via(via)} for allow #{inspect(operation)} in #{location} - #{Exception.message(error)}"
 
       reraise Hologram.CompileError, [message: message], __STACKTRACE__
   end
@@ -272,14 +333,14 @@ defmodule Hologram.Policy.Validator do
       if not is_atom(reference) do
         raise Hologram.CompileError,
           message:
-            "invalid to option #{inspect(reference)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+            "invalid to option #{describe_reference(reference)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
       end
     end)
 
     if via do
       raise Hologram.CompileError,
         message:
-          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
+          "invalid via option #{describe_via(via)} for allow #{inspect(operation)} in #{location} - #{gate_operation_reason(operation)}"
     end
 
     case first_predicate_name(predicates) do
@@ -382,32 +443,17 @@ defmodule Hologram.Policy.Validator do
       reraise Hologram.CompileError, [message: message], __STACKTRACE__
   end
 
-  defp validate_relationship_reference!(
-         entity_type,
-         operation,
-         relationship_name,
-         role_name,
-         location
-       ) do
-    definitions = entity_type.__relationships__()
+  defp validate_relationship_reference!(entity_type, operation, relationship, role_name, location) do
+    target_type =
+      validate_chain!(entity_type, relationship, %{
+        location: location,
+        operation: operation,
+        option: "to",
+        requirement: "a role reference requires a to-one relationship",
+        written: describe_reference({role_name, relationship})
+      })
 
-    case Enum.find(definitions, fn {name, _type, _opts} -> name == relationship_name end) do
-      {_name, [_target], _opts} ->
-        raise Hologram.CompileError,
-          message:
-            "invalid to option #{inspect({role_name, relationship_name})} for allow #{inspect(operation)} in #{location} - relationship #{inspect(relationship_name)} is to-many, but a role reference requires a to-one relationship"
-
-      {_name, target, _opts} ->
-        validate_target_role!(operation, target, role_name, location)
-
-      nil ->
-        declared_relationships =
-          Enum.map_join(definitions, ", ", fn {name, _type, _opts} -> inspect(name) end)
-
-        raise Hologram.CompileError,
-          message:
-            "unknown relationship #{inspect(relationship_name)} in the to option of allow #{inspect(operation)} in #{location} - declared relationships are: #{declared_relationships}"
-    end
+    validate_target_role!(operation, target_type, role_name, location)
   end
 
   defp validate_role_extends_cycles!(role_modules) do
@@ -578,29 +624,21 @@ defmodule Hologram.Policy.Validator do
     if not via_shape?(via) do
       raise Hologram.CompileError,
         message:
-          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - the via option must be a relationship name or an {operation, relationship} tuple"
+          "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - the via option must be a relationship name, a path, or an {operation, relationship} tuple"
     end
 
-    {delegated_operation, [relationship_name]} = Policy.delegation(operation, via)
-    definitions = entity_type.__relationships__()
+    {delegated_operation, relationship_names} = Policy.delegation(operation, via)
 
-    case Enum.find(definitions, fn {name, _type, _opts} -> name == relationship_name end) do
-      {_name, [_target], _opts} ->
-        raise Hologram.CompileError,
-          message:
-            "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - relationship #{inspect(relationship_name)} is to-many, but delegation requires a to-one relationship"
+    target_type =
+      validate_chain!(entity_type, relationship_names, %{
+        location: location,
+        operation: operation,
+        option: "via",
+        requirement: "delegation requires a to-one relationship",
+        written: describe_via(via)
+      })
 
-      {_name, target_type, _opts} ->
-        validate_delegated_operation!(target_type, operation, via, delegated_operation, location)
-
-      nil ->
-        declared_relationships =
-          Enum.map_join(definitions, ", ", fn {name, _type, _opts} -> inspect(name) end)
-
-        raise Hologram.CompileError,
-          message:
-            "unknown relationship #{inspect(relationship_name)} in the via option of allow #{inspect(operation)} in #{location} - declared relationships are: #{declared_relationships}"
-    end
+    validate_delegated_operation!(target_type, operation, via, delegated_operation, location)
   end
 
   defp validate_via_cycles!(entity_types) do
@@ -645,10 +683,12 @@ defmodule Hologram.Policy.Validator do
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
   end
 
-  # A relationship, or an {operation, relationship} tuple naming the operation with an atom.
-  defp via_shape?({operation, relationship_name}) do
-    is_atom(operation) and operation not in [nil, true, false] and is_atom(relationship_name)
+  # A relationship or a path, alone or in an {operation, relationship} tuple naming the operation
+  # with an atom.
+  defp via_shape?({operation, relationship}) do
+    is_atom(operation) and operation not in [nil, true, false] and
+      relationship_shape?(relationship)
   end
 
-  defp via_shape?(via), do: is_atom(via)
+  defp via_shape?(via), do: relationship_shape?(via)
 end

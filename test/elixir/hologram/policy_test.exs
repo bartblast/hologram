@@ -393,6 +393,13 @@ defmodule Hologram.PolicyTest do
                create: [%{predicates: [], to: nil, via: {:update, [:parent]}}]
              }
     end
+
+    test "follows a path in a delegation and a grant reference" do
+      assert build(Policy.Module12) == %{
+               publish: [%{predicates: [], to: nil, via: {:publish, [:parent, :parent]}}],
+               update: [%{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}]
+             }
+    end
   end
 
   describe "build/1 for the grant lifecycle operations" do
@@ -570,8 +577,16 @@ defmodule Hologram.PolicyTest do
       assert delegation(:read, :parent) == {:read, [:parent]}
     end
 
+    test "asks the same operation through a path" do
+      assert delegation(:read, [:trip, :user]) == {:read, [:trip, :user]}
+    end
+
     test "keeps the operation a tuple names" do
       assert delegation(:create, {:update, :parent}) == {:update, [:parent]}
+    end
+
+    test "keeps the operation a tuple around a path names" do
+      assert delegation(:create, {:update, [:stop, :trip]}) == {:update, [:stop, :trip]}
     end
   end
 

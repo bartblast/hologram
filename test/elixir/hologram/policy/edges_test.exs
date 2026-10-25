@@ -166,6 +166,25 @@ defmodule Hologram.Policy.EdgesTest do
              }
     end
 
+    # Every reference field the path is followed through is read, and the target's edges are lifted
+    # under the whole path.
+    test "derives the edges of a delegation and a grant reference through a path" do
+      assert derive([Policy.Module12]) == %{
+               {Policy.Module12, :publish} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent], Policy.Module1, [:parent_id]},
+                 {:relationship_attributes, [:parent, :parent, :parent], Policy.Module2,
+                  [:public]}
+               ],
+               {Policy.Module12, :update} => [
+                 {:attributes, [:parent_id]},
+                 {:relationship_attributes, [:parent], Policy.Module5, [:parent_id]},
+                 {:relationship_grants, [:parent, :parent], Policy.Module1, [:viewer]}
+               ]
+             }
+    end
+
     # A disjunction reads the row's own attributes, so its alternatives' attributes join the rule's
     # one attribute edge rather than adding a kind of edge.
     test "derives one attribute edge for a condition holding a disjunction" do
