@@ -560,7 +560,8 @@ describe("Hologram", () => {
       });
 
       // Reading the epoch afresh at this point would stamp the next action with whatever page the
-      // client has reached, which is exactly how a late continuation lands on a stranger.
+      // client has reached by the time its timer fires, which is how a delayed continuation would
+      // land on a page that never produced it.
       it("a delayed next action does not take the epoch current when it is scheduled", () => {
         callNamedFunctionStub
           .onFirstCall()
@@ -774,6 +775,180 @@ describe("Hologram", () => {
           sendCommandStub,
           commandFor(cid1),
           7,
+        );
+      });
+    });
+
+    // The await of an asynchronous action can span a navigation. Its result belongs to the page it
+    // ran on, so once that page has been left the whole result is dropped: the struct, the next
+    // command, the next action, the render and the next page. Each drop test runs the action on
+    // page 0, moves the client on while the action awaits, and settles it then. The last test is
+    // their control: a result whose page has not been left is processed.
+    describe("result after a navigation", () => {
+      let enqueueSpy,
+        fetchPageStub,
+        originalStruct,
+        sendCommandStub,
+        settle,
+        warnStub;
+
+      const writtenState = Type.map([
+        [Type.atom("written"), Type.boolean(true)],
+      ]);
+
+      const fullResult = Type.componentStruct({
+        nextAction: Type.actionStruct({
+          name: Type.atom("the_next_action"),
+          params: Type.map(),
+          target: cid1,
+        }),
+        nextCommand: Type.commandStruct({
+          name: Type.atom("the_next_command"),
+          params: Type.map(),
+          target: cid1,
+        }),
+        nextPage: module7,
+        state: writtenState,
+      });
+
+      // Runs the action on page 0, moves the client to page 1 while it awaits, and settles it.
+      const settleAfterNavigation = async () => {
+        const promise = Hologram.executeAction(actionFor(cid1), 0);
+
+        Hologram.domEpoch = 1;
+        Hologram.registryEpoch = 1;
+
+        settle(fullResult);
+        await promise;
+      };
+
+      beforeEach(() => {
+        ActionQueue.entries = [];
+
+        originalStruct = Type.componentStruct({nextAction: Type.nil()});
+
+        ComponentRegistry.putEntry(
+          cid1,
+          Type.map([
+            [Type.atom("module"), module7],
+            [Type.atom("struct"), originalStruct],
+          ]),
+        );
+
+        // Only the action awaits. Everything else goes through, the router helper a next page's
+        // path is built with among them.
+        callNamedFunctionStub.callsFake((module, fun, args, context) =>
+          fun.value === "action"
+            ? new Promise((resolve) => {
+                settle = resolve;
+              })
+            : callNamedFunctionStub.wrappedMethod(module, fun, args, context),
+        );
+
+        enqueueSpy = sinon.spy(ActionQueue, "enqueue");
+        fetchPageStub = sinon.stub(Client, "fetchPage");
+        sendCommandStub = sinon.stub(Client, "sendCommand");
+        warnStub = sinon.stub(console, "warn");
+      });
+
+      afterEach(() => {
+        ActionQueue.entries = [];
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      });
+
+      // The promise settling at all is part of the check: the queue's finally waits on it to
+      // release the component and go on.
+      it("drops the result of an asynchronous action whose page has been left, with a warning", async () => {
+        await settleAfterNavigation();
+
+        assert.strictEqual(
+          ComponentRegistry.getComponentStruct(cid1),
+          originalStruct,
+        );
+
+        sinon.assert.notCalled(renderStub);
+
+        sinon.assert.calledOnceWithExactly(
+          warnStub,
+          "Hologram: dropped the result of an action whose page has been left:",
+          ":test_action",
+        );
+      });
+
+      it("sends no next command from a dropped result", async () => {
+        await settleAfterNavigation();
+
+        sinon.assert.notCalled(sendCommandStub);
+      });
+
+      // Not put at all, rather than put with the parent's stamp and then dropped by the queue.
+      it("puts no next action from a dropped result", async () => {
+        await settleAfterNavigation();
+
+        sinon.assert.notCalled(enqueueSpy);
+      });
+
+      it("navigates to no next page from a dropped result", async () => {
+        await settleAfterNavigation();
+
+        sinon.assert.notCalled(fetchPageStub);
+      });
+
+      // The issue's own shape: the destination's markup is on screen and its bundle is still
+      // loading when the await resolves, so only the displayed side has moved on.
+      it("drops the result while a navigation away from its page is still in flight", async () => {
+        const promise = Hologram.executeAction(actionFor(cid1), 0);
+
+        Hologram.domEpoch = 1;
+
+        settle(fullResult);
+        await promise;
+
+        assert.strictEqual(
+          ComponentRegistry.getComponentStruct(cid1),
+          originalStruct,
+        );
+
+        sinon.assert.notCalled(renderStub);
+        sinon.assert.calledOnce(warnStub);
+      });
+
+      // The mirror of the case above: a history restore moves the registry's side on while the
+      // left page's markup is still on screen.
+      it("drops the result while a history restore away from its page is still in flight", async () => {
+        const promise = Hologram.executeAction(actionFor(cid1), 0);
+
+        Hologram.registryEpoch = 1;
+
+        settle(fullResult);
+        await promise;
+
+        assert.strictEqual(
+          ComponentRegistry.getComponentStruct(cid1),
+          originalStruct,
+        );
+
+        sinon.assert.notCalled(renderStub);
+        sinon.assert.calledOnce(warnStub);
+      });
+
+      // Equality means the page has not been left.
+      it("processes the result of an asynchronous action whose page is still on screen", async () => {
+        Hologram.domEpoch = 3;
+        Hologram.registryEpoch = 3;
+
+        const promise = Hologram.executeAction(actionFor(cid1), 3);
+
+        settle(Type.componentStruct({state: writtenState}));
+        await promise;
+
+        sinon.assert.calledOnce(renderStub);
+        sinon.assert.notCalled(warnStub);
+
+        assert.deepStrictEqual(
+          ComponentRegistry.getComponentStruct(cid1),
+          Type.componentStruct({state: writtenState}),
         );
       });
     });
