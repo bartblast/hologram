@@ -526,7 +526,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}]
+      rules = [%{predicates: [], to: [{:rel, [:parent], [:admin]}], via: nil}]
 
       assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{rules: rules})
@@ -541,6 +541,39 @@ defmodule Hologram.DB.QueryCompilerTest do
                sql,
                ~s|AND "$rg"."entity_id" = "test_fixtures_policy_module1"."parent_id")|
              )
+    end
+
+    # The role is held on the row the chain ends at, whose id the last reference holds - read off
+    # the row before it, raw, the way a policy reads the rows it is followed through.
+    test "composes a relationship grant reference two hops away through a scalar subquery" do
+      mapping =
+        Mapper.derive!(
+          [Module14, PolicyModule1, PolicyModule2, PolicyModule5, PolicyModule8, RoleGrant],
+          []
+        )
+
+      term = Stage.normalize(PolicyModule8)
+
+      rules = [%{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}]
+
+      assert %{params: placeholders, sql: sql} =
+               compile(term, mapping, %{rules: rules})
+
+      assert placeholders == [
+               :actor,
+               {:value, ["viewer"]},
+               {:value, "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+
+      target_id_sql =
+        hop(
+          1,
+          PolicyModule5,
+          ~s|"$p1"."parent_id"|,
+          ~s|"test_fixtures_policy_module8"."parent_id"|
+        )
+
+      assert String.contains?(sql, ~s|AND "$rg"."entity_id" = #{target_id_sql})|)
     end
 
     test "composes grant references and predicates as one conjunction" do
@@ -572,7 +605,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: nil, via: {:publish, :parent}}]
+      rules = [%{predicates: [], to: nil, via: {:publish, [:parent]}}]
 
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}],
@@ -583,6 +616,38 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
                    ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
                    ~s|AND "public" = $1) ORDER BY "id" ASC|
+             }
+    end
+
+    test "composes a delegation two hops away, joined through a scalar subquery" do
+      mapping =
+        Mapper.derive!(
+          [Module14, PolicyModule1, PolicyModule2, PolicyModule5, PolicyModule8, RoleGrant],
+          []
+        )
+
+      term = Stage.normalize(PolicyModule8)
+
+      rules = [%{predicates: [], to: nil, via: {:publish, [:parent, :parent]}}]
+
+      target_id_sql =
+        hop(
+          1,
+          PolicyModule5,
+          ~s|"$p1"."parent_id"|,
+          ~s|"test_fixtures_policy_module8"."parent_id"|
+        )
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module8" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module1" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = #{target_id_sql} | <>
+                   ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module2" | <>
+                   ~s|AS "$d2" WHERE "$d2"."id" = "$d1"."parent_id" AND "public" = $1)) | <>
+                   ~s|ORDER BY "id" ASC|
              }
     end
 
@@ -690,7 +755,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [], to: nil, via: {:delete, :parent}}]
+      rules = [%{predicates: [], to: nil, via: {:delete, [:parent]}}]
 
       assert %{sql: sql} = compile(term, mapping, %{rules: rules})
 
@@ -704,7 +769,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
       term = Stage.normalize(PolicyModule1)
 
-      rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: {:publish, :parent}}]
+      rules = [%{predicates: [{:priority, :>=, 3}], to: nil, via: {:publish, [:parent]}}]
 
       assert %{params: placeholders, sql: sql} =
                compile(term, mapping, %{rules: rules})
@@ -719,7 +784,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [
         %{predicates: [], to: [{:own, [:owner]}], via: nil},
-        %{predicates: [], to: nil, via: {:read, :parent}}
+        %{predicates: [], to: nil, via: {:read, [:parent]}}
       ]
 
       assert %{params: placeholders, sql: sql} =

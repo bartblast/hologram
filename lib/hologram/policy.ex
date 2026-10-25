@@ -204,14 +204,15 @@ defmodule Hologram.Policy do
 
   A rule holds the predicate clauses of its allow line - triples, and a `{:or, alternatives}` clause
   for a condition written with `or` - its grant references, and its delegation as {operation,
-  relationship name}, the operation it asks of the related row - nil when the line has none.
+  chain}, the operation it asks of the related row and the to-one relationships followed to that
+  row, in order - nil when the line has none.
   Predicates carry the actor sentinel in value position where the declaration called user_id().
   Grant references are extends-expanded, so a reference to a role also names every role carrying it:
   own roles as {:own, role names}, another entity type's roles as {:type, entity type, role names},
-  a related instance's roles as {:rel, relationship name, role names}, and global role modules as
-  {:global, role modules} - nil when the line has none. The grant store's framework-supplied rules
-  carry a fifth kind no declaration can spell, {:named, entity type, role names}: roles held on
-  the entity a grant row names.
+  a related instance's roles as {:rel, chain, role names} - the chain of to-one relationships to
+  that row - and global role modules as {:global, role modules} - nil when the line has none. The
+  grant store's framework-supplied rules carry a fifth kind no declaration can spell, {:named,
+  entity type, role names}: roles held on the entity a grant row names.
   A rule grants its operation when its predicates hold, one of its grant references is held, and the
   related row grants the operation its delegation names - and a policy grants its operation when any
   of its rules does.
@@ -226,7 +227,7 @@ defmodule Hologram.Policy do
             list(%{
               predicates: list(tuple),
               to: list(tuple) | nil,
-              via: {Entity.operation(), atom} | nil
+              via: {Entity.operation(), list(atom)} | nil
             })
         }
   def build(RoleGrant), do: %{read: role_grant_read_rules()}
@@ -263,17 +264,17 @@ defmodule Hologram.Policy do
 
   @doc """
   Returns what the given via option of an allow line for the given operation delegates, as
-  {operation, relationship}: a relationship asks the related row the same operation, and an
-  {operation, relationship} tuple names the one it asks. Returns nil for a line that delegates
-  nothing.
+  {operation, chain}: the chain is the to-one relationships followed to the related row, in order.
+  A relationship asks the related row the same operation, and an {operation, relationship} tuple
+  names the one it asks. Returns nil for a line that delegates nothing.
   """
-  @spec delegation(Entity.operation(), atom | {atom, atom} | nil) :: {atom, atom} | nil
+  @spec delegation(Entity.operation(), atom | {atom, atom} | nil) :: {atom, list(atom)} | nil
   def delegation(_operation, nil), do: nil
 
   def delegation(_operation, {delegated_operation, relationship_name}),
-    do: {delegated_operation, relationship_name}
+    do: {delegated_operation, [relationship_name]}
 
-  def delegation(operation, relationship_name), do: {operation, relationship_name}
+  def delegation(operation, relationship_name), do: {operation, [relationship_name]}
 
   @doc """
   Returns the given global role module together with every global role module of the project's
@@ -511,9 +512,10 @@ defmodule Hologram.Policy do
     if Reflection.alias?(reference) do
       {:type, reference, Entity.expand_role(reference, role_name)}
     else
-      target_type = Entity.relationship_target(entity_type, reference)
+      relationship_names = [reference]
+      target_type = Entity.path_target(entity_type, relationship_names)
 
-      {:rel, reference, Entity.expand_role(target_type, role_name)}
+      {:rel, relationship_names, Entity.expand_role(target_type, role_name)}
     end
   end
 

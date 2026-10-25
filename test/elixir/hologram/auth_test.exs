@@ -899,7 +899,7 @@ defmodule Hologram.AuthTest do
     end
   end
 
-  describe "chain_target_id/2" do
+  describe "chain_target_id/3" do
     test "answers nil for a hop naming a row that is gone" do
       entity = %Module5{parent_id: Entity.generate_id()}
 
@@ -931,6 +931,35 @@ defmodule Hologram.AuthTest do
         |> DB.create!()
 
       assert chain_target_id(%Module5{parent_id: middle.id}, [:parent, :parent]) == target.id
+    end
+
+    # The chain's end row is not read: its id is the middle row's reference.
+    test "reads the rows along the chain with the given options" do
+      target = create_parent()
+
+      middle =
+        %{parent_id: target.id}
+        |> Module1.new()
+        |> DB.create!()
+
+      entity = %Module5{parent_id: middle.id}
+
+      assert chain_target_id(entity, [:parent, :parent], lock: :share) == target.id
+
+      assert "RowShareLock" in relation_lock_modes(Module1)
+    end
+
+    test "reads the rows along the chain unlocked by default" do
+      target = create_parent()
+
+      middle =
+        %{parent_id: target.id}
+        |> Module1.new()
+        |> DB.create!()
+
+      assert chain_target_id(%Module5{parent_id: middle.id}, [:parent, :parent]) == target.id
+
+      refute "RowShareLock" in relation_lock_modes(Module1)
     end
   end
 

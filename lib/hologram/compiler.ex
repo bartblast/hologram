@@ -4055,17 +4055,12 @@ defmodule Hologram.Compiler do
     render_policy_reference_entry("global", [render_policy_roles(role_modules)])
   end
 
-  defp render_policy_reference(entity_type, {:rel, relationship_name, role_names}) do
-    name_js =
-      relationship_name
-      |> Atom.to_string()
-      |> Jason.encode!()
-
-    {_name, target_type, _opts} =
-      List.keyfind(entity_type.__relationships__(), relationship_name, 0)
+  # The chain a role is held through, spelled the way a delegation spells its chain.
+  defp render_policy_reference(entity_type, {:rel, relationship_names, role_names}) do
+    target_type = Entity.path_target(entity_type, relationship_names)
 
     render_policy_reference_entry("rel", [
-      name_js,
+      render_policy_chain(relationship_names),
       render_entity_type_label(target_type),
       render_policy_roles(role_names)
     ])
@@ -4094,11 +4089,24 @@ defmodule Hologram.Compiler do
     |> then(&"[#{&1}]")
   end
 
+  # TODO: bake the chain as an array of names once the browser's policy checks follow a chain.
+  # Until then a chain of one bakes as the relationship's name, the spelling the browser reads.
+  defp render_policy_chain([relationship_name]) do
+    relationship_name
+    |> Atom.to_string()
+    |> Jason.encode!()
+  end
+
   # Operation first, as the server's tuple holds it - the array shape grant references bake as.
   defp render_policy_delegation(nil), do: "null"
 
-  defp render_policy_delegation({operation, relationship_name}) do
-    Jason.encode!([Policy.operation_key(operation), Atom.to_string(relationship_name)])
+  defp render_policy_delegation({operation, relationship_names}) do
+    operation_js =
+      operation
+      |> Policy.operation_key()
+      |> Jason.encode!()
+
+    "[#{operation_js},#{render_policy_chain(relationship_names)}]"
   end
 
   # The client writes a creator's grants itself when it creates a row, so it has to be told which

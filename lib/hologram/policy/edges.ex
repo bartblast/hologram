@@ -75,36 +75,36 @@ defmodule Hologram.Policy.Edges do
     [{:attributes, [reference_field_name(first_relationship_name)]} | later_edges]
   end
 
-  # A delegated edge names the same data one relationship hop further away: the target's
-  # own-row dependencies become related-row dependencies through the chain, its own grants
-  # become related-row grants, and edges naming absolute targets (global, type-wide,
-  # named) pass through unchanged - a global grant event affects the delegating type
+  # A delegated edge names the same data as many relationship hops further away as the delegation
+  # follows: the target's own-row dependencies become related-row dependencies through the chain,
+  # its own grants become related-row grants, and edges naming absolute targets (global,
+  # type-wide, named) pass through unchanged - a global grant event affects the delegating type
   # exactly as it affects the target.
-  defp lift_edge({:attributes, names}, relationship_name, target_type) do
-    {:relationship_attributes, [relationship_name], target_type, names}
+  defp lift_edge({:attributes, names}, relationship_names, target_type) do
+    {:relationship_attributes, relationship_names, target_type, names}
   end
 
-  defp lift_edge({:own_grants, role_names}, relationship_name, target_type) do
-    {:relationship_grants, [relationship_name], target_type, role_names}
+  defp lift_edge({:own_grants, role_names}, relationship_names, target_type) do
+    {:relationship_grants, relationship_names, target_type, role_names}
   end
 
   defp lift_edge(
          {:relationship_attributes, chain, chain_target, names},
-         relationship_name,
+         relationship_names,
          _target
        ) do
-    {:relationship_attributes, [relationship_name | chain], chain_target, names}
+    {:relationship_attributes, relationship_names ++ chain, chain_target, names}
   end
 
   defp lift_edge(
          {:relationship_grants, chain, chain_target, role_names},
-         relationship_name,
+         relationship_names,
          _target
        ) do
-    {:relationship_grants, [relationship_name | chain], chain_target, role_names}
+    {:relationship_grants, relationship_names ++ chain, chain_target, role_names}
   end
 
-  defp lift_edge(edge, _relationship_name, _target_type), do: edge
+  defp lift_edge(edge, _relationship_names, _target_type), do: edge
 
   # Edges sharing a kind, target, and chain merge by unioning their name lists, so each
   # pair's list states every dependency of one shape exactly once.
@@ -176,12 +176,14 @@ defmodule Hologram.Policy.Edges do
     [{:type_grants, target_type, role_names}]
   end
 
-  defp reference_edges_for(entity_type, {:rel, relationship_name, role_names}) do
-    target_type = Entity.relationship_target(entity_type, relationship_name)
+  # A role held on the row a chain of relationships leads to reads the reference fields the chain is
+  # followed through, and the grants held on that row.
+  defp reference_edges_for(entity_type, {:rel, relationship_names, role_names}) do
+    target_type = Entity.path_target(entity_type, relationship_names)
 
     [
-      {:attributes, [reference_field_name(relationship_name)]},
-      {:relationship_grants, [relationship_name], target_type, role_names}
+      {:relationship_grants, relationship_names, target_type, role_names}
+      | chain_edges(entity_type, relationship_names)
     ]
   end
 
@@ -204,9 +206,10 @@ defmodule Hologram.Policy.Edges do
   defp via_edges(_entity_type, nil), do: []
 
   # The target's edges are those of the operation the delegation asks it, which need not be the
-  # delegating rule's own.
-  defp via_edges(entity_type, {delegated_operation, relationship_name}) do
-    target_type = Entity.relationship_target(entity_type, relationship_name)
+  # delegating rule's own, lifted through the chain the delegation follows - beside the reference
+  # fields it is followed through.
+  defp via_edges(entity_type, {delegated_operation, relationship_names}) do
+    target_type = Entity.path_target(entity_type, relationship_names)
 
     target_rules =
       target_type
@@ -216,8 +219,8 @@ defmodule Hologram.Policy.Edges do
     lifted_edges =
       target_type
       |> operation_edges(target_rules)
-      |> Enum.map(&lift_edge(&1, relationship_name, target_type))
+      |> Enum.map(&lift_edge(&1, relationship_names, target_type))
 
-    [{:attributes, [reference_field_name(relationship_name)]} | lifted_edges]
+    chain_edges(entity_type, relationship_names) ++ lifted_edges
   end
 end

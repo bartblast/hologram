@@ -581,7 +581,7 @@ defmodule Hologram.Policy.Validator do
           "invalid via option #{inspect(via)} for allow #{inspect(operation)} in #{location} - the via option must be a relationship name or an {operation, relationship} tuple"
     end
 
-    {delegated_operation, relationship_name} = Policy.delegation(operation, via)
+    {delegated_operation, [relationship_name]} = Policy.delegation(operation, via)
     definitions = entity_type.__relationships__()
 
     case Enum.find(definitions, fn {name, _type, _opts} -> name == relationship_name end) do
@@ -628,8 +628,8 @@ defmodule Hologram.Policy.Validator do
     |> Enum.zip(entity_type.__policy_sources__())
     |> Enum.reject(fn {{_operation, _to, via, _predicates}, _source} -> is_nil(via) end)
     |> Enum.map(fn {{operation, _to, via, _predicates}, source} ->
-      {delegated_operation, relationship_name} = Policy.delegation(operation, via)
-      target_type = Entity.relationship_target(entity_type, relationship_name)
+      {delegated_operation, relationship_names} = Policy.delegation(operation, via)
+      target_type = Entity.path_target(entity_type, relationship_names)
 
       {{entity_type, operation}, {via, {target_type, delegated_operation}, source}}
     end)

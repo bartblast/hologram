@@ -244,6 +244,36 @@ defmodule Hologram.DB.QueryCompiler do
     limit_sql <> offset_sql
   end
 
+  # The id of the row a chain of relationships leads to, read off the row a policy is evaluated for:
+  # the reference column itself for one relationship, and for a path the last reference read
+  # through the hops before it, raw - a policy decides by the rows as stored.
+  defp chain_target_id_sql(context, [relationship_name], reversed_params) do
+    column = reference_column(context.entity_mapping, relationship_name)
+
+    {"#{context.row_prefix}.#{Mapper.quote_identifier(column.name)}", reversed_params}
+  end
+
+  defp chain_target_id_sql(context, relationship_names, reversed_params) do
+    last_name = List.last(relationship_names)
+    reference_field = String.to_existing_atom("#{last_name}_id")
+    reference_path = List.replace_at(relationship_names, -1, reference_field)
+
+    scope =
+      condition_scope(
+        context.entity_type,
+        context.mapping,
+        context.row_prefix,
+        nil,
+        context.path_depth,
+        context.delegation_depth
+      )
+
+    {target_id_sql, _column, new_params} =
+      path_sql(scope, reference_path, &fetch_column!/2, reversed_params)
+
+    {target_id_sql, new_params}
+  end
+
   defp column_list(entity_mapping) do
     Enum.map_join(entity_mapping.columns, ", ", &Mapper.quote_identifier(&1.name))
   end
@@ -457,7 +487,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp reference_role_names({:type, _target_type, role_names}), do: role_names
 
-  defp reference_role_names({:rel, _relationship_name, role_names}), do: role_names
+  defp reference_role_names({:rel, _relationship_names, role_names}), do: role_names
 
   defp reference_role_names({:named, _target_type, role_names}), do: role_names
 
@@ -679,21 +709,19 @@ defmodule Hologram.DB.QueryCompiler do
     {~s|"$rg"."entity_type" = #{placeholder} AND "$rg"."entity_id" IS NULL|, new_params}
   end
 
-  defp grant_scope_sql({:rel, relationship_name, _role_names}, context, reversed_params) do
-    column = reference_column(context.entity_mapping, relationship_name)
+  # The role is held on the row the chain leads to, named by the id its last reference holds.
+  defp grant_scope_sql({:rel, relationship_names, _role_names}, context, reversed_params) do
+    {placeholder, params_after_type} =
+      context.entity_type
+      |> Entity.path_target(relationship_names)
+      |> entity_type_slot(context, reversed_params)
 
-    {placeholder, new_params} =
-      entity_type_slot(
-        relationship_target(context.entity_type, relationship_name),
-        context,
-        reversed_params
-      )
-
-    quoted_column = Mapper.quote_identifier(column.name)
+    {target_id_sql, new_params} =
+      chain_target_id_sql(context, relationship_names, params_after_type)
 
     scope_sql =
       ~s|"$rg"."entity_type" = #{placeholder} | <>
-        ~s|AND "$rg"."entity_id" = #{context.row_prefix}.#{quoted_column}|
+        ~s|AND "$rg"."entity_id" = #{target_id_sql}|
 
     {scope_sql, new_params}
   end
@@ -723,13 +751,15 @@ defmodule Hologram.DB.QueryCompiler do
   defp delegation_conditions(nil, _context, reversed_params), do: {[], reversed_params}
 
   defp delegation_conditions(
-         {delegated_operation, relationship_name},
+         {delegated_operation, relationship_names},
          context,
          reversed_params
        ) do
-    column = reference_column(context.entity_mapping, relationship_name)
-    target_type = relationship_target(context.entity_type, relationship_name)
+    target_type = Entity.path_target(context.entity_type, relationship_names)
     target_mapping = Map.fetch!(context.mapping, target_type)
+
+    {target_id_sql, params_after_chain} =
+      chain_target_id_sql(context, relationship_names, reversed_params)
 
     target_rules =
       target_type
@@ -750,10 +780,9 @@ defmodule Hologram.DB.QueryCompiler do
       |> Map.merge(%{delegation_depth: depth, path_depth: context.path_depth})
 
     {target_conditions, new_params} =
-      policy_conditions(target_policy, target_context, reversed_params)
+      policy_conditions(target_policy, target_context, params_after_chain)
 
-    join_sql =
-      ~s|#{quoted_alias}."id" = #{context.row_prefix}.#{Mapper.quote_identifier(column.name)}|
+    join_sql = ~s|#{quoted_alias}."id" = #{target_id_sql}|
 
     inner_sql = Enum.join([join_sql | target_conditions], " AND ")
 

@@ -363,11 +363,11 @@ defmodule Hologram.PolicyTest do
                  %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: nil}
                ],
                :delete => [
-                 %{predicates: [], to: [{:rel, :parent, [:admin]}], via: nil}
+                 %{predicates: [], to: [{:rel, [:parent], [:admin]}], via: nil}
                ],
                :grant_role => [owner_rule, owner_rule],
                :publish => [
-                 %{predicates: [], to: nil, via: {:publish, :parent}}
+                 %{predicates: [], to: nil, via: {:publish, [:parent]}}
                ],
                :read => [
                  %{predicates: [{:public, :==, true}], to: nil, via: nil},
@@ -390,7 +390,7 @@ defmodule Hologram.PolicyTest do
 
     test "keeps the operation a delegation names" do
       assert build(Policy.Module11) == %{
-               create: [%{predicates: [], to: nil, via: {:update, :parent}}]
+               create: [%{predicates: [], to: nil, via: {:update, [:parent]}}]
              }
     end
   end
@@ -567,11 +567,11 @@ defmodule Hologram.PolicyTest do
     end
 
     test "asks the same operation through a relationship" do
-      assert delegation(:read, :parent) == {:read, :parent}
+      assert delegation(:read, :parent) == {:read, [:parent]}
     end
 
     test "keeps the operation a tuple names" do
-      assert delegation(:create, {:update, :parent}) == {:update, :parent}
+      assert delegation(:create, {:update, :parent}) == {:update, [:parent]}
     end
   end
 

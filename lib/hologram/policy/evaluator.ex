@@ -48,7 +48,8 @@ defmodule Hologram.Policy.Evaluator do
 
   Grant references and delegations are resolved by the given checker function, called as
   checker.(requirement, entity, actor user id) with the rule's grant reference or a
-  {:via, operation, relationship name} tuple, and returning a boolean.
+  {:via, operation, chain} tuple - the chain of to-one relationships followed to the related row -
+  and returning a boolean.
   """
   @spec rule_matches?(map, struct, String.t() | nil, fun) :: boolean
   def rule_matches?(rule, entity, actor_user_id, checker) do
@@ -185,7 +186,7 @@ defmodule Hologram.Policy.Evaluator do
 
   defp via_holds?(nil, _entity, _actor_user_id, _checker), do: true
 
-  defp via_holds?({operation, relationship_name}, entity, actor_user_id, checker) do
-    checker.({:via, operation, relationship_name}, entity, actor_user_id)
+  defp via_holds?({operation, relationship_names}, entity, actor_user_id, checker) do
+    checker.({:via, operation, relationship_names}, entity, actor_user_id)
   end
 end
