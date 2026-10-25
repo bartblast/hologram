@@ -1,6 +1,7 @@
 defmodule Hologram.Query.Window do
   @moduledoc false
 
+  alias Hologram.Entity
   alias Hologram.Query
   alias Hologram.Query.Stage
 
@@ -21,7 +22,15 @@ defmodule Hologram.Query.Window do
 
   A predicate comparing to a LITERAL stays: an app whose only query asks for todo projects is
   saying the others are never needed. So does one comparing two ATTRIBUTES of the row
-  (`end_date < start_date`) - it says something about the row whatever value anything takes.
+  (`end_date < start_date`) - it says something about the row whatever value anything takes - and
+  one reading a PATH, by the same rule: `channel.archived == false` keeps the messages of
+  unarchived channels.
+
+  A PATH reads rows the query does not return, and the client answers the query over what it
+  holds, so every path the filter names - kept or dropped, on either side of a comparison, inside
+  alternatives - has its relationships embedded in the window as to-one includes, merged with the
+  query's own. The related rows arrive with the window and are kept current with it, and a change
+  to one reaches the window the way a change to an included row does.
 
   A DISJUNCTION cannot drop a predicate the same way. Dropping a conjunct widens what arrives,
   which is safe - dropping an alternative narrows it, and `status == :todo or owner_id == ^user_id`
@@ -52,11 +61,12 @@ defmodule Hologram.Query.Window do
       |> window_clauses()
       |> Stage.normalized_filter()
 
-    %Query{
-      entity: term.entity,
-      filter: filter,
-      include: Map.new(term.include, fn {name, sub_term} -> {name, derive(sub_term)} end)
-    }
+    include =
+      term.include
+      |> Map.new(fn {name, sub_term} -> {name, derive(sub_term)} end)
+      |> put_path_includes(term)
+
+    %Query{entity: term.entity, filter: filter, include: include}
   end
 
   defp placeholder?({:placeholder, _name}), do: true
@@ -65,7 +75,30 @@ defmodule Hologram.Query.Window do
 
   defp placeholder?(_value), do: false
 
+  # A path holds names only, never a placeholder, so only its value can bound nothing.
+  defp placeholder_bound?({path, _operator, value}) when is_list(path), do: placeholder?(value)
+
   defp placeholder_bound?({name, _operator, value}), do: placeholder?(name) or placeholder?(value)
+
+  # A to-one include carries no clauses, so a path's relationship joins one the window already
+  # has by adding what it includes.
+  defp put_path_include(include, _entity_type, []), do: include
+
+  defp put_path_include(include, entity_type, [relationship_name | later_names]) do
+    target_type = Entity.relationship_target(entity_type, relationship_name)
+    included = Map.get(include, relationship_name, %Query{entity: target_type})
+    nested = put_path_include(included.include, target_type, later_names)
+
+    Map.put(include, relationship_name, %{included | include: nested})
+  end
+
+  defp put_path_includes(include, term) do
+    term.filter
+    |> Stage.predicate_references()
+    |> Enum.reduce(include, fn {relationship_names, _name}, acc ->
+      put_path_include(acc, term.entity, relationship_names)
+    end)
+  end
 
   defp window_clause({:or, alternatives}) do
     narrowed = Enum.map(alternatives, &window_clauses/1)

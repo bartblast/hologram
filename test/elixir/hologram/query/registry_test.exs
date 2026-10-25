@@ -64,6 +64,18 @@ defmodule Hologram.Query.RegistryTest do
       assert entity_types(term) == MapSet.new([Module2, Module3])
     end
 
+    test "returns the types a path in the filter goes through" do
+      term = %{Stage.normalize(Module5) | filter: [{[:a, :b, :c], :==, "x"}]}
+
+      assert entity_types(term) == MapSet.new([Module2, Module3, Module5])
+    end
+
+    test "returns the types a path operand goes through" do
+      term = %{Stage.normalize(Module3) | filter: [{:c_id, :==, {:attribute, [:b, :id]}}]}
+
+      assert entity_types(term) == MapSet.new([Module2, Module3])
+    end
+
     test "walks includes to any depth" do
       term =
         Module5

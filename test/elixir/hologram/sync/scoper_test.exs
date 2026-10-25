@@ -54,6 +54,12 @@ defmodule Hologram.Sync.ScoperTest do
       assert affected(events([Module2]), windows, %{}) == [:board]
     end
 
+    test "includes a window whose query reads the changed type through a path" do
+      window = %{term(Module3, %{b: term(Module2)}) | filter: [{[:b, :a], :==, true}]}
+
+      assert affected(events([Module2]), [{:board, window}], %{}) == [:board]
+    end
+
     test "returns every window a transaction reached, and only those" do
       windows = [
         {:board, term(Module2)},

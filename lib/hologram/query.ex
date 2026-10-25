@@ -203,7 +203,9 @@ defmodule Hologram.Query do
   matches a task with no project, and `project.archived == nil` finds it. A condition that wants the
   related row to be there says so: `project.id != nil and project.archived != true` - `project.id`
   reads nil exactly when there is no project the session may read, where `project_id != nil` asks
-  only whether the reference is set. Paths go through any number of to-one relationships.
+  only whether the reference is set. Paths go through any number of to-one relationships, and the
+  rows along a path are downloaded and kept current with the query, whether or not it includes
+  them.
 
   Two attributes compare when they have the same type, or when one widens to the other - an
   integer to a float, compared as floats. Two enums compare when they declare the same values in

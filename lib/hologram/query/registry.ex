@@ -51,8 +51,8 @@ defmodule Hologram.Query.Registry do
   end
 
   @doc """
-  Returns the set of entity types the given normalized query term reads - its own
-  and every one it includes, walked recursively.
+  Returns the set of entity types the given normalized query term reads - its own, every one it
+  includes and every one a path in its filter goes through, walked recursively.
   """
   @spec entity_types(Query.t()) :: MapSet.t(module)
   def entity_types(term) do
@@ -98,9 +98,21 @@ defmodule Hologram.Query.Registry do
   end
 
   defp collect_entity_types(term, acc) do
+    path_types =
+      term.filter
+      |> Stage.predicate_references()
+      |> Enum.flat_map(fn {relationship_names, _name} ->
+        Enum.scan(relationship_names, term.entity, &Entity.relationship_target(&2, &1))
+      end)
+
+    own_types =
+      acc
+      |> MapSet.put(term.entity)
+      |> MapSet.union(MapSet.new(path_types))
+
     term.include
     |> Map.values()
-    |> Enum.reduce(MapSet.put(acc, term.entity), &collect_entity_types/2)
+    |> Enum.reduce(own_types, &collect_entity_types/2)
   end
 
   # A triple keyed by a placeholder contributes no shape: the attribute is unknown, so its type is
