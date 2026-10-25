@@ -215,8 +215,9 @@ export default class Hologram {
   // synchronous "error" event. Async action errors are caught separately via the
   // "unhandledrejection" event listener in #init().
   //
-  // Returns the promise of an asynchronous action, settled once its result has been processed, so
-  // that a caller can wait for the commit. A synchronous action returns nothing.
+  // Returns the promise of an asynchronous action, settled once its result has been processed - or
+  // dropped, when the page it ran on has been left - so that a caller can wait for the commit. A
+  // synchronous action returns nothing.
   // TODO: make private (tested implicitely in feature tests)
   // Deps: [:maps.get/2]
   static executeAction(action, epoch = $.registryEpoch) {
@@ -258,9 +259,28 @@ export default class Hologram {
     );
 
     if (resultComponentStruct instanceof Promise) {
-      return resultComponentStruct.then((resolved) =>
-        Hologram.#processActionResult(resolved, name, target, startTime, epoch),
-      );
+      return resultComponentStruct.then((resolved) => {
+        // The await can span a navigation, and the result belongs to the page the action ran on.
+        // Its target may resolve on the destination too - "page", "layout", a cid both pages use -
+        // to an instance that never produced it, and when it does not resolve the registry write
+        // faults. So the result is dropped whole: the struct, the next command, the render, the
+        // next page, as the queue would drop the next action. The synchronous path needs no such
+        // check: the queue compared the epoch just before running the action, and nothing can
+        // navigate inside a synchronous call. Resolved rather than rejected, so that the queue's
+        // finally releases the component and goes on.
+        if ($.#hasPageBeenLeft(epoch)) {
+          globalThis.Hologram.isProfilingEnabled = false;
+
+          console.warn(
+            "Hologram: dropped the result of an action whose page has been left:",
+            Interpreter.inspect(name),
+          );
+
+          return;
+        }
+
+        Hologram.#processActionResult(resolved, name, target, startTime, epoch);
+      });
     }
 
     Hologram.#processActionResult(
@@ -469,8 +489,7 @@ export default class Hologram {
         // components to the page the registry answers for - so it is dropped, as the queue drops
         // an action whose page has been left.
         if (
-          epoch < Math.max($.domEpoch, $.registryEpoch) ||
-          $.deadEpochs.has(epoch) ||
+          $.#hasPageBeenLeft(epoch) ||
           $.domEpoch !== $.registryEpoch ||
           $.isMounting
         ) {
@@ -1412,6 +1431,17 @@ export default class Hologram {
     );
   }
 
+  // Whether the page an epoch names is gone: left for another page, or never mounted because its
+  // navigation failed. The one definition behind every drop - the queue's, a command's, an
+  // asynchronous action's result - so that they cannot disagree about it. Equality means the page
+  // has not been left: a navigation away from it always moves one side past it, and a mount only
+  // brings the two level.
+  static #hasPageBeenLeft(epoch) {
+    return (
+      epoch < Math.max($.domEpoch, $.registryEpoch) || $.deadEpochs.has(epoch)
+    );
+  }
+
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
   static async #init() {
@@ -2042,9 +2072,10 @@ export default class Hologram {
       );
 
       // A next action belongs to whatever page its parent belonged to, so it inherits the
-      // parent's stamp rather than reading the epoch afresh. That matters most when the parent
-      // was asynchronous: its promise can resolve after a navigation, and the inherited stamp is
-      // what makes the next action drop instead of landing on a page that never produced it.
+      // parent's stamp rather than reading the epoch afresh. That matters when the next action
+      // has a delay: its timer can fire after a navigation, and the inherited stamp is what makes
+      // it drop instead of landing on a page that never produced it. (A parent that settles after
+      // a navigation never gets this far - executeAction drops its whole result.)
       //
       // A next action with no delay runs before the browser paints, so that two components a
       // chain changes are never painted disagreeing. The browser paints between tasks, and a
@@ -2172,10 +2203,9 @@ export default class Hologram {
 
       while (index < ActionQueue.entries.length) {
         const {action, epoch} = ActionQueue.entries[index];
-        const currentEpoch = Math.max($.domEpoch, $.registryEpoch);
 
         // Dropped whatever the page is doing: a stale entry has nothing to wait for.
-        if (epoch < currentEpoch || $.deadEpochs.has(epoch)) {
+        if ($.#hasPageBeenLeft(epoch)) {
           ActionQueue.removeAt(index);
 
           console.warn(
