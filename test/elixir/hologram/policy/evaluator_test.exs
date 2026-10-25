@@ -562,6 +562,21 @@ defmodule Hologram.Policy.EvaluatorTest do
       refute rule_matches?(rule, %Module12{}, nil, low_checker)
     end
 
+    test "compares a path's string by its sort key" do
+      rule = rule(predicates: [{[:link, :label], :>=, "m"}])
+
+      mango_checker = fn {:related, [:link]}, _entity, _actor_user_id ->
+        %Module17{label: "Mango"}
+      end
+
+      lodz_checker = fn {:related, [:link]}, _entity, _actor_user_id ->
+        %Module17{label: "Łódź"}
+      end
+
+      assert rule_matches?(rule, %Module12{}, nil, mango_checker)
+      refute rule_matches?(rule, %Module12{}, nil, lodz_checker)
+    end
+
     test "compares an attribute with a path operand" do
       rule = rule(predicates: [{:level, :<=, {:attribute, [:parent, :parent, :priority]}}])
 

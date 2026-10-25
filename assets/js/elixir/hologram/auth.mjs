@@ -138,14 +138,60 @@ function isActorValue(value) {
   );
 }
 
-// Another attribute of the same row, which the rule names rather than carries.
+// Another attribute of the same row, or of the row a path leads to, which the rule names rather
+// than carries.
 function isAttributeValue(value) {
   return (
     value !== null &&
     typeof value === "object" &&
     !Array.isArray(value) &&
-    typeof value.attribute === "string"
+    (typeof value.attribute === "string" || Array.isArray(value.attribute))
   );
+}
+
+// The row a chain of to-one relationships leads to, with its type, or null at the first reference
+// that is empty or names a row this client does not hold - a row it does not hold reads the way a
+// missing one does, the query kernel's rule for a filter path. The first reference is read off the
+// boxed entity, the later ones off the plain rows before them.
+function chainRow(entityType, entity, relationshipNames) {
+  let type = entityType;
+  let row = null;
+
+  for (const [index, relationshipName] of relationshipNames.entries()) {
+    const referenceField = `${relationshipName}_id`;
+
+    const targetId =
+      index === 0
+        ? entityValue(entityType, entity, referenceField)
+        : (row[referenceField] ?? null);
+
+    if (targetId === null) {
+      return null;
+    }
+
+    type = Model.relationships(type)[relationshipName].type;
+    row = LocalDatabase.getRow(type, targetId);
+
+    if (row === null) {
+      return null;
+    }
+  }
+
+  return {row, type};
+}
+
+// The id the last reference of a chain holds, read off the row the relationships before it lead
+// to, or null when they lead nowhere.
+function chainTargetId(entityType, entity, relationshipNames) {
+  const referenceField = `${relationshipNames.at(-1)}_id`;
+
+  if (relationshipNames.length === 1) {
+    return entityValue(entityType, entity, referenceField);
+  }
+
+  const end = chainRow(entityType, entity, relationshipNames.slice(0, -1));
+
+  return end === null ? null : (end.row[referenceField] ?? null);
 }
 
 // The value a rule compares against, read off the boxed entity in the spelling the rules were
@@ -170,6 +216,31 @@ function enumRanks(entityType, name) {
   return new Map(entry.enumValues[name].map((label, index) => [label, index]));
 }
 
+// The type an attribute is declared on and its name - the entity's own for a bare name, and for a
+// path the type its relationships lead to, which decides how the path's value compares.
+function nameEnd(entityType, name) {
+  if (!Array.isArray(name)) {
+    return {name, type: entityType};
+  }
+
+  return {
+    name: name.at(-1),
+    type: Model.pathTarget(entityType, name.slice(0, -1)),
+  };
+}
+
+// An attribute's value off the boxed entity, or a path's off the row its relationships lead to,
+// as the wire spells it - null when they lead nowhere.
+function nameValue(entityType, entity, name) {
+  if (!Array.isArray(name)) {
+    return entityValue(entityType, entity, name);
+  }
+
+  const end = chainRow(entityType, entity, name.slice(0, -1));
+
+  return end === null ? null : (end.row[name.at(-1)] ?? null);
+}
+
 // The actor of a visitor is nobody rather than null - null would equal a missing reference and
 // hand a visitor every row that has none - so a predicate asking about the actor answers false
 // for a visitor, whichever way it points.
@@ -183,25 +254,27 @@ function predicateHolds(
     return false;
   }
 
+  const end = nameEnd(entityType, name);
+
   return holds(
-    entityValue(entityType, entity, name),
+    nameValue(entityType, entity, name),
     operator,
     operandValue(entityType, entity, value, actorUserId),
-    enumRanks(entityType, name),
-    Model.entry(entityType).attributes[name] === "string",
+    enumRanks(end.type, end.name),
+    Model.entry(end.type).attributes[end.name] === "string",
   );
 }
 
 // What a rule's operand stands for on this row: the acting user, another attribute of the row read
-// off it, or the value itself. An attribute operand compares by the predicate's attribute's ranks,
-// since two enums compare only when they declare the same list.
+// off it or of the row a path leads to, or the value itself. An attribute operand compares by the
+// predicate's attribute's ranks, since two enums compare only when they declare the same list.
 function operandValue(entityType, entity, value, actorUserId) {
   if (isActorValue(value)) {
     return actorUserId;
   }
 
   if (isAttributeValue(value)) {
-    return entityValue(entityType, entity, value.attribute);
+    return nameValue(entityType, entity, value.attribute);
   }
 
   return value;
@@ -240,13 +313,11 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
       return grantExists(rows, actorUserId, roles, entityType, [id, null]);
     }
 
+    // A role held on the row a chain of relationships leads to, named by the id its last
+    // reference holds.
     case "rel": {
-      const [_kind, relationshipName, targetType, roles] = reference;
-      const targetId = entityValue(
-        entityType,
-        entity,
-        `${relationshipName}_id`,
-      );
+      const [_kind, relationshipNames, targetType, roles] = reference;
+      const targetId = chainTargetId(entityType, entity, relationshipNames);
 
       return (
         targetId !== null &&
@@ -311,23 +382,15 @@ function unboxActorUserId(userOrId) {
   return Model.unbox(userOrId, "uuid");
 }
 
-// Delegation asks the RELATED entity's policy for the operation the rule names, so it needs that
-// row and its rules. A client holds neither for a type its build never syncs, and cannot ask the
-// server mid-render - so the answer is no, the way it is for any rule the rows do not satisfy.
+// Delegation asks the RELATED entity's policy for the operation the rule names, of the row its
+// chain of relationships leads to, so it needs that row and its rules. A client holds neither for
+// a type its build never syncs, and cannot ask the server mid-render - so the answer is no, the
+// way it is for any rule the rows do not satisfy.
 function viaHolds(rule, entityType, entity, actorUserId) {
-  const [operation, relationshipName] = rule.via;
-  const relationship = Model.entry(entityType).relationships[relationshipName];
-  const targetId = entityValue(entityType, entity, `${relationshipName}_id`);
+  const [operation, relationshipNames] = rule.via;
+  const end = chainRow(entityType, entity, relationshipNames);
 
-  if (!relationship || targetId === null) {
-    return false;
-  }
-
-  const target = LocalDatabase.getRow(relationship.type, targetId);
-
-  return (
-    target !== null && grants(relationship.type, target, operation, actorUserId)
-  );
+  return end !== null && grants(end.type, end.row, operation, actorUserId);
 }
 
 function grants(entityType, row, operation, actorUserId) {

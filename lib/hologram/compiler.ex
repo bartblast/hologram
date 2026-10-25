@@ -4073,7 +4073,7 @@ defmodule Hologram.Compiler do
     target_type = Entity.path_target(entity_type, relationship_names)
 
     render_policy_reference_entry("rel", [
-      render_policy_chain(relationship_names),
+      render_policy_name(relationship_names),
       render_entity_type_label(target_type),
       render_policy_roles(role_names)
     ])
@@ -4102,21 +4102,6 @@ defmodule Hologram.Compiler do
     |> then(&"[#{&1}]")
   end
 
-  # TODO: bake a chain of one as an array too once the browser's policy checks follow a chain.
-  # Until then it bakes as the relationship's name, the spelling the browser reads.
-  defp render_policy_chain([relationship_name]) do
-    relationship_name
-    |> Atom.to_string()
-    |> Jason.encode!()
-  end
-
-  # A path bakes as the array of its names.
-  defp render_policy_chain(relationship_names) do
-    relationship_names
-    |> Enum.map(&Atom.to_string/1)
-    |> Jason.encode!()
-  end
-
   # Operation first, as the server's tuple holds it - the array shape grant references bake as.
   defp render_policy_delegation(nil), do: "null"
 
@@ -4126,11 +4111,11 @@ defmodule Hologram.Compiler do
       |> Policy.operation_key()
       |> Jason.encode!()
 
-    "[#{operation_js},#{render_policy_chain(relationship_names)}]"
+    "[#{operation_js},#{render_policy_name(relationship_names)}]"
   end
 
-  # An attribute as its name, and a path as the array of its names - the spelling the query kernel
-  # reads a filter's path by.
+  # An attribute as its name, and a path or the chain of a delegation or a grant reference as the
+  # array of its names - the spelling the query kernel reads a filter's path by.
   defp render_policy_name(path) when is_list(path) do
     path
     |> Enum.map(&Atom.to_string/1)

@@ -3671,8 +3671,8 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      # A predicate rule, a grant reference on the entity itself and one on its whole type, and a
-      # delegating rule - one of each kind the evaluator has to read.
+      # A predicate rule, a grant reference on the entity itself, one on its whole type and one on
+      # a related row, and a delegating rule - one of each kind the evaluator has to read.
       assert String.contains?(
                js,
                ~s/"read":[{"predicates":[["public","==",true]],"to":null,"via":null}/
@@ -3685,7 +3685,12 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"publish":[{"predicates":[],"to":null,"via":["publish","parent"]}]/
+               ~s/"delete":[{"predicates":[],"to":[["rel",["parent"],"Hologram.Test.Fixtures.Policy.Module2",["admin"]]],"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[],"to":null,"via":["publish",["parent"]]}]/
              )
     end
 

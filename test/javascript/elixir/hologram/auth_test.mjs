@@ -45,6 +45,7 @@ describe("Elixir_Hologram_Auth", () => {
   const BOB = "018f4571-a1b2-7c3d-8e4f-000000000002";
   const DOC = "018f4571-a1b2-7c3d-8e4f-00000000000a";
   const FOLDER_ID = "018f4571-a1b2-7c3d-8e4f-00000000000b";
+  const PARENT_ID = "018f4571-a1b2-7c3d-8e4f-00000000000c";
 
   const can = Elixir_Hologram_Auth["can?/3"];
 
@@ -128,10 +129,16 @@ describe("Elixir_Hologram_Auth", () => {
           serverOnly: [],
         },
         [FOLDER]: {
-          attributes: {id: "uuid", archived: "boolean"},
+          attributes: {
+            id: "uuid",
+            archived: "boolean",
+            kind: "enum",
+            name: "string",
+          },
+          enumValues: {kind: ["low", "medium", "high"]},
           expandedRoles: {},
           policy: folderPolicy,
-          relationships: {},
+          relationships: {parent: {toMany: false, type: FOLDER}},
           roles: [],
           serverOnly: [],
         },
@@ -248,7 +255,7 @@ describe("Elixir_Hologram_Auth", () => {
     // The folder's own create rule is open, so a delegation that asked it would grant either way.
     it("asks the related entity the operation a delegation names", () => {
       defineModel(
-        {create: [rule({via: ["update", "folder"]})]},
+        {create: [rule({via: ["update", ["folder"]]})]},
         {
           create: [rule()],
           update: [rule({predicates: [["archived", "==", false]]})],
@@ -795,6 +802,115 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    it("reads a path's attribute off the row its relationships lead to", () => {
+      const rules = [
+        rule({predicates: [[["folder", "parent", "archived"], "==", false]]}),
+      ];
+
+      LocalDatabase.putRow(FOLDER, {
+        archived: true,
+        id: FOLDER_ID,
+        parent_id: PARENT_ID,
+      });
+
+      LocalDatabase.putRow(FOLDER, {archived: false, id: PARENT_ID});
+
+      assert.deepStrictEqual(
+        reads(rules, document({folder_id: FOLDER_ID})),
+        Type.boolean(true),
+      );
+
+      LocalDatabase.putRow(FOLDER, {archived: true, id: PARENT_ID});
+
+      assert.deepStrictEqual(
+        reads(rules, document({folder_id: FOLDER_ID})),
+        Type.boolean(false),
+      );
+    });
+
+    // The relationships lead nowhere, so the path reads nil, which compares the way a missing
+    // attribute does.
+    it("reads a path that ends nowhere as nil", () => {
+      const path = ["folder", "parent", "archived"];
+      const entity = document({folder_id: FOLDER_ID});
+
+      LocalDatabase.putRow(FOLDER, {
+        archived: false,
+        id: FOLDER_ID,
+        parent_id: null,
+      });
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [[path, "==", false]]})], entity),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [[path, "!=", true]]})], entity),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [[path, "==", null]]})], entity),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [[["folder", "parent", "kind"], ">=", "low"]]})],
+          entity,
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    // High sorts before medium as a string and after it in the declared list.
+    it("compares a path's enum by the declared position of the attribute it ends at", () => {
+      const rules = [rule({predicates: [[["folder", "kind"], ">", "medium"]]})];
+      const entity = document({folder_id: FOLDER_ID});
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, kind: "high"});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(true));
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, kind: "low"});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(false));
+    });
+
+    it("compares a path's string by its sort key", () => {
+      const rules = [rule({predicates: [[["folder", "name"], ">=", "m"]]})];
+      const entity = document({folder_id: FOLDER_ID});
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, name: "Mango"});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(true));
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, name: "Łódź"});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(false));
+    });
+
+    it("compares an attribute with a path operand", () => {
+      const rules = [
+        rule({
+          predicates: [["title", "==", {attribute: ["folder", "name"]}]],
+        }),
+      ];
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, name: "Plans"});
+
+      assert.deepStrictEqual(
+        reads(rules, document({folder_id: FOLDER_ID, title: "Plans"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({folder_id: FOLDER_ID, title: "Notes"})),
+        Type.boolean(false),
+      );
+    });
+
     it("substitutes the actor in predicate values", () => {
       const rules = [rule({predicates: [["author_id", "==", {actor: true}]]})];
       const entity = document({author_id: ALICE});
@@ -954,7 +1070,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("delegates for a via requirement", () => {
       defineModel(
-        {read: [rule({via: ["read", "folder"]})]},
+        {read: [rule({via: ["read", ["folder"]]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 
@@ -984,7 +1100,10 @@ describe("Elixir_Hologram_Auth", () => {
     // A delegating rule is still evaluated for a visitor, because the type it delegates to skips
     // its own actor-referencing rules in turn.
     it("evaluates a delegating rule for an anonymous session", () => {
-      defineModel({read: [rule({via: ["read", "folder"]})]}, {read: [rule()]});
+      defineModel(
+        {read: [rule({via: ["read", ["folder"]]})]},
+        {read: [rule()]},
+      );
 
       LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
 
@@ -1117,7 +1236,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("grants through a role held on a related entity", () => {
       defineModel({
-        read: [rule({to: [["rel", "folder", FOLDER, ["admin"]]]})],
+        read: [rule({to: [["rel", ["folder"], FOLDER, ["admin"]]]})],
       });
 
       LocalDatabase.putRow(
@@ -1141,7 +1260,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("denies a related-entity role when the relationship is unset", () => {
       defineModel({
-        read: [rule({to: [["rel", "folder", FOLDER, ["admin"]]]})],
+        read: [rule({to: [["rel", ["folder"], FOLDER, ["admin"]]]})],
       });
 
       LocalDatabase.putRow(
@@ -1158,6 +1277,48 @@ describe("Elixir_Hologram_Auth", () => {
           Type.bitstring(ALICE),
           Type.atom("read"),
           document({folder_id: null}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants through a role held two hops away", () => {
+      defineModel({
+        read: [rule({to: [["rel", ["folder", "parent"], FOLDER, ["admin"]]]})],
+      });
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, parent_id: PARENT_ID});
+
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: PARENT_ID, entity_type: FOLDER, role: "admin"}),
+      );
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          Type.atom("read"),
+          document({folder_id: FOLDER_ID}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("denies when a hop of the reference path is missing from the database", () => {
+      defineModel({
+        read: [rule({to: [["rel", ["folder", "parent"], FOLDER, ["admin"]]]})],
+      });
+
+      LocalDatabase.putRow(
+        GRANT,
+        grantRow({entity_id: PARENT_ID, entity_type: FOLDER, role: "admin"}),
+      );
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          Type.atom("read"),
+          document({folder_id: FOLDER_ID}),
         ),
         Type.boolean(false),
       );
@@ -1217,7 +1378,7 @@ describe("Elixir_Hologram_Auth", () => {
   describe("delegation", () => {
     it("grants when the related entity's own rules grant the operation", () => {
       defineModel(
-        {read: [rule({via: ["read", "folder"]})]},
+        {read: [rule({via: ["read", ["folder"]]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 
@@ -1231,7 +1392,7 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("denies when the related entity's own rules deny the operation", () => {
       defineModel(
-        {read: [rule({via: ["read", "folder"]})]},
+        {read: [rule({via: ["read", ["folder"]]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 
@@ -1248,7 +1409,7 @@ describe("Elixir_Hologram_Auth", () => {
     // satisfy.
     it("denies when the related row is not in the database", () => {
       defineModel(
-        {read: [rule({via: ["read", "folder"]})]},
+        {read: [rule({via: ["read", ["folder"]]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 
@@ -1260,12 +1421,88 @@ describe("Elixir_Hologram_Auth", () => {
 
     it("denies when the relationship is unset", () => {
       defineModel(
-        {read: [rule({via: ["read", "folder"]})]},
+        {read: [rule({via: ["read", ["folder"]]})]},
         {read: [rule({predicates: [["archived", "==", false]]})]},
       );
 
       assert.deepStrictEqual(
         can(Type.nil(), Type.atom("read"), document({folder_id: null})),
+        Type.boolean(false),
+      );
+    });
+
+    it("delegates through a path", () => {
+      defineModel(
+        {read: [rule({via: ["read", ["folder", "parent"]]})]},
+        {read: [rule({predicates: [["archived", "==", false]]})]},
+      );
+
+      const entity = document({folder_id: FOLDER_ID});
+
+      LocalDatabase.putRow(FOLDER, {
+        archived: true,
+        id: FOLDER_ID,
+        parent_id: PARENT_ID,
+      });
+
+      LocalDatabase.putRow(FOLDER, {archived: false, id: PARENT_ID});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), entity),
+        Type.boolean(true),
+      );
+
+      LocalDatabase.putRow(FOLDER, {archived: true, id: PARENT_ID});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), entity),
+        Type.boolean(false),
+      );
+    });
+
+    it("denies when a hop of the delegation path is missing from the database", () => {
+      defineModel(
+        {read: [rule({via: ["read", ["folder", "parent"]]})]},
+        {read: [rule({predicates: [["archived", "==", false]]})]},
+      );
+
+      LocalDatabase.putRow(FOLDER, {
+        archived: false,
+        id: FOLDER_ID,
+        parent_id: PARENT_ID,
+      });
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({folder_id: FOLDER_ID})),
+        Type.boolean(false),
+      );
+    });
+  });
+
+  // Cases this side alone has: the server reads the rows along a path as stored, and a client
+  // reads them from what it holds.
+  describe("paths over pot rows", () => {
+    const reads = (rules, entity) => {
+      defineModel({read: rules});
+
+      return can(Type.nil(), Type.atom("read"), entity);
+    };
+
+    // A row the client does not hold reads the way a missing one does - the query kernel's rule
+    // for a filter path, so a filter and a permission check over one path agree.
+    it("reads a path through a row the database does not hold as nil", () => {
+      const path = ["folder", "parent", "archived"];
+      const entity = document({folder_id: FOLDER_ID});
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, parent_id: PARENT_ID});
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [[path, "!=", true]]})], entity),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [[path, "==", false]]})], entity),
         Type.boolean(false),
       );
     });
