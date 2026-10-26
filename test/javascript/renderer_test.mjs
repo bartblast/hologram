@@ -8994,6 +8994,33 @@ describe("Renderer", () => {
         assert.strictEqual(document.activeElement, elements[1]);
       });
 
+      it("blurs the active element on a page arrival that focuses nothing", () => {
+        elements[0].focus();
+        Renderer.isPageArrival = true;
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, document.body);
+      });
+
+      it("keeps a candidate's focus on a page arrival", () => {
+        elements[0].focus();
+        Renderer.isPageArrival = true;
+        Renderer.focusCandidates = [elements[1]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[1]);
+      });
+
+      it("leaves the active element alone on an ordinary render that focuses nothing", () => {
+        elements[0].focus();
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[0]);
+      });
+
       it("does nothing on the boot render", () => {
         elements[0].focus();
         Renderer.blurCandidates = [elements[0]];

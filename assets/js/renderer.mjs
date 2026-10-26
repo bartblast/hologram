@@ -433,9 +433,14 @@ export default class Renderer {
   // and focuses another ends on the focused one in either order. Of the focus candidates, the first
   // in document order takes focus, the rule the browser applies to autofocus on a page load. A
   // candidate the same patch removed again is skipped.
+  //
+  // A page that appears is a page load, and a page load starts with nothing focused: on a page
+  // arrival that no candidate claims, whatever has focus - the link the user clicked, or a field
+  // of the left page the diff kept - gives it up.
   static settleFocus(isBootRender) {
     const focusCandidates = $.focusCandidates;
     const blurCandidates = $.blurCandidates;
+    const isPageArrival = $.isPageArrival;
 
     $.resetFocusCandidates();
     $.isPageArrival = false;
@@ -466,7 +471,11 @@ export default class Renderer {
       }
     }
 
-    target?.focus();
+    if (target !== null) {
+      target.focus();
+    } else if (isPageArrival) {
+      document.activeElement?.blur();
+    }
   }
 
   static toBitstring(term) {

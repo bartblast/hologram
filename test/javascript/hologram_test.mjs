@@ -3039,6 +3039,23 @@ describe("Hologram", () => {
         search.remove();
       });
 
+      // The left page's focused element may survive the patch - the diff keeps a node whose
+      // place matches - and a document load starts with nothing focused.
+      it("starts the destination with nothing focused when it declares no focus", async () => {
+        const field = document.createElement("input");
+        field.id = "left_page_field";
+        document.body.appendChild(field);
+        field.focus();
+
+        try {
+          await Hologram.loadNewPage("/target", payloadFor("blank"));
+
+          assert.strictEqual(document.activeElement, document.body);
+        } finally {
+          field.remove();
+        }
+      });
+
       it("patches as a page arrival and records that the page is shown", async () => {
         let isPageArrivalDuringPatch = null;
 
