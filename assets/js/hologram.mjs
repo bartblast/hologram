@@ -89,6 +89,14 @@ export default class Hologram {
   static isMounting = false;
 
   // Made public to make tests easier
+  // Whether the destination of the navigation in progress is on screen already, put there by the
+  // interim patch in #showNewPage. That patch is where the page appears, so it is where focus is
+  // settled, and the mount's render then has nothing of the kind to do. A history restore has no
+  // interim patch - the left page stays up until the mount's render - so there the mount's render
+  // is where the page appears. Cleared when a navigation starts and when a mount's render is done.
+  static isPageShown = false;
+
+  // Made public to make tests easier
   // Whether a render is on the stack - its patch walking the live DOM, or its event bindings
   // being reconciled onto it. Set by render() alone: a patch made outside a render is not
   // covered, and has to keep a dispatch out by its own means.
@@ -414,6 +422,19 @@ export default class Hologram {
       return null;
     }
 
+    // A binding that evaluates to true names no action: it is almost always $focused written as the
+    // event it is one letter away from, which the build catches only when the value is a literal.
+    // Nothing is said about false - whether it should disable the binding the way nil does is a
+    // separate question - so it dispatches as it always did.
+    if (Operation.isTrue(operationSpecDom)) {
+      const hint =
+        eventType === "focus" ? " - to control focus, use $focused" : "";
+
+      throw new HologramRuntimeError(
+        `an event binding evaluated to true, which is not an action or command name${hint}`,
+      );
+    }
+
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
     if (eventImpl.isEventIgnored(event)) {
@@ -572,8 +593,11 @@ export default class Hologram {
     }
 
     window.requestAnimationFrame(() => {
-      Hologram.#showNewPage(payload);
+      // Before the destination appears, so that the focus its appearance settles leaves the
+      // focused element scrolled into view, as on a document load, rather than being scrolled
+      // back off screen.
       window.scrollTo(0, 0);
+      Hologram.#showNewPage(payload);
 
       if (historyEntryId === null) {
         history.pushState($.#historyId, null, pagePath);
@@ -659,9 +683,19 @@ export default class Hologram {
       );
 
       // On a full document load there is no previous render to diff against, only the page the
-      // server sent, so the old side is built by mirroring this render onto it. The patch then
-      // adopts those nodes instead of recreating the whole page.
-      if (Hologram.virtualDocument === null) {
+      // server sent. That page is on screen already, and the browser applied its autofocus, so
+      // this render settles no focus.
+      const isBootRender = Hologram.virtualDocument === null;
+
+      // A page appears either with a navigation's interim patch, which settles focus itself (see
+      // #showNewPage), or with the mount's first render, as after a history restore. The boot
+      // render is a mount too, but its page appeared with the document.
+      Renderer.isPageArrival = $.isMounting && !$.isPageShown && !isBootRender;
+      Renderer.resetFocusCandidates();
+
+      // On a full document load the old side is built by mirroring this render onto the page the
+      // server sent. The patch then adopts those nodes instead of recreating the whole page.
+      if (isBootRender) {
         Hologram.virtualDocument = Vdom.mirror(
           newVirtualDocument,
           document.documentElement,
@@ -692,6 +726,11 @@ export default class Hologram {
       // now that the DOM is patched, so each re-syncs the children it watches and recomputes - firing
       // again as content this render added extends or fills the container.
       EventListeners.recheckScrollEdges();
+
+      // Focus moves while the render flag is still set: the focus and blur events it fires
+      // dispatch into the queue, which holds until the render is done, the way a focusout the
+      // patch causes is held.
+      Renderer.settleFocus(isBootRender);
     } finally {
       // A template expression is app code and can raise, so the flag is cleared on the way out
       // either way. Leaving it set would silence every dispatch from here on.
@@ -1117,6 +1156,9 @@ export default class Hologram {
     Debouncer.cancelAll();
     Throttler.cancelAll();
     EventListenerRegistry.detachAll();
+
+    // Nothing of the destination is on screen yet, whichever way it arrives.
+    $.isPageShown = false;
   }
 
   // Takes the page's own bundle out of the document the server described, leaving every other
@@ -1793,6 +1835,7 @@ export default class Hologram {
         // A template expression is app code and can raise, so the flag is cleared on the way out
         // either way. Leaving it set would hold every action from here on.
         $.isMounting = false;
+        $.isPageShown = false;
       }
 
       if ($.#scrollPosition) {
@@ -1984,10 +2027,20 @@ export default class Hologram {
 
     $.#dropPageBundleScript(newVirtualDocument, pageModule, payload.pageDigest);
 
+    // This patch is where the destination appears, so it is where its autofocus lands - in the
+    // same frame as its markup, with no window in which the user could focus a field only to
+    // have the mount's render move focus away later. The mount's render then sees the attribute
+    // on both sides of every element it keeps, and leaves focus alone.
+    Renderer.isPageArrival = true;
+    Renderer.resetFocusCandidates();
+
     Hologram.virtualDocument = Vdom.patchVirtualDocument(
       Hologram.virtualDocument,
       newVirtualDocument,
     );
+
+    Renderer.settleFocus(false);
+    $.isPageShown = true;
 
     // A page whose code the tab holds mounts now. The mount of any other waits for its bundle to
     // announce itself.

@@ -156,13 +156,19 @@ export default class Renderer {
   // once `.elm` exists. renderPage() resets this.
   static resizeBindings = [];
 
-  // Elements this render's patch asked to take focus, and elements it asked to give focus up, in
-  // hook order. The hooks only collect: which element takes focus is settled once per render by
-  // settleFocus(), after the patch, when every candidate is in the document and the document order
-  // between an inserted element and an updated one can be read. Hologram.render() resets both
-  // before its patch.
+  // Elements this patch asked to take focus, and elements it asked to give focus up, in hook
+  // order. The hooks only collect: which element takes focus is settled once per patch by
+  // settleFocus(), after it, when every candidate is in the document and the document order
+  // between an inserted element and an updated one can be read. Whoever patches resets both
+  // first: Hologram.render(), and the interim patch of a navigation.
   static focusCandidates = [];
   static blurCandidates = [];
+
+  // Set around a patch that puts a page on screen: a navigation's interim patch, or the mount's
+  // first render when no interim patch came before it (a history restore). A page that appears is
+  // a page load however the diff reused its nodes, so every element it declares focused is a
+  // candidate, not only one whose declaration changed. settleFocus() clears it.
+  static isPageArrival = false;
 
   // Based on Elixir Renderer.encode_tree/1, which it inverts clause for clause.
   //
@@ -417,7 +423,7 @@ export default class Renderer {
       });
   }
 
-  // Moves focus where this render's patch asked, then clears the candidates.
+  // Moves focus where the patch asked, then clears the candidates.
   //
   // The boot render claims nothing: the browser already applied autofocus from the markup the server
   // sent, and the user may have moved on before the runtime started.
@@ -432,6 +438,7 @@ export default class Renderer {
     const blurCandidates = $.blurCandidates;
 
     $.resetFocusCandidates();
+    $.isPageArrival = false;
 
     if (isBootRender) {
       return;
@@ -904,22 +911,21 @@ export default class Renderer {
   }
 
   // Snabbdom update hook, for an element the diff kept. Only a change asks for focus: a re-render
-  // that declares the same thing again leaves focus where the user put it.
+  // that declares the same thing again leaves focus where the user put it. A page arrival is the
+  // exception, see isPageArrival.
   //
-  // A mount is the exception. It is a new page however the diff reused its nodes, so whatever it
-  // declares focused is focused, whatever the previous page or the interim markup said.
+  // What the previous render declared is read off its autofocus attribute rather than its
+  // hologramFocused: an element kept from a navigation's interim page carries the attribute the
+  // server rendered and no hologramFocused, and it was focused when that page appeared, so the
+  // mount's render must see no change on it.
   static #collectUpdatedFocus(oldVnode, newVnode) {
-    const wasFocused = oldVnode.data?.hologramFocused === true;
-    const isFocused = newVnode.data.hologramFocused === true;
+    const hadAutofocus = $.#hasAutofocus(oldVnode);
 
-    if (
-      $.#hasAutofocus(newVnode) &&
-      (Hologram.isMounting || (isFocused && !wasFocused))
-    ) {
+    if ($.#hasAutofocus(newVnode) && ($.isPageArrival || !hadAutofocus)) {
       $.focusCandidates.push(newVnode.elm);
     }
 
-    if (wasFocused && newVnode.data.hologramFocused === false) {
+    if (hadAutofocus && newVnode.data.hologramFocused === false) {
       $.blurCandidates.push(newVnode.elm);
     }
   }

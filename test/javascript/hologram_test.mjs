@@ -1428,6 +1428,70 @@ describe("Hologram", () => {
       sinon.assert.notCalled(scheduleActionStub);
     });
 
+    describe("binding that evaluates to a boolean", () => {
+      // Example: $click={true}
+      const trueSpecDom = Type.keywordList([
+        [Type.atom("expression"), Type.tuple([Type.boolean(true)])],
+      ]);
+
+      // Example: $click={false}
+      const falseSpecDom = Type.keywordList([
+        [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+      ]);
+
+      it("raises for true", () => {
+        assert.throw(
+          () =>
+            Hologram.handleUiEvent(
+              notIgnoredEvent,
+              eventType,
+              trueSpecDom,
+              defaultTarget,
+            ),
+          HologramRuntimeError,
+          "an event binding evaluated to true, which is not an action or command name",
+        );
+
+        sinon.assert.notCalled(executeActionStub);
+      });
+
+      it("adds the $focused hint for a focus binding", () => {
+        assert.throw(
+          () =>
+            Hologram.handleUiEvent(
+              notIgnoredEvent,
+              "focus",
+              trueSpecDom,
+              defaultTarget,
+            ),
+          HologramRuntimeError,
+          "an event binding evaluated to true, which is not an action or command name - to control focus, use $focused",
+        );
+      });
+
+      // Whether false should disable the binding the way nil does is a separate question, so it
+      // dispatches as it always did: as an action named false.
+      it("leaves false to dispatch as it did", () => {
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          falseSpecDom,
+          defaultTarget,
+        );
+
+        dispatch();
+
+        sinon.assert.calledOnce(executeActionStub);
+
+        const action = executeActionStub.firstCall.args[0];
+
+        assert.deepStrictEqual(
+          action.data["atom(name)"][1],
+          Type.atom("false"),
+        );
+      });
+    });
+
     it("regular action without delay", () => {
       const dispatch = Hologram.handleUiEvent(
         notIgnoredEvent,
@@ -2512,6 +2576,7 @@ describe("Hologram", () => {
 
       afterEach(() => {
         delete window.requestAnimationFrame;
+        Hologram.isPageShown = false;
         Hologram.virtualDocument = null;
 
         patchStub?.restore();
@@ -2941,6 +3006,52 @@ describe("Hologram", () => {
         );
 
         assert.deepStrictEqual(patchedHead.children, []);
+      });
+
+      // The patch is where the page appears, so it is where its autofocus lands: in the same frame
+      // as the markup, before the bundle has even been asked for.
+      it("focuses the destination's autofocus element as its markup appears", async () => {
+        const payload = {
+          ...payloadFor("focus"),
+          tree: [
+            wireElement(
+              "html",
+              [],
+              [
+                wireElement("head", [], [wireBundleScript("focus")]),
+                wireElement(
+                  "body",
+                  [],
+                  [wireElement("input", ["id", "search", "autofocus", null])],
+                ),
+              ],
+            ),
+          ],
+        };
+
+        await Hologram.loadNewPage("/target", payload);
+
+        const search = document.getElementById("search");
+
+        assert.strictEqual(document.activeElement, search);
+
+        search.blur();
+        search.remove();
+      });
+
+      it("patches as a page arrival and records that the page is shown", async () => {
+        let isPageArrivalDuringPatch = null;
+
+        patchStub = sinon.stub(Vdom, "patchVirtualDocument").callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return Hologram.virtualDocument;
+        });
+
+        await Hologram.loadNewPage("/target", payloadFor("arrival"));
+
+        assert.isTrue(isPageArrivalDuringPatch);
+        assert.isFalse(Renderer.isPageArrival);
+        assert.isTrue(Hologram.isPageShown);
       });
     });
 
@@ -3630,6 +3741,46 @@ describe("Hologram", () => {
       }
     });
 
+    // A navigation the browser's history closes may have shown its destination and never
+    // mounted it. The restore that follows has no interim patch, so its mount's render is where
+    // the restored page appears, and the flag the shown page left must not say otherwise.
+    it("forgets a page shown by the navigation it closes", async () => {
+      const instanceId = App.instanceId;
+
+      const pageSnapshot = {
+        componentRegistryEntries: Type.map(),
+        instanceId: "popstate-instance",
+        pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Module7"),
+        pageParams: Type.map(),
+        scrollPosition: [0, 0],
+        subscriptionReceipts: [],
+      };
+
+      sessionStorage.setItem(
+        "hologram_page_snapshot_history-2",
+        Serializer.serialize(pageSnapshot, "client"),
+      );
+
+      const consoleErrorStub = sinon.stub(console, "error");
+      const fetchStub = sinon.stub(Client, "fetchPageDigest");
+
+      Hologram.isPageShown = true;
+
+      try {
+        await Hologram.handlePopstateEvent({state: "history-2"});
+
+        assert.isFalse(Hologram.isPageShown);
+      } finally {
+        fetchStub.restore();
+        consoleErrorStub.restore();
+        sessionStorage.clear();
+        ComponentRegistry.clear();
+        App.instanceId = instanceId;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      }
+    });
+
     // The state a snapshot holds can carry values of struct types whose protocol implementations
     // only the chunks it was taken with have, so it is restored once they are in. A snapshot can be
     // older than the build that serves the app now, and its chunks are named by digest, so the
@@ -3881,17 +4032,22 @@ describe("Hologram", () => {
           assert.equal(Hologram.registryEpoch, 1);
           assert.equal(Hologram.domEpoch, 0);
 
+          // Whatever a navigation left behind, the mount's render is the last thing that reads it.
+          Hologram.isPageShown = true;
+
           frame();
 
           assert.equal(domEpochDuringRender, 1);
           assert.equal(Hologram.domEpoch, 1);
           assert.isFalse(Hologram.isMounting);
+          assert.isFalse(Hologram.isPageShown);
         } finally {
           delete window.requestAnimationFrame;
           delete globalThis.Hologram.assetManifest;
           AssetPathRegistry.entries = assetPathEntries;
           LiveReload.pageBundleDigests.delete(mountedModule.value);
           Hologram.isMounting = false;
+          Hologram.isPageShown = false;
           renderStub.restore();
           scrollToStub.restore();
           sseConnectStub.restore();
@@ -4298,9 +4454,13 @@ describe("Hologram", () => {
       clock?.restore();
       clock = null;
       ActionQueue.entries = [];
+      Hologram.isMounting = false;
+      Hologram.isPageShown = false;
       Hologram.isRendering = false;
       Hologram.virtualDocument = null;
+      Renderer.isPageArrival = false;
       Renderer.listenerBindings = [];
+      Renderer.resetFocusCandidates();
       sinon.restore();
     });
 
@@ -4409,6 +4569,123 @@ describe("Hologram", () => {
         previousVirtualDocument,
         renderedVirtualDocument,
       );
+    });
+
+    describe("focus", () => {
+      const renderedVirtualDocument = {sel: "html", data: {}, children: []};
+
+      let patchStub, resetStub, settleStub;
+
+      beforeEach(() => {
+        sinon.stub(Renderer, "renderPage").returns(renderedVirtualDocument);
+        sinon.stub(EventListenerRegistry, "reconcile");
+        sinon.stub(EventListeners, "recheckScrollEdges");
+
+        patchStub = sinon.stub(Vdom, "patchVirtualDocument");
+        resetStub = sinon.stub(Renderer, "resetFocusCandidates");
+        settleStub = sinon.stub(Renderer, "settleFocus");
+
+        Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+      });
+
+      it("resets the candidates before the patch and settles them after it", () => {
+        Hologram.render();
+
+        sinon.assert.callOrder(resetStub, patchStub, settleStub);
+        sinon.assert.calledOnceWithExactly(settleStub, false);
+      });
+
+      it("settles nothing on the boot render", () => {
+        sinon
+          .stub(Vdom, "mirror")
+          .returns({sel: "html", data: {}, children: []});
+        Hologram.virtualDocument = null;
+
+        Hologram.render();
+
+        sinon.assert.calledOnceWithExactly(settleStub, true);
+      });
+
+      // The focus and blur events a settled focus fires dispatch into the queue, which has to
+      // hold them until the render is done, the way it holds a focusout the patch causes.
+      it("settles focus while the render flag is still set", () => {
+        let isRenderingDuringSettle = null;
+
+        settleStub.callsFake(() => {
+          isRenderingDuringSettle = Hologram.isRendering;
+        });
+
+        Hologram.render();
+
+        assert.isTrue(isRenderingDuringSettle);
+      });
+
+      // A history restore has no interim patch: the left page stays up until this render, so
+      // this render is where the page appears.
+      it("patches a mount with no page shown before it as a page arrival", () => {
+        let isPageArrivalDuringPatch = null;
+
+        patchStub.callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return Hologram.virtualDocument;
+        });
+
+        Hologram.isMounting = true;
+
+        Hologram.render();
+
+        assert.isTrue(isPageArrivalDuringPatch);
+      });
+
+      // The interim patch of the navigation put the page on screen and settled its focus.
+      it("patches a mount after a shown page as an ordinary render", () => {
+        let isPageArrivalDuringPatch = null;
+
+        patchStub.callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return Hologram.virtualDocument;
+        });
+
+        Hologram.isMounting = true;
+        Hologram.isPageShown = true;
+
+        Hologram.render();
+
+        assert.isFalse(isPageArrivalDuringPatch);
+      });
+
+      it("patches the boot render as an ordinary render", () => {
+        let isPageArrivalDuringPatch = null;
+
+        sinon
+          .stub(Vdom, "mirror")
+          .returns({sel: "html", data: {}, children: []});
+        Hologram.virtualDocument = null;
+
+        patchStub.callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return {sel: "html", data: {}, children: []};
+        });
+
+        Hologram.isMounting = true;
+
+        Hologram.render();
+
+        assert.isFalse(isPageArrivalDuringPatch);
+      });
+
+      it("patches a render that is no mount as an ordinary render", () => {
+        let isPageArrivalDuringPatch = null;
+
+        patchStub.callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return Hologram.virtualDocument;
+        });
+
+        Hologram.render();
+
+        assert.isFalse(isPageArrivalDuringPatch);
+      });
     });
 
     // A dispatch arriving while the flag is set has to wait for the render to finish, so the flag

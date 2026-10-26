@@ -8630,7 +8630,7 @@ describe("Renderer", () => {
 
     afterEach(() => {
       Renderer.resetFocusCandidates();
-      Hologram.isMounting = false;
+      Renderer.isPageArrival = false;
     });
 
     describe("$focused attribute", () => {
@@ -8794,8 +8794,8 @@ describe("Renderer", () => {
         assert.deepStrictEqual(Renderer.focusCandidates, []);
       });
 
-      it("update collects a literal autofocus during a mount", () => {
-        Hologram.isMounting = true;
+      it("update collects a literal autofocus on a page arrival", () => {
+        Renderer.isPageArrival = true;
 
         const oldVnode = render([boolAttr("autofocus")]);
         const newVnode = patched(render([boolAttr("autofocus")]));
@@ -8805,8 +8805,8 @@ describe("Renderer", () => {
         assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
       });
 
-      it("update collects $focused true staying true during a mount", () => {
-        Hologram.isMounting = true;
+      it("update collects $focused true staying true on a page arrival", () => {
+        Renderer.isPageArrival = true;
 
         const oldVnode = render([exprAttr("$focused", Type.boolean(true))]);
         const newVnode = patched(
@@ -8818,8 +8818,8 @@ describe("Renderer", () => {
         assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
       });
 
-      it("update ignores $focused false during a mount", () => {
-        Hologram.isMounting = true;
+      it("update ignores $focused false on a page arrival", () => {
+        Renderer.isPageArrival = true;
 
         const oldVnode = render([exprAttr("$focused", Type.boolean(false))]);
         const newVnode = patched(
@@ -8829,6 +8829,32 @@ describe("Renderer", () => {
         newVnode.data.hook.update(oldVnode, newVnode);
 
         assert.deepStrictEqual(Renderer.focusCandidates, []);
+      });
+
+      // The interim page a navigation patches in is rendered from the server's tree, which carries
+      // autofocus and no hologramFocused. Focus landed when that page appeared, so the mount's
+      // render must see no change on it.
+      it("update ignores an element kept from the interim page", () => {
+        const oldVnode = render([boolAttr("autofocus")]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+      });
+
+      it("update collects a blur when the previous render carried autofocus", () => {
+        const oldVnode = render([boolAttr("autofocus")]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.blurCandidates, [newVnode.elm]);
       });
 
       it("update collects a change from true to false as a blur", () => {
@@ -8978,14 +9004,16 @@ describe("Renderer", () => {
         assert.strictEqual(document.activeElement, elements[0]);
       });
 
-      it("clears both candidate lists", () => {
+      it("clears both candidate lists and the page arrival flag", () => {
         Renderer.focusCandidates = [elements[0]];
         Renderer.blurCandidates = [elements[1]];
+        Renderer.isPageArrival = true;
 
         Renderer.settleFocus(true);
 
         assert.deepStrictEqual(Renderer.focusCandidates, []);
         assert.deepStrictEqual(Renderer.blurCandidates, []);
+        assert.isFalse(Renderer.isPageArrival);
       });
     });
   });
