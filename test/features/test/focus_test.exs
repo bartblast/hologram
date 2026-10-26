@@ -129,6 +129,14 @@ defmodule HologramFeatureTests.FocusTest do
       |> assert_active_element("page_2_order_early")
     end
 
+    # A disabled button can't take focus, so it is passed over, as the browser does for autofocus.
+    feature "a candidate that can't take focus is passed over", %{session: session} do
+      session
+      |> visit(Page2)
+      |> click(button("Show blocked"))
+      |> assert_active_element("page_2_after_disabled")
+    end
+
     feature "of several inserted candidates, the first wins", %{session: session} do
       session
       |> visit(Page2)
