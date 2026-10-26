@@ -85,6 +85,7 @@ import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
+import FocusEvent from "../../assets/js/events/focus_event.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
@@ -9019,6 +9020,79 @@ describe("Renderer", () => {
         Renderer.settleFocus(false);
 
         assert.strictEqual(document.activeElement, elements[0]);
+      });
+
+      // The DOM fires focus and blur for a programmatic move exactly as for a user's. The ones a
+      // settle causes, the blur of the element giving focus up included, must read as the
+      // runtime's, so the $focus and $blur bindings they reach stay quiet.
+      it("marks the focus and blur events it causes as the runtime's", () => {
+        const seen = [];
+        const record = (event) =>
+          seen.push([
+            event.type,
+            event.target.id,
+            FocusEvent.isRuntimeFocusChange,
+          ]);
+
+        elements.forEach((element) => {
+          element.addEventListener("focus", record);
+          element.addEventListener("blur", record);
+        });
+
+        elements[0].focus();
+        seen.length = 0;
+
+        Renderer.blurCandidates = [elements[0]];
+        Renderer.focusCandidates = [elements[1]];
+
+        Renderer.settleFocus(false);
+
+        assert.deepStrictEqual(seen, [
+          ["blur", "a", true],
+          ["focus", "b", true],
+        ]);
+
+        assert.isFalse(FocusEvent.isRuntimeFocusChange);
+      });
+
+      it("marks the blur of a page arrival that focuses nothing as the runtime's", () => {
+        let isRuntimeFocusChange = null;
+
+        elements[0].addEventListener("blur", () => {
+          isRuntimeFocusChange = FocusEvent.isRuntimeFocusChange;
+        });
+
+        elements[0].focus();
+        Renderer.isPageArrival = true;
+
+        Renderer.settleFocus(false);
+
+        assert.isTrue(isRuntimeFocusChange);
+        assert.isFalse(FocusEvent.isRuntimeFocusChange);
+      });
+
+      it("restores the runtime mark it found", () => {
+        FocusEvent.isRuntimeFocusChange = true;
+        Renderer.focusCandidates = [elements[1]];
+
+        try {
+          Renderer.settleFocus(false);
+
+          assert.isTrue(FocusEvent.isRuntimeFocusChange);
+        } finally {
+          FocusEvent.isRuntimeFocusChange = false;
+        }
+      });
+
+      it("clears the runtime mark when a move raises", () => {
+        elements[1].focus = () => {
+          throw new Error("focus failed");
+        };
+
+        Renderer.focusCandidates = [elements[1]];
+
+        assert.throws(() => Renderer.settleFocus(false), "focus failed");
+        assert.isFalse(FocusEvent.isRuntimeFocusChange);
       });
 
       it("does nothing on the boot render", () => {

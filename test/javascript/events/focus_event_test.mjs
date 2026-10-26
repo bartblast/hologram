@@ -14,7 +14,19 @@ describe("FocusEvent", () => {
     assert.deepStrictEqual(FocusEvent.buildOperationParam(event), Type.map());
   });
 
-  it("isEventIgnored()", () => {
-    assert.isFalse(FocusEvent.isEventIgnored(event));
+  describe("isEventIgnored()", () => {
+    afterEach(() => {
+      FocusEvent.isRuntimeFocusChange = false;
+    });
+
+    it("a focus change the user made", () => {
+      assert.isFalse(FocusEvent.isEventIgnored(event));
+    });
+
+    it("a focus change the runtime made", () => {
+      FocusEvent.isRuntimeFocusChange = true;
+
+      assert.isTrue(FocusEvent.isEventIgnored(event));
+    });
   });
 });

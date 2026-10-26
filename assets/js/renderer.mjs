@@ -6,6 +6,7 @@ import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
 import EventListeners from "./event_listeners.mjs";
+import FocusEvent from "./events/focus_event.mjs";
 import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -449,32 +450,15 @@ export default class Renderer {
       return;
     }
 
-    for (const element of blurCandidates) {
-      if (document.activeElement === element) {
-        element.blur();
-      }
-    }
+    // Focus moved here is the state's doing, so the $focus and $blur bindings it would trigger
+    // stay quiet (see FocusEvent.isRuntimeFocusChange).
+    const wasRuntimeFocusChange = FocusEvent.isRuntimeFocusChange;
+    FocusEvent.isRuntimeFocusChange = true;
 
-    let target = null;
-
-    for (const element of focusCandidates) {
-      if (!element.isConnected) {
-        continue;
-      }
-
-      if (
-        target === null ||
-        target.compareDocumentPosition(element) &
-          Node.DOCUMENT_POSITION_PRECEDING
-      ) {
-        target = element;
-      }
-    }
-
-    if (target !== null) {
-      target.focus();
-    } else if (isPageArrival) {
-      document.activeElement?.blur();
+    try {
+      $.#moveFocus(focusCandidates, blurCandidates, isPageArrival);
+    } finally {
+      FocusEvent.isRuntimeFocusChange = wasRuntimeFocusChange;
     }
   }
 
@@ -1589,6 +1573,37 @@ export default class Renderer {
 
       return acc;
     }, []);
+  }
+
+  // The moves settleFocus() decides on, made while FocusEvent.isRuntimeFocusChange is set.
+  static #moveFocus(focusCandidates, blurCandidates, isPageArrival) {
+    for (const element of blurCandidates) {
+      if (document.activeElement === element) {
+        element.blur();
+      }
+    }
+
+    let target = null;
+
+    for (const element of focusCandidates) {
+      if (!element.isConnected) {
+        continue;
+      }
+
+      if (
+        target === null ||
+        target.compareDocumentPosition(element) &
+          Node.DOCUMENT_POSITION_PRECEDING
+      ) {
+        target = element;
+      }
+    }
+
+    if (target !== null) {
+      target.focus();
+    } else if (isPageArrival) {
+      document.activeElement?.blur();
+    }
   }
 
   static #normalizeEventName(eventName) {

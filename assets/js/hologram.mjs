@@ -727,9 +727,10 @@ export default class Hologram {
       // again as content this render added extends or fills the container.
       EventListeners.recheckScrollEdges();
 
-      // Focus moves while the render flag is still set: the focus and blur events it fires
-      // dispatch into the queue, which holds until the render is done, the way a focusout the
-      // patch causes is held.
+      // Focus moves while the render flag is still set. Its own focus and blur events reach no
+      // $focus or $blur binding (see FocusEvent.isRuntimeFocusChange), but what else a move sets
+      // off - the focusout flush of pending debounced dispatches, a change event of a field that
+      // loses focus - dispatches into the queue, which holds until the render is done.
       Renderer.settleFocus(isBootRender);
     } finally {
       // A template expression is app code and can raise, so the flag is cleared on the way out

@@ -19,6 +19,7 @@ import Config from "../../assets/js/config.mjs";
 import Debouncer from "../../assets/js/debouncer.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
+import FocusEvent from "../../assets/js/events/focus_event.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
@@ -1426,6 +1427,56 @@ describe("Hologram", () => {
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
       sinon.assert.notCalled(scheduleActionStub);
+    });
+
+    // A focus or blur the runtime causes while applying $focused or autofocus reports nothing
+    // back: the state already says where focus is.
+    describe("while the runtime moves focus", () => {
+      beforeEach(() => {
+        FocusEvent.isRuntimeFocusChange = true;
+      });
+
+      afterEach(() => {
+        FocusEvent.isRuntimeFocusChange = false;
+      });
+
+      it("ignores a blur event", () => {
+        assert.isNull(
+          Hologram.handleUiEvent(
+            notIgnoredEvent,
+            "blur",
+            actionSpecDom,
+            defaultTarget,
+          ),
+        );
+      });
+
+      it("ignores a focus event", () => {
+        assert.isNull(
+          Hologram.handleUiEvent(
+            notIgnoredEvent,
+            "focus",
+            actionSpecDom,
+            defaultTarget,
+          ),
+        );
+      });
+
+      // A field that loses focus can fire change for what the user typed into it, which is the
+      // user's doing and has to reach its binding.
+      it("still dispatches an event of another kind", () => {
+        const input = {tagName: "INPUT", type: "text", value: "abc"};
+        const changeEvent = {currentTarget: input, target: input};
+
+        const dispatch = Hologram.handleUiEvent(
+          changeEvent,
+          "change",
+          actionSpecDom,
+          defaultTarget,
+        );
+
+        assert.isFunction(dispatch);
+      });
     });
 
     describe("binding that evaluates to a boolean", () => {

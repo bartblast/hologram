@@ -1,0 +1,60 @@
+defmodule HologramFeatureTests.Focus.Page2 do
+  use Hologram.Page
+
+  route "/focus/2"
+
+  layout HologramFeatureTests.Components.DefaultLayout
+
+  def init(_params, component, _server) do
+    put_state(component, editing?: false, late?: false, order?: false, pair?: false)
+  end
+
+  # The order section asks for focus twice in one render: the later field is kept and turns its
+  # declaration on, which Snabbdom reports during the patch, while the earlier one is inserted,
+  # which it reports after the patch. The earlier one is collected last, so only a document-order
+  # rule picks it.
+  def template do
+    ~HOLO"""
+    <p>
+      <button $click="edit">Edit</button>
+      <button $click="show_late">Show late</button>
+      <button $click="show_order">Show order</button>
+      <button $click="show_pair">Show pair</button>
+    </p>
+    {%if @editing?}
+      <p><input type="text" id="page_2_editor" $focused={true} /></p>
+    {/if}
+    {%if @late?}
+      <p><input type="text" id="page_2_late" autofocus /></p>
+    {/if}
+    <p>
+      {%if @order?}
+        <input type="text" id="page_2_order_early" $focused={true} />
+      {/if}
+      <input type="text" id="page_2_order_late" $focused={@order?} />
+    </p>
+    {%if @pair?}
+      <p>
+        <input type="text" id="page_2_first" $focused={true} />
+        <input type="text" id="page_2_second" $focused={true} />
+      </p>
+    {/if}
+    """
+  end
+
+  def action(:edit, _params, component) do
+    put_state(component, :editing?, true)
+  end
+
+  def action(:show_late, _params, component) do
+    put_state(component, :late?, true)
+  end
+
+  def action(:show_order, _params, component) do
+    put_state(component, :order?, true)
+  end
+
+  def action(:show_pair, _params, component) do
+    put_state(component, :pair?, true)
+  end
+end
