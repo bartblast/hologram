@@ -432,7 +432,8 @@ export default class Renderer {
   // A blur applies only to an element that still has focus, so a field the render stops declaring
   // focused gives focus up even when no other element takes it, and a render that blurs one element
   // and focuses another ends on the focused one in either order. Of the focus candidates, the first
-  // in document order takes focus, the rule the browser applies to autofocus on a page load. A
+  // in document order that can take focus takes it - one that is disabled, hidden or not focusable
+  // at all is passed over, the way the browser passes over it for autofocus on a page load. A
   // candidate the same patch removed again is skipped.
   //
   // A page that appears is a page load, and a page load starts with nothing focused: on a page
@@ -1583,25 +1584,37 @@ export default class Renderer {
       }
     }
 
-    let target = null;
+    // Whether an element can take focus depends on more than its tag - disabled, hidden by CSS,
+    // inert, a tabindex - so each candidate is asked the only reliable way: by trying. A try that
+    // moves focus anywhere counts, not only onto the candidate: a candidate's own focus handler
+    // may pass focus on to a field inside it, and a candidate in a shadow root shows up as its
+    // host.
+    const candidates = focusCandidates
+      .filter((element) => element.isConnected)
+      .sort((a, b) => {
+        if (a === b) {
+          return 0;
+        }
 
-    for (const element of focusCandidates) {
-      if (!element.isConnected) {
-        continue;
-      }
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
+          ? -1
+          : 1;
+      });
+
+    for (const element of candidates) {
+      const previousActiveElement = document.activeElement;
+
+      element.focus();
 
       if (
-        target === null ||
-        target.compareDocumentPosition(element) &
-          Node.DOCUMENT_POSITION_PRECEDING
+        document.activeElement === element ||
+        document.activeElement !== previousActiveElement
       ) {
-        target = element;
+        return;
       }
     }
 
-    if (target !== null) {
-      target.focus();
-    } else if (isPageArrival) {
+    if (isPageArrival) {
       document.activeElement?.blur();
     }
   }

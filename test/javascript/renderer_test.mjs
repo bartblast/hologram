@@ -8958,6 +8958,91 @@ describe("Renderer", () => {
         assert.strictEqual(document.activeElement, elements[0]);
       });
 
+      // A div without a tabindex can't take focus, the way a disabled or hidden field can't.
+      it("passes over a candidate that can't take focus", () => {
+        const div = document.createElement("div");
+        document.body.insertBefore(div, elements[0]);
+
+        try {
+          Renderer.focusCandidates = [elements[2], div];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, elements[2]);
+        } finally {
+          div.remove();
+        }
+      });
+
+      it("keeps focus on a later candidate on a page arrival", () => {
+        const div = document.createElement("div");
+        document.body.insertBefore(div, elements[0]);
+
+        try {
+          elements[0].focus();
+          Renderer.isPageArrival = true;
+          Renderer.focusCandidates = [div, elements[2]];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, elements[2]);
+        } finally {
+          div.remove();
+        }
+      });
+
+      // A wrapper that passes focus on to a field inside it took focus, however it ended up.
+      it("counts a candidate that passes focus on as having taken it", () => {
+        const wrapper = document.createElement("div");
+        wrapper.tabIndex = -1;
+        wrapper.addEventListener("focus", () => elements[1].focus());
+        document.body.insertBefore(wrapper, elements[0]);
+
+        try {
+          Renderer.isPageArrival = true;
+          Renderer.focusCandidates = [wrapper, elements[2]];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, elements[1]);
+        } finally {
+          wrapper.remove();
+        }
+      });
+
+      it("blurs on a page arrival when no candidate can take focus", () => {
+        const div = document.createElement("div");
+        document.body.appendChild(div);
+
+        try {
+          elements[0].focus();
+          Renderer.isPageArrival = true;
+          Renderer.focusCandidates = [div];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, document.body);
+        } finally {
+          div.remove();
+        }
+      });
+
+      it("leaves focus alone on an ordinary render when no candidate can take focus", () => {
+        const div = document.createElement("div");
+        document.body.appendChild(div);
+
+        try {
+          elements[0].focus();
+          Renderer.focusCandidates = [div];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, elements[0]);
+        } finally {
+          div.remove();
+        }
+      });
+
       it("skips a candidate that is no longer in the document", () => {
         elements[0].remove();
         Renderer.focusCandidates = [elements[0], elements[2]];
