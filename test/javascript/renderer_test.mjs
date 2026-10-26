@@ -8588,6 +8588,408 @@ describe("Renderer", () => {
     });
   });
 
+  describe("focus", () => {
+    const boolAttr = (name) =>
+      Type.tuple([Type.bitstring(name), Type.keywordList()]);
+
+    const exprAttr = (name, value) =>
+      Type.tuple([
+        Type.bitstring(name),
+        Type.keywordList([[Type.atom("expression"), Type.tuple([value])]]),
+      ]);
+
+    const textAttr = (name, text) =>
+      Type.tuple([
+        Type.bitstring(name),
+        Type.keywordList([[Type.atom("text"), Type.bitstring(text)]]),
+      ]);
+
+    const spreadAttr = (entries) =>
+      Type.tuple([
+        Type.atom("spread"),
+        Type.tuple([Type.keywordList(entries)]),
+      ]);
+
+    const render = (attrs, tagName = "input") =>
+      Renderer.renderDom(
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring(tagName),
+          Type.list(attrs),
+          Type.list(),
+        ]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    // A rendered vnode standing in for the patched one: Snabbdom hands the hooks the vnode with
+    // its live element attached.
+    const patched = (vnode, elm = {}) => Object.assign(vnode, {elm});
+
+    afterEach(() => {
+      Renderer.resetFocusCandidates();
+      Hologram.isMounting = false;
+    });
+
+    describe("$focused attribute", () => {
+      it("truthy expression renders autofocus and marks the element focused", () => {
+        const result = render([exprAttr("$focused", Type.bitstring("yes"))]);
+
+        assert.isTrue(result.data.attrs.autofocus);
+        assert.isTrue(result.data.hologramFocused);
+      });
+
+      it("false expression renders no autofocus and marks the element unfocused", () => {
+        const result = render([exprAttr("$focused", Type.boolean(false))]);
+
+        assert.notProperty(result.data.attrs, "autofocus");
+        assert.isFalse(result.data.hologramFocused);
+      });
+
+      it("nil expression renders no autofocus and marks the element unfocused", () => {
+        const result = render([exprAttr("$focused", Type.nil())]);
+
+        assert.notProperty(result.data.attrs, "autofocus");
+        assert.isFalse(result.data.hologramFocused);
+      });
+
+      it("bare $focused is true", () => {
+        const result = render([boolAttr("$focused")]);
+
+        assert.isTrue(result.data.attrs.autofocus);
+        assert.isTrue(result.data.hologramFocused);
+      });
+
+      it("the last $focused wins", () => {
+        const result = render([
+          exprAttr("$focused", Type.boolean(true)),
+          exprAttr("$focused", Type.boolean(false)),
+        ]);
+
+        assert.notProperty(result.data.attrs, "autofocus");
+        assert.isFalse(result.data.hologramFocused);
+      });
+
+      it("a false $focused drops an autofocus from a spread", () => {
+        const result = render([
+          spreadAttr([[Type.atom("autofocus"), Type.boolean(true)]]),
+          exprAttr("$focused", Type.boolean(false)),
+        ]);
+
+        assert.notProperty(result.data.attrs, "autofocus");
+      });
+
+      it("a true $focused overrides a false autofocus from a spread", () => {
+        const result = render([
+          exprAttr("$focused", Type.boolean(true)),
+          spreadAttr([[Type.atom("autofocus"), Type.boolean(false)]]),
+        ]);
+
+        assert.isTrue(result.data.attrs.autofocus);
+      });
+
+      it("binds no event listener", () => {
+        const result = render([exprAttr("$focused", Type.boolean(true))]);
+
+        assert.deepStrictEqual(result.data.on, {});
+      });
+
+      it("a literal autofocus alone doesn't mark the element", () => {
+        const result = render([boolAttr("autofocus")]);
+
+        assert.isTrue(result.data.attrs.autofocus);
+        assert.notProperty(result.data, "hologramFocused");
+        assert.isFunction(result.data.hook.insert);
+      });
+
+      it("an element without autofocus or $focused gets no hooks", () => {
+        const result = render([textAttr("id", "abc")]);
+
+        assert.notProperty(result.data, "hook");
+      });
+    });
+
+    describe("focus hooks", () => {
+      it("insert collects an element rendered with $focused true", () => {
+        const result = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        result.data.hook.insert(result);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [result.elm]);
+      });
+
+      it("insert collects a literal autofocus", () => {
+        const result = patched(render([boolAttr("autofocus")]));
+
+        result.data.hook.insert(result);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [result.elm]);
+      });
+
+      it("insert collects an autofocus written with a value", () => {
+        const result = patched(
+          render([exprAttr("autofocus", Type.boolean(true))]),
+        );
+
+        result.data.hook.insert(result);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [result.elm]);
+      });
+
+      it("insert ignores an element rendered with $focused false", () => {
+        const result = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        result.data.hook.insert(result);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+      });
+
+      it("update collects a change from false to true", () => {
+        const oldVnode = render([exprAttr("$focused", Type.boolean(false))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+      });
+
+      it("update collects an element that starts declaring $focused true", () => {
+        const oldVnode = render([textAttr("id", "abc")]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+
+      it("update ignores true staying true", () => {
+        const oldVnode = render([exprAttr("$focused", Type.boolean(true))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+      });
+
+      it("update ignores a literal autofocus on a re-render", () => {
+        const oldVnode = render([boolAttr("autofocus")]);
+        const newVnode = patched(render([boolAttr("autofocus")]));
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+      });
+
+      it("update collects a literal autofocus during a mount", () => {
+        Hologram.isMounting = true;
+
+        const oldVnode = render([boolAttr("autofocus")]);
+        const newVnode = patched(render([boolAttr("autofocus")]));
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+
+      it("update collects $focused true staying true during a mount", () => {
+        Hologram.isMounting = true;
+
+        const oldVnode = render([exprAttr("$focused", Type.boolean(true))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+
+      it("update ignores $focused false during a mount", () => {
+        Hologram.isMounting = true;
+
+        const oldVnode = render([exprAttr("$focused", Type.boolean(false))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+      });
+
+      it("update collects a change from true to false as a blur", () => {
+        const oldVnode = render([exprAttr("$focused", Type.boolean(true))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+        assert.deepStrictEqual(Renderer.blurCandidates, [newVnode.elm]);
+      });
+
+      it("update collects no blur for an element that never declared focus", () => {
+        const oldVnode = render([textAttr("id", "abc")]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+      });
+
+      it("a controlled input keeps its value hooks next to the focus hooks", () => {
+        const oldVnode = render([
+          textAttr("value", "old"),
+          exprAttr("$focused", Type.boolean(false)),
+        ]);
+
+        const newVnode = patched(
+          render([
+            textAttr("value", "new"),
+            exprAttr("$focused", Type.boolean(true)),
+          ]),
+          {value: "old"},
+        );
+
+        newVnode.data.hook.create(null, newVnode);
+        assert.strictEqual(newVnode.elm.value, "new");
+
+        newVnode.elm.value = "old";
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.strictEqual(newVnode.elm.value, "new");
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+
+      it("a controlled checkbox keeps its checked hooks next to the focus hooks", () => {
+        const oldVnode = render([
+          textAttr("type", "checkbox"),
+          exprAttr("checked", Type.boolean(false)),
+          exprAttr("$focused", Type.boolean(false)),
+        ]);
+
+        const newVnode = patched(
+          render([
+            textAttr("type", "checkbox"),
+            exprAttr("checked", Type.boolean(true)),
+            exprAttr("$focused", Type.boolean(true)),
+          ]),
+          {checked: false},
+        );
+
+        newVnode.data.hook.create(null, newVnode);
+        assert.isTrue(newVnode.elm.checked);
+
+        newVnode.elm.checked = false;
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.isTrue(newVnode.elm.checked);
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+    });
+
+    describe("settleFocus()", () => {
+      let elements;
+
+      beforeEach(() => {
+        elements = ["a", "b", "c"].map((id) => {
+          const element = document.createElement("input");
+          element.id = id;
+          document.body.appendChild(element);
+
+          return element;
+        });
+      });
+
+      afterEach(() => {
+        elements.forEach((element) => element.remove());
+      });
+
+      it("focuses the first candidate in document order", () => {
+        // Neither the first nor the last one collected, so only document order picks it.
+        Renderer.focusCandidates = [elements[1], elements[0], elements[2]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[0]);
+      });
+
+      it("skips a candidate that is no longer in the document", () => {
+        elements[0].remove();
+        Renderer.focusCandidates = [elements[0], elements[2]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[2]);
+      });
+
+      it("blurs a blur candidate that has focus", () => {
+        elements[0].focus();
+        Renderer.blurCandidates = [elements[0]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, document.body);
+      });
+
+      it("leaves focus alone when the blur candidate doesn't have it", () => {
+        elements[1].focus();
+        Renderer.blurCandidates = [elements[0]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[1]);
+      });
+
+      it("ends on the focused element when one render blurs one and focuses another", () => {
+        elements[0].focus();
+        Renderer.blurCandidates = [elements[0]];
+        Renderer.focusCandidates = [elements[1]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[1]);
+      });
+
+      it("does nothing on the boot render", () => {
+        elements[0].focus();
+        Renderer.blurCandidates = [elements[0]];
+        Renderer.focusCandidates = [elements[1]];
+
+        Renderer.settleFocus(true);
+
+        assert.strictEqual(document.activeElement, elements[0]);
+      });
+
+      it("clears both candidate lists", () => {
+        Renderer.focusCandidates = [elements[0]];
+        Renderer.blurCandidates = [elements[1]];
+
+        Renderer.settleFocus(true);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+      });
+    });
+  });
+
   describe("context", () => {
     it("emitted in page, accessed in component nested in page", () => {
       initComponentRegistryEntry(

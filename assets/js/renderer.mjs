@@ -156,6 +156,14 @@ export default class Renderer {
   // once `.elm` exists. renderPage() resets this.
   static resizeBindings = [];
 
+  // Elements this render's patch asked to take focus, and elements it asked to give focus up, in
+  // hook order. The hooks only collect: which element takes focus is settled once per render by
+  // settleFocus(), after the patch, when every candidate is in the document and the document order
+  // between an inserted element and an updated one can be read. Hologram.render() resets both
+  // before its patch.
+  static focusCandidates = [];
+  static blurCandidates = [];
+
   // Based on Elixir Renderer.encode_tree/1, which it inverts clause for clause.
   //
   // The payload arrives already parsed out of the response body, so this is not a parse: it is
@@ -330,9 +338,9 @@ export default class Renderer {
   // TODO: when the vdom renderer is rewritten, the decodeTree/renderDom pair collapses into one
   // walk. Sharing renderDom is what keeps this equal to renderPage today; a second walker would
   // have to reproduce every rule renderDom applies to a tree - the boolean attribute rule, the
-  // controlled value/checked staging and its hooks, the three resource-key rules, $key resolving
-  // to the last one, and finalizeChildren settling repeats - and drift in any of them shows up as
-  // a silently rebuilt DOM rather than a failing test.
+  // controlled value/checked staging and its hooks, the focus hooks, the three resource-key rules,
+  // $key resolving to the last one, and finalizeChildren settling repeats - and drift in any of
+  // them shows up as a silently rebuilt DOM rather than a failing test.
   // See: docs/navigation_payload_wire_format.md
   static renderTree(tree) {
     const children = Vdom.finalizeChildren(
@@ -348,6 +356,11 @@ export default class Renderer {
     );
 
     return Renderer.#pageVnodeFromChildren(children);
+  }
+
+  static resetFocusCandidates() {
+    $.focusCandidates = [];
+    $.blurCandidates = [];
   }
 
   // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
@@ -402,6 +415,51 @@ export default class Renderer {
 
         return {target: element, key, attach, handler};
       });
+  }
+
+  // Moves focus where this render's patch asked, then clears the candidates.
+  //
+  // The boot render claims nothing: the browser already applied autofocus from the markup the server
+  // sent, and the user may have moved on before the runtime started.
+  //
+  // A blur applies only to an element that still has focus, so a field the render stops declaring
+  // focused gives focus up even when no other element takes it, and a render that blurs one element
+  // and focuses another ends on the focused one in either order. Of the focus candidates, the first
+  // in document order takes focus, the rule the browser applies to autofocus on a page load. A
+  // candidate the same patch removed again is skipped.
+  static settleFocus(isBootRender) {
+    const focusCandidates = $.focusCandidates;
+    const blurCandidates = $.blurCandidates;
+
+    $.resetFocusCandidates();
+
+    if (isBootRender) {
+      return;
+    }
+
+    for (const element of blurCandidates) {
+      if (document.activeElement === element) {
+        element.blur();
+      }
+    }
+
+    let target = null;
+
+    for (const element of focusCandidates) {
+      if (!element.isConnected) {
+        continue;
+      }
+
+      if (
+        target === null ||
+        target.compareDocumentPosition(element) &
+          Node.DOCUMENT_POSITION_PRECEDING
+      ) {
+        target = element;
+      }
+    }
+
+    target?.focus();
   }
 
   static toBitstring(term) {
@@ -496,6 +554,13 @@ export default class Renderer {
     // it, so it binds nothing. Without this it would register a listener for an event called "key",
     // which no browser fires.
     if (originalEventName === "key") {
+      return null;
+    }
+
+    // $focused says whether the element should have focus rather than something that happens to it,
+    // so it binds nothing either. Without this it would register a listener for an event called
+    // "focused", which no browser fires.
+    if (originalEventName === "focused") {
       return null;
     }
 
@@ -718,6 +783,17 @@ export default class Renderer {
     });
   }
 
+  // Snabbdom insert hook: runs once the whole patch is in the document, where .focus() can work -
+  // the create hook runs before the element is attached. An element that enters the page carrying
+  // autofocus takes focus, whether $focused put it there or the template wrote it, on a mount and
+  // after an action alike. That is what autofocus means when the page loads, so it means the same
+  // when an element appears later.
+  static #collectInsertedFocus(vnode) {
+    if ($.#hasAutofocus(vnode)) {
+      $.focusCandidates.push(vnode.elm);
+    }
+  }
+
   // Records a <window>/<document> tag's event bindings into the per-render accumulator, tagged with
   // the target the listener attaches to. Each binding is keyed by its position across all listener
   // bindings this render, so debounce/throttle windows stay independent even though listeners on one
@@ -825,6 +901,27 @@ export default class Renderer {
         once: $.#onceFromModifiers(attrDom.data[2]),
       });
     });
+  }
+
+  // Snabbdom update hook, for an element the diff kept. Only a change asks for focus: a re-render
+  // that declares the same thing again leaves focus where the user put it.
+  //
+  // A mount is the exception. It is a new page however the diff reused its nodes, so whatever it
+  // declares focused is focused, whatever the previous page or the interim markup said.
+  static #collectUpdatedFocus(oldVnode, newVnode) {
+    const wasFocused = oldVnode.data?.hologramFocused === true;
+    const isFocused = newVnode.data.hologramFocused === true;
+
+    if (
+      $.#hasAutofocus(newVnode) &&
+      (Hologram.isMounting || (isFocused && !wasFocused))
+    ) {
+      $.focusCandidates.push(newVnode.elm);
+    }
+
+    if (wasFocused && newVnode.data.hologramFocused === false) {
+      $.blurCandidates.push(newVnode.elm);
+    }
   }
 
   // Based on compose_attribute_name/2
@@ -1252,6 +1349,13 @@ export default class Renderer {
     }
 
     return moduleProxy.__props__;
+  }
+
+  // autofocus is a boolean attribute, so its presence is what counts: a bare attribute renders as
+  // true, while autofocus={true} and autofocus="autofocus" render as text, and a falsy expression
+  // leaves the attribute out entirely.
+  static #hasAutofocus(vnode) {
+    return vnode.data.attrs?.autofocus !== undefined;
   }
 
   // Based on has_cid_prop?/1
@@ -1807,6 +1911,19 @@ export default class Renderer {
     const {attrs: attrsVdom, props: propsVdom} =
       Renderer.#renderAttributesAndProps(attrsDom, currentTagName);
 
+    // $focused renders as autofocus, the way the server renders it, so the boot patch finds the
+    // attribute the server sent and the focus hooks read one attribute either way. An autofocus
+    // from a spread yields to $focused.
+    //
+    // WARNING: must match apply_focused_attribute/1 on the server.
+    const focused = Renderer.#renderFocused(attrsDom);
+
+    if (focused === true) {
+      attrsVdom.autofocus = true;
+    } else if (focused === false) {
+      delete attrsVdom.autofocus;
+    }
+
     const eventListenersVdom = Renderer.#renderEventListeners(
       attrsDom,
       currentTagName,
@@ -1836,6 +1953,14 @@ export default class Renderer {
       data.props = propsVdom;
     }
 
+    if (focused !== null) {
+      data.hologramFocused = focused;
+    }
+
+    // One hook object per element, assembled in steps, so that an input can carry a controlled
+    // value and focus hooks at once.
+    const hook = {};
+
     // Handle controlled form inputs (value for text inputs/textareas/selects, checked for checkboxes/radios)
     // Radio/checkbox inputs use regular value attributes and controlled checked attributes
     // An element has either controlled value OR controlled checked, never both
@@ -1851,14 +1976,13 @@ export default class Renderer {
       delete attrsVdom["data-hologram-form-input-value"];
       data.hologramFormInputValue = hologramFormInputValue;
 
-      data.hook = {
-        create: (_emptyVnode, newVnode) => {
-          Renderer.#updateFormInputValue(newVnode.elm, hologramFormInputValue);
-        },
-        update: (_oldVnode, newVnode) => {
-          const newValue = newVnode.data.hologramFormInputValue;
-          Renderer.#updateFormInputValue(newVnode.elm, newValue);
-        },
+      hook.create = (_emptyVnode, newVnode) => {
+        Renderer.#updateFormInputValue(newVnode.elm, hologramFormInputValue);
+      };
+
+      hook.update = (_oldVnode, newVnode) => {
+        const newValue = newVnode.data.hologramFormInputValue;
+        Renderer.#updateFormInputValue(newVnode.elm, newValue);
       };
     } else if (
       currentTagName === "input" &&
@@ -1869,18 +1993,35 @@ export default class Renderer {
       delete attrsVdom["data-hologram-form-input-checked"];
       data.hologramFormInputChecked = hologramFormInputChecked;
 
-      data.hook = {
-        create: (_emptyVnode, newVnode) => {
-          Renderer.#updateFormInputChecked(
-            newVnode.elm,
-            hologramFormInputChecked,
-          );
-        },
-        update: (_oldVnode, newVnode) => {
-          const newChecked = newVnode.data.hologramFormInputChecked;
-          Renderer.#updateFormInputChecked(newVnode.elm, newChecked);
-        },
+      hook.create = (_emptyVnode, newVnode) => {
+        Renderer.#updateFormInputChecked(
+          newVnode.elm,
+          hologramFormInputChecked,
+        );
       };
+
+      hook.update = (_oldVnode, newVnode) => {
+        const newChecked = newVnode.data.hologramFormInputChecked;
+        Renderer.#updateFormInputChecked(newVnode.elm, newChecked);
+      };
+    }
+
+    // Only an element that can ask for focus carries the focus hooks, so every other element costs
+    // nothing extra. A $focused that is false still needs the update hook, since its turning false
+    // is what gives focus up.
+    if (attrsVdom.autofocus !== undefined || focused !== null) {
+      const updateFormInput = hook.update;
+
+      hook.insert = $.#collectInsertedFocus;
+
+      hook.update = (oldVnode, newVnode) => {
+        updateFormInput?.(oldVnode, newVnode);
+        $.#collectUpdatedFocus(oldVnode, newVnode);
+      };
+    }
+
+    if (Object.keys(hook).length > 0) {
+      data.hook = hook;
     }
 
     if (
@@ -1963,6 +2104,32 @@ export default class Renderer {
         (event) => handlers.forEach((handler) => handler(event)),
       ]),
     );
+  }
+
+  // Based on apply_focused_attribute/1
+  // Returns the element's $focused as a boolean, or null when the element doesn't declare it. The
+  // last one wins, the way the server resolves it, so the scan runs from the end and stops at the
+  // first one it meets. The build guarantees $focused carries no value (true, as for any boolean
+  // attribute) or a single expression.
+  static #renderFocused(attrsDom) {
+    for (let index = attrsDom.data.length - 1; index >= 0; index -= 1) {
+      const attrDom = attrsDom.data[index];
+
+      if (Type.isRecordTuple(attrDom, "spread", 2)) {
+        continue;
+      }
+
+      if (Bitstring.toText(attrDom.data[0]) === "$focused") {
+        const valueDom = attrDom.data[1];
+
+        return (
+          valueDom.data.length === 0 ||
+          Type.isTruthy(valueDom.data[0].data[1].data[0])
+        );
+      }
+    }
+
+    return null;
   }
 
   // Based on render_tree/3 (list case)
