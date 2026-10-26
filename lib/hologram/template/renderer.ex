@@ -1130,6 +1130,43 @@ defmodule Hologram.Template.Renderer do
     |> render_tree(env, server_struct)
   end
 
+  # `$focused` is what the client reads, and `autofocus` is its markup counterpart: the browser
+  # applies it on a full page load, before the runtime starts, which is how a declared focus holds
+  # on the first load. The last `$focused` on the element decides, and an `autofocus` yields to it.
+  # The build rejects a literal `autofocus` next to `$focused`, so what is dropped here came through
+  # a spread. That way the markup and the client never disagree about the element.
+  #
+  # WARNING: must match the client renderer's handling of `$focused` in #renderElement.
+  defp apply_focused_attribute(attrs_dom) do
+    if List.keymember?(attrs_dom, "$focused", 0) do
+      last_index =
+        attrs_dom
+        |> Enum.with_index()
+        |> Enum.reduce(nil, fn
+          {{"$focused", _value_dom}, index}, _acc -> index
+          _attr_dom_with_index, acc -> acc
+        end)
+
+      attrs_dom
+      |> Enum.with_index()
+      |> Enum.flat_map(fn
+        {{"$focused", value_dom}, ^last_index} -> focused_attribute(value_dom)
+        {{name, _value_dom}, _index} when name in ["$focused", "autofocus"] -> []
+        {attr_dom, _index} -> [attr_dom]
+      end)
+    else
+      attrs_dom
+    end
+  end
+
+  # The build guarantees `$focused` carries no value (true, as for any boolean attribute) or a single
+  # expression.
+  defp focused_attribute([]), do: [{"autofocus", []}]
+
+  defp focused_attribute(expression: {value}) when value in [nil, false], do: []
+
+  defp focused_attribute(expression: {_value}), do: [{"autofocus", []}]
+
   # WARNING: must match the client renderer's #renderAttribute normalization: an empty value list
   # is a boolean attribute, a nil or false expression value removes the attribute, and everything
   # else collapses to one unescaped string.
@@ -1148,7 +1185,7 @@ defmodule Hologram.Template.Renderer do
   # Event bindings stay behind: they are built from compile-time listener information the tree
   # cannot carry, and the interim page a navigation patches in is display-only until hydration
   # attaches real listeners. The `$key` attribute travels, since it is what carries element
-  # identity into the client's diff.
+  # identity into the client's diff. `$focused` travels as the `autofocus` attribute it renders as.
   defp render_tree_attributes(attrs_dom)
 
   defp render_tree_attributes([]), do: []
@@ -1156,6 +1193,7 @@ defmodule Hologram.Template.Renderer do
   defp render_tree_attributes(attrs_dom) do
     attrs_dom
     |> expand_attribute_spreads()
+    |> apply_focused_attribute()
     |> Enum.reject(fn attr_dom ->
       name = elem(attr_dom, 0)
       String.starts_with?(name, "$") and name != "$key"

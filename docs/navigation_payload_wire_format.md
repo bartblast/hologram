@@ -100,7 +100,7 @@ From `lib/hologram/template/renderer.ex`:
         | {:text, String.t()}
 ```
 
-Every dynamic thing is already resolved. `$key` is present; all other `$`-prefixed attributes were dropped by `render_tree_attributes/1`.
+Every dynamic thing is already resolved. `$key` is present, `$focused` is already applied as the `autofocus` attribute it renders as, and all other `$`-prefixed attributes were dropped by `render_tree_attributes/1`.
 
 ## The four axes
 
