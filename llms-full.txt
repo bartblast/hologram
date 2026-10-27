@@ -2443,6 +2443,38 @@ A page reached by client-side navigation is shown before its code has finished l
 
 `$focus` is an event and `$focused` is state, so a binding like `$focus={true}` is almost always a typo. A literal `true` fails the build, and a binding that evaluates to `true` raises an error when the event fires.
 
+#### Changes Made Through JS Interop
+
+Hologram's virtual DOM patching is aware of JS interop. If you manipulate the DOM directly via JS interop (e.g. appending child elements), those changes are preserved across Hologram re-renders, as long as the container element is present in the template:
+
+```elixir
+def template do
+  ~HOLO"""
+  <button $click={:populate}>Populate JS subtree</button>
+  <button $click={:increment}>Increment counter</button>
+  <p>Counter: {@counter}</p>
+  <div id="js_managed"></div>
+  """
+end
+
+def action(:populate, _params, component) do
+  ~JS"""
+  const container = document.getElementById('js_managed');
+  const span = document.createElement('span');
+  span.textContent = 'JS managed content';
+  container.appendChild(span);
+  """
+
+  put_state(component, :counter, component.state.counter + 1)
+end
+
+def action(:increment, _params, component) do
+  put_state(component, :counter, component.state.counter + 1)
+end
+```
+
+In this example, clicking "Populate JS subtree" adds a span via JavaScript and increments the counter. Clicking "Increment counter" afterwards will update the counter display without removing the JS-managed span.
+
 ### Context
 
 Context in Hologram provides a way to share data between components without explicitly passing it through props. The main purpose of Context is to avoid prop drilling - the need to pass data through multiple layers of components that don't need the data themselves, just to make it available to deeply nested components that do need it. It's particularly useful for data that needs to be accessed by many components in your application, such as user authentication state, theme preferences, or global settings.
@@ -3984,35 +4016,7 @@ Values are automatically converted when crossing the Elixir/JavaScript boundary.
 
 #### DOM Patching
 
-Hologram's virtual DOM patching is aware of JS interop. If you manipulate the DOM directly via JS interop (e.g. appending child elements), those changes are preserved across Hologram re-renders, as long as the container element is present in the template:
-
-```elixir
-def template do
-  ~HOLO"""
-  <button $click={:populate}>Populate JS subtree</button>
-  <button $click={:increment}>Increment counter</button>
-  <p>Counter: {@counter}</p>
-  <div id="js_managed"></div>
-  """
-end
-
-def action(:populate, _params, component) do
-  ~JS"""
-  const container = document.getElementById('js_managed');
-  const span = document.createElement('span');
-  span.textContent = 'JS managed content';
-  container.appendChild(span);
-  """
-
-  put_state(component, :counter, component.state.counter + 1)
-end
-
-def action(:increment, _params, component) do
-  put_state(component, :counter, component.state.counter + 1)
-end
-```
-
-In this example, clicking "Populate JS subtree" adds a span via JavaScript and increments the counter. Clicking "Increment counter" afterwards will update the counter display without removing the JS-managed span.
+Changes you make to the DOM through JS interop are preserved across Hologram's re-renders, as long as the element you change stays in the template. See the "Changes Made Through JS Interop" section in the DOM documentation.
 
 #### Coming from LiveView
 

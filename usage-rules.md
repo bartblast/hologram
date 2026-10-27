@@ -182,6 +182,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Plain `autofocus` also works on a page reached by client-side navigation and on an element a re-render inserts. Don't combine it with `$focused` on one element (fails the build). A navigated-to page that declares no focus starts with nothing focused.
 - `$focus` and `$blur` fire only for focus changes the user (or JS interop) makes, never for focus Hologram moves.
 - `$focus` is an event, `$focused` is state: `$focus={true}` fails the build, and a binding that evaluates to `true` raises when the event fires. `$focused` on a component tag does nothing, so set it on an element inside the component.
+- Direct DOM manipulation via JS interop is preserved across Hologram re-renders, as long as the container element stays in the template.
 
 ## Context
 
@@ -256,7 +257,6 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Async: JS Promises become Elixir Tasks. Use `Task.await/1` to get the result.
 - Dispatch actions from JS: `Hologram.dispatchAction("action_name", "page", {key: value})`. Available immediately - calls before the runtime loads are queued and replayed on mount (safe for inline `<script>`).
 - Dispatch DOM events from Elixir: `JS.dispatch_event(target, "my:event", detail: %{value: 42})`.
-- Direct DOM manipulation via JS interop is preserved across Hologram re-renders, as long as the container element stays in the template.
 - Elixir anonymous functions can be passed as JS callbacks.
 - JS interop only works in action handlers (client-side). It is a no-op during server-side rendering.
 - Prefer `JS.call` over `JS.exec`/`JS.eval`. Isolate JS interop behind facade modules.
