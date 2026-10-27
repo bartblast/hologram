@@ -51,7 +51,15 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module33
   alias Hologram.Test.Fixtures.Controller.Module34
   alias Hologram.Test.Fixtures.Controller.Module35
+  alias Hologram.Test.Fixtures.Controller.Module36
+  alias Hologram.Test.Fixtures.Controller.Module37
+  alias Hologram.Test.Fixtures.Controller.Module38
+  alias Hologram.Test.Fixtures.Controller.Module39
   alias Hologram.Test.Fixtures.Controller.Module4
+  alias Hologram.Test.Fixtures.Controller.Module41
+  alias Hologram.Test.Fixtures.Controller.Module42
+  alias Hologram.Test.Fixtures.Controller.Module43
+  alias Hologram.Test.Fixtures.Controller.Module44
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
@@ -1418,6 +1426,57 @@ defmodule Hologram.ControllerTest do
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
     end
 
+    test "sends the response headers the command set" do
+      conn =
+        execute_command_request(%{
+          module: Module6,
+          name: :my_command_with_response_header,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert Plug.Conn.get_resp_header(conn, "x-my-header") == ["my_value"]
+    end
+
+    test "sends the response headers a non-terminal middleware set" do
+      conn =
+        execute_command_request(%{
+          module: Module36,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert Plug.Conn.get_resp_header(conn, "x-my-header") == ["my_value"]
+    end
+
+    test "sends the response headers a terminating middleware set" do
+      conn =
+        execute_command_request(%{
+          module: Module41,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.status == 403
+      assert Plug.Conn.get_resp_header(conn, "x-my-header") == ["my_value"]
+    end
+
+    test "sends a content type a terminating middleware set" do
+      conn =
+        execute_command_request(%{
+          module: Module43,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.status == 403
+      assert conn.resp_body == "denied"
+      assert Plug.Conn.get_resp_header(conn, "content-type") == ["text/plain"]
+    end
+
     test "command handler works correctly when no session changes are made" do
       payload = %{
         module: Module6,
@@ -1849,6 +1908,19 @@ defmodule Hologram.ControllerTest do
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
     end
+
+    test "raises when the command set a content type without a status" do
+      assert_error RuntimeError,
+                   "Response header content-type was set to \"text/plain\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status.",
+                   fn ->
+                     execute_command_request(%{
+                       module: Module6,
+                       name: :my_command_with_content_type,
+                       params: %{},
+                       target: "my_target_1"
+                     })
+                   end
+    end
   end
 
   describe "handle_initial_page_request/2" do
@@ -2102,6 +2174,44 @@ defmodule Hologram.ControllerTest do
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
     end
 
+    # Plug puts a cache-control header on every connection, and the run's headers merge by key, so
+    # the page's own value is the only one that goes out.
+    test "sends the response headers set during init/3, replacing a default" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module37, :dummy_module_37_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module37")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module37)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    test "sends the response headers a non-terminal middleware set" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module38, :dummy_module_38_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module38")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module38)
+
+      assert Plug.Conn.get_resp_header(conn, "x-my-header") == ["my_value"]
+    end
+
+    test "sends the response headers a layout's init/3 set" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module39, :dummy_module_39_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module39")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module39)
+
+      assert Plug.Conn.get_resp_header(conn, "x-layout-header") == ["my_value"]
+    end
+
     test "fires broadcasts queued during page init after successful render" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module12, :dummy_module_12_digest)
 
@@ -2116,10 +2226,23 @@ defmodule Hologram.ControllerTest do
       assert_receive {:broadcast_action, _channel, :page_init_broadcast, %{text: "hi"},
                       [{:instance, _instance_id}]}
     end
+
+    test "raises when init/3 set a content type without a status" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module42, :dummy_module_42_digest)
+
+      assert_error RuntimeError,
+                   "Response header content-type was set to \"text/csv\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status.",
+                   fn ->
+                     :get
+                     |> Plug.Test.conn("/hologram-test-fixtures-controller-module42")
+                     |> Plug.Test.init_test_session(%{})
+                     |> handle_initial_page_request(Module42)
+                   end
+    end
   end
 
-  describe "handle_page_request/4" do
-    # handle_page_request/4 is exposed as `@doc false` public solely as a test
+  describe "handle_page_request/5" do
+    # handle_page_request/5 is exposed as `@doc false` public solely as a test
     # seam: tests can drive a render with a known instance_id without going
     # through the auto-generating handle_initial_page_request/2 wrapper. Its
     # behavior is otherwise covered implicitly through the public wrappers'
@@ -2192,6 +2315,16 @@ defmodule Hologram.ControllerTest do
       assert conn.halted == true
       assert conn.state == :sent
       assert conn.status == 403
+    end
+
+    test "sends the response headers a terminating middleware set" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module31, :dummy_module_31_digest)
+
+      conn = render_page_with_instance(Module31, "test-instance-id")
+
+      assert conn.status == 302
+      assert Plug.Conn.get_resp_header(conn, "x-my-header") == ["my_value"]
+      assert Plug.Conn.get_resp_header(conn, "location") == [Module4.__route__()]
     end
 
     test "runs middleware before the render and passes the enriched server" do
@@ -2825,6 +2958,23 @@ defmodule Hologram.ControllerTest do
       assert Plug.Conn.get_resp_header(conn, "location") == []
     end
 
+    # The redirect's body does not travel, so neither does the label describing it. The payload is
+    # JSON, and carries the content type JSON gets.
+    test "does not send the redirect's content type" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module44, :dummy_module_44_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module44"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module44)
+
+      assert Plug.Conn.get_resp_header(conn, "content-type") == [
+               "application/json; charset=utf-8"
+             ]
+
+      assert Jason.decode!(conn.resp_body)["type"] == "redirect"
+    end
+
     # A dead end rather than a navigation: sent as it stands, so the client can hand the path to the
     # browser and get what a typed-in URL would have given, and so logs and proxies see the denial.
     test "sends a denying middleware's response as it stands" do
@@ -2863,6 +3013,18 @@ defmodule Hologram.ControllerTest do
         |> handle_subsequent_page_request(Module3)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
+    end
+
+    test "sends the response headers set during the render" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module37, :dummy_module_37_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module37"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module37)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+      assert Plug.Conn.get_resp_header(conn, "hologram-page-data") == ["true"]
     end
 
     test "establishes a Hologram session ID" do
@@ -2940,6 +3102,18 @@ defmodule Hologram.ControllerTest do
 
       assert_receive {:replace_subscriptions, [], nil}
     end
+
+    test "raises when init/3 set a content type without a status" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module42, :dummy_module_42_digest)
+
+      assert_error RuntimeError,
+                   "Response header content-type was set to \"text/csv\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status.",
+                   fn ->
+                     "/hologram/page/Hologram.Test.Fixtures.Controller.Module42"
+                     |> subsequent_page_request_conn()
+                     |> handle_subsequent_page_request(Module42)
+                   end
+    end
   end
 
   describe "send_response/2" do
@@ -2962,15 +3136,6 @@ defmodule Hologram.ControllerTest do
 
       assert result.status == 204
       assert result.resp_body == ""
-    end
-
-    test "merges response headers onto existing ones", %{conn: conn} do
-      conn = Plug.Conn.put_resp_header(conn, "x-existing", "kept")
-      server = %Server{status: 200, response_headers: %{"x-custom" => "1"}}
-      result = send_response(conn, server)
-
-      assert Plug.Conn.get_resp_header(result, "x-existing") == ["kept"]
-      assert Plug.Conn.get_resp_header(result, "x-custom") == ["1"]
     end
   end
 
