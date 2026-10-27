@@ -522,17 +522,8 @@ defmodule Hologram.Compiler.Encoder do
       reraise RuntimeError, [message: message], __STACKTRACE__
   end
 
-  # See info about the internal structure of PIDs: https://stackoverflow.com/a/262179/13040586
   def encode_ir(%IR.PIDType{value: value}, context) do
-    segments =
-      value
-      |> :erlang.pid_to_list()
-      |> List.delete_at(0)
-      |> List.delete_at(-1)
-      |> to_string()
-      |> String.split(".")
-      |> Enum.map(&IntegerUtils.parse!/1)
-
+    segments = pid_segments(value)
     encode_identifier(:pid, value, segments, context)
   end
 
@@ -541,15 +532,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(%IR.PortType{value: value}, context) do
-    segments =
-      value
-      |> :erlang.port_to_list()
-      |> Enum.drop(6)
-      |> List.delete_at(-1)
-      |> to_string()
-      |> String.split(".")
-      |> Enum.map(&IntegerUtils.parse!/1)
-
+    segments = port_segments(value)
     encode_identifier(:port, value, segments, context)
   end
 
@@ -791,6 +774,87 @@ defmodule Hologram.Compiler.Encoder do
     IO.puts("result")
     IO.inspect(result)
     IO.puts("\n........................................\n")
+  end
+
+  # Parses NEWER_REFERENCE_EXT binary format to extract node name, creation number, and ID words
+  # See: https://www.erlang.org/doc/apps/erts/erl_ext_dist.html
+  #
+  # Format structure:
+  # - 131: VERSION_NUMBER (Erlang External Term Format version tag)
+  # - 90: NEWER_REFERENCE_EXT tag
+  # - len: number of ID words (16-bit big-endian)
+  # - atom tag (119 or 100): node name encoding format
+  #   - 119: SMALL_ATOM_UTF8_EXT (1-byte length, UTF-8 encoded)
+  #   - 100: ATOM_EXT (2-byte length, Latin-1 encoded)
+  # - atom_len: length of node name
+  # - atom_bytes: node name bytes
+  # - creation: creation number (32-bit big-endian)
+  # - rest: ID words (each 32-bit big-endian)
+  #
+  # Note: Modern BEAM always produces NEWER_REFERENCE_EXT (tag 90) when serializing references.
+  # Even if a reference was originally encoded with an older format (e.g., NEW_REFERENCE_EXT tag 114),
+  # the BEAM automatically normalizes it to NEWER_REFERENCE_EXT when re-serializing.
+  # Therefore, we only need to handle this format.
+  @doc """
+  Splits the external term format of a reference into its node name, creation number and ID
+  words, the parts the client builds a reference from.
+  """
+  @spec parse_reference_binary(binary) :: {String.t(), non_neg_integer, [non_neg_integer]}
+  def parse_reference_binary(binary) do
+    case binary do
+      # NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT (tag 119)
+      <<131, 90, len::16, 119, atom_len::8, atom_bytes::binary-size(atom_len), creation::32,
+        rest::binary>> ->
+        id_words = parse_id_words(rest, len)
+        {atom_bytes, creation, id_words}
+
+      # NEWER_REFERENCE_EXT with ATOM_EXT (tag 100)
+      <<131, 90, len::16, 100, atom_len::16, atom_bytes::binary-size(atom_len), creation::32,
+        rest::binary>> ->
+        id_words = parse_id_words(rest, len)
+        {atom_bytes, creation, id_words}
+    end
+  end
+
+  # See info about the internal structure of PIDs: https://stackoverflow.com/a/262179/13040586
+  @doc """
+  Returns the three numbers that identify the given PID within its node, the segments the client
+  builds a PID from.
+
+  ## Examples
+
+      iex> pid_segments(pid("0.11.222"))
+      [0, 11, 222]
+  """
+  @spec pid_segments(pid) :: [non_neg_integer]
+  def pid_segments(pid) do
+    pid
+    |> :erlang.pid_to_list()
+    |> List.delete_at(0)
+    |> List.delete_at(-1)
+    |> to_string()
+    |> String.split(".")
+    |> Enum.map(&IntegerUtils.parse!/1)
+  end
+
+  @doc """
+  Returns the two numbers that identify the given port within its node, the segments the client
+  builds a port from.
+
+  ## Examples
+
+      iex> port_segments(port("0.11"))
+      [0, 11]
+  """
+  @spec port_segments(port) :: [non_neg_integer]
+  def port_segments(port) do
+    port
+    |> :erlang.port_to_list()
+    |> Enum.drop(6)
+    |> List.delete_at(-1)
+    |> to_string()
+    |> String.split(".")
+    |> Enum.map(&IntegerUtils.parse!/1)
   end
 
   # The operands on the left side of a blamed and/or chain, each paired with its IR, in front of
@@ -1467,41 +1531,6 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp merge_literal_run(operands, _context), do: operands
-
-  # Parses NEWER_REFERENCE_EXT binary format to extract node name, creation number, and ID words
-  # See: https://www.erlang.org/doc/apps/erts/erl_ext_dist.html
-  #
-  # Format structure:
-  # - 131: VERSION_NUMBER (Erlang External Term Format version tag)
-  # - 90: NEWER_REFERENCE_EXT tag
-  # - len: number of ID words (16-bit big-endian)
-  # - atom tag (119 or 100): node name encoding format
-  #   - 119: SMALL_ATOM_UTF8_EXT (1-byte length, UTF-8 encoded)
-  #   - 100: ATOM_EXT (2-byte length, Latin-1 encoded)
-  # - atom_len: length of node name
-  # - atom_bytes: node name bytes
-  # - creation: creation number (32-bit big-endian)
-  # - rest: ID words (each 32-bit big-endian)
-  #
-  # Note: Modern BEAM always produces NEWER_REFERENCE_EXT (tag 90) when serializing references.
-  # Even if a reference was originally encoded with an older format (e.g., NEW_REFERENCE_EXT tag 114),
-  # the BEAM automatically normalizes it to NEWER_REFERENCE_EXT when re-serializing.
-  # Therefore, we only need to handle this format.
-  defp parse_reference_binary(binary) do
-    case binary do
-      # NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT (tag 119)
-      <<131, 90, len::16, 119, atom_len::8, atom_bytes::binary-size(atom_len), creation::32,
-        rest::binary>> ->
-        id_words = parse_id_words(rest, len)
-        {atom_bytes, creation, id_words}
-
-      # NEWER_REFERENCE_EXT with ATOM_EXT (tag 100)
-      <<131, 90, len::16, 100, atom_len::16, atom_bytes::binary-size(atom_len), creation::32,
-        rest::binary>> ->
-        id_words = parse_id_words(rest, len)
-        {atom_bytes, creation, id_words}
-    end
-  end
 
   # Parses ID words from the binary (each word is 32-bit big-endian)
   defp parse_id_words(binary, count)
