@@ -1238,6 +1238,12 @@ The `$change` event data structure depends on where the event handler is placed:
 
 For detailed information about `$change` event behavior with forms, including synthetic event mapping, usage patterns, and data types for different input types, see the "Event Handling" section in the Forms documentation.
 
+##### Focus Events
+
+The `$focus` and `$blur` events include no fields: `params.event` is an empty map.
+
+Both events report focus changes the user makes, and those your own code makes through JavaScript interop. Focus that Hologram moves to apply the `$focused` or `autofocus` attribute doesn't trigger them. To move focus from your state, see the "Focus" section in the DOM documentation.
+
 ##### Keyboard Events
 
 Keyboard events (`$key_down`, `$key_up`) include:
@@ -2055,6 +2061,10 @@ This navigation approach combines the best of both worlds:
 - Fresh page loads guarantee content consistency
 - Proper history management enables natural browser navigation
 
+#### Focus
+
+A page reached by client-side navigation honors `autofocus` and `$focused` the way a page loaded in full does. See the "Focus" section in the DOM documentation.
+
 ### Forms
 
 Forms in Hologram work seamlessly with the framework's declarative architecture. Hologram provides two flexible approaches for handling form inputs, allowing you to choose the best strategy for your specific use case.
@@ -2101,6 +2111,8 @@ Hologram optimizes this synchronization process:
 
 - Efficient mechanisms update form values while preserving browser behavior
 - Redundant DOM updates are avoided to prevent interrupting user input
+
+Focus can be controlled from state too, with the `$focused` attribute. See the "Focus" section in the DOM documentation.
 
 ##### Non-synchronized Inputs
 
@@ -2314,6 +2326,154 @@ When working with forms in Hologram:
 - Use appropriate input types (`email`, `password`, etc.) for better UX and built-in validation
 - Keep form state minimal - only store what you need for validation and UI updates
 - Take advantage of isomorphic validation - use the same Elixir validation code client-side and server-side
+
+### DOM
+
+Hologram renders your templates into the browser's DOM and keeps it in step with your component state. You describe what the page should show, and Hologram works out what to change. Some of what the DOM holds belongs to the browser rather than to your markup, such as which element has focus. This page covers how Hologram handles that state, so you can control it from your components without writing JavaScript.
+
+#### Focus
+
+##### Moving Focus with `$focused`
+
+The `$focused` attribute declares whether an element should have focus. Set it from your state, and Hologram moves focus when the value changes:
+
+```holo
+<button $click="edit_title">Edit title</button>
+<input type="text" name="title" $focused={@editing_title?} />
+```
+
+```elixir
+def action(:edit_title, _params, component) do
+  put_state(component, :editing_title?, true)
+end
+```
+
+Clicking "Edit title" sets `@editing_title?` to `true`, and the title field takes focus.
+
+Like the `value` and `checked` attributes of synchronized inputs (see Forms), `$focused` takes its value from your state. Unlike them, Hologram applies it only when the value changes, as the next section explains.
+
+`$focused` written without a value means true. It goes on an HTML element: on a component tag it has no effect, the same as an event binding, so pass the value to the component as a prop and set `$focused` on the element inside it.
+
+##### When Focus Moves
+
+Hologram moves focus only at these moments:
+
+- An element that appears with `$focused` true takes focus.
+- An element whose `$focused` turns from false to true takes focus.
+- An element whose `$focused` turns from true to false loses focus, if it still has it.
+
+A re-render that leaves `$focused` as it was doesn't move focus. Say the title field has focus because `@editing_title?` is `true`, and the user clicks into another field. If an action then changes some other part of the state, the page re-renders with `@editing_title?` still `true`, but focus stays in the field the user picked. When one render asks for focus on several elements, the first one in document order that can take focus gets it.
+
+On the first page load, the server renders `$focused={true}` as the HTML `autofocus` attribute, so the browser focuses the element before Hologram's runtime has started. That happens before any event listener is attached, so it doesn't trigger `$focus`, and if the user leaves the field before the page has loaded, `$blur` doesn't fire either.
+
+Only elements that can take focus get it, such as inputs, buttons, links and elements with a `tabindex`. A disabled or hidden element can't, so Hologram passes over it to the next element that asks. If one render enables an element and sets its `$focused` to true, it gets focus. If it asks for focus while still disabled, it doesn't get focus later when it's enabled, the same as the browser's `autofocus`.
+
+##### Focusing the Same Element Again
+
+Setting the state to the value it already has moves nothing. In the example above, `@editing_title?` stays `true` after the first click. If the user then clicks somewhere else and presses "Edit title" again, the value doesn't change, so focus doesn't come back. Clear the state when the user leaves the field, with a `$blur` handler:
+
+```holo
+<input type="text" name="title" $focused={@editing_title?} $blur="title_blurred" />
+```
+
+```elixir
+def action(:title_blurred, _params, component) do
+  put_state(component, :editing_title?, false)
+end
+```
+
+Now every click on "Edit title" turns the value from `false` to `true`, which moves focus.
+
+##### Focusing the First Invalid Field
+
+The same pattern works with one state value that names the field to focus. The example below moves focus to the first invalid field after a failed submit:
+
+```holo
+<form $submit="submit">
+  <input type="email" name="email" $focused={@focused_field == :email} $blur="field_blurred" />
+  <input type="password" name="password" $focused={@focused_field == :password} $blur="field_blurred" />
+  <button type="submit">Sign in</button>
+</form>
+```
+
+```elixir
+def init(_params, component, _server) do
+  put_state(component, :focused_field, nil)
+end
+
+def action(:submit, params, component) do
+  case validate(params.event) do
+    {:ok, _data} ->
+      component
+
+    {:error, field} ->
+      put_state(component, :focused_field, field)
+  end
+end
+
+def action(:field_blurred, _params, component) do
+  put_state(component, :focused_field, nil)
+end
+```
+
+Each field clears the state when the user leaves it, so a second failed submit with the same error is a change again and brings focus back.
+
+##### The `autofocus` Attribute
+
+The plain HTML `autofocus` attribute works as well. Browsers apply it only when a page loads. Hologram also applies it when:
+
+- a page is reached by client-side navigation
+- an element appears after an action, such as a field in a form that opens
+
+```holo
+{%if @editing?}
+  <input type="text" name="title" autofocus />
+{/if}
+```
+
+An element takes either `autofocus` or `$focused`, not both, and combining them fails the build. If `autofocus` comes through an attribute spread, `$focused` wins.
+
+##### Focus and Navigation
+
+A page reached by client-side navigation is shown before its code has finished loading. Its `autofocus` or `$focused` element takes focus as soon as the page appears, so a field the user clicks into while the page loads keeps focus when loading completes. A page that declares no focus starts with nothing focused, like a page loaded in full, so keyboard users continue from the top of the new page. Going back or forward in the browser history works the same way: when the page is shown again, its `autofocus` or `$focused` element takes focus, and if it has neither, nothing is focused.
+
+##### Focus Events
+
+`$focus` and `$blur` report focus changes the user makes, and those your own code makes through JavaScript Interop. Focus that Hologram moves to apply `$focused` or `autofocus` doesn't trigger them, the same way setting a synchronized input's value doesn't trigger `$change`: your state already says where focus is. That also keeps a `$blur` handler that clears the state, like the ones above, from undoing a move from one field to another.
+
+`$focus` is an event and `$focused` is state, so a binding like `$focus={true}` is almost always a typo. A literal `true` fails the build, and a binding that evaluates to `true` raises an error when the event fires.
+
+#### Changes Made Through JS Interop
+
+Hologram's virtual DOM patching is aware of JS interop. If you manipulate the DOM directly via JS interop (e.g. appending child elements), those changes are preserved across Hologram re-renders, as long as the container element is present in the template:
+
+```elixir
+def template do
+  ~HOLO"""
+  <button $click={:populate}>Populate JS subtree</button>
+  <button $click={:increment}>Increment counter</button>
+  <p>Counter: {@counter}</p>
+  <div id="js_managed"></div>
+  """
+end
+
+def action(:populate, _params, component) do
+  ~JS"""
+  const container = document.getElementById('js_managed');
+  const span = document.createElement('span');
+  span.textContent = 'JS managed content';
+  container.appendChild(span);
+  """
+
+  put_state(component, :counter, component.state.counter + 1)
+end
+
+def action(:increment, _params, component) do
+  put_state(component, :counter, component.state.counter + 1)
+end
+```
+
+In this example, clicking "Populate JS subtree" adds a span via JavaScript and increments the counter. Clicking "Increment counter" afterwards will update the counter display without removing the JS-managed span.
 
 ### Context
 
@@ -3856,35 +4016,7 @@ Values are automatically converted when crossing the Elixir/JavaScript boundary.
 
 #### DOM Patching
 
-Hologram's virtual DOM patching is aware of JS interop. If you manipulate the DOM directly via JS interop (e.g. appending child elements), those changes are preserved across Hologram re-renders, as long as the container element is present in the template:
-
-```elixir
-def template do
-  ~HOLO"""
-  <button $click={:populate}>Populate JS subtree</button>
-  <button $click={:increment}>Increment counter</button>
-  <p>Counter: {@counter}</p>
-  <div id="js_managed"></div>
-  """
-end
-
-def action(:populate, _params, component) do
-  ~JS"""
-  const container = document.getElementById('js_managed');
-  const span = document.createElement('span');
-  span.textContent = 'JS managed content';
-  container.appendChild(span);
-  """
-
-  put_state(component, :counter, component.state.counter + 1)
-end
-
-def action(:increment, _params, component) do
-  put_state(component, :counter, component.state.counter + 1)
-end
-```
-
-In this example, clicking "Populate JS subtree" adds a span via JavaScript and increments the counter. Clicking "Increment counter" afterwards will update the counter display without removing the JS-managed span.
+Changes you make to the DOM through JS interop are preserved across Hologram's re-renders, as long as the element you change stays in the template. See the "Changes Made Through JS Interop" section in the DOM documentation.
 
 #### Coming from LiveView
 
@@ -4175,6 +4307,8 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 #### Framework Runtime
 
 **Client:** Actions (done), JS Interop (done), Synchronized Form Inputs (done)
+
+**DOM:** Focus Control (done)
 
 **Server:** Commands (done), Cookies (done), Middleware (done), Pub/Sub (done), Session (done)
 

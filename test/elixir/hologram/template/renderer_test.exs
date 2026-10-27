@@ -301,6 +301,13 @@ defmodule Hologram.Template.RendererTest do
                {~s(<div attr_1="aaa" attr_3="111" attr_5="ccc999ddd" attr_7></div>), %{}, @server}
     end
 
+    test "renders $focused as a bare autofocus attribute" do
+      # <input $focused={true} />
+      node = {:element, "input", [{"$focused", [expression: {true}]}], []}
+
+      assert render_dom(node, @env, @server) == {"<input autofocus />", %{}, @server}
+    end
+
     test "with nested stateful components" do
       node =
         {:element, "div", [{"attr", [text: "value"]}],
@@ -640,6 +647,33 @@ defmodule Hologram.Template.RendererTest do
       assert_raise ArgumentError,
                    ~s(event bindings can't be set through a spread, got the "$click" key),
                    fn -> render_dom(node, @env, @server) end
+    end
+
+    test "a false $focused drops an autofocus from the spread" do
+      # <input ...{[autofocus: true]} $focused={false} />
+      node =
+        {:element, "input", [{:spread, {[autofocus: true]}}, {"$focused", [expression: {false}]}],
+         []}
+
+      assert render_dom(node, @env, @server) == {"<input />", %{}, @server}
+    end
+
+    test "a true $focused overrides a false autofocus from the spread" do
+      # <input $focused={true} ...{[autofocus: false]} />
+      node =
+        {:element, "input", [{"$focused", [expression: {true}]}, {:spread, {[autofocus: false]}}],
+         []}
+
+      assert render_dom(node, @env, @server) == {"<input autofocus />", %{}, @server}
+    end
+
+    test "a true $focused next to a true autofocus from the spread renders one autofocus" do
+      # <input ...{[autofocus: true]} $focused={true} />
+      node =
+        {:element, "input", [{:spread, {[autofocus: true]}}, {"$focused", [expression: {true}]}],
+         []}
+
+      assert render_dom(node, @env, @server) == {"<input autofocus />", %{}, @server}
     end
   end
 
@@ -3384,6 +3418,74 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_tree(node, @env, @server) ==
                {{:element, "div", [{"$key", [text: "a1b2c3:4"]}], []}, %{}, @server}
+    end
+
+    test "element node, $focused with a truthy expression renders autofocus" do
+      # <input $focused={"yes"} />
+      node = {:element, "input", [{"$focused", [expression: {"yes"}]}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "input", [{"autofocus", []}], []}, %{}, @server}
+    end
+
+    test "element node, $focused with a false expression renders nothing" do
+      # <input $focused={false} />
+      node = {:element, "input", [{"$focused", [expression: {false}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "input", [], []}, %{}, @server}
+    end
+
+    test "element node, $focused with a nil expression renders nothing" do
+      # <input $focused={nil} />
+      node = {:element, "input", [{"$focused", [expression: {nil}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "input", [], []}, %{}, @server}
+    end
+
+    test "element node, bare $focused renders autofocus" do
+      # <input $focused />
+      node = {:element, "input", [{"$focused", []}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "input", [{"autofocus", []}], []}, %{}, @server}
+    end
+
+    test "element node, $focused renders autofocus at its own position" do
+      # <input id="a" $focused={true} name="b" />
+      node =
+        {:element, "input",
+         [
+           {"id", [text: "a"]},
+           {"$focused", [expression: {true}]},
+           {"name", [text: "b"]}
+         ], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "input",
+                 [{"id", [text: "a"]}, {"autofocus", []}, {"name", [text: "b"]}], []}, %{},
+                @server}
+    end
+
+    test "element node, the last $focused wins" do
+      # <input $focused={true} $focused={false} />
+      node =
+        {:element, "input",
+         [{"$focused", [expression: {true}]}, {"$focused", [expression: {false}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "input", [], []}, %{}, @server}
+    end
+
+    test "element node, $focused next to an event binding with modifiers" do
+      # <input $key_down.enter="submit" $focused={true} />
+      node =
+        {:element, "input",
+         [
+           {"$key_down", [text: "submit"], %{key: [["enter"]]}},
+           {"$focused", [expression: {true}]}
+         ], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "input", [{"autofocus", []}], []}, %{}, @server}
     end
 
     test "element node, event attribute is dropped" do

@@ -24,6 +24,7 @@
 - [Commands](https://hologram.page/docs/commands): Server-side operations, database/API access, async execution, command targets
 - [Navigation](https://hologram.page/docs/navigation): Link component, programmatic navigation, History PushState transitions
 - [Forms](https://hologram.page/docs/forms): Synchronized vs non-synchronized inputs, event handling, input types
+- [DOM](https://hologram.page/docs/dom): Focus control with $focused, autofocus on navigation and insertion, focus events, JS interop changes kept across re-renders
 - [Context](https://hologram.page/docs/context): Sharing data between components without prop drilling
 - [Middleware](https://hologram.page/docs/middleware): Reusable server-side logic running before a page renders or a command executes, composition, dispatch and scoping, terminal responses
 - [Session](https://hologram.page/docs/session): Secure server-side storage persisting across page visits

@@ -660,4 +660,73 @@ describe("Operation", () => {
       assert.isFalse(Operation.isDisabled(specDom));
     });
   });
+
+  describe("isTrue()", () => {
+    it("shorthand syntax, true name", () => {
+      // Example: $click={true}
+      // Spec DOM: [expression: {true}]
+      const specDom = Type.keywordList([
+        [Type.atom("expression"), Type.tuple([Type.boolean(true)])],
+      ]);
+
+      assert.isTrue(Operation.isTrue(specDom));
+    });
+
+    it("shorthand syntax, true name, with params", () => {
+      // Example: $click={true, a: 1}
+      // Spec DOM: [expression: {true, a: 1}]
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.boolean(true),
+            Type.keywordList([[Type.atom("a"), Type.integer(1)]]),
+          ]),
+        ],
+      ]);
+
+      assert.isTrue(Operation.isTrue(specDom));
+    });
+
+    it("shorthand syntax, false name", () => {
+      // Example: $click={false}
+      const specDom = Type.keywordList([
+        [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+      ]);
+
+      assert.isFalse(Operation.isTrue(specDom));
+    });
+
+    it("shorthand syntax, atom name", () => {
+      // Example: $click={:my_action}
+      const specDom = Type.keywordList([
+        [Type.atom("expression"), Type.tuple([Type.atom("my_action")])],
+      ]);
+
+      assert.isFalse(Operation.isTrue(specDom));
+    });
+
+    it("text syntax", () => {
+      // Example: $click="true"
+      const specDom = Type.keywordList([
+        [Type.atom("text"), Type.bitstring("true")],
+      ]);
+
+      assert.isFalse(Operation.isTrue(specDom));
+    });
+
+    it("longhand syntax", () => {
+      // Example: $click={action: :my_action}
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.keywordList([[Type.atom("action"), Type.atom("my_action")]]),
+          ]),
+        ],
+      ]);
+
+      assert.isFalse(Operation.isTrue(specDom));
+    });
+  });
 });

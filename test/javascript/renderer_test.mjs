@@ -85,6 +85,7 @@ import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
+import FocusEvent from "../../assets/js/events/focus_event.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
@@ -8585,6 +8586,621 @@ describe("Renderer", () => {
       assert.equal(Renderer.listenerBindings.length, 1);
       assert.equal(Renderer.listenerBindings[0].key, "bubble:resize");
       assert.equal(Renderer.listenerBindings[0].target, window);
+    });
+  });
+
+  describe("focus", () => {
+    const boolAttr = (name) =>
+      Type.tuple([Type.bitstring(name), Type.keywordList()]);
+
+    const exprAttr = (name, value) =>
+      Type.tuple([
+        Type.bitstring(name),
+        Type.keywordList([[Type.atom("expression"), Type.tuple([value])]]),
+      ]);
+
+    const textAttr = (name, text) =>
+      Type.tuple([
+        Type.bitstring(name),
+        Type.keywordList([[Type.atom("text"), Type.bitstring(text)]]),
+      ]);
+
+    const spreadAttr = (entries) =>
+      Type.tuple([
+        Type.atom("spread"),
+        Type.tuple([Type.keywordList(entries)]),
+      ]);
+
+    const render = (attrs, tagName = "input") =>
+      Renderer.renderDom(
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring(tagName),
+          Type.list(attrs),
+          Type.list(),
+        ]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    // A rendered vnode standing in for the patched one: Snabbdom hands the hooks the vnode with
+    // its live element attached.
+    const patched = (vnode, elm = {}) => Object.assign(vnode, {elm});
+
+    afterEach(() => {
+      Renderer.resetFocusCandidates();
+      Renderer.isPageArrival = false;
+    });
+
+    describe("$focused attribute", () => {
+      it("truthy expression renders autofocus and marks the element focused", () => {
+        const result = render([exprAttr("$focused", Type.bitstring("yes"))]);
+
+        assert.isTrue(result.data.attrs.autofocus);
+        assert.isTrue(result.data.hologramFocused);
+      });
+
+      it("false expression renders no autofocus and marks the element unfocused", () => {
+        const result = render([exprAttr("$focused", Type.boolean(false))]);
+
+        assert.notProperty(result.data.attrs, "autofocus");
+        assert.isFalse(result.data.hologramFocused);
+      });
+
+      it("nil expression renders no autofocus and marks the element unfocused", () => {
+        const result = render([exprAttr("$focused", Type.nil())]);
+
+        assert.notProperty(result.data.attrs, "autofocus");
+        assert.isFalse(result.data.hologramFocused);
+      });
+
+      it("bare $focused is true", () => {
+        const result = render([boolAttr("$focused")]);
+
+        assert.isTrue(result.data.attrs.autofocus);
+        assert.isTrue(result.data.hologramFocused);
+      });
+
+      it("the last $focused wins", () => {
+        const result = render([
+          exprAttr("$focused", Type.boolean(true)),
+          exprAttr("$focused", Type.boolean(false)),
+        ]);
+
+        assert.notProperty(result.data.attrs, "autofocus");
+        assert.isFalse(result.data.hologramFocused);
+      });
+
+      it("a false $focused drops an autofocus from a spread", () => {
+        const result = render([
+          spreadAttr([[Type.atom("autofocus"), Type.boolean(true)]]),
+          exprAttr("$focused", Type.boolean(false)),
+        ]);
+
+        assert.notProperty(result.data.attrs, "autofocus");
+      });
+
+      it("a true $focused overrides a false autofocus from a spread", () => {
+        const result = render([
+          exprAttr("$focused", Type.boolean(true)),
+          spreadAttr([[Type.atom("autofocus"), Type.boolean(false)]]),
+        ]);
+
+        assert.isTrue(result.data.attrs.autofocus);
+      });
+
+      it("binds no event listener", () => {
+        const result = render([exprAttr("$focused", Type.boolean(true))]);
+
+        assert.deepStrictEqual(result.data.on, {});
+      });
+
+      it("a literal autofocus alone doesn't mark the element", () => {
+        const result = render([boolAttr("autofocus")]);
+
+        assert.isTrue(result.data.attrs.autofocus);
+        assert.notProperty(result.data, "hologramFocused");
+        assert.isFunction(result.data.hook.insert);
+      });
+
+      it("an element without autofocus or $focused gets no hooks", () => {
+        const result = render([textAttr("id", "abc")]);
+
+        assert.notProperty(result.data, "hook");
+      });
+    });
+
+    describe("focus hooks", () => {
+      it("insert collects an element rendered with $focused true", () => {
+        const result = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        result.data.hook.insert(result);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [result.elm]);
+      });
+
+      it("insert collects a literal autofocus", () => {
+        const result = patched(render([boolAttr("autofocus")]));
+
+        result.data.hook.insert(result);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [result.elm]);
+      });
+
+      it("insert collects an autofocus written with a value", () => {
+        const result = patched(
+          render([exprAttr("autofocus", Type.boolean(true))]),
+        );
+
+        result.data.hook.insert(result);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [result.elm]);
+      });
+
+      it("insert ignores an element rendered with $focused false", () => {
+        const result = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        result.data.hook.insert(result);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+      });
+
+      it("update collects a change from false to true", () => {
+        const oldVnode = render([exprAttr("$focused", Type.boolean(false))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+      });
+
+      it("update collects an element that starts declaring $focused true", () => {
+        const oldVnode = render([textAttr("id", "abc")]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+
+      it("update ignores true staying true", () => {
+        const oldVnode = render([exprAttr("$focused", Type.boolean(true))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+      });
+
+      it("update ignores a literal autofocus on a re-render", () => {
+        const oldVnode = render([boolAttr("autofocus")]);
+        const newVnode = patched(render([boolAttr("autofocus")]));
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+      });
+
+      it("update collects a literal autofocus on a page arrival", () => {
+        Renderer.isPageArrival = true;
+
+        const oldVnode = render([boolAttr("autofocus")]);
+        const newVnode = patched(render([boolAttr("autofocus")]));
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+
+      it("update collects $focused true staying true on a page arrival", () => {
+        Renderer.isPageArrival = true;
+
+        const oldVnode = render([exprAttr("$focused", Type.boolean(true))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+
+      it("update ignores $focused false on a page arrival", () => {
+        Renderer.isPageArrival = true;
+
+        const oldVnode = render([exprAttr("$focused", Type.boolean(false))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+      });
+
+      // The interim page a navigation patches in is rendered from the server's tree, which carries
+      // autofocus and no hologramFocused. Focus landed when that page appeared, so the mount's
+      // render must see no change on it.
+      it("update ignores an element kept from the interim page", () => {
+        const oldVnode = render([boolAttr("autofocus")]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(true))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+      });
+
+      it("update collects a blur when the previous render carried autofocus", () => {
+        const oldVnode = render([boolAttr("autofocus")]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.blurCandidates, [newVnode.elm]);
+      });
+
+      it("update collects a change from true to false as a blur", () => {
+        const oldVnode = render([exprAttr("$focused", Type.boolean(true))]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+        assert.deepStrictEqual(Renderer.blurCandidates, [newVnode.elm]);
+      });
+
+      it("update collects no blur for an element that never declared focus", () => {
+        const oldVnode = render([textAttr("id", "abc")]);
+        const newVnode = patched(
+          render([exprAttr("$focused", Type.boolean(false))]),
+        );
+
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+      });
+
+      it("a controlled input keeps its value hooks next to the focus hooks", () => {
+        const oldVnode = render([
+          textAttr("value", "old"),
+          exprAttr("$focused", Type.boolean(false)),
+        ]);
+
+        const newVnode = patched(
+          render([
+            textAttr("value", "new"),
+            exprAttr("$focused", Type.boolean(true)),
+          ]),
+          {value: "old"},
+        );
+
+        newVnode.data.hook.create(null, newVnode);
+        assert.strictEqual(newVnode.elm.value, "new");
+
+        newVnode.elm.value = "old";
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.strictEqual(newVnode.elm.value, "new");
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+
+      it("a controlled checkbox keeps its checked hooks next to the focus hooks", () => {
+        const oldVnode = render([
+          textAttr("type", "checkbox"),
+          exprAttr("checked", Type.boolean(false)),
+          exprAttr("$focused", Type.boolean(false)),
+        ]);
+
+        const newVnode = patched(
+          render([
+            textAttr("type", "checkbox"),
+            exprAttr("checked", Type.boolean(true)),
+            exprAttr("$focused", Type.boolean(true)),
+          ]),
+          {checked: false},
+        );
+
+        newVnode.data.hook.create(null, newVnode);
+        assert.isTrue(newVnode.elm.checked);
+
+        newVnode.elm.checked = false;
+        newVnode.data.hook.update(oldVnode, newVnode);
+
+        assert.isTrue(newVnode.elm.checked);
+        assert.deepStrictEqual(Renderer.focusCandidates, [newVnode.elm]);
+      });
+    });
+
+    describe("settleFocus()", () => {
+      let elements;
+
+      beforeEach(() => {
+        elements = ["a", "b", "c"].map((id) => {
+          const element = document.createElement("input");
+          element.id = id;
+          document.body.appendChild(element);
+
+          return element;
+        });
+      });
+
+      afterEach(() => {
+        elements.forEach((element) => element.remove());
+      });
+
+      it("focuses the first candidate in document order", () => {
+        // Neither the first nor the last one collected, so only document order picks it.
+        Renderer.focusCandidates = [elements[1], elements[0], elements[2]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[0]);
+      });
+
+      // A div without a tabindex can't take focus, the way a disabled or hidden field can't.
+      it("passes over a candidate that can't take focus", () => {
+        const div = document.createElement("div");
+        document.body.insertBefore(div, elements[0]);
+
+        try {
+          Renderer.focusCandidates = [elements[2], div];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, elements[2]);
+        } finally {
+          div.remove();
+        }
+      });
+
+      it("keeps focus on a later candidate on a page arrival", () => {
+        const div = document.createElement("div");
+        document.body.insertBefore(div, elements[0]);
+
+        try {
+          elements[0].focus();
+          Renderer.isPageArrival = true;
+          Renderer.focusCandidates = [div, elements[2]];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, elements[2]);
+        } finally {
+          div.remove();
+        }
+      });
+
+      // A wrapper that passes focus on to a field inside it took focus, however it ended up.
+      it("counts a candidate that passes focus on as having taken it", () => {
+        const wrapper = document.createElement("div");
+        wrapper.tabIndex = -1;
+        wrapper.addEventListener("focus", () => elements[1].focus());
+        document.body.insertBefore(wrapper, elements[0]);
+
+        try {
+          Renderer.isPageArrival = true;
+          Renderer.focusCandidates = [wrapper, elements[2]];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, elements[1]);
+        } finally {
+          wrapper.remove();
+        }
+      });
+
+      it("blurs on a page arrival when no candidate can take focus", () => {
+        const div = document.createElement("div");
+        document.body.appendChild(div);
+
+        try {
+          elements[0].focus();
+          Renderer.isPageArrival = true;
+          Renderer.focusCandidates = [div];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, document.body);
+        } finally {
+          div.remove();
+        }
+      });
+
+      it("leaves focus alone on an ordinary render when no candidate can take focus", () => {
+        const div = document.createElement("div");
+        document.body.appendChild(div);
+
+        try {
+          elements[0].focus();
+          Renderer.focusCandidates = [div];
+
+          Renderer.settleFocus(false);
+
+          assert.strictEqual(document.activeElement, elements[0]);
+        } finally {
+          div.remove();
+        }
+      });
+
+      it("skips a candidate that is no longer in the document", () => {
+        elements[0].remove();
+        Renderer.focusCandidates = [elements[0], elements[2]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[2]);
+      });
+
+      it("blurs a blur candidate that has focus", () => {
+        elements[0].focus();
+        Renderer.blurCandidates = [elements[0]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, document.body);
+      });
+
+      it("leaves focus alone when the blur candidate doesn't have it", () => {
+        elements[1].focus();
+        Renderer.blurCandidates = [elements[0]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[1]);
+      });
+
+      it("ends on the focused element when one render blurs one and focuses another", () => {
+        elements[0].focus();
+        Renderer.blurCandidates = [elements[0]];
+        Renderer.focusCandidates = [elements[1]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[1]);
+      });
+
+      it("blurs the active element on a page arrival that focuses nothing", () => {
+        elements[0].focus();
+        Renderer.isPageArrival = true;
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, document.body);
+      });
+
+      it("keeps a candidate's focus on a page arrival", () => {
+        elements[0].focus();
+        Renderer.isPageArrival = true;
+        Renderer.focusCandidates = [elements[1]];
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[1]);
+      });
+
+      it("leaves the active element alone on an ordinary render that focuses nothing", () => {
+        elements[0].focus();
+
+        Renderer.settleFocus(false);
+
+        assert.strictEqual(document.activeElement, elements[0]);
+      });
+
+      // The DOM fires focus and blur for a programmatic move exactly as for a user's. The ones a
+      // settle causes, the blur of the element giving focus up included, must read as the
+      // runtime's, so the $focus and $blur bindings they reach stay quiet.
+      it("marks the focus and blur events it causes as the runtime's", () => {
+        const seen = [];
+        const record = (event) =>
+          seen.push([
+            event.type,
+            event.target.id,
+            FocusEvent.isRuntimeFocusChange,
+          ]);
+
+        elements.forEach((element) => {
+          element.addEventListener("focus", record);
+          element.addEventListener("blur", record);
+        });
+
+        elements[0].focus();
+        seen.length = 0;
+
+        Renderer.blurCandidates = [elements[0]];
+        Renderer.focusCandidates = [elements[1]];
+
+        Renderer.settleFocus(false);
+
+        assert.deepStrictEqual(seen, [
+          ["blur", "a", true],
+          ["focus", "b", true],
+        ]);
+
+        assert.isFalse(FocusEvent.isRuntimeFocusChange);
+      });
+
+      it("marks the blur of a page arrival that focuses nothing as the runtime's", () => {
+        let isRuntimeFocusChange = null;
+
+        elements[0].addEventListener("blur", () => {
+          isRuntimeFocusChange = FocusEvent.isRuntimeFocusChange;
+        });
+
+        elements[0].focus();
+        Renderer.isPageArrival = true;
+
+        Renderer.settleFocus(false);
+
+        assert.isTrue(isRuntimeFocusChange);
+        assert.isFalse(FocusEvent.isRuntimeFocusChange);
+      });
+
+      it("restores the runtime mark it found", () => {
+        FocusEvent.isRuntimeFocusChange = true;
+        Renderer.focusCandidates = [elements[1]];
+
+        try {
+          Renderer.settleFocus(false);
+
+          assert.isTrue(FocusEvent.isRuntimeFocusChange);
+        } finally {
+          FocusEvent.isRuntimeFocusChange = false;
+        }
+      });
+
+      it("clears the runtime mark when a move raises", () => {
+        elements[1].focus = () => {
+          throw new Error("focus failed");
+        };
+
+        Renderer.focusCandidates = [elements[1]];
+
+        assert.throws(() => Renderer.settleFocus(false), "focus failed");
+        assert.isFalse(FocusEvent.isRuntimeFocusChange);
+      });
+
+      it("does nothing on the boot render", () => {
+        elements[0].focus();
+        Renderer.blurCandidates = [elements[0]];
+        Renderer.focusCandidates = [elements[1]];
+
+        Renderer.settleFocus(true);
+
+        assert.strictEqual(document.activeElement, elements[0]);
+      });
+
+      it("clears both candidate lists and the page arrival flag", () => {
+        Renderer.focusCandidates = [elements[0]];
+        Renderer.blurCandidates = [elements[1]];
+        Renderer.isPageArrival = true;
+
+        Renderer.settleFocus(true);
+
+        assert.deepStrictEqual(Renderer.focusCandidates, []);
+        assert.deepStrictEqual(Renderer.blurCandidates, []);
+        assert.isFalse(Renderer.isPageArrival);
+      });
     });
   });
 
