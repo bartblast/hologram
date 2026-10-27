@@ -137,6 +137,14 @@ defmodule HologramFeatureTests.FocusTest do
       |> assert_active_element("page_2_after_disabled")
     end
 
+    feature "a field enabled and declared focused by the same render takes focus",
+            %{session: session} do
+      session
+      |> visit(Page2)
+      |> click(button("Unlock"))
+      |> assert_active_element("page_2_unlocked")
+    end
+
     feature "of several inserted candidates, the first wins", %{session: session} do
       session
       |> visit(Page2)
