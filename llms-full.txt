@@ -2501,7 +2501,7 @@ Component middleware lets a distributable component gate its own commands regard
 Middleware operates on a `Server` struct - the same struct `init/3` and `command/3` receive. It has three zones:
 
 - **Request** (read-only) - the incoming request, read as struct fields: `method`, `scheme`, `host`, `port`, `path`, `query`, `raw_query`, and `ip`.
-- **Response** - the response being built: its `status`, headers, and body.
+- **Response** - the response being built: its `status`, headers, and body. A header set here goes out with whatever response the request ends in - the rendered page, a navigation's page data, a command's reply, or a terminal response - the same way cookies and session changes do.
 - **Stash** - a request-scoped scratchpad for passing data to later middleware in the chain and on to `init/3` or `command/3`.
 
 Identity, session, and cookies live here too. The functions for reading the request and writing each zone are in the Helper Reference below. Enrichment is a common middleware job - the example here resolves the current user once and stashes it, so everything downstream can read it:
@@ -2582,7 +2582,7 @@ These helpers are imported into pages, components, and `use Hologram.Middleware`
 - `put_redirect(server, url_or_page)` - a 302 redirect to either a URL string or a page module.
 - `put_redirect(server, page, params)` - a 302 redirect to a page module with route params.
 - `put_response_body(server, body)` - sets the response body (iodata). Not terminal on its own - pair it with `put_status`.
-- `put_response_header(server, name, value)` - sets a response header (name lower-cased), replacing any existing value. Raises on `cookie` / `set-cookie` - use the cookie helpers for those.
+- `put_response_header(server, name, value)` - sets a response header (name lower-cased), replacing any existing value. Raises on `cookie` / `set-cookie` - use the cookie helpers for those. A `content-type` describes the body, so like `put_response_body` it needs `put_status`. Without one it raises.
 - `put_status(server, status)` - sets the response status and stops the chain. `status` is an integer like `403` or an atom alias like `:forbidden` or `:not_found`. An unknown alias or out-of-range integer raises. The full alias set is in Status Aliases below.
 
 ##### Identity
