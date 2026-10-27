@@ -57,12 +57,23 @@ defmodule Hologram.Runtime.Deserializer do
   def atoms_whitelist, do: @atoms_whitelist
 
   @doc """
+  Returns the delimiter string used for separating fields in serialized data.
+  """
+  @spec delimiter() :: String.t()
+  def delimiter, do: @delimiter
+
+  @doc """
   Deserializes the top-level term serialized by the client in Hologram format into Elixir terms.
 
   The input can be either:
   - A binary containing raw JSON that will be parsed first, then deserialized from Hologram format
   - Already JSON-decoded data in the format [version, data] where version is an integer
     and data is the serialized content in Hologram format
+
+  Versions 1 to 4 are read. Version 4 writes a bitstring that is a valid string as the string
+  itself, and any other bitstring as hex, the only form version 3 has. It also marks the plain
+  JavaScript strings the format carries beside terms, like a reference's node name, with "j"
+  rather than version 3's "s".
 
   This is the entry point for deserializing, which then recursively uses deserialize/2 for nested structures.
   """
@@ -85,41 +96,28 @@ defmodule Hologram.Runtime.Deserializer do
   @spec deserialize(integer, map | String.t()) :: any
   def deserialize(version, data)
 
-  # sobelow_skip ["Misc.BinToTerm"]
-  def deserialize(3, %{"t" => "r", "n" => "s" <> node, "c" => creation, "i" => id_words}) do
-    node_len = byte_size(node)
-    len = length(id_words)
-    id_words_binary = for word <- id_words, into: <<>>, do: <<word::32>>
-
-    # Build Erlang external term format for reference:
-    # - 131: VERSION_NUMBER (ETF version)
-    # - 90: NEWER_REFERENCE_EXT tag
-    # - len::16: number of ID words (16-bit unsigned)
-    # - 119: SMALL_ATOM_UTF8_EXT tag
-    # - node_len::8: length of node name (8-bit unsigned)
-    # - node::binary: node name as UTF-8 bytes
-    # - creation::32: creation number (32-bit unsigned)
-    # - id_words_binary::binary: ID words, each 32-bit big-endian
-    binary =
-      <<131, 90, len::16, 119, node_len::8, node::binary, creation::32, id_words_binary::binary>>
-
-    :erlang.binary_to_term(binary, [:safe])
+  def deserialize(4, %{"t" => "r", "n" => "j" <> node, "c" => creation, "i" => id_words}) do
+    deserialize_reference(node, creation, id_words)
   end
 
-  def deserialize(version, "a" <> value) when version in [3, 2] do
+  def deserialize(3, %{"t" => "r", "n" => "s" <> node, "c" => creation, "i" => id_words}) do
+    deserialize_reference(node, creation, id_words)
+  end
+
+  def deserialize(version, "a" <> value) when version in [4, 3, 2] do
     String.to_existing_atom(value)
   end
 
-  def deserialize(version, "b") when version in [3, 2] do
+  def deserialize(version, "b") when version in [4, 3, 2] do
     ""
   end
 
-  def deserialize(version, "b0" <> <<hex::binary>>) when version in [3, 2] do
+  def deserialize(version, "b0" <> <<hex::binary>>) when version in [4, 3, 2] do
     Base.decode16!(hex, case: :lower)
   end
 
   def deserialize(version, "b" <> <<leftover_bits::binary-size(1), hex::binary>>)
-      when version in [3, 2] do
+      when version in [4, 3, 2] do
     bytes = Base.decode16!(hex, case: :lower)
     leftover_bit_count = String.to_integer(leftover_bits)
     full_byte_count = byte_size(bytes) - 1
@@ -129,7 +127,7 @@ defmodule Hologram.Runtime.Deserializer do
     <<full_bytes::binary, right_aligned_leftover_byte::size(leftover_bit_count)>>
   end
 
-  def deserialize(version, "c" <> data) when version in [3, 2] do
+  def deserialize(version, "c" <> data) when version in [4, 3, 2] do
     [module_str, function_str, arity_str] = String.split(data, @delimiter)
 
     module = Module.safe_concat([module_str])
@@ -139,38 +137,42 @@ defmodule Hologram.Runtime.Deserializer do
     Function.capture(module, function, arity)
   end
 
-  def deserialize(version, "f" <> value) when version in [3, 2] do
+  def deserialize(version, "f" <> value) when version in [4, 3, 2] do
     value
     |> Float.parse()
     |> elem(0)
   end
 
-  def deserialize(version, "i" <> value) when version in [3, 2] do
+  def deserialize(version, "i" <> value) when version in [4, 3, 2] do
     IntegerUtils.parse!(value)
   end
 
-  def deserialize(version, %{"t" => "l", "d" => data}) when version in [3, 2] do
+  def deserialize(version, %{"t" => "l", "d" => data}) when version in [4, 3, 2] do
     Enum.map(data, &deserialize(version, &1))
   end
 
-  def deserialize(version, %{"t" => "m", "d" => data}) when version in [3, 2] do
+  def deserialize(version, %{"t" => "m", "d" => data}) when version in [4, 3, 2] do
     data
     |> Enum.map(fn [key, value] -> {deserialize(version, key), deserialize(version, value)} end)
     |> Enum.into(%{})
     |> maybe_recompile_regex()
   end
 
-  def deserialize(version, "o" <> data) when version in [3, 2] do
+  def deserialize(version, "o" <> data) when version in [4, 3, 2] do
     [major, minor] = decode_identifier_segments(data)
     IEx.Helpers.port(major, minor)
   end
 
-  def deserialize(version, "p" <> data) when version in [3, 2] do
+  def deserialize(version, "p" <> data) when version in [4, 3, 2] do
     [x, y, z] = decode_identifier_segments(data)
     IEx.Helpers.pid(x, y, z)
   end
 
-  def deserialize(version, %{"t" => "t", "d" => data}) when version in [3, 2] do
+  def deserialize(4, "s" <> string) do
+    string
+  end
+
+  def deserialize(version, %{"t" => "t", "d" => data}) when version in [4, 3, 2] do
     data
     |> Enum.map(&deserialize(version, &1))
     |> List.to_tuple()
@@ -243,18 +245,33 @@ defmodule Hologram.Runtime.Deserializer do
     |> List.to_tuple()
   end
 
-  @doc """
-  Returns the delimiter string used for separating fields in serialized data.
-  """
-  @spec delimiter() :: String.t()
-  def delimiter, do: @delimiter
-
   defp decode_identifier_segments(data) do
     [_node, segments_str, _origin] = String.split(data, @delimiter)
 
     segments_str
     |> String.split(",")
     |> Enum.map(&IntegerUtils.parse!/1)
+  end
+
+  # Builds the reference from the parts the client sends, in the Erlang external term format:
+  # - 131: VERSION_NUMBER (ETF version)
+  # - 90: NEWER_REFERENCE_EXT tag
+  # - len::16: number of ID words (16-bit unsigned)
+  # - 119: SMALL_ATOM_UTF8_EXT tag
+  # - node_len::8: length of node name (8-bit unsigned)
+  # - node::binary: node name as UTF-8 bytes
+  # - creation::32: creation number (32-bit unsigned)
+  # - id_words_binary::binary: ID words, each 32-bit big-endian
+  # sobelow_skip ["Misc.BinToTerm"]
+  defp deserialize_reference(node, creation, id_words) do
+    node_len = byte_size(node)
+    len = length(id_words)
+    id_words_binary = for word <- id_words, into: <<>>, do: <<word::32>>
+
+    binary =
+      <<131, 90, len::16, 119, node_len::8, node::binary, creation::32, id_words_binary::binary>>
+
+    :erlang.binary_to_term(binary, [:safe])
   end
 
   # A Regex struct's :re_pattern references a compiled pattern that exists
