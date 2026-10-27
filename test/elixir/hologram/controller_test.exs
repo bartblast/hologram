@@ -57,6 +57,9 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module39
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module41
+  alias Hologram.Test.Fixtures.Controller.Module42
+  alias Hologram.Test.Fixtures.Controller.Module43
+  alias Hologram.Test.Fixtures.Controller.Module44
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
@@ -1460,6 +1463,20 @@ defmodule Hologram.ControllerTest do
       assert Plug.Conn.get_resp_header(conn, "x-my-header") == ["my_value"]
     end
 
+    test "sends a content type a terminating middleware set" do
+      conn =
+        execute_command_request(%{
+          module: Module43,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.status == 403
+      assert conn.resp_body == "denied"
+      assert Plug.Conn.get_resp_header(conn, "content-type") == ["text/plain"]
+    end
+
     test "command handler works correctly when no session changes are made" do
       payload = %{
         module: Module6,
@@ -1891,6 +1908,19 @@ defmodule Hologram.ControllerTest do
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
     end
+
+    test "raises when the command set a content type without a status" do
+      assert_error RuntimeError,
+                   "Response header content-type was set to \"text/plain\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response you end with put_status.",
+                   fn ->
+                     execute_command_request(%{
+                       module: Module6,
+                       name: :my_command_with_content_type,
+                       params: %{},
+                       target: "my_target_1"
+                     })
+                   end
+    end
   end
 
   describe "handle_initial_page_request/2" do
@@ -2195,6 +2225,19 @@ defmodule Hologram.ControllerTest do
 
       assert_receive {:broadcast_action, _channel, :page_init_broadcast, %{text: "hi"},
                       [{:instance, _instance_id}]}
+    end
+
+    test "raises when init/3 set a content type without a status" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module42, :dummy_module_42_digest)
+
+      assert_error RuntimeError,
+                   "Response header content-type was set to \"text/csv\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response you end with put_status.",
+                   fn ->
+                     :get
+                     |> Plug.Test.conn("/hologram-test-fixtures-controller-module42")
+                     |> Plug.Test.init_test_session(%{})
+                     |> handle_initial_page_request(Module42)
+                   end
     end
   end
 
@@ -2915,6 +2958,23 @@ defmodule Hologram.ControllerTest do
       assert Plug.Conn.get_resp_header(conn, "location") == []
     end
 
+    # The redirect's body does not travel, so neither does the label describing it. The payload is
+    # JSON, and carries the content type JSON gets.
+    test "does not send the redirect's content type" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module44, :dummy_module_44_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module44"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module44)
+
+      assert Plug.Conn.get_resp_header(conn, "content-type") == [
+               "application/json; charset=utf-8"
+             ]
+
+      assert Jason.decode!(conn.resp_body)["type"] == "redirect"
+    end
+
     # A dead end rather than a navigation: sent as it stands, so the client can hand the path to the
     # browser and get what a typed-in URL would have given, and so logs and proxies see the denial.
     test "sends a denying middleware's response as it stands" do
@@ -3041,6 +3101,18 @@ defmodule Hologram.ControllerTest do
       |> handle_subsequent_page_request(Module4)
 
       assert_receive {:replace_subscriptions, [], nil}
+    end
+
+    test "raises when init/3 set a content type without a status" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module42, :dummy_module_42_digest)
+
+      assert_error RuntimeError,
+                   "Response header content-type was set to \"text/csv\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response you end with put_status.",
+                   fn ->
+                     "/hologram/page/Hologram.Test.Fixtures.Controller.Module42"
+                     |> subsequent_page_request_conn()
+                     |> handle_subsequent_page_request(Module42)
+                   end
     end
   end
 

@@ -363,6 +363,8 @@ defmodule Hologram.Controller do
       {processed_server_struct, next_action} =
         process_command_result(command_result, middleware_server_struct, target)
 
+      ensure_no_content_type!(processed_server_struct)
+
       # Apply subscription deltas before flushing broadcasts so a registry
       # failure (GenServer.call timeout) leaves no half-done state.
       # flush_broadcasts is effectively infallible, so once apply succeeds both
@@ -665,6 +667,16 @@ defmodule Hologram.Controller do
     end)
   end
 
+  # A content type describes a body the run meant to send. With no status the request did not end
+  # there: Hologram writes the body, and the label can fit nothing it writes, since the same run
+  # serves a page as markup and as data. Raising is what tells the handler. Dropping the header
+  # would hide the mistake, and keeping it would mislabel the response.
+  defp ensure_no_content_type!(%Server{response_headers: %{"content-type" => value}}) do
+    raise "Response header content-type was set to #{inspect(value)}, but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response you end with put_status."
+  end
+
+  defp ensure_no_content_type!(_server), do: :ok
+
   # Reads the Hologram-serialized JSON body produced by `Client.fetchPage` and
   # pulls out the two fields the page-render path needs from the client:
   # the stable JS-context `instance_id` and the subscription keys the client claims to
@@ -812,6 +824,8 @@ defmodule Hologram.Controller do
         tree: rendered_tree
       } = Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
+      ensure_no_content_type!(rendered_server_struct)
+
       maybe_note_page_rendered(renderer_opts[:instance_id], page_module)
 
       # Transition subscriptions before flushing broadcasts so a registry failure
@@ -847,8 +861,9 @@ defmodule Hologram.Controller do
 
   # Every decoration the run accumulated, whichever response the caller goes on to send. Headers
   # merge by key, so one the run set replaces a default the connection came with, like the
-  # cache-control Plug puts on every response. The headers a response kind owns, its content type
-  # and the page data marker, are put after this by the send that owns them, so they win.
+  # cache-control Plug puts on every response. A content type never reaches here from a render or
+  # a command, which raise on one. The page data marker is put after this by the send that owns
+  # it, so it wins.
   defp decorate_conn(conn, server_struct, final_server_struct) do
     conn
     |> Plug.Conn.merge_resp_headers(Map.to_list(final_server_struct.response_headers))
@@ -883,9 +898,12 @@ defmodule Hologram.Controller do
         # The headers travel even though the redirect itself does not: they were applied with the
         # run's other decorations, and middleware that sets one alongside a redirect means it for
         # the response. Location is left behind, since the payload carries the target and a
-        # location on the 200 this sends would name somewhere the client is not going.
+        # location on the 200 this sends would name somewhere the client is not going. The content
+        # type is left behind with it, since it labeled a body that does not travel and this sends
+        # JSON.
         conn
         |> Plug.Conn.delete_resp_header("location")
+        |> Plug.Conn.delete_resp_header("content-type")
         |> send_page_data(build_page_data_payload(resolve_redirect_target(to)))
     end
   end
