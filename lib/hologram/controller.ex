@@ -243,7 +243,8 @@ defmodule Hologram.Controller do
 
   ## Returns
 
-  The updated and halted Plug.Conn struct with the JSON response and applied cookies.
+  The updated and halted Plug.Conn struct with the JSON response and the applied headers, session
+  changes and cookies.
   """
   @spec handle_command_request(command_conn()) :: Plug.Conn.t()
   def handle_command_request(initial_conn) do
@@ -353,9 +354,7 @@ defmodule Hologram.Controller do
       Realtime.maybe_announce_identity_change(server_struct, middleware_server_struct)
 
       conn
-      |> apply_session_ops(middleware_server_struct.__meta__.session_ops)
-      |> apply_cookie_ops(middleware_server_struct.__meta__.cookie_ops)
-      |> maybe_persist_user_id(server_struct, middleware_server_struct)
+      |> decorate_conn(server_struct, middleware_server_struct)
       |> send_response(middleware_server_struct)
       |> Plug.Conn.halt()
     else
@@ -363,6 +362,8 @@ defmodule Hologram.Controller do
 
       {processed_server_struct, next_action} =
         process_command_result(command_result, middleware_server_struct, target)
+
+      ensure_no_content_type!(processed_server_struct)
 
       # Apply subscription deltas before flushing broadcasts so a registry
       # failure (GenServer.call timeout) leaves no half-done state.
@@ -392,9 +393,7 @@ defmodule Hologram.Controller do
       {:ok, encoded_sub_receipt_drops} = Encoder.encode_term(sub_receipt_drops)
 
       conn
-      |> apply_session_ops(flushed_server_struct.__meta__.session_ops)
-      |> apply_cookie_ops(flushed_server_struct.__meta__.cookie_ops)
-      |> maybe_persist_user_id(server_struct, flushed_server_struct)
+      |> decorate_conn(server_struct, flushed_server_struct)
       |> Controller.json(%{
         action: encoded_next_action,
         # The chunks the struct types in the action and in the self echoes need, which the client
@@ -419,7 +418,8 @@ defmodule Hologram.Controller do
 
   ## Returns
 
-  The updated and halted Plug.Conn struct with the rendered HTML and applied cookies.
+  The updated and halted Plug.Conn struct with the rendered HTML and the applied headers, session
+  changes and cookies.
   """
   @spec handle_initial_page_request(Plug.Conn.t(), module) :: Plug.Conn.t()
   def handle_initial_page_request(initial_conn, page_module) do
@@ -598,18 +598,16 @@ defmodule Hologram.Controller do
   end
 
   @doc """
-  Sends the terminal response built from the server struct's response fields.
+  Sends the terminal response built from the server struct's `status` and `response_body` (an
+  empty body when `response_body` is `nil`).
 
-  Merges `response_headers` onto the connection and sends `status` with `response_body`
-  (an empty body when `response_body` is `nil`).
+  Leaves the connection's headers as they are.
   """
   # Body comes from put_response_body/2 (developer-set) - content safety is the caller's.
   # sobelow_skip ["XSS.SendResp"]
   @spec send_response(Plug.Conn.t(), Server.t()) :: Plug.Conn.t()
   def send_response(conn, server) do
-    conn
-    |> Plug.Conn.merge_resp_headers(Map.to_list(server.response_headers))
-    |> Plug.Conn.send_resp(server.status, server.response_body || "")
+    Plug.Conn.send_resp(conn, server.status, server.response_body || "")
   end
 
   @doc false
@@ -669,6 +667,16 @@ defmodule Hologram.Controller do
     end)
   end
 
+  # A content type describes a body the run meant to send. When middleware did not end the
+  # request, Hologram writes the body, and the label can fit nothing it writes, since the same run
+  # serves a page as markup and as data. Raising is what tells the handler. Dropping the header
+  # would hide the mistake, and keeping it would mislabel the response.
+  defp ensure_no_content_type!(%Server{response_headers: %{"content-type" => value}}) do
+    raise "Response header content-type was set to #{inspect(value)}, but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status."
+  end
+
+  defp ensure_no_content_type!(_server), do: :ok
+
   # Reads the Hologram-serialized JSON body produced by `Client.fetchPage` and
   # pulls out the two fields the page-render path needs from the client:
   # the stable JS-context `instance_id` and the subscription keys the client claims to
@@ -713,11 +721,6 @@ defmodule Hologram.Controller do
     |> MapSet.to_list()
   end
 
-  # Persists a handler-driven `server.user_id` change into the Phoenix session
-  # (the opaque `:hologram_user_id` key) so later requests resolve the new
-  # identity. No-op when unchanged, leaving the session - and any Set-Cookie -
-  # untouched on the common path. Applied after the handler's own ops so
-  # `server.user_id` stays the source of truth for the key.
   # In dev a live reload may still be building the page's bundle: the render names the bundle, so
   # it waits for it, and asking for the page has it built next. This is what serves a page the
   # live reload could not tell was about to be visited, a path computed at runtime or a redirect,
@@ -738,6 +741,11 @@ defmodule Hologram.Controller do
     end
   end
 
+  # Persists a handler-driven `server.user_id` change into the Phoenix session
+  # (the opaque `:hologram_user_id` key) so later requests resolve the new
+  # identity. No-op when unchanged, leaving the session - and any Set-Cookie -
+  # untouched on the common path. Applied after the handler's own ops so
+  # `server.user_id` stays the source of truth for the key.
   defp maybe_persist_user_id(conn, %Server{user_id: user_id}, %Server{user_id: user_id}) do
     conn
   end
@@ -773,8 +781,9 @@ defmodule Hologram.Controller do
   end
 
   # Everything a page response does before it is a response: session, middleware, render,
-  # subscription transition, broadcasts. Returns the connection with the session and cookie
-  # operations the run accumulated already applied, so the caller only chooses what to send.
+  # subscription transition, broadcasts. Returns the connection with every decoration the run
+  # accumulated already applied - headers, session and cookie operations, the user id - so the
+  # caller only chooses what to send.
   #
   # A page must behave the same whichever form it is asked for, markup or data, which it only does
   # while there is one of these to run.
@@ -815,6 +824,8 @@ defmodule Hologram.Controller do
         tree: rendered_tree
       } = Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
+      ensure_no_content_type!(rendered_server_struct)
+
       maybe_note_page_rendered(renderer_opts[:instance_id], page_module)
 
       # Transition subscriptions before flushing broadcasts so a registry failure
@@ -848,8 +859,14 @@ defmodule Hologram.Controller do
     end
   end
 
+  # Every decoration the run accumulated, whichever response the caller goes on to send. Headers
+  # merge by key, so one the run set replaces a default the connection came with, like the
+  # cache-control Plug puts on every response. A content type never reaches here from a render or
+  # a command, which raise on one. The page data marker is put after this by the send that owns
+  # it, so it wins.
   defp decorate_conn(conn, server_struct, final_server_struct) do
     conn
+    |> Plug.Conn.merge_resp_headers(Map.to_list(final_server_struct.response_headers))
     |> apply_session_ops(final_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(final_server_struct.__meta__.cookie_ops)
     |> maybe_persist_user_id(server_struct, final_server_struct)
@@ -878,17 +895,15 @@ defmodule Hologram.Controller do
         send_response(conn, server)
 
       to ->
-        # The headers travel even though the redirect itself does not. Middleware that sets one
-        # alongside a redirect means it for the response, and the HTML path keeps it, so dropping
-        # it here would make the same middleware behave differently for a navigation. Location is
-        # left behind: the payload carries the target, and a location on the 200 this sends names
-        # somewhere the client is not going.
+        # The headers travel even though the redirect itself does not: they were applied with the
+        # run's other decorations, and middleware that sets one alongside a redirect means it for
+        # the response. Location is left behind, since the payload carries the target and a
+        # location on the 200 this sends would name somewhere the client is not going. The content
+        # type is left behind with it, since it labeled a body that does not travel and this sends
+        # JSON.
         conn
-        |> Plug.Conn.merge_resp_headers(
-          server.response_headers
-          |> Map.delete("location")
-          |> Map.to_list()
-        )
+        |> Plug.Conn.delete_resp_header("location")
+        |> Plug.Conn.delete_resp_header("content-type")
         |> send_page_data(build_page_data_payload(resolve_redirect_target(to)))
     end
   end
