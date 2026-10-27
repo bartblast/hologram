@@ -1911,7 +1911,7 @@ defmodule Hologram.ControllerTest do
 
     test "raises when the command set a content type without a status" do
       assert_error RuntimeError,
-                   "Response header content-type was set to \"text/plain\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response you end with put_status.",
+                   "Response header content-type was set to \"text/plain\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status.",
                    fn ->
                      execute_command_request(%{
                        module: Module6,
@@ -2231,7 +2231,7 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module42, :dummy_module_42_digest)
 
       assert_error RuntimeError,
-                   "Response header content-type was set to \"text/csv\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response you end with put_status.",
+                   "Response header content-type was set to \"text/csv\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status.",
                    fn ->
                      :get
                      |> Plug.Test.conn("/hologram-test-fixtures-controller-module42")
@@ -3107,7 +3107,7 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module42, :dummy_module_42_digest)
 
       assert_error RuntimeError,
-                   "Response header content-type was set to \"text/csv\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response you end with put_status.",
+                   "Response header content-type was set to \"text/csv\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status.",
                    fn ->
                      "/hologram/page/Hologram.Test.Fixtures.Controller.Module42"
                      |> subsequent_page_request_conn()

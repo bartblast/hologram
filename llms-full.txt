@@ -2582,7 +2582,7 @@ These helpers are imported into pages, components, and `use Hologram.Middleware`
 - `put_redirect(server, url_or_page)` - a 302 redirect to either a URL string or a page module.
 - `put_redirect(server, page, params)` - a 302 redirect to a page module with route params.
 - `put_response_body(server, body)` - sets the response body (iodata). Not terminal on its own - pair it with `put_status`.
-- `put_response_header(server, name, value)` - sets a response header (name lower-cased), replacing any existing value. Raises on `cookie` / `set-cookie` - use the cookie helpers for those. A `content-type` describes the body, so like `put_response_body` it needs `put_status`. Without one it raises.
+- `put_response_header(server, name, value)` - sets a response header (name lower-cased), replacing any existing value. Raises on `cookie` / `set-cookie` - use the cookie helpers for those. A `content-type` describes the body, so it is allowed only on a response that middleware ends with `put_status`. Anywhere else it raises.
 - `put_status(server, status)` - sets the response status and stops the chain. `status` is an integer like `403` or an atom alias like `:forbidden` or `:not_found`. An unknown alias or out-of-range integer raises. The full alias set is in Status Aliases below.
 
 ##### Identity

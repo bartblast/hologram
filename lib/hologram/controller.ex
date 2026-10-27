@@ -667,12 +667,12 @@ defmodule Hologram.Controller do
     end)
   end
 
-  # A content type describes a body the run meant to send. With no status the request did not end
-  # there: Hologram writes the body, and the label can fit nothing it writes, since the same run
+  # A content type describes a body the run meant to send. When middleware did not end the
+  # request, Hologram writes the body, and the label can fit nothing it writes, since the same run
   # serves a page as markup and as data. Raising is what tells the handler. Dropping the header
   # would hide the mistake, and keeping it would mislabel the response.
   defp ensure_no_content_type!(%Server{response_headers: %{"content-type" => value}}) do
-    raise "Response header content-type was set to #{inspect(value)}, but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response you end with put_status."
+    raise "Response header content-type was set to #{inspect(value)}, but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status."
   end
 
   defp ensure_no_content_type!(_server), do: :ok
