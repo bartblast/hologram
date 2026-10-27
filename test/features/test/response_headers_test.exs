@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.ResponseHeadersTest do
   alias HologramFeatureTests.ResponseHeaders.Page5
   alias HologramFeatureTestsWeb.Endpoint
 
+  # The path a navigation to one of these pages posts to.
+  @page_data_path "/hologram/page/HologramFeatureTests.ResponseHeaders"
+
   # A script can't read the headers of the document the browser loaded, so the request goes to the
   # endpoint directly, as a browser would send it.
   describe "first load" do
@@ -43,7 +46,7 @@ defmodule HologramFeatureTests.ResponseHeadersTest do
       |> click(link("Page 1 link"))
       |> assert_page(Page1)
       |> assert_script_result(
-        ~s(return window.__responseHeaders["/hologram/page/HologramFeatureTests.ResponseHeaders.Page1"]["cache-control"];),
+        ~s(return window.__responseHeaders["#{@page_data_path}.Page1"]["cache-control"];),
         "no-store"
       )
     end
@@ -55,7 +58,7 @@ defmodule HologramFeatureTests.ResponseHeadersTest do
       |> click(link("Page 2 link"))
       |> assert_page(Page2)
       |> assert_script_result(
-        ~s(return window.__responseHeaders["/hologram/page/HologramFeatureTests.ResponseHeaders.Page2"]["x-robots-tag"];),
+        ~s(return window.__responseHeaders["#{@page_data_path}.Page2"]["x-robots-tag"];),
         "noindex"
       )
     end
