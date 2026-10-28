@@ -8,7 +8,6 @@ defmodule Hologram.ControllerTest do
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
-  alias Hologram.Commons.SystemUtils
   alias Hologram.Component
   alias Hologram.LiveReload
   alias Hologram.Realtime
@@ -269,6 +268,12 @@ defmodule Hologram.ControllerTest do
     ]
 
     Jason.encode!([2, %{"t" => "m", "d" => serialized_map_data}])
+  end
+
+  # A term the way it reads in a decoded response: serialized, then read back as plain JSON.
+  defp serialized_term(term) do
+    serialized = Serializer.serialize!(term)
+    Jason.decode!(serialized)
   end
 
   defp subsequent_page_request_conn(path, session_data \\ %{}) do
@@ -875,12 +880,12 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response == %{
-               "action" => ~s'Type.atom("nil")',
+               "action" => serialized_term(nil),
                "chunks" => [],
-               "selfEchoes" => "Type.list([])",
+               "selfEchoes" => serialized_term([]),
                "status" => 1,
-               "subReceiptAdds" => "Type.list([])",
-               "subReceiptDrops" => "Type.list([])"
+               "subReceiptAdds" => serialized_term([]),
+               "subReceiptDrops" => serialized_term([])
              }
     end
 
@@ -909,7 +914,12 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response["action"] =~ "injected_by_middleware"
+      assert response["action"] ==
+               serialized_term(%Component.Action{
+                 name: :my_action,
+                 params: %{marker: :injected_by_middleware},
+                 target: "my_target_1"
+               })
     end
 
     test "establishes a Hologram session ID when absent" do
@@ -950,7 +960,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_cid")], [Type.atom("params"), Type.map([[Type.atom("cid"), Type.bitstring("my_target_1")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_cid,
+                 params: %{cid: "my_target_1"},
+                 target: "my_target_1"
+               })
     end
 
     test "extracts instance_id from payload and exposes it via server.instance_id" do
@@ -966,7 +980,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_instance_id")], [Type.atom("params"), Type.map([[Type.atom("instance_id"), Type.bitstring("my-instance-id")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_instance_id,
+                 params: %{instance_id: "my-instance-id"},
+                 target: "my_target_1"
+               })
     end
 
     test "pre-populates server.subscriptions with only the target component's receipts" do
@@ -989,7 +1007,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("my_target_1")])])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_subscriptions,
+                 params: %{subscriptions: [{:room_a, "my_target_1"}]},
+                 target: "my_target_1"
+               })
     end
 
     test "ignores a receipt whose binding has been tombstoned" do
@@ -1015,7 +1037,12 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      assert response["action"] =~ ~s'Type.atom("subscriptions"), Type.list([])'
+      assert response["action"] ==
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_subscriptions,
+                 params: %{subscriptions: []},
+                 target: "my_target_1"
+               })
     end
 
     test "pre-populates server.subscriptions to an empty list when no registry entry exists" do
@@ -1031,7 +1058,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_subscriptions,
+                 params: %{subscriptions: []},
+                 target: "my_target_1"
+               })
     end
 
     test "drives SubscriptionRegistry.apply_deltas after a command calls put_subscription" do
@@ -1200,10 +1231,14 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      %{"subReceiptAdds" => encoded_sub_receipt_adds} = Jason.decode!(conn.resp_body)
+      %{"subReceiptAdds" => sub_receipt_adds} = Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded_sub_receipt_adds, ~s'Type.atom("room_a")')
-      assert String.contains?(encoded_sub_receipt_adds, ~s'Type.bitstring("my_target_1")')
+      # One receipt: its token is signed, so the channel and the cid are what can be asserted.
+      assert [
+               4,
+               %{"t" => "l", "d" => [%{"t" => "t", "d" => ["aroom_a", "smy_target_1", _token]}]}
+             ] =
+               sub_receipt_adds
     end
 
     test "embeds a drop entry in the response for each newly-dropped subscription" do
@@ -1226,10 +1261,9 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      %{"subReceiptDrops" => encoded_sub_receipt_drops} = Jason.decode!(conn.resp_body)
+      %{"subReceiptDrops" => sub_receipt_drops} = Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded_sub_receipt_drops, ~s'Type.atom("room_a")')
-      assert String.contains?(encoded_sub_receipt_drops, ~s'Type.bitstring("my_target_1")')
+      assert sub_receipt_drops == serialized_term([{:room_a, "my_target_1"}])
     end
 
     test "embeds adds and drops together when a command both puts and deletes subscriptions" do
@@ -1253,13 +1287,18 @@ defmodule Hologram.ControllerTest do
         })
 
       %{
-        "subReceiptAdds" => encoded_sub_receipt_adds,
-        "subReceiptDrops" => encoded_sub_receipt_drops
+        "subReceiptAdds" => sub_receipt_adds,
+        "subReceiptDrops" => sub_receipt_drops
       } =
         Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded_sub_receipt_adds, ~s'Type.atom("room_b")')
-      assert String.contains?(encoded_sub_receipt_drops, ~s'Type.atom("room_a")')
+      assert [
+               4,
+               %{"t" => "l", "d" => [%{"t" => "t", "d" => ["aroom_b", "smy_target_1", _token]}]}
+             ] =
+               sub_receipt_adds
+
+      assert sub_receipt_drops == serialized_term([{:room_a, "my_target_1"}])
     end
 
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline when CSRF token validation succeeds" do
@@ -1303,7 +1342,7 @@ defmodule Hologram.ControllerTest do
       conn = execute_successful_command_request()
       response = Jason.decode!(conn.resp_body)
 
-      assert response["action"] == ~s'Type.atom("nil")'
+      assert response["action"] == serialized_term(nil)
     end
 
     test "command with next action target not specified" do
@@ -1318,7 +1357,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_b,
+                 params: %{c: 3},
+                 target: "my_target_1"
+               })
     end
 
     test "command with next action target specified" do
@@ -1333,10 +1376,14 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_c,
+                 params: %{c: 3},
+                 target: "my_target_2"
+               })
     end
 
-    test "command with encoding error for anonymous function" do
+    test "command with a next action the format cannot carry" do
       payload = %{
         module: Module8,
         name: :my_command_8,
@@ -1347,15 +1394,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      expected_msg =
-        if SystemUtils.otp_version() >= 23 do
-          "term contains a function that is not a named function capture"
-        else
-          "term contains a function that is not a remote function capture"
-        end
-
       assert response["status"] == 0
-      assert response["action"] == expected_msg
+      assert response["action"] == "term contains a function that is not a named function capture"
     end
 
     test "command handler can read from session" do
@@ -1383,7 +1423,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_session")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :action_from_session,
+                 params: %{},
+                 target: "my_target_1"
+               })
     end
 
     test "command handler can read from cookies" do
@@ -1413,7 +1457,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :action_from_cookie,
+                 params: %{},
+                 target: "my_target_1"
+               })
     end
 
     test "command handler can write to session" do
@@ -1630,7 +1678,7 @@ defmodule Hologram.ControllerTest do
              ]
     end
 
-    test "sets the selfEchoes field to the encoded actions when any self-echoes were queued" do
+    test "sets the selfEchoes field to the serialized actions when any self-echoes were queued" do
       payload = %{
         module: Module6,
         name: :my_command_self_echo_put_broadcast_subscribed,
@@ -1640,10 +1688,16 @@ defmodule Hologram.ControllerTest do
 
       conn = execute_command_request(payload)
 
-      %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
+      %{"selfEchoes" => self_echoes} = Jason.decode!(conn.resp_body)
 
-      assert encoded_self_echoes ==
-               ~s'Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("test_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])])'
+      assert self_echoes ==
+               serialized_term([
+                 %Component.Action{
+                   name: :test_action,
+                   params: %{text: "hi"},
+                   target: "my_target_1"
+                 }
+               ])
     end
 
     test "sets the selfEchoes field to an empty list when no self-echoes were queued" do
@@ -1656,9 +1710,9 @@ defmodule Hologram.ControllerTest do
 
       conn = execute_command_request(payload)
 
-      %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
+      %{"selfEchoes" => self_echoes} = Jason.decode!(conn.resp_body)
 
-      assert encoded_self_echoes == "Type.list([])"
+      assert self_echoes == serialized_term([])
     end
 
     test "self-echoes reach every cid on the originating instance subscribed to the channel, not just the target" do
@@ -1677,12 +1731,18 @@ defmodule Hologram.ControllerTest do
       }
 
       conn = execute_command_request(payload)
-      %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
+      %{"selfEchoes" => self_echoes} = Jason.decode!(conn.resp_body)
 
       # The broadcast self-echoes to the target cid and the sibling cid on the
       # same instance (order is not guaranteed).
-      assert String.contains?(encoded_self_echoes, ~s|Type.bitstring("my_target_1")|)
-      assert String.contains?(encoded_self_echoes, ~s|Type.bitstring("sibling")|)
+      assert [4, %{"t" => "l", "d" => echoed_actions}] = self_echoes
+
+      targets =
+        Enum.map(echoed_actions, fn %{"t" => "m", "d" => entries} ->
+          Enum.find_value(entries, fn [key, value] -> key == "atarget" && value end)
+        end)
+
+      assert Enum.sort(targets) == ["smy_target_1", "ssibling"]
     end
 
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when the handler changes identity" do
@@ -2824,10 +2884,11 @@ defmodule Hologram.ControllerTest do
           [receipt_token]
         )
 
-      %{"refreshedReceipts" => encoded} = Jason.decode!(conn.resp_body)
+      %{"refreshedReceipts" => refreshed_receipts} = Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded, ~s'Type.atom("room_a")')
-      assert String.contains?(encoded, ~s'Type.bitstring("page")')
+      # One receipt: its token is signed, so the channel and the cid are what can be asserted.
+      assert [4, %{"t" => "l", "d" => [%{"t" => "t", "d" => ["aroom_a", "spage", _token]}]}] =
+               refreshed_receipts
     end
   end
 

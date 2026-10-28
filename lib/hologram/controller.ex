@@ -5,7 +5,6 @@ defmodule Hologram.Controller do
 
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Assets.PageDigestRegistry
-  alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.LiveReload
   alias Hologram.Page
@@ -385,24 +384,25 @@ defmodule Hologram.Controller do
 
       flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
-      {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
-      command_status = if encode_status == :ok, do: 1, else: 0
-
-      {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
-      {:ok, encoded_sub_receipt_adds} = Encoder.encode_term(sub_receipt_adds)
-      {:ok, encoded_sub_receipt_drops} = Encoder.encode_term(sub_receipt_drops)
+      # A next action the format cannot carry fails the command, and the reply says why in the
+      # action's place.
+      {action, command_status} =
+        case Serializer.serialize(next_action) do
+          {:ok, serialized_next_action} -> {Jason.Fragment.new(serialized_next_action), 1}
+          {:error, message} -> {message, 0}
+        end
 
       conn
       |> decorate_conn(server_struct, flushed_server_struct)
-      |> Controller.json(%{
-        action: encoded_next_action,
+      |> send_json(%{
+        action: action,
         # The chunks the struct types in the action and in the self echoes need, which the client
         # loads before it runs them.
         chunks: ChunkRegistry.lookup_term({next_action, self_echoes}),
-        selfEchoes: encoded_self_echoes,
+        selfEchoes: serialize_to_fragment(self_echoes),
         status: command_status,
-        subReceiptAdds: encoded_sub_receipt_adds,
-        subReceiptDrops: encoded_sub_receipt_drops
+        subReceiptAdds: serialize_to_fragment(sub_receipt_adds),
+        subReceiptDrops: serialize_to_fragment(sub_receipt_drops)
       })
       |> Plug.Conn.halt()
     end
@@ -530,13 +530,11 @@ defmodule Hologram.Controller do
           expires_at
         )
 
-        {:ok, encoded_refreshed_receipts} = Encoder.encode_term(refreshed_receipts)
-
         conn
-        |> Controller.json(%{
+        |> send_json(%{
           handshakeId: handshake_id,
           heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
-          refreshedReceipts: encoded_refreshed_receipts
+          refreshedReceipts: serialize_to_fragment(refreshed_receipts)
         })
         |> Plug.Conn.halt()
     end

@@ -14,6 +14,7 @@ import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LiveReload from "../../assets/js/live_reload.mjs";
 import Logger from "../../assets/js/logger.mjs";
+import Serializer from "../../assets/js/serializer.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_registry.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -47,25 +48,25 @@ describe("Sse", () => {
     ok = true,
     status = 200,
   } = {}) {
+    // The receipts travel the way the server sends them: serialized, and parsed along with the
+    // rest of the reply.
+    const serializedRefreshedReceipts = JSON.parse(
+      Serializer.serialize(refreshedReceipts, "server"),
+    );
+
     fetchStub.resolves({
       ok,
       status,
       json: async () => ({
         handshakeId,
         heartbeatIntervalMs,
-        refreshedReceipts: "encoded-refreshed-receipts",
+        refreshedReceipts: serializedRefreshedReceipts,
       }),
     });
 
     return sinon
       .stub(Interpreter, "evaluateJavaScriptExpression")
-      .callsFake((expression) => {
-        if (expression === "encoded-refreshed-receipts") {
-          return refreshedReceipts;
-        }
-
-        return Type.atom("noop");
-      });
+      .returns(Type.atom("noop"));
   }
 
   beforeEach(() => {

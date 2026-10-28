@@ -2,6 +2,7 @@
 
 import App from "./app.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import Deserializer from "./deserializer.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -105,11 +106,10 @@ export default class Sse {
       const {
         handshakeId,
         heartbeatIntervalMs,
-        refreshedReceipts: encodedRefreshed,
+        refreshedReceipts: serializedRefreshed,
       } = await response.json();
 
-      const refreshed =
-        Interpreter.evaluateJavaScriptExpression(encodedRefreshed);
+      const refreshed = Deserializer.deserialize(serializedRefreshed);
 
       if (preHandshakeReceiptCount > 0 && refreshed.data.length === 0) {
         window.location.reload();
