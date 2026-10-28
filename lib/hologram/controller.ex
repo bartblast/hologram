@@ -4,6 +4,7 @@ defmodule Hologram.Controller do
   require Logger
 
   alias Hologram.Assets.ChunkRegistry
+  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Component.Action
   alias Hologram.LiveReload
@@ -96,6 +97,29 @@ defmodule Hologram.Controller do
   end
 
   @doc """
+  Builds the boot data of a first page: what the client reads when it boots, from the block the
+  page's markup carries (see `Hologram.Template.Renderer.interpolate_boot_data/3`).
+
+  The page's fields are the ones a navigation's payload carries, built the same way (see
+  `build_page_data_payload/1`), so the two cannot drift apart: the chunks, the page digest, the
+  mount data and the realtime bookkeeping, every term among them in Hologram's term format as a
+  nested JSON value. Without the tree, which the markup itself is. The document-wide values a
+  navigation already has join them: the asset manifest, the CSRF token and the instance id.
+  """
+  @spec build_boot_data(map) :: map
+  def build_boot_data(%{csrf_token: csrf_token, instance_id: instance_id} = fields) do
+    asset_manifest_json = AssetManifestCache.get_manifest_json()
+
+    fields
+    |> page_fields()
+    |> Map.merge(%{
+      assetManifest: Jason.Fragment.new(asset_manifest_json),
+      csrfToken: csrf_token,
+      instanceId: instance_id
+    })
+  end
+
+  @doc """
   Builds the payload describing a page for a client that renders it itself, rather than being sent
   the markup.
 
@@ -103,11 +127,11 @@ defmodule Hologram.Controller do
   code has arrived, and everything a mount reads as fields of its own beside it: the component
   registry, the page module and params, and the realtime bookkeeping.
 
-  A loaded document has only one channel for that state - a script in the markup it is sent - but a
-  navigated page has the payload, so it does not pay for the round trip of escaping encoder output
-  into the tree's own encoding and unescaping it again on arrival. It also means the state is
-  readable before the render is patched in, rather than as a side effect of a script the patch
-  inserts and the browser then runs.
+  A loaded document carries the same fields in the boot data block of its markup (see
+  `build_boot_data/1`), but a navigated page has the payload, so it does not pay for the round trip
+  of escaping them into the tree's own encoding and unescaping them again on arrival. It also means
+  the state is readable before the render is patched in, rather than as a side effect of an
+  element the patch inserts.
 
   The digest names the bundle to fetch when this client does not have the page's code yet, and the
   chunk digests name the chunks the page needs before it mounts (see
@@ -142,27 +166,10 @@ defmodule Hologram.Controller do
 
   # The wire format for the tree, and the 112 alternatives it was measured against.
   # See: docs/navigation_payload_wire_format.md
-  def build_page_data_payload(%{
-        chunk_digests: chunk_digests,
-        mount_data: mount_data,
-        page_digest: page_digest,
-        self_echoes: self_echoes,
-        sub_receipt_adds: sub_receipt_adds,
-        sub_receipt_drops: sub_receipt_drops,
-        tree: tree
-      }) do
-    %{
-      chunks: chunk_digests,
-      componentRegistry: serialize_to_fragment(mount_data.component_registry),
-      pageDigest: page_digest,
-      pageModule: serialize_to_fragment(mount_data.page_module),
-      pageParams: serialize_to_fragment(mount_data.page_params),
-      selfEchoes: serialize_to_fragment(self_echoes),
-      subReceiptAdds: serialize_to_fragment(sub_receipt_adds),
-      subReceiptDrops: serialize_to_fragment(sub_receipt_drops),
-      tree: Renderer.encode_tree(tree),
-      type: "page"
-    }
+  def build_page_data_payload(%{tree: tree} = fields) do
+    fields
+    |> page_fields()
+    |> Map.merge(%{tree: Renderer.encode_tree(tree), type: "page"})
   end
 
   @doc """
@@ -473,12 +480,22 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, conn, result} ->
+        boot_data =
+          build_boot_data(%{
+            chunk_digests: result.chunk_digests,
+            csrf_token: renderer_opts[:csrf_token],
+            instance_id: renderer_opts[:instance_id],
+            mount_data: result.mount_data,
+            page_digest: PageDigestRegistry.lookup(page_module),
+            self_echoes: result.self_echoes,
+            sub_receipt_adds: result.sub_receipt_adds,
+            sub_receipt_drops: result.sub_receipt_drops
+          })
+
         final_html =
           result.html
+          |> Renderer.interpolate_boot_data(boot_data, renderer_opts[:csp_nonce])
           |> Renderer.interpolate_chunks(result.chunk_digests, chunk_csp_nonce(renderer_opts))
-          |> Renderer.interpolate_self_echoes_js(result.self_echoes)
-          |> Renderer.interpolate_sub_receipt_adds_js(result.sub_receipt_adds)
-          |> Renderer.interpolate_sub_receipt_drops_js(result.sub_receipt_drops)
 
         conn
         |> Controller.html(final_html)
@@ -578,9 +595,9 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, lifecycle_conn, result} ->
-        # The values the HTML path substitutes into the served document travel as payload fields
-        # here. Nothing is interpolated into the tree: this path renders no script to interpolate
-        # into, and the client reads the state from the payload before it patches.
+        # The values a first page carries in its boot data block travel as payload fields here.
+        # Nothing is interpolated into the tree: this path renders no block to interpolate, and the
+        # client reads the state from the payload before it patches.
         payload =
           build_page_data_payload(%{
             chunk_digests: result.chunk_digests,
@@ -775,6 +792,27 @@ defmodule Hologram.Controller do
     |> Enum.sort()
   end
 
+  # The fields describing a page that the first page's boot data and a navigation's payload share.
+  defp page_fields(%{
+         chunk_digests: chunk_digests,
+         mount_data: mount_data,
+         page_digest: page_digest,
+         self_echoes: self_echoes,
+         sub_receipt_adds: sub_receipt_adds,
+         sub_receipt_drops: sub_receipt_drops
+       }) do
+    %{
+      chunks: chunk_digests,
+      componentRegistry: serialize_to_fragment(mount_data.component_registry),
+      pageDigest: page_digest,
+      pageModule: serialize_to_fragment(mount_data.page_module),
+      pageParams: serialize_to_fragment(mount_data.page_params),
+      selfEchoes: serialize_to_fragment(self_echoes),
+      subReceiptAdds: serialize_to_fragment(sub_receipt_adds),
+      subReceiptDrops: serialize_to_fragment(sub_receipt_drops)
+    }
+  end
+
   defp process_command_result(command_result, server_struct, default_target) do
     case command_result do
       %Server{next_action: %Action{target: nil} = action} = updated_server_struct ->
@@ -844,9 +882,9 @@ defmodule Hologram.Controller do
 
       Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
 
-      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The renderer leaves
-      # `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so this Realtime-domain computation
-      # lives in the controller, which is also why it is returned rather than interpolated here.
+      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The renderer stays out of
+      # them on purpose, so this Realtime-domain computation lives in the controller, which is also
+      # why it is returned rather than written into the boot data here.
       self_echoes =
         Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
 

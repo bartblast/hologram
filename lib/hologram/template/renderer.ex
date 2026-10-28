@@ -2,11 +2,9 @@ defmodule Hologram.Template.Renderer do
   @moduledoc false
 
   alias Hologram.Assets.ChunkRegistry
-  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
-  alias Hologram.Compiler.Encoder
   alias Hologram.Component
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
@@ -216,10 +214,9 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
-  Substitutes the chunk tokens in the given HTML with the chunks supplied by the caller, given by
-  their digests: `$CHUNK_DIGESTS_JS_PLACEHOLDER` with the digests as a JavaScript array of strings,
-  and `$CHUNK_SCRIPT_TAGS_PLACEHOLDER` with a script tag per chunk. The digests are the compiler's
-  own, which need no escaping.
+  Substitutes the `$CHUNK_SCRIPT_TAGS_PLACEHOLDER` token in the given HTML with a script tag per
+  chunk supplied by the caller, given by its digest. The digests are the compiler's own, which
+  need no escaping.
 
   The script tags carry the given Content Security Policy nonce, as every script element of the
   page does, or no nonce when it is `nil`. The nonce is a generated one in the base64 alphabet,
@@ -232,8 +229,6 @@ defmodule Hologram.Template.Renderer do
   """
   @spec interpolate_chunks(String.t(), [String.t()], String.t() | nil) :: String.t()
   def interpolate_chunks(html, chunk_digests, csp_nonce) do
-    chunk_digests_js = Jason.encode!(chunk_digests)
-
     nonce_attribute_html = if csp_nonce, do: ~s( nonce="#{csp_nonce}"), else: ""
 
     chunk_script_tags =
@@ -242,39 +237,7 @@ defmodule Hologram.Template.Renderer do
         ~s(<script#{nonce_attribute_html} async src="#{chunk_bundle_path}"></script>)
       end)
 
-    html
-    |> String.replace("$CHUNK_DIGESTS_JS_PLACEHOLDER", chunk_digests_js)
-    |> String.replace("$CHUNK_SCRIPT_TAGS_PLACEHOLDER", chunk_script_tags)
-  end
-
-  @doc """
-  Substitutes the `$SELF_ECHOES_JS_PLACEHOLDER` token in the given HTML with
-  the encoded list of actions supplied by the caller.
-  """
-  @spec interpolate_self_echoes_js(String.t(), [Component.Action.t()]) :: String.t()
-  def interpolate_self_echoes_js(html, self_echoes) do
-    self_echoes_js = Encoder.encode_term!(self_echoes)
-    String.replace(html, "$SELF_ECHOES_JS_PLACEHOLDER", self_echoes_js)
-  end
-
-  @doc """
-  Substitutes the `$SUB_RECEIPT_ADDS_JS_PLACEHOLDER` token in the given HTML with
-  the encoded list of subscription receipts supplied by the caller.
-  """
-  @spec interpolate_sub_receipt_adds_js(String.t(), list) :: String.t()
-  def interpolate_sub_receipt_adds_js(html, sub_receipt_adds) do
-    sub_receipt_adds_js = Encoder.encode_term!(sub_receipt_adds)
-    String.replace(html, "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER", sub_receipt_adds_js)
-  end
-
-  @doc """
-  Substitutes the `$SUB_RECEIPT_DROPS_JS_PLACEHOLDER` token in the given HTML with
-  the encoded list of subscription drops supplied by the caller.
-  """
-  @spec interpolate_sub_receipt_drops_js(String.t(), list) :: String.t()
-  def interpolate_sub_receipt_drops_js(html, sub_receipt_drops) do
-    sub_receipt_drops_js = Encoder.encode_term!(sub_receipt_drops)
-    String.replace(html, "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER", sub_receipt_drops_js)
+    String.replace(html, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER", chunk_script_tags)
   end
 
   @doc """
@@ -349,11 +312,10 @@ defmodule Hologram.Template.Renderer do
   Renders the given page as its two projections: the HTML a document load is served, and the
   evaluated tree the same render is described by as data.
 
-  Only the HTML has the mount data interpolated into it, since a cold document has no channel for
-  that state but the markup it is sent. The tree keeps the placeholders verbatim and the mount
-  data is returned beside it, for a caller that carries the two as separate fields. Both
-  projections leave the Realtime placeholders for the caller to substitute, and the chunk
-  placeholders too: the chunks the struct types in the component registry need are returned as
+  Neither projection holds the mount data. It is returned beside them as terms, for the caller to
+  serialize into the first page's boot data block (see `interpolate_boot_data/3`) or into a
+  navigation's payload. Both projections leave the boot data and chunk placeholders for the caller
+  to substitute: the chunks the struct types in the component registry need are returned as
   digests, and the caller knows of more (see `interpolate_chunks/3`).
 
   ## Examples
@@ -399,8 +361,6 @@ defmodule Hologram.Template.Renderer do
       |> put_page_module_context(page_module)
       |> put_page_mounted_flag_context(false)
       |> maybe_put_csp_nonce_context(opts, initial_page?)
-      |> maybe_put_csrf_token_context(opts, initial_page?)
-      |> maybe_put_instance_id_context(opts, initial_page?)
 
     {initial_tree, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
@@ -425,49 +385,28 @@ defmodule Hologram.Template.Renderer do
         %{module: page_module, struct: page_component_struct_with_emitted_context_after_rendering}
       )
 
-    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left unsubstituted. Its value depends on the
-    # post-render `server.broadcasts`, which is a `Hologram.Realtime` concern - keeping the renderer
-    # Realtime-agnostic means the controller supplies it after `Realtime.get_self_echoes/1`, into
-    # the HTML through `interpolate_self_echoes_js/2` and into the navigation payload as a field.
-
     component_registry_for_client = hollow_props(component_registry_with_page_struct)
 
-    # The values a mount reads, grouped because they travel together and returned as terms, since
-    # each projection encodes them its own way. The HTML projection inlines them as JavaScript,
-    # along with the asset manifest, since a loaded document has no other channel for them. A
-    # navigation carries them as payload fields in the term format the client's reader walks - not
-    # the asset manifest, which is a global the initial document sets once and a navigation
-    # therefore already has.
+    # The values a mount reads, grouped because they travel together, and returned as terms for the
+    # controller to serialize: into the first page's boot data block, or into a navigation's
+    # payload. The values that depend on the render's Realtime state, the self-echoes and the
+    # receipts, join them there, which keeps the renderer Realtime-agnostic.
     mount_data = %{
       component_registry: component_registry_for_client,
       page_module: page_module,
       page_params: params
     }
 
-    asset_manifest_js = AssetManifestCache.get_manifest_js()
-    component_registry_js = Encoder.encode_term!(component_registry_for_client)
-    page_module_js = Encoder.encode_term!(page_module)
-    page_params_js = Encoder.encode_term!(params)
-
-    html_with_interpolated_js =
-      initial_tree
-      |> print_dom(
+    html =
+      print_dom(initial_tree,
         csp_nonce: opts[:csp_nonce],
         csp_nonced_elements: opts[:csp_nonced_elements]
       )
-      |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
-      |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
-      |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
-      |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
 
-    # The tree keeps its placeholders. A navigation carries the mount data beside the tree rather
-    # than inside it, so nothing on that path ever substitutes them - and folding the state into a
-    # script element's text would only mean escaping encoder output into the tree's encoding and
-    # unescaping it again on arrival.
     %{
       chunk_digests: ChunkRegistry.lookup_term(component_registry_for_client),
       component_registry: component_registry_with_page_struct,
-      html: html_with_interpolated_js,
+      html: html,
       mount_data: mount_data,
       server_struct: final_server_struct,
       tree: initial_tree
@@ -1017,37 +956,6 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp maybe_put_csp_nonce_context(page_component_struct, _opts, false) do
-    page_component_struct
-  end
-
-  defp maybe_put_csrf_token_context(page_component_struct, opts, true) do
-    csrf_token =
-      opts[:csrf_token] || raise ArgumentError, "CSRF token is required for initial page requests"
-
-    Component.put_context(
-      page_component_struct,
-      {Hologram.Runtime, :csrf_token},
-      csrf_token
-    )
-  end
-
-  defp maybe_put_csrf_token_context(page_component_struct, _opts, false) do
-    page_component_struct
-  end
-
-  defp maybe_put_instance_id_context(page_component_struct, opts, true) do
-    instance_id =
-      opts[:instance_id] ||
-        raise ArgumentError, "instance_id is required for initial page requests"
-
-    Component.put_context(
-      page_component_struct,
-      {Hologram.Runtime, :instance_id},
-      instance_id
-    )
-  end
-
-  defp maybe_put_instance_id_context(page_component_struct, _opts, false) do
     page_component_struct
   end
 

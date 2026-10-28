@@ -20,6 +20,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Router.SearchTree
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
+  alias Hologram.Runtime.Deserializer
   alias Hologram.Runtime.Serializer
   alias Hologram.Runtime.Session
   alias Hologram.Server
@@ -108,6 +109,23 @@ defmodule Hologram.ControllerTest do
     |> Enum.map_join(&String.pad_leading(&1, 2, "0"))
   end
 
+  # The boot data a first page's markup carries, parsed: the JSON of its boot data block.
+  defp boot_data(resp_body) do
+    [_full_match, boot_data_json] =
+      Regex.run(~r'<script[^>]* id="hologram-boot-data"[^>]*>(.*?)</script>'s, resp_body)
+
+    Jason.decode!(boot_data_json)
+  end
+
+  # A term field of a first page's boot data, read back as the term.
+  defp boot_data_term(resp_body, field) do
+    resp_body
+    |> boot_data()
+    |> Map.fetch!(field)
+    |> Jason.encode!()
+    |> Deserializer.deserialize()
+  end
+
   # Create a test connection with parsed JSON body_params (simulating what Plug.Parsers does)
   defp conn_with_parsed_json(method, path, parsed_json, session \\ @session) do
     method
@@ -138,10 +156,7 @@ defmodule Hologram.ControllerTest do
   end
 
   defp extract_instance_id(resp_body) do
-    [_full, instance_id] =
-      Regex.run(~r/globalThis\.Hologram\.instanceId = "([^"]+)";/, resp_body)
-
-    instance_id
+    boot_data(resp_body)["instanceId"]
   end
 
   # The JSON a fragment writes into a response, since a fragment holds a function and compares equal
@@ -513,6 +528,77 @@ defmodule Hologram.ControllerTest do
                plug_session: %{"existing_key" => "existing_value"},
                plug_session_info: :write
              }
+    end
+  end
+
+  describe "build_boot_data/1" do
+    setup do
+      fields = %{
+        chunk_digests: ["AAAAAAAA"],
+        csrf_token: "my_csrf_token",
+        instance_id: "my_instance_id",
+        mount_data: %{
+          component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
+          page_module: Module1,
+          page_params: %{key: "value"}
+        },
+        page_digest: "abcdef1234567890",
+        self_echoes: [%Component.Action{name: :refresh, params: %{}, target: "page"}],
+        sub_receipt_adds: [{:room, "page", "token"}],
+        sub_receipt_drops: [{:lobby, "page"}]
+      }
+
+      [fields: fields]
+    end
+
+    # The first page and a navigation describe a page by the same fields, built the same way, so
+    # the two cannot drift apart. The markup is the first page's tree, and the document-wide values
+    # a navigation already has join the page's.
+    test "carries a navigation's page fields without the tree, and the document-wide values", %{
+      fields: fields
+    } do
+      assert fields
+             |> build_boot_data()
+             |> Map.keys()
+             |> Enum.sort() == [
+               :assetManifest,
+               :chunks,
+               :componentRegistry,
+               :csrfToken,
+               :instanceId,
+               :pageDigest,
+               :pageModule,
+               :pageParams,
+               :selfEchoes,
+               :subReceiptAdds,
+               :subReceiptDrops
+             ]
+    end
+
+    test "builds the page fields as a navigation's payload does", %{fields: fields} do
+      boot_data = build_boot_data(fields)
+      payload = build_page_data_payload(Map.put(fields, :tree, []))
+
+      for key <- Map.keys(payload) -- [:tree, :type] do
+        assert Jason.encode!(boot_data[key]) == Jason.encode!(payload[key])
+      end
+    end
+
+    test "survives the JSON encoding it is sent over", %{fields: fields} do
+      decoded =
+        fields
+        |> build_boot_data()
+        |> Jason.encode!()
+        |> Jason.decode!()
+
+      assert decoded["assetManifest"]["hologram/runtime.js"] ==
+               "/hologram/runtime-1234567890abcdef.js"
+
+      assert decoded["chunks"] == ["AAAAAAAA"]
+      assert decoded["csrfToken"] == "my_csrf_token"
+      assert decoded["instanceId"] == "my_instance_id"
+      assert decoded["pageDigest"] == "abcdef1234567890"
+      assert decoded["pageParams"] == serialized_term(%{key: "value"})
     end
   end
 
@@ -2039,8 +2125,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module33)
 
-      assert conn.resp_body =~
-               ~s'globalThis.Hologram.initialChunkDigests = ["BBBBBBBB","CCCCCCCC"];'
+      assert boot_data(conn.resp_body)["chunks"] == ["BBBBBBBB", "CCCCCCCC"]
 
       assert conn.resp_body =~
                ~r'<script nonce="[^"]+" async src="/hologram/chunk-BBBBBBBB\.js"></script><script nonce="[^"]+" async src="/hologram/chunk-CCCCCCCC\.js"></script>'
@@ -2055,8 +2140,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module35)
 
-      assert conn.resp_body =~
-               ~s'globalThis.Hologram.initialChunkDigests = ["AAAAAAAA","CCCCCCCC"];'
+      assert boot_data(conn.resp_body)["chunks"] == ["AAAAAAAA", "CCCCCCCC"]
     end
 
     test "names the chunks the page preloads" do
@@ -2072,8 +2156,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module34)
 
-      assert conn.resp_body =~
-               ~s'globalThis.Hologram.initialChunkDigests = ["DDDDDDDD"];'
+      assert boot_data(conn.resp_body)["chunks"] == ["DDDDDDDD"]
 
       assert conn.resp_body =~
                ~r'<script nonce="[^"]+" async src="/hologram/chunk-DDDDDDDD\.js"></script>'
@@ -2127,7 +2210,61 @@ defmodule Hologram.ControllerTest do
         )
 
       assert conn.resp_body =~ ~s'<script async src="/hologram/chunk-DDDDDDDD.js"></script>'
-      refute conn.resp_body =~ "nonce="
+
+      # The boot data block keeps it: its nonce is no policy stamp, but what the client tells the
+      # real block from an injected one by.
+      assert conn.resp_body =~ ~s'<script nonce="#{@csp_nonce}" type="application/json"'
+      assert length(Regex.scan(~r/nonce=/, conn.resp_body)) == 1
+    end
+
+    test "carries the boot data in a block with the nonce the client is given" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert conn.resp_body =~
+               ~s'<script nonce="#{csp_nonce}" type="application/json" id="hologram-boot-data">'
+
+      boot_data = boot_data(conn.resp_body)
+
+      assert boot_data["assetManifest"]["hologram/runtime.js"] ==
+               "/hologram/runtime-1234567890abcdef.js"
+
+      assert is_binary(boot_data["csrfToken"])
+      assert boot_data["pageDigest"] == "dummy_module_34_digest"
+      assert boot_data_term(conn.resp_body, "pageModule") == Module34
+      assert boot_data_term(conn.resp_body, "pageParams") == %{}
+
+      assert %{"page" => %{module: Module34}} =
+               boot_data_term(conn.resp_body, "componentRegistry")
+    end
+
+    # The page's own values travel only in the block, which the browser never runs, so the one
+    # inline script left holds nothing built from app data.
+    test "writes no app data into an inline script" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      inline_scripts =
+        ~r'<script nonce="[^"]+">(.*?)</script>'s
+        |> Regex.scan(conn.resp_body, capture: :all_but_first)
+        |> List.flatten()
+
+      assert length(inline_scripts) == 1
+      refute Enum.any?(inline_scripts, &String.contains?(&1, "Module34"))
+      refute Enum.any?(inline_scripts, &String.contains?(&1, "Type."))
     end
 
     test "generates a new nonce for each initial page request" do
@@ -2159,7 +2296,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module34)
 
-      assert conn.resp_body =~ "globalThis.Hologram.initialChunkDigests = [];"
+      assert boot_data(conn.resp_body)["chunks"] == []
       refute conn.resp_body =~ "/hologram/chunk-"
       refute conn.resp_body =~ "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
     end
@@ -2508,16 +2645,15 @@ defmodule Hologram.ControllerTest do
       refute_receive {:replace_subscriptions, _new_sub_keys, _authorizing_user_id}
     end
 
-    test "substitutes the self_echoes placeholder in the rendered HTML" do
+    test "carries the self-echoes in the boot data" do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       conn = render_page_with_instance(Module14, "test-instance-id")
 
-      refute String.contains?(conn.resp_body, "$SELF_ECHOES_JS_PLACEHOLDER")
-      assert String.contains?(conn.resp_body, "selfEchoes: Type.list([])")
+      assert boot_data_term(conn.resp_body, "selfEchoes") == []
     end
 
-    test "substitutes the sub_receipt_drops placeholder with each client-claimed key the new page no longer puts" do
+    test "carries a receipt drop in the boot data for each client-claimed key the new page no longer puts" do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       # Module14 puts {:room_page, "page"}, {:room_layout, "layout"},
@@ -2529,20 +2665,30 @@ defmodule Hologram.ControllerTest do
           {:room_dropped_b, "layout"}
         ])
 
-      refute String.contains?(conn.resp_body, "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER")
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_dropped_a")')
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_dropped_b")')
+      sub_receipt_drops = boot_data_term(conn.resp_body, "subReceiptDrops")
+
+      assert Enum.sort(sub_receipt_drops) == [
+               {:room_dropped_a, "page"},
+               {:room_dropped_b, "layout"}
+             ]
     end
 
-    test "substitutes the sub_receipt_adds placeholder with a receipt for each binding put during init/3" do
+    test "carries a receipt add in the boot data for each binding put during init/3" do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       conn = render_page_with_instance(Module14, "test-instance-id")
 
-      refute String.contains?(conn.resp_body, "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER")
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_page")')
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_layout")')
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_component")')
+      channels =
+        conn.resp_body
+        |> boot_data_term("subReceiptAdds")
+        |> Enum.map(fn {channel, cid, _receipt_token} -> {channel, cid} end)
+        |> Enum.sort()
+
+      assert channels == [
+               {:room_component, "my_component"},
+               {:room_layout, "layout"},
+               {:room_page, "page"}
+             ]
     end
 
     test "framework sets server.cid to \"page\" during page init/3" do
@@ -3067,10 +3213,10 @@ defmodule Hologram.ControllerTest do
 
       assert tree_json =~ "Module5 page"
 
-      # The state travels beside the tree, so the script that would have carried it is not
+      # The state travels beside the tree, so the block that would have carried it is not
       # rendered on this path at all - which is also why no placeholder can survive into it.
-      refute tree_json =~ "pageMountData"
-      refute tree_json =~ "JS_PLACEHOLDER"
+      refute tree_json =~ "hologram-boot-data"
+      refute tree_json =~ "_PLACEHOLDER"
     end
 
     test "marks a page payload as page data" do
