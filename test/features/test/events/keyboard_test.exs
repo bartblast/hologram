@@ -88,10 +88,10 @@ defmodule HologramFeatureTests.Events.KeyboardTest do
     )
   end
 
-  # A bare Event dispatched as keydown has no key, code or modifier flags, the shape Chrome is
-  # reported to fire when the user picks an autofill suggestion. The result stays nil either way,
-  # so the check is that no listener throws: execute_script reads the browser log after the
-  # script runs, and an uncaught listener error surfaces there as a Wallaby.JSError.
+  # A bare Event dispatched as keydown has no key, code or modifier flags, the shape Chromium
+  # fires before it autofills a field. The result stays nil either way, so the check is that no
+  # listener throws: execute_script reads the browser log after the script runs, and an uncaught
+  # listener error surfaces there as a Wallaby.JSError.
   feature "a keydown without a key is ignored", %{session: session} do
     session
     |> visit(KeyboardPage)

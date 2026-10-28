@@ -28,8 +28,8 @@ export default class KeyboardEvent {
     ]);
   }
 
-  // A keydown or keyup with no key is a browser artifact, not a keypress (Chrome is reported to
-  // fire a bare Event named keydown when the user picks an autofill suggestion). Such an event
+  // A keydown or keyup with no key is a browser artifact, not a keypress (Chromium fires a bare
+  // Event named keydown before it autofills a field and one named keyup after it). Such an event
   // also lacks code and the modifier flags, so no usable param can be built from it.
   static isEventIgnored(event) {
     return typeof event.key !== "string";
