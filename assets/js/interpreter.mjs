@@ -1603,7 +1603,13 @@ export default class Interpreter {
   }
 
   static #areBitstringsEqual(bitstring1, bitstring2) {
-    if (bitstring1.text !== null && bitstring1.text === bitstring2.text) {
+    // Text is false once the bytes failed to decode, so only a string says
+    // they are text. Two binaries that both failed to decode are compared by
+    // their bytes.
+    if (
+      typeof bitstring1.text === "string" &&
+      bitstring1.text === bitstring2.text
+    ) {
       return true;
     }
 
