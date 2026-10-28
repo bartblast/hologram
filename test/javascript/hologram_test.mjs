@@ -2357,12 +2357,21 @@ describe("Hologram", () => {
   describe("loadNewPage()", () => {
     let assignedUrls, assignStub, fetchPageStub;
 
-    const encodedModule7 = `Type.atom("Elixir.Hologram.Test.Fixtures.Module7")`;
-    const encodedNoParams = "Type.map([])";
+    // A payload field holds a term the way the server sends it: serialized, and already parsed
+    // along with the rest of the response.
+    const serialized = (term) =>
+      JSON.parse(Serializer.serialize(term, "server"));
 
-    const redirectTo = (to, encodedPageModule = encodedModule7) => ({
-      pageModule: encodedPageModule,
-      pageParams: encodedNoParams,
+    const module7 = Type.atom("Elixir.Hologram.Test.Fixtures.Module7");
+    const serializedModule7 = serialized(module7);
+    const serializedNoParams = serialized(Type.map());
+
+    // Built once: some tests stub the serializer to watch what the page snapshot saves.
+    const serializedEmptyList = serialized(Type.list());
+
+    const redirectTo = (to, serializedPageModule = serializedModule7) => ({
+      pageModule: serializedPageModule,
+      pageParams: serializedNoParams,
       to: to,
       type: "redirect",
     });
@@ -2394,16 +2403,31 @@ describe("Hologram", () => {
     ];
 
     // The mount data the server used to write into an inline script, carried as payload fields.
-    const encodedComponentRegistry = `Type.map([[Type.bitstring("page"), Type.map([[Type.atom("module"), ${encodedModule7}], [Type.atom("struct"), Type.componentStruct({state: Type.map([[Type.atom("count"), Type.integer(7)]])})]])]])`;
+    const serializedComponentRegistry = serialized(
+      Type.map([
+        [
+          Type.bitstring("page"),
+          Type.map([
+            [Type.atom("module"), module7],
+            [
+              Type.atom("struct"),
+              Type.componentStruct({
+                state: Type.map([[Type.atom("count"), Type.integer(7)]]),
+              }),
+            ],
+          ]),
+        ],
+      ]),
+    );
 
     const payloadFor = (pageDigest, bodyText = "page content") => ({
-      componentRegistry: encodedComponentRegistry,
+      componentRegistry: serializedComponentRegistry,
       pageDigest: pageDigest,
-      pageModule: encodedModule7,
-      pageParams: encodedNoParams,
-      selfEchoes: "Type.list([])",
-      subReceiptAdds: "Type.list([])",
-      subReceiptDrops: "Type.list([])",
+      pageModule: serializedModule7,
+      pageParams: serializedNoParams,
+      selfEchoes: serializedEmptyList,
+      subReceiptAdds: serializedEmptyList,
+      subReceiptDrops: serializedEmptyList,
       tree: treeFor(pageDigest, bodyText),
       type: "page",
     });
@@ -2652,11 +2676,11 @@ describe("Hologram", () => {
       // That the mount then consumes it is a feature test's job - the mount is not reachable from
       // here, since it needs either the destination's code already registered or its bundle to
       // announce itself. What is provable here is that the payload's fields are decoded during
-      // the swap: a field that cannot be evaluated fails it.
+      // the swap: a field that cannot be read fails it, here a map whose entry is no pair.
       it("decodes the payload's mount data during the swap", async () => {
         const payload = {
           ...payloadFor("bad-registry"),
-          componentRegistry: "Type.map([[[",
+          componentRegistry: [4, {t: "m", d: ["i1"]}],
         };
 
         let thrown = null;

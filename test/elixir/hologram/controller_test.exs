@@ -9,7 +9,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
-  alias Hologram.Compiler.Encoder
+  alias Hologram.Component
   alias Hologram.LiveReload
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -21,6 +21,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Router.SearchTree
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
+  alias Hologram.Runtime.Serializer
   alias Hologram.Runtime.Session
   alias Hologram.Server
   alias Hologram.Template.Renderer
@@ -140,6 +141,12 @@ defmodule Hologram.ControllerTest do
       Regex.run(~r/globalThis\.Hologram\.instanceId = "([^"]+)";/, resp_body)
 
     instance_id
+  end
+
+  # The JSON a fragment writes into a response, since a fragment holds a function and compares equal
+  # to nothing.
+  defp fragment_json(fragment) do
+    Jason.encode!(fragment)
   end
 
   defp handshake_request_body(instance_id, receipts) do
@@ -505,15 +512,14 @@ defmodule Hologram.ControllerTest do
       fields = %{
         chunk_digests: ["AAAAAAAA", "BBBBBBBB"],
         mount_data: %{
-          asset_manifest: "{\"/hologram/runtime.js\": \"/hologram/runtime-1234.js\"};",
-          component_registry: ~s/Type.map([[Type.bitstring("page"), Type.map([])]])/,
-          page_module: Encoder.encode_term!(Module1),
-          page_params: ~s/Type.map([])/
+          component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
+          page_module: Module1,
+          page_params: %{}
         },
         page_digest: "abcdef1234567890",
-        self_echoes: [],
-        sub_receipt_adds: [],
-        sub_receipt_drops: [],
+        self_echoes: [%Component.Action{name: :refresh, params: %{}, target: "page"}],
+        sub_receipt_adds: [{:room, "page", "token"}],
+        sub_receipt_drops: [{:lobby, "page"}],
         tree: [{:element, "div", [{"$key", [text: "a1b2c3:0"]}], [{:text, "abc"}]}]
       }
 
@@ -532,16 +538,24 @@ defmodule Hologram.ControllerTest do
     end
 
     # Each value lands under its own key, and they are encoded differently: everything but the tree
-    # as JavaScript the client evaluates, the tree as data it gets already parsed.
-    test "encodes each value under its own key", %{fields: fields} do
+    # as a serialized term the client's reader walks, nested in the response as it is, the tree as
+    # plain JSON.
+    test "serializes each value under its own key", %{fields: fields} do
       payload = build_page_data_payload(fields)
 
-      assert payload.componentRegistry == fields.mount_data.component_registry
-      assert payload.pageModule == fields.mount_data.page_module
-      assert payload.pageParams == fields.mount_data.page_params
-      assert payload.selfEchoes == Encoder.encode_term!(fields.self_echoes)
-      assert payload.subReceiptAdds == Encoder.encode_term!(fields.sub_receipt_adds)
-      assert payload.subReceiptDrops == Encoder.encode_term!(fields.sub_receipt_drops)
+      assert fragment_json(payload.componentRegistry) ==
+               Serializer.serialize!(fields.mount_data.component_registry)
+
+      assert fragment_json(payload.pageModule) == Serializer.serialize!(Module1)
+      assert fragment_json(payload.pageParams) == Serializer.serialize!(%{})
+      assert fragment_json(payload.selfEchoes) == Serializer.serialize!(fields.self_echoes)
+
+      assert fragment_json(payload.subReceiptAdds) ==
+               Serializer.serialize!(fields.sub_receipt_adds)
+
+      assert fragment_json(payload.subReceiptDrops) ==
+               Serializer.serialize!(fields.sub_receipt_drops)
+
       assert payload.tree == Renderer.encode_tree(fields.tree)
     end
 
@@ -565,17 +579,8 @@ defmodule Hologram.ControllerTest do
              ]
     end
 
-    # The asset manifest is a global the initial document sets once, not something a mount reads,
-    # so it has no business on this path even though the renderer hands it back alongside.
-    test "leaves the asset manifest out", %{fields: fields} do
-      payload = build_page_data_payload(fields)
-
-      encoded = Jason.encode!(payload)
-
-      refute Map.has_key?(payload, :assetManifest)
-      refute String.contains?(encoded, "runtime-1234")
-    end
-
+    # A serialized term is nested in the response as a value, not as a string holding one, so the
+    # client parses the response once and nothing inside the term is escaped on the way.
     test "survives the JSON encoding it is sent over", %{fields: fields} do
       payload = build_page_data_payload(fields)
 
@@ -588,7 +593,14 @@ defmodule Hologram.ControllerTest do
       assert decoded["chunks"] == payload.chunks
       assert decoded["pageDigest"] == "abcdef1234567890"
       assert decoded["tree"] == payload.tree
-      assert decoded["componentRegistry"] == payload.componentRegistry
+
+      assert decoded["pageModule"] == [
+               4,
+               "aElixir.Hologram.Test.Fixtures.Controller.Module1"
+             ]
+
+      serialized_component_registry = Serializer.serialize!(fields.mount_data.component_registry)
+      assert decoded["componentRegistry"] == Jason.decode!(serialized_component_registry)
     end
 
     test "describes a redirect to a page the client can ask for itself" do
@@ -596,8 +608,8 @@ defmodule Hologram.ControllerTest do
 
       assert payload.type == "redirect"
       assert payload.to == "/my-target"
-      assert payload.pageModule == Encoder.encode_term!(Module1)
-      assert payload.pageParams == Encoder.encode_term!(%{key: "value"})
+      assert fragment_json(payload.pageModule) == Serializer.serialize!(Module1)
+      assert fragment_json(payload.pageParams) == Serializer.serialize!(%{key: "value"})
     end
 
     # The page clause matches a map and the redirect clauses match tuples, so nothing a page
@@ -632,7 +644,11 @@ defmodule Hologram.ControllerTest do
 
       assert decoded["type"] == "redirect"
       assert decoded["to"] == "/my-target"
-      assert decoded["pageModule"] == payload.pageModule
+
+      assert decoded["pageModule"] == [
+               4,
+               "aElixir.Hologram.Test.Fixtures.Controller.Module1"
+             ]
     end
   end
 
@@ -2837,6 +2853,10 @@ defmodule Hologram.ControllerTest do
       assert response["type"] == "page"
       assert response["pageDigest"] == "dummy_module_4_digest"
 
+      # The terms travel serialized, nested in the response as values the client's reader walks.
+      assert response["pageModule"] == [4, "aElixir.Hologram.Test.Fixtures.Controller.Module4"]
+      assert response["pageParams"] == [4, %{"t" => "m", "d" => []}]
+
       # The fixture's template is empty and its layout is a bare slot, so the render is empty too.
       # That the tree arrives as data rather than as source is what matters here; the tests that
       # follow cover what a non-empty one carries.
@@ -2878,6 +2898,9 @@ defmodule Hologram.ControllerTest do
 
       assert tree_json =~ "param_aaa = 111"
       assert tree_json =~ "param_bbb = 222"
+
+      serialized_params = Serializer.serialize!(%{aaa: 111, bbb: 222})
+      assert response["pageParams"] == Jason.decode!(serialized_params)
     end
 
     test "carries the render as a tree holding no mount data script" do
@@ -2928,7 +2951,11 @@ defmodule Hologram.ControllerTest do
 
       assert response["type"] == "redirect"
       assert response["to"] == Module4.__route__()
-      assert response["pageModule"] == Encoder.encode_term!(Module4)
+
+      assert response["pageModule"] == [
+               4,
+               "aElixir.Hologram.Test.Fixtures.Controller.Module4"
+             ]
     end
 
     # The redirect itself cannot survive the trip, but a header set alongside it was meant for the

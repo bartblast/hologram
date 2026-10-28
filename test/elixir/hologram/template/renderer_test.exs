@@ -5,8 +5,10 @@ defmodule Hologram.Template.RendererTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
+  alias Hologram.Compiler.Encoder
   alias Hologram.Component
   alias Hologram.Runtime.Cookie
   alias Hologram.Server
@@ -2193,8 +2195,7 @@ defmodule Hologram.Template.RendererTest do
       # The renderer keeps them; only what the client is sent is hollowed, and the key stays.
       assert component_registry["page"].struct.props == params
 
-      refute mount_data.component_registry =~ "param_value_1"
-      assert mount_data.component_registry =~ ~s/[Type.atom("props"), Type.map([])]/
+      assert mount_data.component_registry["page"].struct.props == %{}
     end
 
     test "interpolate page module JS" do
@@ -2430,13 +2431,18 @@ defmodule Hologram.Template.RendererTest do
 
       # The two projections are the same render. They differ only in that the HTML has the mount
       # data inlined, so putting it back into the printed tree must reproduce the HTML exactly.
+      asset_manifest_js = AssetManifestCache.get_manifest_js()
+      component_registry_js = Encoder.encode_term!(mount_data.component_registry)
+      page_module_js = Encoder.encode_term!(mount_data.page_module)
+      page_params_js = Encoder.encode_term!(mount_data.page_params)
+
       printed =
         tree
         |> print_dom()
-        |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", mount_data.asset_manifest)
-        |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", mount_data.component_registry)
-        |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", mount_data.page_module)
-        |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", mount_data.page_params)
+        |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
+        |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
+        |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
+        |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
 
       assert printed == html
     end
@@ -2476,16 +2482,16 @@ defmodule Hologram.Template.RendererTest do
 
       %{html: html, mount_data: mount_data} = render_page(Module48, @params, @server, @opts)
 
-      assert mount_data.page_module ==
-               ~s/Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
-
-      assert mount_data.page_params == "Type.map([])"
-      assert String.starts_with?(mount_data.component_registry, "Type.map([")
+      assert Map.keys(mount_data) == [:component_registry, :page_module, :page_params]
+      assert mount_data.page_module == Module48
+      assert mount_data.page_params == %{}
+      assert %{"page" => %{module: Module48}} = mount_data.component_registry
 
       # Each value is what the HTML carries, which is what makes it safe to send beside the tree
       # instead of inside it.
       for value <- Map.values(mount_data) do
-        assert String.contains?(html, value)
+        value_js = Encoder.encode_term!(value)
+        assert String.contains?(html, value_js)
       end
     end
   end

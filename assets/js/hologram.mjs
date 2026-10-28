@@ -571,9 +571,7 @@ export default class Hologram {
       return Hologram.#followRedirect(payload, hopCount, historyEntryId);
     }
 
-    const pageModule = Interpreter.evaluateJavaScriptExpression(
-      payload.pageModule,
-    );
+    const pageModule = Deserializer.deserialize(payload.pageModule);
 
     // The tab holds this page's code from an earlier visit, and a live reload has rebuilt it since.
     // Running the held copy would show the page as it was before the edit, so the browser loads
@@ -1926,8 +1924,8 @@ export default class Hologram {
     }
 
     const toParam = Type.tuple([
-      Interpreter.evaluateJavaScriptExpression(payload.pageModule),
-      Interpreter.evaluateJavaScriptExpression(payload.pageParams),
+      Deserializer.deserialize(payload.pageModule),
+      Deserializer.deserialize(payload.pageParams),
     ]);
 
     return Client.fetchPage(
@@ -1981,10 +1979,7 @@ export default class Hologram {
     // for the mount, while everything armed before this line belongs to the page being left.
     $.domEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
 
-    const pageModule = Interpreter.evaluateJavaScriptExpression(
-      payload.pageModule,
-    );
-
+    const pageModule = Deserializer.deserialize(payload.pageModule);
     const isPageModuleRegistered = $.#isPageModuleRegistered(pageModule);
 
     // The fetch is started before the patch, which is local work, so the network has a head start
@@ -2007,19 +2002,13 @@ export default class Hologram {
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
     // the browser then runs. The page module is already decoded above, so it is reused.
     $.#mountData = {
-      componentRegistry: Interpreter.evaluateJavaScriptExpression(
-        payload.componentRegistry,
-      ),
+      componentRegistry: Deserializer.deserialize(payload.componentRegistry),
       pageDigest: payload.pageDigest,
       pageModule: pageModule,
-      pageParams: Interpreter.evaluateJavaScriptExpression(payload.pageParams),
-      selfEchoes: Interpreter.evaluateJavaScriptExpression(payload.selfEchoes),
-      subReceiptAdds: Interpreter.evaluateJavaScriptExpression(
-        payload.subReceiptAdds,
-      ),
-      subReceiptDrops: Interpreter.evaluateJavaScriptExpression(
-        payload.subReceiptDrops,
-      ),
+      pageParams: Deserializer.deserialize(payload.pageParams),
+      selfEchoes: Deserializer.deserialize(payload.selfEchoes),
+      subReceiptAdds: Deserializer.deserialize(payload.subReceiptAdds),
+      subReceiptDrops: Deserializer.deserialize(payload.subReceiptDrops),
     };
 
     // See: docs/navigation_payload_wire_format.md

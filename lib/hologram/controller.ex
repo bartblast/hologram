@@ -20,6 +20,7 @@ defmodule Hologram.Controller do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
   alias Hologram.Runtime.PlugConnUtils
+  alias Hologram.Runtime.Serializer
   alias Hologram.Runtime.Session
   alias Hologram.Server
   alias Hologram.Server.Middleware
@@ -112,11 +113,10 @@ defmodule Hologram.Controller do
   chunk digests name the chunks the page needs before it mounts (see
   `Hologram.Assets.ChunkRegistry`), which the client loads unless it has them.
 
-  Every value but the tree is encoded the way a command's response encodes terms, as JavaScript the
-  client evaluates, since that is the form its runtime already reads. The tree is not: it holds
-  only elements, text, comments and the doctype, which is a closed vocabulary with no Elixir
-  semantics in it, so it rides as a nested JSON value the client gets already parsed rather than as
-  source it has to evaluate first.
+  Every value but the tree travels in Hologram's term format, as a nested JSON value the client's
+  reader walks once the response is parsed, so nothing in the payload is evaluated as code. The
+  tree holds only elements, text, comments and the doctype, which is a closed vocabulary with no
+  Elixir semantics in it, so it rides as plain JSON the client reads as it is.
 
   A redirect is a payload of its own, since a client-side navigation cannot be answered with a real
   one: a `fetch` following redirects consumes the 302 invisibly, and one set to leave it alone gets
@@ -133,8 +133,8 @@ defmodule Hologram.Controller do
 
   def build_page_data_payload({:redirect, to, page_module, params}) do
     %{
-      pageModule: Encoder.encode_term!(page_module),
-      pageParams: Encoder.encode_term!(params),
+      pageModule: serialize_to_fragment(page_module),
+      pageParams: serialize_to_fragment(params),
       to: to,
       type: "redirect"
     }
@@ -153,13 +153,13 @@ defmodule Hologram.Controller do
       }) do
     %{
       chunks: chunk_digests,
-      componentRegistry: mount_data.component_registry,
+      componentRegistry: serialize_to_fragment(mount_data.component_registry),
       pageDigest: page_digest,
-      pageModule: mount_data.page_module,
-      pageParams: mount_data.page_params,
-      selfEchoes: Encoder.encode_term!(self_echoes),
-      subReceiptAdds: Encoder.encode_term!(sub_receipt_adds),
-      subReceiptDrops: Encoder.encode_term!(sub_receipt_drops),
+      pageModule: serialize_to_fragment(mount_data.page_module),
+      pageParams: serialize_to_fragment(mount_data.page_params),
+      selfEchoes: serialize_to_fragment(self_echoes),
+      subReceiptAdds: serialize_to_fragment(sub_receipt_adds),
+      subReceiptDrops: serialize_to_fragment(sub_receipt_drops),
       tree: Renderer.encode_tree(tree),
       type: "page"
     }
@@ -878,7 +878,17 @@ defmodule Hologram.Controller do
   defp send_page_data(conn, payload) do
     conn
     |> Plug.Conn.put_resp_header("hologram-page-data", "true")
-    |> Controller.json(payload)
+    |> send_json(payload)
+  end
+
+  # Sends the payload as JSON through Jason, whatever JSON library the app's Phoenix is configured
+  # with: the serialized terms the payload nests are fragments only Jason can write.
+  defp send_json(conn, payload) do
+    body = Jason.encode_to_iodata!(payload)
+
+    conn
+    |> Plug.Conn.put_resp_content_type("application/json")
+    |> Plug.Conn.send_resp(conn.status || 200, body)
   end
 
   # What a page's middleware answered, in the form the client can act on.
@@ -910,6 +920,13 @@ defmodule Hologram.Controller do
 
   defp send_terminal_page_data(conn, %Server{} = server) do
     send_response(conn, server)
+  end
+
+  # A term travels as a nested JSON value rather than as a JSON string holding one: the client then
+  # parses the response once, and no quote inside the term is escaped on the way.
+  defp serialize_to_fragment(term) do
+    serialized = Serializer.serialize!(term)
+    Jason.Fragment.new(serialized)
   end
 
   defp refresh_unless_tombstoned(receipt, instance_id, session_id, authorizing_user_id) do

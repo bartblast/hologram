@@ -299,10 +299,9 @@ defmodule Hologram.Template.Renderer do
         component_registry: %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}},
         html: "<div>full page content including layout</div>",
         mount_data: %{
-          asset_manifest: "{...}",
-          component_registry: "Type.map([...])",
-          page_module: "Type.atom(...)",
-          page_params: "Type.map([...])"
+          component_registry: %{"page" => %{module: MyPage, struct: %Component{}}},
+          page_module: MyPage,
+          page_params: %{param: "value"}
         },
         server_struct: %Server{session: %{user_id: 123}},
         tree: [{:element, "div", [{"$key", [text: "k2xq91:0"]}], [{:text, "full page content including layout"}]}]
@@ -313,10 +312,9 @@ defmodule Hologram.Template.Renderer do
           component_registry: %{String.t() => %{module: module, struct: Component.t()}},
           html: String.t(),
           mount_data: %{
-            asset_manifest: String.t(),
-            component_registry: String.t(),
-            page_module: String.t(),
-            page_params: String.t()
+            component_registry: %{String.t() => %{module: module, struct: Component.t()}},
+            page_module: module,
+            page_params: %{atom => any}
           },
           server_struct: Server.t(),
           tree: tree
@@ -365,24 +363,30 @@ defmodule Hologram.Template.Renderer do
 
     component_registry_for_client = hollow_props(component_registry_with_page_struct)
 
-    # The values a mount reads, grouped because they travel together. The HTML projection inlines
-    # all four, since a loaded document has no other channel for them. A navigation carries three of
-    # them as payload fields instead - not the asset manifest, which is a global the initial
-    # document sets once and a navigation therefore already has.
-    mount_data_js = %{
-      asset_manifest: AssetManifestCache.get_manifest_js(),
-      component_registry: Encoder.encode_term!(component_registry_for_client),
-      page_module: Encoder.encode_term!(page_module),
-      page_params: Encoder.encode_term!(params)
+    # The values a mount reads, grouped because they travel together and returned as terms, since
+    # each projection encodes them its own way. The HTML projection inlines them as JavaScript,
+    # along with the asset manifest, since a loaded document has no other channel for them. A
+    # navigation carries them as payload fields in the term format the client's reader walks - not
+    # the asset manifest, which is a global the initial document sets once and a navigation
+    # therefore already has.
+    mount_data = %{
+      component_registry: component_registry_for_client,
+      page_module: page_module,
+      page_params: params
     }
+
+    asset_manifest_js = AssetManifestCache.get_manifest_js()
+    component_registry_js = Encoder.encode_term!(component_registry_for_client)
+    page_module_js = Encoder.encode_term!(page_module)
+    page_params_js = Encoder.encode_term!(params)
 
     html_with_interpolated_js =
       initial_tree
       |> print_dom()
-      |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", mount_data_js.asset_manifest)
-      |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", mount_data_js.component_registry)
-      |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", mount_data_js.page_module)
-      |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", mount_data_js.page_params)
+      |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
+      |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
+      |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
+      |> String.replace("$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
 
     # The tree keeps its placeholders. A navigation carries the mount data beside the tree rather
     # than inside it, so nothing on that path ever substitutes them - and folding the state into a
@@ -392,7 +396,7 @@ defmodule Hologram.Template.Renderer do
       chunk_digests: ChunkRegistry.lookup_term(component_registry_for_client),
       component_registry: component_registry_with_page_struct,
       html: html_with_interpolated_js,
-      mount_data: mount_data_js,
+      mount_data: mount_data,
       server_struct: final_server_struct,
       tree: initial_tree
     }
