@@ -685,7 +685,7 @@ defmodule Hologram.Template.Renderer do
 
   # Event attributes are exempt from deduplication, because a tag may carry multiple bindings which
   # share a base name once their modifiers are decomposed at compile time, e.g. both
-  # $key_down.enter and $key_down.esc are named "$key_down".
+  # $key_down.enter and $key_down.escape are named "$key_down".
   defp dedupe_attributes(attrs_dom) do
     attrs_dom
     |> Enum.with_index()
