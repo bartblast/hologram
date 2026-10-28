@@ -5,7 +5,6 @@ import ComponentRegistry from "./component_registry.mjs";
 import Deserializer from "./deserializer.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
-import Interpreter from "./interpreter.mjs";
 import LiveReload from "./live_reload.mjs";
 import Logger from "./logger.mjs";
 import Serializer from "./serializer.mjs";
@@ -126,12 +125,12 @@ export default class Sse {
 
       $.eventSource = new EventSource(`${$.SSE_PATH}?${params}`);
 
-      // An action or a broadcast arrives as JSON holding the encoded term and the digests of the
+      // An action or a broadcast arrives as JSON holding the serialized term and the digests of the
       // chunks the struct types in it need, which are loaded before the action runs (see
-      // Hologram.schedulePushedAction).
+      // Hologram.schedulePushedAction). The other events carry the serialized term alone.
       $.eventSource.addEventListener("action", (event) => {
-        const {action: encodedAction, chunks} = JSON.parse(event.data);
-        const action = Interpreter.evaluateJavaScriptExpression(encodedAction);
+        const {action: serializedAction, chunks} = JSON.parse(event.data);
+        const action = Deserializer.deserialize(serializedAction);
         const target = Erlang_Maps["get/2"](Type.atom("target"), action);
 
         // Hologram realtime is fire-and-forget: silently drop actions
@@ -147,14 +146,14 @@ export default class Sse {
       });
 
       $.eventSource.addEventListener("add_sub_receipts", (event) => {
-        const receipts = Interpreter.evaluateJavaScriptExpression(event.data);
+        const receipts = Deserializer.deserialize(event.data);
         App.subscriptionReceiptRegistry.merge(receipts, Type.list());
       });
 
       $.eventSource.addEventListener("broadcast", (event) => {
         const {chunks, data} = JSON.parse(event.data);
-        const decoded = Interpreter.evaluateJavaScriptExpression(data);
-        const [actionName, params, cidsList] = decoded.data;
+        const envelope = Deserializer.deserialize(data);
+        const [actionName, params, cidsList] = envelope.data;
 
         for (const cid of cidsList.data) {
           if (!ComponentRegistry.isCidRegistered(cid)) continue;
@@ -169,7 +168,7 @@ export default class Sse {
         }
       });
 
-      // Live reload events carry plain JSON, when they carry anything, rather than encoded
+      // Live reload events carry plain JSON, when they carry anything, rather than serialized
       // terms: the server builds them outside any page, from a compile error and a list of
       // page names.
       $.eventSource.addEventListener("compilation_error", (event) => {
@@ -181,7 +180,7 @@ export default class Sse {
       });
 
       $.eventSource.addEventListener("drop_sub_receipts", (event) => {
-        const keys = Interpreter.evaluateJavaScriptExpression(event.data);
+        const keys = Deserializer.deserialize(event.data);
         App.subscriptionReceiptRegistry.purge(keys);
       });
 
@@ -190,7 +189,7 @@ export default class Sse {
       });
 
       $.eventSource.addEventListener("refresh_sub_receipts", (event) => {
-        const refreshed = Interpreter.evaluateJavaScriptExpression(event.data);
+        const refreshed = Deserializer.deserialize(event.data);
         App.subscriptionReceiptRegistry.merge(refreshed, Type.list());
       });
 
