@@ -3,6 +3,7 @@
 import {
   assert,
   defineRuntimeGlobals,
+  registerWebApis,
   initComponentRegistryEntry,
   sinon,
 } from "./support/helpers.mjs";
@@ -19,6 +20,7 @@ import SubscriptionReceiptRegistry from "../../assets/js/subscription_receipt_re
 import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
+registerWebApis();
 
 describe("Sse", () => {
   let fetchStub;
