@@ -8,6 +8,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import LiteralSet from "./literal_set.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
+import ScriptEvaluator from "./script_evaluator.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -650,15 +651,14 @@ export default class Interpreter {
     return Erlang_Maps["get/2"](right, left);
   }
 
+  // Runs JavaScript code given as a string, with context, Type and Interpreter in scope. The code
+  // is compiled through a script element rather than eval() or new Function(), so it runs under a
+  // Content Security Policy without 'unsafe-eval' (see ScriptEvaluator).
   static evaluateJavaScriptCode(code) {
     const context = Interpreter.buildContext();
+    const fun = ScriptEvaluator.compile(code);
 
-    // See why not to use eval() with esbuild and in general: https://esbuild.github.io/content-types/#direct-eval
-    return new Function("context", "Type", "Interpreter", code)(
-      context,
-      Type,
-      Interpreter,
-    );
+    return fun(context, Type, Interpreter);
   }
 
   static evaluateJavaScriptExpression(expr) {

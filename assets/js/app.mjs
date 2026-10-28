@@ -3,6 +3,10 @@
 import SubscriptionReceiptRegistry from "./subscription_receipt_registry.mjs";
 
 export default class App {
+  // The nonce the document's Content Security Policy names, which the elements the runtime creates
+  // carry. Per document, so it never enters a page snapshot. Null when the document has none.
+  static cspNonce = null;
+
   // Stable per JS context (across page navigation).
   // Populated from globalThis during Hologram boot.
   static instanceId = null;
