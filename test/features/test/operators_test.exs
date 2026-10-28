@@ -325,6 +325,13 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> assert_text(css("#result"), inspect(@list_integer == @list_float))
     end
 
+    feature "== (non-text binaries)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='== (non-text binaries)']"))
+      |> assert_text(css("#result"), inspect({false, false, true, true}))
+    end
+
     feature "<", %{session: session} do
       session
       |> visit(OperatorsPage)
@@ -351,6 +358,13 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> visit(OperatorsPage)
       |> click(css("button[id='>=']"))
       |> assert_text(css("#result"), inspect(@integer_b >= @integer_a))
+    end
+
+    feature "< (non-text binaries)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='< (non-text binaries)']"))
+      |> assert_text(css("#result"), inspect({false, true, false, true}))
     end
   end
 
