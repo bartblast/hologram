@@ -2588,7 +2588,10 @@ defmodule Hologram.Template.RendererTest do
 
       %{html: html, mount_data: mount_data} = render_page(Module48, @params, @server, @opts)
 
-      assert Map.keys(mount_data) == [:component_registry, :page_module, :page_params]
+      assert mount_data
+             |> Map.keys()
+             |> Enum.sort() == [:component_registry, :page_module, :page_params]
+
       assert mount_data.page_module == Module48
       assert mount_data.page_params == %{}
       assert %{"page" => %{module: Module48}} = mount_data.component_registry
