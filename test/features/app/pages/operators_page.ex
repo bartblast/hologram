@@ -12,6 +12,9 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  @binary_a <<0xFF>>
+  @binary_b <<0xFE>>
+
   @boolean_a true
   @boolean_b false
 
@@ -89,10 +92,12 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="=== (map)" $click="=== (map)"> === (map) </button>
       <button id="== (map)" $click="== (map)"> == (map) </button>
       <button id="== (nested number)" $click="== (nested number)"> == (nested number) </button>
+      <button id="== (non-text binaries)" $click="== (non-text binaries)"> == (non-text binaries) </button>
       <button id="<" $click="<"> &lt; </button>
       <button id=">" $click=">"> &gt; </button>
       <button id="<=" $click="<="> &lt;= </button>
       <button id=">=" $click=">="> &gt;= </button>
+      <button id="< (non-text binaries)" $click="< (non-text binaries)"> &lt; (non-text binaries) </button>
     </p>
     <p>
       <h2><code>Custom and Overriden Operators</code></h2>
@@ -296,6 +301,19 @@ defmodule HologramFeatureTests.OperatorsPage do
     put_state(component, :result, wrap_term(@list_integer) == wrap_term(@list_float))
   end
 
+  def action(:"== (non-text binaries)", _params, component) do
+    binary_a = wrap_term(@binary_a)
+    binary_b = wrap_term(@binary_b)
+
+    :unicode.characters_to_binary(binary_a)
+    :unicode.characters_to_binary(binary_b)
+
+    result =
+      {binary_a == binary_b, binary_a === binary_b, binary_a != binary_b, binary_a !== binary_b}
+
+    put_state(component, :result, result)
+  end
+
   def action(:!=, _params, component) do
     put_state(component, :result, wrap_term(@integer_a) != wrap_term(@integer_b))
   end
@@ -318,6 +336,19 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:>=, _params, component) do
     put_state(component, :result, @integer_b >= @integer_a)
+  end
+
+  def action(:"< (non-text binaries)", _params, component) do
+    binary_a = wrap_term(@binary_a)
+    binary_b = wrap_term(@binary_b)
+
+    :unicode.characters_to_binary(binary_a)
+    :unicode.characters_to_binary(binary_b)
+
+    result =
+      {binary_a < binary_b, binary_a > binary_b, binary_a <= binary_b, binary_a >= binary_b}
+
+    put_state(component, :result, result)
   end
 
   def action(:"+++ (custom)", _params, component) do
