@@ -11,6 +11,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
   alias Hologram.Runtime.Cookie
+  alias Hologram.Runtime.Deserializer
+  alias Hologram.Runtime.Serializer
   alias Hologram.Server
   alias Hologram.Server.Broadcast
   alias Hologram.Server.Metadata
@@ -3233,6 +3235,92 @@ defmodule Hologram.Template.RendererTest do
 
       assert encoded ==
                ~s([["d","html"],["div",["class","big","hidden",null],["abc",["c",[" x "]]]]])
+    end
+  end
+
+  describe "interpolate_boot_data/3" do
+    test "substitutes the placeholder with a JSON data block carrying the CSP nonce" do
+      html = "before $BOOT_DATA_PLACEHOLDER after"
+
+      assert Renderer.interpolate_boot_data(html, %{csrfToken: "abc"}, @csp_nonce) ==
+               ~s(before <script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
+                 ~s({"csrfToken":"abc"}</script> after)
+    end
+
+    test "writes no nonce when there is none" do
+      html = "$BOOT_DATA_PLACEHOLDER"
+
+      assert Renderer.interpolate_boot_data(html, %{csrfToken: "abc"}, nil) ==
+               ~s(<script type="application/json" id="hologram-boot-data">{"csrfToken":"abc"}</script>)
+    end
+
+    test "escapes every < so the text cannot end the element or open a comment in it" do
+      html = "$BOOT_DATA_PLACEHOLDER"
+      text = "</script><!--<script>"
+
+      result = Renderer.interpolate_boot_data(html, %{text: text}, @csp_nonce)
+
+      assert result ==
+               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
+                 ~S({"text":"\u003C/script>\u003C!--\u003Cscript>"}</script>)
+
+      [_full_match, json] = Regex.run(~r'id="hologram-boot-data">(.*)</script>$', result)
+
+      assert Jason.decode!(json) == %{"text" => text}
+    end
+
+    test "escapes every < inside a serialized term nested as a JSON value" do
+      html = "$BOOT_DATA_PLACEHOLDER"
+      term = %{text: "</script>"}
+
+      fragment =
+        term
+        |> Serializer.serialize!()
+        |> Jason.Fragment.new()
+
+      result = Renderer.interpolate_boot_data(html, %{pageParams: fragment}, @csp_nonce)
+
+      assert result ==
+               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
+                 ~S({"pageParams":[4,{"t":"m","d":[["atext","s\u003C/script>"]]}]}</script>)
+
+      [_full_match, json] = Regex.run(~r'id="hologram-boot-data">(.*)</script>$', result)
+
+      assert json
+             |> Jason.decode!()
+             |> Map.fetch!("pageParams")
+             |> Jason.encode!()
+             |> Deserializer.deserialize() == term
+    end
+
+    test "escapes a < that follows a backslash" do
+      html = "$BOOT_DATA_PLACEHOLDER"
+      text = ~S(\</script>)
+
+      result = Renderer.interpolate_boot_data(html, %{text: text}, @csp_nonce)
+
+      assert result ==
+               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
+                 ~S({"text":"\\\u003C/script>"}</script>)
+
+      [_full_match, json] = Regex.run(~r'id="hologram-boot-data">(.*)</script>$', result)
+
+      assert Jason.decode!(json) == %{"text" => text}
+    end
+
+    test "escapes every $ so a placeholder token cannot form in the data" do
+      html = "$BOOT_DATA_PLACEHOLDER $CHUNK_SCRIPT_TAGS_PLACEHOLDER"
+      text = "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
+
+      result =
+        html
+        |> Renderer.interpolate_boot_data(%{text: text}, @csp_nonce)
+        |> Renderer.interpolate_chunks(["AAAAAAAA"], @csp_nonce)
+
+      assert result ==
+               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
+                 ~S({"text":"\u0024CHUNK_SCRIPT_TAGS_PLACEHOLDER"}</script> ) <>
+                 ~s(<script nonce="#{@csp_nonce}" async src="/hologram/chunk-AAAAAAAA.js"></script>)
     end
   end
 

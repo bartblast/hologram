@@ -33,6 +33,19 @@ defmodule Hologram.Assets.ManifestCache do
   end
 
   @doc """
+  Returns the asset manifest as JSON: an object mapping each static file's path to its asset path,
+  with the paths in alphabetical order.
+
+  Built once and cached rather than encoded per request, since the mapping changes only when the
+  assets do. Nothing in it is escaped for HTML, so it reaches a page only inside the boot data
+  block, which escapes it (see `Hologram.Template.Renderer.interpolate_boot_data/3`).
+  """
+  @spec get_manifest_json() :: String.t()
+  def get_manifest_json do
+    :persistent_term.get(json_persistent_term_key())
+  end
+
+  @doc """
   Returns the implementation of the asset manifest cache's persistent term key.
   """
   @spec persistent_term_key() :: any
@@ -68,13 +81,27 @@ defmodule Hologram.Assets.ManifestCache do
     """
   end
 
+  defp build_manifest_json do
+    AssetPathRegistry.get_mapping()
+    |> Enum.sort()
+    |> Jason.OrderedObject.new()
+    |> Jason.encode!()
+  end
+
   defp impl do
     Application.get_env(:hologram, :asset_manifest_cache_impl, __MODULE__)
+  end
+
+  defp json_persistent_term_key do
+    {impl().persistent_term_key(), :json}
   end
 
   defp populate do
     key = impl().persistent_term_key()
     manifest = build_manifest()
     :persistent_term.put(key, manifest)
+
+    manifest_json = build_manifest_json()
+    :persistent_term.put(json_persistent_term_key(), manifest_json)
   end
 end

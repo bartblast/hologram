@@ -179,6 +179,43 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Substitutes the `$BOOT_DATA_PLACEHOLDER` token in the given HTML with the element carrying the
+  first page's boot data: a `<script type="application/json">` the browser never runs, holding the
+  given map as JSON, for the client to read when it boots.
+
+  Every `<` in the JSON is written as `\\u003C`, so neither `</script` nor `<!--` can form inside
+  the element, whatever text the data holds. Every `$` is written as `\\u0024`, so no placeholder
+  token can form inside it either, and a substitution made after this one cannot reach into the
+  data. Both characters can only occur inside a JSON string, where the escape reads back as the
+  same character, so this holds for serialized terms nested as JSON values too.
+
+  The element carries the given nonce whenever there is one, whatever kinds of element the policy
+  stamps. The browser never reads a data block's nonce. The client does: it takes only the block
+  whose nonce is the document's, which an element injected into the page cannot carry.
+
+  ## Examples
+
+      iex> interpolate_boot_data("$BOOT_DATA_PLACEHOLDER", %{csrfToken: "abc"}, "xyz")
+      ~s(<script nonce="xyz" type="application/json" id="hologram-boot-data">{"csrfToken":"abc"}</script>)
+  """
+  @spec interpolate_boot_data(String.t(), map, String.t() | nil) :: String.t()
+  def interpolate_boot_data(html, boot_data, csp_nonce) do
+    boot_data_json =
+      boot_data
+      |> Jason.encode!()
+      |> String.replace("<", "\\u003C")
+      |> String.replace("$", "\\u0024")
+
+    nonce_attribute_html = if csp_nonce, do: ~s( nonce="#{csp_nonce}"), else: ""
+
+    boot_data_element =
+      ~s(<script#{nonce_attribute_html} type="application/json" id="hologram-boot-data">) <>
+        boot_data_json <> "</script>"
+
+    String.replace(html, "$BOOT_DATA_PLACEHOLDER", boot_data_element)
+  end
+
+  @doc """
   Substitutes the chunk tokens in the given HTML with the chunks supplied by the caller, given by
   their digests: `$CHUNK_DIGESTS_JS_PLACEHOLDER` with the digests as a JavaScript array of strings,
   and `$CHUNK_SCRIPT_TAGS_PLACEHOLDER` with a script tag per chunk. The digests are the compiler's

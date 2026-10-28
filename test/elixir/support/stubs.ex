@@ -24,6 +24,7 @@ defmodule Hologram.Test.Stubs do
     stub_with(AssetManifestCacheMock, stub)
 
     :persistent_term.erase(stub.persistent_term_key())
+    :persistent_term.erase({stub.persistent_term_key(), :json})
 
     if start_link do
       AssetManifestCache.start_link([])
