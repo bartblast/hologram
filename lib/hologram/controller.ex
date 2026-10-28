@@ -438,6 +438,7 @@ defmodule Hologram.Controller do
 
     renderer_opts = [
       csp_nonce: ContentSecurityPolicy.generate_nonce(),
+      csp_nonced_elements: ContentSecurityPolicy.nonced_elements(),
       csrf_token: masked_csrf_token,
       initial_page?: true,
       instance_id: instance_id
@@ -474,7 +475,7 @@ defmodule Hologram.Controller do
       {:rendered, conn, result} ->
         final_html =
           result.html
-          |> Renderer.interpolate_chunks(result.chunk_digests, renderer_opts[:csp_nonce])
+          |> Renderer.interpolate_chunks(result.chunk_digests, chunk_csp_nonce(renderer_opts))
           |> Renderer.interpolate_self_echoes_js(result.self_echoes)
           |> Renderer.interpolate_sub_receipt_adds_js(result.sub_receipt_adds)
           |> Renderer.interpolate_sub_receipt_drops_js(result.sub_receipt_drops)
@@ -665,6 +666,13 @@ defmodule Hologram.Controller do
     Enum.map(add_keys, fn {channel, cid} ->
       {channel, cid, Receipt.issue(channel, cid, server.instance_id, server.user_id)}
     end)
+  end
+
+  # The chunk tags are script elements, so they carry the nonce only when scripts are stamped.
+  defp chunk_csp_nonce(renderer_opts) do
+    nonced_elements = renderer_opts[:csp_nonced_elements] || []
+
+    if "script" in nonced_elements, do: renderer_opts[:csp_nonce]
   end
 
   # A content type describes a body the run meant to send. When middleware did not end the

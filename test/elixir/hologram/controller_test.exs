@@ -71,6 +71,7 @@ defmodule Hologram.ControllerTest do
   @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
 
   @csp_nonce "test-csp-nonce"
+  @csp_nonced_elements ["link", "script", "style"]
   @csrf_token_session_key CSRFProtection.session_key()
   @hologram_session_id "test-session-id"
 
@@ -226,6 +227,7 @@ defmodule Hologram.ControllerTest do
     |> Plug.Conn.fetch_cookies()
     |> handle_page_request(page_module, %{}, client_claimed_sub_keys,
       csp_nonce: @csp_nonce,
+      csp_nonced_elements: @csp_nonced_elements,
       initial_page?: true,
       instance_id: instance_id,
       csrf_token: @masked_csrf_token
@@ -2104,6 +2106,30 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body =~ "/hologram/chunk-DDDDDDDD.js"
     end
 
+    test "gives the chunk script tags no nonce when scripts are not among the stamped kinds" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module34}, [
+        "DDDDDDDD"
+      ])
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> Plug.Conn.fetch_cookies()
+        |> handle_page_request(Module34, %{}, [],
+          csp_nonce: @csp_nonce,
+          csp_nonced_elements: ["link", "style"],
+          csrf_token: @masked_csrf_token,
+          initial_page?: true,
+          instance_id: "test-instance-id"
+        )
+
+      assert conn.resp_body =~ ~s'<script async src="/hologram/chunk-DDDDDDDD.js"></script>'
+      refute conn.resp_body =~ "nonce="
+    end
+
     test "generates a new nonce for each initial page request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
 
@@ -2584,6 +2610,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module21, %{}, [],
         csp_nonce: @csp_nonce,
+        csp_nonced_elements: @csp_nonced_elements,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2605,6 +2632,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module14, %{}, [],
         csp_nonce: @csp_nonce,
+        csp_nonced_elements: @csp_nonced_elements,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2627,6 +2655,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module22, %{}, [],
           csp_nonce: @csp_nonce,
+          csp_nonced_elements: @csp_nonced_elements,
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token
@@ -2647,6 +2676,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module28, %{}, [],
         csp_nonce: @csp_nonce,
+        csp_nonced_elements: @csp_nonced_elements,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2666,6 +2696,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module25, %{}, [],
         csp_nonce: @csp_nonce,
+        csp_nonced_elements: @csp_nonced_elements,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2684,6 +2715,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module21, %{}, [],
           csp_nonce: @csp_nonce,
+          csp_nonced_elements: @csp_nonced_elements,
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token
@@ -2705,6 +2737,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module14, %{}, [],
           csp_nonce: @csp_nonce,
+          csp_nonced_elements: @csp_nonced_elements,
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token

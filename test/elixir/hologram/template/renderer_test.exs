@@ -82,11 +82,13 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module93
 
   @csp_nonce "test-csp-nonce"
+  @csp_nonced_elements ["link", "script", "style"]
   @csrf_token "test-csrf-token"
   @env %Renderer.Env{}
   @instance_id "test-instance-id"
   @opts [
     csp_nonce: @csp_nonce,
+    csp_nonced_elements: @csp_nonced_elements,
     csrf_token: @csrf_token,
     initial_page?: true,
     instance_id: @instance_id
@@ -2374,6 +2376,22 @@ defmodule Hologram.Template.RendererTest do
       assert nonced_script_tag_count == script_tag_count
     end
 
+    test "script elements of an initial page carry no CSP nonce when scripts are not among the stamped kinds" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      opts = Keyword.put(@opts, :csp_nonced_elements, ["style"])
+
+      assert {html, _component_registry, _server_struct} =
+               render_page_without_tree(Module48, @params, @server, opts)
+
+      assert String.contains?(html, "<script")
+      refute String.contains?(html, "nonce=")
+    end
+
     test "CSRF token is put into page emitted context for initial page requests" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
 
@@ -2526,7 +2544,7 @@ defmodule Hologram.Template.RendererTest do
 
       printed =
         tree
-        |> print_dom(csp_nonce: @csp_nonce)
+        |> print_dom(csp_nonce: @csp_nonce, csp_nonced_elements: @csp_nonced_elements)
         |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
         |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
         |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
@@ -3444,7 +3462,7 @@ defmodule Hologram.Template.RendererTest do
       # <script src="/app.js"></script>
       dom = {:element, "script", [{"src", [text: "/app.js"]}], []}
 
-      assert print_dom(dom, csp_nonce: @csp_nonce) ==
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: @csp_nonced_elements) ==
                ~s(<script nonce="#{@csp_nonce}" src="/app.js"></script>)
     end
 
@@ -3452,7 +3470,7 @@ defmodule Hologram.Template.RendererTest do
       # <style>a > b</style>
       dom = {:element, "style", [], [{:text, "a > b"}]}
 
-      assert print_dom(dom, csp_nonce: @csp_nonce) ==
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: @csp_nonced_elements) ==
                ~s(<style nonce="#{@csp_nonce}">a > b</style>)
     end
 
@@ -3460,7 +3478,7 @@ defmodule Hologram.Template.RendererTest do
       # <link rel="stylesheet" href="/app.css" />
       dom = {:element, "link", [{"rel", [text: "stylesheet"]}, {"href", [text: "/app.css"]}], []}
 
-      assert print_dom(dom, csp_nonce: @csp_nonce) ==
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: @csp_nonced_elements) ==
                ~s(<link nonce="#{@csp_nonce}" rel="stylesheet" href="/app.css" />)
     end
 
@@ -3468,7 +3486,7 @@ defmodule Hologram.Template.RendererTest do
       # <div><script>run()</script></div>
       dom = {:element, "div", [], [{:element, "script", [], [{:text, "run()"}]}]}
 
-      assert print_dom(dom, csp_nonce: @csp_nonce) ==
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: @csp_nonced_elements) ==
                ~s'<div><script nonce="#{@csp_nonce}">run()</script></div>'
     end
 
@@ -3476,7 +3494,7 @@ defmodule Hologram.Template.RendererTest do
       # <script NONCE="written" src="/app.js"></script>
       dom = {:element, "script", [{"NONCE", [text: "written"]}, {"src", [text: "/app.js"]}], []}
 
-      assert print_dom(dom, csp_nonce: @csp_nonce) ==
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: @csp_nonced_elements) ==
                ~s(<script nonce="#{@csp_nonce}" src="/app.js"></script>)
     end
 
@@ -3484,14 +3502,55 @@ defmodule Hologram.Template.RendererTest do
       # <div class="big"></div>
       dom = {:element, "div", [{"class", [text: "big"]}], []}
 
-      assert print_dom(dom, csp_nonce: @csp_nonce) == ~s(<div class="big"></div>)
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: @csp_nonced_elements) ==
+               ~s(<div class="big"></div>)
     end
 
-    test "nil CSP nonce, nothing stamped" do
+    test "nil CSP nonce, nothing stamped and a template nonce dropped" do
       # <script nonce="written"></script>
       dom = {:element, "script", [{"nonce", [text: "written"]}], []}
 
-      assert print_dom(dom, csp_nonce: nil) == ~s(<script nonce="written"></script>)
+      assert print_dom(dom, csp_nonce: nil, csp_nonced_elements: @csp_nonced_elements) ==
+               "<script></script>"
+    end
+
+    test "CSP nonce without element kinds, nothing stamped" do
+      # <script src="/app.js"></script>
+      dom = {:element, "script", [{"src", [text: "/app.js"]}], []}
+
+      assert print_dom(dom, csp_nonce: @csp_nonce) == ~s(<script src="/app.js"></script>)
+    end
+
+    test "element of a kind not given, with a nonce the template wrote, which is dropped" do
+      # <style nonce="written">a > b</style>
+      dom = {:element, "style", [{"nonce", [text: "written"]}], [{:text, "a > b"}]}
+
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: ["script"]) ==
+               "<style>a > b</style>"
+    end
+
+    test "element other than link, script or style, with a nonce the template wrote, which is kept" do
+      # <div nonce="written"></div>
+      dom = {:element, "div", [{"nonce", [text: "written"]}], []}
+
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: @csp_nonced_elements) ==
+               ~s(<div nonce="written"></div>)
+    end
+
+    test "element of a kind not given, not stamped" do
+      # <style>a > b</style>
+      dom = {:element, "style", [], [{:text, "a > b"}]}
+
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: ["script"]) ==
+               "<style>a > b</style>"
+    end
+
+    test "no element kinds, nothing stamped" do
+      # <script src="/app.js"></script>
+      dom = {:element, "script", [{"src", [text: "/app.js"]}], []}
+
+      assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: []) ==
+               ~s(<script src="/app.js"></script>)
     end
   end
 

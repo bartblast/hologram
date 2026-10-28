@@ -24,8 +24,9 @@ defmodule Hologram.Template.Renderer do
   # https://html.spec.whatwg.org/multipage/syntax.html#raw-text-elements
   @raw_text_elems ~w(script style)
 
-  # The elements HTML gives a nonce attribute to. See print_dom/2.
-  @nonced_elems ~w(link script style)
+  # The elements HTML gives a nonce attribute to. A nonce the template wrote on one is dropped
+  # whatever the policy stamps, as the client renderer drops it. See print_dom/2.
+  @nonce_elems ~w(link script style)
 
   # The characters a value cannot carry into a script element as the text of a JavaScript string
   # literal, each with the escape sequence it is written as instead. Every sequence is valid
@@ -250,10 +251,13 @@ defmodule Hologram.Template.Renderer do
   event bindings and element keys among them - so they are left out. An attribute with an empty
   value prints as a bare name, and a void element prints without children.
 
-  Given a `csp_nonce:` option, every link, script and style element is printed with that nonce as
-  its first attribute, so the document's Content Security Policy lets it load or run. A nonce the
-  template wrote on such an element is dropped, since only the generated one is in the policy.
-  Without the option, or with `nil`, elements print as the tree holds them.
+  Given a `csp_nonce:` option and the tag names of the elements to stamp in `csp_nonced_elements:`,
+  every element of those kinds is printed with the nonce as its first attribute, so the document's
+  Content Security Policy lets it load or run. The kinds are the ones a directive of the policy
+  names the nonce for, among the elements HTML gives a nonce attribute to: link, script and style.
+  A nonce the template wrote on a link, script or style element is dropped whatever kinds are
+  stamped, since only the generated one is in the policy. Without the options, with a `nil` nonce
+  or with no element kinds, nothing is stamped.
 
   ## Examples
 
@@ -262,12 +266,12 @@ defmodule Hologram.Template.Renderer do
       ~s(<div class="big">Hologram</div>)
 
       iex> dom = {:element, "script", [{"src", [text: "/app.js"]}], []}
-      iex> print_dom(dom, csp_nonce: "abc123")
+      iex> print_dom(dom, csp_nonce: "abc123", csp_nonced_elements: ["script"])
       ~s(<script nonce="abc123" src="/app.js"></script>)
   """
   @spec print_dom(tree, T.opts()) :: String.t()
   def print_dom(tree, opts \\ []) do
-    print_node(tree, nil, opts[:csp_nonce])
+    print_node(tree, nil, csp_stamp(opts))
   end
 
   @doc """
@@ -410,7 +414,10 @@ defmodule Hologram.Template.Renderer do
 
     html_with_interpolated_js =
       initial_tree
-      |> print_dom(csp_nonce: opts[:csp_nonce])
+      |> print_dom(
+        csp_nonce: opts[:csp_nonce],
+        csp_nonced_elements: opts[:csp_nonced_elements]
+      )
       |> String.replace("$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
       |> String.replace("$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
       |> String.replace("$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
@@ -715,6 +722,15 @@ defmodule Hologram.Template.Renderer do
     if name_prefix, do: name_prefix <> "-" <> segment, else: segment
   end
 
+  # The nonce and the element kinds it goes on, as one value for print_node/3 to carry, or nil when
+  # nothing is to be stamped.
+  defp csp_stamp(opts) do
+    csp_nonce = opts[:csp_nonce]
+    nonced_elements = opts[:csp_nonced_elements] || []
+
+    if csp_nonce && nonced_elements != [], do: {csp_nonce, nonced_elements}, else: nil
+  end
+
   # Event attributes are exempt from deduplication, because a tag may carry multiple bindings which
   # share a base name once their modifiers are decomposed at compile time, e.g. both
   # $key_down.enter and $key_down.esc are named "$key_down".
@@ -998,15 +1014,24 @@ defmodule Hologram.Template.Renderer do
     page_component_struct
   end
 
-  defp maybe_stamp_csp_nonce(attributes, tag_name, csp_nonce)
-       when tag_name in @nonced_elems and is_binary(csp_nonce) do
+  defp maybe_stamp_csp_nonce(attributes, tag_name, csp_stamp) when tag_name in @nonce_elems do
     attributes_without_nonce =
       Enum.reject(attributes, fn {name, _value} -> String.downcase(name) == "nonce" end)
 
-    [{"nonce", [text: csp_nonce]} | attributes_without_nonce]
+    case csp_stamp do
+      {csp_nonce, nonced_elements} ->
+        if tag_name in nonced_elements do
+          [{"nonce", [text: csp_nonce]} | attributes_without_nonce]
+        else
+          attributes_without_nonce
+        end
+
+      nil ->
+        attributes_without_nonce
+    end
   end
 
-  defp maybe_stamp_csp_nonce(attributes, _tag_name, _csp_nonce), do: attributes
+  defp maybe_stamp_csp_nonce(attributes, _tag_name, _csp_stamp), do: attributes
 
   # WARNING: must match the client renderer's #mergeNeighbouringTextNodes: adjacent text nodes
   # join into one, other nodes pass through. Merged text is also what an HTML parser produces, so
@@ -1052,40 +1077,40 @@ defmodule Hologram.Template.Renderer do
   # code of a raw text element. A comment passes it along rather than clearing it: "<!--" inside a
   # script or a style opens no comment, so escaping the text it wraps would corrupt the code it
   # belongs to.
-  defp print_node(nodes, parent_tag_name, csp_nonce) when is_list(nodes) do
-    Enum.map_join(nodes, &print_node(&1, parent_tag_name, csp_nonce))
+  defp print_node(nodes, parent_tag_name, csp_stamp) when is_list(nodes) do
+    Enum.map_join(nodes, &print_node(&1, parent_tag_name, csp_stamp))
   end
 
   # A <window> or <document> tag renders to no node at all.
-  defp print_node(nil, _parent_tag_name, _csp_nonce), do: ""
+  defp print_node(nil, _parent_tag_name, _csp_stamp), do: ""
 
-  defp print_node({:doctype, content}, _parent_tag_name, _csp_nonce), do: "<!DOCTYPE #{content}>"
+  defp print_node({:doctype, content}, _parent_tag_name, _csp_stamp), do: "<!DOCTYPE #{content}>"
 
-  defp print_node({:element, tag_name, attributes, children}, _parent_tag_name, csp_nonce) do
+  defp print_node({:element, tag_name, attributes, children}, _parent_tag_name, csp_stamp) do
     attributes_html =
       attributes
-      |> maybe_stamp_csp_nonce(tag_name, csp_nonce)
+      |> maybe_stamp_csp_nonce(tag_name, csp_stamp)
       |> print_attributes()
 
     if tag_name in @void_elems do
       "<#{tag_name}#{attributes_html} />"
     else
-      children_html = print_node(children, tag_name, csp_nonce)
+      children_html = print_node(children, tag_name, csp_stamp)
 
       "<#{tag_name}#{attributes_html}>#{children_html}</#{tag_name}>"
     end
   end
 
-  defp print_node({:public_comment, children}, parent_tag_name, csp_nonce) do
-    "<!--#{print_node(children, parent_tag_name, csp_nonce)}-->"
+  defp print_node({:public_comment, children}, parent_tag_name, csp_stamp) do
+    "<!--#{print_node(children, parent_tag_name, csp_stamp)}-->"
   end
 
-  defp print_node({:text, text}, parent_tag_name, _csp_nonce)
+  defp print_node({:text, text}, parent_tag_name, _csp_stamp)
        when parent_tag_name in @raw_text_elems do
     text
   end
 
-  defp print_node({:text, text}, _parent_tag_name, _csp_nonce), do: HtmlEntities.encode(text)
+  defp print_node({:text, text}, _parent_tag_name, _csp_stamp), do: HtmlEntities.encode(text)
 
   defp put_initial_page_flag_context(page_component_struct, initial_page?) do
     Component.put_context(
