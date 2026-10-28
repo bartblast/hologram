@@ -727,6 +727,28 @@ describe("Deserializer", () => {
           Type.reference("nonode@nohost", 0, [3, 2, 1]),
         );
       });
+
+      it("already-parsed array, top-level", () => {
+        assert.deepStrictEqual(deserialize([4, "sabc"]), Type.bitstring("abc"));
+      });
+
+      it("already-parsed array, nested in a collection", () => {
+        assert.deepStrictEqual(
+          deserialize([4, {t: "t", d: ["i1", {t: "l", d: ["sabc"]}]}]),
+          Type.tuple([Type.integer(1), Type.list([Type.bitstring("abc")])]),
+        );
+      });
+
+      it("already-parsed array, nested in an object", () => {
+        assert.deepStrictEqual(deserialize([4, {a: "sabc", b: "jxyz"}]), {
+          a: Type.bitstring("abc"),
+          b: "xyz",
+        });
+      });
+
+      it("already-parsed array, version 3", () => {
+        assert.equal(deserialize([3, "sabc"]), "abc");
+      });
     });
 
     // The strings here are what Hologram.Runtime.Serializer writes for the same terms.
