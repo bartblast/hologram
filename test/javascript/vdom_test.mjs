@@ -7,13 +7,10 @@ import {
   vnode,
 } from "./support/helpers.mjs";
 
+import App from "../../assets/js/app.mjs";
 import Vdom from "../../assets/js/vdom.mjs";
 
-import {
-  attributesModule,
-  eventListenersModule,
-  init,
-} from "../../assets/js/vendor/snabbdom/build/index.js";
+import {init} from "../../assets/js/vendor/snabbdom/build/index.js";
 
 defineRuntimeGlobals();
 registerWebApis();
@@ -193,7 +190,7 @@ describe("Vdom", () => {
   describe("mirror()", () => {
     // The same patch production builds, so these stand for the boot patch rather than a
     // differently configured one.
-    const patch = init([attributesModule, eventListenersModule]);
+    const patch = init(Vdom.patchModules);
 
     const mount = (html) => {
       const container = document.createElement("div");
@@ -457,6 +454,65 @@ describe("Vdom", () => {
       patched();
 
       assert.equal(container.querySelector("script"), serverScript);
+    });
+
+    it("leaves the nonce of a server-rendered element in place", () => {
+      const {container, mirrored, patched} = adopt(
+        [vnode("style", {attrs: {}}, ["a {}"])],
+        '<style nonce="my_nonce">a {}</style>',
+      );
+
+      assert.deepStrictEqual(mirrored.children[0].data.attrs, {});
+
+      patched();
+
+      assert.equal(container.querySelector("style").nonce, "my_nonce");
+    });
+  });
+
+  describe("patchModules", () => {
+    const patch = init(Vdom.patchModules);
+
+    const create = (sel) => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      const rendered = vnode("div", {attrs: {}}, [vnode(sel, {attrs: {}}, [])]);
+      patch(container, rendered);
+
+      return container.firstChild;
+    };
+
+    afterEach(() => {
+      App.cspNonce = null;
+    });
+
+    it("sets the document's nonce on a created script element", () => {
+      App.cspNonce = "my_nonce";
+
+      assert.equal(create("script").nonce, "my_nonce");
+    });
+
+    it("sets the document's nonce on a created style element", () => {
+      App.cspNonce = "my_nonce";
+
+      assert.equal(create("style").nonce, "my_nonce");
+    });
+
+    it("sets the document's nonce on a created link element", () => {
+      App.cspNonce = "my_nonce";
+
+      assert.equal(create("link").nonce, "my_nonce");
+    });
+
+    it("sets no nonce on a created element of another kind", () => {
+      App.cspNonce = "my_nonce";
+
+      assert.equal(create("img").nonce, "");
+    });
+
+    it("sets no nonce when the document has none", () => {
+      assert.equal(create("script").nonce, "");
     });
   });
 });

@@ -1,5 +1,6 @@
 "use strict";
 
+import App from "./app.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 
 // The script files the document runs besides the runtime, page bundles and chunks alike, each
@@ -85,6 +86,12 @@ export default class ScriptRegistry {
       script.src = path;
       script.async = true;
       script.fetchPriority = "high";
+
+      // Trusted through 'strict-dynamic' already, since the runtime creating it is. The nonce keeps
+      // it loading under a policy that names the nonce alone.
+      if (App.cspNonce !== null) {
+        script.nonce = App.cspNonce;
+      }
 
       script.onerror = () => {
         $.statuses.set(digest, "failed");

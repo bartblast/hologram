@@ -13,6 +13,12 @@ export default class App {
 
   static subscriptionReceiptRegistry = SubscriptionReceiptRegistry;
 
+  // The nonce is per document, so it is read from the document's own shell script, and is null
+  // when that script set none.
+  static loadCspNonce() {
+    App.cspNonce = globalThis.Hologram.cspNonce ?? null;
+  }
+
   // Idempotent: returns early when `App.instanceId` is already set so a
   // snapshot-restored value survives the boot sequence even though
   // `#restorePageSnapshot` runs before `App.maybeLoadInstanceId()`.

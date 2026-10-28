@@ -1,5 +1,7 @@
 "use strict";
 
+import App from "./app.mjs";
+
 import {
   attributesModule,
   eventListenersModule,
@@ -7,9 +9,36 @@ import {
   vnode as rawVnode,
 } from "./vendor/snabbdom/build/index.js";
 
-const patch = init([attributesModule, eventListenersModule]);
+// The elements HTML gives a nonce attribute to.
+const NONCED_ELEMENTS = new Set(["link", "script", "style"]);
+
+// An element the diff creates carries the document's Content Security Policy nonce before it is
+// inserted, so the policy lets it load or run. The nonce is set through the property and not as an
+// attribute: when an element is connected to a document whose policy came in a header, browsers
+// hide its nonce, the content attribute becomes the empty string while the property keeps the
+// value, so that CSS attribute selectors cannot read it, and an attribute set from here would undo
+// that hiding.
+const cspNonceModule = {
+  create: (_emptyVnode, vnode) => {
+    if (App.cspNonce !== null && NONCED_ELEMENTS.has(vnode.elm.localName)) {
+      vnode.elm.nonce = App.cspNonce;
+    }
+  },
+};
+
+const patchModules = [attributesModule, cspNonceModule, eventListenersModule];
+
+const patch = init(patchModules);
 
 export default class Vdom {
+  // The modules the diff runs with: attributes, the nonce on created elements, event listeners.
+  static patchModules = patchModules;
+
+  // Whether the element is one HTML gives a nonce attribute to.
+  static isNoncedElement(tagName) {
+    return NONCED_ELEMENTS.has(tagName);
+  }
+
   // Numbers repeats of a key within one children list, in document order: the second occurrence
   // becomes "<key>:1", the third "<key>:2".
   //
@@ -122,6 +151,13 @@ export default class Vdom {
     const attrs = {};
 
     for (const attr of domNode.attributes) {
+      // The rendered side carries no nonce attribute: the server stamps it at print time and the
+      // diff sets the property on creation. Mirroring it would have the boot patch remove it, and
+      // removing the attribute resets the element's nonce.
+      if (attr.name === "nonce") {
+        continue;
+      }
+
       attrs[attr.name] = attr.value === "" ? true : attr.value;
     }
 

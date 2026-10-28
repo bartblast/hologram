@@ -3456,6 +3456,14 @@ defmodule Hologram.Template.RendererTest do
                ~s(<style nonce="#{@csp_nonce}">a > b</style>)
     end
 
+    test "link element, stamped with the CSP nonce" do
+      # <link rel="stylesheet" href="/app.css" />
+      dom = {:element, "link", [{"rel", [text: "stylesheet"]}, {"href", [text: "/app.css"]}], []}
+
+      assert print_dom(dom, csp_nonce: @csp_nonce) ==
+               ~s(<link nonce="#{@csp_nonce}" rel="stylesheet" href="/app.css" />)
+    end
+
     test "script element nested in another element, stamped with the CSP nonce" do
       # <div><script>run()</script></div>
       dom = {:element, "div", [], [{:element, "script", [], [{:text, "run()"}]}]}
@@ -3472,7 +3480,7 @@ defmodule Hologram.Template.RendererTest do
                ~s(<script nonce="#{@csp_nonce}" src="/app.js"></script>)
     end
 
-    test "element other than script or style, not stamped" do
+    test "element other than link, script or style, not stamped" do
       # <div class="big"></div>
       dom = {:element, "div", [{"class", [text: "big"]}], []}
 

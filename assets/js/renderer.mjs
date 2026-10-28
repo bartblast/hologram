@@ -1759,9 +1759,17 @@ export default class Renderer {
     }
 
     // Expand spreads into unboxed [name, valueDom] pairs, then filter out event attributes
-    // (starting with $)
+    // (starting with $).
+    //
+    // A nonce the template wrote on a link, script or style element is dropped, as the server's
+    // print_dom/2 drops it: only the document's nonce is in the policy, and the diff sets that one
+    // on the element itself. Set as an attribute it would replace the document's nonce.
+    const isNoncedElement = Vdom.isNoncedElement(tagName);
+
     const regularAttrs = $.#expandAttributeSpreads(attrsDom).filter(
-      ([name]) => !name.startsWith("$"),
+      ([name]) =>
+        !name.startsWith("$") &&
+        !(isNoncedElement && name.toLowerCase() === "nonce"),
     );
 
     // Check if this is a form element with special handling of checked and value attributes

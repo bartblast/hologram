@@ -1486,6 +1486,10 @@ export default class Hologram {
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
   static async #init() {
+    // First, since the ETS tables restored below can hold stored functions, which compile through a
+    // script element that needs the nonce.
+    App.loadCspNonce();
+
     window.addEventListener("error", (event) => {
       $.handleUncaughtError(event.error);
     });

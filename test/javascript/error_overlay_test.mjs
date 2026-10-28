@@ -7,6 +7,7 @@ import {
   registerWebApis,
 } from "./support/helpers.mjs";
 
+import App from "../../assets/js/app.mjs";
 import ErrorOverlay from "../../assets/js/error_overlay.mjs";
 
 defineRuntimeGlobals();
@@ -40,6 +41,7 @@ describe("ErrorOverlay", () => {
     ErrorOverlay.hide("my_id");
     ErrorOverlay.hide("my_id_2");
     globalThis.document = originalDocument;
+    App.cspNonce = null;
   });
 
   describe("hide()", () => {
@@ -166,6 +168,24 @@ describe("ErrorOverlay", () => {
       assert.equal(style.tagName, "STYLE");
       assert.include(style.textContent, ".hologram-error-overlay {");
       assert.include(style.textContent, ".hologram-error-overlay__heading {");
+    });
+
+    it("puts the styles in the page with the document's nonce", () => {
+      App.cspNonce = "my_nonce";
+
+      show();
+
+      const style = document.getElementById("hologram-error-overlay-style");
+
+      assert.equal(style.nonce, "my_nonce");
+    });
+
+    it("puts the styles in the page without a nonce when the document has none", () => {
+      show();
+
+      const style = document.getElementById("hologram-error-overlay-style");
+
+      assert.equal(style.nonce, "");
     });
 
     it("puts the styles in the page only once", () => {

@@ -2,6 +2,7 @@
 
 import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
+import App from "../../assets/js/app.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import ScriptRegistry from "../../assets/js/script_registry.mjs";
 
@@ -177,6 +178,26 @@ describe("ScriptRegistry", () => {
 
       assert.isTrue(scripts.every((script) => script.async === true));
       assert.isTrue(scripts.every((script) => script.fetchPriority === "high"));
+    });
+
+    it("gives each script element the document's nonce", () => {
+      App.cspNonce = "my_nonce";
+
+      try {
+        ScriptRegistry.request([scriptA, scriptB], () => null);
+      } finally {
+        App.cspNonce = null;
+      }
+
+      assert.isTrue(
+        requestedScripts().every((script) => script.nonce === "my_nonce"),
+      );
+    });
+
+    it("gives the script elements no nonce when the document has none", () => {
+      ScriptRegistry.request([scriptA], () => null);
+
+      assert.equal(requestedScripts()[0].nonce, "");
     });
 
     it("fetches a script that failed again", () => {

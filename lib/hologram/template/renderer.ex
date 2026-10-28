@@ -24,6 +24,9 @@ defmodule Hologram.Template.Renderer do
   # https://html.spec.whatwg.org/multipage/syntax.html#raw-text-elements
   @raw_text_elems ~w(script style)
 
+  # The elements HTML gives a nonce attribute to. See print_dom/2.
+  @nonced_elems ~w(link script style)
+
   # The characters a value cannot carry into a script element as the text of a JavaScript string
   # literal, each with the escape sequence it is written as instead. Every sequence is valid
   # inside all three kinds of literal - double-quoted, single-quoted and template - and reads back
@@ -247,10 +250,10 @@ defmodule Hologram.Template.Renderer do
   event bindings and element keys among them - so they are left out. An attribute with an empty
   value prints as a bare name, and a void element prints without children.
 
-  Given a `csp_nonce:` option, every script and style element is printed with that nonce as its
-  first attribute, so the document's Content Security Policy lets it run. A nonce the template
-  wrote on such an element is dropped, since only the generated one is in the policy. Without
-  the option, or with `nil`, elements print as the tree holds them.
+  Given a `csp_nonce:` option, every link, script and style element is printed with that nonce as
+  its first attribute, so the document's Content Security Policy lets it load or run. A nonce the
+  template wrote on such an element is dropped, since only the generated one is in the policy.
+  Without the option, or with `nil`, elements print as the tree holds them.
 
   ## Examples
 
@@ -996,7 +999,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp maybe_stamp_csp_nonce(attributes, tag_name, csp_nonce)
-       when tag_name in @raw_text_elems and is_binary(csp_nonce) do
+       when tag_name in @nonced_elems and is_binary(csp_nonce) do
     attributes_without_nonce =
       Enum.reject(attributes, fn {name, _value} -> String.downcase(name) == "nonce" end)
 

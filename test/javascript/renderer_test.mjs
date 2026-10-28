@@ -4773,6 +4773,78 @@ describe("Renderer", () => {
     });
   });
 
+  describe("nonce attribute", () => {
+    const elementWithNonce = (tagName, nonceAttrName = "nonce") =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list([
+          Type.tuple([
+            Type.bitstring(nonceAttrName),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("written")]]),
+          ]),
+          Type.tuple([
+            Type.bitstring("rel"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("stylesheet")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    it("dropped from a link element", () => {
+      const result = render(elementWithNonce("link"));
+
+      const expected = vnode("link", {attrs: {rel: "stylesheet"}, on: {}}, []);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("dropped from a script element", () => {
+      const result = render(elementWithNonce("script"));
+
+      const expected = vnode(
+        "script",
+        {attrs: {rel: "stylesheet"}, on: {}},
+        [],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("dropped from a style element", () => {
+      const result = render(elementWithNonce("style"));
+
+      const expected = vnode("style", {attrs: {rel: "stylesheet"}, on: {}}, []);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("dropped whatever its case", () => {
+      const result = render(elementWithNonce("style", "NONCE"));
+
+      const expected = vnode("style", {attrs: {rel: "stylesheet"}, on: {}}, []);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("kept on another element", () => {
+      const result = render(elementWithNonce("div"));
+
+      const expected = vnode(
+        "div",
+        {attrs: {nonce: "written", rel: "stylesheet"}, on: {}},
+        [],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("element spread", () => {
     const spread = (value) =>
       Type.tuple([Type.atom("spread"), Type.tuple([value])]);
