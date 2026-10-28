@@ -161,6 +161,46 @@ export default class Interpreter {
     return context;
   }
 
+  // Builds the capture of a named function, &module.functionName/arity: one clause taking the
+  // arity's worth of arguments and calling the function with them. The module and the function
+  // name are boxed atoms, the arity a number.
+  static buildFunctionCapture(module, functionName, arity) {
+    const paramNames = Array.from(
+      {length: arity},
+      (_elem, index) => `$${index + 1}`,
+    );
+
+    const clauses = [
+      {
+        params: (_context) =>
+          paramNames.map((name) => Type.variablePattern(name)),
+        guards: [],
+        body: (context) => {
+          const args = Type.list(paramNames.map((name) => context.vars[name]));
+
+          return Interpreter.callNamedFunction(
+            module,
+            functionName,
+            args,
+            context,
+          );
+        },
+      },
+    ];
+
+    const capturedModule = module.value.startsWith("Elixir.")
+      ? Interpreter.moduleExName(module)
+      : `:${module.value}`;
+
+    return Type.functionCapture(
+      capturedModule,
+      functionName.value,
+      arity,
+      clauses,
+      Interpreter.buildContext(),
+    );
+  }
+
   // Hologram-specific, no server-side equivalent.
   static buildTooBigOutputErrorMsg(mfa) {
     return (
@@ -282,10 +322,12 @@ export default class Interpreter {
       );
     }
 
+    // A context with no module, like a function capture's, is no module's own code, so no private
+    // function is local to it.
     if (
       moduleProxy.__exports__ &&
       !moduleProxy.__exports__.has(functionArityStr) &&
-      !Interpreter.isEqual(module, context.module)
+      (context.module === null || !Interpreter.isEqual(module, context.module))
     ) {
       Interpreter.raiseUndefinedFunctionError(
         module,
