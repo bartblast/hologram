@@ -7,10 +7,15 @@ import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
 export default class Deserializer {
+  // Reads a value serialized by Serializer.serialize or by the server. The text starts with the
+  // format version, "[4,", which decides what an "s" string is: a string under version 4, a plain
+  // JavaScript string under version 3, the form stored by earlier releases.
   static deserialize(serialized) {
+    const version = $.#version(serialized);
+
     return JSON.parse(serialized, (_key, value) => {
       return typeof value === "string"
-        ? $.#maybeDeserializeFromString(value)
+        ? $.#maybeDeserializeFromString(value, version)
         : $.#maybeDeserializeFromObject(value);
     })[1];
   }
@@ -26,16 +31,22 @@ export default class Deserializer {
     return bitstring;
   }
 
+  // The capture is built the way :erlang.make_fun/3 builds one, so it can be called: its one
+  // clause calls the named function with the arity's worth of arguments. An Erlang module is
+  // written with a leading colon, an Elixir module without its Elixir prefix.
   static #deserializeBoxedFunctionCapture(serialized) {
-    const parts = serialized.split(Serializer.DELIMITER);
-    const context = Interpreter.buildContext();
+    const [capturedModule, functionName, arity] = serialized.split(
+      Serializer.DELIMITER,
+    );
 
-    return Type.functionCapture(
-      parts[0],
-      parts[1],
-      parseInt(parts[2]),
-      [],
-      context,
+    const module = capturedModule.startsWith(":")
+      ? Type.atom(capturedModule.slice(1))
+      : Type.atom(`Elixir.${capturedModule}`);
+
+    return Interpreter.buildFunctionCapture(
+      module,
+      Type.atom(functionName),
+      parseInt(arity),
     );
   }
 
@@ -71,7 +82,7 @@ export default class Deserializer {
     return obj;
   }
 
-  static #maybeDeserializeFromString(serialized) {
+  static #maybeDeserializeFromString(serialized, version) {
     const data = serialized.slice(1);
 
     switch (serialized[0]) {
@@ -90,6 +101,9 @@ export default class Deserializer {
       case "i":
         return Type.integer(BigInt(data));
 
+      case "j":
+        return data;
+
       case "o":
         return $.#deserializeBoxedIdentifier("port", data);
 
@@ -97,7 +111,7 @@ export default class Deserializer {
         return $.#deserializeBoxedIdentifier("pid", data);
 
       case "s":
-        return data;
+        return version === 3 ? data : Type.bitstring(data);
 
       case "u":
         return Interpreter.evaluateJavaScriptExpression(data);
@@ -131,6 +145,11 @@ export default class Deserializer {
 
   static #regexStructField(map, key) {
     return map.data[Type.encodeMapKey(Type.atom(key))][1];
+  }
+
+  // The format version, written as the first element of the serialized array.
+  static #version(serialized) {
+    return parseInt(serialized.slice(1, serialized.indexOf(",")));
   }
 }
 

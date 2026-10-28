@@ -5584,27 +5584,71 @@ describe("Bitstring", () => {
   });
 
   describe("serialize()", () => {
-    it("empty bitstring", () => {
-      const bitstring = Type.bitstring("");
+    it("binary that is not a valid string", () => {
+      const bitstring = Bitstring.fromBytes([255]);
       const result = Bitstring.serialize(bitstring);
 
-      assert.equal(result, "b");
+      assert.equal(result, "b0ff");
     });
 
-    it("non-empty bitstring without leftover bits", () => {
-      const bitstring = Type.bitstring("Hologram");
-      const result = Bitstring.serialize(bitstring);
-
-      assert.equal(result, "b0486f6c6f6772616d");
-    });
-
-    it("non-empty bitstring with leftover bits", () => {
+    it("bitstring with leftover bits", () => {
       const bitstring = Bitstring.fromBytes([1, 52, 103]);
       bitstring.leftoverBitCount = 5;
 
       const result = Bitstring.serialize(bitstring);
 
       assert.equal(result, "b5013467");
+    });
+
+    it("string", () => {
+      const bitstring = Type.bitstring("Hologram");
+      const result = Bitstring.serialize(bitstring);
+
+      assert.equal(result, "sHologram");
+    });
+
+    it("string, beyond ASCII", () => {
+      const bitstring = Type.bitstring("zażółć 🎉");
+      const result = Bitstring.serialize(bitstring);
+
+      assert.equal(result, "szażółć 🎉");
+    });
+
+    it("string, built from bytes", () => {
+      const bitstring = Bitstring.fromBytes([72, 111, 108, 111]);
+      const result = Bitstring.serialize(bitstring);
+
+      assert.equal(result, "sHolo");
+    });
+
+    it("string, empty", () => {
+      const bitstring = Type.bitstring("");
+      const result = Bitstring.serialize(bitstring);
+
+      assert.equal(result, "s");
+    });
+
+    // Half of a surrogate pair is not valid text in any encoding. The encoder writes U+FFFD for
+    // it, so that is the character the string travels with.
+    it("string holding a lone surrogate", () => {
+      const bitstring = Type.bitstring("a\uD800b");
+      const result = Bitstring.serialize(bitstring);
+
+      assert.equal(result, "sa\uFFFDb");
+    });
+
+    it("string starting with a byte order mark", () => {
+      const bitstring = Type.bitstring("\uFEFFA");
+      const result = Bitstring.serialize(bitstring);
+
+      assert.equal(result, "b0efbbbf41");
+    });
+
+    it("string starting with a byte order mark, built from bytes", () => {
+      const bitstring = Bitstring.fromBytes([0xef, 0xbb, 0xbf, 0x41]);
+      const result = Bitstring.serialize(bitstring);
+
+      assert.equal(result, "b0efbbbf41");
     });
   });
 

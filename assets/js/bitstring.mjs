@@ -712,9 +712,23 @@ export default class Bitstring {
     return segment.type === "binary" ? 8 : 1;
   }
 
+  // A bitstring that is a valid string travels as the string itself, any other one as hex.
+  //
+  // A string holding a lone surrogate, half of a pair, is not valid text in any encoding: JSON
+  // escapes it and the server refuses it. Its bytes are valid, since the encoder writes U+FFFD for
+  // the surrogate, so the text is taken from the bytes again, which also makes the bitstring equal
+  // to one built from those bytes. A leading byte order mark is the one sequence the decoder drops
+  // from the text, so a bitstring starting with one travels as hex, where nothing is dropped.
   static serialize(bitstring) {
-    if ($.isEmpty(bitstring)) {
-      return "b";
+    if ($.isText(bitstring)) {
+      if (!bitstring.text.isWellFormed()) {
+        $.maybeSetBytesFromText(bitstring);
+        bitstring.text = $.#decoder.decode(bitstring.bytes);
+      }
+
+      if (!$.#hasByteOrderMark(bitstring)) {
+        return `s${bitstring.text}`;
+      }
     }
 
     $.maybeResolveHex(bitstring);
@@ -1341,6 +1355,24 @@ export default class Bitstring {
       leftoverBitCount: leftoverBits,
       hex: null,
     };
+  }
+
+  // Whether the bitstring starts with a byte order mark, in its text or in its bytes. The text of a
+  // bitstring built from bytes has already lost the mark, so the bytes are checked as well.
+  static #hasByteOrderMark(bitstring) {
+    if (bitstring.text.startsWith("\uFEFF")) {
+      return true;
+    }
+
+    const bytes = bitstring.bytes;
+
+    return (
+      bytes !== null &&
+      bytes.length >= 3 &&
+      bytes[0] === 0xef &&
+      bytes[1] === 0xbb &&
+      bytes[2] === 0xbf
+    );
   }
 
   static #isLittleEndian(segment) {

@@ -482,7 +482,7 @@ describe("Type", () => {
       const bitstring = Type.bitstring("Hologram");
       const result = Type.encodeMapKey(bitstring);
 
-      assert.equal(result, "b0486f6c6f6772616d");
+      assert.equal(result, "sHologram");
     });
 
     it("encodes boxed float value as map key", () => {
@@ -615,7 +615,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([]),
         HologramInterpreterError,
-        "improper list must have at least 2 items, received [3,[]]",
+        "improper list must have at least 2 items, received [4,[]]",
       );
     });
 
@@ -623,7 +623,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([Type.integer(1)]),
         HologramInterpreterError,
-        'improper list must have at least 2 items, received [3,["i1"]]',
+        'improper list must have at least 2 items, received [4,["i1"]]',
       );
     });
 
