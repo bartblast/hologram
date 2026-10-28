@@ -2,6 +2,7 @@ defmodule Hologram.UI.Runtime do
   use Hologram.Component
   alias Hologram.Router.Helpers, as: RouterHelpers
 
+  prop :csp_nonce, :string, from_context: {Hologram.Runtime, :csp_nonce}
   prop :csrf_token, :string, from_context: {Hologram.Runtime, :csrf_token}
   prop :initial_page?, :boolean, from_context: {Hologram.Runtime, :initial_page?}
   prop :instance_id, :string, from_context: {Hologram.Runtime, :instance_id}
@@ -17,6 +18,7 @@ defmodule Hologram.UI.Runtime do
         globalThis.Hologram ??= \{\};
         globalThis.Hologram._pendingJsInteropActions = [];
         globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER;
+        globalThis.Hologram.cspNonce = "{@csp_nonce}";
         globalThis.Hologram.csrfToken = "{@csrf_token}";
         globalThis.Hologram.initialChunkDigests = $CHUNK_DIGESTS_JS_PLACEHOLDER;
         globalThis.Hologram.initialPageDigest = "{@page_digest}";

@@ -17,6 +17,7 @@ defmodule Hologram.UI.RuntimeTest do
 
     [
       context: %{
+        {Hologram.Runtime, :csp_nonce} => "test-csp-nonce-67890",
         {Hologram.Runtime, :csrf_token} => "test-csrf-token-12345",
         {Hologram.Runtime, :initial_page?} => false,
         {Hologram.Runtime, :instance_id} => "test-instance-id-abcde",
@@ -37,6 +38,7 @@ defmodule Hologram.UI.RuntimeTest do
 
     refute String.contains?(markup, "globalThis.Hologram._pendingJsInteropActions")
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
+    refute String.contains?(markup, "globalThis.Hologram.cspNonce")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     refute String.contains?(markup, "globalThis.Hologram.initialChunkDigests")
@@ -54,6 +56,7 @@ defmodule Hologram.UI.RuntimeTest do
 
     assert String.contains?(markup, "globalThis.Hologram._pendingJsInteropActions")
     assert String.contains?(markup, "globalThis.Hologram.assetManifest")
+    assert String.contains?(markup, "globalThis.Hologram.cspNonce")
     assert String.contains?(markup, "globalThis.Hologram.csrfToken")
     assert String.contains?(markup, "globalThis.Hologram.dispatchAction")
 
@@ -77,6 +80,7 @@ defmodule Hologram.UI.RuntimeTest do
   test "not initial page, page mounted", %{context: initial_context} do
     context =
       initial_context
+      |> Map.delete({Hologram.Runtime, :csp_nonce})
       |> Map.delete({Hologram.Runtime, :csrf_token})
       |> Map.delete({Hologram.Runtime, :instance_id})
       |> Map.put({Hologram.Runtime, :page_mounted?}, true)
@@ -85,6 +89,7 @@ defmodule Hologram.UI.RuntimeTest do
 
     refute String.contains?(markup, "globalThis.Hologram._pendingJsInteropActions")
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
+    refute String.contains?(markup, "globalThis.Hologram.cspNonce")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     refute String.contains?(markup, "globalThis.Hologram.initialChunkDigests")
@@ -102,6 +107,7 @@ defmodule Hologram.UI.RuntimeTest do
   test "not initial page, page not mounted", %{context: initial_context} do
     context =
       initial_context
+      |> Map.delete({Hologram.Runtime, :csp_nonce})
       |> Map.delete({Hologram.Runtime, :csrf_token})
       |> Map.delete({Hologram.Runtime, :instance_id})
 
@@ -109,6 +115,7 @@ defmodule Hologram.UI.RuntimeTest do
 
     refute String.contains?(markup, "globalThis.Hologram._pendingJsInteropActions")
     refute String.contains?(markup, "globalThis.Hologram.assetManifest")
+    refute String.contains?(markup, "globalThis.Hologram.cspNonce")
     refute String.contains?(markup, "globalThis.Hologram.csrfToken")
     refute String.contains?(markup, "globalThis.Hologram.dispatchAction")
     refute String.contains?(markup, "globalThis.Hologram.initialChunkDigests")
@@ -118,6 +125,13 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "hologram/runtime")
     refute String.contains?(markup, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER")
     assert String.contains?(markup, "hologram/page")
+  end
+
+  test "csp_nonce prop", %{context: initial_context} do
+    context = Map.put(initial_context, {Hologram.Runtime, :initial_page?}, true)
+    markup = render_component(Runtime, %{}, context)
+
+    assert String.contains?(markup, ~s'globalThis.Hologram.cspNonce = "test-csp-nonce-67890";')
   end
 
   test "csrf_token prop", %{context: initial_context} do

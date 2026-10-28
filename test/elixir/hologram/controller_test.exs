@@ -70,6 +70,7 @@ defmodule Hologram.ControllerTest do
   @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
   @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
 
+  @csp_nonce "test-csp-nonce"
   @csrf_token_session_key CSRFProtection.session_key()
   @hologram_session_id "test-session-id"
 
@@ -224,6 +225,7 @@ defmodule Hologram.ControllerTest do
     |> Plug.Test.init_test_session(%{})
     |> Plug.Conn.fetch_cookies()
     |> handle_page_request(page_module, %{}, client_claimed_sub_keys,
+      csp_nonce: @csp_nonce,
       initial_page?: true,
       instance_id: instance_id,
       csrf_token: @masked_csrf_token
@@ -2039,8 +2041,7 @@ defmodule Hologram.ControllerTest do
                ~s'globalThis.Hologram.initialChunkDigests = ["BBBBBBBB","CCCCCCCC"];'
 
       assert conn.resp_body =~
-               ~s'<script async src="/hologram/chunk-BBBBBBBB.js"></script>' <>
-                 ~s'<script async src="/hologram/chunk-CCCCCCCC.js"></script>'
+               ~r'<script nonce="[^"]+" async src="/hologram/chunk-BBBBBBBB\.js"></script><script nonce="[^"]+" async src="/hologram/chunk-CCCCCCCC\.js"></script>'
     end
 
     test "names the chunks the struct types in the self-echoes need" do
@@ -2072,7 +2073,55 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body =~
                ~s'globalThis.Hologram.initialChunkDigests = ["DDDDDDDD"];'
 
-      assert conn.resp_body =~ ~s'<script async src="/hologram/chunk-DDDDDDDD.js"></script>'
+      assert conn.resp_body =~
+               ~r'<script nonce="[^"]+" async src="/hologram/chunk-DDDDDDDD\.js"></script>'
+    end
+
+    test "stamps the nonce the client is given on every script tag, chunk tags included" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module34}, [
+        "DDDDDDDD"
+      ])
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      script_tags = Regex.scan(~r/<script[ >][^>]*>/, conn.resp_body)
+
+      nonced_script_tags =
+        Regex.scan(~r/<script nonce="#{Regex.escape(csp_nonce)}"[ >]/, conn.resp_body)
+
+      assert byte_size(Base.decode64!(csp_nonce)) == 16
+      assert length(script_tags) == 5
+      assert length(nonced_script_tags) == length(script_tags)
+      assert conn.resp_body =~ "/hologram/chunk-DDDDDDDD.js"
+    end
+
+    test "generates a new nonce for each initial page request" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      csp_nonces =
+        Enum.map(1..2, fn _index ->
+          conn =
+            :get
+            |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+            |> Plug.Test.init_test_session(%{})
+            |> handle_initial_page_request(Module34)
+
+          [_full_match, csp_nonce] =
+            Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+          csp_nonce
+        end)
+
+      assert Enum.uniq(csp_nonces) == csp_nonces
     end
 
     test "names no chunk for a page that needs none" do
@@ -2534,6 +2583,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module21, %{}, [],
+        csp_nonce: @csp_nonce,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2554,6 +2604,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module14, %{}, [],
+        csp_nonce: @csp_nonce,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2575,6 +2626,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module22, %{}, [],
+          csp_nonce: @csp_nonce,
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token
@@ -2594,6 +2646,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module28, %{}, [],
+        csp_nonce: @csp_nonce,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2612,6 +2665,7 @@ defmodule Hologram.ControllerTest do
       |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module25, %{}, [],
+        csp_nonce: @csp_nonce,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2629,6 +2683,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{hologram_session_id: "test-session-id"})
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module21, %{}, [],
+          csp_nonce: @csp_nonce,
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token
@@ -2649,6 +2704,7 @@ defmodule Hologram.ControllerTest do
         })
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module14, %{}, [],
+          csp_nonce: @csp_nonce,
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token

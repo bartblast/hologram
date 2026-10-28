@@ -15,6 +15,7 @@ defmodule Hologram.Controller do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Router.PageModuleResolver
+  alias Hologram.Runtime.ContentSecurityPolicy
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
@@ -436,6 +437,7 @@ defmodule Hologram.Controller do
     instance_id = UUID.uuid4()
 
     renderer_opts = [
+      csp_nonce: ContentSecurityPolicy.generate_nonce(),
       csrf_token: masked_csrf_token,
       initial_page?: true,
       instance_id: instance_id
@@ -472,7 +474,7 @@ defmodule Hologram.Controller do
       {:rendered, conn, result} ->
         final_html =
           result.html
-          |> Renderer.interpolate_chunks(result.chunk_digests)
+          |> Renderer.interpolate_chunks(result.chunk_digests, renderer_opts[:csp_nonce])
           |> Renderer.interpolate_self_echoes_js(result.self_echoes)
           |> Renderer.interpolate_sub_receipt_adds_js(result.sub_receipt_adds)
           |> Renderer.interpolate_sub_receipt_drops_js(result.sub_receipt_drops)
