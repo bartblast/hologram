@@ -443,9 +443,14 @@ defmodule Hologram.Controller do
 
     instance_id = UUID.uuid4()
 
+    # Read once, so the nonce and the elements it is stamped on follow the same policy. A page sent
+    # without a policy carries no nonce at all, since nothing would read it.
+    csp_directives = ContentSecurityPolicy.directives()
+    csp_nonce = if csp_directives, do: ContentSecurityPolicy.generate_nonce()
+
     renderer_opts = [
-      csp_nonce: ContentSecurityPolicy.generate_nonce(),
-      csp_nonced_elements: ContentSecurityPolicy.nonced_elements(),
+      csp_nonce: csp_nonce,
+      csp_nonced_elements: ContentSecurityPolicy.nonced_elements(csp_directives),
       csrf_token: masked_csrf_token,
       initial_page?: true,
       instance_id: instance_id

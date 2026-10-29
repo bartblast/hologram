@@ -11,22 +11,13 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
   ]
 
   setup do
-    original_config = Application.fetch_env(:hologram, :content_security_policy)
-
-    on_exit(fn ->
-      case original_config do
-        {:ok, config} -> Application.put_env(:hologram, :content_security_policy, config)
-        :error -> Application.delete_env(:hologram, :content_security_policy)
-      end
-    end)
-
-    Application.delete_env(:hologram, :content_security_policy)
+    put_hologram_config(:content_security_policy, [])
   end
 
   @source_message "but a source is visible ASCII without a semicolon or a comma, and not empty"
 
   defp put_config(config) do
-    Application.put_env(:hologram, :content_security_policy, config)
+    put_hologram_config(:content_security_policy, config)
   end
 
   defp unbootable_scripts_message(name) do
@@ -69,6 +60,18 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
 
     test "no policy when the config is false" do
       put_config(false)
+
+      assert directives() == nil
+    end
+
+    test "no policy when the config removes every directive" do
+      put_config(
+        base_uri: false,
+        form_action: false,
+        frame_ancestors: false,
+        object_src: false,
+        script_src: false
+      )
 
       assert directives() == nil
     end
@@ -120,39 +123,39 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
     end
   end
 
-  describe "nonced_elements/0" do
+  describe "nonced_elements/1" do
     test "script elements under the defaults" do
-      assert nonced_elements() == ["script"]
+      assert nonced_elements(directives()) == ["script"]
     end
 
     test "link and style elements too when style_src names the nonce" do
       put_config(style_src: [:self, :nonce])
 
-      assert nonced_elements() == ["link", "script", "style"]
+      assert nonced_elements(directives()) == ["link", "script", "style"]
     end
 
     test "follows script_src_elem over script_src" do
       put_config(script_src_elem: [:self, :unsafe_inline])
 
-      assert nonced_elements() == []
+      assert nonced_elements(directives()) == []
     end
 
     test "follows style_src_elem over style_src" do
       put_config(style_src: [:self], style_src_elem: [:nonce])
 
-      assert nonced_elements() == ["link", "script", "style"]
+      assert nonced_elements(directives()) == ["link", "script", "style"]
     end
 
     test "follows default_src when script_src is removed" do
       put_config(default_src: [:self, :nonce], script_src: false)
 
-      assert nonced_elements() == ["link", "script", "style"]
+      assert nonced_elements(directives()) == ["link", "script", "style"]
     end
 
     test "none when the policy is off" do
       put_config(false)
 
-      assert nonced_elements() == []
+      assert nonced_elements(directives()) == []
     end
   end
 

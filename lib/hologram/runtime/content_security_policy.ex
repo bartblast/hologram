@@ -87,7 +87,8 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
   or `nil` when the app turned the policy off with `false`.
 
   A directive the config gives replaces the default for that directive, and one set to `false` is
-  removed. Read at call time, so the key works from `config/runtime.exs`.
+  removed. A config removing every directive is no policy either. Read at call time, so the key
+  works from `config/runtime.exs`.
 
   ## Examples
 
@@ -107,10 +108,13 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
         nil
 
       config ->
-        @default_directives
-        |> Keyword.merge(config)
-        |> Enum.reject(fn {_name, sources} -> sources == false end)
-        |> Enum.sort_by(fn {name, _sources} -> name end)
+        directives =
+          @default_directives
+          |> Keyword.merge(config)
+          |> Enum.reject(fn {_name, sources} -> sources == false end)
+          |> Enum.sort_by(fn {name, _sources} -> name end)
+
+        if directives != [], do: directives
     end
   end
 
@@ -152,21 +156,21 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
   end
 
   @doc """
-  The elements a rendered page stamps with its nonce: the ones a directive of the policy names the
-  nonce for. `"script"` when the directive governing script elements names `:nonce`, `"link"` and
-  `"style"` when the one governing style elements does, none when the policy is off.
+  The elements a page sent with the given directives stamps with its nonce: the ones a directive
+  names the nonce for. `"script"` when the directive governing script elements names `:nonce`,
+  `"link"` and `"style"` when the one governing style elements does, none for no policy (`nil`).
 
   The governing directive is the one the browser reads: `script_src_elem` when present, else
   `script_src`, else `default_src`, and likewise for styles.
 
   ## Examples
 
-      iex> nonced_elements()
+      iex> nonced_elements(directives())
       ["script"]
   """
-  @spec nonced_elements() :: [String.t()]
-  def nonced_elements do
-    case directives() do
+  @spec nonced_elements(keyword | nil) :: [String.t()]
+  def nonced_elements(directives) do
+    case directives do
       nil ->
         []
 

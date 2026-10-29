@@ -89,8 +89,8 @@ defmodule Hologram.UI.RuntimeTest do
     assert fill_names(context) == []
   end
 
-  # The shell runs only because it carries the nonce, so it holds nothing built from app data: the
-  # values the boot reads travel in the boot data block, which the browser never runs.
+  # Under a policy the shell runs only because it carries the nonce, so it holds nothing built from
+  # app data: the values the boot reads travel in the boot data block, which the browser never runs.
   test "shell", %{context: initial_context} do
     context = Map.put(initial_context, {Hologram.Runtime, :initial_page?}, true)
     markup = render_component(Runtime, %{}, context)
@@ -103,6 +103,31 @@ defmodule Hologram.UI.RuntimeTest do
                  globalThis.Hologram ??= {};
                  globalThis.Hologram._pendingJsInteropActions = [];
                  globalThis.Hologram.cspNonce = "test-csp-nonce-67890";
+
+                 globalThis.Hologram.dispatchAction = function(actionName, target, params) {
+                   globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
+                 }
+               </script>\
+             """)
+  end
+
+  # A page sent without a policy has no nonce, so the shell names none.
+  test "shell, without a CSP nonce", %{context: initial_context} do
+    context =
+      initial_context
+      |> Map.delete({Hologram.Runtime, :csp_nonce})
+      |> Map.put({Hologram.Runtime, :initial_page?}, true)
+
+    markup = render_component(Runtime, %{}, context)
+
+    [shell] = Regex.run(~r'<script>.*?</script>'s, markup)
+
+    assert normalize_newlines(shell) ==
+             normalize_newlines("""
+             <script>
+                 globalThis.Hologram ??= {};
+                 globalThis.Hologram._pendingJsInteropActions = [];
+                 
 
                  globalThis.Hologram.dispatchAction = function(actionName, target, params) {
                    globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);

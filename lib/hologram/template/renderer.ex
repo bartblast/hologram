@@ -945,16 +945,19 @@ defmodule Hologram.Template.Renderer do
     "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: #{inspect(value)}"
   end
 
+  # An initial page puts the nonce in the context when it is given one, and nothing otherwise.
   defp maybe_put_csp_nonce_context(page_component_struct, opts, true) do
-    csp_nonce =
-      opts[:csp_nonce] ||
-        raise ArgumentError, "CSP nonce is required for initial page requests"
+    case opts[:csp_nonce] do
+      nil ->
+        page_component_struct
 
-    Component.put_context(
-      page_component_struct,
-      {Hologram.Runtime, :csp_nonce},
-      csp_nonce
-    )
+      csp_nonce ->
+        Component.put_context(
+          page_component_struct,
+          {Hologram.Runtime, :csp_nonce},
+          csp_nonce
+        )
+    end
   end
 
   defp maybe_put_csp_nonce_context(page_component_struct, _opts, false) do

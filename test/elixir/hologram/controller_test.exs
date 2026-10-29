@@ -2284,6 +2284,49 @@ defmodule Hologram.ControllerTest do
       assert length(Regex.scan(~r/id="hologram-boot-data"/, conn.resp_body)) == 1
     end
 
+    test "carries no nonce anywhere when the policy is off" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module34}, [
+        "DDDDDDDD"
+      ])
+
+      put_hologram_config(:content_security_policy, false)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      refute conn.resp_body =~ "nonce"
+      assert conn.resp_body =~ ~s'<script type="application/json" id="hologram-boot-data">'
+      assert conn.resp_body =~ ~s'<script async src="/hologram/chunk-DDDDDDDD.js"></script>'
+      assert boot_data(conn.resp_body)["chunks"] == ["DDDDDDDD"]
+    end
+
+    # The block's nonce is Hologram's guard against an injected block, which the client compares
+    # with the shell's, so a page under a policy carries both whatever the policy stamps.
+    test "carries the nonce on the boot data block and in the shell under a policy that stamps nothing" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      put_hologram_config(:content_security_policy, script_src: [:self, :unsafe_inline])
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert conn.resp_body =~
+               ~s'<script nonce="#{csp_nonce}" type="application/json" id="hologram-boot-data">'
+
+      assert length(Regex.scan(~r/nonce=/, conn.resp_body)) == 1
+    end
+
     test "generates a new nonce for each initial page request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
 

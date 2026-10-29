@@ -72,6 +72,23 @@ describe("ScriptEvaluator", () => {
       assert.equal(appendedElements[0].nonce, "R4nd0mN0nce");
     });
 
+    it("gives the script element no nonce when the document has none", () => {
+      App.cspNonce = null;
+
+      const head = scriptWindow.document.head;
+      const appendChild = head.appendChild.bind(head);
+      const appendedElements = [];
+
+      head.appendChild = (element) => {
+        appendedElements.push(element);
+        return appendChild(element);
+      };
+
+      assert.equal(ScriptEvaluator.compile("return 1;")(), 1);
+      assert.equal(appendedElements.length, 1);
+      assert.equal(appendedElements[0].nonce, "");
+    });
+
     it("leaves no script element and no window property behind", () => {
       ScriptEvaluator.compile("return 1;");
 

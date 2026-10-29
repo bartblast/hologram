@@ -2206,24 +2206,37 @@ defmodule Hologram.Template.RendererTest do
       refute Map.has_key?(page_emitted_context, {Hologram.Runtime, :csp_nonce})
     end
 
-    test "raises ArgumentError when CSP nonce is not provided for initial page requests" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+    # A page sent without a policy has no nonce.
+    test "CSP nonce is optional for initial page requests" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
 
-      opts = [initial_page?: true]
+      opts = [csp_nonce: nil, csp_nonced_elements: [], initial_page?: true]
 
-      assert_error ArgumentError, "CSP nonce is required for initial page requests", fn ->
-        render_page_without_tree(Module28, @params, @server, opts)
-      end
+      assert {html, _component_registry, _server_struct} =
+               render_page_without_tree(Module48, @params, @server, opts)
+
+      assert String.contains?(html, "globalThis.Hologram._pendingJsInteropActions")
+      refute String.contains?(html, "nonce")
     end
 
-    test "raises ArgumentError when CSP nonce is nil for initial page requests" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+    test "CSP nonce left out, script elements of an initial page printed without one" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module48,
+        "102790adb6c3b1956db310be523a7693"
+      )
 
-      opts = [csp_nonce: nil, initial_page?: true]
+      opts = [csp_nonce: nil, csp_nonced_elements: ["script"], initial_page?: true]
 
-      assert_error ArgumentError, "CSP nonce is required for initial page requests", fn ->
-        render_page_without_tree(Module28, @params, @server, opts)
-      end
+      assert {html, _component_registry, _server_struct} =
+               render_page_without_tree(Module48, @params, @server, opts)
+
+      assert String.contains?(html, "<script")
+      refute String.contains?(html, "nonce")
     end
 
     test "CSP nonce is not required for subsequent page requests" do
