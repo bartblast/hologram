@@ -98,7 +98,7 @@ defmodule Hologram.Controller do
 
   @doc """
   Builds the boot data of a first page: what the client reads when it boots, from the block the
-  page's markup carries (see `Hologram.Template.Renderer.interpolate_boot_data/3`).
+  page's markup carries (see `Hologram.Template.Renderer.boot_data_element/2`).
 
   The page's fields are the ones a navigation's payload carries, built the same way (see
   `build_page_data_payload/1`), so the two cannot drift apart: the chunks, the page digest, the
@@ -492,10 +492,22 @@ defmodule Hologram.Controller do
             sub_receipt_drops: result.sub_receipt_drops
           })
 
+        csp_nonce = renderer_opts[:csp_nonce]
+
+        fills = %{
+          "boot_data" => Renderer.boot_data_element(boot_data, csp_nonce),
+          "chunk_script_tags" =>
+            Renderer.chunk_script_tags(result.chunk_digests, chunk_csp_nonce(renderer_opts))
+        }
+
+        # Printed here rather than by the renderer, since only now is every value the markers are
+        # filled with known.
         final_html =
-          result.html
-          |> Renderer.interpolate_boot_data(boot_data, renderer_opts[:csp_nonce])
-          |> Renderer.interpolate_chunks(result.chunk_digests, chunk_csp_nonce(renderer_opts))
+          Renderer.print_dom(result.tree,
+            csp_nonce: csp_nonce,
+            csp_nonced_elements: renderer_opts[:csp_nonced_elements],
+            fills: fills
+          )
 
         conn
         |> Controller.html(final_html)
@@ -864,7 +876,6 @@ defmodule Hologram.Controller do
       %{
         chunk_digests: state_chunk_digests,
         component_registry: component_registry,
-        html: rendered_html,
         mount_data: mount_data,
         server_struct: rendered_server_struct,
         tree: rendered_tree
@@ -893,7 +904,6 @@ defmodule Hologram.Controller do
       result = %{
         chunk_digests: page_chunk_digests(page_module, state_chunk_digests, self_echoes),
         component_registry: component_registry,
-        html: rendered_html,
         mount_data: mount_data,
         self_echoes: self_echoes,
         sub_receipt_adds: sub_receipt_adds,

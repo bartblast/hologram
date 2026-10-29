@@ -29,7 +29,7 @@ defmodule Hologram.Assets.ManifestCache do
 
   Built once and cached rather than encoded per request, since the mapping changes only when the
   assets do. Nothing in it is escaped for HTML, so it reaches a page only inside the boot data
-  block, which escapes it (see `Hologram.Template.Renderer.interpolate_boot_data/3`).
+  block, which escapes it (see `Hologram.Template.Renderer.boot_data_element/2`).
   """
   @spec get_manifest_json() :: String.t()
   def get_manifest_json do

@@ -2142,19 +2142,22 @@ defmodule Hologram.Template.RendererTest do
       assert mount_data.component_registry["page"].struct.props == %{}
     end
 
-    test "leaves the boot data and chunk placeholders for the caller, and encodes no JavaScript" do
+    test "leaves a marker for each value the caller fills, and encodes no JavaScript" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
         "102790adb6c3b1956db310be523a7693"
       )
 
-      assert {html, _component_registry, _server_struct} =
-               render_page_without_tree(Module48, @params, @server, @opts)
+      %{tree: tree} = render_page(Module48, @params, @server, @opts)
 
-      assert String.contains?(html, "$BOOT_DATA_PLACEHOLDER")
-      assert String.contains?(html, "$CHUNK_SCRIPT_TAGS_PLACEHOLDER")
-      refute String.contains?(html, "Type.")
+      printed_with_fills =
+        print_dom(tree, fills: %{"boot_data" => "<boot />", "chunk_script_tags" => "<chunks />"})
+
+      assert String.contains?(printed_with_fills, "<boot />")
+      assert String.contains?(printed_with_fills, "<chunks />")
+      refute String.contains?(printed_with_fills, "hologram-fill")
+      refute String.contains?(printed_with_fills, "Type.")
     end
 
     test "with DOCTYPE" do
@@ -2273,22 +2276,6 @@ defmodule Hologram.Template.RendererTest do
       {_html, registry, _server} = render_page_without_tree(Module80, @params, @server, @opts)
 
       assert registry["layout"].struct.state.observed_cid == "layout"
-    end
-
-    test "returns the tree the HTML is printed from" do
-      ETS.put(
-        PageDigestRegistryStub.ets_table_name(),
-        Module48,
-        "102790adb6c3b1956db310be523a7693"
-      )
-
-      %{html: html, tree: tree} = render_page(Module48, @params, @server, @opts)
-
-      # The two projections are the same render. They differ only in the nonce, which is stamped at
-      # print time, so printing the tree with the nonce must reproduce the HTML exactly.
-      printed = print_dom(tree, csp_nonce: @csp_nonce, csp_nonced_elements: @csp_nonced_elements)
-
-      assert printed == html
     end
 
     test "carries no mount data in the tree's scripts" do
@@ -2837,6 +2824,94 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "boot_data_element/2" do
+    test "a JSON data block carrying the CSP nonce" do
+      assert Renderer.boot_data_element(%{csrfToken: "abc"}, @csp_nonce) ==
+               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
+                 ~s({"csrfToken":"abc"}</script>)
+    end
+
+    test "no nonce when there is none" do
+      assert Renderer.boot_data_element(%{csrfToken: "abc"}, nil) ==
+               ~s(<script type="application/json" id="hologram-boot-data">{"csrfToken":"abc"}</script>)
+    end
+
+    test "escapes every < so the text cannot end the element or open a comment in it" do
+      text = "</script><!--<script>"
+
+      result = Renderer.boot_data_element(%{text: text}, @csp_nonce)
+
+      assert result ==
+               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
+                 ~S({"text":"\u003C/script>\u003C!--\u003Cscript>"}</script>)
+
+      [_full_match, json] = Regex.run(~r'id="hologram-boot-data">(.*)</script>$', result)
+
+      assert Jason.decode!(json) == %{"text" => text}
+    end
+
+    test "escapes every < inside a serialized term nested as a JSON value" do
+      term = %{text: "</script>"}
+
+      fragment =
+        term
+        |> Serializer.serialize!()
+        |> Jason.Fragment.new()
+
+      result = Renderer.boot_data_element(%{pageParams: fragment}, @csp_nonce)
+
+      assert result ==
+               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
+                 ~S({"pageParams":[4,{"t":"m","d":[["atext","s\u003C/script>"]]}]}</script>)
+
+      [_full_match, json] = Regex.run(~r'id="hologram-boot-data">(.*)</script>$', result)
+
+      assert json
+             |> Jason.decode!()
+             |> Map.fetch!("pageParams")
+             |> Jason.encode!()
+             |> Deserializer.deserialize() == term
+    end
+
+    test "leaves a $ as it is" do
+      assert Renderer.boot_data_element(%{text: "$BOOT_DATA_PLACEHOLDER"}, nil) ==
+               ~s(<script type="application/json" id="hologram-boot-data">) <>
+                 ~s({"text":"$BOOT_DATA_PLACEHOLDER"}</script>)
+    end
+
+    test "escapes a < that follows a backslash" do
+      text = ~S(\</script>)
+
+      result = Renderer.boot_data_element(%{text: text}, @csp_nonce)
+
+      assert result ==
+               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
+                 ~S({"text":"\\\u003C/script>"}</script>)
+
+      [_full_match, json] = Regex.run(~r'id="hologram-boot-data">(.*)</script>$', result)
+
+      assert Jason.decode!(json) == %{"text" => text}
+    end
+  end
+
+  describe "chunk_script_tags/2" do
+    test "a script tag per chunk" do
+      assert Renderer.chunk_script_tags(["AAAAAAAA", "BBBBBBBB"], nil) ==
+               ~s'<script async src="/hologram/chunk-AAAAAAAA.js"></script>' <>
+                 ~s'<script async src="/hologram/chunk-BBBBBBBB.js"></script>'
+    end
+
+    test "no script tag when no chunks are provided" do
+      assert Renderer.chunk_script_tags([], nil) == ""
+    end
+
+    test "the CSP nonce on each chunk script tag" do
+      assert Renderer.chunk_script_tags(["AAAAAAAA", "BBBBBBBB"], @csp_nonce) ==
+               ~s'<script nonce="#{@csp_nonce}" async src="/hologram/chunk-AAAAAAAA.js"></script>' <>
+                 ~s'<script nonce="#{@csp_nonce}" async src="/hologram/chunk-BBBBBBBB.js"></script>'
+    end
+  end
+
   describe "encode_tree/1" do
     test "text node" do
       tree = {:text, "abc < xyz"}
@@ -2956,118 +3031,6 @@ defmodule Hologram.Template.RendererTest do
 
       assert encoded ==
                ~s([["d","html"],["div",["class","big","hidden",null],["abc",["c",[" x "]]]]])
-    end
-  end
-
-  describe "interpolate_boot_data/3" do
-    test "substitutes the placeholder with a JSON data block carrying the CSP nonce" do
-      html = "before $BOOT_DATA_PLACEHOLDER after"
-
-      assert Renderer.interpolate_boot_data(html, %{csrfToken: "abc"}, @csp_nonce) ==
-               ~s(before <script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
-                 ~s({"csrfToken":"abc"}</script> after)
-    end
-
-    test "writes no nonce when there is none" do
-      html = "$BOOT_DATA_PLACEHOLDER"
-
-      assert Renderer.interpolate_boot_data(html, %{csrfToken: "abc"}, nil) ==
-               ~s(<script type="application/json" id="hologram-boot-data">{"csrfToken":"abc"}</script>)
-    end
-
-    test "escapes every < so the text cannot end the element or open a comment in it" do
-      html = "$BOOT_DATA_PLACEHOLDER"
-      text = "</script><!--<script>"
-
-      result = Renderer.interpolate_boot_data(html, %{text: text}, @csp_nonce)
-
-      assert result ==
-               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
-                 ~S({"text":"\u003C/script>\u003C!--\u003Cscript>"}</script>)
-
-      [_full_match, json] = Regex.run(~r'id="hologram-boot-data">(.*)</script>$', result)
-
-      assert Jason.decode!(json) == %{"text" => text}
-    end
-
-    test "escapes every < inside a serialized term nested as a JSON value" do
-      html = "$BOOT_DATA_PLACEHOLDER"
-      term = %{text: "</script>"}
-
-      fragment =
-        term
-        |> Serializer.serialize!()
-        |> Jason.Fragment.new()
-
-      result = Renderer.interpolate_boot_data(html, %{pageParams: fragment}, @csp_nonce)
-
-      assert result ==
-               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
-                 ~S({"pageParams":[4,{"t":"m","d":[["atext","s\u003C/script>"]]}]}</script>)
-
-      [_full_match, json] = Regex.run(~r'id="hologram-boot-data">(.*)</script>$', result)
-
-      assert json
-             |> Jason.decode!()
-             |> Map.fetch!("pageParams")
-             |> Jason.encode!()
-             |> Deserializer.deserialize() == term
-    end
-
-    test "escapes a < that follows a backslash" do
-      html = "$BOOT_DATA_PLACEHOLDER"
-      text = ~S(\</script>)
-
-      result = Renderer.interpolate_boot_data(html, %{text: text}, @csp_nonce)
-
-      assert result ==
-               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
-                 ~S({"text":"\\\u003C/script>"}</script>)
-
-      [_full_match, json] = Regex.run(~r'id="hologram-boot-data">(.*)</script>$', result)
-
-      assert Jason.decode!(json) == %{"text" => text}
-    end
-
-    test "escapes every $ so a placeholder token cannot form in the data" do
-      html = "$BOOT_DATA_PLACEHOLDER $CHUNK_SCRIPT_TAGS_PLACEHOLDER"
-      text = "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
-
-      result =
-        html
-        |> Renderer.interpolate_boot_data(%{text: text}, @csp_nonce)
-        |> Renderer.interpolate_chunks(["AAAAAAAA"], @csp_nonce)
-
-      assert result ==
-               ~s(<script nonce="#{@csp_nonce}" type="application/json" id="hologram-boot-data">) <>
-                 ~S({"text":"\u0024CHUNK_SCRIPT_TAGS_PLACEHOLDER"}</script> ) <>
-                 ~s(<script nonce="#{@csp_nonce}" async src="/hologram/chunk-AAAAAAAA.js"></script>)
-    end
-  end
-
-  describe "interpolate_chunks/3" do
-    test "substitutes the placeholder with a script tag per chunk" do
-      html = "before $CHUNK_SCRIPT_TAGS_PLACEHOLDER after"
-      chunk_digests = ["AAAAAAAA", "BBBBBBBB"]
-
-      assert Renderer.interpolate_chunks(html, chunk_digests, nil) ==
-               ~s'before <script async src="/hologram/chunk-AAAAAAAA.js"></script>' <>
-                 ~s'<script async src="/hologram/chunk-BBBBBBBB.js"></script> after'
-    end
-
-    test "substitutes the placeholder with no script tag when no chunks are provided" do
-      html = "before $CHUNK_SCRIPT_TAGS_PLACEHOLDER after"
-
-      assert Renderer.interpolate_chunks(html, [], nil) == "before  after"
-    end
-
-    test "writes the CSP nonce on each chunk script tag" do
-      html = "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
-      chunk_digests = ["AAAAAAAA", "BBBBBBBB"]
-
-      assert Renderer.interpolate_chunks(html, chunk_digests, @csp_nonce) ==
-               ~s'<script nonce="#{@csp_nonce}" async src="/hologram/chunk-AAAAAAAA.js"></script>' <>
-                 ~s'<script nonce="#{@csp_nonce}" async src="/hologram/chunk-BBBBBBBB.js"></script>'
     end
   end
 
@@ -3290,6 +3253,48 @@ defmodule Hologram.Template.RendererTest do
 
       assert print_dom(dom, csp_nonce: @csp_nonce, csp_nonced_elements: []) ==
                ~s(<script src="/app.js"></script>)
+    end
+
+    test "marker, printed as the fill filed under its name" do
+      # <div><hologram-fill name="boot_data" /></div>
+      dom =
+        {:element, "div", [], [{:element, "hologram-fill", [{"name", [text: "boot_data"]}], []}]}
+
+      assert print_dom(dom, fills: %{"boot_data" => "<b>boot</b>"}) == "<div><b>boot</b></div>"
+    end
+
+    test "marker without a name, printed as nothing" do
+      # <hologram-fill />
+      dom = {:element, "hologram-fill", [], []}
+
+      assert print_dom(dom, fills: %{"boot_data" => "<b>boot</b>"}) == ""
+    end
+
+    test "marker with children, printed as its fill alone" do
+      # <hologram-fill name="boot_data"><p>child</p></hologram-fill>
+      dom =
+        {:element, "hologram-fill", [{"name", [text: "boot_data"]}],
+         [{:element, "p", [], [{:text, "child"}]}]}
+
+      assert print_dom(dom, fills: %{"boot_data" => "<b>boot</b>"}) == "<b>boot</b>"
+    end
+
+    test "marker the fills name nothing for, printed as nothing" do
+      # <div><hologram-fill name="boot_data" /></div>
+      dom =
+        {:element, "div", [], [{:element, "hologram-fill", [{"name", [text: "boot_data"]}], []}]}
+
+      assert print_dom(dom, fills: %{"other" => "<b>other</b>"}) == "<div></div>"
+    end
+
+    test "user text spelling a marker or a placeholder token, printed as text" do
+      # <div title="$BOOT_DATA_PLACEHOLDER">&lt;hologram-fill name="boot_data" /&gt;</div>
+      dom =
+        {:element, "div", [{"title", [text: "$BOOT_DATA_PLACEHOLDER"]}],
+         [{:text, ~s(<hologram-fill name="boot_data" />)}]}
+
+      assert print_dom(dom, fills: %{"boot_data" => "<b>boot</b>"}) ==
+               ~s(<div title="$BOOT_DATA_PLACEHOLDER">&lt;hologram-fill name=&quot;boot_data&quot; /&gt;</div>)
     end
   end
 
@@ -3560,11 +3565,17 @@ defmodule Hologram.Template.RendererTest do
 
   defp collect_script_texts(_node), do: []
 
-  # The tree projection is covered by its own tests - these tests assert the projections the
-  # pre-tree render returned, unchanged.
+  # The page printed from its tree, as the controller prints a first page, here with nothing to fill
+  # its markers with. Named for the tree it leaves out of what it returns.
   defp render_page_without_tree(page_module, params, server_struct, opts) do
-    %{component_registry: component_registry, html: html, server_struct: mutated_server_struct} =
+    %{component_registry: component_registry, server_struct: mutated_server_struct, tree: tree} =
       render_page(page_module, params, server_struct, opts)
+
+    html =
+      print_dom(tree,
+        csp_nonce: opts[:csp_nonce],
+        csp_nonced_elements: opts[:csp_nonced_elements]
+      )
 
     {html, component_registry, mutated_server_struct}
   end

@@ -5,6 +5,8 @@ defmodule Hologram.UI.RuntimeTest do
   import Mox
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
+  alias Hologram.Server
+  alias Hologram.Template.Renderer
   alias Hologram.UI.Runtime
 
   use_module_stub :asset_path_registry
@@ -26,9 +28,8 @@ defmodule Hologram.UI.RuntimeTest do
     ]
   end
 
-  # The parts the component can render, each named by a string only that part contains.
-  @boot_data_token "$BOOT_DATA_PLACEHOLDER"
-  @chunk_tags_token "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
+  # The parts the component can render, each named by a string only that part contains. The fill
+  # markers print as nothing, so they are found in the rendered tree instead.
   @page_bundle_path "hologram/page"
   @runtime_path "hologram/runtime"
   @shell "globalThis.Hologram._pendingJsInteropActions"
@@ -42,10 +43,10 @@ defmodule Hologram.UI.RuntimeTest do
     markup = render_component(Runtime, %{}, context)
 
     refute String.contains?(markup, @shell)
-    refute String.contains?(markup, @boot_data_token)
     refute String.contains?(markup, @runtime_path)
-    refute String.contains?(markup, @chunk_tags_token)
     refute String.contains?(markup, @page_bundle_path)
+
+    assert fill_names(context) == []
   end
 
   test "initial page, page not mounted", %{context: context} do
@@ -53,10 +54,10 @@ defmodule Hologram.UI.RuntimeTest do
     markup = render_component(Runtime, %{}, context)
 
     assert String.contains?(markup, @shell)
-    assert String.contains?(markup, @boot_data_token)
     assert String.contains?(markup, @runtime_path)
-    assert String.contains?(markup, @chunk_tags_token)
     assert String.contains?(markup, @page_bundle_path)
+
+    assert fill_names(context) == ["boot_data", "chunk_script_tags"]
   end
 
   test "not initial page, page mounted", %{context: initial_context} do
@@ -68,10 +69,10 @@ defmodule Hologram.UI.RuntimeTest do
     markup = render_component(Runtime, %{}, context)
 
     refute String.contains?(markup, @shell)
-    refute String.contains?(markup, @boot_data_token)
     refute String.contains?(markup, @runtime_path)
-    refute String.contains?(markup, @chunk_tags_token)
     refute String.contains?(markup, @page_bundle_path)
+
+    assert fill_names(context) == []
   end
 
   # This is the navigation case. The mount data reaches the client as its own payload fields, so
@@ -82,10 +83,10 @@ defmodule Hologram.UI.RuntimeTest do
     markup = render_component(Runtime, %{}, context)
 
     refute String.contains?(markup, @shell)
-    refute String.contains?(markup, @boot_data_token)
     refute String.contains?(markup, @runtime_path)
-    refute String.contains?(markup, @chunk_tags_token)
     assert String.contains?(markup, @page_bundle_path)
+
+    assert fill_names(context) == []
   end
 
   # The shell runs only because it carries the nonce, so it holds nothing built from app data: the
@@ -117,5 +118,24 @@ defmodule Hologram.UI.RuntimeTest do
              markup,
              ~s'<script async src="/hologram/page-MyPage-102790adb6c3b1956db310be523a7693.js">'
            )
+  end
+
+  # The names of the fill markers the component renders, in order.
+  defp fill_names(context) do
+    node = {:component, Runtime, [], []}
+
+    {tree, _component_registry, _server_struct} =
+      Renderer.render_tree(node, %Renderer.Env{context: context}, %Server{})
+
+    tree
+    |> List.wrap()
+    |> List.flatten()
+    |> Enum.flat_map(fn
+      {:element, "hologram-fill", attributes, _children} ->
+        for {"name", [text: name]} <- attributes, do: name
+
+      _node ->
+        []
+    end)
   end
 end

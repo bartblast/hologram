@@ -21,9 +21,9 @@ defmodule Hologram.UI.Runtime do
           globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
         \}
       </script>
-      $BOOT_DATA_PLACEHOLDER
+      <hologram-fill name="boot_data" />
       <script async src={asset_path("hologram/runtime.js")}></script>
-      $CHUNK_SCRIPT_TAGS_PLACEHOLDER
+      <hologram-fill name="chunk_script_tags" />
     {/if}
 
     {%if !@page_mounted?}

@@ -61,6 +61,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module42
   alias Hologram.Test.Fixtures.Controller.Module43
   alias Hologram.Test.Fixtures.Controller.Module44
+  alias Hologram.Test.Fixtures.Controller.Module45
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
@@ -2267,6 +2268,22 @@ defmodule Hologram.ControllerTest do
       refute Enum.any?(inline_scripts, &String.contains?(&1, "Type."))
     end
 
+    # The values a first page is filled with are written where the Runtime component's markers sit,
+    # not substituted for a token over the printed page, so text spelling a token gets nothing.
+    test "fills nothing into a user's text that spells a placeholder token" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module45, :dummy_module_45_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module45/$BOOT_DATA_PLACEHOLDER")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module45)
+
+      assert conn.resp_body =~ ~s(<input value="$BOOT_DATA_PLACEHOLDER" />)
+      assert conn.resp_body =~ "<p>$BOOT_DATA_PLACEHOLDER</p>"
+      assert length(Regex.scan(~r/id="hologram-boot-data"/, conn.resp_body)) == 1
+    end
+
     test "generates a new nonce for each initial page request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
 
@@ -2298,7 +2315,7 @@ defmodule Hologram.ControllerTest do
 
       assert boot_data(conn.resp_body)["chunks"] == []
       refute conn.resp_body =~ "/hologram/chunk-"
-      refute conn.resp_body =~ "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
+      refute conn.resp_body =~ "hologram-fill"
     end
 
     test "extracts and casts page params and passes them to page renderer" do
@@ -3214,9 +3231,9 @@ defmodule Hologram.ControllerTest do
       assert tree_json =~ "Module5 page"
 
       # The state travels beside the tree, so the block that would have carried it is not
-      # rendered on this path at all - which is also why no placeholder can survive into it.
+      # rendered on this path at all - nor the markers its values would be written at.
       refute tree_json =~ "hologram-boot-data"
-      refute tree_json =~ "_PLACEHOLDER"
+      refute tree_json =~ "hologram-fill"
     end
 
     test "marks a page payload as page data" do
