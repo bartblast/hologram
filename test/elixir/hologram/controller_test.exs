@@ -8,8 +8,7 @@ defmodule Hologram.ControllerTest do
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
-  alias Hologram.Commons.SystemUtils
-  alias Hologram.Compiler.Encoder
+  alias Hologram.Component
   alias Hologram.LiveReload
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -21,6 +20,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Router.SearchTree
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
+  alias Hologram.Runtime.Deserializer
+  alias Hologram.Runtime.Serializer
   alias Hologram.Runtime.Session
   alias Hologram.Server
   alias Hologram.Template.Renderer
@@ -60,6 +61,10 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module42
   alias Hologram.Test.Fixtures.Controller.Module43
   alias Hologram.Test.Fixtures.Controller.Module44
+  alias Hologram.Test.Fixtures.Controller.Module45
+  alias Hologram.Test.Fixtures.Controller.Module46
+  alias Hologram.Test.Fixtures.Controller.Module47
+  alias Hologram.Test.Fixtures.Controller.Module48
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
@@ -70,6 +75,8 @@ defmodule Hologram.ControllerTest do
   @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
   @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
 
+  @csp_nonce "test-csp-nonce"
+  @csp_nonced_elements ["link", "script", "style"]
   @csrf_token_session_key CSRFProtection.session_key()
   @hologram_session_id "test-session-id"
 
@@ -106,6 +113,23 @@ defmodule Hologram.ControllerTest do
     |> Enum.map_join(&String.pad_leading(&1, 2, "0"))
   end
 
+  # The boot data a first page's markup carries, parsed: the JSON of its boot data block.
+  defp boot_data(resp_body) do
+    [_full_match, boot_data_json] =
+      Regex.run(~r'<script[^>]* id="hologram-boot-data"[^>]*>(.*?)</script>'s, resp_body)
+
+    Jason.decode!(boot_data_json)
+  end
+
+  # A term field of a first page's boot data, read back as the term.
+  defp boot_data_term(resp_body, field) do
+    resp_body
+    |> boot_data()
+    |> Map.fetch!(field)
+    |> Jason.encode!()
+    |> Deserializer.deserialize()
+  end
+
   # Create a test connection with parsed JSON body_params (simulating what Plug.Parsers does)
   defp conn_with_parsed_json(method, path, parsed_json, session \\ @session) do
     method
@@ -136,10 +160,13 @@ defmodule Hologram.ControllerTest do
   end
 
   defp extract_instance_id(resp_body) do
-    [_full, instance_id] =
-      Regex.run(~r/globalThis\.Hologram\.instanceId = "([^"]+)";/, resp_body)
+    boot_data(resp_body)["instanceId"]
+  end
 
-    instance_id
+  # The JSON a fragment writes into a response, since a fragment holds a function and compares equal
+  # to nothing.
+  defp fragment_json(fragment) do
+    Jason.encode!(fragment)
   end
 
   defp handshake_request_body(instance_id, receipts) do
@@ -218,6 +245,8 @@ defmodule Hologram.ControllerTest do
     |> Plug.Test.init_test_session(%{})
     |> Plug.Conn.fetch_cookies()
     |> handle_page_request(page_module, %{}, client_claimed_sub_keys,
+      csp_nonce: @csp_nonce,
+      csp_nonced_elements: @csp_nonced_elements,
       initial_page?: true,
       instance_id: instance_id,
       csrf_token: @masked_csrf_token
@@ -262,6 +291,12 @@ defmodule Hologram.ControllerTest do
     ]
 
     Jason.encode!([2, %{"t" => "m", "d" => serialized_map_data}])
+  end
+
+  # A term the way it reads in a decoded response: serialized, then read back as plain JSON.
+  defp serialized_term(term) do
+    serialized = Serializer.serialize!(term)
+    Jason.decode!(serialized)
   end
 
   defp subsequent_page_request_conn(path, session_data \\ %{}) do
@@ -500,20 +535,90 @@ defmodule Hologram.ControllerTest do
     end
   end
 
+  describe "build_boot_data/1" do
+    setup do
+      fields = %{
+        chunk_digests: ["AAAAAAAA"],
+        csrf_token: "my_csrf_token",
+        instance_id: "my_instance_id",
+        mount_data: %{
+          component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
+          page_module: Module1,
+          page_params: %{key: "value"}
+        },
+        page_digest: "abcdef1234567890",
+        self_echoes: [%Component.Action{name: :refresh, params: %{}, target: "page"}],
+        sub_receipt_adds: [{:room, "page", "token"}],
+        sub_receipt_drops: [{:lobby, "page"}]
+      }
+
+      [fields: fields]
+    end
+
+    # The first page and a navigation describe a page by the same fields, built the same way, so
+    # the two cannot drift apart. The markup is the first page's tree, and the document-wide values
+    # a navigation already has join the page's.
+    test "carries a navigation's page fields without the tree, and the document-wide values", %{
+      fields: fields
+    } do
+      assert fields
+             |> build_boot_data()
+             |> Map.keys()
+             |> Enum.sort() == [
+               :assetManifest,
+               :chunks,
+               :componentRegistry,
+               :csrfToken,
+               :instanceId,
+               :pageDigest,
+               :pageModule,
+               :pageParams,
+               :selfEchoes,
+               :subReceiptAdds,
+               :subReceiptDrops
+             ]
+    end
+
+    test "builds the page fields as a navigation's payload does", %{fields: fields} do
+      boot_data = build_boot_data(fields)
+      payload = build_page_data_payload(Map.put(fields, :tree, []))
+
+      for key <- Map.keys(payload) -- [:tree, :type] do
+        assert Jason.encode!(boot_data[key]) == Jason.encode!(payload[key])
+      end
+    end
+
+    test "survives the JSON encoding it is sent over", %{fields: fields} do
+      decoded =
+        fields
+        |> build_boot_data()
+        |> Jason.encode!()
+        |> Jason.decode!()
+
+      assert decoded["assetManifest"]["hologram/runtime.js"] ==
+               "/hologram/runtime-1234567890abcdef.js"
+
+      assert decoded["chunks"] == ["AAAAAAAA"]
+      assert decoded["csrfToken"] == "my_csrf_token"
+      assert decoded["instanceId"] == "my_instance_id"
+      assert decoded["pageDigest"] == "abcdef1234567890"
+      assert decoded["pageParams"] == serialized_term(%{key: "value"})
+    end
+  end
+
   describe "build_page_data_payload/1" do
     setup do
       fields = %{
         chunk_digests: ["AAAAAAAA", "BBBBBBBB"],
         mount_data: %{
-          asset_manifest: "{\"/hologram/runtime.js\": \"/hologram/runtime-1234.js\"};",
-          component_registry: ~s/Type.map([[Type.bitstring("page"), Type.map([])]])/,
-          page_module: Encoder.encode_term!(Module1),
-          page_params: ~s/Type.map([])/
+          component_registry: %{"page" => %{module: Module1, struct: %Component{}}},
+          page_module: Module1,
+          page_params: %{}
         },
         page_digest: "abcdef1234567890",
-        self_echoes: [],
-        sub_receipt_adds: [],
-        sub_receipt_drops: [],
+        self_echoes: [%Component.Action{name: :refresh, params: %{}, target: "page"}],
+        sub_receipt_adds: [{:room, "page", "token"}],
+        sub_receipt_drops: [{:lobby, "page"}],
         tree: [{:element, "div", [{"$key", [text: "a1b2c3:0"]}], [{:text, "abc"}]}]
       }
 
@@ -532,16 +637,24 @@ defmodule Hologram.ControllerTest do
     end
 
     # Each value lands under its own key, and they are encoded differently: everything but the tree
-    # as JavaScript the client evaluates, the tree as data it gets already parsed.
-    test "encodes each value under its own key", %{fields: fields} do
+    # as a serialized term the client's reader walks, nested in the response as it is, the tree as
+    # plain JSON.
+    test "serializes each value under its own key", %{fields: fields} do
       payload = build_page_data_payload(fields)
 
-      assert payload.componentRegistry == fields.mount_data.component_registry
-      assert payload.pageModule == fields.mount_data.page_module
-      assert payload.pageParams == fields.mount_data.page_params
-      assert payload.selfEchoes == Encoder.encode_term!(fields.self_echoes)
-      assert payload.subReceiptAdds == Encoder.encode_term!(fields.sub_receipt_adds)
-      assert payload.subReceiptDrops == Encoder.encode_term!(fields.sub_receipt_drops)
+      assert fragment_json(payload.componentRegistry) ==
+               Serializer.serialize!(fields.mount_data.component_registry)
+
+      assert fragment_json(payload.pageModule) == Serializer.serialize!(Module1)
+      assert fragment_json(payload.pageParams) == Serializer.serialize!(%{})
+      assert fragment_json(payload.selfEchoes) == Serializer.serialize!(fields.self_echoes)
+
+      assert fragment_json(payload.subReceiptAdds) ==
+               Serializer.serialize!(fields.sub_receipt_adds)
+
+      assert fragment_json(payload.subReceiptDrops) ==
+               Serializer.serialize!(fields.sub_receipt_drops)
+
       assert payload.tree == Renderer.encode_tree(fields.tree)
     end
 
@@ -565,17 +678,8 @@ defmodule Hologram.ControllerTest do
              ]
     end
 
-    # The asset manifest is a global the initial document sets once, not something a mount reads,
-    # so it has no business on this path even though the renderer hands it back alongside.
-    test "leaves the asset manifest out", %{fields: fields} do
-      payload = build_page_data_payload(fields)
-
-      encoded = Jason.encode!(payload)
-
-      refute Map.has_key?(payload, :assetManifest)
-      refute String.contains?(encoded, "runtime-1234")
-    end
-
+    # A serialized term is nested in the response as a value, not as a string holding one, so the
+    # client parses the response once and nothing inside the term is escaped on the way.
     test "survives the JSON encoding it is sent over", %{fields: fields} do
       payload = build_page_data_payload(fields)
 
@@ -588,7 +692,14 @@ defmodule Hologram.ControllerTest do
       assert decoded["chunks"] == payload.chunks
       assert decoded["pageDigest"] == "abcdef1234567890"
       assert decoded["tree"] == payload.tree
-      assert decoded["componentRegistry"] == payload.componentRegistry
+
+      assert decoded["pageModule"] == [
+               4,
+               "aElixir.Hologram.Test.Fixtures.Controller.Module1"
+             ]
+
+      serialized_component_registry = Serializer.serialize!(fields.mount_data.component_registry)
+      assert decoded["componentRegistry"] == Jason.decode!(serialized_component_registry)
     end
 
     test "describes a redirect to a page the client can ask for itself" do
@@ -596,8 +707,8 @@ defmodule Hologram.ControllerTest do
 
       assert payload.type == "redirect"
       assert payload.to == "/my-target"
-      assert payload.pageModule == Encoder.encode_term!(Module1)
-      assert payload.pageParams == Encoder.encode_term!(%{key: "value"})
+      assert fragment_json(payload.pageModule) == Serializer.serialize!(Module1)
+      assert fragment_json(payload.pageParams) == Serializer.serialize!(%{key: "value"})
     end
 
     # The page clause matches a map and the redirect clauses match tuples, so nothing a page
@@ -632,7 +743,11 @@ defmodule Hologram.ControllerTest do
 
       assert decoded["type"] == "redirect"
       assert decoded["to"] == "/my-target"
-      assert decoded["pageModule"] == payload.pageModule
+
+      assert decoded["pageModule"] == [
+               4,
+               "aElixir.Hologram.Test.Fixtures.Controller.Module1"
+             ]
     end
   end
 
@@ -859,12 +974,12 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response == %{
-               "action" => ~s'Type.atom("nil")',
+               "action" => serialized_term(nil),
                "chunks" => [],
-               "selfEchoes" => "Type.list([])",
+               "selfEchoes" => serialized_term([]),
                "status" => 1,
-               "subReceiptAdds" => "Type.list([])",
-               "subReceiptDrops" => "Type.list([])"
+               "subReceiptAdds" => serialized_term([]),
+               "subReceiptDrops" => serialized_term([])
              }
     end
 
@@ -893,7 +1008,12 @@ defmodule Hologram.ControllerTest do
 
       response = Jason.decode!(conn.resp_body)
 
-      assert response["action"] =~ "injected_by_middleware"
+      assert response["action"] ==
+               serialized_term(%Component.Action{
+                 name: :my_action,
+                 params: %{marker: :injected_by_middleware},
+                 target: "my_target_1"
+               })
     end
 
     test "establishes a Hologram session ID when absent" do
@@ -934,7 +1054,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_cid")], [Type.atom("params"), Type.map([[Type.atom("cid"), Type.bitstring("my_target_1")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_cid,
+                 params: %{cid: "my_target_1"},
+                 target: "my_target_1"
+               })
     end
 
     test "extracts instance_id from payload and exposes it via server.instance_id" do
@@ -950,7 +1074,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_instance_id")], [Type.atom("params"), Type.map([[Type.atom("instance_id"), Type.bitstring("my-instance-id")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_instance_id,
+                 params: %{instance_id: "my-instance-id"},
+                 target: "my_target_1"
+               })
     end
 
     test "pre-populates server.subscriptions with only the target component's receipts" do
@@ -973,7 +1101,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("my_target_1")])])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_subscriptions,
+                 params: %{subscriptions: [{:room_a, "my_target_1"}]},
+                 target: "my_target_1"
+               })
     end
 
     test "ignores a receipt whose binding has been tombstoned" do
@@ -999,7 +1131,12 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      assert response["action"] =~ ~s'Type.atom("subscriptions"), Type.list([])'
+      assert response["action"] ==
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_subscriptions,
+                 params: %{subscriptions: []},
+                 target: "my_target_1"
+               })
     end
 
     test "pre-populates server.subscriptions to an empty list when no registry entry exists" do
@@ -1015,7 +1152,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_echoing_subscriptions")], [Type.atom("params"), Type.map([[Type.atom("subscriptions"), Type.list([])]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_echoing_subscriptions,
+                 params: %{subscriptions: []},
+                 target: "my_target_1"
+               })
     end
 
     test "drives SubscriptionRegistry.apply_deltas after a command calls put_subscription" do
@@ -1184,10 +1325,14 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      %{"subReceiptAdds" => encoded_sub_receipt_adds} = Jason.decode!(conn.resp_body)
+      %{"subReceiptAdds" => sub_receipt_adds} = Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded_sub_receipt_adds, ~s'Type.atom("room_a")')
-      assert String.contains?(encoded_sub_receipt_adds, ~s'Type.bitstring("my_target_1")')
+      # One receipt: its token is signed, so the channel and the cid are what can be asserted.
+      assert [
+               4,
+               %{"t" => "l", "d" => [%{"t" => "t", "d" => ["aroom_a", "smy_target_1", _token]}]}
+             ] =
+               sub_receipt_adds
     end
 
     test "embeds a drop entry in the response for each newly-dropped subscription" do
@@ -1210,10 +1355,9 @@ defmodule Hologram.ControllerTest do
           target: "my_target_1"
         })
 
-      %{"subReceiptDrops" => encoded_sub_receipt_drops} = Jason.decode!(conn.resp_body)
+      %{"subReceiptDrops" => sub_receipt_drops} = Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded_sub_receipt_drops, ~s'Type.atom("room_a")')
-      assert String.contains?(encoded_sub_receipt_drops, ~s'Type.bitstring("my_target_1")')
+      assert sub_receipt_drops == serialized_term([{:room_a, "my_target_1"}])
     end
 
     test "embeds adds and drops together when a command both puts and deletes subscriptions" do
@@ -1237,13 +1381,18 @@ defmodule Hologram.ControllerTest do
         })
 
       %{
-        "subReceiptAdds" => encoded_sub_receipt_adds,
-        "subReceiptDrops" => encoded_sub_receipt_drops
+        "subReceiptAdds" => sub_receipt_adds,
+        "subReceiptDrops" => sub_receipt_drops
       } =
         Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded_sub_receipt_adds, ~s'Type.atom("room_b")')
-      assert String.contains?(encoded_sub_receipt_drops, ~s'Type.atom("room_a")')
+      assert [
+               4,
+               %{"t" => "l", "d" => [%{"t" => "t", "d" => ["aroom_b", "smy_target_1", _token]}]}
+             ] =
+               sub_receipt_adds
+
+      assert sub_receipt_drops == serialized_term([{:room_a, "my_target_1"}])
     end
 
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline when CSRF token validation succeeds" do
@@ -1287,7 +1436,7 @@ defmodule Hologram.ControllerTest do
       conn = execute_successful_command_request()
       response = Jason.decode!(conn.resp_body)
 
-      assert response["action"] == ~s'Type.atom("nil")'
+      assert response["action"] == serialized_term(nil)
     end
 
     test "command with next action target not specified" do
@@ -1302,7 +1451,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_b,
+                 params: %{c: 3},
+                 target: "my_target_1"
+               })
     end
 
     test "command with next action target specified" do
@@ -1317,10 +1470,14 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])'
+               serialized_term(%Component.Action{
+                 name: :my_action_c,
+                 params: %{c: 3},
+                 target: "my_target_2"
+               })
     end
 
-    test "command with encoding error for anonymous function" do
+    test "command with a next action the format cannot carry" do
       payload = %{
         module: Module8,
         name: :my_command_8,
@@ -1331,15 +1488,8 @@ defmodule Hologram.ControllerTest do
       conn = execute_command_request(payload)
       response = Jason.decode!(conn.resp_body)
 
-      expected_msg =
-        if SystemUtils.otp_version() >= 23 do
-          "term contains a function that is not a named function capture"
-        else
-          "term contains a function that is not a remote function capture"
-        end
-
       assert response["status"] == 0
-      assert response["action"] == expected_msg
+      assert response["action"] == "term contains a function that is not a named function capture"
     end
 
     test "command handler can read from session" do
@@ -1367,7 +1517,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_session")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :action_from_session,
+                 params: %{},
+                 target: "my_target_1"
+               })
     end
 
     test "command handler can read from cookies" do
@@ -1397,7 +1551,11 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
 
       assert response["action"] ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               serialized_term(%Component.Action{
+                 name: :action_from_cookie,
+                 params: %{},
+                 target: "my_target_1"
+               })
     end
 
     test "command handler can write to session" do
@@ -1475,6 +1633,19 @@ defmodule Hologram.ControllerTest do
       assert conn.status == 403
       assert conn.resp_body == "denied"
       assert Plug.Conn.get_resp_header(conn, "content-type") == ["text/plain"]
+    end
+
+    test "sends a content security policy a terminating middleware set" do
+      conn =
+        execute_command_request(%{
+          module: Module48,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.status == 403
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == ["default-src 'none'"]
     end
 
     test "command handler works correctly when no session changes are made" do
@@ -1614,7 +1785,7 @@ defmodule Hologram.ControllerTest do
              ]
     end
 
-    test "sets the selfEchoes field to the encoded actions when any self-echoes were queued" do
+    test "sets the selfEchoes field to the serialized actions when any self-echoes were queued" do
       payload = %{
         module: Module6,
         name: :my_command_self_echo_put_broadcast_subscribed,
@@ -1624,10 +1795,16 @@ defmodule Hologram.ControllerTest do
 
       conn = execute_command_request(payload)
 
-      %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
+      %{"selfEchoes" => self_echoes} = Jason.decode!(conn.resp_body)
 
-      assert encoded_self_echoes ==
-               ~s'Type.list([Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("test_action")], [Type.atom("params"), Type.map([[Type.atom("text"), Type.bitstring("hi")]])], [Type.atom("target"), Type.bitstring("my_target_1")]])])'
+      assert self_echoes ==
+               serialized_term([
+                 %Component.Action{
+                   name: :test_action,
+                   params: %{text: "hi"},
+                   target: "my_target_1"
+                 }
+               ])
     end
 
     test "sets the selfEchoes field to an empty list when no self-echoes were queued" do
@@ -1640,9 +1817,9 @@ defmodule Hologram.ControllerTest do
 
       conn = execute_command_request(payload)
 
-      %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
+      %{"selfEchoes" => self_echoes} = Jason.decode!(conn.resp_body)
 
-      assert encoded_self_echoes == "Type.list([])"
+      assert self_echoes == serialized_term([])
     end
 
     test "self-echoes reach every cid on the originating instance subscribed to the channel, not just the target" do
@@ -1661,12 +1838,18 @@ defmodule Hologram.ControllerTest do
       }
 
       conn = execute_command_request(payload)
-      %{"selfEchoes" => encoded_self_echoes} = Jason.decode!(conn.resp_body)
+      %{"selfEchoes" => self_echoes} = Jason.decode!(conn.resp_body)
 
       # The broadcast self-echoes to the target cid and the sibling cid on the
       # same instance (order is not guaranteed).
-      assert String.contains?(encoded_self_echoes, ~s|Type.bitstring("my_target_1")|)
-      assert String.contains?(encoded_self_echoes, ~s|Type.bitstring("sibling")|)
+      assert [4, %{"t" => "l", "d" => echoed_actions}] = self_echoes
+
+      targets =
+        Enum.map(echoed_actions, fn %{"t" => "m", "d" => entries} ->
+          Enum.find_value(entries, fn [key, value] -> key == "atarget" && value end)
+        end)
+
+      assert Enum.sort(targets) == ["smy_target_1", "ssibling"]
     end
 
     test "broadcasts {:identity_changed, ...} on the pre session's announce topic when the handler changes identity" do
@@ -1909,6 +2092,25 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "Forbidden"
     end
 
+    test "raises when the command set a content security policy without a status" do
+      assert_error RuntimeError,
+                   "Response header content-security-policy was set to \"script-src 'self'\", but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status.",
+                   fn ->
+                     execute_command_request(%{
+                       module: Module6,
+                       name: :my_command_with_content_security_policy,
+                       params: %{},
+                       target: "my_target_1"
+                     })
+                   end
+    end
+
+    test "sends no content security policy with a command reply" do
+      conn = execute_successful_command_request()
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == []
+    end
+
     test "raises when the command set a content type without a status" do
       assert_error RuntimeError,
                    "Response header content-type was set to \"text/plain\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status.",
@@ -1959,12 +2161,10 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module33)
 
-      assert conn.resp_body =~
-               ~s'globalThis.Hologram.initialChunkDigests = ["BBBBBBBB","CCCCCCCC"];'
+      assert boot_data(conn.resp_body)["chunks"] == ["BBBBBBBB", "CCCCCCCC"]
 
       assert conn.resp_body =~
-               ~s'<script async src="/hologram/chunk-BBBBBBBB.js"></script>' <>
-                 ~s'<script async src="/hologram/chunk-CCCCCCCC.js"></script>'
+               ~r'<script nonce="[^"]+" async src="/hologram/chunk-BBBBBBBB\.js"></script><script nonce="[^"]+" async src="/hologram/chunk-CCCCCCCC\.js"></script>'
     end
 
     test "names the chunks the struct types in the self-echoes need" do
@@ -1976,8 +2176,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module35)
 
-      assert conn.resp_body =~
-               ~s'globalThis.Hologram.initialChunkDigests = ["AAAAAAAA","CCCCCCCC"];'
+      assert boot_data(conn.resp_body)["chunks"] == ["AAAAAAAA", "CCCCCCCC"]
     end
 
     test "names the chunks the page preloads" do
@@ -1993,10 +2192,315 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module34)
 
+      assert boot_data(conn.resp_body)["chunks"] == ["DDDDDDDD"]
+
       assert conn.resp_body =~
-               ~s'globalThis.Hologram.initialChunkDigests = ["DDDDDDDD"];'
+               ~r'<script nonce="[^"]+" async src="/hologram/chunk-DDDDDDDD\.js"></script>'
+    end
+
+    test "stamps the nonce the client is given on every script tag, chunk tags included" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module34}, [
+        "DDDDDDDD"
+      ])
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      script_tags = Regex.scan(~r/<script[ >][^>]*>/, conn.resp_body)
+
+      nonced_script_tags =
+        Regex.scan(~r/<script nonce="#{Regex.escape(csp_nonce)}"[ >]/, conn.resp_body)
+
+      assert byte_size(Base.decode64!(csp_nonce)) == 16
+      assert length(script_tags) == 5
+      assert length(nonced_script_tags) == length(script_tags)
+      assert conn.resp_body =~ "/hologram/chunk-DDDDDDDD.js"
+    end
+
+    test "gives the chunk script tags no nonce when scripts are not among the stamped kinds" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module34}, [
+        "DDDDDDDD"
+      ])
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> Plug.Conn.fetch_cookies()
+        |> handle_page_request(Module34, %{}, [],
+          csp_nonce: @csp_nonce,
+          csp_nonced_elements: ["link", "style"],
+          csrf_token: @masked_csrf_token,
+          initial_page?: true,
+          instance_id: "test-instance-id"
+        )
 
       assert conn.resp_body =~ ~s'<script async src="/hologram/chunk-DDDDDDDD.js"></script>'
+
+      # The boot data block keeps it: its nonce is no policy stamp, but what the client tells the
+      # real block from an injected one by.
+      assert conn.resp_body =~ ~s'<script nonce="#{@csp_nonce}" type="application/json"'
+      assert length(Regex.scan(~r/nonce=/, conn.resp_body)) == 1
+    end
+
+    test "carries the boot data in a block with the nonce the client is given" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert conn.resp_body =~
+               ~s'<script nonce="#{csp_nonce}" type="application/json" id="hologram-boot-data">'
+
+      boot_data = boot_data(conn.resp_body)
+
+      assert boot_data["assetManifest"]["hologram/runtime.js"] ==
+               "/hologram/runtime-1234567890abcdef.js"
+
+      assert is_binary(boot_data["csrfToken"])
+      assert boot_data["pageDigest"] == "dummy_module_34_digest"
+      assert boot_data_term(conn.resp_body, "pageModule") == Module34
+      assert boot_data_term(conn.resp_body, "pageParams") == %{}
+
+      assert %{"page" => %{module: Module34}} =
+               boot_data_term(conn.resp_body, "componentRegistry")
+    end
+
+    # The page's own values travel only in the block, which the browser never runs, so the one
+    # inline script left holds nothing built from app data.
+    test "writes no app data into an inline script" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      inline_scripts =
+        ~r'<script nonce="[^"]+">(.*?)</script>'s
+        |> Regex.scan(conn.resp_body, capture: :all_but_first)
+        |> List.flatten()
+
+      assert length(inline_scripts) == 1
+      refute Enum.any?(inline_scripts, &String.contains?(&1, "Module34"))
+      refute Enum.any?(inline_scripts, &String.contains?(&1, "Type."))
+    end
+
+    # The values a first page is filled with are written where the Runtime component's markers sit,
+    # not substituted for a token over the printed page, so text spelling a token gets nothing.
+    test "fills nothing into a user's text that spells a placeholder token" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module45, :dummy_module_45_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module45/$BOOT_DATA_PLACEHOLDER")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module45)
+
+      assert conn.resp_body =~ ~s(<input value="$BOOT_DATA_PLACEHOLDER" />)
+      assert conn.resp_body =~ "<p>$BOOT_DATA_PLACEHOLDER</p>"
+      assert length(Regex.scan(~r/id="hologram-boot-data"/, conn.resp_body)) == 1
+    end
+
+    test "carries no nonce anywhere when the policy is off" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      ETS.put(ChunkRegistryStub.ets_table_name(), {:page, Module34}, [
+        "DDDDDDDD"
+      ])
+
+      put_hologram_config(:content_security_policy, false)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      refute conn.resp_body =~ "nonce"
+      assert conn.resp_body =~ ~s'<script type="application/json" id="hologram-boot-data">'
+      assert conn.resp_body =~ ~s'<script async src="/hologram/chunk-DDDDDDDD.js"></script>'
+      assert boot_data(conn.resp_body)["chunks"] == ["DDDDDDDD"]
+    end
+
+    # The block's nonce is Hologram's guard against an injected block, which the client compares
+    # with the shell's, so a page under a policy carries both whatever the policy stamps.
+    test "carries the nonce on the boot data block and in the shell under a policy that stamps nothing" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      put_hologram_config(:content_security_policy, script_src: [:self, :unsafe_inline])
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert conn.resp_body =~
+               ~s'<script nonce="#{csp_nonce}" type="application/json" id="hologram-boot-data">'
+
+      assert length(Regex.scan(~r/nonce=/, conn.resp_body)) == 1
+    end
+
+    test "sends the default policy with the nonce the page carries" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == [
+               "base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; " <>
+                 "script-src 'nonce-#{csp_nonce}' 'strict-dynamic' 'unsafe-inline' https:"
+             ]
+    end
+
+    test "sends the policy the config gives" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      put_hologram_config(:content_security_policy,
+        frame_ancestors: false,
+        img_src: [:self, "data:"]
+      )
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == [
+               "base-uri 'none'; form-action 'self'; img-src 'self' data:; object-src 'none'; " <>
+                 "script-src 'nonce-#{csp_nonce}' 'strict-dynamic' 'unsafe-inline' https:"
+             ]
+    end
+
+    test "sends no policy when the config turns it off" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      put_hologram_config(:content_security_policy, false)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == []
+    end
+
+    # A plug ahead of Hologram may set policies of its own, which could never carry the page's
+    # nonce, and a browser enforces every policy a response carries, so the page goes out with
+    # exactly the one the config describes.
+    test "replaces every policy the connection already carries" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Conn.prepend_resp_headers([
+          {"content-security-policy", "default-src 'self'"},
+          {"content-security-policy", "img-src 'self'"}
+        ])
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == [
+               "base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; " <>
+                 "script-src 'nonce-#{csp_nonce}' 'strict-dynamic' 'unsafe-inline' https:"
+             ]
+    end
+
+    test "raises when init/3 set a content security policy, also when the policy is off" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module46, :dummy_module_46_digest)
+
+      put_hologram_config(:content_security_policy, false)
+
+      assert_error RuntimeError,
+                   "Response header content-security-policy was set to \"script-src 'self'\", but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status.",
+                   fn ->
+                     :get
+                     |> Plug.Test.conn("/hologram-test-fixtures-controller-module46")
+                     |> Plug.Test.init_test_session(%{})
+                     |> handle_initial_page_request(Module46)
+                   end
+    end
+
+    test "raises when init/3 set a content security policy without a status" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module46, :dummy_module_46_digest)
+
+      assert_error RuntimeError,
+                   "Response header content-security-policy was set to \"script-src 'self'\", but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status.",
+                   fn ->
+                     :get
+                     |> Plug.Test.conn("/hologram-test-fixtures-controller-module46")
+                     |> Plug.Test.init_test_session(%{})
+                     |> handle_initial_page_request(Module46)
+                   end
+    end
+
+    test "sends the policy a terminating middleware sets" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module47, :dummy_module_47_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module47")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module47)
+
+      assert conn.status == 403
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == ["default-src 'none'"]
+    end
+
+    test "generates a new nonce for each initial page request" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      csp_nonces =
+        Enum.map(1..2, fn _index ->
+          conn =
+            :get
+            |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+            |> Plug.Test.init_test_session(%{})
+            |> handle_initial_page_request(Module34)
+
+          [_full_match, csp_nonce] =
+            Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+          csp_nonce
+        end)
+
+      assert Enum.uniq(csp_nonces) == csp_nonces
     end
 
     test "names no chunk for a page that needs none" do
@@ -2008,9 +2512,9 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module34)
 
-      assert conn.resp_body =~ "globalThis.Hologram.initialChunkDigests = [];"
+      assert boot_data(conn.resp_body)["chunks"] == []
       refute conn.resp_body =~ "/hologram/chunk-"
-      refute conn.resp_body =~ "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
+      refute conn.resp_body =~ "hologram-fill"
     end
 
     test "extracts and casts page params and passes them to page renderer" do
@@ -2357,16 +2861,15 @@ defmodule Hologram.ControllerTest do
       refute_receive {:replace_subscriptions, _new_sub_keys, _authorizing_user_id}
     end
 
-    test "substitutes the self_echoes placeholder in the rendered HTML" do
+    test "carries the self-echoes in the boot data" do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       conn = render_page_with_instance(Module14, "test-instance-id")
 
-      refute String.contains?(conn.resp_body, "$SELF_ECHOES_JS_PLACEHOLDER")
-      assert String.contains?(conn.resp_body, "selfEchoes: Type.list([])")
+      assert boot_data_term(conn.resp_body, "selfEchoes") == []
     end
 
-    test "substitutes the sub_receipt_drops placeholder with each client-claimed key the new page no longer puts" do
+    test "carries a receipt drop in the boot data for each client-claimed key the new page no longer puts" do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       # Module14 puts {:room_page, "page"}, {:room_layout, "layout"},
@@ -2378,20 +2881,30 @@ defmodule Hologram.ControllerTest do
           {:room_dropped_b, "layout"}
         ])
 
-      refute String.contains?(conn.resp_body, "$SUB_RECEIPT_DROPS_JS_PLACEHOLDER")
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_dropped_a")')
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_dropped_b")')
+      sub_receipt_drops = boot_data_term(conn.resp_body, "subReceiptDrops")
+
+      assert Enum.sort(sub_receipt_drops) == [
+               {:room_dropped_a, "page"},
+               {:room_dropped_b, "layout"}
+             ]
     end
 
-    test "substitutes the sub_receipt_adds placeholder with a receipt for each binding put during init/3" do
+    test "carries a receipt add in the boot data for each binding put during init/3" do
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       conn = render_page_with_instance(Module14, "test-instance-id")
 
-      refute String.contains?(conn.resp_body, "$SUB_RECEIPT_ADDS_JS_PLACEHOLDER")
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_page")')
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_layout")')
-      assert String.contains?(conn.resp_body, ~s'Type.atom("room_component")')
+      channels =
+        conn.resp_body
+        |> boot_data_term("subReceiptAdds")
+        |> Enum.map(fn {channel, cid, _receipt_token} -> {channel, cid} end)
+        |> Enum.sort()
+
+      assert channels == [
+               {:room_component, "my_component"},
+               {:room_layout, "layout"},
+               {:room_page, "page"}
+             ]
     end
 
     test "framework sets server.cid to \"page\" during page init/3" do
@@ -2458,6 +2971,8 @@ defmodule Hologram.ControllerTest do
       |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module21, %{}, [],
+        csp_nonce: @csp_nonce,
+        csp_nonced_elements: @csp_nonced_elements,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2478,6 +2993,8 @@ defmodule Hologram.ControllerTest do
       |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module14, %{}, [],
+        csp_nonce: @csp_nonce,
+        csp_nonced_elements: @csp_nonced_elements,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2499,6 +3016,8 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module22, %{}, [],
+          csp_nonce: @csp_nonce,
+          csp_nonced_elements: @csp_nonced_elements,
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token
@@ -2518,6 +3037,8 @@ defmodule Hologram.ControllerTest do
       |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module28, %{}, [],
+        csp_nonce: @csp_nonce,
+        csp_nonced_elements: @csp_nonced_elements,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2536,6 +3057,8 @@ defmodule Hologram.ControllerTest do
       |> Plug.Test.init_test_session(%{hologram_session_id: session_id})
       |> Plug.Conn.fetch_cookies()
       |> handle_page_request(Module25, %{}, [],
+        csp_nonce: @csp_nonce,
+        csp_nonced_elements: @csp_nonced_elements,
         initial_page?: true,
         instance_id: "test-instance-id",
         csrf_token: @masked_csrf_token
@@ -2553,6 +3076,8 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{hologram_session_id: "test-session-id"})
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module21, %{}, [],
+          csp_nonce: @csp_nonce,
+          csp_nonced_elements: @csp_nonced_elements,
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token
@@ -2573,6 +3098,8 @@ defmodule Hologram.ControllerTest do
         })
         |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module14, %{}, [],
+          csp_nonce: @csp_nonce,
+          csp_nonced_elements: @csp_nonced_elements,
           initial_page?: true,
           instance_id: "test-instance-id",
           csrf_token: @masked_csrf_token
@@ -2808,10 +3335,11 @@ defmodule Hologram.ControllerTest do
           [receipt_token]
         )
 
-      %{"refreshedReceipts" => encoded} = Jason.decode!(conn.resp_body)
+      %{"refreshedReceipts" => refreshed_receipts} = Jason.decode!(conn.resp_body)
 
-      assert String.contains?(encoded, ~s'Type.atom("room_a")')
-      assert String.contains?(encoded, ~s'Type.bitstring("page")')
+      # One receipt: its token is signed, so the channel and the cid are what can be asserted.
+      assert [4, %{"t" => "l", "d" => [%{"t" => "t", "d" => ["aroom_a", "spage", _token]}]}] =
+               refreshed_receipts
     end
   end
 
@@ -2836,6 +3364,10 @@ defmodule Hologram.ControllerTest do
 
       assert response["type"] == "page"
       assert response["pageDigest"] == "dummy_module_4_digest"
+
+      # The terms travel serialized, nested in the response as values the client's reader walks.
+      assert response["pageModule"] == [4, "aElixir.Hologram.Test.Fixtures.Controller.Module4"]
+      assert response["pageParams"] == [4, %{"t" => "m", "d" => []}]
 
       # The fixture's template is empty and its layout is a bare slot, so the render is empty too.
       # That the tree arrives as data rather than as source is what matters here; the tests that
@@ -2878,6 +3410,9 @@ defmodule Hologram.ControllerTest do
 
       assert tree_json =~ "param_aaa = 111"
       assert tree_json =~ "param_bbb = 222"
+
+      serialized_params = Serializer.serialize!(%{aaa: 111, bbb: 222})
+      assert response["pageParams"] == Jason.decode!(serialized_params)
     end
 
     test "carries the render as a tree holding no mount data script" do
@@ -2894,10 +3429,10 @@ defmodule Hologram.ControllerTest do
 
       assert tree_json =~ "Module5 page"
 
-      # The state travels beside the tree, so the script that would have carried it is not
-      # rendered on this path at all - which is also why no placeholder can survive into it.
-      refute tree_json =~ "pageMountData"
-      refute tree_json =~ "JS_PLACEHOLDER"
+      # The state travels beside the tree, so the block that would have carried it is not
+      # rendered on this path at all - nor the markers its values would be written at.
+      refute tree_json =~ "hologram-boot-data"
+      refute tree_json =~ "hologram-fill"
     end
 
     test "marks a page payload as page data" do
@@ -2928,7 +3463,11 @@ defmodule Hologram.ControllerTest do
 
       assert response["type"] == "redirect"
       assert response["to"] == Module4.__route__()
-      assert response["pageModule"] == Encoder.encode_term!(Module4)
+
+      assert response["pageModule"] == [
+               4,
+               "aElixir.Hologram.Test.Fixtures.Controller.Module4"
+             ]
     end
 
     # The redirect itself cannot survive the trip, but a header set alongside it was meant for the
@@ -3101,6 +3640,29 @@ defmodule Hologram.ControllerTest do
       |> handle_subsequent_page_request(Module4)
 
       assert_receive {:replace_subscriptions, [], nil}
+    end
+
+    test "sends no content security policy with a page payload" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module4)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == []
+    end
+
+    test "raises when init/3 set a content security policy without a status" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module46, :dummy_module_46_digest)
+
+      assert_error RuntimeError,
+                   "Response header content-security-policy was set to \"script-src 'self'\", but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status.",
+                   fn ->
+                     "/hologram/page/Hologram.Test.Fixtures.Controller.Module46"
+                     |> subsequent_page_request_conn()
+                     |> handle_subsequent_page_request(Module46)
+                   end
     end
 
     test "raises when init/3 set a content type without a status" do

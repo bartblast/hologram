@@ -180,7 +180,7 @@ export default class Type {
         return Type.#encodePrimitiveTypeMapKey(term);
 
       case "bitstring":
-        return Bitstring.serialize(term);
+        return Bitstring.encodeMapKey(term);
 
       case "list":
       case "tuple":

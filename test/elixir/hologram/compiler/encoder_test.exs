@@ -5552,6 +5552,39 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "parse_reference_binary/1" do
+    test "NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT (tag 119)" do
+      binary = <<131, 90, 3::16, 119, 13::8, "nonode@nohost", 0::32, 1::32, 2::32, 3::32>>
+
+      assert parse_reference_binary(binary) == {"nonode@nohost", 0, [1, 2, 3]}
+    end
+
+    test "NEWER_REFERENCE_EXT with ATOM_EXT (tag 100)" do
+      binary = <<131, 90, 3::16, 100, 13::16, "nonode@nohost", 0::32, 1::32, 2::32, 3::32>>
+
+      assert parse_reference_binary(binary) == {"nonode@nohost", 0, [1, 2, 3]}
+    end
+
+    test "the binary a reference serializes to" do
+      reference = ref("0.1.2.3")
+      binary = :erlang.term_to_binary(reference)
+
+      assert parse_reference_binary(binary) == {"nonode@nohost", 0, [3, 2, 1]}
+    end
+  end
+
+  describe "pid_segments/1" do
+    test "returns the three numbers identifying the PID within its node" do
+      assert pid_segments(pid("0.11.222")) == [0, 11, 222]
+    end
+  end
+
+  describe "port_segments/1" do
+    test "returns the two numbers identifying the port within its node" do
+      assert port_segments(port("0.11")) == [0, 11]
+    end
+  end
+
   defp random_bytes(max_length) do
     for _index <- 1..:rand.uniform(max_length), into: <<>>, do: <<:rand.uniform(256) - 1>>
   end

@@ -2841,44 +2841,8 @@ const Erlang = {
     }
 
     const arityValue = Number(arity.value);
-    const functionNameText = functionName.value;
 
-    const paramNames = Array.from(
-      {length: arityValue},
-      (_elem, index) => `$${index + 1}`,
-    );
-
-    const clauses = [
-      {
-        params: (_context) =>
-          paramNames.map((name) => Type.variablePattern(name)),
-        guards: [],
-        body: (context) => {
-          const args = Type.list(paramNames.map((name) => context.vars[name]));
-
-          return Interpreter.callNamedFunction(
-            module,
-            functionName,
-            args,
-            context,
-          );
-        },
-      },
-    ];
-
-    const capturedModule = module.value.startsWith("Elixir.")
-      ? Interpreter.moduleExName(module)
-      : `:${module.value}`;
-
-    const context = Interpreter.buildContext({module: Type.nil()});
-
-    return Type.functionCapture(
-      capturedModule,
-      functionNameText,
-      arityValue,
-      clauses,
-      context,
-    );
+    return Interpreter.buildFunctionCapture(module, functionName, arityValue);
   },
   // End make_fun/3
   // Deps: []

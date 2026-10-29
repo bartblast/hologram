@@ -31,7 +31,8 @@
 - [Cookies](https://hologram.page/docs/cookies): Client-side persistent storage managed through server-side functions
 - [Realtime](https://hologram.page/docs/realtime): Live server-pushed updates, subscribing to channels, broadcasting actions, delivery semantics
 - [JavaScript Interop](https://hologram.page/docs/javascript-interop): Calling JavaScript from Elixir, importing JS modules, async support
-- [Configuration](https://hologram.page/docs/configuration): Client diagnostics settings, bundle size limit, environment variables
+- [Configuration](https://hologram.page/docs/configuration): Client diagnostics settings, bundle size limit, content security policy, environment variables
+- [Security](https://hologram.page/docs/security): What Hologram protects against by default, escaping, CSRF protection, the strict Content Security Policy and how to configure it, Trusted Types, what the client can fake
 - [Bundling](https://hologram.page/docs/bundling): What goes into the runtime bundle, the page bundles and chunks, how the code of struct types loads, when reflection functions and dynamic components ship
 
 ## Reference

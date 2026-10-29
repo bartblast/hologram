@@ -13,6 +13,114 @@ defmodule Hologram.Runtime.DeserializerTest do
     ]
   end
 
+  describe "version 4" do
+    test "top-level data, raw JSON" do
+      assert deserialize(~s'[4,"axyz"]') == :xyz
+    end
+
+    test "top-level data, already JSON-decoded" do
+      assert deserialize([4, "axyz"]) == :xyz
+    end
+
+    test "atom" do
+      assert deserialize(4, "axyz") == :xyz
+    end
+
+    test "bitstring, empty" do
+      assert deserialize(4, "b") == ""
+    end
+
+    test "bitstring, single-byte, without leftover bits" do
+      assert deserialize(4, "b0ff") == <<255>>
+    end
+
+    test "bitstring, single-byte, with leftover bits" do
+      assert deserialize(4, "b3a0") == <<5::size(3)>>
+    end
+
+    test "bitstring, multiple-byte, without leftover bits" do
+      assert deserialize(4, "b0486f6c6f6772616d") == "Hologram"
+    end
+
+    test "bitstring, multiple-byte, with leftover bits" do
+      assert deserialize(4, "b3616263a0") == <<97, 98, 99, 5::size(3)>>
+    end
+
+    test "float, encoded as float" do
+      assert deserialize(4, "f1.23") === 1.23
+    end
+
+    test "float, encoded as integer" do
+      assert deserialize(4, "f123") === 123.0
+    end
+
+    test "function capture" do
+      data = "cCalendar.ISO#{@delimiter}parse_date#{@delimiter}2"
+      assert deserialize(4, data) == (&Calendar.ISO.parse_date/2)
+    end
+
+    test "integer" do
+      assert deserialize(4, "i123") == 123
+    end
+
+    test "list" do
+      data = %{"t" => "l", "d" => ["i1", "f2.34"]}
+      assert deserialize(4, data) == [1, 2.34]
+    end
+
+    test "map" do
+      data = %{"t" => "m", "d" => [["ax", "i1"], ["sy", "f2.34"]]}
+      assert deserialize(4, data) == %{:x => 1, "y" => 2.34}
+    end
+
+    test "pid" do
+      data = "pmy_node@my_host#{@delimiter}0,11,222#{@delimiter}server"
+      assert deserialize(4, data) == pid("0.11.222")
+    end
+
+    test "port" do
+      data = "omy_node@my_host#{@delimiter}0,11#{@delimiter}server"
+      assert deserialize(4, data) == port("0.11")
+    end
+
+    test "reference" do
+      data = %{"t" => "r", "n" => "jnonode@nohost", "c" => 0, "i" => [3, 2, 1]}
+      assert deserialize(4, data) == ref("0.1.2.3")
+    end
+
+    test "Regex struct" do
+      client_ref = %{"t" => "r", "n" => "jhologram_client", "c" => 0, "i" => [3, 2, 1]}
+      client_re_pattern = %{"t" => "t", "d" => ["are_pattern", "i0", "i0", "i0", client_ref]}
+
+      data = %{
+        "t" => "m",
+        "d" => regex_struct_entries(client_re_pattern, "sab", ["acaseless"])
+      }
+
+      result = deserialize(4, data)
+
+      assert %Regex{source: "ab", opts: [:caseless]} = result
+      assert Regex.match?(result, "AB")
+    end
+
+    test "string" do
+      assert deserialize(4, "sHologram") == "Hologram"
+    end
+
+    test "string, empty" do
+      assert deserialize(4, "s") == ""
+    end
+
+    test "string, beyond ASCII" do
+      assert deserialize(4, "szażółć 🎉") == "zażółć 🎉"
+    end
+
+    test "tuple" do
+      data = %{"t" => "t", "d" => ["i1", "f2.34"]}
+      assert deserialize(4, data) == {1, 2.34}
+    end
+  end
+
   describe "version 3" do
     test "top-level data, raw JSON" do
       assert deserialize(~s'[3,"axyz"]') == :xyz

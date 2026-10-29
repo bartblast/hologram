@@ -4,8 +4,8 @@ defmodule Hologram.Controller do
   require Logger
 
   alias Hologram.Assets.ChunkRegistry
+  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
-  alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.LiveReload
   alias Hologram.Page
@@ -16,10 +16,12 @@ defmodule Hologram.Controller do
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Realtime.Tombstone
   alias Hologram.Router.PageModuleResolver
+  alias Hologram.Runtime.ContentSecurityPolicy
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
   alias Hologram.Runtime.PlugConnUtils
+  alias Hologram.Runtime.Serializer
   alias Hologram.Runtime.Session
   alias Hologram.Server
   alias Hologram.Server.Middleware
@@ -95,6 +97,29 @@ defmodule Hologram.Controller do
   end
 
   @doc """
+  Builds the boot data of a first page: what the client reads when it boots, from the block the
+  page's markup carries (see `Hologram.Template.Renderer.boot_data_element/2`).
+
+  The page's fields are the ones a navigation's payload carries, built the same way (see
+  `build_page_data_payload/1`), so the two cannot drift apart: the chunks, the page digest, the
+  mount data and the realtime bookkeeping, every term among them in Hologram's term format as a
+  nested JSON value. Without the tree, which the markup itself is. The document-wide values a
+  navigation already has join them: the asset manifest, the CSRF token and the instance id.
+  """
+  @spec build_boot_data(map) :: map
+  def build_boot_data(%{csrf_token: csrf_token, instance_id: instance_id} = fields) do
+    asset_manifest_json = AssetManifestCache.get_manifest_json()
+
+    fields
+    |> page_fields()
+    |> Map.merge(%{
+      assetManifest: Jason.Fragment.new(asset_manifest_json),
+      csrfToken: csrf_token,
+      instanceId: instance_id
+    })
+  end
+
+  @doc """
   Builds the payload describing a page for a client that renders it itself, rather than being sent
   the markup.
 
@@ -102,21 +127,20 @@ defmodule Hologram.Controller do
   code has arrived, and everything a mount reads as fields of its own beside it: the component
   registry, the page module and params, and the realtime bookkeeping.
 
-  A loaded document has only one channel for that state - a script in the markup it is sent - but a
-  navigated page has the payload, so it does not pay for the round trip of escaping encoder output
-  into the tree's own encoding and unescaping it again on arrival. It also means the state is
-  readable before the render is patched in, rather than as a side effect of a script the patch
-  inserts and the browser then runs.
+  A loaded document carries the same fields in the boot data block of its markup (see
+  `build_boot_data/1`), but a navigated page has the payload, so it does not pay for the round trip
+  of escaping them into the tree's own encoding and unescaping them again on arrival. It also means
+  the state is readable before the render is patched in, rather than as a side effect of an
+  element the patch inserts.
 
   The digest names the bundle to fetch when this client does not have the page's code yet, and the
   chunk digests name the chunks the page needs before it mounts (see
   `Hologram.Assets.ChunkRegistry`), which the client loads unless it has them.
 
-  Every value but the tree is encoded the way a command's response encodes terms, as JavaScript the
-  client evaluates, since that is the form its runtime already reads. The tree is not: it holds
-  only elements, text, comments and the doctype, which is a closed vocabulary with no Elixir
-  semantics in it, so it rides as a nested JSON value the client gets already parsed rather than as
-  source it has to evaluate first.
+  Every value but the tree travels in Hologram's term format, as a nested JSON value the client's
+  reader walks once the response is parsed, so nothing in the payload is evaluated as code. The
+  tree holds only elements, text, comments and the doctype, which is a closed vocabulary with no
+  Elixir semantics in it, so it rides as plain JSON the client reads as it is.
 
   A redirect is a payload of its own, since a client-side navigation cannot be answered with a real
   one: a `fetch` following redirects consumes the 302 invisibly, and one set to leave it alone gets
@@ -133,8 +157,8 @@ defmodule Hologram.Controller do
 
   def build_page_data_payload({:redirect, to, page_module, params}) do
     %{
-      pageModule: Encoder.encode_term!(page_module),
-      pageParams: Encoder.encode_term!(params),
+      pageModule: serialize_to_fragment(page_module),
+      pageParams: serialize_to_fragment(params),
       to: to,
       type: "redirect"
     }
@@ -142,27 +166,10 @@ defmodule Hologram.Controller do
 
   # The wire format for the tree, and the 112 alternatives it was measured against.
   # See: docs/navigation_payload_wire_format.md
-  def build_page_data_payload(%{
-        chunk_digests: chunk_digests,
-        mount_data: mount_data,
-        page_digest: page_digest,
-        self_echoes: self_echoes,
-        sub_receipt_adds: sub_receipt_adds,
-        sub_receipt_drops: sub_receipt_drops,
-        tree: tree
-      }) do
-    %{
-      chunks: chunk_digests,
-      componentRegistry: mount_data.component_registry,
-      pageDigest: page_digest,
-      pageModule: mount_data.page_module,
-      pageParams: mount_data.page_params,
-      selfEchoes: Encoder.encode_term!(self_echoes),
-      subReceiptAdds: Encoder.encode_term!(sub_receipt_adds),
-      subReceiptDrops: Encoder.encode_term!(sub_receipt_drops),
-      tree: Renderer.encode_tree(tree),
-      type: "page"
-    }
+  def build_page_data_payload(%{tree: tree} = fields) do
+    fields
+    |> page_fields()
+    |> Map.merge(%{tree: Renderer.encode_tree(tree), type: "page"})
   end
 
   @doc """
@@ -363,6 +370,7 @@ defmodule Hologram.Controller do
       {processed_server_struct, next_action} =
         process_command_result(command_result, middleware_server_struct, target)
 
+      ensure_no_content_security_policy!(processed_server_struct)
       ensure_no_content_type!(processed_server_struct)
 
       # Apply subscription deltas before flushing broadcasts so a registry
@@ -385,24 +393,25 @@ defmodule Hologram.Controller do
 
       flushed_server_struct = Realtime.flush_broadcasts(processed_server_struct)
 
-      {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
-      command_status = if encode_status == :ok, do: 1, else: 0
-
-      {:ok, encoded_self_echoes} = Encoder.encode_term(self_echoes)
-      {:ok, encoded_sub_receipt_adds} = Encoder.encode_term(sub_receipt_adds)
-      {:ok, encoded_sub_receipt_drops} = Encoder.encode_term(sub_receipt_drops)
+      # A next action the format cannot carry fails the command, and the reply says why in the
+      # action's place.
+      {action, command_status} =
+        case Serializer.serialize(next_action) do
+          {:ok, serialized_next_action} -> {Jason.Fragment.new(serialized_next_action), 1}
+          {:error, message} -> {message, 0}
+        end
 
       conn
       |> decorate_conn(server_struct, flushed_server_struct)
-      |> Controller.json(%{
-        action: encoded_next_action,
+      |> send_json(%{
+        action: action,
         # The chunks the struct types in the action and in the self echoes need, which the client
         # loads before it runs them.
         chunks: ChunkRegistry.lookup_term({next_action, self_echoes}),
-        selfEchoes: encoded_self_echoes,
+        selfEchoes: serialize_to_fragment(self_echoes),
         status: command_status,
-        subReceiptAdds: encoded_sub_receipt_adds,
-        subReceiptDrops: encoded_sub_receipt_drops
+        subReceiptAdds: serialize_to_fragment(sub_receipt_adds),
+        subReceiptDrops: serialize_to_fragment(sub_receipt_drops)
       })
       |> Plug.Conn.halt()
     end
@@ -435,7 +444,15 @@ defmodule Hologram.Controller do
 
     instance_id = UUID.uuid4()
 
+    # Read once, so the nonce and the elements it is stamped on follow the same policy. A page sent
+    # without a policy carries no nonce at all, since nothing would read it.
+    csp_directives = ContentSecurityPolicy.directives()
+    csp_nonce = if csp_directives, do: ContentSecurityPolicy.generate_nonce()
+
     renderer_opts = [
+      csp_directives: csp_directives,
+      csp_nonce: csp_nonce,
+      csp_nonced_elements: ContentSecurityPolicy.nonced_elements(csp_directives),
       csrf_token: masked_csrf_token,
       initial_page?: true,
       instance_id: instance_id
@@ -470,14 +487,37 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, conn, result} ->
+        boot_data =
+          build_boot_data(%{
+            chunk_digests: result.chunk_digests,
+            csrf_token: renderer_opts[:csrf_token],
+            instance_id: renderer_opts[:instance_id],
+            mount_data: result.mount_data,
+            page_digest: PageDigestRegistry.lookup(page_module),
+            self_echoes: result.self_echoes,
+            sub_receipt_adds: result.sub_receipt_adds,
+            sub_receipt_drops: result.sub_receipt_drops
+          })
+
+        csp_nonce = renderer_opts[:csp_nonce]
+
+        fills = %{
+          "boot_data" => Renderer.boot_data_element(boot_data, csp_nonce),
+          "chunk_script_tags" =>
+            Renderer.chunk_script_tags(result.chunk_digests, chunk_csp_nonce(renderer_opts))
+        }
+
+        # Printed here rather than by the renderer, since only now is every value the markers are
+        # filled with known.
         final_html =
-          result.html
-          |> Renderer.interpolate_chunks(result.chunk_digests)
-          |> Renderer.interpolate_self_echoes_js(result.self_echoes)
-          |> Renderer.interpolate_sub_receipt_adds_js(result.sub_receipt_adds)
-          |> Renderer.interpolate_sub_receipt_drops_js(result.sub_receipt_drops)
+          Renderer.print_dom(result.tree,
+            csp_nonce: csp_nonce,
+            csp_nonced_elements: renderer_opts[:csp_nonced_elements],
+            fills: fills
+          )
 
         conn
+        |> maybe_put_content_security_policy(renderer_opts[:csp_directives], csp_nonce)
         |> Controller.html(final_html)
         |> Plug.Conn.halt()
     end
@@ -530,13 +570,11 @@ defmodule Hologram.Controller do
           expires_at
         )
 
-        {:ok, encoded_refreshed_receipts} = Encoder.encode_term(refreshed_receipts)
-
         conn
-        |> Controller.json(%{
+        |> send_json(%{
           handshakeId: handshake_id,
           heartbeatIntervalMs: SSE.heartbeat_interval_ms(conn),
-          refreshedReceipts: encoded_refreshed_receipts
+          refreshedReceipts: serialize_to_fragment(refreshed_receipts)
         })
         |> Plug.Conn.halt()
     end
@@ -577,9 +615,9 @@ defmodule Hologram.Controller do
         |> Plug.Conn.halt()
 
       {:rendered, lifecycle_conn, result} ->
-        # The values the HTML path substitutes into the served document travel as payload fields
-        # here. Nothing is interpolated into the tree: this path renders no script to interpolate
-        # into, and the client reads the state from the payload before it patches.
+        # The values a first page carries in its boot data block travel as payload fields here.
+        # Nothing is interpolated into the tree: this path renders no block to interpolate, and the
+        # client reads the state from the payload before it patches.
         payload =
           build_page_data_payload(%{
             chunk_digests: result.chunk_digests,
@@ -666,6 +704,27 @@ defmodule Hologram.Controller do
       {channel, cid, Receipt.issue(channel, cid, server.instance_id, server.user_id)}
     end)
   end
+
+  # The chunk tags are script elements, so they carry the nonce only when scripts are stamped.
+  defp chunk_csp_nonce(renderer_opts) do
+    nonced_elements = renderer_opts[:csp_nonced_elements] || []
+
+    if "script" in nonced_elements, do: renderer_opts[:csp_nonce]
+  end
+
+  # A page's policy belongs in the config. The policy Hologram sends names the page's nonce, which
+  # only Hologram knows, and a policy one page set would hold only when that page is the one a visit
+  # starts on, since the browser fixes it when the document loads and a navigation keeps the
+  # document. On a command reply, which is JSON, a browser reads no policy at all, so setting one
+  # there does nothing, and raising says so. A terminal response middleware writes is free to carry
+  # one, since this runs only past middleware.
+  defp ensure_no_content_security_policy!(%Server{
+         response_headers: %{"content-security-policy" => value}
+       }) do
+    raise "Response header content-security-policy was set to #{inspect(value)}, but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status."
+  end
+
+  defp ensure_no_content_security_policy!(_server), do: :ok
 
   # A content type describes a body the run meant to send. When middleware did not end the
   # request, Hologram writes the body, and the label can fit nothing it writes, since the same run
@@ -754,6 +813,24 @@ defmodule Hologram.Controller do
     Session.put_user_id(conn, user_id)
   end
 
+  # The policy a rendered page is sent with, replacing every one a plug ahead of Hologram left on the
+  # connection, so the page carries exactly the policy the config describes. A browser enforces
+  # every policy a response carries, so one left beside it, without the nonce, would block the page.
+  defp maybe_put_content_security_policy(conn, nil, _csp_nonce), do: conn
+
+  defp maybe_put_content_security_policy(conn, csp_directives, csp_nonce) do
+    header_value = ContentSecurityPolicy.header_value(csp_directives, csp_nonce)
+
+    other_resp_headers =
+      Enum.reject(conn.resp_headers, fn {name, _value} -> name == "content-security-policy" end)
+
+    Plug.Conn.put_resp_header(
+      %{conn | resp_headers: other_resp_headers},
+      "content-security-policy",
+      header_value
+    )
+  end
+
   # The chunks a rendered page needs before it mounts: the ones it preloads for the struct types
   # its client code names, the ones its state needs, and the ones its self echoes need.
   defp page_chunk_digests(page_module, state_chunk_digests, self_echoes) do
@@ -765,6 +842,27 @@ defmodule Hologram.Controller do
     |> Enum.concat()
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  # The fields describing a page that the first page's boot data and a navigation's payload share.
+  defp page_fields(%{
+         chunk_digests: chunk_digests,
+         mount_data: mount_data,
+         page_digest: page_digest,
+         self_echoes: self_echoes,
+         sub_receipt_adds: sub_receipt_adds,
+         sub_receipt_drops: sub_receipt_drops
+       }) do
+    %{
+      chunks: chunk_digests,
+      componentRegistry: serialize_to_fragment(mount_data.component_registry),
+      pageDigest: page_digest,
+      pageModule: serialize_to_fragment(mount_data.page_module),
+      pageParams: serialize_to_fragment(mount_data.page_params),
+      selfEchoes: serialize_to_fragment(self_echoes),
+      subReceiptAdds: serialize_to_fragment(sub_receipt_adds),
+      subReceiptDrops: serialize_to_fragment(sub_receipt_drops)
+    }
   end
 
   defp process_command_result(command_result, server_struct, default_target) do
@@ -818,12 +916,12 @@ defmodule Hologram.Controller do
       %{
         chunk_digests: state_chunk_digests,
         component_registry: component_registry,
-        html: rendered_html,
         mount_data: mount_data,
         server_struct: rendered_server_struct,
         tree: rendered_tree
       } = Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
+      ensure_no_content_security_policy!(rendered_server_struct)
       ensure_no_content_type!(rendered_server_struct)
 
       maybe_note_page_rendered(renderer_opts[:instance_id], page_module)
@@ -836,9 +934,9 @@ defmodule Hologram.Controller do
 
       Realtime.maybe_announce_identity_change(server_struct, rendered_server_struct)
 
-      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The renderer leaves
-      # `$SELF_ECHOES_JS_PLACEHOLDER` in the HTML on purpose so this Realtime-domain computation
-      # lives in the controller, which is also why it is returned rather than interpolated here.
+      # Snapshot self-echoes before flush_broadcasts/1 clears the queue. The renderer stays out of
+      # them on purpose, so this Realtime-domain computation lives in the controller, which is also
+      # why it is returned rather than written into the boot data here.
       self_echoes =
         Realtime.get_self_echoes(rendered_server_struct, rendered_server_struct.subscriptions)
 
@@ -847,7 +945,6 @@ defmodule Hologram.Controller do
       result = %{
         chunk_digests: page_chunk_digests(page_module, state_chunk_digests, self_echoes),
         component_registry: component_registry,
-        html: rendered_html,
         mount_data: mount_data,
         self_echoes: self_echoes,
         sub_receipt_adds: sub_receipt_adds,
@@ -861,9 +958,9 @@ defmodule Hologram.Controller do
 
   # Every decoration the run accumulated, whichever response the caller goes on to send. Headers
   # merge by key, so one the run set replaces a default the connection came with, like the
-  # cache-control Plug puts on every response. A content type never reaches here from a render or
-  # a command, which raise on one. The page data marker is put after this by the send that owns
-  # it, so it wins.
+  # cache-control Plug puts on every response. A content type or a content security policy never
+  # reaches here from a render or a command, which raise on either. The page data marker is put
+  # after this by the send that owns it, so it wins.
   defp decorate_conn(conn, server_struct, final_server_struct) do
     conn
     |> Plug.Conn.merge_resp_headers(Map.to_list(final_server_struct.response_headers))
@@ -878,7 +975,17 @@ defmodule Hologram.Controller do
   defp send_page_data(conn, payload) do
     conn
     |> Plug.Conn.put_resp_header("hologram-page-data", "true")
-    |> Controller.json(payload)
+    |> send_json(payload)
+  end
+
+  # Sends the payload as JSON through Jason, whatever JSON library the app's Phoenix is configured
+  # with: the serialized terms the payload nests are fragments only Jason can write.
+  defp send_json(conn, payload) do
+    body = Jason.encode_to_iodata!(payload)
+
+    conn
+    |> Plug.Conn.put_resp_content_type("application/json")
+    |> Plug.Conn.send_resp(conn.status || 200, body)
   end
 
   # What a page's middleware answered, in the form the client can act on.
@@ -910,6 +1017,13 @@ defmodule Hologram.Controller do
 
   defp send_terminal_page_data(conn, %Server{} = server) do
     send_response(conn, server)
+  end
+
+  # A term travels as a nested JSON value rather than as a JSON string holding one: the client then
+  # parses the response once, and no quote inside the term is escaped on the way.
+  defp serialize_to_fragment(term) do
+    serialized = Serializer.serialize!(term)
+    Jason.Fragment.new(serialized)
   end
 
   defp refresh_unless_tombstoned(receipt, instance_id, session_id, authorizing_user_id) do

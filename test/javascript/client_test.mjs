@@ -476,6 +476,11 @@ describe("Client", () => {
   });
 
   describe("sendCommand()", () => {
+    // A reply field holds a term the way the server sends it: serialized, and already parsed along
+    // with the rest of the reply.
+    const serialized = (term) =>
+      JSON.parse(Serializer.serialize(term, "server"));
+
     let fetchStub,
       schedulePushedActionStub,
       originalHologram,
@@ -530,11 +535,11 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: "Type.nil()",
-          selfEchoes: "Type.list([])",
+          action: serialized(Type.nil()),
+          selfEchoes: serialized(Type.list()),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       };
 
@@ -573,11 +578,13 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: 'Type.actionStruct({name: Type.atom("dummy_action")})',
-          selfEchoes: "Type.list([])",
+          action: serialized(
+            Type.actionStruct({name: Type.atom("dummy_action")}),
+          ),
+          selfEchoes: serialized(Type.list()),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       };
 
@@ -601,13 +608,21 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: 'Type.actionStruct({name: Type.atom("next_action")})',
+          action: serialized(
+            Type.actionStruct({name: Type.atom("next_action")}),
+          ),
           chunks: ["AAAAAAAA", "BBBBBBBB"],
-          selfEchoes:
-            'Type.list([Type.actionStruct({name: Type.atom("self_echo"), target: Type.bitstring("my_target")})])',
+          selfEchoes: serialized(
+            Type.list([
+              Type.actionStruct({
+                name: Type.atom("self_echo"),
+                target: Type.bitstring("my_target"),
+              }),
+            ]),
+          ),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       };
 
@@ -633,11 +648,11 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: "Type.nil()",
-          selfEchoes: "Type.list([])",
+          action: serialized(Type.nil()),
+          selfEchoes: serialized(Type.list()),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       };
 
@@ -704,12 +719,22 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: "Type.nil()",
-          selfEchoes:
-            'Type.list([Type.actionStruct({name: Type.atom("self_echo_a"), target: Type.bitstring("my_target")}), Type.actionStruct({name: Type.atom("self_echo_b"), target: Type.bitstring("my_target")})])',
+          action: serialized(Type.nil()),
+          selfEchoes: serialized(
+            Type.list([
+              Type.actionStruct({
+                name: Type.atom("self_echo_a"),
+                target: Type.bitstring("my_target"),
+              }),
+              Type.actionStruct({
+                name: Type.atom("self_echo_b"),
+                target: Type.bitstring("my_target"),
+              }),
+            ]),
+          ),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       };
 
@@ -741,12 +766,22 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: "Type.nil()",
-          selfEchoes:
-            'Type.list([Type.actionStruct({name: Type.atom("self_echo_a"), target: Type.bitstring("left_page_component")}), Type.actionStruct({name: Type.atom("self_echo_b"), target: Type.bitstring("my_target")})])',
+          action: serialized(Type.nil()),
+          selfEchoes: serialized(
+            Type.list([
+              Type.actionStruct({
+                name: Type.atom("self_echo_a"),
+                target: Type.bitstring("left_page_component"),
+              }),
+              Type.actionStruct({
+                name: Type.atom("self_echo_b"),
+                target: Type.bitstring("my_target"),
+              }),
+            ]),
+          ),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       };
 
@@ -766,11 +801,11 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: "Type.nil()",
-          selfEchoes: "Type.list([])",
+          action: serialized(Type.nil()),
+          selfEchoes: serialized(Type.list()),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       };
 
@@ -785,12 +820,20 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: 'Type.actionStruct({name: Type.atom("next_action")})',
-          selfEchoes:
-            'Type.list([Type.actionStruct({name: Type.atom("self_echo"), target: Type.bitstring("my_target")})])',
+          action: serialized(
+            Type.actionStruct({name: Type.atom("next_action")}),
+          ),
+          selfEchoes: serialized(
+            Type.list([
+              Type.actionStruct({
+                name: Type.atom("self_echo"),
+                target: Type.bitstring("my_target"),
+              }),
+            ]),
+          ),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       };
 
@@ -820,12 +863,20 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: 'Type.actionStruct({name: Type.atom("next_action")})',
-          selfEchoes:
-            'Type.list([Type.actionStruct({name: Type.atom("self_echo"), target: Type.bitstring("my_target")})])',
+          action: serialized(
+            Type.actionStruct({name: Type.atom("next_action")}),
+          ),
+          selfEchoes: serialized(
+            Type.list([
+              Type.actionStruct({
+                name: Type.atom("self_echo"),
+                target: Type.bitstring("my_target"),
+              }),
+            ]),
+          ),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       };
 
@@ -863,12 +914,20 @@ describe("Client", () => {
       resolveFetch({
         ok: true,
         json: sinon.stub().resolves({
-          action: 'Type.actionStruct({name: Type.atom("next_action")})',
-          selfEchoes:
-            'Type.list([Type.actionStruct({name: Type.atom("self_echo"), target: Type.bitstring("my_target")})])',
+          action: serialized(
+            Type.actionStruct({name: Type.atom("next_action")}),
+          ),
+          selfEchoes: serialized(
+            Type.list([
+              Type.actionStruct({
+                name: Type.atom("self_echo"),
+                target: Type.bitstring("my_target"),
+              }),
+            ]),
+          ),
           status: 1,
-          subReceiptAdds: "Type.list([])",
-          subReceiptDrops: "Type.list([])",
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
         }),
       });
 
@@ -921,13 +980,23 @@ describe("Client", () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves({
-          action: "Type.nil()",
-          selfEchoes: "Type.list([])",
+          action: serialized(Type.nil()),
+          selfEchoes: serialized(Type.list()),
           status: 1,
-          subReceiptAdds:
-            'Type.list([Type.tuple([Type.atom("room_b"), Type.bitstring("page"), Type.bitstring("token-b")])])',
-          subReceiptDrops:
-            'Type.list([Type.tuple([Type.atom("room_a"), Type.bitstring("page")])])',
+          subReceiptAdds: serialized(
+            Type.list([
+              Type.tuple([
+                Type.atom("room_b"),
+                Type.bitstring("page"),
+                Type.bitstring("token-b"),
+              ]),
+            ]),
+          ),
+          subReceiptDrops: serialized(
+            Type.list([
+              Type.tuple([Type.atom("room_a"), Type.bitstring("page")]),
+            ]),
+          ),
         }),
       };
 

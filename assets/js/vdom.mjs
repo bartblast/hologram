@@ -1,5 +1,8 @@
 "use strict";
 
+import App from "./app.mjs";
+import TrustedTypes from "./trusted_types.mjs";
+
 import {
   attributesModule,
   eventListenersModule,
@@ -7,9 +10,76 @@ import {
   vnode as rawVnode,
 } from "./vendor/snabbdom/build/index.js";
 
-const patch = init([attributesModule, eventListenersModule]);
+// The elements HTML gives a nonce attribute to.
+const NONCED_ELEMENTS = new Set(["link", "script", "style"]);
+
+// An element the diff creates carries the document's Content Security Policy nonce before it is
+// inserted, so the policy lets it load or run. The nonce is set through the property and not as an
+// attribute: when an element is connected to a document whose policy came in a header, browsers
+// hide its nonce, the content attribute becomes the empty string while the property keeps the
+// value, so that CSS attribute selectors cannot read it, and an attribute set from here would undo
+// that hiding.
+const cspNonceModule = {
+  create: (_emptyVnode, vnode) => {
+    if (App.cspNonce !== null && NONCED_ELEMENTS.has(vnode.elm.localName)) {
+      vnode.elm.nonce = App.cspNonce;
+    }
+  },
+};
+
+// A script element the diff creates gets its URL and code from data.hologramScript, assigned
+// through the runtime's Trusted Types policy before it is inserted, which is when it runs. Neither
+// travels as an attribute or a child: the diff sets those as plain strings, which a document
+// enforcing Trusted Types refuses at a script. A script vnode is keyed by what it runs, so one
+// that changes is a new element, and nothing is ever assigned to a script that already ran.
+const scriptModule = {
+  create: (_emptyVnode, vnode) => {
+    const script = vnode.data.hologramScript;
+
+    if (script === undefined) {
+      return;
+    }
+
+    if (script.src !== null) {
+      vnode.elm.src = TrustedTypes.scriptUrl(script.src);
+    }
+
+    // textContent rather than text, which an SVG script element does not have.
+    if (script.code !== null) {
+      vnode.elm.textContent = TrustedTypes.script(script.code);
+    }
+  },
+};
+
+const patchModules = [
+  attributesModule,
+  cspNonceModule,
+  eventListenersModule,
+  scriptModule,
+];
+
+const patch = init(patchModules);
 
 export default class Vdom {
+  // The modules the diff runs with: attributes, the nonce on created elements, event listeners, a
+  // created script's URL and code.
+  static patchModules = patchModules;
+
+  // A script's URL as data.hologramScript carries it, from its src attribute in the vdom convention:
+  // a valueless src is an empty URL, and a script without one has none.
+  static scriptSrc(src) {
+    if (src === undefined || src === false) {
+      return null;
+    }
+
+    return src === true ? "" : src;
+  }
+
+  // Whether the element is one HTML gives a nonce attribute to.
+  static isNoncedElement(tagName) {
+    return NONCED_ELEMENTS.has(tagName);
+  }
+
   // Numbers repeats of a key within one children list, in document order: the second occurrence
   // becomes "<key>:1", the third "<key>:2".
   //
@@ -122,6 +192,13 @@ export default class Vdom {
     const attrs = {};
 
     for (const attr of domNode.attributes) {
+      // The rendered side carries no nonce attribute: the server stamps it at print time and the
+      // diff sets the property on creation. Mirroring it would have the boot patch remove it, and
+      // removing the attribute resets the element's nonce.
+      if (attr.name === "nonce") {
+        continue;
+      }
+
       attrs[attr.name] = attr.value === "" ? true : attr.value;
     }
 
@@ -198,6 +275,10 @@ export default class Vdom {
 
     if (renderedVnode.key) {
       data.key = renderedVnode.key;
+    }
+
+    if (domNode.localName === "script") {
+      return $.#scriptVnodeOfDomNode(renderedVnode.sel, data, domNode);
     }
 
     const cursor = {index: 0};
@@ -319,6 +400,22 @@ export default class Vdom {
     return null;
   }
 
+  // The old-side vnode of a script element in the shape the renderer gives one: its URL and code in
+  // data.hologramScript, out of its attributes and children, so the patch leaves the script the
+  // server sent as it is rather than removing its src and its text.
+  static #scriptVnodeOfDomNode(sel, data, domNode) {
+    const {src, ...otherAttrs} = data.attrs;
+
+    data.attrs = otherAttrs;
+
+    data.hologramScript = {
+      code: domNode.textContent === "" ? null : domNode.textContent,
+      src: $.scriptSrc(src),
+    };
+
+    return rawVnode(sel, data, [], undefined, domNode);
+  }
+
   // A vnode standing for a DOM node on its own terms: its own tag, attributes, children and
   // resource key, with the live node attached. Used wherever the rendered side has no counterpart,
   // so the patch decides what happens to it - matching it by tag or key and keeping it, or
@@ -349,6 +446,10 @@ export default class Vdom {
 
     if (key) {
       data.key = key;
+    }
+
+    if (domNode.localName === "script") {
+      return $.#scriptVnodeOfDomNode(domNode.localName, data, domNode);
     }
 
     const children = $.finalizeChildren(

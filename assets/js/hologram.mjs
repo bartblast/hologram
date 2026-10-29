@@ -135,6 +135,10 @@ export default class Hologram {
   // destination may hold the same cids.
   static #awaitingTargets = new Map();
 
+  // The first page's boot data as parsed from the block the server wrote, held for the mount, which
+  // reads its terms. Null in a document with no block.
+  static #bootData = null;
+
   // The digests of the chunks this document was told of: the ones the document the server sent
   // carries and the ones requested since. A snapshot saves the loaded ones.
   static #chunkDigests = new Set();
@@ -571,9 +575,7 @@ export default class Hologram {
       return Hologram.#followRedirect(payload, hopCount, historyEntryId);
     }
 
-    const pageModule = Interpreter.evaluateJavaScriptExpression(
-      payload.pageModule,
-    );
+    const pageModule = Deserializer.deserialize(payload.pageModule);
 
     // The tab holds this page's code from an earlier visit, and a live reload has rebuilt it since.
     // Running the held copy would show the page as it was before the edit, so the browser loads
@@ -662,6 +664,55 @@ export default class Hologram {
     for (const action of selfEchoes.data) {
       Hologram.enqueueActionAfterDelay(action, $.registryEpoch);
     }
+  }
+
+  // Reads the boot data block the server wrote into the first page: a script element of type
+  // application/json, which the browser never runs, so the policy never checks it. The runtime
+  // checks it instead. In a document with a nonce it takes only the block carrying that nonce, read
+  // through the property, since a policy sent in a header blanks the attribute. An element injected
+  // into the page cannot carry the nonce, so a forged block is passed over rather than read. A
+  // document without a nonce has no policy, and takes the one block there is.
+  //
+  // The plain fields go on globalThis.Hologram, under the names the rest of the runtime reads them
+  // by. A document with no block, which a test document is, sets nothing and holds no boot data.
+  //
+  // Made public to make tests easier
+  static readBootData() {
+    $.#bootData = null;
+
+    const blocks = Array.from(
+      document.querySelectorAll(
+        'script[type="application/json"]#hologram-boot-data',
+      ),
+    );
+
+    if (blocks.length === 0) {
+      return;
+    }
+
+    const block =
+      App.cspNonce === null
+        ? blocks[0]
+        : blocks.find(
+            (element) =>
+              element.nonce === App.cspNonce && $.#isNonceable(element),
+          );
+
+    if (block === undefined) {
+      throw new HologramRuntimeError(
+        "The page's boot data could not be read: no boot data block carries the document's nonce",
+      );
+    }
+
+    const bootData = JSON.parse(block.textContent);
+
+    globalThis.Hologram.assetManifest = bootData.assetManifest;
+    globalThis.Hologram.csrfToken = bootData.csrfToken;
+    globalThis.Hologram.initialChunkDigests = bootData.chunks;
+    globalThis.Hologram.initialPageDigest = bootData.pageDigest;
+    globalThis.Hologram.instanceId = bootData.instanceId;
+
+    $.#bootData = bootData;
   }
 
   // Made public to make tests easier
@@ -867,6 +918,22 @@ export default class Hologram {
         );
       },
     );
+  }
+
+  // The mount data of the first page, from its boot data block. Its terms are read here rather than
+  // at boot, when the mount asks for them, as a navigation's are read when its payload arrives.
+  static #bootMountData() {
+    const bootData = $.#bootData;
+
+    return {
+      componentRegistry: Deserializer.deserialize(bootData.componentRegistry),
+      pageDigest: bootData.pageDigest,
+      pageModule: Deserializer.deserialize(bootData.pageModule),
+      pageParams: Deserializer.deserialize(bootData.pageParams),
+      selfEchoes: Deserializer.deserialize(bootData.selfEchoes),
+      subReceiptAdds: Deserializer.deserialize(bootData.subReceiptAdds),
+      subReceiptDrops: Deserializer.deserialize(bootData.subReceiptDrops),
+    };
   }
 
   static #buildPagePath(toParam) {
@@ -1488,6 +1555,13 @@ export default class Hologram {
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
   static async #init() {
+    // First, since the ETS tables restored below can hold stored functions, which compile through a
+    // script element that needs the nonce.
+    App.loadCspNonce();
+
+    // Next, since the snapshot check below reads the page digest and the asset manifest from it.
+    $.readBootData();
+
     window.addEventListener("error", (event) => {
       $.handleUncaughtError(event.error);
     });
@@ -1602,6 +1676,16 @@ export default class Hologram {
     return pageDigest === undefined
       ? chunkDigests
       : [pageDigest, ...chunkDigests];
+  }
+
+  // Whether the element can be the one the server wrote, as the CSP specification decides whether an
+  // element is nonceable: an attribute holding "<script" or "<style" is the trace of an injected
+  // unclosed tag that has absorbed the real element's attributes, its nonce among them.
+  static #isNonceable(element) {
+    return Array.from(element.attributes).every(({name, value}) => {
+      const text = `${name} ${value}`.toLowerCase();
+      return !text.includes("<script") && !text.includes("<style");
+    });
   }
 
   static #isPageModuleRegistered(pageModule) {
@@ -1738,14 +1822,9 @@ export default class Hologram {
     }
   }
 
-  // A loaded document has no payload, so it carries the same six values as an inline script that
-  // defines pageMountData - the one channel markup has for structured state.
+  // A loaded document has no payload, so it carries the same values in its boot data block.
   static #loadMountData() {
-    // A loaded document's bundle digest comes with the other values its boot script sets.
-    const mountData = $.#mountData ?? {
-      ...globalThis.Hologram.pageMountData(Hologram.#deps),
-      pageDigest: globalThis.Hologram.initialPageDigest,
-    };
+    const mountData = $.#mountData ?? $.#bootMountData();
 
     $.#mountData = null;
 
@@ -1877,7 +1956,7 @@ export default class Hologram {
       }
 
       // SSE must open AFTER `#mountPage()` because the handshake payload
-      // includes the receipts merged from `pageMountData.subReceiptAdds` -
+      // includes the receipts merged from the mount data's `subReceiptAdds` -
       // connecting earlier would send an empty receipts list.
       if (Sse.eventSource === null) {
         Sse.connect();
@@ -1926,8 +2005,8 @@ export default class Hologram {
     }
 
     const toParam = Type.tuple([
-      Interpreter.evaluateJavaScriptExpression(payload.pageModule),
-      Interpreter.evaluateJavaScriptExpression(payload.pageParams),
+      Deserializer.deserialize(payload.pageModule),
+      Deserializer.deserialize(payload.pageParams),
     ]);
 
     return Client.fetchPage(
@@ -1981,10 +2060,7 @@ export default class Hologram {
     // for the mount, while everything armed before this line belongs to the page being left.
     $.domEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
 
-    const pageModule = Interpreter.evaluateJavaScriptExpression(
-      payload.pageModule,
-    );
-
+    const pageModule = Deserializer.deserialize(payload.pageModule);
     const isPageModuleRegistered = $.#isPageModuleRegistered(pageModule);
 
     // The fetch is started before the patch, which is local work, so the network has a head start
@@ -2007,19 +2083,13 @@ export default class Hologram {
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
     // the browser then runs. The page module is already decoded above, so it is reused.
     $.#mountData = {
-      componentRegistry: Interpreter.evaluateJavaScriptExpression(
-        payload.componentRegistry,
-      ),
+      componentRegistry: Deserializer.deserialize(payload.componentRegistry),
       pageDigest: payload.pageDigest,
       pageModule: pageModule,
-      pageParams: Interpreter.evaluateJavaScriptExpression(payload.pageParams),
-      selfEchoes: Interpreter.evaluateJavaScriptExpression(payload.selfEchoes),
-      subReceiptAdds: Interpreter.evaluateJavaScriptExpression(
-        payload.subReceiptAdds,
-      ),
-      subReceiptDrops: Interpreter.evaluateJavaScriptExpression(
-        payload.subReceiptDrops,
-      ),
+      pageParams: Deserializer.deserialize(payload.pageParams),
+      selfEchoes: Deserializer.deserialize(payload.selfEchoes),
+      subReceiptAdds: Deserializer.deserialize(payload.subReceiptAdds),
+      subReceiptDrops: Deserializer.deserialize(payload.subReceiptDrops),
     };
 
     // See: docs/navigation_payload_wire_format.md
@@ -2330,8 +2400,8 @@ export default class Hologram {
     }
   }
 
-  // The digest of the runtime bundle this document runs, read from the path the asset manifest the
-  // boot script left holds for it.
+  // The digest of the runtime bundle this document runs, read from the path the asset manifest from
+  // the boot data block holds for it.
   static #runtimeDigest() {
     const path = globalThis.Hologram.assetManifest?.["hologram/runtime.js"];
 

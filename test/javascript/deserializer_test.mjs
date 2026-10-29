@@ -10,6 +10,7 @@ import Deserializer from "../../assets/js/deserializer.mjs";
 import Erlang_Re from "../../assets/js/erlang/re.mjs";
 import ERTS from "../../assets/js/erts.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -191,28 +192,71 @@ describe("Deserializer", () => {
           vars: {x: Type.integer(10), y: Type.integer(20)},
         });
 
+        // The clauses the capture had when it was serialized are not what comes back: the
+        // deserialized capture gets one clause calling the named function, the way
+        // :erlang.make_fun/3 builds one, so that it can be called.
         describe("capture", () => {
-          const term = Type.functionCapture(
-            "Calendar.ISO",
-            "date_to_string",
-            4,
+          const assertCapture = (deserialized, capturedModule) => {
+            assert.equal(deserialized.capturedModule, capturedModule);
+            assert.equal(deserialized.capturedFunction, "reverse");
+            assert.equal(deserialized.arity, 1);
+            assert.equal(deserialized.clauses.length, 1);
+
+            assert.deepStrictEqual(
+              deserialized.context,
+              Interpreter.buildContext(),
+            );
+
+            const callResult = Interpreter.callAnonymousFunction(deserialized, [
+              Type.list([Type.integer(1), Type.integer(2)]),
+            ]);
+
+            assert.deepStrictEqual(
+              callResult,
+              Type.list([Type.integer(2), Type.integer(1)]),
+            );
+          };
+
+          const elixirTerm = Type.functionCapture(
+            "Enum",
+            "reverse",
+            1,
             [],
             context,
           );
 
-          const expectedContext = contextFixture({
-            module: null,
-            vars: {},
+          const erlangTerm = Type.functionCapture(
+            ":lists",
+            "reverse",
+            1,
+            [],
+            context,
+          );
+
+          it("Elixir module, top-level", () => {
+            const deserialized = deserialize(serialize(elixirTerm, "server"));
+            assertCapture(deserialized, "Enum");
           });
 
-          const expectedTerm = {...term, context: expectedContext};
+          it("Elixir module, nested", () => {
+            const deserialized = deserialize(
+              serialize({x: elixirTerm}, "server"),
+            );
 
-          it("top-level", () => {
-            testTopLevelDeserialization(term, "server", expectedTerm);
+            assertCapture(deserialized.x, "Enum");
           });
 
-          it("nested", () => {
-            testNestedDeserialization(term, "server", expectedTerm);
+          it("Erlang module, top-level", () => {
+            const deserialized = deserialize(serialize(erlangTerm, "server"));
+            assertCapture(deserialized, ":lists");
+          });
+
+          it("Erlang module, nested", () => {
+            const deserialized = deserialize(
+              serialize({x: erlangTerm}, "server"),
+            );
+
+            assertCapture(deserialized.x, ":lists");
           });
         });
 
@@ -635,6 +679,129 @@ describe("Deserializer", () => {
         it("nested", () => {
           testNestedDeserialization(term);
         });
+      });
+    });
+
+    // Data stored by an earlier release starts with its own version, and reads by that version's
+    // rules: an "s" value was a JavaScript string in version 3 and is a string in version 4.
+    describe("format version", () => {
+      it("version 4, s marks a string", () => {
+        assert.deepStrictEqual(
+          deserialize('[4,"sabc"]'),
+          Type.bitstring("abc"),
+        );
+      });
+
+      it("version 4, s marks a string, beyond ASCII", () => {
+        assert.deepStrictEqual(
+          deserialize('[4,"szażółć 🎉"]'),
+          Type.bitstring("zażółć 🎉"),
+        );
+      });
+
+      it("version 4, s marks a string, empty", () => {
+        assert.deepStrictEqual(deserialize('[4,"s"]'), Type.bitstring(""));
+      });
+
+      it("version 4, j marks a JavaScript string", () => {
+        assert.equal(deserialize('[4,"jabc"]'), "abc");
+      });
+
+      it("version 4, nested", () => {
+        assert.deepStrictEqual(deserialize('[4,{"a":"sabc","b":"jxyz"}]'), {
+          a: Type.bitstring("abc"),
+          b: "xyz",
+        });
+      });
+
+      it("version 3, s marks a JavaScript string", () => {
+        assert.equal(deserialize('[3,"sabc"]'), "abc");
+      });
+
+      it("version 3, reference", () => {
+        const serialized =
+          '[3,{"t":"r","n":"snonode@nohost","c":0,"i":[3,2,1]}]';
+
+        assert.deepStrictEqual(
+          deserialize(serialized),
+          Type.reference("nonode@nohost", 0, [3, 2, 1]),
+        );
+      });
+
+      it("already-parsed array, top-level", () => {
+        assert.deepStrictEqual(deserialize([4, "sabc"]), Type.bitstring("abc"));
+      });
+
+      it("already-parsed array, nested in a collection", () => {
+        assert.deepStrictEqual(
+          deserialize([4, {t: "t", d: ["i1", {t: "l", d: ["sabc"]}]}]),
+          Type.tuple([Type.integer(1), Type.list([Type.bitstring("abc")])]),
+        );
+      });
+
+      it("already-parsed array, nested in an object", () => {
+        assert.deepStrictEqual(deserialize([4, {a: "sabc", b: "jxyz"}]), {
+          a: Type.bitstring("abc"),
+          b: "xyz",
+        });
+      });
+
+      it("already-parsed array, version 3", () => {
+        assert.equal(deserialize([3, "sabc"]), "abc");
+      });
+    });
+
+    // The strings here are what Hologram.Runtime.Serializer writes for the same terms.
+    describe("terms the server serializes", () => {
+      // Looking a reference up registers its node in the node table, which other tests read.
+      afterEach(() => {
+        NodeTable.reset();
+      });
+
+      it("pid", () => {
+        const serialized = `[4,"pnonode@nohost${Serializer.DELIMITER}0,11,222${Serializer.DELIMITER}server"]`;
+
+        assert.deepStrictEqual(
+          deserialize(serialized),
+          Type.pid("nonode@nohost", [0, 11, 222], "server"),
+        );
+      });
+
+      it("reference", () => {
+        const serialized =
+          '[4,{"t":"r","n":"jnonode@nohost","c":0,"i":[3,2,1]}]';
+
+        assert.deepStrictEqual(
+          deserialize(serialized),
+          Type.reference("nonode@nohost", 0, [3, 2, 1]),
+        );
+      });
+
+      it("Regex struct, registered under the reference it carries", () => {
+        const serialized =
+          '[4,{"t":"m","d":[["are_pattern",{"t":"t","d":["are_pattern","i1","i1","i0",{"t":"r","n":"jnonode@nohost","c":0,"i":[80213,907673603,1311398366]}]}],["aopts",{"t":"l","d":["aunicode","aucp","acaseless"]}],["asource","s(a)b"],["a__struct__","aElixir.Regex"]]}]';
+
+        const regex = deserialize(serialized);
+
+        assert.isTrue(Type.isStruct(regex, "Regex"));
+
+        const rePattern =
+          regex.data[Type.encodeMapKey(Type.atom("re_pattern"))][1];
+
+        assert.isNotNull(ERTS.regexPatternRegistry.lookupByTerm(rePattern));
+
+        const runResult = Erlang_Re["run/2"](Type.bitstring("xAB"), rePattern);
+
+        assert.deepStrictEqual(
+          runResult,
+          Type.tuple([
+            Type.atom("match"),
+            Type.list([
+              Type.tuple([Type.integer(1), Type.integer(2)]),
+              Type.tuple([Type.integer(1), Type.integer(1)]),
+            ]),
+          ]),
+        );
       });
     });
   });

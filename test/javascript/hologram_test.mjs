@@ -2357,12 +2357,21 @@ describe("Hologram", () => {
   describe("loadNewPage()", () => {
     let assignedUrls, assignStub, fetchPageStub;
 
-    const encodedModule7 = `Type.atom("Elixir.Hologram.Test.Fixtures.Module7")`;
-    const encodedNoParams = "Type.map([])";
+    // A payload field holds a term the way the server sends it: serialized, and already parsed
+    // along with the rest of the response.
+    const serialized = (term) =>
+      JSON.parse(Serializer.serialize(term, "server"));
 
-    const redirectTo = (to, encodedPageModule = encodedModule7) => ({
-      pageModule: encodedPageModule,
-      pageParams: encodedNoParams,
+    const module7 = Type.atom("Elixir.Hologram.Test.Fixtures.Module7");
+    const serializedModule7 = serialized(module7);
+    const serializedNoParams = serialized(Type.map());
+
+    // Built once: some tests stub the serializer to watch what the page snapshot saves.
+    const serializedEmptyList = serialized(Type.list());
+
+    const redirectTo = (to, serializedPageModule = serializedModule7) => ({
+      pageModule: serializedPageModule,
+      pageParams: serializedNoParams,
       to: to,
       type: "redirect",
     });
@@ -2394,16 +2403,31 @@ describe("Hologram", () => {
     ];
 
     // The mount data the server used to write into an inline script, carried as payload fields.
-    const encodedComponentRegistry = `Type.map([[Type.bitstring("page"), Type.map([[Type.atom("module"), ${encodedModule7}], [Type.atom("struct"), Type.componentStruct({state: Type.map([[Type.atom("count"), Type.integer(7)]])})]])]])`;
+    const serializedComponentRegistry = serialized(
+      Type.map([
+        [
+          Type.bitstring("page"),
+          Type.map([
+            [Type.atom("module"), module7],
+            [
+              Type.atom("struct"),
+              Type.componentStruct({
+                state: Type.map([[Type.atom("count"), Type.integer(7)]]),
+              }),
+            ],
+          ]),
+        ],
+      ]),
+    );
 
     const payloadFor = (pageDigest, bodyText = "page content") => ({
-      componentRegistry: encodedComponentRegistry,
+      componentRegistry: serializedComponentRegistry,
       pageDigest: pageDigest,
-      pageModule: encodedModule7,
-      pageParams: encodedNoParams,
-      selfEchoes: "Type.list([])",
-      subReceiptAdds: "Type.list([])",
-      subReceiptDrops: "Type.list([])",
+      pageModule: serializedModule7,
+      pageParams: serializedNoParams,
+      selfEchoes: serializedEmptyList,
+      subReceiptAdds: serializedEmptyList,
+      subReceiptDrops: serializedEmptyList,
       tree: treeFor(pageDigest, bodyText),
       type: "page",
     });
@@ -2636,27 +2660,23 @@ describe("Hologram", () => {
         removeBundleScripts();
       });
 
-      // The point of carrying the state beside the render: it is readable without any script
-      // having run, so it no longer depends on the patch inserting one and the browser executing
-      // it. No mount data script exists in this tree at all.
+      // The point of carrying the state beside the render: it is readable without any element the
+      // patch inserts. No boot data block exists in this tree at all.
       it("makes the page's mount data readable before the patch", async () => {
-        delete globalThis.Hologram.pageMountData;
-
         await Hologram.loadNewPage("/target", payloadFor("mount-data"));
 
-        // Nothing defined the carrier, so the mount can only have read the payload.
-        assert.isUndefined(globalThis.Hologram.pageMountData);
-        assert.notInclude(document.head.innerHTML, "pageMountData");
+        // Nothing carried a block, so the mount can only read the payload.
+        assert.isNull(document.querySelector("#hologram-boot-data"));
       });
 
       // That the mount then consumes it is a feature test's job - the mount is not reachable from
       // here, since it needs either the destination's code already registered or its bundle to
       // announce itself. What is provable here is that the payload's fields are decoded during
-      // the swap: a field that cannot be evaluated fails it.
+      // the swap: a field that cannot be read fails it, here a map whose entry is no pair.
       it("decodes the payload's mount data during the swap", async () => {
         const payload = {
           ...payloadFor("bad-registry"),
-          componentRegistry: "Type.map([[[",
+          componentRegistry: [4, {t: "m", d: ["i1"]}],
         };
 
         let thrown = null;
@@ -4500,6 +4520,144 @@ describe("Hologram", () => {
       } finally {
         scheduleActionStub.restore();
       }
+    });
+  });
+
+  describe("readBootData()", () => {
+    const fieldNames = [
+      "assetManifest",
+      "csrfToken",
+      "initialChunkDigests",
+      "initialPageDigest",
+      "instanceId",
+    ];
+
+    let originalFields;
+
+    const bootDataJson = (instanceId) =>
+      JSON.stringify({
+        assetManifest: {"hologram/runtime.js": "/hologram/runtime-AAAA.js"},
+        chunks: ["CCCCCCCC"],
+        csrfToken: "my_csrf_token",
+        instanceId: instanceId,
+        pageDigest: "my_page_digest",
+      });
+
+    const appendBlock = (instanceId, nonce = null, extraAttrs = {}) => {
+      const block = document.createElement("script");
+      block.type = "application/json";
+      block.id = "hologram-boot-data";
+
+      if (nonce !== null) {
+        block.nonce = nonce;
+      }
+
+      for (const [name, value] of Object.entries(extraAttrs)) {
+        block.setAttribute(name, value);
+      }
+
+      block.textContent = bootDataJson(instanceId);
+      document.body.appendChild(block);
+    };
+
+    beforeEach(() => {
+      originalFields = Object.fromEntries(
+        fieldNames.map((name) => [name, globalThis.Hologram[name]]),
+      );
+    });
+
+    afterEach(() => {
+      document
+        .querySelectorAll("#hologram-boot-data")
+        .forEach((block) => block.remove());
+
+      // With no block left, a read holds no boot data, so none leaks into a later test.
+      Hologram.readBootData();
+
+      for (const name of fieldNames) {
+        globalThis.Hologram[name] = originalFields[name];
+      }
+
+      App.cspNonce = null;
+    });
+
+    it("puts the block's plain fields where the runtime reads them", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("my_instance_id", "my_nonce");
+
+      Hologram.readBootData();
+
+      assert.deepStrictEqual(globalThis.Hologram.assetManifest, {
+        "hologram/runtime.js": "/hologram/runtime-AAAA.js",
+      });
+
+      assert.equal(globalThis.Hologram.csrfToken, "my_csrf_token");
+
+      assert.deepStrictEqual(globalThis.Hologram.initialChunkDigests, [
+        "CCCCCCCC",
+      ]);
+
+      assert.equal(globalThis.Hologram.initialPageDigest, "my_page_digest");
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("passes over a block without the document's nonce in favor of the one with it", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("forged_instance_id", "other_nonce");
+      appendBlock("my_instance_id", "my_nonce");
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("passes over a block whose attributes hold an absorbed script tag", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("forged_instance_id", "my_nonce", {
+        "data-x": '<script id="a"',
+      });
+      appendBlock("my_instance_id", "my_nonce");
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("passes over a block whose attributes hold an absorbed style tag, whatever its case", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("forged_instance_id", "my_nonce", {"data-x": "<STYLE>"});
+      appendBlock("my_instance_id", "my_nonce");
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("throws when no block carries the document's nonce", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("forged_instance_id", "other_nonce");
+
+      assert.throws(
+        () => Hologram.readBootData(),
+        HologramRuntimeError,
+        "The page's boot data could not be read: no boot data block carries the document's nonce",
+      );
+    });
+
+    it("takes the one block there is in a document without a nonce", () => {
+      appendBlock("my_instance_id");
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("sets nothing in a document with no block", () => {
+      globalThis.Hologram.instanceId = "untouched";
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "untouched");
     });
   });
 

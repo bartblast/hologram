@@ -2,9 +2,8 @@ defmodule Hologram.UI.Runtime do
   use Hologram.Component
   alias Hologram.Router.Helpers, as: RouterHelpers
 
-  prop :csrf_token, :string, from_context: {Hologram.Runtime, :csrf_token}
+  prop :csp_nonce, :string, default: nil, from_context: {Hologram.Runtime, :csp_nonce}
   prop :initial_page?, :boolean, from_context: {Hologram.Runtime, :initial_page?}
-  prop :instance_id, :string, from_context: {Hologram.Runtime, :instance_id}
   prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
   prop :page_module, :module, from_context: {Hologram.Runtime, :page_module}
   prop :page_mounted?, :boolean, from_context: {Hologram.Runtime, :page_mounted?}
@@ -16,40 +15,15 @@ defmodule Hologram.UI.Runtime do
       <script>
         globalThis.Hologram ??= \{\};
         globalThis.Hologram._pendingJsInteropActions = [];
-        globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER;
-        globalThis.Hologram.csrfToken = "{@csrf_token}";
-        globalThis.Hologram.initialChunkDigests = $CHUNK_DIGESTS_JS_PLACEHOLDER;
-        globalThis.Hologram.initialPageDigest = "{@page_digest}";
-        globalThis.Hologram.instanceId = "{@instance_id}";
+        {%if @csp_nonce}globalThis.Hologram.cspNonce = "{@csp_nonce}";{/if}
 
         globalThis.Hologram.dispatchAction = function(actionName, target, params) \{
           globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
         \}
       </script>
-    {/if}
-
-    {%if @initial_page? && !@page_mounted?}
-      <script>
-        {%raw}
-          globalThis.Hologram.pageMountData = (deps) => {
-            const Type = deps.Type;
-            
-            return {
-              componentRegistry: $COMPONENT_REGISTRY_JS_PLACEHOLDER,
-              pageModule: $PAGE_MODULE_JS_PLACEHOLDER,
-              pageParams: $PAGE_PARAMS_JS_PLACEHOLDER,
-              selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER,
-              subReceiptAdds: $SUB_RECEIPT_ADDS_JS_PLACEHOLDER,
-              subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER
-            };
-          };
-        {/raw}
-      </script>
-    {/if}
-
-    {%if @initial_page? && !@page_mounted?}
+      <hologram-fill name="boot_data" />
       <script async src={asset_path("hologram/runtime.js")}></script>
-      $CHUNK_SCRIPT_TAGS_PLACEHOLDER
+      <hologram-fill name="chunk_script_tags" />
     {/if}
 
     {%if !@page_mounted?}

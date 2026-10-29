@@ -107,17 +107,25 @@ describe("SubscriptionReceiptRegistry", () => {
 
   describe("populate()", () => {
     it("replaces existing entries with the passed iterable", () => {
-      SubscriptionReceiptRegistry.entries.set("old-key", "old-value");
-      SubscriptionReceiptRegistry.populate([["new-key", "new-value"]]);
+      const oldReceipt = receipt(Type.atom("room_a"), "page", "token-a");
+      const newReceipt = receipt(Type.atom("room_b"), "comp_1", "token-b");
+      const newKey = Type.encodeMapKey(key(Type.atom("room_b"), "comp_1"));
+
+      SubscriptionReceiptRegistry.populate([["old-key", oldReceipt]]);
+      SubscriptionReceiptRegistry.populate([[newKey, newReceipt]]);
 
       assert.equal(SubscriptionReceiptRegistry.entries.size, 1);
+      assert.equal(SubscriptionReceiptRegistry.entries.get(newKey), newReceipt);
+    });
 
-      assert.equal(
-        SubscriptionReceiptRegistry.entries.get("new-key"),
-        "new-value",
-      );
+    it("keys each entry by its own channel and cid, whatever key it came with", () => {
+      const triple = receipt(Type.atom("room_a"), "page", "token-a");
+      const currentKey = Type.encodeMapKey(key(Type.atom("room_a"), "page"));
 
-      assert.isFalse(SubscriptionReceiptRegistry.entries.has("old-key"));
+      SubscriptionReceiptRegistry.populate([["stale-key", triple]]);
+
+      assert.equal(SubscriptionReceiptRegistry.entries.get(currentKey), triple);
+      assert.isFalse(SubscriptionReceiptRegistry.entries.has("stale-key"));
     });
   });
 

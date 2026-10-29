@@ -2,6 +2,8 @@
 
 A client-side navigation is answered with the page's evaluated tree. The tree is a closed vocabulary of four constructors with no Elixir semantics in it, so it does not need the boxed-term encoder - but it does need a shape. This records the full cross-product of the choices that shape is made of, measured on two real pages, so the one that was picked can be checked rather than taken on trust.
 
+The other fields of the payload, the mount data and the realtime bookkeeping, are terms and travel in `Hologram.Runtime.Serializer`'s format, as nested JSON values the client's deserializer walks once the response is parsed.
+
 Related: issue #1068.
 
 ## Chosen format

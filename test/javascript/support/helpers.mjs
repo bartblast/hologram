@@ -35,6 +35,7 @@ import Interpreter from "../../../assets/js/interpreter.mjs";
 import RegexParseError from "../../../assets/js/erts/regex/regex_parse_error.mjs";
 import RegexParser from "../../../assets/js/erts/regex/regex_parser.mjs";
 import Renderer from "../../../assets/js/renderer.mjs";
+import ScriptEvaluator from "../../../assets/js/script_evaluator.mjs";
 import Serializer from "../../../assets/js/serializer.mjs";
 import Type from "../../../assets/js/type.mjs";
 import Utils from "../../../assets/js/utils.mjs";
@@ -287,6 +288,14 @@ export function buildUndefinedFunctionErrorMsg(
 // Keep this message in sync with build_with_clause_error_msg in Hologram.Commons.TestUtils.
 export function buildWithClauseErrorMsg(arg) {
   return "no with clause matching:\n\n    " + Interpreter.inspect(arg) + "\n";
+}
+
+// The real ScriptEvaluator.compile, which defineRuntimeGlobals replaces with compileInTestRealm.
+export const compileInScriptElement = ScriptEvaluator.compile;
+
+// Compiles code into a function the way ScriptEvaluator.compile does, in the tests' own realm.
+export function compileInTestRealm(code) {
+  return new Function("context", "Type", "Interpreter", code);
 }
 
 export function componentRegistryEntryFixture(data = {}) {
@@ -685,6 +694,12 @@ function defineGlobalModule(moduleJsName, moduleObj) {
 
 export function defineRuntimeGlobals() {
   globalThis.Hologram ??= {};
+
+  // jsdom runs a script element's code in a JavaScript realm of its own, where an object or a
+  // promise the code creates is not an instance of this realm's Object or Promise, so the interop
+  // layer would box it as an opaque native value. A browser has one realm, so the tests compile
+  // code in this one. The real compile is tested on its own, in script_evaluator_test.mjs.
+  ScriptEvaluator.compile = compileInTestRealm;
 
   // In the browser the runtime bundle bootstrap sets the config object before
   // any dispatch can run - mirror that invariant here. Frame tracking defaults

@@ -176,8 +176,12 @@ describe("Type", () => {
   });
 
   it("bitstringPattern()", () => {
-    const segment1 = Type.bitstringSegment(Type.integer(1), {type: "integer"});
-    const segment2 = Type.bitstringSegment(Type.integer(2), {type: "integer"});
+    const segment1 = Type.bitstringSegment(Type.integer(1), {
+      type: "integer",
+    });
+    const segment2 = Type.bitstringSegment(Type.integer(2), {
+      type: "integer",
+    });
 
     const result = Type.bitstringPattern([segment1, segment2]);
 
@@ -482,7 +486,7 @@ describe("Type", () => {
       const bitstring = Type.bitstring("Hologram");
       const result = Type.encodeMapKey(bitstring);
 
-      assert.equal(result, "b0486f6c6f6772616d");
+      assert.equal(result, "s8:Hologram");
     });
 
     it("encodes boxed float value as map key", () => {
@@ -510,6 +514,16 @@ describe("Type", () => {
       const result = Type.encodeMapKey(list);
 
       assert.equal(result, "list(integer(1),atom(b))");
+    });
+
+    // A string holding a comma must not read as two strings, or the two lists below would share a
+    // key and a map holding both would keep one entry.
+    it("encodes boxed list values whose strings would join the same way as different map keys", () => {
+      const list1 = Type.list([Type.bitstring("yes,sir")]);
+      const list2 = Type.list([Type.bitstring("yes"), Type.bitstring("ir")]);
+
+      assert.equal(Type.encodeMapKey(list1), "list(s7:yes,sir)");
+      assert.equal(Type.encodeMapKey(list2), "list(s3:yes,s2:ir)");
     });
 
     it("encodes empty boxed map value as map key", () => {
@@ -550,6 +564,27 @@ describe("Type", () => {
       const result = Type.encodeMapKey(tuple);
 
       assert.equal(result, "tuple(integer(1),atom(b))");
+    });
+
+    it("encodes boxed tuple values whose strings would join the same way as different map keys", () => {
+      const tuple1 = Type.tuple([
+        Type.atom("room"),
+        Type.bitstring("a,sb"),
+        Type.bitstring("c"),
+      ]);
+
+      const tuple2 = Type.tuple([
+        Type.atom("room"),
+        Type.bitstring("a"),
+        Type.bitstring("b"),
+        Type.bitstring("c"),
+      ]);
+
+      assert.equal(Type.encodeMapKey(tuple1), "tuple(atom(room),s4:a,sb,s1:c)");
+      assert.equal(
+        Type.encodeMapKey(tuple2),
+        "tuple(atom(room),s1:a,s1:b,s1:c)",
+      );
     });
   });
 
@@ -615,7 +650,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([]),
         HologramInterpreterError,
-        "improper list must have at least 2 items, received [3,[]]",
+        "improper list must have at least 2 items, received [4,[]]",
       );
     });
 
@@ -623,7 +658,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([Type.integer(1)]),
         HologramInterpreterError,
-        'improper list must have at least 2 items, received [3,["i1"]]',
+        'improper list must have at least 2 items, received [4,["i1"]]',
       );
     });
 
@@ -1429,6 +1464,25 @@ describe("Type", () => {
       const expectedData = {
         "atom(a)": [Type.atom("a"), Type.integer(5)],
         "atom(b)": [Type.atom("b"), Type.integer(6)],
+      };
+
+      const expected = {type: "map", data: expectedData};
+
+      assert.deepStrictEqual(Type.map(inputData), expected);
+    });
+
+    it("keeps keys apart whose strings would join the same way", () => {
+      const key1 = Type.list([Type.bitstring("yes,sir")]);
+      const key2 = Type.list([Type.bitstring("yes"), Type.bitstring("ir")]);
+
+      const inputData = [
+        [key1, Type.integer(1)],
+        [key2, Type.integer(2)],
+      ];
+
+      const expectedData = {
+        "list(s7:yes,sir)": [key1, Type.integer(1)],
+        "list(s3:yes,s2:ir)": [key2, Type.integer(2)],
       };
 
       const expected = {type: "map", data: expectedData};

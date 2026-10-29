@@ -203,6 +203,24 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Puts the given value under the given key of the :hologram application env for the rest of the
+  test, putting back what the key held before, set or not, when the test exits.
+  """
+  @spec put_hologram_config(atom, any) :: :ok
+  def put_hologram_config(key, value) do
+    original_value = Application.fetch_env(:hologram, key)
+
+    ExUnit.Callbacks.on_exit(fn ->
+      case original_value do
+        {:ok, value} -> Application.put_env(:hologram, key, value)
+        :error -> Application.delete_env(:hologram, key)
+      end
+    end)
+
+    Application.put_env(:hologram, key, value)
+  end
+
+  @doc """
   Generates a unique random atom.
   """
   @spec random_atom() :: atom

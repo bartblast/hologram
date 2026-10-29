@@ -2,8 +2,10 @@
 
 import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
+import App from "../../assets/js/app.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import ScriptRegistry from "../../assets/js/script_registry.mjs";
+import TrustedTypes from "../../assets/js/trusted_types.mjs";
 
 defineRuntimeGlobals();
 
@@ -177,6 +179,53 @@ describe("ScriptRegistry", () => {
 
       assert.isTrue(scripts.every((script) => script.async === true));
       assert.isTrue(scripts.every((script) => script.fetchPriority === "high"));
+    });
+
+    it("gives each script element the document's nonce", () => {
+      App.cspNonce = "my_nonce";
+
+      try {
+        ScriptRegistry.request([scriptA, scriptB], () => null);
+      } finally {
+        App.cspNonce = null;
+      }
+
+      assert.isTrue(
+        requestedScripts().every((script) => script.nonce === "my_nonce"),
+      );
+    });
+
+    it("assigns each script's URL through the Trusted Types policy", () => {
+      const assignedUrls = [];
+
+      TrustedTypes.cachedPolicy = undefined;
+
+      globalThis.trustedTypes = {
+        createPolicy: (_name, rules) => ({
+          createScriptURL: (url) => {
+            assignedUrls.push(url);
+            return rules.createScriptURL(url);
+          },
+        }),
+      };
+
+      try {
+        ScriptRegistry.request([scriptA, scriptB], () => null);
+      } finally {
+        delete globalThis.trustedTypes;
+        TrustedTypes.cachedPolicy = undefined;
+      }
+
+      assert.deepStrictEqual(assignedUrls, [
+        "/hologram/chunk-AAAAAAAA.js",
+        "/hologram/chunk-BBBBBBBB.js",
+      ]);
+    });
+
+    it("gives the script elements no nonce when the document has none", () => {
+      ScriptRegistry.request([scriptA], () => null);
+
+      assert.equal(requestedScripts()[0].nonce, "");
     });
 
     it("fetches a script that failed again", () => {

@@ -112,7 +112,7 @@ defmodule Hologram.Realtime do
   end
 
   # Returns the list of `%Action{}`s the framework should self-echo to the
-  # originator via the HTTP response payload (command POST or pageMountData).
+  # originator via the HTTP response payload (command POST or the first page's boot data).
   # An entry self-echoes iff its channel is in the originator's effective
   # subscription set (`server.subscriptions` ∪ identity channels) AND its
   # `except` list does not cover any of the originator's identities. Caller

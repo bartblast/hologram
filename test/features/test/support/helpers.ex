@@ -269,10 +269,12 @@ defmodule HologramFeatureTests.Helpers do
       |> Endpoint.call(Endpoint.init([]))
       |> Map.fetch!(:resp_body)
 
-    [_match, digests_json] =
-      Regex.run(~r/globalThis\.Hologram\.initialChunkDigests = (\[[^\]]*\]);/, document)
+    [_match, boot_data_json] =
+      Regex.run(~r'<script[^>]* id="hologram-boot-data"[^>]*>(.*?)</script>'s, document)
 
-    Jason.decode!(digests_json)
+    boot_data_json
+    |> Jason.decode!()
+    |> Map.fetch!("chunks")
   end
 
   @doc """
