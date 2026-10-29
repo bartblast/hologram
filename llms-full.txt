@@ -2742,7 +2742,7 @@ These helpers are imported into pages, components, and `use Hologram.Middleware`
 - `put_redirect(server, url_or_page)` - a 302 redirect to either a URL string or a page module.
 - `put_redirect(server, page, params)` - a 302 redirect to a page module with route params.
 - `put_response_body(server, body)` - sets the response body (iodata). Not terminal on its own - pair it with `put_status`.
-- `put_response_header(server, name, value)` - sets a response header (name lower-cased), replacing any existing value. Raises on `cookie` / `set-cookie` - use the cookie helpers for those. A `content-type` describes the body, so it is allowed only on a response that middleware ends with `put_status`. Anywhere else it raises.
+- `put_response_header(server, name, value)` - sets a response header (name lower-cased), replacing any existing value. Raises on `cookie` / `set-cookie` - use the cookie helpers for those. A `content-type` describes the body, and a page's `content-security-policy` belongs in config, as the Security documentation explains. So each is allowed only on a response that middleware ends with `put_status`. Anywhere else it raises.
 - `put_status(server, status)` - sets the response status and stops the chain. `status` is an integer like `403` or an atom alias like `:forbidden` or `:not_found`. An unknown alias or out-of-range integer raises. The full alias set is in Status Aliases below.
 
 ##### Identity
@@ -2832,7 +2832,7 @@ Each status code and the atom alias `put_status` accepts for it. An unknown alia
 
 ### Session
 
-Session in Hologram provides secure storage that persists across page visits within a user's browsing session. Session data is stored in a secure session cookie that ensures data integrity and security. You can work with session data in three main contexts:
+Session in Hologram provides secure storage that persists across page visits within a user's browsing session. In embedded mode, session data lives in your Phoenix endpoint's session. The cookie store Phoenix apps use by default signs the data but doesn't encrypt it, so a user can read it unless the endpoint sets an `encryption_salt`. In standalone mode, Hologram keeps session data in a cookie of its own, which it encrypts. In both modes a user can't edit the data, though they can delete the cookie or send back an older copy. You can work with session data in three main contexts:
 
 - During page or component initialization (`init/3` functions)
 - In page or component commands for dynamic session operations
@@ -3000,11 +3000,11 @@ end
 
 Understanding when to use Hologram's session system versus direct cookie management:
 
-- **Session System** - Automatic security handling, data is opaque to clients, managed through session functions
+- **Session System** - Automatic security handling, data a user can't edit, managed through session functions
 - **Direct Cookie Management** - Full control over cookie behavior, data encoding, and security settings
 - **Data Access** - Session data cannot be read by client-side code; direct cookies can be configured for client access
 - **Security** - Sessions provide automatic security; direct cookies require manual security configuration
-- **Use Cases** - Sessions for sensitive/private data; direct cookies when you need client-side access or specific cookie behavior
+- **Use Cases** - Use sessions for data a user mustn't edit, and direct cookies when you need client-side access or specific cookie behavior
 
 #### Common Use Cases
 
@@ -3798,6 +3798,8 @@ return x + 3;
 """)  # 5
 ```
 
+`JS.eval/1` and `JS.exec/1` work under Hologram's Content Security Policy, which allows no `'unsafe-eval'`. The code runs as a script carrying the page's nonce. See "Content Security Policy" in the Security documentation.
+
 ##### ~JS Sigil - Inline JavaScript
 
 The `~JS` sigil is a shorthand for `JS.exec/1`. It is convenient for DOM manipulation and fire-and-forget code:
@@ -4146,7 +4148,7 @@ Planning to publish a reusable package that wraps a JavaScript library, a Web AP
 
 Hologram is configured under the `:hologram` key in your config files, and reads a few things from environment variables. Everything is optional - the defaults are chosen so that a new app needs no configuration at all.
 
-**Note:** These settings belong in `config/config.exs`, or in an environment-specific file such as `config/prod.exs`. The compiler reads them while it builds the client bundles, so changing one requires recompiling, not just restarting - and setting one in `config/runtime.exs` has no effect on a release, whose bundles were compiled long before that file is evaluated.
+**Note:** These settings belong in `config/config.exs`, or in an environment-specific file such as `config/prod.exs`. The compiler reads them while it builds the client bundles, so changing one requires recompiling, not just restarting - and setting one in `config/runtime.exs` has no effect on a release, whose bundles were compiled long before that file is evaluated. The one exception is `content_security_policy`, which is read for every page and works from `config/runtime.exs` too.
 
 #### Client Diagnostics
 
@@ -4198,6 +4200,16 @@ The maximum size of a generated JavaScript bundle, in bytes. A bundle larger tha
 
 The limit applies to the runtime bundle and to each page bundle.
 
+#### Security
+
+##### content_security_policy
+
+The Content Security Policy Hologram sends with every page a visit starts on. The default policy needs no configuration. See Content Security Policy in the Security documentation for the default, how to change it, and Trusted Types.
+
+```elixir
+config :hologram, content_security_policy: [img_src: [:self, "data:"]]
+```
+
 #### Environment Variables
 
 A few things are read from the environment rather than from config, because they are needed before the application environment is available or because they differ per machine:
@@ -4205,6 +4217,160 @@ A few things are read from the environment rather than from config, because they
 - `HOLOGRAM_ENV` - the environment Hologram runs as, falling back to `MIX_ENV`. It decides which defaults apply, e.g. `client_stacktraces` is enabled in `dev` and `test`, and disabled elsewhere.
 - `HOLOGRAM_START` - set it to `1` to start Hologram in `dev` and `test`, which is exactly what `mix holo` does. Outside those environments Hologram always starts.
 - `SECRET_KEY_BASE` - the secret Hologram signs with, required in every environment. In **embedded mode** (Hologram inside your Phoenix endpoint), `dev` and `test` fall back to the endpoint's configured `:secret_key_base`.
+
+### Security
+
+Hologram protects your pages against cross-site scripting and request forgery by default, with nothing to configure. This page lists what it does for you and where to read more.
+
+#### What Hologram Does for You
+
+- **Escaping.** Every value interpolated into text or a quoted attribute is HTML-escaped, so user input renders as text and can't become markup. Inside a `<script>` or `<style>` element, a value in quotes is escaped for that language too. See "Security: Automatic HTML Escaping" in the Template Syntax documentation.
+- **CSRF protection.** Every command carries a token tied to the user's session, and the server refuses a command without a valid one. See CSRF Protection below.
+- **Content Security Policy.** Hologram sends a strict policy with every page a visit starts on, so a script an attacker gets into the page doesn't run. See Content Security Policy below.
+- **Cookies.** A cookie you set is HTTP-only, secure and `SameSite=Lax` unless you say otherwise. Its value isn't signed, so a user can read and change it. Treat it like any other client-supplied data. See the Cookies documentation.
+- **Session.** Only the server writes session data, in `init/3`, commands and middleware, never by client code. A user can't edit it, though they can delete it or send back an older copy. Whether a user can read it depends on how it's stored, which the Session documentation describes.
+
+Escaping makes a value safe where it stands as text. It can't help when a value ends up somewhere that is itself code or a URL:
+
+- **An interpolation without quotes in a `<script>` or `<style>`**, as in `const id = {@id};`. A value like `1;alert(document.domain)` runs as code, and the page's nonce covers it, since the script is yours. Put the value in quotes, `"{@id}"`, and convert it in JavaScript, or pass it through JS interop.
+- **User input in code you pass to `JS.eval/1` or `JS.exec/1`**, as in `JS.exec("highlight('#{query}')")`. The string runs as code, with the page's nonce. Pass the value as an argument with `JS.call/3` instead. The `~JS` sigil doesn't interpolate, so its code is always yours.
+- **A user-supplied URL in `href` or `src`.** It can be a `javascript:` URL. Check the scheme before you render it.
+- **Attribute names or tag names taken from user input**, through an attribute spread or a dynamic tag. Build them from values you control.
+
+#### CSRF Protection
+
+A cross-site request forgery makes a logged-in user's browser send a request your app trusts, from a page on another site. Hologram guards commands against it. The page a visit starts on carries a token tied to the user's session, the runtime sends it with every command, and the server answers a command whose token doesn't match with a 403. The token is masked anew on every page load, so it never repeats in the markup.
+
+A page load carries no token, whether it's the first one of a visit or a navigation. Another site can link to any of your pages, and the browser loads it as the logged-in user. So don't let middleware or `init/3` act on the user's behalf, such as by deleting a post or sending an email. Do that in a command, which the token protects. A link whose URL carries its own secret, like an email confirmation link, is fine, since another site can't know it.
+
+The realtime stream needs no token either. The server refuses its handshake without a session, and accepts only the subscriptions it signed for that tab and user. In embedded mode, a native form that posts to a Phoenix route gets Phoenix's own CSRF protection.
+
+#### Content Security Policy
+
+Hologram sends a Content Security Policy with every page a visit starts on. The policy tells the browser which scripts may run, so the browser refuses a script an attacker gets into a page, through an escaping bug for example. It needs no configuration, and your templates need no changes.
+
+##### The Default Policy
+
+```
+base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; script-src 'nonce-R4nd0m...' 'strict-dynamic' 'unsafe-inline' https:
+```
+
+What each directive does:
+
+- `base-uri 'none'` - no `<base>` element, which could otherwise redirect the page's relative script URLs.
+- `form-action 'self'` - forms submit only to your own site, so an injected form can't send what users type somewhere else.
+- `frame-ancestors 'self'` - only your own pages can put your pages in an iframe, which stops clickjacking.
+- `object-src 'none'` - no plugins through `<object>` or `<embed>`.
+- `script-src 'nonce-...' 'strict-dynamic'` - a script runs only if it carries the page's nonce, a random value Hologram generates for every page load, or if a script carrying it loaded it. This is what stops injected scripts. `'unsafe-inline'` and `https:` are fallbacks for browsers too old for nonces or `'strict-dynamic'`, and every current browser ignores them.
+
+Nothing restricts images, fonts, styles, media, the iframes you embed, or the servers the page talks to, since none of them run code. Google Fonts, a CDN stylesheet, an analytics pixel, a YouTube embed and inline `style` attributes all work with no configuration.
+
+This is the strict policy Google and OWASP recommend. It passes Lighthouse, Google's CSP Evaluator and Mozilla's HTTP Observatory. Their one note is that it names no endpoint for violation reports, which only your app can provide. Configuring the Policy below shows how.
+
+##### Nonces
+
+Hologram puts the page's nonce on every `<script>` element it renders. That covers the ones in your layouts and templates, its own runtime and bundles, and the scripts the client creates when it navigates, so inline and third-party scripts in your templates work as written:
+
+```html
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXX"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+</script>
+```
+
+Hologram removes a nonce you write yourself on a `<script>`, `<style>` or `<link>`. The policy lists only the page's own nonce, so yours would never match.
+
+The default policy doesn't restrict styles, so Hologram adds no nonce to `<style>` and `<link>` elements. If you allow only styles that carry the page's nonce, Hologram adds it to every `<style>` and `<link>` it renders:
+
+```elixir
+config :hologram, content_security_policy: [style_src: [:self, :nonce]]
+```
+
+The same goes for `:nonce` in `style_src_elem`, or in `default_src` if you set neither `style_src_elem` nor `style_src`. The browser checks styles against the first of those three that your policy has, and so does Hologram.
+
+What the policy blocks, by design, is code that doesn't come through a nonced script: inline event handler attributes like `onclick="..."`, `javascript:` URLs, and scripts a third-party script writes into the page with `document.write`. Use Hologram's event bindings, such as `$click`, instead of handler attributes.
+
+JavaScript interop works under the policy without `'unsafe-eval'`. `JS.eval/1`, `JS.exec/1` and the `~JS` sigil don't use `eval()` or `new Function()`. Hologram runs their code as a script carrying the page's nonce, so the policy trusts it like your own scripts. The data Hologram sends between the server and the client travels as JSON.
+
+##### Configuring the Policy
+
+```elixir
+config :hologram, content_security_policy: [
+  form_action: [:self, "https://checkout.stripe.com"],
+  img_src: [:self, "https://images.example.com", "data:"]
+]
+```
+
+How the config maps to the header:
+
+- Each key is a directive, written with underscores: `img_src` for `img-src`.
+- Each value is a list of sources. An atom is a keyword, written quoted with hyphens: `:self` becomes `'self'`, `:unsafe_inline` becomes `'unsafe-inline'`, and `:nonce` becomes the page's nonce. A string is written as it is, such as a host, a scheme like `"data:"` or a sandbox flag. A tuple like `{:sha256, "..."}` is a hash source. `upgrade_insecure_requests` takes no sources, so it takes `true` instead of a list.
+- A directive you give replaces Hologram's default for that directive. The others keep their defaults. A directive Hologram doesn't set, like `img_src` above, is unrestricted until you give it, so giving one limits that kind of request to the sources you list.
+- `false` removes a directive. For example, `frame_ancestors: false` drops the policy's limit on who can embed your pages. Another header can still limit it, such as `x-frame-options`. In embedded mode, Phoenix's `put_secure_browser_headers` sends one.
+- `config :hologram, content_security_policy: false` sends no policy at all, and the page then carries no nonce.
+
+The policy is read for every page, so unlike the compiler settings it also works from `config/runtime.exs`. A malformed config fails your app's start with an error naming the entry. So does one under which no Hologram page could work, such as a `script_src` that allows neither the page's nonce nor inline scripts and your own origin, a `default_src: [:none]` that blocks the requests Hologram makes to your server, or a `sandbox` without `"allow-scripts"` and `"allow-same-origin"`.
+
+Common additions:
+
+```elixir
+config :hologram, content_security_policy: [
+  # The servers your client code talks to: your own, and an analytics service
+  connect_src: [:self, "https://analytics.example.com"],
+  # Your pages embedded on a partner's site
+  frame_ancestors: [:self, "https://partner.example.com"],
+  # Violation reports sent to an endpoint you run or a reporting service
+  report_uri: ["https://csp-reports.example.com"],
+  # Stylesheets and style elements limited to your own site and the page's nonce,
+  # with inline style attributes still allowed, which style_src alone would block
+  style_src: [:self, :nonce],
+  style_src_attr: [:unsafe_inline]
+]
+```
+
+Check the hosts a third-party service needs in its own docs before limiting a directive. An analytics service often sends to several domains.
+
+Most apps never change `script_src`. Every script Hologram renders carries the nonce, and with `'strict-dynamic'` the scripts those load are trusted too. When you do change it, restate the parts of the default you want to keep, since a directive you give replaces the default: `script_src: [:nonce, :strict_dynamic, :unsafe_inline, "https:", ...]`.
+
+Hologram's own forms submit through `$submit` and never post natively, so `form-action 'self'` doesn't affect them. A native `<form>` that posts to another site needs that site in `form_action`. So does a native form whose route answers with a redirect to another site, since browsers check the redirect too. Stripe Checkout's quickstart and some OAuth sign-in buttons work that way. Hologram doesn't need the form for either. For a checkout, a command creates the session and puts an action with its URL, and the action sends the browser there with `JS.set(:window, :location, url)`. For a sign-in, a plain link to the route works.
+
+##### Trusted Types
+
+Trusted Types extends the protection to the browser APIs that turn strings into code or markup, like `innerHTML` and `script.src`. When it's enforced, the browser refuses a plain string there and takes only a value that a named policy created. Turn it on with:
+
+```elixir
+config :hologram, content_security_policy: [require_trusted_types_for: [:script]]
+```
+
+Hologram's runtime writes its scripts through a Trusted Types policy named `hologram`, so it keeps working under enforcement. A third-party script that writes raw HTML needs a `default` policy of your own. Without a `trusted_types` directive any policy name is allowed. When you give one to limit the names, Hologram adds `hologram` to it:
+
+```elixir
+config :hologram, content_security_policy: [
+  require_trusted_types_for: [:script],
+  trusted_types: ["default"]
+]
+```
+
+Under enforcement the browser also refuses a few attributes your templates can write, on elements Hologram creates on the client: `srcdoc` on an `<iframe>`, `on*` event handler attributes, which the policy blocks anyway, and `href` on an SVG `<script>`.
+
+##### Who Sends the Policy
+
+- On a page a visit starts on, Hologram sends exactly the policy the config describes. In embedded mode, it replaces any `content-security-policy` header a plug ahead of it set. Hologram leaves a `content-security-policy-report-only` header alone. One without the page's nonce reports every Hologram script.
+- Navigations, commands and the realtime stream carry no policy, since the browser keeps the one of the page the visit started on.
+- With `content_security_policy: false`, Hologram sends no policy. In embedded mode, it leaves alone any policy a plug ahead of it set. Such a policy carries no nonce, so it blocks Hologram's scripts unless it allows them another way.
+- `put_response_header(server, "content-security-policy", ...)` raises in a page, a layout, a component or a command. The policy belongs in config. The browser applies the policy of the page a visit starts on, and Hologram's navigation keeps it, so a policy one page set would hold only when that page came first. A response that middleware ends with `put_status` can carry one.
+
+#### What the Client Can Fake
+
+Everything a request carries comes from the client and can be faked: a page's params, the module, name, target and params of a command, the request headers, the cookies, and the `host`. Users can read and change client code too, since it runs in their browser, so authorize on the server, never in an action alone. Decide who may see a page in its middleware or `init/3`, and who may run a command in middleware or in the command itself.
+
+A command can be sent to any component, not only through the buttons a page shows, and only the middleware of the component it names runs. A gate on a page doesn't cover its components' commands, so attach it to each component that needs it. The Middleware documentation shows how.
+
+The `host` is client-supplied even with no proxy in front. Validate it against an allowlist before using it for a security decision, such as picking a tenant, and never build a security-sensitive URL from it, such as a password reset link in an email.
+
+#### Reporting Vulnerabilities
+
+To report a security vulnerability in Hologram, see the Reporting Vulnerabilities page.
 
 ### Bundling
 

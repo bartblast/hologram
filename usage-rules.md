@@ -95,6 +95,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - A layout template **must** include `<slot />` where page content will be inserted.
 - The layout's component ID (cid) is always `"layout"`. Use `target: "layout"` to target actions at it.
 - Pass props to layouts via `layout MyApp.MainLayout, prop: value` or via `put_state/2` in the page's `init/3`.
+- `<script>` elements in layouts and templates get the page's Content Security Policy nonce automatically, so inline and third-party scripts need nothing. Don't write a `nonce` attribute yourself, since Hologram drops it. The policy blocks inline `on*` handler attributes and `javascript:` URLs, so use event bindings like `$click`.
 
 ## Events
 
@@ -205,7 +206,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Read the incoming request as `Server` struct fields: `method`, `scheme`, `host`, `port`, `path`, `query`, `raw_query`, `ip`. These are **not** authenticated - `host` is client-supplied and spoofable, so validate it against an allowlist before any security decision and never build security-sensitive URLs (password-reset links, emails) from it.
 - Set or clear the authenticated user with `put_user_id(server, user_id)` / `delete_user_id(server)` (persisted to the session) - the canonical login/logout mechanism.
 - Stop the chain by setting a status - `put_status(server, :forbidden)`, `put_status(server, 403)`, or `put_redirect(server, MyApp.LoginPage)`. There is no separate `halt`: a non-nil status is the signal, checked after each middleware returns (it does not abort on the spot).
-- Response headers set with `put_response_header` / `append_response_header` go out with every response the request ends in - the rendered page, a navigation, a command's reply, or a terminal response - not only with terminal ones. A `content-type` describes the body, so it is allowed only on a response that middleware ends with `put_status`. Anywhere else it raises.
+- Response headers set with `put_response_header` / `append_response_header` go out with every response the request ends in - the rendered page, a navigation, a command's reply, or a terminal response - not only with terminal ones. A `content-type` describes the body, and a `content-security-policy` is set in config, so each is allowed only on a response that middleware ends with `put_status`. Anywhere else it raises.
 - Pass data downstream with `put_stash(server, :key, value)`, read later with `get_stash` in middleware, `init/3`, or commands.
 - Dispatch is flat: page middleware covers the page render and the page's own commands; component middleware covers only that component's commands. A page's middleware does **not** cover its components' commands - attach the gate to the component (or a shared composite) to protect them.
 - Compose without a global registry: a base module's `__using__` can inject `middleware` lines into every page/component that uses it (parent first, then child). There is no forced global middleware list - app-wide concerns are plugged into the pages/components that need them.
@@ -255,6 +256,8 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Instantiate a class: `JS.new(:Calculator, [10])`. Chain with `|>`: `:Calculator |> JS.new([10]) |> JS.call(:add, [5])`.
 - Get/set/delete properties: `JS.get(obj, :value)`, `JS.set(obj, :value, 20)`, `JS.delete(obj, :value)`. Inspect values: `JS.typeof(obj)`, `JS.instanceof(obj, :Class)`.
 - Evaluate JS: `JS.eval("3 + 4")`. Execute JS: `JS.exec("const x = 2; return x + 3;")`. Inline JS: `~JS"""..."""`.
+- `JS.eval`, `JS.exec` and `~JS` work under Hologram's Content Security Policy and need no `'unsafe-eval'`.
+- Never build `JS.eval` / `JS.exec` code from user input, since it runs as code with the page's nonce. Pass values with `JS.call/3` instead.
 - Async: JS Promises become Elixir Tasks. Use `Task.await/1` to get the result.
 - Dispatch actions from JS: `Hologram.dispatchAction("action_name", "page", {key: value})`. Available immediately - calls before the runtime loads are queued and replayed on mount (safe for inline `<script>`).
 - Dispatch DOM events from Elixir: `JS.dispatch_event(target, "my:event", detail: %{value: 42})`.
@@ -264,10 +267,11 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 
 ## Configuration
 
-- Hologram settings live under `:hologram` in `config/config.exs`, or in an environment-specific file like `config/prod.exs`. They are read while the client bundles compile, so `config/runtime.exs` is too late and changing one requires a recompile, not just a restart.
+- Hologram settings live under `:hologram` in `config/config.exs`, or in an environment-specific file like `config/prod.exs`. They are read while the client bundles compile, so `config/runtime.exs` is too late and changing one requires a recompile, not just a restart. The exception is `:content_security_policy`, which is read per page.
 - `:client_stacktraces` defaults to `true` in `dev`/`test` and `false` elsewhere. `:client_error_overlay` follows it unless set on its own - set it to `false` to keep the console report without showing an error screen to users.
 - Enabling `:client_stacktraces` outside `dev`/`test` puts argument values, source paths and line numbers in front of users, and makes the compiled Elixir in a bundle roughly a third larger over the wire.
 - `:max_bundle_size` (bytes) fails the build when a generated bundle grows past it. Unset by default.
+- `:content_security_policy` - Hologram sends a strict policy by default: `script-src` by nonce with `'strict-dynamic'`, `object-src 'none'`, `base-uri 'none'`, `form-action 'self'` and `frame-ancestors 'self'`. Configure it as a keyword list of directives with underscores, as in `img_src: [:self, "data:"]`. Atoms are keywords such as `:self`, `:nonce` and `:unsafe_inline`, strings are written as they are, a directive you give replaces the default, `false` removes one, and `content_security_policy: false` turns the policy off. It's read per page, so it also works from `config/runtime.exs`. Turn on Trusted Types with `require_trusted_types_for: [:script]`. Don't set `content-security-policy` with `put_response_header`, except on a response that middleware ends with `put_status`.
 
 ## Umbrella Projects
 
