@@ -3002,8 +3002,8 @@ Understanding when to use Hologram's session system versus direct cookie managem
 
 - **Session System** - Automatic security handling, data a user can't edit, managed through session functions
 - **Direct Cookie Management** - Full control over cookie behavior, data encoding, and security settings
-- **Data Access** - Session data cannot be read by client-side code; direct cookies can be configured for client access
-- **Security** - Sessions provide automatic security; direct cookies require manual security configuration
+- **Data Access** - Client-side code can't read session data, and direct cookies can be configured for client access
+- **Security** - Sessions handle security automatically, and direct cookies need manual security configuration
 - **Use Cases** - Use sessions for data a user mustn't edit, and direct cookies when you need client-side access or specific cookie behavior
 
 #### Common Use Cases
