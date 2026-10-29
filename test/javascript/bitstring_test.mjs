@@ -1279,6 +1279,92 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("encodeMapKey()", () => {
+    it("binary that is not a valid string", () => {
+      const bitstring = Bitstring.fromBytes([255]);
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "b0ff");
+    });
+
+    it("bitstring with leftover bits", () => {
+      const bitstring = Bitstring.fromBytes([1, 52, 103]);
+      bitstring.leftoverBitCount = 5;
+
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "b5013467");
+    });
+
+    it("string", () => {
+      const bitstring = Type.bitstring("Hologram");
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "s8:Hologram");
+    });
+
+    it("string, beyond ASCII", () => {
+      const bitstring = Type.bitstring("zażółć 🎉");
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "s9:zażółć 🎉");
+    });
+
+    it("string, built from bytes", () => {
+      const bitstring = Bitstring.fromBytes([72, 111, 108, 111]);
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "s4:Holo");
+    });
+
+    it("string, empty", () => {
+      const bitstring = Type.bitstring("");
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "s0:");
+    });
+
+    it("string holding commas, parentheses and a colon", () => {
+      const bitstring = Type.bitstring("a,sb),s1:c");
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "s10:a,sb),s1:c");
+    });
+
+    // Half of a surrogate pair is not valid text in any encoding. The encoder writes U+FFFD for
+    // it, so that is the character the key holds.
+    it("string holding a lone surrogate", () => {
+      const bitstring = Type.bitstring("a\uD800b");
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "s3:a\uFFFDb");
+    });
+
+    it("string starting with a byte order mark", () => {
+      const bitstring = Type.bitstring("\uFEFFA");
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "b0efbbbf41");
+    });
+
+    it("string starting with a byte order mark, built from bytes", () => {
+      const bitstring = Bitstring.fromBytes([0xef, 0xbb, 0xbf, 0x41]);
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "b0efbbbf41");
+    });
+
+    // The text keeps its mark, which the bytes would lose if the text were taken from them again
+    // for the surrogate.
+    it("string starting with a byte order mark and holding a lone surrogate", () => {
+      const bitstring = Type.bitstring("\uFEFF\uD800z");
+      const result = Bitstring.encodeMapKey(bitstring);
+
+      assert.equal(result, "b0efbbbfefbfbd7a");
+      assert.equal(bitstring.text, "\uFEFF\uD800z");
+    });
+  });
+
   describe("fromBits()", () => {
     it("empty", () => {
       const result = Bitstring.fromBits([]);
@@ -5649,6 +5735,16 @@ describe("Bitstring", () => {
       const result = Bitstring.serialize(bitstring);
 
       assert.equal(result, "b0efbbbf41");
+    });
+
+    // The text keeps its mark, which the bytes would lose if the text were taken from them again
+    // for the surrogate.
+    it("string starting with a byte order mark and holding a lone surrogate", () => {
+      const bitstring = Type.bitstring("\uFEFF\uD800z");
+      const result = Bitstring.serialize(bitstring);
+
+      assert.equal(result, "b0efbbbfefbfbd7a");
+      assert.equal(bitstring.text, "\uFEFF\uD800z");
     });
   });
 

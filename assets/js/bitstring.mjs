@@ -275,6 +275,17 @@ export default class Bitstring {
     return codePoint;
   }
 
+  // The map key of a bitstring (see Type.encodeMapKey()). Text carries its length, so text holding
+  // a comma or a parenthesis can't run into the next item of a list or tuple key and make two
+  // different keys equal. A bitstring that isn't text keys by its hex form, which holds neither.
+  static encodeMapKey(bitstring) {
+    const text = $.#serializableText(bitstring);
+
+    return text === null
+      ? $.#serializeAsHex(bitstring)
+      : `s${text.length}:${text}`;
+  }
+
   static fromBits(bits) {
     const bitCount = bits.length;
     const byteCount = Math.ceil(bitCount / 8);
@@ -713,27 +724,10 @@ export default class Bitstring {
   }
 
   // A bitstring that is a valid string travels as the string itself, any other one as hex.
-  //
-  // A string holding a lone surrogate, half of a pair, is not valid text in any encoding: JSON
-  // escapes it and the server refuses it. Its bytes are valid, since the encoder writes U+FFFD for
-  // the surrogate, so the text is taken from the bytes again, which also makes the bitstring equal
-  // to one built from those bytes. A leading byte order mark is the one sequence the decoder drops
-  // from the text, so a bitstring starting with one travels as hex, where nothing is dropped.
   static serialize(bitstring) {
-    if ($.isText(bitstring)) {
-      if (!bitstring.text.isWellFormed()) {
-        $.maybeSetBytesFromText(bitstring);
-        bitstring.text = $.#decoder.decode(bitstring.bytes);
-      }
+    const text = $.#serializableText(bitstring);
 
-      if (!$.#hasByteOrderMark(bitstring)) {
-        return `s${bitstring.text}`;
-      }
-    }
-
-    $.maybeResolveHex(bitstring);
-
-    return `b${bitstring.leftoverBitCount}${bitstring.hex}`;
+    return text === null ? $.#serializeAsHex(bitstring) : `s${text}`;
   }
 
   static takeChunk(bitstring, chunkOffset, chunkSize) {
@@ -1424,6 +1418,35 @@ export default class Bitstring {
       dataView.setUint8(0, highByte);
       dataView.setUint8(1, lowByte);
     }
+  }
+
+  // The text a bitstring is written as, or null when it is written as hex.
+  //
+  // A leading byte order mark is the one sequence the decoder drops from the text, so a bitstring
+  // starting with one is written as hex, where nothing is dropped. It is checked first, since the
+  // text taken from the bytes below would have lost the mark.
+  //
+  // A string holding a lone surrogate, half of a pair, is not valid text in any encoding: JSON
+  // escapes it and the server refuses it. Its bytes are valid, since the encoder writes U+FFFD for
+  // the surrogate, so the text is taken from the bytes again, which also makes the bitstring equal
+  // to one built from those bytes.
+  static #serializableText(bitstring) {
+    if (!$.isText(bitstring) || $.#hasByteOrderMark(bitstring)) {
+      return null;
+    }
+
+    if (!bitstring.text.isWellFormed()) {
+      $.maybeSetBytesFromText(bitstring);
+      bitstring.text = $.#decoder.decode(bitstring.bytes);
+    }
+
+    return bitstring.text;
+  }
+
+  static #serializeAsHex(bitstring) {
+    $.maybeResolveHex(bitstring);
+
+    return `b${bitstring.leftoverBitCount}${bitstring.hex}`;
   }
 
   static #toIntegerFromBitstringWithLeftoverBits(
