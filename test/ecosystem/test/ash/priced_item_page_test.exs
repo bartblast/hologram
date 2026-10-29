@@ -37,7 +37,10 @@ defmodule HologramEcosystemTests.Ash.PricedItemPageTest do
     assert money_digests != []
 
     for digest <- money_digests do
-      chunk_bundle_path = Regex.escape(RouterHelpers.chunk_bundle_path(digest))
+      chunk_bundle_path =
+        digest
+        |> RouterHelpers.chunk_bundle_path()
+        |> Regex.escape()
 
       assert document =~ ~r'<script nonce="[^"]+" async src="#{chunk_bundle_path}"></script>'
     end
