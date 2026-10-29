@@ -2,9 +2,16 @@ defmodule Hologram.Application do
   @moduledoc false
 
   use Application
+  alias Hologram.Runtime.ContentSecurityPolicy
 
   @impl Application
   def start(_type, _args) do
+    # Before anything starts, so a policy no page could be served under fails the boot of the app
+    # rather than its first request.
+    if Hologram.enabled?() do
+      ContentSecurityPolicy.validate_config!()
+    end
+
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]
 
     Hologram.env()

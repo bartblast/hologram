@@ -1,10 +1,76 @@
 defmodule Hologram.Runtime.ContentSecurityPolicyTest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.BasicCase, async: false
   import Hologram.Runtime.ContentSecurityPolicy
 
-  describe "nonced_elements/0" do
-    test "names every element HTML gives a nonce attribute to" do
-      assert nonced_elements() == ["link", "script", "style"]
+  @default_directives [
+    base_uri: [:none],
+    form_action: [:self],
+    frame_ancestors: [:self],
+    object_src: [:none],
+    script_src: [:nonce, :strict_dynamic, :unsafe_inline, "https:"]
+  ]
+
+  setup do
+    original_config = Application.fetch_env(:hologram, :content_security_policy)
+
+    on_exit(fn ->
+      case original_config do
+        {:ok, config} -> Application.put_env(:hologram, :content_security_policy, config)
+        :error -> Application.delete_env(:hologram, :content_security_policy)
+      end
+    end)
+
+    Application.delete_env(:hologram, :content_security_policy)
+  end
+
+  @source_message "but a source is visible ASCII without a semicolon or a comma, and not empty"
+
+  defp put_config(config) do
+    Application.put_env(:hologram, :content_security_policy, config)
+  end
+
+  defp unbootable_scripts_message(name) do
+    "config :hologram, :content_security_policy describes a policy no Hologram page could work " <>
+      "under: #{inspect(name)}, the directive governing script elements, names no :nonce, and " <>
+      "allows the inline shell script through :unsafe_inline together with :self or a source " <>
+      "the runtime is served from only without :strict_dynamic and without a hash, which make " <>
+      "browsers ignore :unsafe_inline"
+  end
+
+  describe "directives/0" do
+    test "the defaults, with no config" do
+      assert directives() == @default_directives
+    end
+
+    test "a directive the config gives replaces the default for it" do
+      put_config(form_action: [:self, "https://checkout.stripe.com"])
+
+      assert directives()[:form_action] == [:self, "https://checkout.stripe.com"]
+    end
+
+    test "a directive the config adds joins the defaults, sorted by name" do
+      put_config(img_src: [:self, "data:"])
+
+      assert Keyword.keys(directives()) == [
+               :base_uri,
+               :form_action,
+               :frame_ancestors,
+               :img_src,
+               :object_src,
+               :script_src
+             ]
+    end
+
+    test "a directive set to false is removed, the others kept" do
+      put_config(frame_ancestors: false)
+
+      assert directives() == Keyword.delete(@default_directives, :frame_ancestors)
+    end
+
+    test "no policy when the config is false" do
+      put_config(false)
+
+      assert directives() == nil
     end
   end
 
@@ -18,6 +84,306 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
 
     test "differs between calls" do
       assert generate_nonce() != generate_nonce()
+    end
+  end
+
+  describe "header_value/2" do
+    test "the defaults, with the nonce" do
+      assert header_value(@default_directives, "R4nd0m") ==
+               "base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; " <>
+                 "script-src 'nonce-R4nd0m' 'strict-dynamic' 'unsafe-inline' https:"
+    end
+
+    test "a keyword atom, quoted with hyphens" do
+      assert header_value([script_src: [:wasm_unsafe_eval]], "R4nd0m") ==
+               "script-src 'wasm-unsafe-eval'"
+    end
+
+    test "the nonce, in every directive naming it" do
+      assert header_value([script_src: [:nonce], style_src: [:self, :nonce]], "R4nd0m") ==
+               "script-src 'nonce-R4nd0m'; style-src 'self' 'nonce-R4nd0m'"
+    end
+
+    test "a string, as it is" do
+      assert header_value([img_src: ["https://images.example.com", "data:"]], "R4nd0m") ==
+               "img-src https://images.example.com data:"
+    end
+
+    test "a hash tuple, as a hash source" do
+      assert header_value([style_src: [{:sha256, "YWJj"}]], "R4nd0m") ==
+               "style-src 'sha256-YWJj'"
+    end
+
+    test "a directive with no sources, as its bare name" do
+      assert header_value([upgrade_insecure_requests: []], "R4nd0m") ==
+               "upgrade-insecure-requests"
+    end
+  end
+
+  describe "nonced_elements/0" do
+    test "script elements under the defaults" do
+      assert nonced_elements() == ["script"]
+    end
+
+    test "link and style elements too when style_src names the nonce" do
+      put_config(style_src: [:self, :nonce])
+
+      assert nonced_elements() == ["link", "script", "style"]
+    end
+
+    test "follows script_src_elem over script_src" do
+      put_config(script_src_elem: [:self, :unsafe_inline])
+
+      assert nonced_elements() == []
+    end
+
+    test "follows style_src_elem over style_src" do
+      put_config(style_src: [:self], style_src_elem: [:nonce])
+
+      assert nonced_elements() == ["link", "script", "style"]
+    end
+
+    test "follows default_src when script_src is removed" do
+      put_config(default_src: [:self, :nonce], script_src: false)
+
+      assert nonced_elements() == ["link", "script", "style"]
+    end
+
+    test "none when the policy is off" do
+      put_config(false)
+
+      assert nonced_elements() == []
+    end
+  end
+
+  describe "validate_config!/0" do
+    test "passes for no config" do
+      assert validate_config!() == :ok
+    end
+
+    test "passes for false" do
+      put_config(false)
+
+      assert validate_config!() == :ok
+    end
+
+    test "passes for a config using every kind of value" do
+      put_config(
+        frame_ancestors: false,
+        img_src: [:self, "data:"],
+        sandbox: ["allow-same-origin", "allow-scripts"],
+        style_src: [:self, {:sha384, "YWJj"}, :unsafe_hashes]
+      )
+
+      assert validate_config!() == :ok
+    end
+
+    test "passes for a policy without a nonce that lets the runtime load from its own origin" do
+      put_config(script_src: [:self, :unsafe_inline])
+
+      assert validate_config!() == :ok
+    end
+
+    test "raises for a value that is not a keyword list" do
+      put_config(%{img_src: [:self]})
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy must be a keyword list of directives or false, but received %{img_src: [:self]}",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for an unknown directive" do
+      put_config(img_srcc: [:self])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy names an unknown directive: :img_srcc",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a directive given more than once" do
+      put_config(img_src: [:self], img_src: ["data:"])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :img_src directive more than once",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a directive value that is not a list" do
+      put_config(img_src: :self)
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :img_src directive :self, but a directive takes a list of sources or false",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for an unknown keyword" do
+      put_config(img_src: [:selff])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :img_src directive an unknown keyword: :selff",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a source that is neither a keyword, a string nor a hash" do
+      put_config(img_src: [123])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :img_src directive the source 123, but a source is a keyword atom, a string, or a {:sha256 | :sha384 | :sha512, base64} tuple",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a hash of an unknown algorithm" do
+      put_config(style_src: [{:md5, "YWJj"}])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :style_src directive the source {:md5, "YWJj"}, but a source is a keyword atom, a string, or a {:sha256 | :sha384 | :sha512, base64} tuple),
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a hash whose digest is not base64" do
+      put_config(style_src: [{:sha256, "not base64!"}])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :style_src directive a :sha256 hash whose digest "not base64!" is not base64),
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a hash whose digest ends in a newline" do
+      put_config(style_src: [{:sha256, "YWJj\n"}])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :style_src directive a :sha256 hash whose digest "YWJj\\n" is not base64),
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a hash whose digest has more padding than base64 takes" do
+      put_config(style_src: [{:sha256, "YWJj==="}])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :style_src directive a :sha256 hash whose digest "YWJj===" is not base64),
+                   fn -> validate_config!() end
+    end
+
+    # A source is written into the header as it is, so these would end it early and start another
+    # source or directive.
+    test "raises for a source holding a semicolon" do
+      put_config(img_src: ["https://a.com; script-src *"])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :img_src directive the source "https://a.com; script-src *", but a source is visible ASCII without a semicolon or a comma, and not empty),
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a source holding a comma" do
+      put_config(img_src: ["https://a.com,https://b.com"])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :img_src directive the source "https://a.com,https://b.com", #{@source_message}),
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a source holding whitespace" do
+      put_config(img_src: ["https://a.com https://b.com"])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :img_src directive the source "https://a.com https://b.com", #{@source_message}),
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a source holding a control character" do
+      source = "https://a.com\0"
+      put_config(img_src: [source])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :img_src directive the source #{inspect(source)}, #{@source_message}",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a source holding a character beyond ASCII" do
+      put_config(img_src: ["https://ä.com"])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :img_src directive the source "https://ä.com", #{@source_message}),
+                   fn -> validate_config!() end
+    end
+
+    test "raises for an empty source" do
+      put_config(img_src: [""])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :img_src directive the source "", but a source is visible ASCII without a semicolon or a comma, and not empty),
+                   fn -> validate_config!() end
+    end
+
+    test "passes for a policy naming the nonce through default_src alone" do
+      put_config(default_src: [:self, :nonce], script_src: false)
+
+      assert validate_config!() == :ok
+    end
+
+    test "raises for a script policy without a nonce and with 'unsafe-inline' alone" do
+      put_config(script_src: [:unsafe_inline])
+
+      assert_error ArgumentError, unbootable_scripts_message(:script_src), fn ->
+        validate_config!()
+      end
+    end
+
+    test "raises for a script element policy that overrides a bootable script policy" do
+      put_config(script_src_elem: [:self])
+
+      assert_error ArgumentError, unbootable_scripts_message(:script_src_elem), fn ->
+        validate_config!()
+      end
+    end
+
+    # A browser ignores 'unsafe-inline' and 'self' beside 'strict-dynamic'.
+    test "raises for a script policy without a nonce whose 'unsafe-inline' 'strict-dynamic' voids" do
+      put_config(script_src: [:self, :strict_dynamic, :unsafe_inline])
+
+      assert_error ArgumentError, unbootable_scripts_message(:script_src), fn ->
+        validate_config!()
+      end
+    end
+
+    # A browser ignores 'unsafe-inline' beside a hash, and no hash can allow the shell, which holds
+    # the per-page nonce.
+    test "raises for a script policy without a nonce whose 'unsafe-inline' a hash voids" do
+      put_config(script_src: [:self, :unsafe_inline, {:sha256, "YWJj"}])
+
+      assert_error ArgumentError, unbootable_scripts_message(:script_src), fn ->
+        validate_config!()
+      end
+    end
+
+    test "raises for a connection policy that doesn't allow the app's own server" do
+      put_config(default_src: [:none])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy describes a policy no Hologram page could work under: :default_src, the directive governing the connections the runtime makes to its server, allows neither :self nor a source naming the server",
+                   fn -> validate_config!() end
+    end
+
+    test "passes for a connection policy that allows the app's own server" do
+      put_config(default_src: [:none], connect_src: [:self])
+
+      assert validate_config!() == :ok
+    end
+
+    test "raises for a sandbox without allow-scripts and allow-same-origin" do
+      put_config(sandbox: [])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy describes a policy no Hologram page could work under: :sandbox lacks "allow-same-origin" and "allow-scripts", which the runtime needs to run and to reach its server),
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a sandbox without allow-same-origin" do
+      put_config(sandbox: ["allow-scripts"])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy describes a policy no Hologram page could work under: :sandbox lacks "allow-same-origin", which the runtime needs to run and to reach its server),
+                   fn -> validate_config!() end
     end
   end
 end

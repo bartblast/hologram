@@ -61,5 +61,39 @@ defmodule Hologram.ApplicationTest do
       children = Supervisor.which_children(pid)
       assert children == []
     end
+
+    test "fails on a malformed content security policy config" do
+      System.put_env("HOLOGRAM_START", "1")
+
+      original_config = Application.fetch_env(:hologram, :content_security_policy)
+      Application.put_env(:hologram, :content_security_policy, img_srcc: [:self])
+
+      on_exit(fn ->
+        case original_config do
+          {:ok, config} -> Application.put_env(:hologram, :content_security_policy, config)
+          :error -> Application.delete_env(:hologram, :content_security_policy)
+        end
+      end)
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy names an unknown directive: :img_srcc",
+                   fn -> start(:my_app, :temporary) end
+    end
+
+    test "leaves a malformed content security policy config alone when Hologram is disabled" do
+      System.delete_env("HOLOGRAM_START")
+
+      original_config = Application.fetch_env(:hologram, :content_security_policy)
+      Application.put_env(:hologram, :content_security_policy, img_srcc: [:self])
+
+      on_exit(fn ->
+        case original_config do
+          {:ok, config} -> Application.put_env(:hologram, :content_security_policy, config)
+          :error -> Application.delete_env(:hologram, :content_security_policy)
+        end
+      end)
+
+      assert {:ok, _pid} = start(:my_app, :temporary)
+    end
   end
 end
