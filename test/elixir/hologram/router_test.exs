@@ -95,12 +95,12 @@ defmodule Hologram.RouterTest do
         |> call([])
 
       assert Jason.decode!(conn.resp_body) == %{
-               "action" => ~s'Type.atom("nil")',
+               "action" => [4, "anil"],
                "chunks" => [],
-               "selfEchoes" => "Type.list([])",
+               "selfEchoes" => [4, %{"t" => "l", "d" => []}],
                "status" => 1,
-               "subReceiptAdds" => "Type.list([])",
-               "subReceiptDrops" => "Type.list([])"
+               "subReceiptAdds" => [4, %{"t" => "l", "d" => []}],
+               "subReceiptDrops" => [4, %{"t" => "l", "d" => []}]
              }
     end
   end

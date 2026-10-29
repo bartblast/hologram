@@ -1,6 +1,8 @@
 defmodule Hologram.Runtime.ContentSecurityPolicy do
   @moduledoc false
 
+  @config_error_prefix "config :hologram, :content_security_policy"
+
   # Strict CSP as Google and OWASP publish it: scripts run by nonce, and those may load more
   # ('strict-dynamic'), which is what stops injected scripts, and object-src and base-uri close the
   # two classic ways around that. 'unsafe-inline' is the fallback for browsers without nonces,
@@ -228,12 +230,15 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
     end
   end
 
+  # Each raises itself rather than through the other, since a function that only calls one which
+  # never returns is one Dialyzer reports as having no local return.
   defp raise_config_error(message) do
-    raise ArgumentError, "config :hologram, :content_security_policy #{message}"
+    raise ArgumentError, "#{@config_error_prefix} #{message}"
   end
 
   defp raise_unbootable_error(reason) do
-    raise_config_error("describes a policy no Hologram page could work under: #{reason}")
+    raise ArgumentError,
+          "#{@config_error_prefix} describes a policy no Hologram page could work under: #{reason}"
   end
 
   defp render_name(name) do
