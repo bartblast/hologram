@@ -2,6 +2,7 @@
 
 import App from "./app.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import TrustedTypes from "./trusted_types.mjs";
 
 // Turns JavaScript code given as a string into a function, without eval() or new Function(), which a
 // Content Security Policy without 'unsafe-eval' blocks. The code is placed in a script element the
@@ -38,7 +39,9 @@ export default class ScriptEvaluator {
 
     // Placed as text rather than as markup, so no HTML parsing happens and code holding "</script>"
     // cannot end the element.
-    script.textContent = `window.${$.SLOT} = function (context, Type, Interpreter) {\n${code}\n};`;
+    script.textContent = TrustedTypes.script(
+      `window.${$.SLOT} = function (context, Type, Interpreter) {\n${code}\n};`,
+    );
 
     let parseError = null;
 

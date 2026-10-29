@@ -8,6 +8,7 @@ import {
 } from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
+import TrustedTypes from "../../assets/js/trusted_types.mjs";
 import Vdom from "../../assets/js/vdom.mjs";
 
 import {init} from "../../assets/js/vendor/snabbdom/build/index.js";
@@ -418,7 +419,8 @@ describe("Vdom", () => {
             "script",
             {
               key: "__hologramScript__:/fresh.js",
-              attrs: {src: "/fresh.js"},
+              attrs: {},
+              hologramScript: {code: null, src: "/fresh.js"},
             },
             [],
           ),
@@ -441,7 +443,11 @@ describe("Vdom", () => {
     it("keeps a script whose rendered key matches, so it is not re-executed", () => {
       const rendered = vnode(
         "script",
-        {key: "__hologramScript__:my_src", attrs: {src: "my_src"}},
+        {
+          key: "__hologramScript__:my_src",
+          attrs: {},
+          hologramScript: {code: null, src: "my_src"},
+        },
         [],
       );
 
@@ -454,6 +460,39 @@ describe("Vdom", () => {
       patched();
 
       assert.equal(container.querySelector("script"), serverScript);
+      assert.equal(serverScript.getAttribute("src"), "my_src");
+    });
+
+    // The script carries its code in data.hologramScript on both sides, so the patch leaves the
+    // text the server sent where it is.
+    it("keeps the code of an inline script the server sent", () => {
+      const rendered = vnode(
+        "script",
+        {
+          key: "__hologramScript__:go();",
+          attrs: {type: "text/javascript"},
+          hologramScript: {code: "go();", src: null},
+        },
+        [],
+      );
+
+      const {container, mirrored, patched} = adopt(
+        [rendered],
+        '<script type="text/javascript">go();</script>',
+      );
+
+      const serverScript = container.querySelector("script");
+
+      assert.deepStrictEqual(mirrored.children[0].data.hologramScript, {
+        code: "go();",
+        src: null,
+      });
+
+      patched();
+
+      assert.equal(container.querySelector("script"), serverScript);
+      assert.equal(serverScript.textContent, "go();");
+      assert.equal(serverScript.getAttribute("type"), "text/javascript");
     });
 
     it("leaves the nonce of a server-rendered element in place", () => {
@@ -513,6 +552,94 @@ describe("Vdom", () => {
 
     it("sets no nonce when the document has none", () => {
       assert.equal(create("script").nonce, "");
+    });
+
+    describe("a created script", () => {
+      const createScript = (hologramScript) => {
+        const container = document.createElement("div");
+        document.body.appendChild(container);
+
+        const rendered = vnode("div", {attrs: {}}, [
+          vnode("script", {attrs: {}, hologramScript}, []),
+        ]);
+
+        patch(container, rendered);
+
+        return container.firstChild;
+      };
+
+      afterEach(() => {
+        delete globalThis.trustedTypes;
+        TrustedTypes.cachedPolicy = undefined;
+      });
+
+      it("gets its URL", () => {
+        const script = createScript({code: null, src: "/app.js"});
+
+        assert.equal(script.getAttribute("src"), "/app.js");
+        assert.equal(script.textContent, "");
+      });
+
+      it("gets its code", () => {
+        const script = createScript({code: "go();", src: null});
+
+        assert.isFalse(script.hasAttribute("src"));
+        assert.equal(script.textContent, "go();");
+      });
+
+      it("gets its code inside an SVG, whose script element has no text property", () => {
+        const container = document.createElement("div");
+        document.body.appendChild(container);
+
+        const svgNs = "http://www.w3.org/2000/svg";
+
+        const rendered = vnode("div", {attrs: {}}, [
+          vnode("svg", {attrs: {}, ns: svgNs}, [
+            vnode(
+              "script",
+              {
+                attrs: {},
+                hologramScript: {code: "go();", src: null},
+                ns: svgNs,
+              },
+              [],
+            ),
+          ]),
+        ]);
+
+        patch(container, rendered);
+
+        const script = container.querySelector("script");
+
+        assert.equal(script.namespaceURI, svgNs);
+        assert.equal(script.textContent, "go();");
+      });
+
+      it("gets its URL and code through the Trusted Types policy", () => {
+        const assigned = [];
+
+        TrustedTypes.cachedPolicy = undefined;
+
+        globalThis.trustedTypes = {
+          createPolicy: (_name, rules) => ({
+            createScript: (code) => {
+              assigned.push(["script", code]);
+              return rules.createScript(code);
+            },
+            createScriptURL: (url) => {
+              assigned.push(["scriptUrl", url]);
+              return rules.createScriptURL(url);
+            },
+          }),
+        };
+
+        createScript({code: "go();", src: "/app.js"});
+
+        assert.deepStrictEqual(assigned, [
+          ["scriptUrl", "/app.js"],
+          ["script", "go();"],
+        ]);
+      });
     });
   });
 });

@@ -13,6 +13,7 @@ import {VirtualConsole} from "../../assets/node_modules/jsdom/lib/api.js";
 import App from "../../assets/js/app.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import ScriptEvaluator from "../../assets/js/script_evaluator.mjs";
+import TrustedTypes from "../../assets/js/trusted_types.mjs";
 
 defineRuntimeGlobals();
 
@@ -70,6 +71,34 @@ describe("ScriptEvaluator", () => {
 
       assert.equal(appendedElements.length, 1);
       assert.equal(appendedElements[0].nonce, "R4nd0mN0nce");
+    });
+
+    it("assigns the script element's code through the Trusted Types policy", () => {
+      const assignedCode = [];
+
+      TrustedTypes.cachedPolicy = undefined;
+
+      globalThis.trustedTypes = {
+        createPolicy: (_name, rules) => ({
+          createScript: (code) => {
+            assignedCode.push(code);
+            return rules.createScript(code);
+          },
+        }),
+      };
+
+      let fun;
+
+      try {
+        fun = ScriptEvaluator.compile("return 21 + 21;");
+      } finally {
+        delete globalThis.trustedTypes;
+        TrustedTypes.cachedPolicy = undefined;
+      }
+
+      assert.equal(fun(), 42);
+      assert.equal(assignedCode.length, 1);
+      assert.include(assignedCode[0], "return 21 + 21;");
     });
 
     it("gives the script element no nonce when the document has none", () => {

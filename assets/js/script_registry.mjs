@@ -2,6 +2,7 @@
 
 import App from "./app.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import TrustedTypes from "./trusted_types.mjs";
 
 // The script files the document runs besides the runtime, page bundles and chunks alike, each
 // named by the digest of its content and each with a status: "requested" once the document holds
@@ -83,7 +84,7 @@ export default class ScriptRegistry {
 
       const script = document.createElement("script");
 
-      script.src = path;
+      script.src = TrustedTypes.scriptUrl(path);
       script.async = true;
       script.fetchPriority = "high";
 

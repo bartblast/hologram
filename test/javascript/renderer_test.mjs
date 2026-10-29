@@ -256,6 +256,60 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // A script vnode carries its URL and code beside its attributes and children, and the comment
+    // prints them where markup has them, as the server does.
+    it("with a script child", () => {
+      // <!--<div><script src="/app.js"></script><script>go();</script></div>-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("div"),
+            Type.list(),
+            Type.list([
+              Type.tuple([
+                Type.atom("element"),
+                Type.bitstring("script"),
+                Type.list([
+                  Type.tuple([
+                    Type.bitstring("src"),
+                    Type.keywordList([
+                      [Type.atom("text"), Type.bitstring("/app.js")],
+                    ]),
+                  ]),
+                ]),
+                Type.list(),
+              ]),
+              Type.tuple([
+                Type.atom("element"),
+                Type.bitstring("script"),
+                Type.list(),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("go();")]),
+                ]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "!",
+        '<div><script src="/app.js"></script><script>go();</script></div>',
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("with multiple children", () => {
       // <!--abc<div></div>-->
       const node = Type.tuple([
@@ -2755,7 +2809,11 @@ describe("Renderer", () => {
 
           const expected = vnode(
             "script",
-            {attrs: {type: "text/javascript"}, on: {}},
+            {
+              attrs: {type: "text/javascript"},
+              hologramScript: {code: null, src: null},
+              on: {},
+            },
             [],
           );
 
@@ -2783,7 +2841,11 @@ describe("Renderer", () => {
             parentTagName,
           );
 
-          const expected = vnode("script", {attrs: {src: true}, on: {}}, []);
+          const expected = vnode(
+            "script",
+            {attrs: {}, hologramScript: {code: null, src: ""}, on: {}},
+            [],
+          );
 
           assert.deepStrictEqual(result, expected);
         });
@@ -2806,7 +2868,11 @@ describe("Renderer", () => {
             parentTagName,
           );
 
-          const expected = vnode("script", {attrs: {src: true}, on: {}}, []);
+          const expected = vnode(
+            "script",
+            {attrs: {}, hologramScript: {code: null, src: ""}, on: {}},
+            [],
+          );
 
           assert.deepStrictEqual(result, expected);
         });
@@ -2838,7 +2904,8 @@ describe("Renderer", () => {
             "script",
             {
               key: "__hologramScript__:my_src",
-              attrs: {src: "my_src"},
+              attrs: {},
+              hologramScript: {code: null, src: "my_src"},
               on: {},
             },
             [],
@@ -2870,9 +2937,10 @@ describe("Renderer", () => {
             {
               key: "__hologramScript__:const x = 123;",
               attrs: {},
+              hologramScript: {code: "const x = 123;", src: null},
               on: {},
             },
-            ["const x = 123;"],
+            [],
           );
 
           assert.deepStrictEqual(result, expected);
@@ -2894,7 +2962,11 @@ describe("Renderer", () => {
             parentTagName,
           );
 
-          const expected = vnode("script", {attrs: {}, on: {}}, []);
+          const expected = vnode(
+            "script",
+            {attrs: {}, hologramScript: {code: null, src: null}, on: {}},
+            [],
+          );
 
           assert.deepStrictEqual(result, expected);
         });
@@ -2995,8 +3067,8 @@ describe("Renderer", () => {
 
           const result = render(node);
 
-          assert.equal(result.children.length, 1);
-          assert.equal(result.children[0].text, "let x = 123; go();");
+          assert.equal(result.children.length, 0);
+          assert.equal(result.data.hologramScript.code, "let x = 123; go();");
           assert.equal(result.key, "__hologramScript__:let x = 123; go();");
         });
 
@@ -4809,7 +4881,11 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "script",
-        {attrs: {rel: "stylesheet"}, on: {}},
+        {
+          attrs: {rel: "stylesheet"},
+          hologramScript: {code: null, src: null},
+          on: {},
+        },
         [],
       );
 
@@ -9751,8 +9827,13 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "script",
-        {attrs: {}, key: "__hologramScript__:abc < xyz", on: {}},
-        ["abc < xyz"],
+        {
+          attrs: {},
+          hologramScript: {code: "abc < xyz", src: null},
+          key: "__hologramScript__:abc < xyz",
+          on: {},
+        },
+        [],
       );
 
       assert.deepStrictEqual(result, expected);
@@ -9890,8 +9971,13 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "script",
-        {attrs: {}, key: "__hologramScript__:abc \\u{3C} xyz", on: {}},
-        ["abc \\u{3C} xyz"],
+        {
+          attrs: {},
+          hologramScript: {code: "abc \\u{3C} xyz", src: null},
+          key: "__hologramScript__:abc \\u{3C} xyz",
+          on: {},
+        },
+        [],
       );
 
       assert.deepStrictEqual(result, expected);
@@ -9917,7 +10003,7 @@ describe("Renderer", () => {
         slots,
         defaultTarget,
         parentTagName,
-      ).children[0].text;
+      ).data.hologramScript.code;
     };
 
     it("expression inside script elements, backslash char", () => {

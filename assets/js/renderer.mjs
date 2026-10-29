@@ -1986,7 +1986,7 @@ export default class Renderer {
 
     // The element's children are complete here, whatever nesting of blocks, loops and components
     // produced them, so this is where a repeated key is settled against the rest of the list.
-    const childrenVdom = Vdom.finalizeChildren(
+    let childrenVdom = Vdom.finalizeChildren(
       Renderer.renderDom(
         childrenDom,
         context,
@@ -2104,6 +2104,21 @@ export default class Renderer {
       if (slotKey !== null) {
         data.key = slotKey;
       }
+    }
+
+    // A script's URL and code go to a script sink Trusted Types guards, which takes them only through
+    // a policy, while the diff would set the URL as a plain attribute and the code as a text child.
+    // So they travel beside the attributes and children, and the vdom assigns them through the
+    // runtime's policy when it creates the element. Its key, read from them above, names the
+    // element by what it runs.
+    if (currentTagName === "script") {
+      data.hologramScript = {
+        code: typeof childrenVdom[0] === "string" ? childrenVdom[0] : null,
+        src: Vdom.scriptSrc(attrsVdom.src),
+      };
+
+      delete attrsVdom.src;
+      childrenVdom = [];
     }
 
     const elementVnode = vnode(currentTagName, data, childrenVdom);
@@ -2290,7 +2305,11 @@ export default class Renderer {
     );
 
     const commentContent = childrenVdom
-      .map((child) => (typeof child === "string" ? child : vnodeToHtml(child)))
+      .map((child) =>
+        typeof child === "string"
+          ? child
+          : vnodeToHtml(Renderer.#withScriptsInMarkup(child)),
+      )
       .join("");
 
     return vnode("!", commentContent);
@@ -2576,6 +2595,39 @@ export default class Renderer {
     );
 
     return within === null ? undefined : Bitstring.toText(within);
+  }
+
+  // A vnode printed as markup, the way the server prints it, with every script's URL and code put
+  // back where markup has them: data.hologramScript is the vdom's carrier for them, which
+  // snabbdom-to-html does not read.
+  static #withScriptsInMarkup(vnodeOrText) {
+    if (typeof vnodeOrText === "string" || vnodeOrText.sel === undefined) {
+      return vnodeOrText;
+    }
+
+    const children = (vnodeOrText.children ?? []).map((child) =>
+      Renderer.#withScriptsInMarkup(child),
+    );
+
+    const script = vnodeOrText.data?.hologramScript;
+
+    if (script === undefined) {
+      return {...vnodeOrText, children};
+    }
+
+    const attrs =
+      script.src === null
+        ? vnodeOrText.data.attrs
+        : {
+            ...vnodeOrText.data.attrs,
+            src: script.src === "" ? true : script.src,
+          };
+
+    return vnode(
+      vnodeOrText.sel,
+      {...vnodeOrText.data, attrs},
+      script.code === null ? [] : [script.code],
+    );
   }
 }
 
