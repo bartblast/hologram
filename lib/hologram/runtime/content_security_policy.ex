@@ -94,13 +94,17 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
   # directives, base-uri, form-action and frame-ancestors among them. 'none' is in both kinds.
   @source_keywords @keywords -- [:allow, :allow_duplicates, :block, :script]
 
+  # The directives that take no sources, each a switch: true writes its bare name, false removes it.
+  @switch_directives [:upgrade_insecure_requests]
+
   @doc """
   Returns the policy the rendered pages are sent with: Hologram's default directives with the
   app's `config :hologram, :content_security_policy` merged over them, sorted by directive name,
   or `nil` when the app turned the policy off with `false`.
 
   A directive the config gives replaces the default for that directive, and one set to `false` is
-  removed. A config removing every directive is no policy either. Read at call time, so the key
+  removed. A switch directive, which takes no sources, is set to `true` to turn it on. A config
+  removing every directive is no policy either. Read at call time, so the key
   works from `config/runtime.exs`.
 
   A `trusted_types` directive the config gives has Hologram's own Trusted Types policy,
@@ -117,7 +121,7 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
         script_src: [:nonce, :strict_dynamic, :unsafe_inline, "https:"]
       ]
   """
-  @spec directives() :: keyword([atom | String.t() | {atom, String.t()}]) | nil
+  @spec directives() :: keyword([atom | String.t() | {atom, String.t()}] | true) | nil
   def directives do
     case Application.get_env(:hologram, :content_security_policy, []) do
       false ->
@@ -156,20 +160,21 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
   nonce where a directive names `:nonce`.
 
   A directive name is written with hyphens. A keyword atom is written quoted with hyphens, `:nonce`
-  as the nonce source, a string as it is, a hash tuple as a hash source, and a directive with no
-  sources as its bare name.
+  as the nonce source, a string as it is, and a hash tuple as a hash source. A switch directive set
+  to `true` is written as its bare name, and so is a directive given an empty list.
 
   ## Examples
 
       iex> header_value([img_src: [:self, "data:"], script_src: [:nonce]], "abc")
       "img-src 'self' data:; script-src 'nonce-abc'"
+
+      iex> header_value([upgrade_insecure_requests: true], "abc")
+      "upgrade-insecure-requests"
   """
-  @spec header_value(keyword([atom | String.t() | {atom, String.t()}]), String.t()) :: String.t()
+  @spec header_value(keyword([atom | String.t() | {atom, String.t()}] | true), String.t()) ::
+          String.t()
   def header_value(directives, nonce) do
-    Enum.map_join(directives, "; ", fn {name, sources} ->
-      rendered_sources = Enum.map(sources, &render_source(&1, nonce))
-      Enum.join([render_name(name) | rendered_sources], " ")
-    end)
+    Enum.map_join(directives, "; ", &render_directive(&1, nonce))
   end
 
   @doc """
@@ -277,6 +282,13 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
           "#{@config_error_prefix} describes a policy no Hologram page could work under: #{reason}"
   end
 
+  defp render_directive({name, true}, _nonce), do: render_name(name)
+
+  defp render_directive({name, sources}, nonce) do
+    rendered_sources = Enum.map(sources, &render_source(&1, nonce))
+    Enum.join([render_name(name) | rendered_sources], " ")
+  end
+
   defp render_name(name) do
     name
     |> Atom.to_string()
@@ -318,13 +330,20 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
       sources == false ->
         :ok
 
+      name in @switch_directives ->
+        if sources != true do
+          raise_config_error(
+            "gives the #{inspect(name)} directive #{inspect(sources)}, but it takes true or false"
+          )
+        end
+
       is_list(sources) ->
         Enum.each(sources, &validate_source!(name, &1))
 
       true ->
         raise_config_error(
           "gives the #{inspect(name)} directive #{inspect(sources)}, " <>
-            "but a directive takes a list of sources or false"
+            "but it takes a list of sources or false"
         )
     end
   end

@@ -60,6 +60,25 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
       assert directives() == Keyword.delete(@default_directives, :frame_ancestors)
     end
 
+    test "a switch directive set to true joins the defaults" do
+      put_config(upgrade_insecure_requests: true)
+
+      assert directives() == [
+               base_uri: [:none],
+               form_action: [:self],
+               frame_ancestors: [:self],
+               object_src: [:none],
+               script_src: [:nonce, :strict_dynamic, :unsafe_inline, "https:"],
+               upgrade_insecure_requests: true
+             ]
+    end
+
+    test "a switch directive set to false is left out" do
+      put_config(upgrade_insecure_requests: false)
+
+      assert directives() == @default_directives
+    end
+
     test "no policy when the config is false" do
       put_config(false)
 
@@ -162,9 +181,13 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
                "require-trusted-types-for 'script'"
     end
 
-    test "a directive with no sources, as its bare name" do
-      assert header_value([upgrade_insecure_requests: []], "R4nd0m") ==
+    test "a switch directive set to true, as its bare name" do
+      assert header_value([upgrade_insecure_requests: true], "R4nd0m") ==
                "upgrade-insecure-requests"
+    end
+
+    test "an empty source list, as the bare directive name" do
+      assert header_value([img_src: []], "R4nd0m") == "img-src"
     end
   end
 
@@ -220,7 +243,8 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
         frame_ancestors: false,
         img_src: [:self, "data:"],
         sandbox: ["allow-same-origin", "allow-scripts"],
-        style_src: [:self, {:sha384, "YWJj"}, :unsafe_hashes]
+        style_src: [:self, {:sha384, "YWJj"}, :unsafe_hashes],
+        upgrade_insecure_requests: true
       )
 
       assert validate_config!() == :ok
@@ -288,7 +312,37 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
       put_config(img_src: :self)
 
       assert_error ArgumentError,
-                   "config :hologram, :content_security_policy gives the :img_src directive :self, but a directive takes a list of sources or false",
+                   "config :hologram, :content_security_policy gives the :img_src directive :self, but it takes a list of sources or false",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for true given to a directive that takes sources" do
+      put_config(img_src: true)
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :img_src directive true, but it takes a list of sources or false",
+                   fn -> validate_config!() end
+    end
+
+    test "passes for a switch directive set to false" do
+      put_config(upgrade_insecure_requests: false)
+
+      assert validate_config!() == :ok
+    end
+
+    test "raises for a list given to a switch directive" do
+      put_config(upgrade_insecure_requests: ["https:"])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :upgrade_insecure_requests directive ["https:"], but it takes true or false),
+                   fn -> validate_config!() end
+    end
+
+    test "raises for an empty list given to a switch directive" do
+      put_config(upgrade_insecure_requests: [])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :upgrade_insecure_requests directive [], but it takes true or false",
                    fn -> validate_config!() end
     end
 
