@@ -62,6 +62,9 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module43
   alias Hologram.Test.Fixtures.Controller.Module44
   alias Hologram.Test.Fixtures.Controller.Module45
+  alias Hologram.Test.Fixtures.Controller.Module46
+  alias Hologram.Test.Fixtures.Controller.Module47
+  alias Hologram.Test.Fixtures.Controller.Module48
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
@@ -1632,6 +1635,19 @@ defmodule Hologram.ControllerTest do
       assert Plug.Conn.get_resp_header(conn, "content-type") == ["text/plain"]
     end
 
+    test "sends a content security policy a terminating middleware set" do
+      conn =
+        execute_command_request(%{
+          module: Module48,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert conn.status == 403
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == ["default-src 'none'"]
+    end
+
     test "command handler works correctly when no session changes are made" do
       payload = %{
         module: Module6,
@@ -2076,6 +2092,25 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "Forbidden"
     end
 
+    test "raises when the command set a content security policy without a status" do
+      assert_error RuntimeError,
+                   "Response header content-security-policy was set to \"script-src 'self'\", but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status.",
+                   fn ->
+                     execute_command_request(%{
+                       module: Module6,
+                       name: :my_command_with_content_security_policy,
+                       params: %{},
+                       target: "my_target_1"
+                     })
+                   end
+    end
+
+    test "sends no content security policy with a command reply" do
+      conn = execute_successful_command_request()
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == []
+    end
+
     test "raises when the command set a content type without a status" do
       assert_error RuntimeError,
                    "Response header content-type was set to \"text/plain\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status.",
@@ -2325,6 +2360,127 @@ defmodule Hologram.ControllerTest do
                ~s'<script nonce="#{csp_nonce}" type="application/json" id="hologram-boot-data">'
 
       assert length(Regex.scan(~r/nonce=/, conn.resp_body)) == 1
+    end
+
+    test "sends the default policy with the nonce the page carries" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == [
+               "base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; " <>
+                 "script-src 'nonce-#{csp_nonce}' 'strict-dynamic' 'unsafe-inline' https:"
+             ]
+    end
+
+    test "sends the policy the config gives" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      put_hologram_config(:content_security_policy,
+        frame_ancestors: false,
+        img_src: [:self, "data:"]
+      )
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == [
+               "base-uri 'none'; form-action 'self'; img-src 'self' data:; object-src 'none'; " <>
+                 "script-src 'nonce-#{csp_nonce}' 'strict-dynamic' 'unsafe-inline' https:"
+             ]
+    end
+
+    test "sends no policy when the config turns it off" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      put_hologram_config(:content_security_policy, false)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == []
+    end
+
+    # A plug ahead of Hologram may set policies of its own, which could never carry the page's
+    # nonce, and a browser enforces every policy a response carries, so the page goes out with
+    # exactly the one the config describes.
+    test "replaces every policy the connection already carries" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module34, :dummy_module_34_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module34")
+        |> Plug.Conn.prepend_resp_headers([
+          {"content-security-policy", "default-src 'self'"},
+          {"content-security-policy", "img-src 'self'"}
+        ])
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module34)
+
+      [_full_match, csp_nonce] =
+        Regex.run(~r'globalThis\.Hologram\.cspNonce = "([^"]+)";', conn.resp_body)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == [
+               "base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; " <>
+                 "script-src 'nonce-#{csp_nonce}' 'strict-dynamic' 'unsafe-inline' https:"
+             ]
+    end
+
+    test "raises when init/3 set a content security policy, also when the policy is off" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module46, :dummy_module_46_digest)
+
+      put_hologram_config(:content_security_policy, false)
+
+      assert_error RuntimeError,
+                   "Response header content-security-policy was set to \"script-src 'self'\", but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status.",
+                   fn ->
+                     :get
+                     |> Plug.Test.conn("/hologram-test-fixtures-controller-module46")
+                     |> Plug.Test.init_test_session(%{})
+                     |> handle_initial_page_request(Module46)
+                   end
+    end
+
+    test "raises when init/3 set a content security policy without a status" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module46, :dummy_module_46_digest)
+
+      assert_error RuntimeError,
+                   "Response header content-security-policy was set to \"script-src 'self'\", but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status.",
+                   fn ->
+                     :get
+                     |> Plug.Test.conn("/hologram-test-fixtures-controller-module46")
+                     |> Plug.Test.init_test_session(%{})
+                     |> handle_initial_page_request(Module46)
+                   end
+    end
+
+    test "sends the policy a terminating middleware sets" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module47, :dummy_module_47_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module47")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module47)
+
+      assert conn.status == 403
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == ["default-src 'none'"]
     end
 
     test "generates a new nonce for each initial page request" do
@@ -3484,6 +3640,29 @@ defmodule Hologram.ControllerTest do
       |> handle_subsequent_page_request(Module4)
 
       assert_receive {:replace_subscriptions, [], nil}
+    end
+
+    test "sends no content security policy with a page payload" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module4)
+
+      assert Plug.Conn.get_resp_header(conn, "content-security-policy") == []
+    end
+
+    test "raises when init/3 set a content security policy without a status" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module46, :dummy_module_46_digest)
+
+      assert_error RuntimeError,
+                   "Response header content-security-policy was set to \"script-src 'self'\", but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status.",
+                   fn ->
+                     "/hologram/page/Hologram.Test.Fixtures.Controller.Module46"
+                     |> subsequent_page_request_conn()
+                     |> handle_subsequent_page_request(Module46)
+                   end
     end
 
     test "raises when init/3 set a content type without a status" do

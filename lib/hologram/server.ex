@@ -115,6 +115,9 @@ defmodule Hologram.Server do
   The header name is downcased. If the header already has a value, the new value is
   appended after a comma. Use `put_response_header/3` to replace instead of append.
 
+  The same two headers as for `put_response_header/3` are Hologram's own on a response it
+  writes.
+
   ## Parameters
 
     * `server` - The server struct
@@ -618,6 +621,12 @@ defmodule Hologram.Server do
 
   The header name is downcased, so names are case-insensitive and a later put
   overwrites an earlier one regardless of case.
+
+  Two headers are Hologram's own on a response it writes: `content-type`, since the
+  body is Hologram's, and `content-security-policy`, since a page's policy is set under
+  the `:content_security_policy` config. Setting either raises when Hologram writes the
+  response, a page, a navigation's page data or a command reply, and both are free on a
+  response that middleware ends with `put_status/2`.
 
   ## Parameters
 

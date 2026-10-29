@@ -370,6 +370,7 @@ defmodule Hologram.Controller do
       {processed_server_struct, next_action} =
         process_command_result(command_result, middleware_server_struct, target)
 
+      ensure_no_content_security_policy!(processed_server_struct)
       ensure_no_content_type!(processed_server_struct)
 
       # Apply subscription deltas before flushing broadcasts so a registry
@@ -449,6 +450,7 @@ defmodule Hologram.Controller do
     csp_nonce = if csp_directives, do: ContentSecurityPolicy.generate_nonce()
 
     renderer_opts = [
+      csp_directives: csp_directives,
       csp_nonce: csp_nonce,
       csp_nonced_elements: ContentSecurityPolicy.nonced_elements(csp_directives),
       csrf_token: masked_csrf_token,
@@ -515,6 +517,7 @@ defmodule Hologram.Controller do
           )
 
         conn
+        |> maybe_put_content_security_policy(renderer_opts[:csp_directives], csp_nonce)
         |> Controller.html(final_html)
         |> Plug.Conn.halt()
     end
@@ -709,6 +712,20 @@ defmodule Hologram.Controller do
     if "script" in nonced_elements, do: renderer_opts[:csp_nonce]
   end
 
+  # A page's policy belongs in the config. The policy Hologram sends names the page's nonce, which
+  # only Hologram knows, and a policy one page set would hold only when that page is the one a visit
+  # starts on, since the browser fixes it when the document loads and a navigation keeps the
+  # document. On a command reply, which is JSON, a browser reads no policy at all, so setting one
+  # there does nothing, and raising says so. A terminal response middleware writes is free to carry
+  # one, since this runs only past middleware.
+  defp ensure_no_content_security_policy!(%Server{
+         response_headers: %{"content-security-policy" => value}
+       }) do
+    raise "Response header content-security-policy was set to #{inspect(value)}, but a page's policy is set under config :hologram, :content_security_policy, which Hologram sends with the page's nonce on every page a visit starts on. Set content-security-policy only on a response that middleware ends with put_status."
+  end
+
+  defp ensure_no_content_security_policy!(_server), do: :ok
+
   # A content type describes a body the run meant to send. When middleware did not end the
   # request, Hologram writes the body, and the label can fit nothing it writes, since the same run
   # serves a page as markup and as data. Raising is what tells the handler. Dropping the header
@@ -794,6 +811,24 @@ defmodule Hologram.Controller do
 
   defp maybe_persist_user_id(conn, _pre_server, %Server{user_id: user_id}) do
     Session.put_user_id(conn, user_id)
+  end
+
+  # The policy a rendered page is sent with, replacing every one a plug ahead of Hologram left on the
+  # connection, so the page carries exactly the policy the config describes. A browser enforces
+  # every policy a response carries, so one left beside it, without the nonce, would block the page.
+  defp maybe_put_content_security_policy(conn, nil, _csp_nonce), do: conn
+
+  defp maybe_put_content_security_policy(conn, csp_directives, csp_nonce) do
+    header_value = ContentSecurityPolicy.header_value(csp_directives, csp_nonce)
+
+    other_resp_headers =
+      Enum.reject(conn.resp_headers, fn {name, _value} -> name == "content-security-policy" end)
+
+    Plug.Conn.put_resp_header(
+      %{conn | resp_headers: other_resp_headers},
+      "content-security-policy",
+      header_value
+    )
   end
 
   # The chunks a rendered page needs before it mounts: the ones it preloads for the struct types
@@ -886,6 +921,7 @@ defmodule Hologram.Controller do
         tree: rendered_tree
       } = Renderer.render_page(page_module, params, middleware_server_struct, renderer_opts)
 
+      ensure_no_content_security_policy!(rendered_server_struct)
       ensure_no_content_type!(rendered_server_struct)
 
       maybe_note_page_rendered(renderer_opts[:instance_id], page_module)
@@ -922,9 +958,9 @@ defmodule Hologram.Controller do
 
   # Every decoration the run accumulated, whichever response the caller goes on to send. Headers
   # merge by key, so one the run set replaces a default the connection came with, like the
-  # cache-control Plug puts on every response. A content type never reaches here from a render or
-  # a command, which raise on one. The page data marker is put after this by the send that owns
-  # it, so it wins.
+  # cache-control Plug puts on every response. A content type or a content security policy never
+  # reaches here from a render or a command, which raise on either. The page data marker is put
+  # after this by the send that owns it, so it wins.
   defp decorate_conn(conn, server_struct, final_server_struct) do
     conn
     |> Plug.Conn.merge_resp_headers(Map.to_list(final_server_struct.response_headers))
