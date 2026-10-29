@@ -14,6 +14,8 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
     put_hologram_config(:content_security_policy, [])
   end
 
+  @no_trusted_types_policy_message "config :hologram, :content_security_policy describes a policy no Hologram page could work under: :trusted_types allows no Trusted Types policy, Hologram's own among them, so list the policies the app creates, or \"*\" for every one"
+
   @source_message "but a source is visible ASCII without a semicolon or a comma, and not empty"
 
   defp put_config(config) do
@@ -62,6 +64,31 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
       put_config(false)
 
       assert directives() == nil
+    end
+
+    test "Hologram's Trusted Types policy added to the names a trusted_types directive allows" do
+      put_config(require_trusted_types_for: [:script], trusted_types: ["default"])
+
+      assert directives()[:trusted_types] == ["hologram", "default"]
+    end
+
+    test "Hologram's Trusted Types policy not added twice" do
+      put_config(trusted_types: ["default", "hologram"])
+
+      assert directives()[:trusted_types] == ["default", "hologram"]
+    end
+
+    test "no trusted_types directive added when the config removes it" do
+      put_config(require_trusted_types_for: [:script], trusted_types: false)
+
+      refute Keyword.has_key?(directives(), :trusted_types)
+    end
+
+    # Without the directive any policy name is allowed, and adding one would forbid the others.
+    test "no trusted_types directive added when the config gives none" do
+      put_config(require_trusted_types_for: [:script])
+
+      refute Keyword.has_key?(directives(), :trusted_types)
     end
 
     test "no policy when the config removes every directive" do
@@ -115,6 +142,24 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
     test "a hash tuple, as a hash source" do
       assert header_value([style_src: [{:sha256, "YWJj"}]], "R4nd0m") ==
                "style-src 'sha256-YWJj'"
+    end
+
+    test "Trusted Types enforced, with Hologram's policy beside the app's" do
+      put_config(
+        require_trusted_types_for: [:script],
+        trusted_types: ["default", :allow_duplicates]
+      )
+
+      assert header_value(directives(), "R4nd0m") ==
+               "base-uri 'none'; form-action 'self'; frame-ancestors 'self'; object-src 'none'; " <>
+                 "require-trusted-types-for 'script'; " <>
+                 "script-src 'nonce-R4nd0m' 'strict-dynamic' 'unsafe-inline' https:; " <>
+                 "trusted-types hologram default 'allow-duplicates'"
+    end
+
+    test "require-trusted-types-for, with its script keyword" do
+      assert header_value([require_trusted_types_for: [:script]], "R4nd0m") ==
+               "require-trusted-types-for 'script'"
     end
 
     test "a directive with no sources, as its bare name" do
@@ -181,6 +226,34 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
       assert validate_config!() == :ok
     end
 
+    test "passes for a config removing every directive" do
+      put_config(
+        base_uri: false,
+        form_action: false,
+        frame_ancestors: false,
+        object_src: false,
+        script_src: false
+      )
+
+      assert validate_config!() == :ok
+    end
+
+    test "passes for Trusted Types enforced with the app's own policies" do
+      put_config(
+        require_trusted_types_for: [:script],
+        trusted_types: ["default", :allow_duplicates]
+      )
+
+      assert validate_config!() == :ok
+    end
+
+    # 'none' beside policy names is ignored by the browser.
+    test "passes for a trusted_types directive naming :none beside a policy" do
+      put_config(trusted_types: [:none, "default"])
+
+      assert validate_config!() == :ok
+    end
+
     test "passes for a policy without a nonce that lets the runtime load from its own origin" do
       put_config(script_src: [:self, :unsafe_inline])
 
@@ -224,6 +297,39 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
 
       assert_error ArgumentError,
                    "config :hologram, :content_security_policy gives the :img_src directive an unknown keyword: :selff",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a keyword the directive doesn't take" do
+      put_config(script_src: [:nonce, :script])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :script_src directive the keyword :script, which it doesn't take",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a source keyword in a directive with keywords of its own" do
+      put_config(require_trusted_types_for: [:self])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :require_trusted_types_for directive the keyword :self, which it doesn't take",
+                   fn -> validate_config!() end
+    end
+
+    # A browser drops require-trusted-types-for without 'script', leaving Trusted Types unenforced.
+    test "raises for require_trusted_types_for without :script" do
+      put_config(require_trusted_types_for: [])
+
+      assert_error ArgumentError,
+                   "config :hologram, :content_security_policy gives the :require_trusted_types_for directive [], but it takes [:script]",
+                   fn -> validate_config!() end
+    end
+
+    test "raises for a Trusted Types policy name outside the grammar's alphabet" do
+      put_config(trusted_types: ["https:"])
+
+      assert_error ArgumentError,
+                   ~s(config :hologram, :content_security_policy gives the :trusted_types directive the policy name "https:", but a policy name holds only letters, digits and - # = _ / @ . %, or is *),
                    fn -> validate_config!() end
     end
 
@@ -379,6 +485,22 @@ defmodule Hologram.Runtime.ContentSecurityPolicyTest do
       assert_error ArgumentError,
                    ~s(config :hologram, :content_security_policy describes a policy no Hologram page could work under: :sandbox lacks "allow-same-origin" and "allow-scripts", which the runtime needs to run and to reach its server),
                    fn -> validate_config!() end
+    end
+
+    test "raises for a trusted_types directive allowing no policy" do
+      put_config(require_trusted_types_for: [:script], trusted_types: [])
+
+      assert_error ArgumentError, @no_trusted_types_policy_message, fn ->
+        validate_config!()
+      end
+    end
+
+    test "raises for a trusted_types directive naming :none alone" do
+      put_config(trusted_types: [:none, :allow_duplicates])
+
+      assert_error ArgumentError, @no_trusted_types_policy_message, fn ->
+        validate_config!()
+      end
     end
 
     test "raises for a sandbox without allow-same-origin" do

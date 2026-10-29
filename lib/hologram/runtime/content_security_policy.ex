@@ -54,8 +54,14 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
 
   @hash_algorithms [:sha256, :sha384, :sha512]
 
-  # The keyword sources, written quoted: :self is 'self', :unsafe_inline is 'unsafe-inline'. Among
-  # them the values of webrtc ('allow', 'block') and of trusted-types ('allow-duplicates').
+  # The keywords three directives take instead of the source keywords, each only where it belongs.
+  @directive_keywords %{
+    require_trusted_types_for: [:script],
+    trusted_types: [:allow_duplicates, :none],
+    webrtc: [:allow, :block]
+  }
+
+  # The keywords, written quoted: :self is 'self', :unsafe_inline is 'unsafe-inline'.
   @keywords [
     :allow,
     :allow_duplicates,
@@ -67,6 +73,7 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
     :report_sha256,
     :report_sha384,
     :report_sha512,
+    :script,
     :self,
     :strict_dynamic,
     :trusted_types_eval,
@@ -83,6 +90,10 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
   @script_element_directives [:script_src_elem, :script_src, :default_src]
   @style_element_directives [:style_src_elem, :style_src, :default_src]
 
+  # The keywords a source list takes, which every directive but those three does: the fetch
+  # directives, base-uri, form-action and frame-ancestors among them. 'none' is in both kinds.
+  @source_keywords @keywords -- [:allow, :allow_duplicates, :block, :script]
+
   @doc """
   Returns the policy the rendered pages are sent with: Hologram's default directives with the
   app's `config :hologram, :content_security_policy` merged over them, sorted by directive name,
@@ -91,6 +102,9 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
   A directive the config gives replaces the default for that directive, and one set to `false` is
   removed. A config removing every directive is no policy either. Read at call time, so the key
   works from `config/runtime.exs`.
+
+  A `trusted_types` directive the config gives has Hologram's own Trusted Types policy,
+  `"hologram"`, added to the names it allows, since the runtime creates it to run its scripts.
 
   ## Examples
 
@@ -114,6 +128,7 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
           @default_directives
           |> Keyword.merge(config)
           |> Enum.reject(fn {_name, sources} -> sources == false end)
+          |> maybe_allow_hologram_trusted_types_policy()
           |> Enum.sort_by(fn {name, _sources} -> name end)
 
         if directives != [], do: directives
@@ -208,12 +223,19 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
         Enum.each(config, &validate_directive!/1)
         validate_unique_names!(config)
 
-        directives = directives()
-        validate_scripts_bootable!(directives)
-        validate_connections_bootable!(directives)
-        validate_sandbox_bootable!(directives)
+        validate_trusted_types!(config)
 
-        :ok
+        case directives() do
+          nil ->
+            :ok
+
+          directives ->
+            validate_scripts_bootable!(directives)
+            validate_connections_bootable!(directives)
+            validate_sandbox_bootable!(directives)
+
+            :ok
+        end
     end
   end
 
@@ -227,6 +249,20 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
     case governing_directive(directives, directive_names) do
       {_name, sources} -> sources
       nil -> []
+    end
+  end
+
+  # A trusted-types directive allows only the policy names it lists, and the runtime creates its own.
+  # Without the directive any name is allowed, so none is added, which would forbid the app's own.
+  defp maybe_allow_hologram_trusted_types_policy(directives) do
+    case Keyword.fetch(directives, :trusted_types) do
+      {:ok, names} ->
+        if "hologram" in names,
+          do: directives,
+          else: Keyword.put(directives, :trusted_types, ["hologram" | names])
+
+      :error ->
+        directives
     end
   end
 
@@ -348,10 +384,20 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
   end
 
   defp validate_source!(name, keyword) when is_atom(keyword) do
-    if keyword not in @keywords do
-      raise_config_error(
-        "gives the #{inspect(name)} directive an unknown keyword: #{inspect(keyword)}"
-      )
+    cond do
+      keyword not in @keywords ->
+        raise_config_error(
+          "gives the #{inspect(name)} directive an unknown keyword: #{inspect(keyword)}"
+        )
+
+      keyword not in Map.get(@directive_keywords, name, @source_keywords) ->
+        raise_config_error(
+          "gives the #{inspect(name)} directive the keyword #{inspect(keyword)}, " <>
+            "which it doesn't take"
+        )
+
+      true ->
+        :ok
     end
   end
 
@@ -382,6 +428,49 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
       "gives the #{inspect(name)} directive the source #{inspect(source)}, but a source is " <>
         "a keyword atom, a string, or a {:sha256 | :sha384 | :sha512, base64} tuple"
     )
+  end
+
+  # require-trusted-types-for takes 'script' alone, and a browser drops it with any other value,
+  # leaving Trusted Types unenforced. trusted-types allows the policy names it lists, so one listing
+  # none - empty, or 'none' alone - forbids Hologram's own, while 'none' beside names is ignored.
+  # A name is in the grammar's alphabet, or the * that allows every one.
+  defp validate_trusted_types!(config) do
+    case Keyword.get(config, :require_trusted_types_for) do
+      sources when is_list(sources) and sources != [:script] ->
+        raise_config_error(
+          "gives the :require_trusted_types_for directive #{inspect(sources)}, " <>
+            "but it takes [:script]"
+        )
+
+      _sources ->
+        :ok
+    end
+
+    case Keyword.get(config, :trusted_types) do
+      sources when is_list(sources) ->
+        names = Enum.filter(sources, &is_binary/1)
+
+        if names == [] do
+          raise_unbootable_error(
+            ":trusted_types allows no Trusted Types policy, Hologram's own among them, " <>
+              "so list the policies the app creates, or \"*\" for every one"
+          )
+        end
+
+        Enum.each(names, &validate_trusted_types_policy_name!/1)
+
+      _sources ->
+        :ok
+    end
+  end
+
+  defp validate_trusted_types_policy_name!(name) do
+    if name != "*" and not String.match?(name, ~r'\A[A-Za-z0-9\-#=_/@.%]+\z') do
+      raise_config_error(
+        "gives the :trusted_types directive the policy name #{inspect(name)}, but a policy name " <>
+          "holds only letters, digits and - # = _ / @ . %, or is *"
+      )
+    end
   end
 
   defp validate_unique_names!(config) do
