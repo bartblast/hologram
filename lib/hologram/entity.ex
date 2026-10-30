@@ -192,10 +192,15 @@ defmodule Hologram.Entity do
   A line with no options grants the operation unconditionally.
 
   A client that checks permissions holds the related rows its checks read - the row a `via:` leads
-  to, the rows before the last relationship of a `to:` reference, the rows along a `when:` path -
-  beside the rows it holds, read under the session user's own read rules and kept current. A row
-  the user may not read is missing there and compares as nil, and a change to a related row
-  answers the check again.
+  to and the rows the rules it asks read through it, the rows before the last relationship of a
+  `to:` reference, the rows along a `when:` path - beside the rows it holds, read under the session
+  user's own read rules and kept current. A row the user may not read is missing there and compares
+  as nil, and a change to a related row answers the check again.
+
+  So a rule that reads a related row through an entity type with no read rules fails the build: no
+  client ever holds such a row, and the browser would answer no where the server may answer yes. A
+  rule for `:read` itself is exempt, since a row reaches a client only once the server's read rules
+  admitted it, and a client never decides them.
   """
   @spec allow(operation, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do
