@@ -25,6 +25,8 @@ defmodule HologramFeatureTests.Helpers do
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
+  @mounted_page_script "return globalThis.Hologram?.mountedPage ?? null;"
+
   @place_script "return globalThis.Hologram.durability.cursor();"
 
   # What a GenServer records about the function that started it, which is how a sync session is
@@ -246,6 +248,32 @@ defmodule HologramFeatureTests.Helpers do
     else
       Process.sleep(50)
       await_local_fill(session, attempts_left - 1)
+    end
+  end
+
+  @doc """
+  Blocks until the given page has mounted in this browser - the client's first render of it done -
+  then returns the `session`.
+
+  The server's HTML is on screen before that render, so an assertion on what a page shows can pass
+  on the HTML alone. Polling for the mount is how a test asserts what the browser itself rendered,
+  without waiting for anything the stream brings.
+  """
+  @spec await_page_mount(Wallaby.Session.t(), module, non_neg_integer) :: Wallaby.Session.t()
+  def await_page_mount(session, page_module, attempts_left \\ 100)
+
+  def await_page_mount(session, page_module, 0) do
+    raise Wallaby.ExpectationNotMetError,
+          "Timed out waiting for #{inspect(page_module)} to mount, the client has mounted " <>
+            inspect(script_result(session, @mounted_page_script))
+  end
+
+  def await_page_mount(session, page_module, attempts_left) do
+    if script_result(session, @mounted_page_script) == inspect(page_module) do
+      session
+    else
+      Process.sleep(50)
+      await_page_mount(session, page_module, attempts_left - 1)
     end
   end
 

@@ -67,8 +67,8 @@ defmodule HologramFeatureTests.PoliciesTest do
     end)
   end
 
-  # Two ships, each with a cabin. Each feature makes the session user the captain of the own ship
-  # alone, so the other cabin stays out for want of the role.
+  # Two ships, each with a cabin. Each feature makes the session user the captain of one ship alone,
+  # so the cabin of the ship without the role stays out.
   defp seed_ships do
     Map.new(["other", "own"], fn prefix ->
       ship =
@@ -520,5 +520,37 @@ defmodule HologramFeatureTests.PoliciesTest do
     session
     |> assert_text(css("#renamable_cabins"), ~r/^$/)
     |> assert_same_page_load()
+  end
+
+  # The stream is held back from the first visit on for longer than a page takes to mount, and the
+  # list is read once, right after the mount, so nothing is synced or saved by then and each page
+  # holds only what it carried - which is also why the page is visited by its path, as visiting it
+  # by module waits for the stream. The second visit goes through another page, so it
+  # opens a history entry of its own rather than loading the URL already open, which mounts the
+  # previous visit's snapshot instead of the page the server just rendered (#1474). Once the page
+  # has mounted, the control shows only if the render handed over the ship the rename rule reads -
+  # without it the browser's first render takes away the control the server rendered.
+  feature "keeps a control on the first render through rows no page queries", %{
+    session: session
+  } do
+    ships = seed_ships()
+
+    session
+    |> simulate_slow_sse_attach(5_000)
+    |> visit("/policies/7")
+    |> await_page_mount(Page7)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+
+    Auth.grant_role(session_user(), :captain, ships["other_ship"])
+
+    session
+    |> visit("/external")
+    |> visit("/policies/7")
+    |> await_page_mount(Page7)
+    |> assert_script_result(
+      "return document.getElementById('renamable_cabins').textContent;",
+      "other_cabin"
+    )
   end
 end
