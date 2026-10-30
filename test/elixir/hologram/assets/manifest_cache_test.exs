@@ -18,50 +18,36 @@ defmodule Hologram.Assets.ManifestCacheTest do
     setup_asset_manifest_cache(AssetManifestCacheStub, false)
   end
 
-  test "get_manifest_js/0" do
+  test "get_manifest_json/0" do
     init(nil)
 
-    result = get_manifest_js()
-
-    expected = """
-    {
-    "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
-    "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
-    "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-    "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
-    "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-    "test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
-    "test_dir_3/test_file_10.css": "/test_dir_3/test_file_10.css",
-    "test_dir_3/test_file_11-DOWNLOAD.css": "/test_dir_3/test_file_11-DOWNLOAD.css",
-    "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-    "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
-    };\
-    """
-
-    assert normalize_newlines(result) == normalize_newlines(expected)
+    assert get_manifest_json() ==
+             ~s({"hologram/runtime.js":"/hologram/runtime-AAAAAAAA.js",) <>
+               ~s("hologram/test_file_9.css":"/hologram/test_file_9-99999999999999999999999999999999.css",) <>
+               ~s("test_dir_1/test_dir_2/page.js":"/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",) <>
+               ~s("test_dir_1/test_dir_2/test_file_1.css":"/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",) <>
+               ~s("test_dir_1/test_dir_2/test_file_2.css":"/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",) <>
+               ~s("test_dir_3/page.js":"/test_dir_3/page-66666666666666666666666666666666.js",) <>
+               ~s("test_dir_3/test_file_10.css":"/test_dir_3/test_file_10.css",) <>
+               ~s("test_dir_3/test_file_11-DOWNLOAD.css":"/test_dir_3/test_file_11-DOWNLOAD.css",) <>
+               ~s("test_dir_3/test_file_4.css":"/test_dir_3/test_file_4-44444444444444444444444444444444.css",) <>
+               ~s("test_dir_3/test_file_5.css":"/test_dir_3/test_file_5-55555555555555555555555555555555.css"})
   end
 
-  # A path is printed into the inline script the manifest is part of, as a string literal. The
-  # registered name holds everything such a literal cannot carry raw - a quote, a backslash, and
-  # a closing script tag, which the HTML parser would read before any JavaScript ran.
-  test "get_manifest_js/0 escapes a path for the script element the manifest is printed into" do
-    static_path = ~S|hostile/quote"backslash\tag</script>.txt|
+  test "get_manifest_json/0 encodes a path any JSON string can carry" do
+    static_path = ~S|hostile/quote"backslash\tag.txt|
     AssetPathRegistry.register(static_path, "/" <> static_path)
 
     init(nil)
-    result = get_manifest_js()
 
-    refute String.contains?(result, "</script>")
-
-    assert String.contains?(
-             result,
-             ~S|"hostile/quote\"backslash\\tag\u{3C}/script>.txt": "/hostile/quote\"backslash\\tag\u{3C}/script>.txt"|
-           )
+    assert Jason.decode!(get_manifest_json())[static_path] == "/" <> static_path
   end
 
   test "init/1" do
     assert init(nil) == {:ok, nil}
-    assert :persistent_term.get(AssetManifestCacheStub.persistent_term_key()) == get_manifest_js()
+
+    assert :persistent_term.get(AssetManifestCacheStub.persistent_term_key()) ==
+             get_manifest_json()
   end
 
   test "reload/0" do
@@ -71,24 +57,9 @@ defmodule Hologram.Assets.ManifestCacheTest do
     :persistent_term.put(key, :dummy_value)
 
     reload()
-    manifest_js = :persistent_term.get(key)
+    manifest_json = :persistent_term.get(key)
 
-    expected = """
-    {
-    "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
-    "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
-    "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-    "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
-    "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-    "test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
-    "test_dir_3/test_file_10.css": "/test_dir_3/test_file_10.css",
-    "test_dir_3/test_file_11-DOWNLOAD.css": "/test_dir_3/test_file_11-DOWNLOAD.css",
-    "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-    "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
-    };\
-    """
-
-    assert normalize_newlines(manifest_js) == normalize_newlines(expected)
+    assert Jason.decode!(manifest_json)["hologram/runtime.js"] == "/hologram/runtime-AAAAAAAA.js"
   end
 
   test "start_link/1" do

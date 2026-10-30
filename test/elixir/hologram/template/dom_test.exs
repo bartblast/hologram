@@ -1346,6 +1346,251 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, $focused attribute" do
+    test "with an expression stays a 2-tuple" do
+      # <input $focused={true} />
+      tags = [{:self_closing_tag, {"input", [{"$focused", [expression: "{true}"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "input",
+                  [{"$focused", [expression: {:{}, [line: 1], [true]}]}, key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+
+    test "bare stays a 2-tuple with an empty value" do
+      # <input $focused />
+      tags = [{:self_closing_tag, {"input", [{"$focused", []}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "input", [{"$focused", []}, key(tags, 0)], []]}
+             ]
+    end
+
+    test "on a dynamic tag" do
+      # <{"input"} $focused={true} />
+      tags = [
+        {:self_closing_tag,
+         {{:expression, ~s({"input"})}, [{"$focused", [expression: "{true}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["input"]},
+                  [{"$focused", [expression: {:{}, [line: 1], [true]}]}, key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+
+    test "raises for a text value" do
+      # <input $focused="handler" />
+      tags = [{:self_closing_tag, {"input", [{"$focused", [text: "handler"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "the $focused attribute takes a single expression, like $focused={@editing?}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a mixed value" do
+      # <input $focused="a{true}" />
+      tags = [
+        {:self_closing_tag, {"input", [{"$focused", [text: "a", expression: "{true}"]}]}}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "the $focused attribute takes a single expression, like $focused={@editing?}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a modifier" do
+      # <input $focused.once={true} />
+      tags = [{:self_closing_tag, {"input", [{"$focused.once", [expression: "{true}"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the $focused attribute takes no modifiers, got "once"',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises next to a literal autofocus" do
+      # <input autofocus $focused={true} />
+      tags = [
+        {:self_closing_tag, {"input", [{"autofocus", []}, {"$focused", [expression: "{true}"]}]}}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "an element takes either the autofocus attribute or $focused, not both",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises next to a literal autofocus on a dynamic tag" do
+      # <{"input"} $focused={true} autofocus={true} />
+      tags = [
+        {:self_closing_tag,
+         {{:expression, ~s({"input"})},
+          [{"$focused", [expression: "{true}"]}, {"autofocus", [expression: "{true}"]}]}}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "an element takes either the autofocus attribute or $focused, not both",
+                   fn -> build_ast(tags) end
+    end
+
+    test "a literal autofocus alone passes" do
+      # <input autofocus />
+      tags = [{:self_closing_tag, {"input", [{"autofocus", []}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "input", [{"autofocus", []}, key(tags, 0)], []]}
+             ]
+    end
+
+    test "raises on the window tag" do
+      # <window $focused={true} />
+      tags = [{:self_closing_tag, {"window", [{"$focused", [expression: "{true}"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the <window> tag accepts only event bindings, but got the "$focused" attribute',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the window tag with a modifier" do
+      # <window $focused.once={true} />
+      tags = [{:self_closing_tag, {"window", [{"$focused.once", [expression: "{true}"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the <window> tag accepts only event bindings, but got the "$focused.once" attribute',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the document tag" do
+      # <document $focused={true} />
+      tags = [{:self_closing_tag, {"document", [{"$focused", [expression: "{true}"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the <document> tag accepts only event bindings, but got the "$focused" attribute',
+                   fn -> build_ast(tags) end
+    end
+  end
+
+  describe "build_ast/1, true event binding value" do
+    test "raises for a literal true" do
+      # <button $click={true}></button>
+      tags = [
+        {:start_tag, {"button", [{"$click", [expression: "{true}"]}]}},
+        {:end_tag, "button"}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "the $click binding takes an action or command, got true",
+                   fn -> build_ast(tags) end
+    end
+
+    test "a literal false passes" do
+      # <button $click={false}></button>
+      tags = [
+        {:start_tag, {"button", [{"$click", [expression: "{false}"]}]}},
+        {:end_tag, "button"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "button",
+                  [{"$click", [expression: {:{}, [line: 1], [false]}]}, key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+
+    test "raises with the $focused hint for $focus" do
+      # <input $focus={true} />
+      tags = [{:self_closing_tag, {"input", [{"$focus", [expression: "{true}"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "the $focus binding takes an action or command, got true - to control focus, use $focused",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a modifier form too" do
+      # <button $click.once={true}></button>
+      tags = [
+        {:start_tag, {"button", [{"$click.once", [expression: "{true}"]}]}},
+        {:end_tag, "button"}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "the $click binding takes an action or command, got true",
+                   fn -> build_ast(tags) end
+    end
+
+    test "an expression that is not a literal boolean passes" do
+      # <button $click={@action}></button>
+      tags = [
+        {:start_tag, {"button", [{"$click", [expression: "{@action}"]}]}},
+        {:end_tag, "button"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "button",
+                  [
+                    {"$click",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            {{:., [line: 1], [{:vars, [line: 1], nil}, :action]},
+                             [no_parens: true, line: 1], []}
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "raises for a literal atom-syntax boolean" do
+      # <button $click={:true}></button>
+      tags = [
+        {:start_tag, {"button", [{"$click", [expression: "{:true}"]}]}},
+        {:end_tag, "button"}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "the $click binding takes an action or command, got :true",
+                   fn -> build_ast(tags) end
+    end
+
+    test "a plain attribute with a literal boolean passes" do
+      # <button disabled={true}></button>
+      tags = [
+        {:start_tag, {"button", [{"disabled", [expression: "{true}"]}]}},
+        {:end_tag, "button"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "button",
+                  [{"disabled", [expression: {:{}, [line: 1], [true]}]}, key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+  end
+
   describe "build_ast/1, page-level tags" do
     # Each is the only one of its kind, so a key cannot tell it from a sibling, and the patch
     # reaches all three by name rather than through an ordinary children diff - a key there would

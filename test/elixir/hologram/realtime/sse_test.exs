@@ -5,7 +5,6 @@ defmodule Hologram.Realtime.SSETest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.LiveReload
   alias Hologram.Realtime
@@ -13,6 +12,7 @@ defmodule Hologram.Realtime.SSETest do
   alias Hologram.Realtime.Receipt
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.ReplicaIdentity
+  alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: EntityModule2
@@ -20,7 +20,7 @@ defmodule Hologram.Realtime.SSETest do
 
   use_module_stub :chunk_registry
 
-  @server_only_token_js ~s'[Type.atom("token"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Entity.ServerOnly")], [Type.atom("attribute"), Type.atom("token")]])]'
+  @server_only_token ~s'["atoken",{"t":"m","d":[["aattribute","atoken"],["a__struct__","aElixir.Hologram.Entity.ServerOnly"]]}]'
 
   setup :set_mox_global
 
@@ -99,10 +99,10 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
-  # Pulls the signed token out of an encoded add_sub_receipts chunk, which carries it as
-  # the third element of each {channel, cid, token} tuple.
+  # Pulls the signed token out of a serialized add_sub_receipts chunk, which carries it as
+  # the third element of each {channel, cid, token} tuple, a string marked with "s".
   defp extract_receipt_token(resp_body) do
-    [_full_match, token] = Regex.run(~r/Type\.bitstring\("(SFMyNTY\.[^"]+)"\)/, resp_body)
+    [_full_match, token] = Regex.run(~r/"s(SFMyNTY\.[^"]+)"/, resp_body)
 
     token
   end
@@ -182,25 +182,27 @@ defmodule Hologram.Realtime.SSETest do
   describe "encode_action_envelope/2" do
     test "names the chunks the struct types in the action need" do
       action = %Action{name: :my_action, params: %{date: ~D[2026-10-05]}, target: "c1"}
-      {:ok, encoded} = Encoder.encode_term(action)
+      serialized = Serializer.serialize!(action)
+      expected = Jason.decode!(serialized)
 
       assert 42
              |> encode_action_envelope(action)
              |> decode_envelope() ==
                {"action", 42,
                 %{
-                  "action" => encoded,
+                  "action" => expected,
                   "chunks" => ["BBBBBBBB", "CCCCCCCC"]
                 }}
     end
 
-    test "wraps an encoded action in the SSE event envelope" do
+    test "wraps a serialized action in the SSE event envelope" do
       action = %Action{name: :my_action, target: "c1"}
-      {:ok, encoded} = Encoder.encode_term(action)
+      serialized = Serializer.serialize!(action)
+      expected = Jason.decode!(serialized)
 
       assert 42
              |> encode_action_envelope(action)
-             |> decode_envelope() == {"action", 42, %{"action" => encoded, "chunks" => []}}
+             |> decode_envelope() == {"action", 42, %{"action" => expected, "chunks" => []}}
     end
 
     test "replaces server-only attribute values in the action params with the sentinel" do
@@ -213,31 +215,29 @@ defmodule Hologram.Realtime.SSETest do
 
       action = %Action{name: :my_action, params: %{row: row}, target: "c1"}
 
-      {"action", 42, %{"action" => encoded_action}} =
-        42
-        |> encode_action_envelope(action)
-        |> decode_envelope()
+      envelope = encode_action_envelope(42, action)
 
-      assert String.contains?(encoded_action, @server_only_token_js)
-      refute String.contains?(encoded_action, "note_secret_v1")
-      refute String.contains?(encoded_action, "tok_K3xR")
+      assert String.contains?(envelope, @server_only_token)
+      refute String.contains?(envelope, "note_secret_v1")
+      refute String.contains?(envelope, "tok_K3xR")
     end
   end
 
   describe "encode_add_sub_receipts_envelope/2" do
     test "wraps the receipts list in an add_sub_receipts SSE event envelope" do
       receipts = [{:notifications, "c1", "token-a"}]
-      {:ok, encoded} = Encoder.encode_term(receipts)
+      serialized = Serializer.serialize!(receipts)
 
       assert encode_add_sub_receipts_envelope(42, receipts) ==
-               "event: add_sub_receipts\nid: 42\ndata: #{encoded}\n\n"
+               "event: add_sub_receipts\nid: 42\ndata: #{serialized}\n\n"
     end
   end
 
   describe "encode_broadcast_envelope/4" do
     test "names the chunks the struct types in the params need" do
       params = %{time: ~T[12:34:56]}
-      {:ok, encoded} = Encoder.encode_term({:append, params, ["chat"]})
+      serialized = Serializer.serialize!({:append, params, ["chat"]})
+      expected = Jason.decode!(serialized)
 
       assert 42
              |> encode_broadcast_envelope(:append, params, ["chat"])
@@ -245,33 +245,36 @@ defmodule Hologram.Realtime.SSETest do
                {"broadcast", 42,
                 %{
                   "chunks" => ["AAAAAAAA", "CCCCCCCC"],
-                  "data" => encoded
+                  "data" => expected
                 }}
     end
 
     test "wraps a single-cid payload in a broadcast SSE event envelope" do
-      {:ok, encoded} = Encoder.encode_term({:append, %{text: "hi"}, ["chat"]})
+      serialized = Serializer.serialize!({:append, %{text: "hi"}, ["chat"]})
+      expected = Jason.decode!(serialized)
 
       assert 42
              |> encode_broadcast_envelope(:append, %{text: "hi"}, ["chat"])
-             |> decode_envelope() == {"broadcast", 42, %{"chunks" => [], "data" => encoded}}
+             |> decode_envelope() == {"broadcast", 42, %{"chunks" => [], "data" => expected}}
     end
 
     test "wraps a multi-cid payload in a broadcast SSE event envelope" do
       cids = ["chat", "sidebar", "minimap"]
-      {:ok, encoded} = Encoder.encode_term({:append, %{text: "hi"}, cids})
+      serialized = Serializer.serialize!({:append, %{text: "hi"}, cids})
+      expected = Jason.decode!(serialized)
 
       assert 42
              |> encode_broadcast_envelope(:append, %{text: "hi"}, cids)
-             |> decode_envelope() == {"broadcast", 42, %{"chunks" => [], "data" => encoded}}
+             |> decode_envelope() == {"broadcast", 42, %{"chunks" => [], "data" => expected}}
     end
 
     test "handles empty params" do
-      {:ok, encoded} = Encoder.encode_term({:ping, %{}, ["page"]})
+      serialized = Serializer.serialize!({:ping, %{}, ["page"]})
+      expected = Jason.decode!(serialized)
 
       assert 1
              |> encode_broadcast_envelope(:ping, %{}, ["page"])
-             |> decode_envelope() == {"broadcast", 1, %{"chunks" => [], "data" => encoded}}
+             |> decode_envelope() == {"broadcast", 1, %{"chunks" => [], "data" => expected}}
     end
   end
 
@@ -291,14 +294,11 @@ defmodule Hologram.Realtime.SSETest do
         token: "tok_M6zY"
       }
 
-      {"broadcast", 42, %{"data" => encoded_tuple}} =
-        42
-        |> encode_broadcast_envelope(:append, %{row: row}, ["chat"])
-        |> decode_envelope()
+      envelope = encode_broadcast_envelope(42, :append, %{row: row}, ["chat"])
 
-      assert String.contains?(encoded_tuple, @server_only_token_js)
-      refute String.contains?(encoded_tuple, "note_secret_v2")
-      refute String.contains?(encoded_tuple, "tok_M6zY")
+      assert String.contains?(envelope, @server_only_token)
+      refute String.contains?(envelope, "note_secret_v2")
+      refute String.contains?(envelope, "tok_M6zY")
     end
   end
 
@@ -311,10 +311,10 @@ defmodule Hologram.Realtime.SSETest do
   describe "encode_drop_sub_receipts_envelope/2" do
     test "wraps the keys list in a drop_sub_receipts SSE event envelope" do
       keys = [{:notifications, "c1"}]
-      {:ok, encoded} = Encoder.encode_term(keys)
+      serialized = Serializer.serialize!(keys)
 
       assert encode_drop_sub_receipts_envelope(42, keys) ==
-               "event: drop_sub_receipts\nid: 42\ndata: #{encoded}\n\n"
+               "event: drop_sub_receipts\nid: 42\ndata: #{serialized}\n\n"
     end
   end
 
@@ -327,10 +327,10 @@ defmodule Hologram.Realtime.SSETest do
   describe "encode_refresh_sub_receipts_envelope/2" do
     test "wraps the receipts list in a refresh_sub_receipts SSE event envelope" do
       receipts = [{:notifications, "c1", "token-a"}]
-      {:ok, encoded} = Encoder.encode_term(receipts)
+      serialized = Serializer.serialize!(receipts)
 
       assert encode_refresh_sub_receipts_envelope(42, receipts) ==
-               "event: refresh_sub_receipts\nid: 42\ndata: #{encoded}\n\n"
+               "event: refresh_sub_receipts\nid: 42\ndata: #{serialized}\n\n"
     end
   end
 
@@ -864,9 +864,10 @@ defmodule Hologram.Realtime.SSETest do
       # Only one event chunk total (the bundled one), not one per cid.
       assert length(String.split(updated_conn.resp_body, "event: broadcast\n", trim: true)) == 1
 
-      {:ok, encoded} = Encoder.encode_term({:my_action, %{}, ["chat", "sidebar"]})
+      serialized = Serializer.serialize!({:my_action, %{}, ["chat", "sidebar"]})
+      expected = Jason.decode!(serialized)
 
-      assert {"broadcast", _id, %{"chunks" => [], "data" => ^encoded}} =
+      assert {"broadcast", _id, %{"chunks" => [], "data" => ^expected}} =
                decode_envelope(updated_conn.resp_body)
     end
 

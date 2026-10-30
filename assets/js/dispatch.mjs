@@ -82,6 +82,16 @@ export default class Dispatch {
     return false;
   }
 
+  // An event binding whose operation name resolves to true (e.g. $click={true}, or $focus={@x}
+  // with @x true) names no action or command. false is deliberately not judged here - whether it
+  // should disable the binding the way nil does is a separate question.
+  static isTrue(specDom) {
+    return (
+      Dispatch.#isExpressionShorthandSyntax(specDom) &&
+      Type.isTrue(specDom.data[0].data[1].data[0])
+    );
+  }
+
   // Deps: [:maps.from_list/1, :maps.put/3]
   #buildParamsMap(paramsKeywordList) {
     this.params = Erlang_Maps["put/3"](

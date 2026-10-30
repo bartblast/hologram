@@ -8,9 +8,11 @@ defmodule Hologram.Template.RendererFromQueryTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Auth
   alias Hologram.Commons.ETS
+  alias Hologram.Controller
   alias Hologram.DB
   alias Hologram.DB.QueryCache
   alias Hologram.Entity
@@ -75,6 +77,36 @@ defmodule Hologram.Template.RendererFromQueryTest do
     replica_token: "test-replica-token"
   ]
   @server %Server{}
+
+  # The boot data block of a printed document, decoded.
+  defp boot_data(html) do
+    [_full, json] =
+      Regex.run(~r'<script[^>]* id="hologram-boot-data"[^>]*>(.*?)</script>'s, html)
+
+    Jason.decode!(json)
+  end
+
+  # The document the HTML path serves: the tree printed with its boot data block filled in, the way
+  # the controller fills it.
+  defp render_page_html(page_module, server_struct \\ %Server{}, params \\ %{}) do
+    result = render_page(page_module, params, server_struct, @page_opts)
+
+    boot_data =
+      Controller.build_boot_data(%{
+        chunk_digests: result.chunk_digests,
+        csrf_token: @page_opts[:csrf_token],
+        instance_id: @page_opts[:instance_id],
+        mount_data: result.mount_data,
+        page_digest: PageDigestRegistry.lookup(page_module),
+        replica_id: @page_opts[:replica_id],
+        replica_token: @page_opts[:replica_token],
+        self_echoes: [],
+        sub_receipt_adds: [],
+        sub_receipt_drops: []
+      })
+
+    print_dom(result.tree, fills: %{"boot_data" => boot_data_element(boot_data, nil)})
+  end
 
   defp create_entities do
     {:ok, _entity} =
@@ -220,20 +252,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     # names a server-only attribute legitimately, and the question here is what the data layer
     # was handed.
     defp carried_rows_json(html) do
-      [_full, json] = Regex.run(~r/syncRows: (.+)$/m, html)
-
-      json
-    end
-
-    # The document the HTML path serves: the tree with its mount data put back, printed. The
-    # renderer hands the two out separately, because the navigation path carries them separately.
-    defp render_page_html(page_module, server_struct \\ %Server{}, params \\ %{}) do
-      %{mount_data: mount_data, tree: tree} =
-        render_page(page_module, params, server_struct, @page_opts)
-
-      tree
-      |> interpolate_js_in_tree(mount_replacements(mount_data))
-      |> print_dom()
+      Jason.encode!(boot_data(html)["syncRows"])
     end
 
     # The rows travel flat, each once, with the to-many naming the ids it holds - the shape a
@@ -255,13 +274,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       html = render_page_html(Module99)
 
-      assert String.contains?(html, ~s|syncRows: {"put_entity":{|)
+      assert String.contains?(html, ~s|"syncRows":{"put_entity":{|)
       assert String.contains?(html, ~s|"#{@entity_2_type}":[{|)
       assert String.contains?(html, ~s|"c":"the embedded row"|)
       assert String.contains?(html, ~s|"a":["#{target.id}"]|)
     end
 
-    # A row holds whatever was written to the database, and it is printed into a script element -
+    # A row holds whatever was written to the database, and it is printed into the boot data block -
     # so a value that spells a closing tag would end that element and put whatever follows it into
     # the document as markup. The escape leaves the value identical to whoever parses the JSON.
     test "carries a value that spells a closing tag without ending the script" do
@@ -279,20 +298,16 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       :ok = add_relationship(Module3, source.id, :a, target.id)
 
-      carried = carried_rows_json(render_page_html(Module99))
+      html = render_page_html(Module99)
 
-      refute String.contains?(carried, "</script>")
-
-      assert String.contains?(
-               carried,
-               ~S|"c":"\u003C\/script>\u003Cscript>alert(1)\u003C\/script>"|
-             )
+      refute String.contains?(html, "</script><script>alert(1)")
+      assert String.contains?(html, ~S|"c":"\u003C/script>\u003Cscript>alert(1)\u003C/script>"|)
     end
 
     test "carries nothing for a page whose props read no rows" do
       html = render_page_html(Module99)
 
-      assert String.contains?(html, "syncRows: {}")
+      assert String.contains?(html, ~s|"syncRows":{}|)
     end
 
     # The positive artifact beside the negative one: this is what the row travelled in, so
@@ -321,13 +336,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       html = render_page_html(Module99, %Server{user_id: user.id})
 
-      assert String.contains?(html, ~s|actorUserId: "#{user.id}"|)
+      assert String.contains?(html, ~s|"actorUserId":"#{user.id}"|)
     end
 
     test "names nobody for a visitor" do
       html = render_page_html(Module99)
 
-      assert String.contains?(html, "actorUserId: null")
+      assert String.contains?(html, ~s|"actorUserId":null|)
     end
   end
 
@@ -419,15 +434,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
       :ok
     end
 
-    # The trailing comma and the line ending belong to the script around the value rather than to
-    # the value - and the line ending is not always one character, since a checkout on Windows
-    # carries CRLF into the template the script is written in.
     defp carried_counts_json(html) do
-      [_full, json] = Regex.run(~r/syncCounts: (.+)$/m, html)
-
-      json
-      |> String.trim()
-      |> String.trim_trailing(",")
+      Jason.encode!(boot_data(html)["syncCounts"])
     end
 
     defp render_counts_page_html do
@@ -437,7 +445,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
 
     # Read back through a JSON decoder rather than matched as a substring: the counts are printed
-    # into a script element, so their spelling carries escapes an HTML parser must not read as
+    # into the boot data block, so their spelling carries escapes an HTML parser must not read as
     # markup - and what this test is about is the counts, not how they are spelled.
     test "carries the count each instance of a count prop answered" do
       create_entities()
@@ -456,7 +464,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     test "carries nothing for a page whose props count nothing" do
       html = render_page_html(Module99)
 
-      assert String.contains?(html, "syncCounts: {}")
+      assert String.contains?(html, ~s|"syncCounts":{}|)
     end
   end
 

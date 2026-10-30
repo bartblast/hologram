@@ -37,6 +37,18 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
     put_cookie(server, "my_cookie_name", "my_cookie_value")
   end
 
+  def command(:my_command_with_content_security_policy, _params, server) do
+    put_response_header(server, "content-security-policy", "script-src 'self'")
+  end
+
+  def command(:my_command_with_content_type, _params, server) do
+    put_response_header(server, "content-type", "text/plain")
+  end
+
+  def command(:my_command_with_response_header, _params, server) do
+    put_response_header(server, "x-my-header", "my_value")
+  end
+
   def command(:my_command_with_session, _params, server) do
     put_session(server, "my_session_key", "my_session_value")
   end

@@ -32,8 +32,18 @@ export default class SubscriptionReceiptRegistry {
   // preserve the JS context. Mirrors `ComponentRegistry.populate/1`; the
   // iterable accepts whatever `Serializer.serialize` → `Deserializer.deserialize`
   // produces for the save-side `Array.from(entries.entries())` form.
+  //
+  // The keys are computed from the triples rather than taken from the pairs: a
+  // snapshot stored by an earlier release holds keys in that release's
+  // encoding, and an entry kept under one of those would never be found again.
   static populate(entries) {
-    $.entries = new Map(entries);
+    $.entries = new Map();
+
+    for (const [_encodedKey, triple] of entries) {
+      const [channel, cid] = triple.data;
+      const encodedKey = Type.encodeMapKey(Type.tuple([channel, cid]));
+      $.entries.set(encodedKey, triple);
+    }
   }
 
   static purge(keys) {

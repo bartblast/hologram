@@ -205,10 +205,22 @@ defmodule Hologram.Template.DOM do
     value_code = Enum.map_join(value_parts, ", ", &render_code/1)
 
     case decompose_event_attribute_name(name) do
+      # $focused says where focus should be, so it is a boolean attribute the client reads rather
+      # than an event binding, and the modifier syntax has nothing to mean on it.
+      {"$focused", []} ->
+        validate_focused_attribute_value(value_parts)
+        "{\"$focused\", [#{value_code}]}"
+
+      {"$focused", [modifier | _rest]} ->
+        raise TemplateSyntaxError,
+          message: ~s'the $focused attribute takes no modifiers, got "#{modifier}"'
+
       {base_name, []} ->
+        validate_event_binding_value(base_name, value_parts)
         "{\"#{base_name}\", [#{value_code}]}"
 
       {base_name, modifiers} ->
+        validate_event_binding_value(base_name, value_parts)
         "{\"#{base_name}\", [#{value_code}], #{render_event_modifiers(base_name, modifiers)}}"
     end
   end
@@ -276,6 +288,8 @@ defmodule Hologram.Template.DOM do
   # holding the runtime value. Attributes use element-style event decomposition, since the element
   # branch is the only one that can consume events - the component branch filters them out anyway.
   defp render_code({:start_tag, {{:expression, templ_expr}, attributes}}) do
+    validate_focus_attributes(attributes)
+
     attributes_code = Enum.map_join(attributes, ", ", &render_attribute_code(&1, :element))
 
     "{:dynamic_tag, #{templ_expr}, [#{attributes_code}], ["
@@ -286,6 +300,10 @@ defmodule Hologram.Template.DOM do
 
     if tag_name in ["window", "document"] do
       validate_reserved_tag_attributes(tag_name, attributes)
+    end
+
+    if tag_type == :element do
+      validate_focus_attributes(attributes)
     end
 
     # HTML source carries no tag-name case, so the name is written the way the parser would spell
@@ -339,8 +357,50 @@ defmodule Hologram.Template.DOM do
 
   defp substitute_module_attributes(ast), do: ast
 
+  # An event binding names an action or a command. A literal true names neither, and is almost
+  # always $focused written as the event it is one letter away from. Only the literal is judged
+  # here. An expression that evaluates to true is caught at event time on the client. False is
+  # left alone: whether it should disable a binding the way nil does is a separate question.
+  defp validate_event_binding_value("$" <> _rest = base_name, expression: expr_str) do
+    literal = extract_expression_content(expr_str)
+
+    if literal in ["true", ":true"] do
+      hint = if base_name == "$focus", do: " - to control focus, use $focused", else: ""
+
+      raise TemplateSyntaxError,
+        message: "the #{base_name} binding takes an action or command, got #{literal}#{hint}"
+    end
+  end
+
+  defp validate_event_binding_value(_name, _value_parts), do: :ok
+
+  # autofocus is what $focused renders as, so an element carrying both would have the markup and
+  # the state disagree about it. Only literal attributes are judged here: an autofocus arriving
+  # through a spread yields to $focused at render time instead.
+  defp validate_focus_attributes(attributes) do
+    names = for {name, _value_parts} <- attributes, do: name
+
+    if "autofocus" in names and "$focused" in names do
+      raise TemplateSyntaxError,
+        message: "an element takes either the autofocus attribute or $focused, not both"
+    end
+  end
+
+  # $focused takes the value of a boolean attribute: nothing (true), or one expression.
+  defp validate_focused_attribute_value(value_parts)
+
+  defp validate_focused_attribute_value([]), do: :ok
+
+  defp validate_focused_attribute_value(expression: _expr_str), do: :ok
+
+  defp validate_focused_attribute_value(_value_parts) do
+    raise TemplateSyntaxError,
+      message: "the $focused attribute takes a single expression, like $focused={@editing?}"
+  end
+
   # The <window> and <document> tags bind events to the window or document and nothing else, so each
   # attribute must be an event binding (a "$"-prefixed name). Any other attribute fails the build.
+  # $focused is "$"-prefixed and still not a binding: there is no element for it to focus.
   defp validate_reserved_tag_attributes(tag_name, attributes) do
     Enum.each(attributes, fn
       # Spread entries can't carry event bindings, since "$"-prefixed keys are rejected at runtime.
@@ -349,7 +409,9 @@ defmodule Hologram.Template.DOM do
           message: ~s'the <#{tag_name}> tag accepts only event bindings, but got a spread'
 
       {name, _value_parts} ->
-        unless String.starts_with?(name, "$") do
+        {base_name, _modifiers} = decompose_event_attribute_name(name)
+
+        unless String.starts_with?(name, "$") and base_name != "$focused" do
           raise TemplateSyntaxError,
             message:
               ~s'the <#{tag_name}> tag accepts only event bindings, but got the "#{name}" attribute'

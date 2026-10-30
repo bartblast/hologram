@@ -4,14 +4,12 @@ defmodule Hologram.Template.Renderer do
   require Hologram.Query
 
   alias Hologram.Assets.ChunkRegistry
-  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
-  alias Hologram.Compiler.Encoder
   alias Hologram.Component
   alias Hologram.DB
   alias Hologram.DB.QueryCache
@@ -29,24 +27,19 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Template.DOM
   alias Hologram.Template.Helpers
 
-  # The one placeholder the runtime component leaves between elements rather than in a script: the
-  # script elements of the chunks a page needs before it mounts (see
-  # `interpolate_chunk_script_tags_in_tree/2`).
-  @chunk_script_tags_placeholder "$CHUNK_SCRIPT_TAGS_PLACEHOLDER"
-
-  # Every placeholder the mount script carries, whoever fills it in - the renderer answers for
-  # most, the controller for the rest.
-  @js_placeholder_pattern ~r/\$[A-Z_]+_JS_PLACEHOLDER/
-
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
   # The elements the HTML parser reads as raw text: their content reaches the language they hold -
   # JavaScript, CSS - without entity decoding, so entity-encoding it on the way out would put a
-  # different program in the document than the tree holds. See print_node/2.
+  # different program in the document than the tree holds. See print_node/3.
   #
   # https://html.spec.whatwg.org/multipage/syntax.html#raw-text-elements
   @raw_text_elems ~w(script style)
+
+  # The elements HTML gives a nonce attribute to. A nonce the template wrote on one is dropped
+  # whatever the policy stamps, as the client renderer drops it. See print_dom/2.
+  @nonce_elems ~w(link script style)
 
   # The characters a value cannot carry into a script element as the text of a JavaScript string
   # literal, each with the escape sequence it is written as instead. Every sequence is valid
@@ -155,6 +148,62 @@ defmodule Hologram.Template.Renderer do
           }
   end
 
+  @doc """
+  Builds the element carrying the first page's boot data: a `<script type="application/json">` the
+  browser never runs, holding the given map as JSON, for the client to read when it boots. Printed
+  where the Runtime component's `boot_data` marker sits (see `print_dom/2`).
+
+  Every `<` in the JSON is written as `\\u003C`, so neither `</script` nor `<!--` can form inside
+  the element, whatever text the data holds. A `<` can only occur inside a JSON string, where the
+  escape reads back as the same character, so this holds for serialized terms nested as JSON
+  values too.
+
+  The element carries the given nonce whenever there is one, whatever kinds of element the policy
+  stamps. The browser never reads a data block's nonce. The client does: it takes only the block
+  whose nonce is the document's, which an element injected into the page cannot carry.
+
+  ## Examples
+
+      iex> boot_data_element(%{csrfToken: "abc"}, "xyz")
+      ~s(<script nonce="xyz" type="application/json" id="hologram-boot-data">{"csrfToken":"abc"}</script>)
+  """
+  @spec boot_data_element(map, String.t() | nil) :: String.t()
+  def boot_data_element(boot_data, csp_nonce) do
+    boot_data_json =
+      boot_data
+      |> Jason.encode!()
+      |> String.replace("<", "\\u003C")
+
+    nonce_attribute_html = if csp_nonce, do: ~s( nonce="#{csp_nonce}"), else: ""
+
+    ~s(<script#{nonce_attribute_html} type="application/json" id="hologram-boot-data">) <>
+      boot_data_json <> "</script>"
+  end
+
+  @doc """
+  Builds a script tag per chunk supplied by the caller, given by its digest. Printed where the
+  Runtime component's `chunk_script_tags` marker sits (see `print_dom/2`). The digests are the
+  compiler's own, which need no escaping.
+
+  The script tags carry the given Content Security Policy nonce, as every script element of the
+  page does, or no nonce when it is `nil`. The nonce is a generated one in the base64 alphabet,
+  which needs no escaping either.
+
+  ## Examples
+
+      iex> chunk_script_tags(["AAAAAAAA"], "abc123")
+      ~s(<script nonce="abc123" async src="/hologram/chunk-AAAAAAAA.js"></script>)
+  """
+  @spec chunk_script_tags([String.t()], String.t() | nil) :: String.t()
+  def chunk_script_tags(chunk_digests, csp_nonce) do
+    nonce_attribute_html = if csp_nonce, do: ~s( nonce="#{csp_nonce}"), else: ""
+
+    Enum.map_join(chunk_digests, fn chunk_digest ->
+      chunk_bundle_path = RouterHelpers.chunk_bundle_path(chunk_digest)
+      ~s(<script#{nonce_attribute_html} async src="#{chunk_bundle_path}"></script>)
+    end)
+  end
+
   # TODO: revisit this shape when the vdom renderer and the template format are rewritten. It was
   # chosen for a client that rebuilds boxed terms from it; a client that walks plain JavaScript
   # literals wants a different one, and the object-attribute forms ruled out here become eligible
@@ -199,124 +248,6 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
-  Maps the chunks a page needs before it mounts, given by their digests, to the placeholder the
-  mount script carries them under: `$CHUNK_DIGESTS_JS_PLACEHOLDER`, as a JavaScript array of
-  strings. The digests are the compiler's own, which need no escaping.
-  """
-  @spec chunk_replacements([String.t()]) :: %{String.t() => String.t()}
-  def chunk_replacements(chunk_digests) do
-    %{"$CHUNK_DIGESTS_JS_PLACEHOLDER" => Jason.encode!(chunk_digests)}
-  end
-
-  @doc """
-  Substitutes the `$CHUNK_SCRIPT_TAGS_PLACEHOLDER` token with a script element per chunk given by
-  its digest, across the given tree: the text node holding the token is replaced by the elements.
-
-  In the tree rather than in the printed document, like `interpolate_js_in_tree/2`: the token sits
-  between elements, where the runtime component renders it as the whole of a text node, and a text
-  node that says anything else is something a page rendered - from what someone typed, maybe - and
-  is left as it was.
-  """
-  @spec interpolate_chunk_script_tags_in_tree(tree, [String.t()]) :: tree
-  def interpolate_chunk_script_tags_in_tree(tree, chunk_digests)
-
-  def interpolate_chunk_script_tags_in_tree(
-        {:element, tag_name, attributes, children},
-        chunk_digests
-      ) do
-    {:element, tag_name, attributes,
-     interpolate_chunk_script_tags_in_tree(children, chunk_digests)}
-  end
-
-  def interpolate_chunk_script_tags_in_tree(nodes, chunk_digests) when is_list(nodes) do
-    Enum.flat_map(nodes, fn
-      {:text, text} = node ->
-        if String.trim(text) == @chunk_script_tags_placeholder do
-          chunk_script_elements(chunk_digests)
-        else
-          [node]
-        end
-
-      node ->
-        [interpolate_chunk_script_tags_in_tree(node, chunk_digests)]
-    end)
-  end
-
-  def interpolate_chunk_script_tags_in_tree(node, _chunk_digests), do: node
-
-  @doc """
-  Substitutes the given placeholders with the JavaScript source each maps to, in one pass over
-  the given text.
-
-  ONE pass, so nothing a replacement carries is read as a placeholder in turn - a value holding
-  the text of another token would otherwise have that token honoured inside it, and these values
-  hold whatever a URL, a database or a component's state put there.
-
-  What an inserted value carries is neutralized for the same reason one stage further out: a
-  token inside it survives this pass untouched and would be substituted by whoever interpolates
-  next. Inserted values are JavaScript source or JSON, and in both a token can only sit inside a
-  string, where spelling its `$` as an escape leaves the string saying exactly what it said.
-
-  A token the map does not answer for is left as it was, for whoever answers for it later.
-  """
-  @spec interpolate_js(String.t(), %{String.t() => String.t()}) :: String.t()
-  def interpolate_js(text, replacements) do
-    Regex.replace(@js_placeholder_pattern, text, fn token ->
-      case Map.fetch(replacements, token) do
-        {:ok, js} -> neutralize_js_placeholders(js)
-        :error -> token
-      end
-    end)
-  end
-
-  @doc """
-  Substitutes the given placeholders with the JavaScript source each maps to, inside every
-  script element's text across the given tree.
-  """
-  @spec interpolate_js_in_tree(tree, %{String.t() => String.t()}) :: tree
-  def interpolate_js_in_tree(tree, replacements)
-
-  def interpolate_js_in_tree({:element, "script", attributes, children}, replacements) do
-    interpolated_children =
-      Enum.map(children, fn
-        {:text, text} -> {:text, interpolate_js(text, replacements)}
-        child -> interpolate_js_in_tree(child, replacements)
-      end)
-
-    {:element, "script", attributes, interpolated_children}
-  end
-
-  def interpolate_js_in_tree({:element, tag_name, attributes, children}, replacements) do
-    {:element, tag_name, attributes, interpolate_js_in_tree(children, replacements)}
-  end
-
-  def interpolate_js_in_tree(nodes, replacements) when is_list(nodes) do
-    Enum.map(nodes, &interpolate_js_in_tree(&1, replacements))
-  end
-
-  def interpolate_js_in_tree(node, _replacements), do: node
-
-  @doc """
-  Maps the mount data to the placeholder each of its values answers for.
-
-  The renderer names the mount data for the payload, where a field name is what the client reads.
-  The document path needs the same values under the tokens the page's scripts carry, and the token
-  vocabulary is this module's, since this is what leaves them in the tree.
-  """
-  @spec mount_replacements(%{atom => String.t()}) :: %{String.t() => String.t()}
-  def mount_replacements(mount_data) do
-    %{
-      "$ACTOR_USER_ID_JS_PLACEHOLDER" => mount_data.actor_user_id,
-      "$ASSET_MANIFEST_JS_PLACEHOLDER" => mount_data.asset_manifest,
-      "$COMPONENT_REGISTRY_JS_PLACEHOLDER" => mount_data.component_registry,
-      "$PAGE_MODULE_JS_PLACEHOLDER" => mount_data.page_module,
-      "$PAGE_PARAMS_JS_PLACEHOLDER" => mount_data.page_params,
-      "$SYNC_COUNTS_JS_PLACEHOLDER" => mount_data.sync_counts,
-      "$SYNC_ROWS_JS_PLACEHOLDER" => mount_data.sync_rows
-    }
-  end
-
-  @doc """
   Prints an evaluated DOM as HTML.
 
   An evaluated DOM holds text verbatim and each attribute value as a single string, both
@@ -327,15 +258,37 @@ defmodule Hologram.Template.Renderer do
   event bindings and element keys among them - so they are left out. An attribute with an empty
   value prints as a bare name, and a void element prints without children.
 
+  Given a `csp_nonce:` option and the tag names of the elements to stamp in `csp_nonced_elements:`,
+  every element of those kinds is printed with the nonce as its first attribute, so the document's
+  Content Security Policy lets it load or run. The kinds are the ones a directive of the policy
+  names the nonce for, among the elements HTML gives a nonce attribute to: link, script and style.
+  A nonce the template wrote on a link, script or style element is dropped whatever kinds are
+  stamped, since only the generated one is in the policy. Without the options, with a `nil` nonce
+  or with no element kinds, nothing is stamped.
+
+  Given a `fills:` map from a name to HTML, a `<hologram-fill name="...">` marker element is printed
+  as the HTML filed under its name, and a marker the map names nothing for prints nothing, its
+  children included. This is how values known only once the page has rendered reach it, the boot
+  data and the chunk tags among them: written where the marker sits rather than substituted for a
+  token afterwards, so no text a user put on the page can be taken for the place a value goes.
+  Interpolated values become text and attribute values, never elements, so only markup a template
+  writes makes a marker, or a dynamic tag a template hands a tag name to, which can make a
+  `<script>` just the same. The client renderer knows no markers: the Runtime component renders
+  them only on a first page, which the client never renders itself.
+
   ## Examples
 
       iex> dom = {:element, "div", [{"class", [text: "big"]}], [{:text, "Hologram"}]}
       iex> print_dom(dom)
       ~s(<div class="big">Hologram</div>)
+
+      iex> dom = {:element, "script", [{"src", [text: "/app.js"]}], []}
+      iex> print_dom(dom, csp_nonce: "abc123", csp_nonced_elements: ["script"])
+      ~s(<script nonce="abc123" src="/app.js"></script>)
   """
-  @spec print_dom(tree) :: String.t()
-  def print_dom(tree) do
-    print_node(tree, nil)
+  @spec print_dom(tree, T.opts()) :: String.t()
+  def print_dom(tree, opts \\ []) do
+    print_node(tree, nil, print_opts(opts))
   end
 
   @doc """
@@ -367,22 +320,21 @@ defmodule Hologram.Template.Renderer do
   def render_dom(dom, env, server_struct) do
     {tree, component_registry, mutated_server_struct} = render_tree(dom, env, server_struct)
 
-    {print_node(tree, env.tag_name), component_registry, mutated_server_struct}
+    {print_node(tree, env.tag_name, print_opts([])), component_registry, mutated_server_struct}
   end
 
   # TODO: Refactor once there is something akin to {...@vars} syntax
   # (it would be possible to pass page state as layout props this way).
   @doc """
-  Renders the given page as its two projections: the HTML a document load is served, and the
-  evaluated tree the same render is described by as data.
+  Renders the given page as an evaluated tree: the render described as data, which a navigation
+  carries as it is and a first page is printed from (see `print_dom/2`).
 
-  The tree keeps the placeholders verbatim and the mount data is returned beside it: a caller
-  serving a document substitutes the mount data into the tree it prints, since a cold document has
-  no channel for that state but the markup it is sent, and a caller carrying the two as separate
-  fields leaves them apart. Both leave the Realtime placeholders for the caller to substitute, and
-  the chunk placeholders too: the chunks the struct types in the component registry need are
-  returned as digests, and the caller knows of more (see `chunk_replacements/1` and
-  `interpolate_chunk_script_tags_in_tree/2`).
+  The tree holds no mount data. It is returned beside it as terms, for the caller to serialize
+  into the first page's boot data (see `boot_data_element/2`) or into a navigation's payload. A
+  first page is printed once the caller has every value its markers are filled with: the boot
+  data, which joins Realtime values to the mount data, and the chunk tags, since the chunks the
+  struct types in the component registry need are returned as digests and the caller knows of
+  more (see `chunk_script_tags/2`).
 
   ## Examples
 
@@ -392,12 +344,11 @@ defmodule Hologram.Template.Renderer do
         component_registry: %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}},
         mount_data: %{
           actor_user_id: "123",
-          asset_manifest: "{...}",
-          component_registry: "Type.map([...])",
-          page_module: "Type.atom(...)",
-          page_params: "Type.map([...])",
-          sync_counts: "{...}",
-          sync_rows: "{...}"
+          component_registry: %{"page" => %{module: MyPage, struct: %Component{}}},
+          page_module: MyPage,
+          page_params: %{param: "value"},
+          sync_counts: %{},
+          sync_rows: %{}
         },
         server_struct: %Server{session: %{user_id: 123}},
         tree: [{:element, "div", [{"$key", [text: "k2xq91:0"]}], [{:text, "full page content including layout"}]}]
@@ -407,13 +358,12 @@ defmodule Hologram.Template.Renderer do
           chunk_digests: [String.t()],
           component_registry: %{String.t() => %{module: module, struct: Component.t()}},
           mount_data: %{
-            actor_user_id: String.t(),
-            asset_manifest: String.t(),
-            component_registry: String.t(),
-            page_module: String.t(),
-            page_params: String.t(),
-            sync_counts: String.t(),
-            sync_rows: String.t()
+            actor_user_id: String.t() | integer | atom | nil,
+            component_registry: %{String.t() => %{module: module, struct: Component.t()}},
+            page_module: module,
+            page_params: %{atom => any},
+            sync_counts: %{String.t() => integer},
+            sync_rows: map
           },
           server_struct: Server.t(),
           tree: tree
@@ -443,9 +393,7 @@ defmodule Hologram.Template.Renderer do
       |> put_page_digest_context(page_digest)
       |> put_page_module_context(page_module)
       |> put_page_mounted_flag_context(false)
-      |> maybe_put_csrf_token_context(opts, initial_page?)
-      |> maybe_put_instance_id_context(opts, initial_page?)
-      |> maybe_put_replica_identity_context(opts, initial_page?)
+      |> maybe_put_csp_nonce_context(opts, initial_page?)
       |> put_user_context()
 
     {initial_tree, initial_component_registry, final_server_struct} =
@@ -456,8 +404,11 @@ defmodule Hologram.Template.Renderer do
         page_server_struct
       )
 
+    # The nonce belongs to the one document it was generated for, so it leaves the context before
+    # the page struct goes to the client, where nothing reads it and a page snapshot would keep it.
     page_component_struct_with_emitted_context_after_rendering =
       page_component_struct_with_emitted_context_before_rendering
+      |> delete_csp_nonce_context()
       |> put_initial_page_flag_context(false)
       |> put_page_mounted_flag_context(true)
 
@@ -468,57 +419,36 @@ defmodule Hologram.Template.Renderer do
         %{module: page_module, struct: page_component_struct_with_emitted_context_after_rendering}
       )
 
-    # `$SELF_ECHOES_JS_PLACEHOLDER` is intentionally left unsubstituted, along with the two
-    # sub-receipt tokens. Their values depend on the post-render `server.broadcasts`, which is a
-    # `Hologram.Realtime` concern - keeping the renderer Realtime-agnostic means the controller
-    # substitutes them, into the tree it prints and into the navigation payload as fields.
-
-    # The rows this render read, and who read them - both spelled as JSON rather than as the
-    # boxed terms the rest of the mount data carries, because both are read by the data layer
-    # rather than by transpiled code: the rows go through the same ingest a frame does, and the
-    # acting user is what binds the actor predicates of the queries the client re-runs.
-    # Gathered first, because it answers what the render ASKED rather than what it read: a
-    # permission check reads no rows, so the rows behind its answer are looked up once the
-    # questions are all in - and they join what the page carries like any other rows.
+    # The rows this render read, and who read them, both read by the data layer rather than by
+    # compiled code: the rows go through the same ingest a frame does, and the acting user is what
+    # binds the actor predicates of the queries the client re-runs. Gathered first, because it
+    # answers what the render ASKED rather than what it read: a permission check reads no rows, so
+    # the rows behind its answer are looked up once the questions are all in - and they join what
+    # the page carries like any other rows.
     Carry.take_grant_scopes()
     |> Auth.carried_grants()
     |> Carry.collect()
 
     component_registry_for_client = hollow_props(component_registry_with_page_struct)
 
-    # The values a mount reads, grouped because they travel together. The HTML projection inlines
-    # all seven, since a loaded document has no other channel for them. A navigation carries six
-    # of them as payload fields instead - not the asset manifest, which is a global the initial
-    # document sets once and a navigation therefore already has.
-    #
-    # Encoded through the CLIENT encoder, which strips server-only attribute values: the same page
-    # served either way must not say more one way than the other.
-    #
-    # The rows and counts are escaped for the SCRIPT ELEMENT they are printed into, not only for
-    # JSON: a row holds whatever was written to the database, and a `</script>` in a string ends
-    # the element around it whatever the JavaScript is doing - the HTML parser reads the tag before
-    # the JavaScript engine reads anything at all. `:html_safe` spells the `<` as an escape, which
-    # is the same string to a JSON reader and nothing to an HTML one.
-    mount_data_js = %{
-      actor_user_id: Jason.encode!(server_struct.user_id, escape: :html_safe),
-      asset_manifest: AssetManifestCache.get_manifest_js(),
-      component_registry: Encoder.encode_client_term!(component_registry_for_client),
-      page_module: Encoder.encode_client_term!(page_module),
-      page_params: Encoder.encode_client_term!(params),
-      sync_counts: Jason.encode!(Carry.take_counts(), escape: :html_safe),
-      sync_rows: Jason.encode!(Carry.take(), escape: :html_safe)
+    # The values a mount reads, grouped because they travel together, and returned as terms for the
+    # controller to serialize: into the first page's boot data block, or into a navigation's
+    # payload. The values that depend on the render's Realtime state, the self-echoes and the
+    # receipts, join them there, which keeps the renderer Realtime-agnostic. The acting user and the
+    # rows travel as plain JSON, since the data layer reads them as JSON.
+    mount_data = %{
+      actor_user_id: server_struct.user_id,
+      component_registry: component_registry_for_client,
+      page_module: page_module,
+      page_params: params,
+      sync_counts: Carry.take_counts(),
+      sync_rows: Carry.take()
     }
 
-    # The tree keeps its placeholders. A navigation carries the mount data beside the tree rather
-    # than inside it, so nothing on that path ever substitutes them - and folding the state into a
-    # script element's text would only mean escaping encoder output into the tree's encoding and
-    # unescaping it again on arrival. The document path substitutes them into the tree it prints,
-    # which is the caller's to do, since only the caller holds the Realtime values that go in the
-    # same pass.
     %{
       chunk_digests: ChunkRegistry.lookup_term(component_registry_for_client),
       component_registry: component_registry_with_page_struct,
-      mount_data: mount_data_js,
+      mount_data: mount_data,
       server_struct: final_server_struct,
       tree: initial_tree
     }
@@ -810,9 +740,18 @@ defmodule Hologram.Template.Renderer do
     if name_prefix, do: name_prefix <> "-" <> segment, else: segment
   end
 
+  # The nonce and the element kinds it goes on, as one value of the options print_node/3 carries,
+  # or nil when nothing is to be stamped.
+  defp csp_stamp(opts) do
+    csp_nonce = opts[:csp_nonce]
+    nonced_elements = opts[:csp_nonced_elements] || []
+
+    if csp_nonce && nonced_elements != [], do: {csp_nonce, nonced_elements}, else: nil
+  end
+
   # Event attributes are exempt from deduplication, because a tag may carry multiple bindings which
   # share a base name once their modifiers are decomposed at compile time, e.g. both
-  # $key_down.enter and $key_down.esc are named "$key_down".
+  # $key_down.enter and $key_down.escape are named "$key_down".
   defp dedupe_attributes(attrs_dom) do
     attrs_dom
     |> Enum.with_index()
@@ -823,6 +762,13 @@ defmodule Hologram.Template.Renderer do
     end)
     |> Enum.reverse()
     |> Enum.map(fn {attr_dom, _index} -> attr_dom end)
+  end
+
+  defp delete_csp_nonce_context(%{emitted_context: context} = page_component_struct) do
+    %{
+      page_component_struct
+      | emitted_context: Map.delete(context, {Hologram, :csp_nonce})
+    }
   end
 
   # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,
@@ -956,6 +902,14 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
+  # The name a fill marker files its value under: the text of its name attribute.
+  defp fill_name(attributes) do
+    Enum.find_value(attributes, fn
+      {"name", [text: name]} -> name
+      _attribute -> nil
+    end)
+  end
+
   defp filter_allowed_props(props_dom, module) do
     registered_prop_names =
       module.__props__()
@@ -999,15 +953,6 @@ defmodule Hologram.Template.Renderer do
     end
 
     Enum.map(param_names, &from_query_arg!(module, prop_name, &1, props))
-  end
-
-  # What the runtime component renders for the runtime script, once per chunk: an async script
-  # element, by the chunk's bundle path.
-  defp chunk_script_elements(chunk_digests) do
-    Enum.map(chunk_digests, fn chunk_digest ->
-      {:element, "script",
-       [{"async", []}, {"src", [text: RouterHelpers.chunk_bundle_path(chunk_digest)]}], []}
-    end)
   end
 
   defp has_cid_prop?(props) do
@@ -1108,66 +1053,47 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
-  # A `$` inside an inserted value cannot begin a token once it is spelled as an escape, and the
-  # string it sits in says the same thing either way: `\u0024` is `$` to a JSON reader and to a
-  # JavaScript one alike. Only the `$` moves - the rest of the token is ordinary text.
-  defp neutralize_js_placeholders(js) do
-    Regex.replace(@js_placeholder_pattern, js, fn <<?$, rest::binary>> ->
-      "\\u0024" <> rest
-    end)
-  end
-
   defp invalid_dynamic_tag_value_message(value) do
     "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: #{inspect(value)}"
   end
 
-  defp maybe_put_csrf_token_context(page_component_struct, opts, true) do
-    csrf_token =
-      opts[:csrf_token] || raise ArgumentError, "CSRF token is required for initial page requests"
+  # An initial page puts the nonce in the context when it is given one, and nothing otherwise.
+  defp maybe_put_csp_nonce_context(page_component_struct, opts, true) do
+    case opts[:csp_nonce] do
+      nil ->
+        page_component_struct
 
-    Component.put_context(
-      page_component_struct,
-      {Hologram, :csrf_token},
-      csrf_token
-    )
+      csp_nonce ->
+        Component.put_context(
+          page_component_struct,
+          {Hologram, :csp_nonce},
+          csp_nonce
+        )
+    end
   end
 
-  defp maybe_put_csrf_token_context(page_component_struct, _opts, false) do
+  defp maybe_put_csp_nonce_context(page_component_struct, _opts, false) do
     page_component_struct
   end
 
-  defp maybe_put_instance_id_context(page_component_struct, opts, true) do
-    instance_id =
-      opts[:instance_id] ||
-        raise ArgumentError, "instance_id is required for initial page requests"
+  defp maybe_stamp_csp_nonce(attributes, tag_name, csp_stamp) when tag_name in @nonce_elems do
+    attributes_without_nonce =
+      Enum.reject(attributes, fn {name, _value} -> String.downcase(name) == "nonce" end)
 
-    Component.put_context(
-      page_component_struct,
-      {Hologram, :instance_id},
-      instance_id
-    )
+    case csp_stamp do
+      {csp_nonce, nonced_elements} ->
+        if tag_name in nonced_elements do
+          [{"nonce", [text: csp_nonce]} | attributes_without_nonce]
+        else
+          attributes_without_nonce
+        end
+
+      nil ->
+        attributes_without_nonce
+    end
   end
 
-  defp maybe_put_instance_id_context(page_component_struct, _opts, false) do
-    page_component_struct
-  end
-
-  defp maybe_put_replica_identity_context(page_component_struct, opts, true) do
-    replica_id =
-      opts[:replica_id] || raise ArgumentError, "replica_id is required for initial page requests"
-
-    replica_token =
-      opts[:replica_token] ||
-        raise ArgumentError, "replica_token is required for initial page requests"
-
-    page_component_struct
-    |> Component.put_context({Hologram, :replica_id}, replica_id)
-    |> Component.put_context({Hologram, :replica_token}, replica_token)
-  end
-
-  defp maybe_put_replica_identity_context(page_component_struct, _opts, false) do
-    page_component_struct
-  end
+  defp maybe_stamp_csp_nonce(attributes, _tag_name, _csp_stamp), do: attributes
 
   # WARNING: must match the client renderer's #mergeNeighbouringTextNodes: adjacent text nodes
   # join into one, other nodes pass through. Merged text is also what an HTML parser produces, so
@@ -1213,36 +1139,54 @@ defmodule Hologram.Template.Renderer do
   # code of a raw text element. A comment passes it along rather than clearing it: "<!--" inside a
   # script or a style opens no comment, so escaping the text it wraps would corrupt the code it
   # belongs to.
-  defp print_node(nodes, parent_tag_name) when is_list(nodes) do
-    Enum.map_join(nodes, &print_node(&1, parent_tag_name))
+  defp print_node(nodes, parent_tag_name, print_opts) when is_list(nodes) do
+    Enum.map_join(nodes, &print_node(&1, parent_tag_name, print_opts))
   end
 
   # A <window> or <document> tag renders to no node at all.
-  defp print_node(nil, _parent_tag_name), do: ""
+  defp print_node(nil, _parent_tag_name, _print_opts), do: ""
 
-  defp print_node({:doctype, content}, _parent_tag_name), do: "<!DOCTYPE #{content}>"
+  defp print_node({:doctype, content}, _parent_tag_name, _print_opts), do: "<!DOCTYPE #{content}>"
 
-  defp print_node({:element, tag_name, attributes, children}, _parent_tag_name) do
-    attributes_html = print_attributes(attributes)
+  # A marker for a value written at print time, which the printed page carries in its place.
+  defp print_node(
+         {:element, "hologram-fill", attributes, _children},
+         _parent_tag_name,
+         print_opts
+       ) do
+    Map.get(print_opts.fills, fill_name(attributes), "")
+  end
+
+  defp print_node({:element, tag_name, attributes, children}, _parent_tag_name, print_opts) do
+    attributes_html =
+      attributes
+      |> maybe_stamp_csp_nonce(tag_name, print_opts.csp_stamp)
+      |> print_attributes()
 
     if tag_name in @void_elems do
       "<#{tag_name}#{attributes_html} />"
     else
-      children_html = print_node(children, tag_name)
+      children_html = print_node(children, tag_name, print_opts)
 
       "<#{tag_name}#{attributes_html}>#{children_html}</#{tag_name}>"
     end
   end
 
-  defp print_node({:public_comment, children}, parent_tag_name) do
-    "<!--#{print_node(children, parent_tag_name)}-->"
+  defp print_node({:public_comment, children}, parent_tag_name, print_opts) do
+    "<!--#{print_node(children, parent_tag_name, print_opts)}-->"
   end
 
-  defp print_node({:text, text}, parent_tag_name) when parent_tag_name in @raw_text_elems do
+  defp print_node({:text, text}, parent_tag_name, _print_opts)
+       when parent_tag_name in @raw_text_elems do
     text
   end
 
-  defp print_node({:text, text}, _parent_tag_name), do: HtmlEntities.encode(text)
+  defp print_node({:text, text}, _parent_tag_name, _print_opts), do: HtmlEntities.encode(text)
+
+  # What print_node/3 carries down the tree: the nonce stamp and the values markers are filled with.
+  defp print_opts(opts) do
+    %{csp_stamp: csp_stamp(opts), fills: opts[:fills] || %{}}
+  end
 
   defp put_initial_page_flag_context(page_component_struct, initial_page?) do
     Component.put_context(
@@ -1386,6 +1330,43 @@ defmodule Hologram.Template.Renderer do
     |> render_tree(env, server_struct)
   end
 
+  # `$focused` is what the client reads, and `autofocus` is its markup counterpart: the browser
+  # applies it on a full page load, before the runtime starts, which is how a declared focus holds
+  # on the first load. The last `$focused` on the element decides, and an `autofocus` yields to it.
+  # The build rejects a literal `autofocus` next to `$focused`, so what is dropped here came through
+  # a spread. That way the markup and the client never disagree about the element.
+  #
+  # WARNING: must match the client renderer's handling of `$focused` in #renderElement.
+  defp apply_focused_attribute(attrs_dom) do
+    if List.keymember?(attrs_dom, "$focused", 0) do
+      last_index =
+        attrs_dom
+        |> Enum.with_index()
+        |> Enum.reduce(nil, fn
+          {{"$focused", _value_dom}, index}, _acc -> index
+          _attr_dom_with_index, acc -> acc
+        end)
+
+      attrs_dom
+      |> Enum.with_index()
+      |> Enum.flat_map(fn
+        {{"$focused", value_dom}, ^last_index} -> focused_attribute(value_dom)
+        {{name, _value_dom}, _index} when name in ["$focused", "autofocus"] -> []
+        {attr_dom, _index} -> [attr_dom]
+      end)
+    else
+      attrs_dom
+    end
+  end
+
+  # The build guarantees `$focused` carries no value (true, as for any boolean attribute) or a single
+  # expression.
+  defp focused_attribute([]), do: [{"autofocus", []}]
+
+  defp focused_attribute(expression: {value}) when value in [nil, false], do: []
+
+  defp focused_attribute(expression: {_value}), do: [{"autofocus", []}]
+
   # WARNING: must match the client renderer's #renderAttribute normalization: an empty value list
   # is a boolean attribute, a nil or false expression value removes the attribute, and everything
   # else collapses to one unescaped string.
@@ -1404,7 +1385,7 @@ defmodule Hologram.Template.Renderer do
   # Event bindings stay behind: they are built from compile-time listener information the tree
   # cannot carry, and the interim page a navigation patches in is display-only until hydration
   # attaches real listeners. The `$key` attribute travels, since it is what carries element
-  # identity into the client's diff.
+  # identity into the client's diff. `$focused` travels as the `autofocus` attribute it renders as.
   defp render_tree_attributes(attrs_dom)
 
   defp render_tree_attributes([]), do: []
@@ -1412,6 +1393,7 @@ defmodule Hologram.Template.Renderer do
   defp render_tree_attributes(attrs_dom) do
     attrs_dom
     |> expand_attribute_spreads()
+    |> apply_focused_attribute()
     |> Enum.reject(fn attr_dom ->
       name = elem(attr_dom, 0)
       String.starts_with?(name, "$") and name != "$key"

@@ -87,4 +87,19 @@ defmodule HologramFeatureTests.Events.KeyboardTest do
       ~r{\{:slash, %\{event: %\{alt_key: false, code: "Slash", ctrl_key: false, key: "/", meta_key: false, repeat: false, shift_key: false\}\}\}}
     )
   end
+
+  # A bare Event dispatched as keydown has no key, code or modifier flags, the shape Chromium
+  # fires before it autofills a field. The result stays nil either way, so the check is that no
+  # listener throws: execute_script reads the browser log after the script runs, and an uncaught
+  # listener error surfaces there as a Wallaby.JSError.
+  feature "a keydown without a key is ignored", %{session: session} do
+    session
+    |> visit(KeyboardPage)
+    |> execute_script("""
+    for (const id of ["my_input_key_down", "my_input_enter"]) {
+      document.getElementById(id).dispatchEvent(new Event("keydown", {bubbles: true}));
+    }
+    """)
+    |> assert_text(css("#result"), "nil")
+  end
 end

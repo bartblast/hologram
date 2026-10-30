@@ -24,6 +24,7 @@ import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import Elixir_Task from "../../assets/js/elixir/task.mjs";
 import ERTS from "../../assets/js/erts.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
+import FocusEvent from "../../assets/js/events/focus_event.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
@@ -1691,6 +1692,120 @@ describe("Hologram", () => {
       sinon.assert.notCalled(scheduleActionStub);
     });
 
+    // A focus or blur the runtime causes while applying $focused or autofocus reports nothing
+    // back: the state already says where focus is.
+    describe("while the runtime moves focus", () => {
+      beforeEach(() => {
+        FocusEvent.isRuntimeFocusChange = true;
+      });
+
+      afterEach(() => {
+        FocusEvent.isRuntimeFocusChange = false;
+      });
+
+      it("ignores a blur event", () => {
+        assert.isNull(
+          Hologram.handleUiEvent(
+            notIgnoredEvent,
+            "blur",
+            actionSpecDom,
+            defaultTarget,
+          ),
+        );
+      });
+
+      it("ignores a focus event", () => {
+        assert.isNull(
+          Hologram.handleUiEvent(
+            notIgnoredEvent,
+            "focus",
+            actionSpecDom,
+            defaultTarget,
+          ),
+        );
+      });
+
+      // A field that loses focus can fire change for what the user typed into it, which is the
+      // user's doing and has to reach its binding.
+      it("still dispatches an event of another kind", () => {
+        const input = {tagName: "INPUT", type: "text", value: "abc"};
+        const changeEvent = {currentTarget: input, target: input};
+
+        const dispatch = Hologram.handleUiEvent(
+          changeEvent,
+          "change",
+          actionSpecDom,
+          defaultTarget,
+        );
+
+        assert.isFunction(dispatch);
+      });
+    });
+
+    describe("binding that evaluates to a boolean", () => {
+      // Example: $click={true}
+      const trueSpecDom = Type.keywordList([
+        [Type.atom("expression"), Type.tuple([Type.boolean(true)])],
+      ]);
+
+      // Example: $click={false}
+      const falseSpecDom = Type.keywordList([
+        [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+      ]);
+
+      it("raises for true", () => {
+        assert.throw(
+          () =>
+            Hologram.handleUiEvent(
+              notIgnoredEvent,
+              eventType,
+              trueSpecDom,
+              defaultTarget,
+            ),
+          HologramRuntimeError,
+          "an event binding evaluated to true, which is not an action or command name",
+        );
+
+        sinon.assert.notCalled(executeActionStub);
+      });
+
+      it("adds the $focused hint for a focus binding", () => {
+        assert.throw(
+          () =>
+            Hologram.handleUiEvent(
+              notIgnoredEvent,
+              "focus",
+              trueSpecDom,
+              defaultTarget,
+            ),
+          HologramRuntimeError,
+          "an event binding evaluated to true, which is not an action or command name - to control focus, use $focused",
+        );
+      });
+
+      // Whether false should disable the binding the way nil does is a separate question, so it
+      // dispatches as it always did: as an action named false.
+      it("leaves false to dispatch as it did", () => {
+        const dispatch = Hologram.handleUiEvent(
+          notIgnoredEvent,
+          eventType,
+          falseSpecDom,
+          defaultTarget,
+        );
+
+        dispatch();
+
+        sinon.assert.calledOnce(executeActionStub);
+
+        const action = executeActionStub.firstCall.args[0];
+
+        assert.deepStrictEqual(
+          action.data["atom(name)"][1],
+          Type.atom("false"),
+        );
+      });
+    });
+
     it("regular action without delay", () => {
       const dispatch = Hologram.handleUiEvent(
         notIgnoredEvent,
@@ -2505,12 +2620,21 @@ describe("Hologram", () => {
   describe("loadNewPage()", () => {
     let assignedUrls, assignStub, fetchPageStub;
 
-    const encodedModule7 = `Type.atom("Elixir.Hologram.Test.Fixtures.Module7")`;
-    const encodedNoParams = "Type.map([])";
+    // A payload field holds a term the way the server sends it: serialized, and already parsed
+    // along with the rest of the response.
+    const serialized = (term) =>
+      JSON.parse(Serializer.serialize(term, "server"));
 
-    const redirectTo = (to, encodedPageModule = encodedModule7) => ({
-      pageModule: encodedPageModule,
-      pageParams: encodedNoParams,
+    const module7 = Type.atom("Elixir.Hologram.Test.Fixtures.Module7");
+    const serializedModule7 = serialized(module7);
+    const serializedNoParams = serialized(Type.map());
+
+    // Built once: some tests stub the serializer to watch what the page snapshot saves.
+    const serializedEmptyList = serialized(Type.list());
+
+    const redirectTo = (to, serializedPageModule = serializedModule7) => ({
+      pageModule: serializedPageModule,
+      pageParams: serializedNoParams,
       to: to,
       type: "redirect",
     });
@@ -2542,16 +2666,31 @@ describe("Hologram", () => {
     ];
 
     // The mount data the server used to write into an inline script, carried as payload fields.
-    const encodedComponentRegistry = `Type.map([[Type.bitstring("page"), Type.map([[Type.atom("module"), ${encodedModule7}], [Type.atom("struct"), Type.componentStruct({state: Type.map([[Type.atom("count"), Type.integer(7)]])})]])]])`;
+    const serializedComponentRegistry = serialized(
+      Type.map([
+        [
+          Type.bitstring("page"),
+          Type.map([
+            [Type.atom("module"), module7],
+            [
+              Type.atom("struct"),
+              Type.componentStruct({
+                state: Type.map([[Type.atom("count"), Type.integer(7)]]),
+              }),
+            ],
+          ]),
+        ],
+      ]),
+    );
 
     const payloadFor = (pageDigest, bodyText = "page content") => ({
-      componentRegistry: encodedComponentRegistry,
+      componentRegistry: serializedComponentRegistry,
       pageDigest: pageDigest,
-      pageModule: encodedModule7,
-      pageParams: encodedNoParams,
-      selfEchoes: "Type.list([])",
-      subReceiptAdds: "Type.list([])",
-      subReceiptDrops: "Type.list([])",
+      pageModule: serializedModule7,
+      pageParams: serializedNoParams,
+      selfEchoes: serializedEmptyList,
+      subReceiptAdds: serializedEmptyList,
+      subReceiptDrops: serializedEmptyList,
       tree: treeFor(pageDigest, bodyText),
       type: "page",
     });
@@ -2775,6 +2914,7 @@ describe("Hologram", () => {
 
       afterEach(() => {
         delete window.requestAnimationFrame;
+        Hologram.isPageShown = false;
         Hologram.virtualDocument = null;
 
         patchStub?.restore();
@@ -2783,27 +2923,23 @@ describe("Hologram", () => {
         removeBundleScripts();
       });
 
-      // The point of carrying the state beside the render: it is readable without any script
-      // having run, so it no longer depends on the patch inserting one and the browser executing
-      // it. No mount data script exists in this tree at all.
+      // The point of carrying the state beside the render: it is readable without any element the
+      // patch inserts. No boot data block exists in this tree at all.
       it("makes the page's mount data readable before the patch", async () => {
-        delete globalThis.Hologram.pageMountData;
-
         await Hologram.loadNewPage("/target", payloadFor("mount-data"));
 
-        // Nothing defined the carrier, so the mount can only have read the payload.
-        assert.isUndefined(globalThis.Hologram.pageMountData);
-        assert.notInclude(document.head.innerHTML, "pageMountData");
+        // Nothing carried a block, so the mount can only read the payload.
+        assert.isNull(document.querySelector("#hologram-boot-data"));
       });
 
       // That the mount then consumes it is a feature test's job - the mount is not reachable from
       // here, since it needs either the destination's code already registered or its bundle to
       // announce itself. What is provable here is that the payload's fields are decoded during
-      // the swap: a field that cannot be evaluated fails it.
+      // the swap: a field that cannot be read fails it, here a map whose entry is no pair.
       it("decodes the payload's mount data during the swap", async () => {
         const payload = {
           ...payloadFor("bad-registry"),
-          componentRegistry: "Type.map([[[",
+          componentRegistry: [4, {t: "m", d: ["i1"]}],
         };
 
         let thrown = null;
@@ -3204,6 +3340,69 @@ describe("Hologram", () => {
         );
 
         assert.deepStrictEqual(patchedHead.children, []);
+      });
+
+      // The patch is where the page appears, so it is where its autofocus lands: in the same frame
+      // as the markup, before the bundle has even been asked for.
+      it("focuses the destination's autofocus element as its markup appears", async () => {
+        const payload = {
+          ...payloadFor("focus"),
+          tree: [
+            wireElement(
+              "html",
+              [],
+              [
+                wireElement("head", [], [wireBundleScript("focus")]),
+                wireElement(
+                  "body",
+                  [],
+                  [wireElement("input", ["id", "search", "autofocus", null])],
+                ),
+              ],
+            ),
+          ],
+        };
+
+        await Hologram.loadNewPage("/target", payload);
+
+        const search = document.getElementById("search");
+
+        assert.strictEqual(document.activeElement, search);
+
+        search.blur();
+        search.remove();
+      });
+
+      // The left page's focused element may survive the patch - the diff keeps a node whose
+      // place matches - and a document load starts with nothing focused.
+      it("starts the destination with nothing focused when it declares no focus", async () => {
+        const field = document.createElement("input");
+        field.id = "left_page_field";
+        document.body.appendChild(field);
+        field.focus();
+
+        try {
+          await Hologram.loadNewPage("/target", payloadFor("blank"));
+
+          assert.strictEqual(document.activeElement, document.body);
+        } finally {
+          field.remove();
+        }
+      });
+
+      it("patches as a page arrival and records that the page is shown", async () => {
+        let isPageArrivalDuringPatch = null;
+
+        patchStub = sinon.stub(Vdom, "patchVirtualDocument").callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return Hologram.virtualDocument;
+        });
+
+        await Hologram.loadNewPage("/target", payloadFor("arrival"));
+
+        assert.isTrue(isPageArrivalDuringPatch);
+        assert.isFalse(Renderer.isPageArrival);
+        assert.isTrue(Hologram.isPageShown);
       });
     });
 
@@ -3893,6 +4092,46 @@ describe("Hologram", () => {
       }
     });
 
+    // A navigation the browser's history closes may have shown its destination and never
+    // mounted it. The restore that follows has no interim patch, so its mount's render is where
+    // the restored page appears, and the flag the shown page left must not say otherwise.
+    it("forgets a page shown by the navigation it closes", async () => {
+      const instanceId = App.instanceId;
+
+      const pageSnapshot = {
+        componentRegistryEntries: Type.map(),
+        instanceId: "popstate-instance",
+        pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Module7"),
+        pageParams: Type.map(),
+        scrollPosition: [0, 0],
+        subscriptionReceipts: [],
+      };
+
+      sessionStorage.setItem(
+        "hologram_page_snapshot_history-2",
+        Serializer.serialize(pageSnapshot, "client"),
+      );
+
+      const consoleErrorStub = sinon.stub(console, "error");
+      const fetchStub = sinon.stub(Client, "fetchPageDigest");
+
+      Hologram.isPageShown = true;
+
+      try {
+        await Hologram.handlePopstateEvent({state: "history-2"});
+
+        assert.isFalse(Hologram.isPageShown);
+      } finally {
+        fetchStub.restore();
+        consoleErrorStub.restore();
+        sessionStorage.clear();
+        ComponentRegistry.clear();
+        App.instanceId = instanceId;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      }
+    });
+
     // The state a snapshot holds can carry values of struct types whose protocol implementations
     // only the chunks it was taken with have, so it is restored once they are in. A snapshot can be
     // older than the build that serves the app now, and its chunks are named by digest, so the
@@ -4144,17 +4383,22 @@ describe("Hologram", () => {
           assert.equal(Hologram.registryEpoch, 1);
           assert.equal(Hologram.domEpoch, 0);
 
+          // Whatever a navigation left behind, the mount's render is the last thing that reads it.
+          Hologram.isPageShown = true;
+
           frame();
 
           assert.equal(domEpochDuringRender, 1);
           assert.equal(Hologram.domEpoch, 1);
           assert.isFalse(Hologram.isMounting);
+          assert.isFalse(Hologram.isPageShown);
         } finally {
           delete window.requestAnimationFrame;
           delete globalThis.Hologram.assetManifest;
           AssetPathRegistry.entries = assetPathEntries;
           LiveReload.pageBundleDigests.delete(mountedModule.value);
           Hologram.isMounting = false;
+          Hologram.isPageShown = false;
           renderStub.restore();
           scrollToStub.restore();
           sseConnectStub.restore();
@@ -4542,6 +4786,144 @@ describe("Hologram", () => {
     });
   });
 
+  describe("readBootData()", () => {
+    const fieldNames = [
+      "assetManifest",
+      "csrfToken",
+      "initialChunkDigests",
+      "initialPageDigest",
+      "instanceId",
+    ];
+
+    let originalFields;
+
+    const bootDataJson = (instanceId) =>
+      JSON.stringify({
+        assetManifest: {"hologram/runtime.js": "/hologram/runtime-AAAA.js"},
+        chunks: ["CCCCCCCC"],
+        csrfToken: "my_csrf_token",
+        instanceId: instanceId,
+        pageDigest: "my_page_digest",
+      });
+
+    const appendBlock = (instanceId, nonce = null, extraAttrs = {}) => {
+      const block = document.createElement("script");
+      block.type = "application/json";
+      block.id = "hologram-boot-data";
+
+      if (nonce !== null) {
+        block.nonce = nonce;
+      }
+
+      for (const [name, value] of Object.entries(extraAttrs)) {
+        block.setAttribute(name, value);
+      }
+
+      block.textContent = bootDataJson(instanceId);
+      document.body.appendChild(block);
+    };
+
+    beforeEach(() => {
+      originalFields = Object.fromEntries(
+        fieldNames.map((name) => [name, globalThis.Hologram[name]]),
+      );
+    });
+
+    afterEach(() => {
+      document
+        .querySelectorAll("#hologram-boot-data")
+        .forEach((block) => block.remove());
+
+      // With no block left, a read holds no boot data, so none leaks into a later test.
+      Hologram.readBootData();
+
+      for (const name of fieldNames) {
+        globalThis.Hologram[name] = originalFields[name];
+      }
+
+      App.cspNonce = null;
+    });
+
+    it("puts the block's plain fields where the runtime reads them", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("my_instance_id", "my_nonce");
+
+      Hologram.readBootData();
+
+      assert.deepStrictEqual(globalThis.Hologram.assetManifest, {
+        "hologram/runtime.js": "/hologram/runtime-AAAA.js",
+      });
+
+      assert.equal(globalThis.Hologram.csrfToken, "my_csrf_token");
+
+      assert.deepStrictEqual(globalThis.Hologram.initialChunkDigests, [
+        "CCCCCCCC",
+      ]);
+
+      assert.equal(globalThis.Hologram.initialPageDigest, "my_page_digest");
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("passes over a block without the document's nonce in favor of the one with it", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("forged_instance_id", "other_nonce");
+      appendBlock("my_instance_id", "my_nonce");
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("passes over a block whose attributes hold an absorbed script tag", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("forged_instance_id", "my_nonce", {
+        "data-x": '<script id="a"',
+      });
+      appendBlock("my_instance_id", "my_nonce");
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("passes over a block whose attributes hold an absorbed style tag, whatever its case", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("forged_instance_id", "my_nonce", {"data-x": "<STYLE>"});
+      appendBlock("my_instance_id", "my_nonce");
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("throws when no block carries the document's nonce", () => {
+      App.cspNonce = "my_nonce";
+      appendBlock("forged_instance_id", "other_nonce");
+
+      assert.throws(
+        () => Hologram.readBootData(),
+        HologramRuntimeError,
+        "The page's boot data could not be read: no boot data block carries the document's nonce",
+      );
+    });
+
+    it("takes the one block there is in a document without a nonce", () => {
+      appendBlock("my_instance_id");
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "my_instance_id");
+    });
+
+    it("sets nothing in a document with no block", () => {
+      globalThis.Hologram.instanceId = "untouched";
+
+      Hologram.readBootData();
+
+      assert.equal(globalThis.Hologram.instanceId, "untouched");
+    });
+  });
+
   describe("render()", () => {
     let clock = null;
 
@@ -4561,9 +4943,13 @@ describe("Hologram", () => {
       clock?.restore();
       clock = null;
       ActionQueue.entries = [];
+      Hologram.isMounting = false;
+      Hologram.isPageShown = false;
       Hologram.isRendering = false;
       Hologram.virtualDocument = null;
+      Renderer.isPageArrival = false;
       Renderer.listenerBindings = [];
+      Renderer.resetFocusCandidates();
       sinon.restore();
     });
 
@@ -4672,6 +5058,123 @@ describe("Hologram", () => {
         previousVirtualDocument,
         renderedVirtualDocument,
       );
+    });
+
+    describe("focus", () => {
+      const renderedVirtualDocument = {sel: "html", data: {}, children: []};
+
+      let patchStub, resetStub, settleStub;
+
+      beforeEach(() => {
+        sinon.stub(Renderer, "renderPage").returns(renderedVirtualDocument);
+        sinon.stub(EventListenerRegistry, "reconcile");
+        sinon.stub(EventListeners, "recheckScrollEdges");
+
+        patchStub = sinon.stub(Vdom, "patchVirtualDocument");
+        resetStub = sinon.stub(Renderer, "resetFocusCandidates");
+        settleStub = sinon.stub(Renderer, "settleFocus");
+
+        Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+      });
+
+      it("resets the candidates before the patch and settles them after it", () => {
+        Hologram.render();
+
+        sinon.assert.callOrder(resetStub, patchStub, settleStub);
+        sinon.assert.calledOnceWithExactly(settleStub, false);
+      });
+
+      it("settles nothing on the boot render", () => {
+        sinon
+          .stub(Vdom, "mirror")
+          .returns({sel: "html", data: {}, children: []});
+        Hologram.virtualDocument = null;
+
+        Hologram.render();
+
+        sinon.assert.calledOnceWithExactly(settleStub, true);
+      });
+
+      // The focus and blur events a settled focus fires dispatch into the queue, which has to
+      // hold them until the render is done, the way it holds a focusout the patch causes.
+      it("settles focus while the render flag is still set", () => {
+        let isRenderingDuringSettle = null;
+
+        settleStub.callsFake(() => {
+          isRenderingDuringSettle = Hologram.isRendering;
+        });
+
+        Hologram.render();
+
+        assert.isTrue(isRenderingDuringSettle);
+      });
+
+      // A history restore has no interim patch: the left page stays up until this render, so
+      // this render is where the page appears.
+      it("patches a mount with no page shown before it as a page arrival", () => {
+        let isPageArrivalDuringPatch = null;
+
+        patchStub.callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return Hologram.virtualDocument;
+        });
+
+        Hologram.isMounting = true;
+
+        Hologram.render();
+
+        assert.isTrue(isPageArrivalDuringPatch);
+      });
+
+      // The interim patch of the navigation put the page on screen and settled its focus.
+      it("patches a mount after a shown page as an ordinary render", () => {
+        let isPageArrivalDuringPatch = null;
+
+        patchStub.callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return Hologram.virtualDocument;
+        });
+
+        Hologram.isMounting = true;
+        Hologram.isPageShown = true;
+
+        Hologram.render();
+
+        assert.isFalse(isPageArrivalDuringPatch);
+      });
+
+      it("patches the boot render as an ordinary render", () => {
+        let isPageArrivalDuringPatch = null;
+
+        sinon
+          .stub(Vdom, "mirror")
+          .returns({sel: "html", data: {}, children: []});
+        Hologram.virtualDocument = null;
+
+        patchStub.callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return {sel: "html", data: {}, children: []};
+        });
+
+        Hologram.isMounting = true;
+
+        Hologram.render();
+
+        assert.isFalse(isPageArrivalDuringPatch);
+      });
+
+      it("patches a render that is no mount as an ordinary render", () => {
+        let isPageArrivalDuringPatch = null;
+
+        patchStub.callsFake(() => {
+          isPageArrivalDuringPatch = Renderer.isPageArrival;
+          return Hologram.virtualDocument;
+        });
+
+        Hologram.render();
+
+        assert.isFalse(isPageArrivalDuringPatch);
+      });
     });
 
     // A dispatch arriving while the flag is set has to wait for the render to finish, so the flag

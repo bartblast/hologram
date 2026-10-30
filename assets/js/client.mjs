@@ -5,6 +5,7 @@ import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Connection from "./connection.mjs";
+import Deserializer from "./deserializer.mjs";
 import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import HttpTransport from "./http_transport.mjs";
@@ -193,34 +194,31 @@ export default class Client {
       const {
         action,
         chunks = [],
-        selfEchoes: encodedSelfEchoes,
+        selfEchoes: serializedSelfEchoes,
         status,
-        subReceiptAdds: encodedSubReceiptAdds,
-        subReceiptDrops: encodedSubReceiptDrops,
+        subReceiptAdds: serializedSubReceiptAdds,
+        subReceiptDrops: serializedSubReceiptDrops,
       } = await response.json();
 
       if (status === 0) {
         $.#failCommand(action);
       }
 
-      const subReceiptAdds = Interpreter.evaluateJavaScriptExpression(
-        encodedSubReceiptAdds,
-      );
+      const subReceiptAdds = Deserializer.deserialize(serializedSubReceiptAdds);
 
-      const subReceiptDrops = Interpreter.evaluateJavaScriptExpression(
-        encodedSubReceiptDrops,
+      const subReceiptDrops = Deserializer.deserialize(
+        serializedSubReceiptDrops,
       );
 
       App.subscriptionReceiptRegistry.merge(subReceiptAdds, subReceiptDrops);
 
-      const nextAction = Interpreter.evaluateJavaScriptExpression(action);
+      const nextAction = Deserializer.deserialize(action);
 
       if (!Type.isNil(nextAction)) {
         Hologram.schedulePushedAction(nextAction, chunks, epoch);
       }
 
-      const selfEchoes =
-        Interpreter.evaluateJavaScriptExpression(encodedSelfEchoes);
+      const selfEchoes = Deserializer.deserialize(serializedSelfEchoes);
 
       // A self echo is the sender's own copy of a broadcast, so it goes where a broadcast from
       // another tab goes: to the page on screen when it arrives, since the subscription it answers

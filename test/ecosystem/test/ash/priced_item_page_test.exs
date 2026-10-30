@@ -37,16 +37,23 @@ defmodule HologramEcosystemTests.Ash.PricedItemPageTest do
     assert money_digests != []
 
     for digest <- money_digests do
-      assert String.contains?(
-               document,
-               ~s(<script async src="#{RouterHelpers.chunk_bundle_path(digest)}"></script>)
-             )
+      chunk_bundle_path =
+        digest
+        |> RouterHelpers.chunk_bundle_path()
+        |> Regex.escape()
+
+      assert document =~ ~r'<script nonce="[^"]+" async src="#{chunk_bundle_path}"></script>'
     end
 
-    [_match, initial_digests_json] =
-      Regex.run(~r/globalThis\.Hologram\.initialChunkDigests = (\[[^\]]*\]);/, document)
+    [_match, boot_data_json] =
+      Regex.run(~r'<script[^>]* id="hologram-boot-data"[^>]*>(.*?)</script>'s, document)
 
-    assert money_digests -- Jason.decode!(initial_digests_json) == []
+    initial_digests =
+      boot_data_json
+      |> Jason.decode!()
+      |> Map.fetch!("chunks")
+
+    assert money_digests -- initial_digests == []
   end
 
   # The page's client code names no money struct, so the chunk reaches the document through the

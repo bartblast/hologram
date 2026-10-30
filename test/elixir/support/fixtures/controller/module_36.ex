@@ -2,42 +2,15 @@
 defmodule Hologram.Test.Fixtures.Controller.Module36 do
   use Hologram.Component
 
-  import Hologram.Query, only: [trust: 1]
+  middleware :mark
 
-  alias Hologram.Auth
-  alias Hologram.DB
-  alias Hologram.Test.Fixtures.Policy.Module1
-  alias Hologram.Test.Fixtures.Role.Module1, as: Role1
+  def mark(server, _opts) do
+    put_response_header(server, "x-my-header", "my_value")
+  end
 
   @impl Component
-  def command(:my_command_creating_entity, _params, server) do
-    entity = Module1.new()
-
-    entity
-    |> trust()
-    |> DB.create!()
-
-    %{server | next_action: nil}
-  end
-
-  def command(:my_command_creating_entity_on_the_users_authority, _params, server) do
-    DB.create!(Module1.new())
-
-    %{server | next_action: nil}
-  end
-
-  def command(:my_command_granting_global_role, %{user_id: user_id}, server) do
-    Auth.grant_role(user_id, Role1)
-
-    %{server | next_action: nil}
-  end
-
-  def command(:my_command_revoking_role, params, server) do
-    %{entity_id: entity_id, user_id: user_id} = params
-
-    Auth.revoke_role(user_id, :owner, %Module1{id: entity_id})
-
-    %{server | next_action: nil}
+  def command(:my_command, _params, server) do
+    server
   end
 
   @impl Component

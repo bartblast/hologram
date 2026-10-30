@@ -732,6 +732,14 @@ defmodule Hologram.EntityTest do
       assert strip_server_only_deep(action) == %Action{name: :save, params: expected_params}
     end
 
+    test "strips entity structs held in an improper list, its last tail among them" do
+      entity_1 = new(Module15, token: "tok_E5")
+      entity_2 = new(Module15, token: "tok_F6")
+
+      assert strip_server_only_deep([entity_1 | entity_2]) ==
+               [strip_server_only(entity_1) | strip_server_only(entity_2)]
+    end
+
     test "strips an entity struct used as a map key" do
       entity = new(Module15, label: "Report", token: "tok_D4")
 

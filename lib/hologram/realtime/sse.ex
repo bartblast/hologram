@@ -2,7 +2,6 @@ defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
   alias Hologram.Assets.ChunkRegistry
-  alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.DB.Oplog
   alias Hologram.Entity.Model
@@ -15,6 +14,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Realtime.SSE.Adapters
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Runtime.ReplicaIdentity
+  alias Hologram.Runtime.Serializer
   alias Hologram.Runtime.Session
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Frame
@@ -43,45 +43,46 @@ defmodule Hologram.Realtime.SSE do
   @doc """
   Builds the SSE event-stream chunk for an `action` broadcast: the standard
   `event:`/`id:`/`data:` framing with the given id and, as the data payload, a JSON
-  object holding the encoded `%Action{}` struct under `action` and the digests of the
-  chunks its struct types need under `chunks` (see `Hologram.Assets.ChunkRegistry`),
-  which the client loads before it runs the action.
+  object holding the serialized `%Action{}` struct under `action`, nested as a value
+  the client's reader walks, and the digests of the chunks its struct types need under
+  `chunks` (see `Hologram.Assets.ChunkRegistry`), which the client loads before it runs
+  the action.
   """
   @spec encode_action_envelope(integer, Action.t()) :: String.t()
   def encode_action_envelope(id, %Action{} = action) do
-    {:ok, encoded_action} = Encoder.encode_client_term(action)
-    data = Jason.encode!(%{action: encoded_action, chunks: ChunkRegistry.lookup_term(action)})
+    serialized_action = serialize_to_fragment(action)
+    data = Jason.encode!(%{action: serialized_action, chunks: ChunkRegistry.lookup_term(action)})
 
     "event: action\nid: #{id}\ndata: #{data}\n\n"
   end
 
   @doc """
   Builds the SSE event-stream chunk for an `add_sub_receipts` event: the
-  standard `event:`/`id:`/`data:` framing with the given id and the encoded
+  standard `event:`/`id:`/`data:` framing with the given id and the serialized
   list of `{channel, cid, token}` triples as the data payload.
   """
   @spec encode_add_sub_receipts_envelope(integer, [{any, String.t(), String.t()}]) ::
           String.t()
   def encode_add_sub_receipts_envelope(id, receipts) do
-    {:ok, data} = Encoder.encode_client_term(receipts)
+    data = Serializer.serialize!(receipts)
     "event: add_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
   end
 
   @doc """
   Builds the SSE event-stream chunk for a `broadcast` event: the standard
   `event:`/`id:`/`data:` framing with the given id and, as the data payload, a JSON
-  object holding the encoded `{action_name, params, [cid1, cid2, ...]}` tuple under
-  `data` and the digests of the chunks the struct types in the params need under
-  `chunks` (see `Hologram.Assets.ChunkRegistry`), which the client loads before it
-  runs the actions.
+  object holding the serialized `{action_name, params, [cid1, cid2, ...]}` tuple under
+  `data`, nested as a value the client's reader walks, and the digests of the chunks
+  the struct types in the params need under `chunks` (see
+  `Hologram.Assets.ChunkRegistry`), which the client loads before it runs the actions.
 
   The cids list lets the client iterate per-cid dispatch from a single
   bundled chunk rather than receiving one `event: action` per matching cid.
   """
   @spec encode_broadcast_envelope(integer, atom, map, [String.t()]) :: String.t()
   def encode_broadcast_envelope(id, action_name, params, cids) do
-    {:ok, encoded_tuple} = Encoder.encode_client_term({action_name, params, cids})
-    data = Jason.encode!(%{chunks: ChunkRegistry.lookup_term(params), data: encoded_tuple})
+    serialized_tuple = serialize_to_fragment({action_name, params, cids})
+    data = Jason.encode!(%{chunks: ChunkRegistry.lookup_term(params), data: serialized_tuple})
 
     "event: broadcast\nid: #{id}\ndata: #{data}\n\n"
   end
@@ -109,12 +110,12 @@ defmodule Hologram.Realtime.SSE do
 
   @doc """
   Builds the SSE event-stream chunk for a `drop_sub_receipts` event: the
-  standard `event:`/`id:`/`data:` framing with the given id and the encoded
+  standard `event:`/`id:`/`data:` framing with the given id and the serialized
   list of `{channel, cid}` keys as the data payload.
   """
   @spec encode_drop_sub_receipts_envelope(integer, [{any, String.t()}]) :: String.t()
   def encode_drop_sub_receipts_envelope(id, keys) do
-    {:ok, data} = Encoder.encode_client_term(keys)
+    data = Serializer.serialize!(keys)
     "event: drop_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
   end
 
@@ -129,13 +130,13 @@ defmodule Hologram.Realtime.SSE do
 
   @doc """
   Builds the SSE event-stream chunk for a `refresh_sub_receipts` event: the
-  standard `event:`/`id:`/`data:` framing with the given id and the encoded
+  standard `event:`/`id:`/`data:` framing with the given id and the serialized
   list of `{channel, cid, token}` triples as the data payload.
   """
   @spec encode_refresh_sub_receipts_envelope(integer, [{any, String.t(), String.t()}]) ::
           String.t()
   def encode_refresh_sub_receipts_envelope(id, receipts) do
-    {:ok, data} = Encoder.encode_client_term(receipts)
+    data = Serializer.serialize!(receipts)
     "event: refresh_sub_receipts\nid: #{id}\ndata: #{data}\n\n"
   end
 
@@ -982,6 +983,13 @@ defmodule Hologram.Realtime.SSE do
     :ok = GenServer.stop(session, :normal)
 
     start_syncing(conn, new_user_id, false)
+  end
+
+  # A term travels as a nested JSON value rather than as a JSON string holding one: the client then
+  # parses the event's data once, and no quote inside the term is escaped on the way.
+  defp serialize_to_fragment(term) do
+    serialized = Serializer.serialize!(term)
+    Jason.Fragment.new(serialized)
   end
 
   defp watch_client(conn, adapter) do

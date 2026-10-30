@@ -994,6 +994,66 @@ describe("Interpreter", () => {
     assert.equal(result, expected);
   });
 
+  describe("buildFunctionCapture()", () => {
+    beforeEach(() => {
+      ERTS.funSequence.reset();
+    });
+
+    it("captures an Elixir module function", () => {
+      const result = Interpreter.buildFunctionCapture(
+        Type.alias("Kernel"),
+        Type.atom("inspect"),
+        1,
+      );
+
+      assert.equal(result.capturedModule, "Kernel");
+      assert.equal(result.capturedFunction, "inspect");
+      assert.equal(result.arity, 1);
+      assert.equal(result.clauses.length, 1);
+      assert.deepStrictEqual(result.context, Interpreter.buildContext());
+
+      const callResult = Interpreter.callAnonymousFunction(result, [
+        Type.integer(123),
+      ]);
+
+      assert.deepStrictEqual(callResult, Type.bitstring("123"));
+    });
+
+    it("captures an Erlang module function", () => {
+      const result = Interpreter.buildFunctionCapture(
+        Type.atom("erlang"),
+        Type.atom("+"),
+        2,
+      );
+
+      assert.equal(result.capturedModule, ":erlang");
+      assert.equal(result.capturedFunction, "+");
+      assert.equal(result.arity, 2);
+      assert.equal(result.clauses.length, 1);
+
+      const callResult = Interpreter.callAnonymousFunction(result, [
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(callResult, Type.integer(5));
+    });
+
+    it("raises UndefinedFunctionError when the captured function is not exported", () => {
+      const result = Interpreter.buildFunctionCapture(
+        Type.alias("Kernel"),
+        Type.atom("not_a_function"),
+        1,
+      );
+
+      assertBoxedError(
+        () => Interpreter.callAnonymousFunction(result, [Type.integer(1)]),
+        "UndefinedFunctionError",
+        "function Kernel.not_a_function/1 is undefined or private",
+      );
+    });
+  });
+
   // Only frame tracking is unit-tested here - clause dispatch behavior is
   // covered by feature and consistency tests, because its unit tests would
   // need updating each time Hologram.Compiler.Encoder's implementation
@@ -5080,6 +5140,16 @@ describe("Interpreter", () => {
 
           assert.isTrue(Interpreter.isStrictlyEqual(left, right));
         });
+
+        it("both decoded as not text", () => {
+          const left = Bitstring.fromBytes([0xff]);
+          Bitstring.maybeSetTextFromBytes(left);
+
+          const right = Bitstring.fromBytes([0xff]);
+          Bitstring.maybeSetTextFromBytes(right);
+
+          assert.isTrue(Interpreter.isStrictlyEqual(left, right));
+        });
       });
 
       describe("not equal - different length", () => {
@@ -5110,6 +5180,16 @@ describe("Interpreter", () => {
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
+
+        it("both decoded as not text", () => {
+          const left = Bitstring.fromBytes([0xff]);
+          Bitstring.maybeSetTextFromBytes(left);
+
+          const right = Bitstring.fromBytes([0xff, 0x00, 0xff, 0x00]);
+          Bitstring.maybeSetTextFromBytes(right);
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
       });
 
       describe("not equal - different content", () => {
@@ -5137,6 +5217,16 @@ describe("Interpreter", () => {
         it("left has bytes field, right has text field", () => {
           const left = Bitstring.fromBytes([97, 98, 100]);
           const right = Type.bitstring("abc");
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("both decoded as not text", () => {
+          const left = Bitstring.fromBytes([0xff]);
+          Bitstring.maybeSetTextFromBytes(left);
+
+          const right = Bitstring.fromBytes([0xfe]);
+          Bitstring.maybeSetTextFromBytes(right);
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });

@@ -6,6 +6,7 @@ import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
 import EventListeners from "./event_listeners.mjs";
+import FocusEvent from "./events/focus_event.mjs";
 import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -155,6 +156,20 @@ export default class Renderer {
   // patch, so the binding is held here until resolveResizeBindings turns it into a registry binding
   // once `.elm` exists. renderPage() resets this.
   static resizeBindings = [];
+
+  // Elements this patch asked to take focus, and elements it asked to give focus up, in hook
+  // order. The hooks only collect: which element takes focus is settled once per patch by
+  // settleFocus(), after it, when every candidate is in the document and the document order
+  // between an inserted element and an updated one can be read. Whoever patches resets both
+  // first: Hologram.render(), and the interim patch of a navigation.
+  static focusCandidates = [];
+  static blurCandidates = [];
+
+  // Set around a patch that puts a page on screen: a navigation's interim patch, or the mount's
+  // first render when no interim patch came before it (a history restore). A page that appears is
+  // a page load however the diff reused its nodes, so every element it declares focused is a
+  // candidate, not only one whose declaration changed. settleFocus() clears it.
+  static isPageArrival = false;
 
   // Based on Elixir Renderer.encode_tree/1, which it inverts clause for clause.
   //
@@ -330,9 +345,9 @@ export default class Renderer {
   // TODO: when the vdom renderer is rewritten, the decodeTree/renderDom pair collapses into one
   // walk. Sharing renderDom is what keeps this equal to renderPage today; a second walker would
   // have to reproduce every rule renderDom applies to a tree - the boolean attribute rule, the
-  // controlled value/checked staging and its hooks, the three resource-key rules, $key resolving
-  // to the last one, and finalizeChildren settling repeats - and drift in any of them shows up as
-  // a silently rebuilt DOM rather than a failing test.
+  // controlled value/checked staging and its hooks, the focus hooks, the three resource-key rules,
+  // $key resolving to the last one, and finalizeChildren settling repeats - and drift in any of
+  // them shows up as a silently rebuilt DOM rather than a failing test.
   // See: docs/navigation_payload_wire_format.md
   static renderTree(tree) {
     const children = Vdom.finalizeChildren(
@@ -348,6 +363,11 @@ export default class Renderer {
     );
 
     return Renderer.#pageVnodeFromChildren(children);
+  }
+
+  static resetFocusCandidates() {
+    $.focusCandidates = [];
+    $.blurCandidates = [];
   }
 
   // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
@@ -402,6 +422,45 @@ export default class Renderer {
 
         return {target: element, key, attach, handler};
       });
+  }
+
+  // Moves focus where the patch asked, then clears the candidates.
+  //
+  // The boot render claims nothing: the browser already applied autofocus from the markup the server
+  // sent, and the user may have moved on before the runtime started.
+  //
+  // A blur applies only to an element that still has focus, so a field the render stops declaring
+  // focused gives focus up even when no other element takes it, and a render that blurs one element
+  // and focuses another ends on the focused one in either order. Of the focus candidates, the first
+  // in document order that can take focus takes it - one that is disabled, hidden or not focusable
+  // at all is passed over, the way the browser passes over it for autofocus on a page load. A
+  // candidate the same patch removed again is skipped.
+  //
+  // A page that appears is a page load, and a page load starts with nothing focused: on a page
+  // arrival that no candidate claims, whatever has focus - the link the user clicked, or a field
+  // of the left page the diff kept - gives it up.
+  static settleFocus(isBootRender) {
+    const focusCandidates = $.focusCandidates;
+    const blurCandidates = $.blurCandidates;
+    const isPageArrival = $.isPageArrival;
+
+    $.resetFocusCandidates();
+    $.isPageArrival = false;
+
+    if (isBootRender) {
+      return;
+    }
+
+    // Focus moved here is the state's doing, so the $focus and $blur bindings it would trigger
+    // stay quiet (see FocusEvent.isRuntimeFocusChange).
+    const wasRuntimeFocusChange = FocusEvent.isRuntimeFocusChange;
+    FocusEvent.isRuntimeFocusChange = true;
+
+    try {
+      $.#moveFocus(focusCandidates, blurCandidates, isPageArrival);
+    } finally {
+      FocusEvent.isRuntimeFocusChange = wasRuntimeFocusChange;
+    }
   }
 
   static toBitstring(term) {
@@ -496,6 +555,13 @@ export default class Renderer {
     // it, so it binds nothing. Without this it would register a listener for an event called "key",
     // which no browser fires.
     if (originalEventName === "key") {
+      return null;
+    }
+
+    // $focused says whether the element should have focus rather than something that happens to it,
+    // so it binds nothing either. Without this it would register a listener for an event called
+    // "focused", which no browser fires.
+    if (originalEventName === "focused") {
       return null;
     }
 
@@ -717,6 +783,17 @@ export default class Renderer {
     });
   }
 
+  // Snabbdom insert hook: runs once the whole patch is in the document, where .focus() can work -
+  // the create hook runs before the element is attached. An element that enters the page carrying
+  // autofocus takes focus, whether $focused put it there or the template wrote it, on a mount and
+  // after an action alike. That is what autofocus means when the page loads, so it means the same
+  // when an element appears later.
+  static #collectInsertedFocus(vnode) {
+    if ($.#hasAutofocus(vnode)) {
+      $.focusCandidates.push(vnode.elm);
+    }
+  }
+
   // Records a <window>/<document> tag's event bindings into the per-render accumulator, tagged with
   // the target the listener attaches to. Each binding is keyed by its position across all listener
   // bindings this render, so debounce/throttle windows stay independent even though listeners on one
@@ -824,6 +901,26 @@ export default class Renderer {
         once: $.#onceFromModifiers(attrDom.data[2]),
       });
     });
+  }
+
+  // Snabbdom update hook, for an element the diff kept. Only a change asks for focus: a re-render
+  // that declares the same thing again leaves focus where the user put it. A page arrival is the
+  // exception, see isPageArrival.
+  //
+  // What the previous render declared is read off its autofocus attribute rather than its
+  // hologramFocused: an element kept from a navigation's interim page carries the attribute the
+  // server rendered and no hologramFocused, and it was focused when that page appeared, so the
+  // mount's render must see no change on it.
+  static #collectUpdatedFocus(oldVnode, newVnode) {
+    const hadAutofocus = $.#hasAutofocus(oldVnode);
+
+    if ($.#hasAutofocus(newVnode) && ($.isPageArrival || !hadAutofocus)) {
+      $.focusCandidates.push(newVnode.elm);
+    }
+
+    if (hadAutofocus && newVnode.data.hologramFocused === false) {
+      $.blurCandidates.push(newVnode.elm);
+    }
   }
 
   // Based on compose_attribute_name/2
@@ -1311,6 +1408,13 @@ export default class Renderer {
     return moduleProxy.__props__;
   }
 
+  // autofocus is a boolean attribute, so its presence is what counts: a bare attribute renders as
+  // true, while autofocus={true} and autofocus="autofocus" render as text, and a falsy expression
+  // leaves the attribute out entirely.
+  static #hasAutofocus(vnode) {
+    return vnode.data.attrs?.autofocus !== undefined;
+  }
+
   // Based on has_cid_prop?/1
   static #hasCidProp(props) {
     return "atom(cid)" in props.data;
@@ -1573,6 +1677,49 @@ export default class Renderer {
     }, []);
   }
 
+  // The moves settleFocus() decides on, made while FocusEvent.isRuntimeFocusChange is set.
+  static #moveFocus(focusCandidates, blurCandidates, isPageArrival) {
+    for (const element of blurCandidates) {
+      if (document.activeElement === element) {
+        element.blur();
+      }
+    }
+
+    // Whether an element can take focus depends on more than its tag - disabled, hidden by CSS,
+    // inert, a tabindex - so each candidate is asked the only reliable way: by trying. A try that
+    // moves focus anywhere counts, not only onto the candidate: a candidate's own focus handler
+    // may pass focus on to a field inside it, and a candidate in a shadow root shows up as its
+    // host.
+    const candidates = focusCandidates
+      .filter((element) => element.isConnected)
+      .sort((a, b) => {
+        if (a === b) {
+          return 0;
+        }
+
+        return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
+          ? -1
+          : 1;
+      });
+
+    for (const element of candidates) {
+      const previousActiveElement = document.activeElement;
+
+      element.focus();
+
+      if (
+        document.activeElement === element ||
+        document.activeElement !== previousActiveElement
+      ) {
+        return;
+      }
+    }
+
+    if (isPageArrival) {
+      document.activeElement?.blur();
+    }
+  }
+
   static #normalizeEventName(eventName) {
     return eventName.replace(/_/g, "");
   }
@@ -1713,9 +1860,17 @@ export default class Renderer {
     }
 
     // Expand spreads into unboxed [name, valueDom] pairs, then filter out event attributes
-    // (starting with $)
+    // (starting with $).
+    //
+    // A nonce the template wrote on a link, script or style element is dropped, as the server's
+    // print_dom/2 drops it: only the document's nonce is in the policy, and the diff sets that one
+    // on the element itself. Set as an attribute it would replace the document's nonce.
+    const isNoncedElement = Vdom.isNoncedElement(tagName);
+
     const regularAttrs = $.#expandAttributeSpreads(attrsDom).filter(
-      ([name]) => !name.startsWith("$"),
+      ([name]) =>
+        !name.startsWith("$") &&
+        !(isNoncedElement && name.toLowerCase() === "nonce"),
     );
 
     // Check if this is a form element with special handling of checked and value attributes
@@ -1909,6 +2064,19 @@ export default class Renderer {
     const {attrs: attrsVdom, props: propsVdom} =
       Renderer.#renderAttributesAndProps(attrsDom, currentTagName);
 
+    // $focused renders as autofocus, the way the server renders it, so the boot patch finds the
+    // attribute the server sent and the focus hooks read one attribute either way. An autofocus
+    // from a spread yields to $focused.
+    //
+    // WARNING: must match apply_focused_attribute/1 on the server.
+    const focused = Renderer.#renderFocused(attrsDom);
+
+    if (focused === true) {
+      attrsVdom.autofocus = true;
+    } else if (focused === false) {
+      delete attrsVdom.autofocus;
+    }
+
     const eventListenersVdom = Renderer.#renderEventListeners(
       attrsDom,
       currentTagName,
@@ -1920,7 +2088,7 @@ export default class Renderer {
 
     // The element's children are complete here, whatever nesting of blocks, loops and components
     // produced them, so this is where a repeated key is settled against the rest of the list.
-    const childrenVdom = Vdom.finalizeChildren(
+    let childrenVdom = Vdom.finalizeChildren(
       Renderer.renderDom(
         childrenDom,
         context,
@@ -1938,6 +2106,14 @@ export default class Renderer {
       data.props = propsVdom;
     }
 
+    if (focused !== null) {
+      data.hologramFocused = focused;
+    }
+
+    // One hook object per element, assembled in steps, so that an input can carry a controlled
+    // value and focus hooks at once.
+    const hook = {};
+
     // Handle controlled form inputs (value for text inputs/textareas/selects, checked for checkboxes/radios)
     // Radio/checkbox inputs use regular value attributes and controlled checked attributes
     // An element has either controlled value OR controlled checked, never both
@@ -1953,14 +2129,13 @@ export default class Renderer {
       delete attrsVdom["data-hologram-form-input-value"];
       data.hologramFormInputValue = hologramFormInputValue;
 
-      data.hook = {
-        create: (_emptyVnode, newVnode) => {
-          Renderer.#updateFormInputValue(newVnode.elm, hologramFormInputValue);
-        },
-        update: (_oldVnode, newVnode) => {
-          const newValue = newVnode.data.hologramFormInputValue;
-          Renderer.#updateFormInputValue(newVnode.elm, newValue);
-        },
+      hook.create = (_emptyVnode, newVnode) => {
+        Renderer.#updateFormInputValue(newVnode.elm, hologramFormInputValue);
+      };
+
+      hook.update = (_oldVnode, newVnode) => {
+        const newValue = newVnode.data.hologramFormInputValue;
+        Renderer.#updateFormInputValue(newVnode.elm, newValue);
       };
     } else if (
       currentTagName === "input" &&
@@ -1971,18 +2146,35 @@ export default class Renderer {
       delete attrsVdom["data-hologram-form-input-checked"];
       data.hologramFormInputChecked = hologramFormInputChecked;
 
-      data.hook = {
-        create: (_emptyVnode, newVnode) => {
-          Renderer.#updateFormInputChecked(
-            newVnode.elm,
-            hologramFormInputChecked,
-          );
-        },
-        update: (_oldVnode, newVnode) => {
-          const newChecked = newVnode.data.hologramFormInputChecked;
-          Renderer.#updateFormInputChecked(newVnode.elm, newChecked);
-        },
+      hook.create = (_emptyVnode, newVnode) => {
+        Renderer.#updateFormInputChecked(
+          newVnode.elm,
+          hologramFormInputChecked,
+        );
       };
+
+      hook.update = (_oldVnode, newVnode) => {
+        const newChecked = newVnode.data.hologramFormInputChecked;
+        Renderer.#updateFormInputChecked(newVnode.elm, newChecked);
+      };
+    }
+
+    // Only an element that can ask for focus carries the focus hooks, so every other element costs
+    // nothing extra. A $focused that is false still needs the update hook, since its turning false
+    // is what gives focus up.
+    if (attrsVdom.autofocus !== undefined || focused !== null) {
+      const updateFormInput = hook.update;
+
+      hook.insert = $.#collectInsertedFocus;
+
+      hook.update = (oldVnode, newVnode) => {
+        updateFormInput?.(oldVnode, newVnode);
+        $.#collectUpdatedFocus(oldVnode, newVnode);
+      };
+    }
+
+    if (Object.keys(hook).length > 0) {
+      data.hook = hook;
     }
 
     if (
@@ -2014,6 +2206,21 @@ export default class Renderer {
       if (slotKey !== null) {
         data.key = slotKey;
       }
+    }
+
+    // A script's URL and code go to a script sink Trusted Types guards, which takes them only through
+    // a policy, while the diff would set the URL as a plain attribute and the code as a text child.
+    // So they travel beside the attributes and children, and the vdom assigns them through the
+    // runtime's policy when it creates the element. Its key, read from them above, names the
+    // element by what it runs.
+    if (currentTagName === "script") {
+      data.hologramScript = {
+        code: typeof childrenVdom[0] === "string" ? childrenVdom[0] : null,
+        src: Vdom.scriptSrc(attrsVdom.src),
+      };
+
+      delete attrsVdom.src;
+      childrenVdom = [];
     }
 
     const elementVnode = vnode(currentTagName, data, childrenVdom);
@@ -2065,6 +2272,32 @@ export default class Renderer {
         (event) => handlers.forEach((handler) => handler(event)),
       ]),
     );
+  }
+
+  // Based on apply_focused_attribute/1
+  // Returns the element's $focused as a boolean, or null when the element doesn't declare it. The
+  // last one wins, the way the server resolves it, so the scan runs from the end and stops at the
+  // first one it meets. The build guarantees $focused carries no value (true, as for any boolean
+  // attribute) or a single expression.
+  static #renderFocused(attrsDom) {
+    for (let index = attrsDom.data.length - 1; index >= 0; index -= 1) {
+      const attrDom = attrsDom.data[index];
+
+      if (Type.isRecordTuple(attrDom, "spread", 2)) {
+        continue;
+      }
+
+      if (Bitstring.toText(attrDom.data[0]) === "$focused") {
+        const valueDom = attrDom.data[1];
+
+        return (
+          valueDom.data.length === 0 ||
+          Type.isTruthy(valueDom.data[0].data[1].data[0])
+        );
+      }
+    }
+
+    return null;
   }
 
   // Based on render_tree/3 (list case)
@@ -2174,7 +2407,11 @@ export default class Renderer {
     );
 
     const commentContent = childrenVdom
-      .map((child) => (typeof child === "string" ? child : vnodeToHtml(child)))
+      .map((child) =>
+        typeof child === "string"
+          ? child
+          : vnodeToHtml(Renderer.#withScriptsInMarkup(child)),
+      )
       .join("");
 
     return vnode("!", commentContent);
@@ -2460,6 +2697,39 @@ export default class Renderer {
     );
 
     return within === null ? undefined : Bitstring.toText(within);
+  }
+
+  // A vnode printed as markup, the way the server prints it, with every script's URL and code put
+  // back where markup has them: data.hologramScript is the vdom's carrier for them, which
+  // snabbdom-to-html does not read.
+  static #withScriptsInMarkup(vnodeOrText) {
+    if (typeof vnodeOrText === "string" || vnodeOrText.sel === undefined) {
+      return vnodeOrText;
+    }
+
+    const children = (vnodeOrText.children ?? []).map((child) =>
+      Renderer.#withScriptsInMarkup(child),
+    );
+
+    const script = vnodeOrText.data?.hologramScript;
+
+    if (script === undefined) {
+      return {...vnodeOrText, children};
+    }
+
+    const attrs =
+      script.src === null
+        ? vnodeOrText.data.attrs
+        : {
+            ...vnodeOrText.data.attrs,
+            src: script.src === "" ? true : script.src,
+          };
+
+    return vnode(
+      vnodeOrText.sel,
+      {...vnodeOrText.data, attrs},
+      script.code === null ? [] : [script.code],
+    );
   }
 }
 

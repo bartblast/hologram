@@ -2,7 +2,7 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
-  @version "0.12.3"
+  @version "0.12.4"
 
   # Copied from Hologram.Commons.SystemUtils
   @windows_exec_suffixes [".bat", ".cmd", ".exe"]
@@ -76,7 +76,7 @@ defmodule Hologram.MixProject do
       {:gproc, "~> 1.0"},
       {:html_entities, "~> 0.5"},
       {:interceptor, "~> 0.5"},
-      {:jason, "~> 1.0"},
+      {:jason, "~> 1.3"},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},

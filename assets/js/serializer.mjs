@@ -7,10 +7,13 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 Serializer Format Changelog
 
 Release 0.7.0: switched to version 3.
+Unreleased: switched to version 4 - a bitstring that is a valid string is written as "s" followed
+by the string, and a plain JavaScript string as "j" followed by the string. Version 3 wrote every
+bitstring as hex and marked a plain JavaScript string with "s".
 */
 
 export default class Serializer {
-  static CURRENT_VERSION = 3;
+  static CURRENT_VERSION = 4;
 
   // Can't use control characters in 0x00-0x1F (0-31) range
   // because they are escaped in JSON and result in multi-byte delimiter.
@@ -117,7 +120,7 @@ export default class Serializer {
       return value;
     }
 
-    return `s${value}`;
+    return `j${value}`;
   }
 }
 

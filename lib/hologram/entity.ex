@@ -483,7 +483,7 @@ defmodule Hologram.Entity do
   end
 
   def strip_server_only_deep(term) when is_list(term) do
-    Enum.map(term, &strip_server_only_deep/1)
+    strip_server_only_deep_list(term)
   end
 
   def strip_server_only_deep(term) when is_tuple(term) do
@@ -664,6 +664,17 @@ defmodule Hologram.Entity do
       {name, type_union(union_types)}
     ]
   end
+
+  # Walks the list cell by cell rather than through Enum, which raises on an improper list: one
+  # whose last tail is not an empty list. Such a tail is stripped like any other term, and whoever
+  # writes the list out decides whether it can carry one.
+  defp strip_server_only_deep_list([head | tail]) do
+    [strip_server_only_deep(head) | strip_server_only_deep_list(tail)]
+  end
+
+  defp strip_server_only_deep_list([]), do: []
+
+  defp strip_server_only_deep_list(tail), do: strip_server_only_deep(tail)
 
   # A type is AST, not data: the field types name other modules' t/0, and those names have to
   # arrive in the entity's module unexpanded - which is why this is built rather than escaped.

@@ -17,6 +17,8 @@
 // of the page usable, and an overlay with no way out would make the app
 // impossible to exercise by hand.
 
+import App from "./app.mjs";
+
 const CLASS_PREFIX = "hologram-error-overlay";
 
 const STYLE_ELEMENT_ID = "hologram-error-overlay-style";
@@ -233,6 +235,10 @@ export default class ErrorOverlay {
     const style = document.createElement("style");
     style.id = STYLE_ELEMENT_ID;
     style.textContent = STYLES;
+
+    if (App.cspNonce !== null) {
+      style.nonce = App.cspNonce;
+    }
 
     document.head.appendChild(style);
   }

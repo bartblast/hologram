@@ -6,6 +6,7 @@ defmodule Hologram.Application do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.Model
   alias Hologram.Policy
+  alias Hologram.Runtime.ContentSecurityPolicy
 
   @impl Application
   def start(_type, _args) do
@@ -14,6 +15,12 @@ defmodule Hologram.Application do
     RoleGrant.reset_resolution_cache()
     Model.reset_caches()
     Policy.reset_model_facts_cache()
+
+    # Before anything starts, so a policy no page could be served under fails the boot of the app
+    # rather than its first request.
+    if Hologram.enabled?() do
+      ContentSecurityPolicy.validate_config!()
+    end
 
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]
 

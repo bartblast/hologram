@@ -93,6 +93,14 @@ export default class Hologram {
   static isMounting = false;
 
   // Made public to make tests easier
+  // Whether the destination of the navigation in progress is on screen already, put there by the
+  // interim patch in #showNewPage. That patch is where the page appears, so it is where focus is
+  // settled, and the mount's render then has nothing of the kind to do. A history restore has no
+  // interim patch - the left page stays up until the mount's render - so there the mount's render
+  // is where the page appears. Cleared when a navigation starts and when a mount's render is done.
+  static isPageShown = false;
+
+  // Made public to make tests easier
   // Whether a render is on the stack - its patch walking the live DOM, or its event bindings
   // being reconciled onto it. Set by render() alone: a patch made outside a render is not
   // covered, and has to keep a dispatch out by its own means.
@@ -130,6 +138,10 @@ export default class Hologram {
   // Emptied when the page is left: what was awaiting belongs to the page being left, and the
   // destination may hold the same cids.
   static #awaitingTargets = new Map();
+
+  // The first page's boot data as parsed from the block the server wrote, held for the mount, which
+  // reads its terms. Null in a document with no block.
+  static #bootData = null;
 
   // The digests of the chunks this document was told of: the ones the document the server sent
   // carries and the ones requested since. A snapshot saves the loaded ones.
@@ -450,6 +462,19 @@ export default class Hologram {
       return null;
     }
 
+    // A binding that evaluates to true names no action: it is almost always $focused written as the
+    // event it is one letter away from, which the build catches only when the value is a literal.
+    // Nothing is said about false - whether it should disable the binding the way nil does is a
+    // separate question - so it dispatches as it always did.
+    if (Dispatch.isTrue(dispatchSpecDom)) {
+      const hint =
+        eventType === "focus" ? " - to control focus, use $focused" : "";
+
+      throw new HologramRuntimeError(
+        `an event binding evaluated to true, which is not an action or command name${hint}`,
+      );
+    }
+
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
     if (eventImpl.isEventIgnored(event)) {
@@ -586,9 +611,7 @@ export default class Hologram {
       return Hologram.#followRedirect(payload, hopCount, historyEntryId);
     }
 
-    const pageModule = Interpreter.evaluateJavaScriptExpression(
-      payload.pageModule,
-    );
+    const pageModule = Deserializer.deserialize(payload.pageModule);
 
     // The tab holds this page's code from an earlier visit, and a live reload has rebuilt it since.
     // Running the held copy would show the page as it was before the edit, so the browser loads
@@ -608,8 +631,11 @@ export default class Hologram {
     }
 
     window.requestAnimationFrame(() => {
-      Hologram.#showNewPage(payload);
+      // Before the destination appears, so that the focus its appearance settles leaves the
+      // focused element scrolled into view, as on a document load, rather than being scrolled
+      // back off screen.
       window.scrollTo(0, 0);
+      Hologram.#showNewPage(payload);
 
       if (historyEntryId === null) {
         history.pushState($.#historyId, null, pagePath);
@@ -676,6 +702,57 @@ export default class Hologram {
     }
   }
 
+  // Reads the boot data block the server wrote into the first page: a script element of type
+  // application/json, which the browser never runs, so the policy never checks it. The runtime
+  // checks it instead. In a document with a nonce it takes only the block carrying that nonce, read
+  // through the property, since a policy sent in a header blanks the attribute. An element injected
+  // into the page cannot carry the nonce, so a forged block is passed over rather than read. A
+  // document without a nonce has no policy, and takes the one block there is.
+  //
+  // The plain fields go on globalThis.Hologram, under the names the rest of the runtime reads them
+  // by. A document with no block, which a test document is, sets nothing and holds no boot data.
+  //
+  // Made public to make tests easier
+  static readBootData() {
+    $.#bootData = null;
+
+    const blocks = Array.from(
+      document.querySelectorAll(
+        'script[type="application/json"]#hologram-boot-data',
+      ),
+    );
+
+    if (blocks.length === 0) {
+      return;
+    }
+
+    const block =
+      App.cspNonce === null
+        ? blocks[0]
+        : blocks.find(
+            (element) =>
+              element.nonce === App.cspNonce && $.#isNonceable(element),
+          );
+
+    if (block === undefined) {
+      throw new HologramRuntimeError(
+        "The page's boot data could not be read: no boot data block carries the document's nonce",
+      );
+    }
+
+    const bootData = JSON.parse(block.textContent);
+
+    globalThis.Hologram.assetManifest = bootData.assetManifest;
+    globalThis.Hologram.csrfToken = bootData.csrfToken;
+    globalThis.Hologram.initialChunkDigests = bootData.chunks;
+    globalThis.Hologram.initialPageDigest = bootData.pageDigest;
+    globalThis.Hologram.instanceId = bootData.instanceId;
+    globalThis.Hologram.replicaId = bootData.replicaId;
+    globalThis.Hologram.replicaToken = bootData.replicaToken;
+
+    $.#bootData = bootData;
+  }
+
   // Made public to make tests easier
   static render() {
     const startTime = performance.now();
@@ -695,9 +772,19 @@ export default class Hologram {
       );
 
       // On a full document load there is no previous render to diff against, only the page the
-      // server sent, so the old side is built by mirroring this render onto it. The patch then
-      // adopts those nodes instead of recreating the whole page.
-      if (Hologram.virtualDocument === null) {
+      // server sent. That page is on screen already, and the browser applied its autofocus, so
+      // this render settles no focus.
+      const isBootRender = Hologram.virtualDocument === null;
+
+      // A page appears either with a navigation's interim patch, which settles focus itself (see
+      // #showNewPage), or with the mount's first render, as after a history restore. The boot
+      // render is a mount too, but its page appeared with the document.
+      Renderer.isPageArrival = $.isMounting && !$.isPageShown && !isBootRender;
+      Renderer.resetFocusCandidates();
+
+      // On a full document load the old side is built by mirroring this render onto the page the
+      // server sent. The patch then adopts those nodes instead of recreating the whole page.
+      if (isBootRender) {
         Hologram.virtualDocument = Vdom.mirror(
           newVirtualDocument,
           document.documentElement,
@@ -728,6 +815,12 @@ export default class Hologram {
       // now that the DOM is patched, so each re-syncs the children it watches and recomputes - firing
       // again as content this render added extends or fills the container.
       EventListeners.recheckScrollEdges();
+
+      // Focus moves while the render flag is still set. Its own focus and blur events reach no
+      // $focus or $blur binding (see FocusEvent.isRuntimeFocusChange), but what else a move sets
+      // off - the focusout flush of pending debounced dispatches, a change event of a field that
+      // loses focus - dispatches into the queue, which holds until the render is done.
+      Renderer.settleFocus(isBootRender);
     } finally {
       // A template expression is app code and can raise, so the flag is cleared on the way out
       // either way. Leaving it set would silence every dispatch from here on.
@@ -863,6 +956,25 @@ export default class Hologram {
         );
       },
     );
+  }
+
+  // The mount data of the first page, from its boot data block. Its terms are read here rather than
+  // at boot, when the mount asks for them, as a navigation's are read when its payload arrives.
+  static #bootMountData() {
+    const bootData = $.#bootData;
+
+    return {
+      actorUserId: bootData.actorUserId,
+      componentRegistry: Deserializer.deserialize(bootData.componentRegistry),
+      pageDigest: bootData.pageDigest,
+      pageModule: Deserializer.deserialize(bootData.pageModule),
+      pageParams: Deserializer.deserialize(bootData.pageParams),
+      selfEchoes: Deserializer.deserialize(bootData.selfEchoes),
+      subReceiptAdds: Deserializer.deserialize(bootData.subReceiptAdds),
+      subReceiptDrops: Deserializer.deserialize(bootData.subReceiptDrops),
+      syncCounts: bootData.syncCounts,
+      syncRows: bootData.syncRows,
+    };
   }
 
   static #buildPagePath(toParam) {
@@ -1153,17 +1265,9 @@ export default class Hologram {
     Debouncer.cancelAll();
     Throttler.cancelAll();
     EventListenerRegistry.detachAll();
-  }
 
-  // What the document the server sent mounts with: the values its boot script defines, and the
-  // digest of the page's bundle, which the boot script sets beside them. Read by whichever comes
-  // first, the tab group's naming or the mount, since both need it and the second takes what the
-  // first read.
-  static #documentMountData() {
-    return {
-      ...globalThis.Hologram.pageMountData(Hologram.#deps),
-      pageDigest: globalThis.Hologram.initialPageDigest,
-    };
+    // Nothing of the destination is on screen yet, whichever way it arrives.
+    $.isPageShown = false;
   }
 
   // Takes the page's own bundle out of the document the server described, leaving every other
@@ -1492,6 +1596,13 @@ export default class Hologram {
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
   static async #init() {
+    // First, since the ETS tables restored below can hold stored functions, which compile through a
+    // script element that needs the nonce.
+    App.loadCspNonce();
+
+    // Next, since the snapshot check below reads the page digest and the asset manifest from it.
+    $.readBootData();
+
     window.addEventListener("error", (event) => {
       $.handleUncaughtError(event.error);
     });
@@ -1567,8 +1678,7 @@ export default class Hologram {
     // The actor is read only when the group is named by it - the mount finds it already read, as it
     // has always taken what is held over what the page defines.
     await Hologram.dataLayer?.boot({
-      readActorUserId: () =>
-        ($.#mountData ??= $.#documentMountData()).actorUserId,
+      readActorUserId: () => ($.#mountData ??= $.#bootMountData()).actorUserId,
       replica: {
         id: globalThis.Hologram.replicaId,
         token: globalThis.Hologram.replicaToken,
@@ -1621,6 +1731,16 @@ export default class Hologram {
     return pageDigest === undefined
       ? chunkDigests
       : [pageDigest, ...chunkDigests];
+  }
+
+  // Whether the element can be the one the server wrote, as the CSP specification decides whether an
+  // element is nonceable: an attribute holding "<script" or "<style" is the trace of an injected
+  // unclosed tag that has absorbed the real element's attributes, its nonce among them.
+  static #isNonceable(element) {
+    return Array.from(element.attributes).every(({name, value}) => {
+      const text = `${name} ${value}`.toLowerCase();
+      return !text.includes("<script") && !text.includes("<style");
+    });
   }
 
   static #isPageModuleRegistered(pageModule) {
@@ -1757,10 +1877,9 @@ export default class Hologram {
     }
   }
 
-  // A loaded document has no payload, so it carries the same six values as an inline script that
-  // defines pageMountData - the one channel markup has for structured state.
+  // A loaded document has no payload, so it carries the same values in its boot data block.
   static #loadMountData() {
-    const mountData = $.#mountData ?? $.#documentMountData();
+    const mountData = $.#mountData ?? $.#bootMountData();
 
     $.#mountData = null;
 
@@ -1855,6 +1974,7 @@ export default class Hologram {
         // A template expression is app code and can raise, so the flag is cleared on the way out
         // either way. Leaving it set would hold every action from here on.
         $.isMounting = false;
+        $.isPageShown = false;
       }
 
       if ($.#scrollPosition) {
@@ -1901,7 +2021,7 @@ export default class Hologram {
       Hologram.dataLayer?.restore();
 
       // SSE must open AFTER `#mountPage()` because the handshake payload
-      // includes the receipts merged from `pageMountData.subReceiptAdds` -
+      // includes the receipts merged from the mount data's `subReceiptAdds` -
       // connecting earlier would send an empty receipts list.
       if (Sse.eventSource === null) {
         Sse.connect();
@@ -1928,12 +2048,6 @@ export default class Hologram {
     return `/hologram/page-${Interpreter.moduleExName(pageModule)}-${pageDigest}.js`;
   }
 
-  // A value the server sent as JSON, or undefined when it sent none - a build with no data model
-  // carries no rows, and neither does a payload from a server that predates them.
-  static #parseMountJson(json) {
-    return json === undefined ? undefined : JSON.parse(json);
-  }
-
   static #pageSnapshotKey(historyId) {
     return `${$.#PAGE_SNAPSHOT_KEY_PREFIX}${historyId}`;
   }
@@ -1956,8 +2070,8 @@ export default class Hologram {
     }
 
     const toParam = Type.tuple([
-      Interpreter.evaluateJavaScriptExpression(payload.pageModule),
-      Interpreter.evaluateJavaScriptExpression(payload.pageParams),
+      Deserializer.deserialize(payload.pageModule),
+      Deserializer.deserialize(payload.pageParams),
     ]);
 
     return Client.fetchPage(
@@ -2011,10 +2125,7 @@ export default class Hologram {
     // for the mount, while everything armed before this line belongs to the page being left.
     $.domEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
 
-    const pageModule = Interpreter.evaluateJavaScriptExpression(
-      payload.pageModule,
-    );
-
+    const pageModule = Deserializer.deserialize(payload.pageModule);
     const isPageModuleRegistered = $.#isPageModuleRegistered(pageModule);
 
     // The fetch is started before the patch, which is local work, so the network has a head start
@@ -2036,26 +2147,20 @@ export default class Hologram {
 
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
     // the browser then runs. The page module is already decoded above, so it is reused.
-    // The data-layer values travel as JSON rather than as boxed terms, the way the inline script
-    // inlines them: the local database reads them, not transpiled code. A server that predates
+    // The data-layer values travel as plain JSON rather than as serialized terms, as they do in the
+    // boot data block: the local database reads them, not compiled code. A server that predates
     // them sends none, which the mount reads as nothing to ingest.
     $.#mountData = {
-      actorUserId: $.#parseMountJson(payload.actorUserId),
-      componentRegistry: Interpreter.evaluateJavaScriptExpression(
-        payload.componentRegistry,
-      ),
+      actorUserId: payload.actorUserId,
+      componentRegistry: Deserializer.deserialize(payload.componentRegistry),
       pageDigest: payload.pageDigest,
       pageModule: pageModule,
-      pageParams: Interpreter.evaluateJavaScriptExpression(payload.pageParams),
-      selfEchoes: Interpreter.evaluateJavaScriptExpression(payload.selfEchoes),
-      subReceiptAdds: Interpreter.evaluateJavaScriptExpression(
-        payload.subReceiptAdds,
-      ),
-      subReceiptDrops: Interpreter.evaluateJavaScriptExpression(
-        payload.subReceiptDrops,
-      ),
-      syncCounts: $.#parseMountJson(payload.syncCounts),
-      syncRows: $.#parseMountJson(payload.syncRows),
+      pageParams: Deserializer.deserialize(payload.pageParams),
+      selfEchoes: Deserializer.deserialize(payload.selfEchoes),
+      subReceiptAdds: Deserializer.deserialize(payload.subReceiptAdds),
+      subReceiptDrops: Deserializer.deserialize(payload.subReceiptDrops),
+      syncCounts: payload.syncCounts,
+      syncRows: payload.syncRows,
     };
 
     // See: docs/navigation_payload_wire_format.md
@@ -2064,10 +2169,20 @@ export default class Hologram {
 
     $.#dropPageBundleScript(newVirtualDocument, pageModule, payload.pageDigest);
 
+    // This patch is where the destination appears, so it is where its autofocus lands - in the
+    // same frame as its markup, with no window in which the user could focus a field only to
+    // have the mount's render move focus away later. The mount's render then sees the attribute
+    // on both sides of every element it keeps, and leaves focus alone.
+    Renderer.isPageArrival = true;
+    Renderer.resetFocusCandidates();
+
     Hologram.virtualDocument = Vdom.patchVirtualDocument(
       Hologram.virtualDocument,
       newVirtualDocument,
     );
+
+    Renderer.settleFocus(false);
+    $.isPageShown = true;
 
     // A page whose code the tab holds mounts now. The mount of any other waits for its bundle to
     // announce itself.
@@ -2364,8 +2479,8 @@ export default class Hologram {
     }
   }
 
-  // The digest of the runtime bundle this document runs, read from the path the asset manifest the
-  // boot script left holds for it.
+  // The digest of the runtime bundle this document runs, read from the path the asset manifest from
+  // the boot data block holds for it.
   static #runtimeDigest() {
     const path = globalThis.Hologram.assetManifest?.["hologram/runtime.js"];
 

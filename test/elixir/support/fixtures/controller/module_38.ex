@@ -2,26 +2,20 @@
 defmodule Hologram.Test.Fixtures.Controller.Module38 do
   use Hologram.Page
 
-  alias Hologram.Auth
   alias Hologram.Test.Fixtures.LayoutFixture
 
   route "/hologram-test-fixtures-controller-module38"
 
   layout LayoutFixture
 
-  middleware :capture_actor
+  middleware :mark
 
-  def capture_actor(server, _opts) do
-    put_stash(server, :actor, Auth.user_id())
-  end
-
-  @impl Page
-  def init(_params, component, server) do
-    put_state(component, actor: get_stash(server, :actor))
+  def mark(server, _opts) do
+    put_response_header(server, "x-my-header", "my_value")
   end
 
   @impl Page
   def template do
-    ~HOLO"actor={@actor}"
+    ~HOLO"Module38"
   end
 end

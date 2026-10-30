@@ -95,6 +95,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - A layout template **must** include `<slot />` where page content will be inserted.
 - The layout's component ID (cid) is always `"layout"`. Use `target: "layout"` to target actions at it.
 - Pass props to layouts via `layout MyApp.MainLayout, prop: value` or via `put_state/2` in the page's `init/3`.
+- `<script>` elements in layouts and templates get the page's Content Security Policy nonce automatically, so inline and third-party scripts need nothing. Don't write a `nonce` attribute yourself, since Hologram drops it. The policy blocks inline `on*` handler attributes and `javascript:` URLs, so use event bindings like `$click`.
 
 ## Events
 
@@ -117,7 +118,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - `$resize` fires when the bound target's size changes (no initial dispatch on first render) - bind it to an element to track that element, or to `<window>` for the browser window. For an element, `params.event` has `border_box_size`, `content_box_size`, and `device_pixel_content_box_size`, each a `%{block_size, inline_size}` map (the device-pixel one is `nil` where unsupported - notably Safari and all iOS browsers). A window resize has an empty payload (the native event provides no size data). It fires rapidly, so pair it with `throttle(ms)` or `debounce(ms)`.
 - `$scroll` fires when a scrollable element, or the page, is scrolled - bind it to an element to track that element, or to `<window>` / `<document>` to track the page. `params.event` has `scroll_left` and `scroll_top`. It fires rapidly, so pair it with `throttle(ms)` or `debounce(ms)`.
 - `$reach_bottom`, `$reach_left`, `$reach_right`, `$reach_top` fire when a scroll container is scrolled so the matching edge comes into view (the basis for infinite scroll, load-more, pull-to-refresh) - bind them to the scrolling element, one per edge. They carry no `params.event` data (a pure trigger). Each also fires on mount when its edge is already in view, so resolve the binding to `nil` to stop it (e.g. at end-of-data). Append `within(<distance>)` to fire ahead of the edge - a length (`200px`) or a percentage of the container (`50%`), with a default of `100%` (the container's height for top/bottom, its width for left/right). Edges are the visual ones in every layout, `column-reverse`, `row-reverse` and `direction: rtl` containers included.
-- Keyboard events (`$key_down`, `$key_up`): `params.event` has `key` (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), `code`, `alt_key`, `ctrl_key`, `meta_key`, `shift_key`, `repeat`.
+- Keyboard events (`$key_down`, `$key_up`): `params.event` has `key` (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), `code`, `alt_key`, `ctrl_key`, `meta_key`, `shift_key`, `repeat`. Keyboard events that carry no key (Chromium sends them on autofill, scripts can dispatch them as a plain `Event`) are ignored, so `key` is always a string.
 - Filter keyboard events to a key with a dot: `$key_down.enter="submit"`; combine modifiers with `+`: `$key_down.ctrl+enter="send"`. Works on `$key_down` and `$key_up`, case-insensitive, and matches a superset (extra held modifiers do not block it).
 - Filter keys: letters/digits as the character (`k`, `7`); modifiers `alt`/`ctrl`/`meta`/`shift` (only when combined with a key); named keys (`arrow_up`, `enter`, `escape`, `space`, `tab`, `f1`-`f12`, ...); symbol keys as alias words (`slash`, `period`, `comma`, `minus`, ...) **not** raw characters.
 - Key filters are validated at compile time - a misspelled key like `$key_down.entr` fails the build, **not** a silent runtime no-op.
@@ -175,6 +176,15 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - `$submit` event data contains all form field values as a map: `params.event` => `%{field_name: value}`.
 - Elixir validation code (including Ecto changesets) runs both client-side and server-side since Hologram runs Elixir in the browser.
 
+## DOM
+
+- **Focus** is driven from state with `$focused={expr}`: the element takes focus when it appears with the expression true or when the expression turns true, and loses it when it turns false. An unchanged value never moves focus, so clear the state in a `$blur` handler to let the same element be focused again. **Not** `.focus()` through JS interop.
+- When several elements ask for focus in one render, the first in document order that can take focus gets it. The first page load renders `$focused={true}` as `autofocus`.
+- Plain `autofocus` also works on a page reached by client-side navigation and on an element a re-render inserts. Don't combine it with `$focused` on one element (fails the build). A navigated-to page that declares no focus starts with nothing focused.
+- `$focus` and `$blur` fire only for focus changes the user (or JS interop) makes, never for focus Hologram moves.
+- `$focus` is an event, `$focused` is state: `$focus={true}` fails the build, and a binding that evaluates to `true` raises when the event fires. `$focused` on a component tag does nothing, so set it on an element inside the component.
+- Direct DOM manipulation via JS interop is preserved across Hologram re-renders, as long as the container element stays in the template.
+
 ## Context
 
 - Context shares data down the component tree without prop drilling. **Not** a global store.
@@ -196,6 +206,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Read the incoming request as `Server` struct fields: `method`, `scheme`, `host`, `port`, `path`, `query`, `raw_query`, `ip`. These are **not** authenticated - `host` is client-supplied and spoofable, so validate it against an allowlist before any security decision and never build security-sensitive URLs (password-reset links, emails) from it.
 - Set or clear the authenticated user with `put_user_id(server, user_id)` / `delete_user_id(server)` (persisted to the session) - the canonical login/logout mechanism.
 - Stop the chain by setting a status - `put_status(server, :forbidden)`, `put_status(server, 403)`, or `put_redirect(server, MyApp.LoginPage)`. There is no separate `halt`: a non-nil status is the signal, checked after each middleware returns (it does not abort on the spot).
+- Response headers set with `put_response_header` / `append_response_header` go out with every response the request ends in - the rendered page, a navigation, a command's reply, or a terminal response - not only with terminal ones. A `content-type` describes the body, and a `content-security-policy` is set in config, so each is allowed only on a response that middleware ends with `put_status`. Anywhere else it raises.
 - Pass data downstream with `put_stash(server, :key, value)`, read later with `get_stash` in middleware, `init/3`, or commands.
 - Dispatch is flat: page middleware covers the page render and the page's own commands; component middleware covers only that component's commands. A page's middleware does **not** cover its components' commands - attach the gate to the component (or a shared composite) to protect them.
 - Compose without a global registry: a base module's `__using__` can inject `middleware` lines into every page/component that uses it (parent first, then child). There is no forced global middleware list - app-wide concerns are plugged into the pages/components that need them.
@@ -245,20 +256,22 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Instantiate a class: `JS.new(:Calculator, [10])`. Chain with `|>`: `:Calculator |> JS.new([10]) |> JS.call(:add, [5])`.
 - Get/set/delete properties: `JS.get(obj, :value)`, `JS.set(obj, :value, 20)`, `JS.delete(obj, :value)`. Inspect values: `JS.typeof(obj)`, `JS.instanceof(obj, :Class)`.
 - Evaluate JS: `JS.eval("3 + 4")`. Execute JS: `JS.exec("const x = 2; return x + 3;")`. Inline JS: `~JS"""..."""`.
+- `JS.eval`, `JS.exec` and `~JS` work under Hologram's Content Security Policy and need no `'unsafe-eval'`.
+- Never build `JS.eval` / `JS.exec` code from user input, since it runs as code with the page's nonce. Pass values with `JS.call/3` instead.
 - Async: JS Promises become Elixir Tasks. Use `Task.await/1` to get the result.
 - Dispatch actions from JS: `Hologram.dispatchAction("action_name", "page", {key: value})`. Available immediately - calls before the runtime loads are queued and replayed on mount (safe for inline `<script>`).
 - Dispatch DOM events from Elixir: `JS.dispatch_event(target, "my:event", detail: %{value: 42})`.
-- Direct DOM manipulation via JS interop is preserved across Hologram re-renders, as long as the container element stays in the template.
 - Elixir anonymous functions can be passed as JS callbacks.
 - JS interop only works in action handlers (client-side). It is a no-op during server-side rendering.
 - Prefer `JS.call` over `JS.exec`/`JS.eval`. Isolate JS interop behind facade modules.
 
 ## Configuration
 
-- Hologram settings live under `:hologram` in `config/config.exs`, or in an environment-specific file like `config/prod.exs`. They are read while the client bundles compile, so `config/runtime.exs` is too late and changing one requires a recompile, not just a restart.
+- Hologram settings live under `:hologram` in `config/config.exs`, or in an environment-specific file like `config/prod.exs`. They are read while the client bundles compile, so `config/runtime.exs` is too late and changing one requires a recompile, not just a restart. The exception is `:content_security_policy`, which is read per page.
 - `:client_stacktraces` defaults to `true` in `dev`/`test` and `false` elsewhere. `:client_error_overlay` follows it unless set on its own - set it to `false` to keep the console report without showing an error screen to users.
 - Enabling `:client_stacktraces` outside `dev`/`test` puts argument values, source paths and line numbers in front of users, and makes the compiled Elixir in a bundle roughly a third larger over the wire.
 - `:max_bundle_size` (bytes) fails the build when a generated bundle grows past it. Unset by default.
+- `:content_security_policy` - Hologram sends a strict policy by default: `script-src` by nonce with `'strict-dynamic'`, `object-src 'none'`, `base-uri 'none'`, `form-action 'self'` and `frame-ancestors 'self'`. Configure it as a keyword list of directives with underscores, as in `img_src: [:self, "data:"]`. Atoms are keywords such as `:self`, `:nonce` and `:unsafe_inline`, strings are written as they are, a directive you give replaces the default, `false` removes one, and `content_security_policy: false` turns the policy off. It's read per page, so it also works from `config/runtime.exs`. Turn on Trusted Types with `require_trusted_types_for: [:script]`. Don't set `content-security-policy` with `put_response_header`, except on a response that middleware ends with `put_status`.
 
 ## Umbrella Projects
 

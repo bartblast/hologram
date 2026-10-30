@@ -54,8 +54,12 @@ export default class Bitstring {
   // "Bitstrings are compared byte by byte, incomplete bytes are compared bit by bit."
   // Returns -1 if bitstring1 < bitstring2, 0 if equal, 1 if bitstring1 > bitstring2
   static compare(bitstring1, bitstring2) {
-    // Fast path: text-based comparison for identical text representations
-    if (bitstring1.text !== null && bitstring2.text !== null) {
+    // Fast path: text-based comparison for identical text representations.
+    // Text is false once the bytes failed to decode, so only a string takes it.
+    if (
+      typeof bitstring1.text === "string" &&
+      typeof bitstring2.text === "string"
+    ) {
       if (
         bitstring1.text === bitstring2.text &&
         bitstring1.leftoverBitCount === bitstring2.leftoverBitCount
@@ -286,6 +290,17 @@ export default class Bitstring {
     }
 
     return codePoint;
+  }
+
+  // The map key of a bitstring (see Type.encodeMapKey()). Text carries its length, so text holding
+  // a comma or a parenthesis can't run into the next item of a list or tuple key and make two
+  // different keys equal. A bitstring that isn't text keys by its hex form, which holds neither.
+  static encodeMapKey(bitstring) {
+    const text = $.#serializableText(bitstring);
+
+    return text === null
+      ? $.#serializeAsHex(bitstring)
+      : `s${text.length}:${text}`;
   }
 
   static fromBits(bits) {
@@ -725,14 +740,11 @@ export default class Bitstring {
     return segment.type === "binary" ? 8 : 1;
   }
 
+  // A bitstring that is a valid string travels as the string itself, any other one as hex.
   static serialize(bitstring) {
-    if ($.isEmpty(bitstring)) {
-      return "b";
-    }
+    const text = $.#serializableText(bitstring);
 
-    $.maybeResolveHex(bitstring);
-
-    return `b${bitstring.leftoverBitCount}${bitstring.hex}`;
+    return text === null ? $.#serializeAsHex(bitstring) : `s${text}`;
   }
 
   static takeChunk(bitstring, chunkOffset, chunkSize) {
@@ -1356,6 +1368,24 @@ export default class Bitstring {
     };
   }
 
+  // Whether the bitstring starts with a byte order mark, in its text or in its bytes. The text of a
+  // bitstring built from bytes has already lost the mark, so the bytes are checked as well.
+  static #hasByteOrderMark(bitstring) {
+    if (bitstring.text.startsWith("\uFEFF")) {
+      return true;
+    }
+
+    const bytes = bitstring.bytes;
+
+    return (
+      bytes !== null &&
+      bytes.length >= 3 &&
+      bytes[0] === 0xef &&
+      bytes[1] === 0xbb &&
+      bytes[2] === 0xbf
+    );
+  }
+
   static #isLittleEndian(segment) {
     return segment.endianness === "little";
   }
@@ -1405,6 +1435,35 @@ export default class Bitstring {
       dataView.setUint8(0, highByte);
       dataView.setUint8(1, lowByte);
     }
+  }
+
+  // The text a bitstring is written as, or null when it is written as hex.
+  //
+  // A leading byte order mark is the one sequence the decoder drops from the text, so a bitstring
+  // starting with one is written as hex, where nothing is dropped. It is checked first, since the
+  // text taken from the bytes below would have lost the mark.
+  //
+  // A string holding a lone surrogate, half of a pair, is not valid text in any encoding: JSON
+  // escapes it and the server refuses it. Its bytes are valid, since the encoder writes U+FFFD for
+  // the surrogate, so the text is taken from the bytes again, which also makes the bitstring equal
+  // to one built from those bytes.
+  static #serializableText(bitstring) {
+    if (!$.isText(bitstring) || $.#hasByteOrderMark(bitstring)) {
+      return null;
+    }
+
+    if (!bitstring.text.isWellFormed()) {
+      $.maybeSetBytesFromText(bitstring);
+      bitstring.text = $.#decoder.decode(bitstring.bytes);
+    }
+
+    return bitstring.text;
+  }
+
+  static #serializeAsHex(bitstring) {
+    $.maybeResolveHex(bitstring);
+
+    return `b${bitstring.leftoverBitCount}${bitstring.hex}`;
   }
 
   static #toIntegerFromBitstringWithLeftoverBits(
