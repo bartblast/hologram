@@ -19,11 +19,14 @@ defmodule Hologram.Query.Registry do
   see `Hologram.Query.Window`. Its id is the content id of the window term, so
   queries downloading the same rows name one window between them. Structurally equal
   terms collapse into one entry.
+
+  Whether the build has a page checking permissions on the client is given, since such a client's
+  windows also download the rows its types' rules read through relationships.
   """
-  @spec build(list(Query.t())) :: %{String.t() => %{atom => any}}
-  def build(terms) do
+  @spec build(list(Query.t()), boolean) :: %{String.t() => %{atom => any}}
+  def build(terms, permission_checking?) do
     Map.new(terms, fn term ->
-      window = Window.derive(term)
+      window = Window.derive(term, permission_checking?)
 
       entry = %{
         placeholder_shape: placeholder_shape(term),

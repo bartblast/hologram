@@ -58,7 +58,7 @@ defmodule Hologram.DB.QueryCacheTest do
       |> filter(b >= ^%Placeholder{name: :min_b})
       |> Stage.normalize()
 
-    Registry.build([module_1_term, module_11_term])
+    Registry.build([module_1_term, module_11_term], false)
   end
 
   test "entries/0" do

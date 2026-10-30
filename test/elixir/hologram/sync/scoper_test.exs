@@ -6,6 +6,8 @@ defmodule Hologram.Sync.ScoperTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Policy.Edges
   alias Hologram.Query
+  alias Hologram.Query.Stage
+  alias Hologram.Query.Window
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -125,6 +127,32 @@ defmodule Hologram.Sync.ScoperTest do
       windows = [{:board, term(PolicyModule12)}]
 
       assert affected(events([PolicyModule5]), windows, edges) == [:board]
+    end
+
+    # No read rule of the type reads its parent's row - its publish rule does, by delegating to it -
+    # so the read edges name nothing of the parent type. The window downloads the parent for a client
+    # checking permissions, and a change to it reaches the window the way a change to any row it
+    # includes does.
+    test "includes a window embedding the rows a rule of another operation reads when their type changes" do
+      edges = Edges.derive(Reflection.list_entities())
+
+      window =
+        PolicyModule1
+        |> Stage.normalize()
+        |> Window.derive(true)
+
+      assert affected(events([PolicyModule2]), [{:board, window}], edges) == [:board]
+    end
+
+    test "leaves out a window of a build no client checks permissions in when such a type changes" do
+      edges = Edges.derive(Reflection.list_entities())
+
+      window =
+        PolicyModule1
+        |> Stage.normalize()
+        |> Window.derive(false)
+
+      assert affected(events([PolicyModule2]), [{:board, window}], edges) == []
     end
 
     test "ignores an entity type this node has never compiled" do

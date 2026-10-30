@@ -2,6 +2,7 @@ defmodule Hologram.Query.Window do
   @moduledoc false
 
   alias Hologram.Entity
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
 
@@ -42,6 +43,16 @@ defmodule Hologram.Query.Window do
   can move an alternative among the others, so the filter is put back in canonical order - two
   queries differing only in a pinned alternative must name one window.
 
+  A client that checks permissions answers each rule over what it holds too, and a rule can read
+  rows other than the one it decides about - the row a `via:` leads to, the rows before the last
+  relationship of a `to:` reference, the rows along a `when:` path. So when the build has a page
+  checking permissions on the client, the chains the rules of the type a query returns read (see
+  `Hologram.Policy.related_chains/1`) are embedded the way a path's relationships are, and so are
+  those of every type it includes, under that include. A row embedded for a path or for a rule
+  gets no rule chains of its own: the template never sees it, whatever a delegation reads through
+  it is in the delegating type's chains already, and a rule reading a row of its own type would
+  otherwise never stop embedding.
+
   Order, limit and offset are emptied rather than dropped. They shape what a query answers rather
   than what it downloads, so two queries reading the same rows in different orders share one
   window - but a window IS a query term and is run as one, so it keeps a term's shape and states
@@ -54,8 +65,8 @@ defmodule Hologram.Query.Window do
   query itself - a relative bound the compiler can read and the server evaluates per run - which
   the filter surface does not offer yet.
   """
-  @spec derive(Query.t()) :: Query.t()
-  def derive(term) do
+  @spec derive(Query.t(), boolean) :: Query.t()
+  def derive(term, permission_checking?) do
     filter =
       term.filter
       |> window_clauses()
@@ -63,8 +74,8 @@ defmodule Hologram.Query.Window do
 
     include =
       term.include
-      |> Map.new(fn {name, sub_term} -> {name, derive(sub_term)} end)
-      |> put_path_includes(term)
+      |> Map.new(fn {name, sub_term} -> {name, derive(sub_term, permission_checking?)} end)
+      |> put_embedded_includes(term, permission_checking?)
 
     %Query{entity: term.entity, filter: filter, include: include}
   end
@@ -72,16 +83,18 @@ defmodule Hologram.Query.Window do
   @doc """
   Returns the given query term with the relationships its filters' paths go through embedded as
   to-one includes, merged with its own, the sub-terms of its includes embedded the same way - the
-  term that reads the rows a path reads alongside the rows it returns.
+  term that reads the rows a path reads alongside the rows it returns. When the build has a page
+  checking permissions on the client, the chains the rules of the types it returns and includes
+  read are embedded beside them, the way `derive/2` embeds them into the window.
 
-  A term with no path in any filter comes back unchanged.
+  A term with nothing to embed comes back unchanged.
   """
-  @spec embed_paths(Query.t()) :: Query.t()
-  def embed_paths(term) do
+  @spec embed(Query.t(), boolean) :: Query.t()
+  def embed(term, permission_checking?) do
     include =
       term.include
-      |> Map.new(fn {name, sub_term} -> {name, embed_paths(sub_term)} end)
-      |> put_path_includes(term)
+      |> Map.new(fn {name, sub_term} -> {name, embed(sub_term, permission_checking?)} end)
+      |> put_embedded_includes(term, permission_checking?)
 
     %{term | include: include}
   end
@@ -96,6 +109,14 @@ defmodule Hologram.Query.Window do
   defp placeholder_bound?({path, _operator, value}) when is_list(path), do: placeholder?(value)
 
   defp placeholder_bound?({name, _operator, value}), do: placeholder?(name) or placeholder?(value)
+
+  # What a term reads beside the rows it returns: the rows along its filter's paths, and the rows
+  # its type's rules read when a client checks them.
+  defp put_embedded_includes(include, term, permission_checking?) do
+    include
+    |> put_path_includes(term)
+    |> put_policy_includes(term.entity, permission_checking?)
+  end
 
   # A to-one include carries no clauses, so a path's relationship joins one the window already
   # has by adding what it includes.
@@ -115,6 +136,14 @@ defmodule Hologram.Query.Window do
     |> Enum.reduce(include, fn {relationship_names, _name}, acc ->
       put_path_include(acc, term.entity, relationship_names)
     end)
+  end
+
+  defp put_policy_includes(include, _entity_type, false), do: include
+
+  defp put_policy_includes(include, entity_type, true) do
+    entity_type
+    |> Policy.related_chains()
+    |> Enum.reduce(include, &put_path_include(&2, entity_type, &1))
   end
 
   defp window_clause({:or, alternatives}) do

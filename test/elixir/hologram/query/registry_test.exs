@@ -9,13 +9,14 @@ defmodule Hologram.Query.RegistryTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module5
+  alias Hologram.Test.Fixtures.Policy
 
-  describe "build/1" do
+  describe "build/2" do
     test "builds entries with the term, its placeholder shape, and the window it downloads" do
       term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
-      window = Window.derive(term)
+      window = Window.derive(term, false)
 
-      assert build([term]) == %{
+      assert build([term], false) == %{
                id(term) => %{
                  placeholder_shape: %{search: :string},
                  term: term,
@@ -29,7 +30,7 @@ defmodule Hologram.Query.RegistryTest do
       searched_term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
       chosen_term = %{Stage.normalize(Module2) | filter: [{:a, :==, {:placeholder, :flag}}]}
 
-      registry = build([searched_term, chosen_term])
+      registry = build([searched_term, chosen_term], false)
 
       assert map_size(registry) == 2
 
@@ -42,9 +43,19 @@ defmodule Hologram.Query.RegistryTest do
         |> filter(a: true)
         |> Stage.normalize()
 
-      registry = build([term, term])
+      registry = build([term, term], false)
 
       assert map_size(registry) == 1
+    end
+
+    test "derives each window with whether a client checks permissions" do
+      term = Stage.normalize(Policy.Module1)
+      window = Window.derive(term, true)
+
+      entry = build([term], true)[id(term)]
+
+      assert entry.window == window
+      assert entry.window_id == id(window)
     end
   end
 

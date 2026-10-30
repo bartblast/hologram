@@ -144,7 +144,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   defp buildable_queries?(module, entity_types) do
     [module]
     |> Compiler.extract_component_queries(entity_types, PLT.start())
-    |> Compiler.build_queries(entity_types)
+    |> Compiler.build_queries(entity_types, false)
 
     true
   rescue

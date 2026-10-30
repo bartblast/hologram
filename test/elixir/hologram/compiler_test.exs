@@ -1121,7 +1121,7 @@ defmodule Hologram.CompilerTest do
         Entity2
         |> filter(a: true)
         |> Stage.normalize()
-        |> Window.derive()
+        |> Window.derive(false)
         |> Registry.id()
 
       assert page_windows[PageModule8] == [window_id]
@@ -1417,6 +1417,38 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "permission_checking?/2" do
+    test "is true when a page checks permissions on the client and the data model designates a user entity type",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      {reach_by_page, _component_queries} =
+        derive_kept_reach([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert permission_checking?(reach_by_page, module_info_plt)
+    end
+
+    test "is false when no page checks permissions on the client", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      {reach_by_page, _component_queries} =
+        derive_kept_reach([PageModule8], call_graph, module_info_plt, [])
+
+      refute permission_checking?(reach_by_page, module_info_plt)
+    end
+
+    test "is false when the data model designates no user entity type", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      {reach_by_page, _component_queries} =
+        derive_kept_reach([PageModule8], call_graph, plt_without_user_entity, [PageModule8])
+
+      refute permission_checking?(reach_by_page, plt_without_user_entity)
+    end
+  end
+
   describe "server_only_mfas/0" do
     # A manually ported function leaves the graph a page's reach is listed on, so a page reaching
     # one could never be refused.
@@ -1482,7 +1514,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "build_queries/2" do
+  describe "build_queries/3" do
     setup do
       [entity_types: Reflection.list_entities()]
     end
@@ -1497,7 +1529,7 @@ defmodule Hologram.CompilerTest do
           PLT.start()
         )
 
-      queries = build_queries(component_queries, entity_types)
+      queries = build_queries(component_queries, entity_types, false)
 
       module_1_term =
         Entity2
@@ -1510,7 +1542,7 @@ defmodule Hologram.CompilerTest do
         |> filter(b >= ^%Placeholder{name: :min_b})
         |> Stage.normalize()
 
-      expected_entries = Registry.build([module_1_term, module_11_term])
+      expected_entries = Registry.build([module_1_term, module_11_term], false)
 
       assert queries.entries == expected_entries
       assert queries.prop_params == %{{ComponentModule11, :entities} => [:min_b]}
@@ -1524,7 +1556,7 @@ defmodule Hologram.CompilerTest do
       component_queries =
         extract_component_queries([QueryExtractorModule1], entity_types, PLT.start())
 
-      queries = build_queries(component_queries, entity_types)
+      queries = build_queries(component_queries, entity_types, false)
 
       grants_window = Auth.grants_window()
 
@@ -1538,7 +1570,7 @@ defmodule Hologram.CompilerTest do
       component_queries =
         extract_component_queries([QueryExtractorModule1], entity_types, PLT.start())
 
-      queries = build_queries(component_queries, entity_types -- [RoleGrant])
+      queries = build_queries(component_queries, entity_types -- [RoleGrant], false)
 
       refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
     end
@@ -1549,7 +1581,7 @@ defmodule Hologram.CompilerTest do
       component_queries =
         extract_component_queries([QueryExtractorModule1], entity_types, PLT.start())
 
-      queries = build_queries(component_queries, entity_types)
+      queries = build_queries(component_queries, entity_types, false)
 
       assert queries.prop_params == %{}
     end
@@ -1559,7 +1591,7 @@ defmodule Hologram.CompilerTest do
       component_queries =
         extract_component_queries([ComponentModule20], entity_types, PLT.start())
 
-      queries = build_queries(component_queries, entity_types)
+      queries = build_queries(component_queries, entity_types, false)
 
       assert map_size(queries.entries) == 1
     end
@@ -1576,7 +1608,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule15], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
 
@@ -1592,7 +1624,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule16], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
 
@@ -1607,7 +1639,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule33], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
 
@@ -1624,7 +1656,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule17], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
 
@@ -1641,7 +1673,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule32], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
 
@@ -1658,7 +1690,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule18], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
 
@@ -1676,7 +1708,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule30], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
 
@@ -1693,7 +1725,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule31], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
 
@@ -1711,7 +1743,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule19], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
 
@@ -1728,7 +1760,7 @@ defmodule Hologram.CompilerTest do
         extract_component_queries([ComponentModule28], entity_types, PLT.start())
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        build_queries(component_queries, entity_types)
+        build_queries(component_queries, entity_types, false)
       end
     end
   end
@@ -1740,7 +1772,7 @@ defmodule Hologram.CompilerTest do
       queries =
         [ComponentModule11]
         |> extract_component_queries(entity_types, PLT.start())
-        |> build_queries(entity_types)
+        |> build_queries(entity_types, false)
 
       opts = [build_dir: "/my_build_dir"]
 

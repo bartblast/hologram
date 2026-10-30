@@ -59,6 +59,7 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Module12,
                     Policy.Module13,
                     Policy.Module14,
+                    Policy.Module15,
                     Policy.Module2,
                     Policy.Module3,
                     Policy.Module4,
