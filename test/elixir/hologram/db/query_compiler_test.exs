@@ -82,7 +82,7 @@ defmodule Hologram.DB.QueryCompilerTest do
           related_query
           |> filter(a: true)
           |> sort(c)
-          |> limit(5)
+          |> take(5)
         end)
         |> Stage.normalize()
 
@@ -940,13 +940,13 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s( WHERE "a" != $1))
     end
 
-    test "compiles limit and offset as literal bounds" do
+    test "compiles take and skip as literal LIMIT and OFFSET" do
       mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
-        |> limit(50)
-        |> offset(20)
+        |> take(50)
+        |> skip(20)
         |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
@@ -1052,7 +1052,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> limit(50)
+        |> take(50)
         |> count()
         |> Stage.normalize()
 
@@ -1357,7 +1357,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> limit(0)
+        |> take(0)
         |> one()
         |> Stage.normalize()
 

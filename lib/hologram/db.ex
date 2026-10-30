@@ -54,13 +54,13 @@ defmodule Hologram.DB do
           include: 2,
           include: 3,
           increment: 3,
-          limit: 2,
-          offset: 2,
           one: 1,
           paginate: 2,
           put_attribute: 2,
           put_attribute: 3,
+          skip: 2,
           sort: 2,
+          take: 2,
           trust: 1
         ]
 

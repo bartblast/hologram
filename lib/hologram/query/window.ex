@@ -53,7 +53,7 @@ defmodule Hologram.Query.Window do
   it is in the delegating type's chains already, and a rule reading a row of its own type would
   otherwise never stop embedding.
 
-  Order, limit and offset are emptied rather than dropped. They shape what a query answers rather
+  Sort, skip and take are emptied rather than dropped. They shape what a query answers rather
   than what it downloads, so two queries reading the same rows in different orders share one
   window - but a window IS a query term and is run as one, so it keeps a term's shape and states
   that it asks for every row, in no order.

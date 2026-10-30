@@ -350,48 +350,6 @@ defmodule Hologram.Query do
   defdelegate increment(entity, name, amount), to: Stage
 
   @doc """
-  Sets the given query's limit - the maximum number of results the query evaluates
-  to - and returns the resulting query term.
-
-  The query is an entity type module (starting a fresh query term) or an already built
-  query term. The limit is a non-negative integer, written as a literal or pinned when it
-  comes from the surrounding code - `limit(20)`, `limit(^page_size)`. It bounds what the query
-  evaluates to, not the underlying data. A later call replaces a limit an earlier one set.
-
-  Raises Hologram.CompileError, naming the location, when the limit is neither an integer
-  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
-  query term, or when the limit is not a non-negative integer.
-  """
-  defmacro limit(query, value) do
-    lowered = Expression.bound(value, :limit, __CALLER__)
-
-    quote do
-      Stage.take(unquote(query), unquote(lowered))
-    end
-  end
-
-  @doc """
-  Sets the given query's offset - the number of results skipped before the query's
-  results begin - and returns the resulting query term.
-
-  The query is an entity type module (starting a fresh query term) or an already built
-  query term. The offset is a non-negative integer, written as a literal or pinned when it
-  comes from the surrounding code - `offset(40)`, `offset(^skip)`. It slices what the query
-  evaluates to, not the underlying data. A later call replaces an offset an earlier one set.
-
-  Raises Hologram.CompileError, naming the location, when the offset is neither an integer
-  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
-  query term, or when the offset is not a non-negative integer.
-  """
-  defmacro offset(query, value) do
-    lowered = Expression.bound(value, :offset, __CALLER__)
-
-    quote do
-      Stage.skip(unquote(query), unquote(lowered))
-    end
-  end
-
-  @doc """
   Marks the given query as single-result and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
@@ -413,9 +371,9 @@ defmodule Hologram.Query do
   query term. Options are `page:` (a positive integer, 1-based) and `size:` (a positive
   integer, the number of results per page), both required, each written as a literal or pinned
   when it comes from the surrounding code - `paginate(page: ^page, size: 25)` - or the whole
-  options pinned. Pagination expands into the offset and limit view bounds -
-  `paginate(page: 2, size: 20)` sets offset 20 and limit 20 - and slices what the query
-  evaluates to, not the underlying data, replacing view bounds already set.
+  options pinned. A page sets the skip and take bounds - `paginate(page: 3, size: 20)` skips 40
+  and takes 20 - and slices what the query evaluates to, not the underlying data, replacing
+  bounds already set by paginate/2, skip/2 or take/2.
 
   Raises Hologram.CompileError, naming the location, when an option value is neither an
   integer literal nor pinned, or when the options are neither a keyword list nor pinned. Raises
@@ -463,6 +421,30 @@ defmodule Hologram.Query do
   defdelegate put_attribute(entity, name, value), to: Stage
 
   @doc """
+  Sets how many results the given query skips before its results begin and returns the
+  resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The count is a non-negative integer, written as a literal or pinned when it
+  comes from the surrounding code - `skip(40)`, `skip(^start)`. It slices what the query
+  evaluates to, not the underlying data.
+
+  A later call replaces the count an earlier one set rather than adding to it, so
+  `skip(20) |> skip(20)` skips 20 - where two `Enum.drop` calls in a row drop 40.
+
+  Raises Hologram.CompileError, naming the location, when the count is neither an integer
+  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
+  query term, or when the count is not a non-negative integer.
+  """
+  defmacro skip(query, value) do
+    lowered = Expression.bound(value, :skip, __CALLER__)
+
+    quote do
+      Stage.skip(unquote(query), unquote(lowered))
+    end
+  end
+
+  @doc """
   Sets the given query's sort order and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
@@ -499,6 +481,30 @@ defmodule Hologram.Query do
 
     quote do
       Stage.sort(unquote(query), unquote(lowered))
+    end
+  end
+
+  @doc """
+  Sets how many results the given query takes at most and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The count is a non-negative integer, written as a literal or pinned when it
+  comes from the surrounding code - `take(20)`, `take(^page_size)`. It bounds what the query
+  evaluates to, not the underlying data.
+
+  A later call replaces the count an earlier one set, so `take(20) |> take(50)` takes 50 - where
+  two `Enum.take` calls in a row keep the smaller count. A negative count is refused rather than
+  read as "the last N" the way `Enum.take` reads it.
+
+  Raises Hologram.CompileError, naming the location, when the count is neither an integer
+  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
+  query term, or when the count is not a non-negative integer.
+  """
+  defmacro take(query, value) do
+    lowered = Expression.bound(value, :take, __CALLER__)
+
+    quote do
+      Stage.take(unquote(query), unquote(lowered))
     end
   end
 

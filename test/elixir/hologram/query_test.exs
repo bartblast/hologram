@@ -206,7 +206,7 @@ defmodule Hologram.QueryTest do
         Module3
         |> filter(c_id: "x")
         |> include(a, &filter(&1, a: true))
-        |> limit(5)
+        |> take(5)
         |> one()
 
       printed = inspect(term)
@@ -249,52 +249,6 @@ defmodule Hologram.QueryTest do
     end
   end
 
-  describe "limit/2" do
-    test "lowers a literal" do
-      assert limit(Module2, 5).take == 5
-    end
-
-    test "lowers a pinned bound" do
-      page_size = 20
-
-      assert limit(Module2, ^page_size).take == 20
-    end
-
-    test "raises the lowering's compile error" do
-      code = """
-      import Hologram.Query
-      limit(Hologram.Test.Fixtures.Entity.Module2, page_size)
-      """
-
-      assert_error Hologram.CompileError,
-                   "nofile:2: limit takes an integer or a pinned expression, got: page_size - a value from the surrounding code is pinned: ^page_size",
-                   fn -> Code.eval_string(code) end
-    end
-  end
-
-  describe "offset/2" do
-    test "lowers a literal" do
-      assert offset(Module2, 40).skip == 40
-    end
-
-    test "lowers a pinned bound" do
-      skip = 40
-
-      assert offset(Module2, ^skip).skip == 40
-    end
-
-    test "raises the lowering's compile error" do
-      code = """
-      import Hologram.Query
-      offset(Hologram.Test.Fixtures.Entity.Module2, skip)
-      """
-
-      assert_error Hologram.CompileError,
-                   "nofile:2: offset takes an integer or a pinned expression, got: skip - a value from the surrounding code is pinned: ^skip",
-                   fn -> Code.eval_string(code) end
-    end
-  end
-
   describe "paginate/2" do
     test "lowers a pinned option" do
       page = 3
@@ -320,6 +274,29 @@ defmodule Hologram.QueryTest do
 
       assert_error Hologram.CompileError,
                    "nofile:2: a paginate option takes an integer or a pinned expression, got: page - a value from the surrounding code is pinned: ^page",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
+  describe "skip/2" do
+    test "lowers a literal" do
+      assert skip(Module2, 40).skip == 40
+    end
+
+    test "lowers a pinned bound" do
+      start = 40
+
+      assert skip(Module2, ^start).skip == 40
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      skip(Hologram.Test.Fixtures.Entity.Module2, start)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: skip takes an integer or a pinned expression, got: start - a value from the surrounding code is pinned: ^start",
                    fn -> Code.eval_string(code) end
     end
   end
@@ -353,6 +330,29 @@ defmodule Hologram.QueryTest do
 
       assert_error Hologram.CompileError,
                    "nofile:2: sort names an attribute with a bare name, got: :c - write c",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
+  describe "take/2" do
+    test "lowers a literal" do
+      assert take(Module2, 5).take == 5
+    end
+
+    test "lowers a pinned bound" do
+      page_size = 20
+
+      assert take(Module2, ^page_size).take == 20
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      take(Hologram.Test.Fixtures.Entity.Module2, page_size)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: take takes an integer or a pinned expression, got: page_size - a value from the surrounding code is pinned: ^page_size",
                    fn -> Code.eval_string(code) end
     end
   end

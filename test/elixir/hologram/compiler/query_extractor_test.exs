@@ -118,7 +118,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       expected_term =
         Entity2
         |> filter(b >= ^%Placeholder{name: :min_b})
-        |> limit(5)
+        |> take(5)
         |> Stage.normalize()
 
       assert extract_module_queries(Module29, entity_types, ir_plt) == [expected_term]

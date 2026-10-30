@@ -42,7 +42,7 @@ defmodule Hologram.Query.Expression do
   @range_operators [:.., :..//]
 
   @doc """
-  Lowers the bound argument of `limit/2` or `offset/2`, named by the given stage, to what the
+  Lowers the bound argument of `take/2` or `skip/2`, named by the given stage, to what the
   stage function takes: an integer literal, or the pinned expression itself.
 
   Raises Hologram.CompileError, located at the argument, on anything else.

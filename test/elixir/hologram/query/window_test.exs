@@ -183,8 +183,8 @@ defmodule Hologram.Query.WindowTest do
         Module2
         |> filter(a: true)
         |> sort(c)
-        |> limit(20)
-        |> offset(40)
+        |> take(20)
+        |> skip(40)
         |> Stage.normalize()
 
       assert derive(term, false) == %Query{entity: Module2, filter: [{:a, :==, true}]}
@@ -394,7 +394,7 @@ defmodule Hologram.Query.WindowTest do
         Module5
         |> filter(a.b.c == "x")
         |> sort(id: :desc)
-        |> limit(3)
+        |> take(3)
         |> Stage.normalize()
 
       assert embed(term, false) == %{

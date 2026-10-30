@@ -676,20 +676,20 @@ defmodule Hologram.Query.InterpreterTest do
       }
     end
 
-    test "takes at most the limit" do
+    test "takes at most as many rows as take sets" do
       query =
         Module10
         |> sort(count)
-        |> limit(2)
+        |> take(2)
 
       assert names(agreed(query)) == ["ada", "bob"]
     end
 
-    test "skips the offset" do
+    test "skips as many rows as skip sets" do
       query =
         Module10
         |> sort(count)
-        |> offset(1)
+        |> skip(1)
 
       assert names(agreed(query)) == ["bob", "cleo"]
     end
@@ -698,8 +698,8 @@ defmodule Hologram.Query.InterpreterTest do
       query =
         Module10
         |> sort(count)
-        |> offset(1)
-        |> limit(1)
+        |> skip(1)
+        |> take(1)
 
       assert names(agreed(query)) == ["bob"]
     end
@@ -746,7 +746,7 @@ defmodule Hologram.Query.InterpreterTest do
     test "counts what the view bounds leave" do
       query =
         Module10
-        |> limit(2)
+        |> take(2)
         |> count()
 
       assert agreed(query) == 2
@@ -1196,7 +1196,7 @@ defmodule Hologram.Query.InterpreterTest do
         include(Module3, a, fn related ->
           related
           |> sort(c)
-          |> limit(2)
+          |> take(2)
         end)
 
       assert [row] = agreed(query)
