@@ -1253,6 +1253,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     component_queries = Map.merge(kept_component_queries, fresh_component_queries)
 
+    # A checking build's windows download the rows the rules read through relationships, so the
+    # registered windows and the ids each page subscribes to are derived with it alike.
+    permission_checking? = Compiler.permission_checking?(reach_by_page, module_info_plt)
+
     # Derived from every page's reach rather than from the bundles, so the dumps are whole before
     # the first batch, whatever batch the batches stop at.
     {page_windows_plt, page_windows_plt_dump_path} =
@@ -1267,7 +1271,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     {queries_plt, queries_plt_dump_path} =
       component_queries
       |> Map.take(context.component_modules)
-      |> Compiler.build_queries(entity_types)
+      |> Compiler.build_queries(entity_types, permission_checking?)
       |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
     sync_constants =

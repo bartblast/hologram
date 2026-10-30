@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.build_queries/2
+Hologram.Compiler.build_queries/3
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">build_queries/2</td>
-    <td style="white-space: nowrap; text-align: right">22.67 K</td>
-    <td style="white-space: nowrap; text-align: right">44.11 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;41.94%</td>
-    <td style="white-space: nowrap; text-align: right">41.04 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">103.96 &micro;s</td>
+    <td style="white-space: nowrap">build_queries/3</td>
+    <td style="white-space: nowrap; text-align: right">18.46 K</td>
+    <td style="white-space: nowrap; text-align: right">54.17 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;15.05%</td>
+    <td style="white-space: nowrap; text-align: right">51.46 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">82.92 &micro;s</td>
   </tr>
 
 </table>

@@ -7,5 +7,6 @@ defmodule Hologram.Test.Fixtures.Policy.Module10 do
   role :editor
 
   allow :create
+  allow :read
   allow :update, to: :editor, when: archived == false
 end

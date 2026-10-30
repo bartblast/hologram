@@ -102,11 +102,11 @@ build_page_windows/3        6.64 K      150.53 μs    ±10.67%      147.13 μs  
 ```
 
 
-### ✅ compiler » build_queries_2
+### ✅ compiler » build_queries_3
 
 ```
 Name                      ips        average  deviation         median         99th %
-build_queries/2       22.67 K       44.11 μs    ±41.94%       41.04 μs      103.96 μs
+build_queries/3       18.46 K       54.17 μs    ±15.05%       51.46 μs       82.92 μs
 ```
 
 

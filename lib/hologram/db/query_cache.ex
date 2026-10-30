@@ -58,6 +58,18 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
+  Returns true when the build has a page checking permissions on the client, or false otherwise -
+  as the build decided it, when it registered the queries.
+
+  Such a client answers each rule over the rows it holds, so it needs the related rows its queried
+  types' rules read beside the rows the queries return.
+  """
+  @spec permission_checking?() :: boolean
+  def permission_checking? do
+    :persistent_term.get(impl().persistent_term_key()).permission_checking?
+  end
+
+  @doc """
   Returns the term the given window downloads, or nil when no registered query downloads it.
 
   Windows are shared: several queries choosing among the same rows name one window between them,

@@ -38,9 +38,11 @@ defmodule Hologram.Auth do
   """
   @spec grants_window() :: Query.t()
   def grants_window do
+    # Only a client checking permissions downloads it, so it is derived as one. The grant store's
+    # rules read no row through a relationship, so nothing is embedded either way.
     RoleGrant
     |> Stage.normalize()
-    |> Window.derive()
+    |> Window.derive(true)
   end
 
   @doc """

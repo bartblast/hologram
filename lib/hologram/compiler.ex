@@ -340,12 +340,17 @@ defmodule Hologram.Compiler do
   other rows it reads. Only when the given module info PLT records a user entity type: a data model
   without one has no grant store, so no page checks permissions against anything.
 
+  The window ids are derived with whether the build checks permissions on the client (see
+  `permission_checking?/2`), since a checking build's windows download the related rows the rules
+  read, and a page has to name the windows the registered queries hold.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_page_windows_3/README.md
   """
   @spec build_page_windows(%{module => kept_page_reach}, %{module => component_queries}, PLT.t()) ::
           %{module => list(String.t())}
   def build_page_windows(reach_by_page, component_queries, module_info_plt) do
     grant_store? = Reflection.user_entity(module_info_plt) != nil
+    permission_checking? = permission_checking?(reach_by_page, module_info_plt)
 
     # Each component's window ids are derived once, however many pages reach it.
     window_ids_by_component =
@@ -357,7 +362,7 @@ defmodule Hologram.Compiler do
           component_queries
           |> Map.fetch!(component_module)
           |> Map.fetch!(:terms)
-          |> Enum.map(&window_id/1)
+          |> Enum.map(&window_id(&1, permission_checking?))
 
         {component_module, window_ids}
       end)
@@ -467,6 +472,22 @@ defmodule Hologram.Compiler do
         Enum.any?(mfas, &(&1 in @permission_mfas)) do
       page_module
     end
+  end
+
+  @doc """
+  Returns true when some page checks permissions on the client and the data model has a grant
+  store to check them against, or false otherwise - from what the data layer keeps of each page's
+  reach (see `build_kept_page_reach/3`) and the given module info PLT.
+
+  What it gates is build-wide: the rules and roles the client is compiled with, and the related
+  rows a checking client's windows download beside the rows its queries return.
+  """
+  @spec permission_checking?(%{module => kept_page_reach}, PLT.t()) :: boolean
+  def permission_checking?(reach_by_page, module_info_plt) do
+    # A data model with no user entity type has no grant store, so no page checks permissions
+    # against anything then.
+    Reflection.user_entity(module_info_plt) != nil and
+      Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
   end
 
   @doc false
@@ -832,8 +853,9 @@ defmodule Hologram.Compiler do
   @doc """
   Derives what a running Hologram app holds for the given registered queries of components, as
   `extract_component_queries/3` extracts them: the registry entries keyed by query content id, the
-  argument names of every parameterized capture keyed by `{module, prop name}`, and the term behind
-  each window keyed by window id.
+  argument names of every parameterized capture keyed by `{module, prop name}`, the term behind
+  each window keyed by window id, and whether the build has a page checking permissions on the
+  client.
 
   The components are every component of the build rather than the ones pages reach, because what
   reads the result is the renderer and the sync layer, which answer for any component that renders.
@@ -846,16 +868,19 @@ defmodule Hologram.Compiler do
   query has no authority to claim on either tier.
 
   The grants window is among the windows when the given entity types hold the role grant store,
-  which a data model does exactly when it designates a user entity type.
+  which a data model does exactly when it designates a user entity type. Whether the build has a page
+  checking permissions on the client is given (see `permission_checking?/2`): such a client's
+  windows also download the related rows its types' rules read.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_2/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_3/README.md
   """
-  @spec build_queries(%{module => component_queries}, list(module)) :: %{
+  @spec build_queries(%{module => component_queries}, list(module), boolean) :: %{
           entries: %{String.t() => %{atom => any}},
+          permission_checking?: boolean,
           prop_params: %{{module, atom} => list(atom | nil)},
           windows: %{String.t() => Query.t()}
         }
-  def build_queries(component_queries, entity_types) do
+  def build_queries(component_queries, entity_types, permission_checking?) do
     # In module order, so that the registry and the first refusal do not depend on the map's order.
     module_queries =
       component_queries
@@ -867,14 +892,19 @@ defmodule Hologram.Compiler do
     Enum.each(module_queries, &validate_untrusted_queries!/1)
 
     terms = Enum.flat_map(module_queries, fn {_module, module_terms} -> module_terms end)
-    entries = Registry.build(terms)
+    entries = Registry.build(terms, permission_checking?)
 
     windows =
       entries
       |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
       |> put_grants_window(entity_types)
 
-    %{entries: entries, prop_params: prop_params_index(component_queries), windows: windows}
+    %{
+      entries: entries,
+      permission_checking?: permission_checking?,
+      prop_params: prop_params_index(component_queries),
+      windows: windows
+    }
   end
 
   @doc """
@@ -2159,15 +2189,11 @@ defmodule Hologram.Compiler do
     all_entity_types = Reflection.list_entities(module_info_plt)
     role_modules = Reflection.list_roles(module_info_plt)
 
-    # A data model with no user entity type has no grant store, so no page checks permissions
-    # against anything then.
     # Rules and roles are baked only when some page checks permissions, and then for every type
     # declaring a rule or a role, reached or not. Trimming them to the reached types would save at
     # most about 0.5 KB gzipped on the feature test app, and a type that reaches the client as data
     # the compiler cannot see would be denied there while the server allows it.
-    permission_checking? =
-      Reflection.user_entity(module_info_plt) != nil and
-        Enum.any?(reach_by_page, fn {_page_module, reach} -> reach.checks_permissions? end)
+    permission_checking? = permission_checking?(reach_by_page, module_info_plt)
 
     # A page mentions an entity type however it spells the mention: `%Task{}` compiles to a call
     # to `Task.__struct__/1`, `Task.new(...)` calls an MFA of `Task`, and `Entity.new(Task, ...)`
@@ -4810,9 +4836,9 @@ defmodule Hologram.Compiler do
     Registry.id(Auth.grants_window())
   end
 
-  defp window_id(term) do
+  defp window_id(term, permission_checking?) do
     term
-    |> Window.derive()
+    |> Window.derive(permission_checking?)
     |> Registry.id()
   end
 

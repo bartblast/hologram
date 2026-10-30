@@ -31,6 +31,7 @@ defmodule Hologram.DB.QueryCacheTest do
 
     %{
       entries: entries,
+      permission_checking?: false,
       prop_params: %{{Module11, :entities} => [:min_b]},
       windows: expected_windows(entries)
     }
@@ -58,7 +59,7 @@ defmodule Hologram.DB.QueryCacheTest do
       |> filter(b >= ^%Placeholder{name: :min_b})
       |> Stage.normalize()
 
-    Registry.build([module_1_term, module_11_term])
+    Registry.build([module_1_term, module_11_term], false)
   end
 
   test "entries/0" do
@@ -96,6 +97,22 @@ defmodule Hologram.DB.QueryCacheTest do
     assert init(nil) == {:ok, nil}
 
     assert :persistent_term.get(QueryCacheStub.persistent_term_key()) == expected_data()
+  end
+
+  describe "permission_checking?/0" do
+    test "returns true for a build with a page checking permissions on the client" do
+      dump_query_cache(QueryCacheStub, [Module11], true)
+
+      init(nil)
+
+      assert permission_checking?()
+    end
+
+    test "returns false for a build with no page checking permissions on the client" do
+      init(nil)
+
+      refute permission_checking?()
+    end
   end
 
   describe "prop_params/2" do

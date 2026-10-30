@@ -395,6 +395,48 @@ defmodule Hologram.Policy do
     |> Enum.sort()
   end
 
+  @doc """
+  Returns the chains of to-one relationship names whose rows the given entity type's rules read,
+  across every operation, sorted: every row along a path in a condition, the rows before the last
+  relationship of a role reference - its last reference id is read off the row before it - and the
+  row a delegation leads to, with everything the delegated operation's rules read through it,
+  prefixed with the delegation's chain.
+
+  A chain is followed hop by hop, so the rows these chains lead to are what a client needs beside a
+  row it holds to answer the type's rules over it. Rules reading only the row itself, the grant
+  store, a whole type or the app-wide roles give none.
+
+  Takes a validated data model: the walk follows delegation to its end, so a via cycle would not
+  terminate - Hologram.Policy.Validator refuses one before anything reads the model.
+  """
+  @spec related_chains(module) :: list(list(atom))
+  def related_chains(entity_type) do
+    entity_type
+    |> build()
+    |> Map.keys()
+    |> Enum.flat_map(&related_chains(entity_type, &1))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Returns the chains of to-one relationship names whose rows the given entity type's rules for the
+  given operation read, sorted - the chains `related_chains/1` returns, for one operation. A
+  delegation's chains are those of the operation it asks the related row, whatever operation
+  delegates. An operation with no rules gives none.
+
+  Takes a validated data model, for the reason `related_chains/1` does.
+  """
+  @spec related_chains(module, Entity.operation()) :: list(list(atom))
+  def related_chains(entity_type, operation) do
+    entity_type
+    |> build()
+    |> Map.get(operation, [])
+    |> Enum.flat_map(&rule_chains(entity_type, &1))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   @doc false
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
@@ -533,6 +575,21 @@ defmodule Hologram.Policy do
     "declared roles are: #{Enum.map_join(declared_names, ", ", &inspect/1)}"
   end
 
+  defp delegation_chains(_entity_type, nil), do: []
+
+  # The row a delegation leads to, and every row the delegated operation's rules read through it -
+  # the target's own chains, followed from the row the delegation reaches.
+  defp delegation_chains(entity_type, {operation, relationship_names}) do
+    target_type = Entity.path_target(entity_type, relationship_names)
+
+    lifted_chains =
+      target_type
+      |> related_chains(operation)
+      |> Enum.map(&(relationship_names ++ &1))
+
+    [relationship_names | lifted_chains]
+  end
+
   # A bare grant lifecycle line covers, for each declared role, the holders it names whose own
   # role is that role or extends it - so the rule for a role above what a holder holds names
   # nobody. A global role module it names sits in no own extends chain and outranks every own
@@ -660,6 +717,16 @@ defmodule Hologram.Policy do
     |> Enum.sort()
   end
 
+  # Every path a condition reads, the compared name and an attribute operand alike.
+  defp predicate_chains(predicates) do
+    predicates
+    |> Stage.predicate_references()
+    |> Enum.flat_map(fn
+      {[], _name} -> []
+      {relationship_names, _name} -> [relationship_names]
+    end)
+  end
+
   # The bare key answers whether the acting user may grant (or revoke) some role: every per-role
   # rule, in role order. A bare line's own rule is not kept - the per-role rules it expanded to
   # are its meaning, and their union says the same about "some role" as the line did.
@@ -679,6 +746,19 @@ defmodule Hologram.Policy do
       else
         Map.put(acc, operation, union)
       end
+    end)
+  end
+
+  defp reference_chains(nil), do: []
+
+  # A role held on the row a chain leads to is looked up by the id its last reference holds, read off
+  # the row before it - so the rows before the last relationship are read, the one at the end never
+  # is. Every other reference reads the grant store alone.
+  defp reference_chains(references) do
+    Enum.flat_map(references, fn
+      {:rel, [_relationship_name], _role_names} -> []
+      {:rel, relationship_names, _role_names} -> [Enum.drop(relationship_names, -1)]
+      _other_reference -> []
     end)
   end
 
@@ -729,6 +809,10 @@ defmodule Hologram.Policy do
       to: named_reference ++ global_reference,
       via: nil
     }
+  end
+
+  defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}) do
+    predicate_chains(predicates) ++ reference_chains(to) ++ delegation_chains(entity_type, via)
   end
 
   defp unknown_operation_message(entity_type, operation) do
