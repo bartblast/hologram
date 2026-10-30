@@ -39,11 +39,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const increment = Elixir_Hologram_Query_Stage["increment/3"];
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
   const include = Elixir_Hologram_Query_Stage["include/3"];
-  const limit = Elixir_Hologram_Query_Stage["limit/2"];
   const normalize = Elixir_Hologram_Query_Stage["normalize/1"];
   const offset = Elixir_Hologram_Query_Stage["offset/2"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
   const sort = Elixir_Hologram_Query_Stage["sort/2"];
+  const take = Elixir_Hologram_Query_Stage["take/2"];
   const trust = Elixir_Hologram_Query_Stage["trust/1"];
   const putAttribute = Elixir_Hologram_Query_Stage["put_attribute/2"];
   const putAttributeValue = Elixir_Hologram_Query_Stage["put_attribute/3"];
@@ -53,9 +53,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     entity: entityType,
     filter: [],
     include: {},
-    limit: null,
     offset: null,
     sort: [],
+    take: null,
   });
 
   const freshTerm = baseTerm(TASK);
@@ -1081,10 +1081,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("composes with other stages", () => {
-      const query = count(limit(task, Type.integer(50)));
+      const query = count(take(task, Type.integer(50)));
 
       assert.equal(query.cardinality, "count");
-      assert.equal(query.limit, 50);
+      assert.equal(query.take, 50);
     });
 
     it("raises when cardinality is already marked", () => {
@@ -2453,49 +2453,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  describe("limit/2", () => {
-    it("accepts zero", () => {
-      assert.equal(limit(task, Type.integer(0)).limit, 0);
-    });
-
-    it("composes with other stages", () => {
-      const query = limit(offset(task, Type.integer(20)), Type.integer(50));
-
-      assert.equal(query.offset, 20);
-      assert.equal(query.limit, 50);
-    });
-
-    it("sets the limit", () => {
-      assert.deepStrictEqual(limit(task, Type.integer(50)), {
-        ...freshTerm,
-        limit: 50,
-      });
-    });
-
-    it("raises on a negative limit", () => {
-      assert.throw(
-        () => limit(task, Type.integer(-5)),
-        HologramBoxedError,
-        "limit must be a non-negative integer, got: -5",
-      );
-    });
-
-    it("raises on a non-integer limit", () => {
-      assert.throw(
-        () => limit(task, Type.float(5.0)),
-        HologramBoxedError,
-        "limit must be a non-negative integer, got: 5.0",
-      );
-    });
-
-    it("replaces a prior limit", () => {
-      assert.equal(
-        limit(limit(task, Type.integer(50)), Type.integer(100)).limit,
-        100,
-      );
-    });
-  });
-
   describe("normalize/1", () => {
     it("appends an ascending id tiebreaker to orderings", () => {
       const query = normalize(sort(task, Type.atom("position")));
@@ -2833,18 +2790,61 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
+  describe("take/2", () => {
+    it("accepts zero", () => {
+      assert.equal(take(task, Type.integer(0)).take, 0);
+    });
+
+    it("composes with other stages", () => {
+      const query = take(offset(task, Type.integer(20)), Type.integer(50));
+
+      assert.equal(query.offset, 20);
+      assert.equal(query.take, 50);
+    });
+
+    it("sets how many results it takes", () => {
+      assert.deepStrictEqual(take(task, Type.integer(50)), {
+        ...freshTerm,
+        take: 50,
+      });
+    });
+
+    it("raises on a negative count", () => {
+      assert.throw(
+        () => take(task, Type.integer(-5)),
+        HologramBoxedError,
+        "take must be a non-negative integer, got: -5",
+      );
+    });
+
+    it("raises on a non-integer count", () => {
+      assert.throw(
+        () => take(task, Type.float(5.0)),
+        HologramBoxedError,
+        "take must be a non-negative integer, got: 5.0",
+      );
+    });
+
+    it("replaces a prior take", () => {
+      assert.equal(
+        take(take(task, Type.integer(50)), Type.integer(100)).take,
+        100,
+      );
+    });
+  });
+
   describe("the query a stage starts from", () => {
     it("carries the stages already applied", () => {
-      const query = offset(limit(task, Type.integer(5)), Type.integer(10));
+      const query = offset(take(task, Type.integer(5)), Type.integer(10));
 
-      assert.equal(query.limit, 5);
+      assert.equal(query.take, 5);
       assert.equal(query.offset, 10);
       assert.equal(query.entity, TASK);
     });
 
     it("raises for a value that is neither a module nor a term", () => {
       assert.throw(
-        () => limit(Type.bitstring("MyApp.Task"), Type.integer(5)),
+        () => take(Type.bitstring("MyApp.Task"), Type.integer(5)),
         HologramBoxedError,
         '"MyApp.Task" is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive',
       );
@@ -2854,7 +2854,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // refused where the server would refuse a module that is not an entity type at all.
     it("raises for a type this build never told the client about", () => {
       assert.throw(
-        () => limit(Type.alias("MyApp.Unknown"), Type.integer(5)),
+        () => take(Type.alias("MyApp.Unknown"), Type.integer(5)),
         HologramBoxedError,
         "MyApp.Unknown is not an entity type module or a query term",
       );

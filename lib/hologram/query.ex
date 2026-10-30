@@ -18,9 +18,9 @@ defmodule Hologram.Query do
             entity: nil,
             filter: [],
             include: %{},
-            limit: nil,
             offset: nil,
             sort: [],
+            take: nil,
             trust: false
 
   # Another attribute of the same row, or a path to an attribute of a related row, compared with
@@ -58,9 +58,9 @@ defmodule Hologram.Query do
           entity: module,
           filter: list(clause),
           include: %{atom => t},
-          limit: bound,
           offset: bound,
           sort: list(ordering),
+          take: bound,
           trust: boolean
         }
 
@@ -366,7 +366,7 @@ defmodule Hologram.Query do
     lowered = Expression.bound(value, :limit, __CALLER__)
 
     quote do
-      Stage.limit(unquote(query), unquote(lowered))
+      Stage.take(unquote(query), unquote(lowered))
     end
   end
 
@@ -569,9 +569,9 @@ defmodule Hologram.Query do
             entity: term.entity,
             filter: term.filter,
             include: term.include,
-            limit: term.limit,
             offset: term.offset,
             sort: term.sort,
+            take: term.take,
             trust: term.trust
           ],
           fn {name, value} -> value == Map.fetch!(defaults, name) end

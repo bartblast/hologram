@@ -312,9 +312,9 @@ describe("QueryKernel", () => {
           entity: TASK,
           filter: [],
           include: {},
-          limit: null,
           offset: null,
           sort: [["id", "asc"]],
+          take: null,
         },
         overrides,
       );
@@ -566,8 +566,8 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t3", position: 3, title: "cleo"});
       });
 
-      it("takes at most the limit", () => {
-        assert.deepEqual(titles(QueryKernel.run(term({limit: 2}))), [
+      it("takes at most as many rows as take sets", () => {
+        assert.deepEqual(titles(QueryKernel.run(term({take: 2}))), [
           "ada",
           "bob",
         ]);
@@ -581,7 +581,7 @@ describe("QueryKernel", () => {
       });
 
       it("skips before it takes", () => {
-        const bounded = term({limit: 1, offset: 1});
+        const bounded = term({offset: 1, take: 1});
 
         assert.deepEqual(titles(QueryKernel.run(bounded)), ["bob"]);
       });
@@ -620,7 +620,7 @@ describe("QueryKernel", () => {
       // A count counts what the query evaluates to, so a bounded query counts what its bounds
       // leave rather than what its filter matched.
       it("counts what the view bounds leave", () => {
-        const counting = term({cardinality: "count", limit: 1});
+        const counting = term({cardinality: "count", take: 1});
 
         assert.equal(QueryKernel.run(counting), 1);
       });
@@ -637,9 +637,9 @@ describe("QueryKernel", () => {
             entity: TASK,
             filter: [],
             include: {},
-            limit: null,
             offset: null,
             sort: [["id", "asc"]],
+            take: null,
           },
           overrides,
         );
@@ -741,11 +741,11 @@ describe("QueryKernel", () => {
 
         const include = {
           tasks: subTerm({
-            limit: 2,
             sort: [
               ["position", "asc"],
               ["id", "asc"],
             ],
+            take: 2,
           }),
         };
 
@@ -1399,9 +1399,9 @@ describe("QueryKernel", () => {
         entity: MESSAGE,
         filter: [[["channel", "org", "name"], "==", "acme"]],
         include: {},
-        limit: null,
         offset: null,
         sort: [["id", "asc"]],
+        take: null,
       };
 
       assert.deepStrictEqual(

@@ -80,7 +80,7 @@ defmodule Hologram.Query.Interpreter do
   defp bound(rows, term) do
     rows
     |> Enum.drop(term.offset || 0)
-    |> take(term.limit)
+    |> take(term.take)
   end
 
   # Values of one kind, compared the way that kind is ordered rather than the way its
@@ -414,7 +414,7 @@ defmodule Hologram.Query.Interpreter do
 
   defp take(rows, nil), do: rows
 
-  defp take(rows, limit), do: Enum.take(rows, limit)
+  defp take(rows, count), do: Enum.take(rows, count)
 
   # The values the rank map holds, back in the order the entity declares them - the cold path of
   # a refusal, so the sort costs nothing anything else pays for.

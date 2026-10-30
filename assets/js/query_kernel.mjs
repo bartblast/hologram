@@ -101,9 +101,9 @@ export default class QueryKernel {
   static #bound(rows, term) {
     const offset = term.offset ?? 0;
 
-    return term.limit === null || term.limit === undefined
+    return term.take === null || term.take === undefined
       ? rows.slice(offset)
-      : rows.slice(offset, offset + term.limit);
+      : rows.slice(offset, offset + term.take);
   }
 
   static #compare(left, right) {

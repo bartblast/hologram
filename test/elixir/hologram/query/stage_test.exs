@@ -1705,59 +1705,6 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
-  describe "limit/2" do
-    test "accepts a placeholder" do
-      query = limit(Module2, %Placeholder{name: :size})
-
-      assert query.limit == {:placeholder, :size}
-    end
-
-    test "accepts zero" do
-      query = limit(Module2, 0)
-
-      assert query.limit == 0
-    end
-
-    test "composes with other stages" do
-      query =
-        Module2
-        |> filter(a: true)
-        |> limit(50)
-
-      assert query.filter == [{:a, :==, true}]
-      assert query.limit == 50
-    end
-
-    test "replaces a prior limit" do
-      query =
-        Module2
-        |> limit(50)
-        |> limit(100)
-
-      assert query.limit == 100
-    end
-
-    test "sets the limit" do
-      assert limit(Module2, 50) == %Query{entity: Module2, limit: 50}
-    end
-
-    test "raises on a negative limit" do
-      expected_msg = "limit must be a non-negative integer, got: -5"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        limit(Module2, -5)
-      end
-    end
-
-    test "raises on a non-integer limit" do
-      expected_msg = "limit must be a non-negative integer, got: 5.0"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        limit(Module2, wrap_term(5.0))
-      end
-    end
-  end
-
   describe "normalize/1" do
     test "appends an ascending id tiebreaker after a placeholder ordering key" do
       query =
@@ -1975,38 +1922,38 @@ defmodule Hologram.Query.StageTest do
       query = paginate(Module2, page: %Placeholder{name: :page}, size: 20)
 
       assert query.offset == {:placeholder, :page}
-      assert query.limit == 20
+      assert query.take == 20
     end
 
     test "accepts a placeholder size" do
       query = paginate(Module2, page: 3, size: %Placeholder{name: :size})
 
       assert query.offset == {:placeholder, :size}
-      assert query.limit == {:placeholder, :size}
+      assert query.take == {:placeholder, :size}
     end
 
     test "computes a zero offset for the first page" do
       query = paginate(Module2, page: 1, size: 20)
 
-      assert query.limit == 20
+      assert query.take == 20
       assert query.offset == 0
     end
 
     test "replaces prior view bounds" do
       query =
         Module2
-        |> limit(10)
-        |> paginate(page: 2, size: 20)
+        |> take(10)
+        |> paginate(page: 3, size: 20)
 
-      assert query.limit == 20
-      assert query.offset == 20
+      assert query.take == 20
+      assert query.offset == 40
     end
 
     test "sets the view bounds from page and size" do
-      assert paginate(Module2, page: 2, size: 20) == %Query{
+      assert paginate(Module2, page: 3, size: 20) == %Query{
                entity: Module2,
-               limit: 20,
-               offset: 20
+               offset: 40,
+               take: 20
              }
     end
 
@@ -2065,7 +2012,7 @@ defmodule Hologram.Query.StageTest do
         Module2
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> filter([{%Placeholder{name: :field}, 5}])
-        |> limit(%Placeholder{name: :size})
+        |> take(%Placeholder{name: :size})
         |> offset(%Placeholder{name: :start})
         |> sort([{%Placeholder{name: :sort}, %Placeholder{name: :dir}}])
 
@@ -2391,6 +2338,59 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         sort(Module2, :x)
+      end
+    end
+  end
+
+  describe "take/2" do
+    test "accepts a placeholder" do
+      query = take(Module2, %Placeholder{name: :size})
+
+      assert query.take == {:placeholder, :size}
+    end
+
+    test "accepts zero" do
+      query = take(Module2, 0)
+
+      assert query.take == 0
+    end
+
+    test "composes with other stages" do
+      query =
+        Module2
+        |> filter(a: true)
+        |> take(50)
+
+      assert query.filter == [{:a, :==, true}]
+      assert query.take == 50
+    end
+
+    test "replaces a prior take" do
+      query =
+        Module2
+        |> take(50)
+        |> take(100)
+
+      assert query.take == 100
+    end
+
+    test "sets how many results it takes" do
+      assert take(Module2, 50) == %Query{entity: Module2, take: 50}
+    end
+
+    test "raises on a negative count" do
+      expected_msg = "take must be a non-negative integer, got: -5"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        take(Module2, -5)
+      end
+    end
+
+    test "raises on a non-integer count" do
+      expected_msg = "take must be a non-negative integer, got: 5.0"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        take(Module2, wrap_term(5.0))
       end
     end
   end

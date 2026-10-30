@@ -1352,7 +1352,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.ends_with?(sql, ~s( ORDER BY "c_$sort" DESC, "c" DESC, "id" ASC))
     end
 
-    test "compiles single-result queries with a zero limit as zero" do
+    test "compiles single-result queries with a zero take as zero" do
       mapping = Mapper.derive!([Module2], [])
 
       term =

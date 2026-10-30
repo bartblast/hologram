@@ -181,12 +181,6 @@ defmodule Hologram.Query.Stage do
 
   def inspect_name(name), do: inspect(name)
 
-  @doc false
-  @spec limit(module | Query.t(), non_neg_integer) :: Query.t()
-  def limit(query, value) do
-    set_view_bound!(query, :limit, value)
-  end
-
   # Returns the canonical form of the given query - the form executors run literally
   # and the registry hashes. Normalization: sorts filter clauses into canonical order,
   # disjunctions all the way down, gives every set-returning shape a total
@@ -255,7 +249,7 @@ defmodule Hologram.Query.Stage do
 
     query
     |> offset(paginate_offset(page, size))
-    |> limit(size)
+    |> take(size)
   end
 
   @doc """
@@ -272,7 +266,7 @@ defmodule Hologram.Query.Stage do
         value_placeholder_names(name) ++ value_placeholder_names(value)
       end)
 
-    bound_names = Enum.flat_map([term.limit, term.offset], &value_placeholder_names/1)
+    bound_names = Enum.flat_map([term.take, term.offset], &value_placeholder_names/1)
 
     order_names =
       Enum.flat_map(term.sort, fn {key, direction} ->
@@ -375,6 +369,12 @@ defmodule Hologram.Query.Stage do
     entries = order_entries!(spec, term.entity)
 
     %{term | sort: entries}
+  end
+
+  @doc false
+  @spec take(module | Query.t(), non_neg_integer) :: Query.t()
+  def take(query, value) do
+    set_view_bound!(query, :take, value)
   end
 
   # Returns every predicate triple of the given filter clauses, in order, the ones inside a
@@ -1009,7 +1009,7 @@ defmodule Hologram.Query.Stage do
   end
 
   defp sub_term_has_clauses?(sub_term) do
-    sub_term.filter != [] or sub_term.sort != [] or sub_term.limit != nil or
+    sub_term.filter != [] or sub_term.sort != [] or sub_term.take != nil or
       sub_term.offset != nil
   end
 

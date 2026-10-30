@@ -650,7 +650,7 @@ function subTermHasClauses(subTerm) {
   return (
     subTerm.filter.length > 0 ||
     subTerm.sort.length > 0 ||
-    subTerm.limit !== null ||
+    subTerm.take !== null ||
     subTerm.offset !== null
   );
 }
@@ -773,9 +773,9 @@ function toTerm(query) {
     entity: name,
     filter: [],
     include: {},
-    limit: null,
     offset: null,
     sort: [],
+    take: null,
   };
 }
 
@@ -1459,8 +1459,6 @@ const Elixir_Hologram_Query_Stage = {
   "increment/3": (entity, name, amount) =>
     putDelta(entity, name, amount, 1, "increment"),
 
-  "limit/2": (query, value) => setViewBound(query, "limit", value),
-
   // The canonical form of a query - what the kernel runs literally.
   "normalize/1": (query) => normalizedTerm(toTerm(query)),
 
@@ -1489,6 +1487,8 @@ const Elixir_Hologram_Query_Stage = {
 
     return {...term, sort: orderEntries(spec, term.entity)};
   },
+
+  "take/2": (query, value) => setViewBound(query, "take", value),
 
   // Both forms the server accepts - an entity struct and a query - are refused here, in the wire's
   // own words. Trust is the SERVER's authority: a batch claiming it is refused by name, and a read

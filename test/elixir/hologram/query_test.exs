@@ -237,10 +237,10 @@ defmodule Hologram.QueryTest do
       term =
         Module2
         |> sort(c)
-        |> paginate(page: 2, size: 20)
+        |> paginate(page: 3, size: 20)
 
       assert inspect(term) ==
-               "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module2, limit: 20, offset: 20, sort: [c: :asc]}"
+               "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module2, offset: 40, sort: [c: :asc], take: 20}"
     end
 
     test "shows the trust mark" do
@@ -251,13 +251,13 @@ defmodule Hologram.QueryTest do
 
   describe "limit/2" do
     test "lowers a literal" do
-      assert limit(Module2, 5).limit == 5
+      assert limit(Module2, 5).take == 5
     end
 
     test "lowers a pinned bound" do
       page_size = 20
 
-      assert limit(Module2, ^page_size).limit == 20
+      assert limit(Module2, ^page_size).take == 20
     end
 
     test "raises the lowering's compile error" do
@@ -297,11 +297,11 @@ defmodule Hologram.QueryTest do
 
   describe "paginate/2" do
     test "lowers a pinned option" do
-      page = 2
+      page = 3
 
       query = paginate(Module2, page: ^page, size: 20)
 
-      assert {query.offset, query.limit} == {20, 20}
+      assert {query.offset, query.take} == {40, 20}
     end
 
     test "takes pinned options" do
@@ -309,7 +309,7 @@ defmodule Hologram.QueryTest do
 
       query = paginate(Module2, ^opts)
 
-      assert {query.offset, query.limit} == {0, 10}
+      assert {query.offset, query.take} == {0, 10}
     end
 
     test "raises the lowering's compile error" do

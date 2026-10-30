@@ -26,7 +26,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   Cardinality shapes the statement: `:set` selects the mapped columns with ordering
   and view bounds, `:one` selects with `LIMIT 1` under the query's total order (a
-  zero limit stays zero), and `:count` selects `count(*)` - over a capped subquery
+  zero take stays zero), and `:count` selects `count(*)` - over a capped subquery
   when view bounds are set, since a counting query counts what it evaluates to.
   Counting queries carry no includes - an embedded entity cannot change the count.
 
@@ -238,7 +238,7 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp bounds_clause(term) do
-    limit_sql = if term.limit, do: " LIMIT #{term.limit}", else: ""
+    limit_sql = if term.take, do: " LIMIT #{term.take}", else: ""
     offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
 
     limit_sql <> offset_sql
@@ -1085,7 +1085,7 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp statement(%{cardinality: :one} = term, entity_mapping, where_sql, order_sql, include_sql) do
-    effective_limit = if term.limit == 0, do: 0, else: 1
+    effective_limit = if term.take == 0, do: 0, else: 1
     offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
 
     "SELECT #{column_list(entity_mapping)}#{include_sql} " <>
