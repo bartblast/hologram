@@ -537,9 +537,11 @@ defmodule Hologram.DB.EntityOperations do
       {:ok, %Postgrex.Result{rows: [row]}} ->
         decode_row(entity_type, row)
 
-      {:error,
-       %Postgrex.Error{postgres: %{code: :foreign_key_violation, constraint: constraint}} =
-           error} ->
+      # A row another row references can't go. A RESTRICT key reports that as a restrict
+      # violation on PostgreSQL 18 and later, and as a foreign key violation before 18 and
+      # for a NO ACTION key on every version.
+      {:error, %Postgrex.Error{postgres: %{code: code, constraint: constraint}} = error}
+      when code in [:foreign_key_violation, :restrict_violation] ->
         case Mapper.referencing_relationship(DB.mapping(), constraint) do
           {entity_type, relationship} ->
             Connection.rollback(%{referenced_by: entity_type, relationship: relationship})
