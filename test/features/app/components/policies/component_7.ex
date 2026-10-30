@@ -36,10 +36,7 @@ defmodule HologramFeatureTests.Components.Policies.Component7 do
     Enum.filter(legs, &can?(user, :rename, &1))
   end
 
-  # The include downloads the trips the checks read two rows away from a leg.
   defp stops_query do
-    Stop
-    |> include(trip)
-    |> order_by(name)
+    order_by(Stop, name)
   end
 end

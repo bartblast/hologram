@@ -7,11 +7,13 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Leg
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
@@ -19,16 +21,17 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias HologramFeatureTests.Policies.Page3
   alias HologramFeatureTests.Policies.Page5
   alias HologramFeatureTests.Policies.Page6
+  alias HologramFeatureTests.Policies.Page7
   alias HologramFeatureTests.PoliciesPage
   alias HologramFeatureTests.Roles.Admin
 
   # The tables truncate in one statement: the memo, note and role grant tables' foreign keys to the
-  # user table, the stop table's to the trip table and the leg table's to the stop table make
-  # Postgres reject truncating the referenced table alone.
+  # user table, the stop table's to the trip table, the leg table's to the stop table and the cabin
+  # table's to the ship table make Postgres reject truncating the referenced table alone.
   setup do
     tables =
       Enum.map_join(
-        [Booking, Document, Folder, Leg, Memo, Note, RoleGrant, Stop, Trip, User],
+        [Booking, Cabin, Document, Folder, Leg, Memo, Note, RoleGrant, Ship, Stop, Trip, User],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
@@ -61,6 +64,23 @@ defmodule HologramFeatureTests.PoliciesTest do
       |> DB.create!()
 
       {"#{prefix}_trip", trip}
+    end)
+  end
+
+  # Two ships, each with a cabin. Each feature makes the session user the captain of the own ship
+  # alone, so the other cabin stays out for want of the role.
+  defp seed_ships do
+    Map.new(["other", "own"], fn prefix ->
+      ship =
+        %{name: "#{prefix}_ship"}
+        |> Ship.new()
+        |> DB.create!()
+
+      %{name: "#{prefix}_cabin", ship_id: ship.id}
+      |> Cabin.new()
+      |> DB.create!()
+
+      {"#{prefix}_ship", ship}
     end)
   end
 
@@ -452,6 +472,53 @@ defmodule HologramFeatureTests.PoliciesTest do
     session
     |> assert_text(css("#leggable_stops"), ~r/^own_stop$/)
     |> assert_text(css("#renamable_legs"), ~r/^own_leg$/)
+    |> assert_same_page_load()
+  end
+
+  # The page queries cabins and nothing else, and no page queries ships, so the ship the rename rule
+  # reads reaches the browser only because the rule reads it - without it the browser answers no
+  # for every cabin, whatever the role.
+  feature "answers a check through rows no page queries", %{session: session} do
+    ships = seed_ships()
+
+    session
+    |> visit(Page7)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+
+    Auth.grant_role(session_user(), :captain, ships["own_ship"])
+
+    session
+    |> reload()
+    |> mark_this_page_load()
+    |> await_local_fill()
+    |> assert_text(css("#renamable_cabins"), ~r/^own_cabin$/)
+    |> assert_same_page_load()
+  end
+
+  # Archiving the ship changes no cabin, and the control still goes - the rows the rule reads are
+  # kept current, so a change to one answers the check again on the same page load.
+  feature "takes a control away when a row a rule reads changes", %{session: session} do
+    ships = seed_ships()
+
+    session
+    |> visit(Page7)
+    |> click(button("Log in"))
+    |> assert_text(css("#result"), "logged_in")
+
+    Auth.grant_role(session_user(), :captain, ships["own_ship"])
+
+    session =
+      session
+      |> reload()
+      |> await_local_fill()
+      |> assert_text(css("#renamable_cabins"), ~r/^own_cabin$/)
+      |> mark_this_page_load()
+
+    DB.update!(Ship, ships["own_ship"].id, archived: true)
+
+    session
+    |> assert_text(css("#renamable_cabins"), ~r/^$/)
     |> assert_same_page_load()
   end
 end
