@@ -40,8 +40,8 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
   const include = Elixir_Hologram_Query_Stage["include/3"];
   const normalize = Elixir_Hologram_Query_Stage["normalize/1"];
-  const offset = Elixir_Hologram_Query_Stage["offset/2"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
+  const skip = Elixir_Hologram_Query_Stage["skip/2"];
   const sort = Elixir_Hologram_Query_Stage["sort/2"];
   const take = Elixir_Hologram_Query_Stage["take/2"];
   const trust = Elixir_Hologram_Query_Stage["trust/1"];
@@ -53,7 +53,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     entity: entityType,
     filter: [],
     include: {},
-    offset: null,
+    skip: null,
     sort: [],
     take: null,
   });
@@ -2638,30 +2638,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  describe("offset/2", () => {
-    it("sets the offset", () => {
-      assert.deepStrictEqual(offset(task, Type.integer(20)), {
-        ...freshTerm,
-        offset: 20,
-      });
-    });
-
-    it("raises on a negative offset", () => {
-      assert.throw(
-        () => offset(task, Type.integer(-5)),
-        HologramBoxedError,
-        "offset must be a non-negative integer, got: -5",
-      );
-    });
-
-    it("replaces a prior offset", () => {
-      assert.equal(
-        offset(offset(task, Type.integer(20)), Type.integer(40)).offset,
-        40,
-      );
-    });
-  });
-
   describe("one/1", () => {
     it("marks the query as single-result", () => {
       assert.deepStrictEqual(one(task), {...freshTerm, cardinality: "one"});
@@ -2676,9 +2652,30 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  // A stage takes the module a query starts from or the term the stage before it returned, and
-  // the term it hands on is what the kernel reads - so what a stage refuses is what the client
-  // could not have answered anyway.
+  describe("skip/2", () => {
+    it("sets how many results it skips", () => {
+      assert.deepStrictEqual(skip(task, Type.integer(20)), {
+        ...freshTerm,
+        skip: 20,
+      });
+    });
+
+    it("raises on a negative count", () => {
+      assert.throw(
+        () => skip(task, Type.integer(-5)),
+        HologramBoxedError,
+        "skip must be a non-negative integer, got: -5",
+      );
+    });
+
+    it("replaces a prior skip", () => {
+      assert.equal(
+        skip(skip(task, Type.integer(20)), Type.integer(40)).skip,
+        40,
+      );
+    });
+  });
+
   describe("sort/2", () => {
     it("defaults a bare attribute name to ascending", () => {
       assert.deepStrictEqual(sort(task, Type.atom("title")).sort, [
@@ -2796,9 +2793,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("composes with other stages", () => {
-      const query = take(offset(task, Type.integer(20)), Type.integer(50));
+      const query = take(skip(task, Type.integer(20)), Type.integer(50));
 
-      assert.equal(query.offset, 20);
+      assert.equal(query.skip, 20);
       assert.equal(query.take, 50);
     });
 
@@ -2833,12 +2830,15 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
+  // A stage takes the module a query starts from or the term the stage before it returned, and
+  // the term it hands on is what the kernel reads - so what a stage refuses is what the client
+  // could not have answered anyway.
   describe("the query a stage starts from", () => {
     it("carries the stages already applied", () => {
-      const query = offset(take(task, Type.integer(5)), Type.integer(10));
+      const query = skip(take(task, Type.integer(5)), Type.integer(10));
 
       assert.equal(query.take, 5);
-      assert.equal(query.offset, 10);
+      assert.equal(query.skip, 10);
       assert.equal(query.entity, TASK);
     });
 

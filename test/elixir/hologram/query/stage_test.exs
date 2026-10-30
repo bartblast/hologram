@@ -1853,35 +1853,6 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
-  describe "offset/2" do
-    test "accepts a placeholder" do
-      query = offset(Module2, %Placeholder{name: :start})
-
-      assert query.offset == {:placeholder, :start}
-    end
-
-    test "replaces a prior offset" do
-      query =
-        Module2
-        |> offset(20)
-        |> offset(40)
-
-      assert query.offset == 40
-    end
-
-    test "sets the offset" do
-      assert offset(Module2, 20) == %Query{entity: Module2, offset: 20}
-    end
-
-    test "raises on a negative offset" do
-      expected_msg = "offset must be a non-negative integer, got: -5"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        offset(Module2, -5)
-      end
-    end
-  end
-
   describe "one/1" do
     test "composes with other stages" do
       query =
@@ -1921,22 +1892,22 @@ defmodule Hologram.Query.StageTest do
     test "accepts a placeholder page" do
       query = paginate(Module2, page: %Placeholder{name: :page}, size: 20)
 
-      assert query.offset == {:placeholder, :page}
+      assert query.skip == {:placeholder, :page}
       assert query.take == 20
     end
 
     test "accepts a placeholder size" do
       query = paginate(Module2, page: 3, size: %Placeholder{name: :size})
 
-      assert query.offset == {:placeholder, :size}
+      assert query.skip == {:placeholder, :size}
       assert query.take == {:placeholder, :size}
     end
 
-    test "computes a zero offset for the first page" do
+    test "computes a zero skip for the first page" do
       query = paginate(Module2, page: 1, size: 20)
 
       assert query.take == 20
-      assert query.offset == 0
+      assert query.skip == 0
     end
 
     test "replaces prior view bounds" do
@@ -1946,13 +1917,13 @@ defmodule Hologram.Query.StageTest do
         |> paginate(page: 3, size: 20)
 
       assert query.take == 20
-      assert query.offset == 40
+      assert query.skip == 40
     end
 
     test "sets the view bounds from page and size" do
       assert paginate(Module2, page: 3, size: 20) == %Query{
                entity: Module2,
-               offset: 40,
+               skip: 40,
                take: 20
              }
     end
@@ -2013,7 +1984,7 @@ defmodule Hologram.Query.StageTest do
         |> filter(b: {:>=, %Placeholder{name: :min_b}})
         |> filter([{%Placeholder{name: :field}, 5}])
         |> take(%Placeholder{name: :size})
-        |> offset(%Placeholder{name: :start})
+        |> skip(%Placeholder{name: :start})
         |> sort([{%Placeholder{name: :sort}, %Placeholder{name: :dir}}])
 
       assert placeholder_names(query) == [:min_b, :field, :size, :start, :sort, :dir]
@@ -2211,6 +2182,35 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         put_attribute(entity, :nope, 1)
+      end
+    end
+  end
+
+  describe "skip/2" do
+    test "accepts a placeholder" do
+      query = skip(Module2, %Placeholder{name: :start})
+
+      assert query.skip == {:placeholder, :start}
+    end
+
+    test "replaces a prior skip" do
+      query =
+        Module2
+        |> skip(20)
+        |> skip(40)
+
+      assert query.skip == 40
+    end
+
+    test "sets how many results it skips" do
+      assert skip(Module2, 20) == %Query{entity: Module2, skip: 20}
+    end
+
+    test "raises on a negative count" do
+      expected_msg = "skip must be a non-negative integer, got: -5"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        skip(Module2, -5)
       end
     end
   end

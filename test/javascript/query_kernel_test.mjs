@@ -312,7 +312,7 @@ describe("QueryKernel", () => {
           entity: TASK,
           filter: [],
           include: {},
-          offset: null,
+          skip: null,
           sort: [["id", "asc"]],
           take: null,
         },
@@ -573,15 +573,15 @@ describe("QueryKernel", () => {
         ]);
       });
 
-      it("skips the offset", () => {
-        assert.deepEqual(titles(QueryKernel.run(term({offset: 1}))), [
+      it("skips as many rows as skip sets", () => {
+        assert.deepEqual(titles(QueryKernel.run(term({skip: 1}))), [
           "bob",
           "cleo",
         ]);
       });
 
       it("skips before it takes", () => {
-        const bounded = term({offset: 1, take: 1});
+        const bounded = term({skip: 1, take: 1});
 
         assert.deepEqual(titles(QueryKernel.run(bounded)), ["bob"]);
       });
@@ -637,7 +637,7 @@ describe("QueryKernel", () => {
             entity: TASK,
             filter: [],
             include: {},
-            offset: null,
+            skip: null,
             sort: [["id", "asc"]],
             take: null,
           },
@@ -1399,7 +1399,7 @@ describe("QueryKernel", () => {
         entity: MESSAGE,
         filter: [[["channel", "org", "name"], "==", "acme"]],
         include: {},
-        offset: null,
+        skip: null,
         sort: [["id", "asc"]],
         take: null,
       };

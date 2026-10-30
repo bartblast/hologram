@@ -18,7 +18,7 @@ defmodule Hologram.Query do
             entity: nil,
             filter: [],
             include: %{},
-            offset: nil,
+            skip: nil,
             sort: [],
             take: nil,
             trust: false
@@ -58,7 +58,7 @@ defmodule Hologram.Query do
           entity: module,
           filter: list(clause),
           include: %{atom => t},
-          offset: bound,
+          skip: bound,
           sort: list(ordering),
           take: bound,
           trust: boolean
@@ -387,7 +387,7 @@ defmodule Hologram.Query do
     lowered = Expression.bound(value, :offset, __CALLER__)
 
     quote do
-      Stage.offset(unquote(query), unquote(lowered))
+      Stage.skip(unquote(query), unquote(lowered))
     end
   end
 
@@ -569,7 +569,7 @@ defmodule Hologram.Query do
             entity: term.entity,
             filter: term.filter,
             include: term.include,
-            offset: term.offset,
+            skip: term.skip,
             sort: term.sort,
             take: term.take,
             trust: term.trust

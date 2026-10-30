@@ -113,7 +113,7 @@ function placeholderNames(term) {
     ],
   );
 
-  const fromBounds = [term.take, term.offset].flatMap(valuePlaceholderNames);
+  const fromBounds = [term.take, term.skip].flatMap(valuePlaceholderNames);
 
   const fromOrder = term.sort.flatMap(([key, direction]) => [
     ...valuePlaceholderNames(key),

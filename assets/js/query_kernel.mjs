@@ -99,11 +99,11 @@ export default class QueryKernel {
   }
 
   static #bound(rows, term) {
-    const offset = term.offset ?? 0;
+    const skip = term.skip ?? 0;
 
     return term.take === null || term.take === undefined
-      ? rows.slice(offset)
-      : rows.slice(offset, offset + term.take);
+      ? rows.slice(skip)
+      : rows.slice(skip, skip + term.take);
   }
 
   static #compare(left, right) {

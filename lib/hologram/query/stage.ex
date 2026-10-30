@@ -210,12 +210,6 @@ defmodule Hologram.Query.Stage do
   end
 
   @doc false
-  @spec offset(module | Query.t(), non_neg_integer) :: Query.t()
-  def offset(query, value) do
-    set_view_bound!(query, :offset, value)
-  end
-
-  @doc false
   @spec one(module | Query.t()) :: Query.t()
   def one(query) do
     term = to_term(query)
@@ -248,7 +242,7 @@ defmodule Hologram.Query.Stage do
     size = validate_paginate_option!(opts, :size)
 
     query
-    |> offset(paginate_offset(page, size))
+    |> skip(paginate_skip(page, size))
     |> take(size)
   end
 
@@ -266,7 +260,7 @@ defmodule Hologram.Query.Stage do
         value_placeholder_names(name) ++ value_placeholder_names(value)
       end)
 
-    bound_names = Enum.flat_map([term.take, term.offset], &value_placeholder_names/1)
+    bound_names = Enum.flat_map([term.take, term.skip], &value_placeholder_names/1)
 
     order_names =
       Enum.flat_map(term.sort, fn {key, direction} ->
@@ -359,6 +353,12 @@ defmodule Hologram.Query.Stage do
   @spec put_attribute(Entity.t(), atom, any) :: Entity.t()
   def put_attribute(entity, name, value) do
     put_attribute(entity, [{name, value}])
+  end
+
+  @doc false
+  @spec skip(module | Query.t(), non_neg_integer) :: Query.t()
+  def skip(query, value) do
+    set_view_bound!(query, :skip, value)
   end
 
   @doc false
@@ -729,19 +729,19 @@ defmodule Hologram.Query.Stage do
     {name, operator, operand}
   end
 
-  # The offset a page produces depends on both options, so a placeholder in either makes it one too -
+  # The skip a page produces depends on both options, so a placeholder in either makes it one too -
   # named for whichever option it varies with, page first.
   #
   # THE NAME IS NOT A BINDING KEY. A leaf names the ARGUMENT a value derives from, never the value
-  # itself, which is why `offset(^((page - 1) * size))` written out by hand yields this same leaf, and
+  # itself, which is why `skip(^((page - 1) * size))` written out by hand yields this same leaf, and
   # why `filter(b: ^(n * 2))` yields `{:b, :==, {:placeholder, :n}}`. Nothing ever turns a leaf back
-  # into a value: both tiers call the real builder with the component's real props, so the offset
+  # into a value: both tiers call the real builder with the component's real props, so the skip
   # that executes is the computed one.
-  defp paginate_offset(%Placeholder{} = page, _size), do: page
+  defp paginate_skip(%Placeholder{} = page, _size), do: page
 
-  defp paginate_offset(_page, %Placeholder{} = size), do: size
+  defp paginate_skip(_page, %Placeholder{} = size), do: size
 
-  defp paginate_offset(page, size), do: (page - 1) * size
+  defp paginate_skip(page, size), do: (page - 1) * size
 
   defp path?([_hop, _name | _rest] = names), do: Enum.all?(names, &is_atom/1)
 
@@ -1010,7 +1010,7 @@ defmodule Hologram.Query.Stage do
 
   defp sub_term_has_clauses?(sub_term) do
     sub_term.filter != [] or sub_term.sort != [] or sub_term.take != nil or
-      sub_term.offset != nil
+      sub_term.skip != nil
   end
 
   # Where a name is declared: an attribute on the queried type, a path's last name on the type its

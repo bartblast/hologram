@@ -651,7 +651,7 @@ function subTermHasClauses(subTerm) {
     subTerm.filter.length > 0 ||
     subTerm.sort.length > 0 ||
     subTerm.take !== null ||
-    subTerm.offset !== null
+    subTerm.skip !== null
   );
 }
 
@@ -773,7 +773,7 @@ function toTerm(query) {
     entity: name,
     filter: [],
     include: {},
-    offset: null,
+    skip: null,
     sort: [],
     take: null,
   };
@@ -1462,7 +1462,6 @@ const Elixir_Hologram_Query_Stage = {
   // The canonical form of a query - what the kernel runs literally.
   "normalize/1": (query) => normalizedTerm(toTerm(query)),
 
-  "offset/2": (query, value) => setViewBound(query, "offset", value),
   "one/1": (query) => setCardinality(query, "one"),
 
   "put_attribute/2": (entity, values) => {
@@ -1481,6 +1480,8 @@ const Elixir_Hologram_Query_Stage = {
       entity,
       Type.list([Type.tuple([name, value])]),
     ),
+
+  "skip/2": (query, value) => setViewBound(query, "skip", value),
 
   "sort/2": (query, spec) => {
     const term = toTerm(query);

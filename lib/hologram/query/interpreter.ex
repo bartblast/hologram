@@ -79,7 +79,7 @@ defmodule Hologram.Query.Interpreter do
 
   defp bound(rows, term) do
     rows
-    |> Enum.drop(term.offset || 0)
+    |> Enum.drop(term.skip || 0)
     |> take(term.take)
   end
 

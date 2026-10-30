@@ -239,7 +239,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp bounds_clause(term) do
     limit_sql = if term.take, do: " LIMIT #{term.take}", else: ""
-    offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
+    offset_sql = if term.skip, do: " OFFSET #{term.skip}", else: ""
 
     limit_sql <> offset_sql
   end
@@ -1086,7 +1086,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp statement(%{cardinality: :one} = term, entity_mapping, where_sql, order_sql, include_sql) do
     effective_limit = if term.take == 0, do: 0, else: 1
-    offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
+    offset_sql = if term.skip, do: " OFFSET #{term.skip}", else: ""
 
     "SELECT #{column_list(entity_mapping)}#{include_sql} " <>
       "FROM #{qualified_table(entity_mapping.table)}" <>

@@ -62,7 +62,7 @@ export function pageTerms() {
     entity: TASK,
     filter: [],
     include: {},
-    offset: null,
+    skip: null,
     sort: [["id", "asc"]],
     take: null,
   };
