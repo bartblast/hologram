@@ -43,7 +43,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const normalize = Elixir_Hologram_Query_Stage["normalize/1"];
   const offset = Elixir_Hologram_Query_Stage["offset/2"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
-  const orderBy = Elixir_Hologram_Query_Stage["order_by/2"];
+  const sort = Elixir_Hologram_Query_Stage["sort/2"];
   const trust = Elixir_Hologram_Query_Stage["trust/1"];
   const putAttribute = Elixir_Hologram_Query_Stage["put_attribute/2"];
   const putAttributeValue = Elixir_Hologram_Query_Stage["put_attribute/3"];
@@ -1232,7 +1232,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(query.filter, [["status", ">", "open"]]);
     });
 
-    // The derived sort key is the order, so a comparison reads it the way `order_by` does - a
+    // The derived sort key is the order, so a comparison reads it the way `sort` does - a
     // bound names a position in the list the attribute sorts into.
     it("builds an ordering triple for a string attribute", () => {
       const value = Type.tuple([Type.atom(">"), Type.bitstring("a")]);
@@ -2259,7 +2259,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         project,
         Type.atom("tasks"),
         subBuilder((related) =>
-          orderBy(
+          sort(
             filter(related, predicates([["done", Type.boolean(false)]])),
             Type.atom("position"),
           ),
@@ -2498,7 +2498,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
   describe("normalize/1", () => {
     it("appends an ascending id tiebreaker to orderings", () => {
-      const query = normalize(orderBy(task, Type.atom("position")));
+      const query = normalize(sort(task, Type.atom("position")));
 
       assert.deepStrictEqual(query.sort, [
         ["position", "asc"],
@@ -2514,14 +2514,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("drops the ordering from counting queries", () => {
-      const query = normalize(count(orderBy(task, Type.atom("position"))));
+      const query = normalize(count(sort(task, Type.atom("position"))));
 
       assert.deepStrictEqual(query.sort, []);
     });
 
     it("is idempotent", () => {
       const normalized = normalize(
-        orderBy(
+        sort(
           include(
             filter(
               project,
@@ -2551,7 +2551,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("id"), Type.atom("desc")]),
       ]);
 
-      assert.deepStrictEqual(normalize(orderBy(task, spec)).sort, [
+      assert.deepStrictEqual(normalize(sort(task, spec)).sort, [
         ["id", "desc"],
       ]);
     });
@@ -2722,9 +2722,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
   // A stage takes the module a query starts from or the term the stage before it returned, and
   // the term it hands on is what the kernel reads - so what a stage refuses is what the client
   // could not have answered anyway.
-  describe("order_by/2", () => {
+  describe("sort/2", () => {
     it("defaults a bare attribute name to ascending", () => {
-      assert.deepStrictEqual(orderBy(task, Type.atom("title")).sort, [
+      assert.deepStrictEqual(sort(task, Type.atom("title")).sort, [
         ["title", "asc"],
       ]);
     });
@@ -2732,7 +2732,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("defaults list entries to ascending", () => {
       const spec = Type.list([Type.atom("title"), Type.atom("done")]);
 
-      assert.deepStrictEqual(orderBy(task, spec).sort, [
+      assert.deepStrictEqual(sort(task, spec).sort, [
         ["title", "asc"],
         ["done", "asc"],
       ]);
@@ -2743,7 +2743,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("title"), Type.atom("desc")]),
       ]);
 
-      assert.deepStrictEqual(orderBy(task, spec).sort, [["title", "desc"]]);
+      assert.deepStrictEqual(sort(task, spec).sort, [["title", "desc"]]);
     });
 
     it("accepts a mixed list of names and direction tuples", () => {
@@ -2752,48 +2752,45 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("title"), Type.atom("desc")]),
       ]);
 
-      assert.deepStrictEqual(orderBy(task, spec).sort, [
+      assert.deepStrictEqual(sort(task, spec).sort, [
         ["done", "asc"],
         ["title", "desc"],
       ]);
     });
 
-    it("replaces prior ordering", () => {
-      const query = orderBy(
-        orderBy(task, Type.atom("done")),
-        Type.atom("title"),
-      );
+    it("replaces a prior sort", () => {
+      const query = sort(sort(task, Type.atom("done")), Type.atom("title"));
 
       assert.deepStrictEqual(query.sort, [["title", "asc"]]);
     });
 
-    it("orders by a system attribute", () => {
-      assert.deepStrictEqual(orderBy(task, Type.atom("created_at")).sort, [
+    it("sorts by a system attribute", () => {
+      assert.deepStrictEqual(sort(task, Type.atom("created_at")).sort, [
         ["created_at", "asc"],
       ]);
     });
 
     // The declared `values:` list is the order, so nothing about an enum keeps it from being an
     // ordering key - both executors sort by a value's position in that list.
-    it("orders by an enum attribute", () => {
-      assert.deepStrictEqual(orderBy(task, Type.atom("status")).sort, [
+    it("sorts by an enum attribute", () => {
+      assert.deepStrictEqual(sort(task, Type.atom("status")).sort, [
         ["status", "asc"],
       ]);
     });
 
     it("raises on a non-atom spec", () => {
       assert.throw(
-        () => orderBy(task, Type.integer(123)),
+        () => sort(task, Type.integer(123)),
         HologramBoxedError,
-        "order_by spec must be an attribute name or a list, got: 123",
+        "sort spec must be an attribute name or a list, got: 123",
       );
     });
 
     it("raises on an invalid entry", () => {
       assert.throw(
-        () => orderBy(task, Type.list([Type.integer(123)])),
+        () => sort(task, Type.list([Type.integer(123)])),
         HologramBoxedError,
-        "invalid order_by entry 123 - use an attribute name or an {attribute, :asc | :desc} tuple",
+        "invalid sort entry 123 - use an attribute name or an {attribute, :asc | :desc} tuple",
       );
     });
 
@@ -2803,7 +2800,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
 
       assert.throw(
-        () => orderBy(task, spec),
+        () => sort(task, spec),
         HologramBoxedError,
         "invalid direction :down for attribute :title - use :asc or :desc",
       );
@@ -2811,7 +2808,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on a relationship name", () => {
       assert.throw(
-        () => orderBy(Type.alias(PROJECT), Type.atom("tasks")),
+        () => sort(Type.alias(PROJECT), Type.atom("tasks")),
         HologramBoxedError,
         ":tasks is a relationship in MyApp.Project - only attributes can be ordered",
       );
@@ -2821,7 +2818,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // never ordered by.
     it("raises on a to-one reference field", () => {
       assert.throw(
-        () => orderBy(Type.alias(PROJECT), Type.atom("owner_id")),
+        () => sort(Type.alias(PROJECT), Type.atom("owner_id")),
         HologramBoxedError,
         "unknown attribute :owner_id in MyApp.Project - known attributes: :id, :name",
       );
@@ -2829,7 +2826,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on an unknown attribute", () => {
       assert.throw(
-        () => orderBy(task, Type.atom("x")),
+        () => sort(task, Type.atom("x")),
         HologramBoxedError,
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );

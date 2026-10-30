@@ -81,7 +81,7 @@ describe("DataLayer", () => {
         task.data[Type.encodeMapKey(Type.atom("title"))][1].text,
       ]);
 
-    const orderBy = ManuallyPortedElixirHologramQueryStage["order_by/2"];
+    const sort = ManuallyPortedElixirHologramQueryStage["sort/2"];
 
     const allTasks = () => [
       [Type.alias(TASK), "Buy milk"],
@@ -126,7 +126,7 @@ describe("DataLayer", () => {
 
     it("answers from the local database, boxed for the template", () => {
       const capture = builder(0, () =>
-        orderBy(Type.alias(TASK), Type.atom("title")),
+        sort(Type.alias(TASK), Type.atom("title")),
       );
 
       const result = DataLayer.answerPropQuery(
@@ -249,7 +249,7 @@ describe("DataLayer", () => {
 
     it("leaves a query that does not count alone", () => {
       const capture = builder(0, () =>
-        orderBy(Type.alias(TASK), Type.atom("title")),
+        sort(Type.alias(TASK), Type.atom("title")),
       );
 
       LocalDatabase.syncCounts = {"MyApp.NotCounting/tasks/": 42};
@@ -582,9 +582,9 @@ describe("DataLayer", () => {
           "normalize/1",
           "offset/2",
           "one/1",
-          "order_by/2",
           "put_attribute/2",
           "put_attribute/3",
+          "sort/2",
           "trust/1",
         ]),
       );

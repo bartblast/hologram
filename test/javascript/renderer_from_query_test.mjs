@@ -34,7 +34,7 @@ describe("Renderer from_query props", () => {
   const filter = ManuallyPortedElixirHologramQueryStage["filter/2"];
   const include = ManuallyPortedElixirHologramQueryStage["include/3"];
   const one = ManuallyPortedElixirHologramQueryStage["one/1"];
-  const orderBy = ManuallyPortedElixirHologramQueryStage["order_by/2"];
+  const sort = ManuallyPortedElixirHologramQueryStage["sort/2"];
 
   // What the template was rendered with - the props the pipeline resolved, which is what this
   // stage produces.
@@ -237,7 +237,7 @@ describe("Renderer from_query props", () => {
   // appending the id tiebreaker - the same order the server's executor returns.
   it("orders results the way the normalized term names", () => {
     const capture = builder(0, () =>
-      orderBy(Type.alias(TASK), Type.atom("title")),
+      sort(Type.alias(TASK), Type.atom("title")),
     );
 
     defineComponent("MyApp.Ordered", [queryProp("tasks", capture)]);

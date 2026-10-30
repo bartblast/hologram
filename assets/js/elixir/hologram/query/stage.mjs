@@ -15,7 +15,7 @@ import Type from "../../../type.mjs";
 // ask the entity module for its attributes, and entity modules ship no reflection to the client -
 // but the same declarations are baked into the bundle as the model, which these read instead.
 // What is checked is what the server checks, in the same words: the ArgumentError messages are
-// mirrored, and the consistency suite pins them.
+// mirrored, and the unit tests of both tiers pin the same words.
 
 const EQUALITY_OPERATORS = ["!=", "=="];
 const MEMBERSHIP_OPERATORS = ["in", "not_in"];
@@ -196,7 +196,7 @@ function orderEntries(spec, entityType) {
   }
 
   Interpreter.raiseArgumentError(
-    `order_by spec must be an attribute name or a list, got: ${Interpreter.inspect(spec)}`,
+    `sort spec must be an attribute name or a list, got: ${Interpreter.inspect(spec)}`,
   );
 }
 
@@ -228,7 +228,7 @@ function orderEntry(entry, entityType) {
   }
 
   Interpreter.raiseArgumentError(
-    `invalid order_by entry ${Interpreter.inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple`,
+    `invalid sort entry ${Interpreter.inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple`,
   );
 }
 
@@ -1467,12 +1467,6 @@ const Elixir_Hologram_Query_Stage = {
   "offset/2": (query, value) => setViewBound(query, "offset", value),
   "one/1": (query) => setCardinality(query, "one"),
 
-  "order_by/2": (query, spec) => {
-    const term = toTerm(query);
-
-    return {...term, sort: orderEntries(spec, term.entity)};
-  },
-
   "put_attribute/2": (entity, values) => {
     const entityType = entityTypeOf(entity, "put_attribute");
     const pairs = putPairs(values, "put_attribute");
@@ -1489,6 +1483,12 @@ const Elixir_Hologram_Query_Stage = {
       entity,
       Type.list([Type.tuple([name, value])]),
     ),
+
+  "sort/2": (query, spec) => {
+    const term = toTerm(query);
+
+    return {...term, sort: orderEntries(spec, term.entity)};
+  },
 
   // Both forms the server accepts - an entity struct and a query - are refused here, in the wire's
   // own words. Trust is the SERVER's authority: a batch claiming it is refused by name, and a read

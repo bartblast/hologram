@@ -1119,7 +1119,7 @@ describe("QueryKernel", () => {
   });
 
   // Mirrors the reference's "run/3 - comparing strings" case for case: a bound is a position in
-  // the list `order_by` renders, and the key beside the value is what puts it there.
+  // the list `sort` renders, and the key beside the value is what puts it there.
   describe("matches() - comparing strings", () => {
     const rows = [
       {id: "t1", title: "Zürich", title_sort: "zurich"},

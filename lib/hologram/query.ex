@@ -439,7 +439,7 @@ defmodule Hologram.Query do
     lowered = Expression.ordering(spec, __CALLER__)
 
     quote do
-      Stage.order_by(unquote(query), unquote(lowered))
+      Stage.sort(unquote(query), unquote(lowered))
     end
   end
 

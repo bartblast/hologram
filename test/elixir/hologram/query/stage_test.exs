@@ -677,7 +677,7 @@ defmodule Hologram.Query.StageTest do
       assert query.filter == [{:b, :>=, 3}]
     end
 
-    # The derived sort key is the order, so a comparison reads it the way `order_by` does - a
+    # The derived sort key is the order, so a comparison reads it the way `sort` does - a
     # bound names a position in the list the attribute sorts into.
     test "builds an ordering triple for a string attribute" do
       query = filter(Module2, c: {:>=, "x"})
@@ -1370,7 +1370,7 @@ defmodule Hologram.Query.StageTest do
         include(Module3, :a, fn related_query ->
           related_query
           |> filter(a: false)
-          |> order_by(:c)
+          |> sort(:c)
         end)
 
       expected_sub_term = %{
@@ -1762,7 +1762,7 @@ defmodule Hologram.Query.StageTest do
     test "appends an ascending id tiebreaker after a placeholder ordering key" do
       query =
         Module2
-        |> order_by(%Placeholder{name: :sort})
+        |> sort(%Placeholder{name: :sort})
         |> normalize()
 
       assert query.sort == [{{:placeholder, :sort}, :asc}, {:id, :asc}]
@@ -1771,7 +1771,7 @@ defmodule Hologram.Query.StageTest do
     test "appends an ascending id tiebreaker to orderings" do
       query =
         Module2
-        |> order_by(:c)
+        |> sort(:c)
         |> normalize()
 
       assert query.sort == [{:c, :asc}, {:id, :asc}]
@@ -1784,7 +1784,7 @@ defmodule Hologram.Query.StageTest do
     test "drops the ordering from counting queries" do
       query =
         Module2
-        |> order_by(:c)
+        |> sort(:c)
         |> count()
         |> normalize()
 
@@ -1802,7 +1802,7 @@ defmodule Hologram.Query.StageTest do
           ]
         )
         |> include(:a)
-        |> order_by(:created_at)
+        |> sort(:created_at)
         |> normalize()
 
       assert normalize(normalized) == normalized
@@ -1820,7 +1820,7 @@ defmodule Hologram.Query.StageTest do
     test "leaves orderings already keyed by id untouched" do
       query =
         Module2
-        |> order_by(id: :desc)
+        |> sort(id: :desc)
         |> normalize()
 
       assert query.sort == [{:id, :desc}]
@@ -1970,133 +1970,6 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
-  describe "order_by/2" do
-    test "accepts a keyword spec with directions" do
-      query = order_by(Module2, b: :desc, c: :asc)
-
-      assert query.sort == [{:b, :desc}, {:c, :asc}]
-    end
-
-    test "accepts a mixed list of names and direction tuples" do
-      query = order_by(Module2, [:c, {:b, :desc}])
-
-      assert query.sort == [{:c, :asc}, {:b, :desc}]
-    end
-
-    test "accepts a placeholder as a bare spec" do
-      query = order_by(Module2, %Placeholder{name: :sort})
-
-      assert query.sort == [{{:placeholder, :sort}, :asc}]
-    end
-
-    test "accepts a placeholder as a direction" do
-      query = order_by(Module2, c: %Placeholder{name: :dir})
-
-      assert query.sort == [{:c, {:placeholder, :dir}}]
-    end
-
-    test "accepts a placeholder as an ordering key" do
-      query = order_by(Module2, [{%Placeholder{name: :sort}, :desc}])
-
-      assert query.sort == [{{:placeholder, :sort}, :desc}]
-    end
-
-    test "composes with filtering" do
-      query =
-        Module2
-        |> filter(a: true)
-        |> order_by(:c)
-
-      assert query.filter == [{:a, :==, true}]
-      assert query.sort == [{:c, :asc}]
-    end
-
-    test "defaults a bare attribute name to ascending" do
-      assert order_by(Module2, :c) == %Query{entity: Module2, sort: [{:c, :asc}]}
-    end
-
-    test "defaults list entries to ascending" do
-      query = order_by(Module2, [:c, :a])
-
-      assert query.sort == [{:c, :asc}, {:a, :asc}]
-    end
-
-    test "orders by a system attribute" do
-      query = order_by(Module2, :created_at)
-
-      assert query.sort == [{:created_at, :asc}]
-    end
-
-    # The declared `values:` list is the order, so nothing about an enum keeps it from being an
-    # ordering key - both executors sort by a value's position in that list.
-    test "orders by an enum attribute" do
-      query = order_by(Module4, :c)
-
-      assert query.sort == [{:c, :asc}]
-    end
-
-    test "replaces prior ordering" do
-      query =
-        Module2
-        |> order_by(:c)
-        |> order_by(b: :desc)
-
-      assert query.sort == [{:b, :desc}]
-    end
-
-    test "raises on a non-atom spec" do
-      expected_msg = "order_by spec must be an attribute name or a list, got: 123"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        order_by(Module2, 123)
-      end
-    end
-
-    test "raises on a relationship name" do
-      expected_msg =
-        ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be ordered"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        order_by(Module3, :c)
-      end
-    end
-
-    test "raises on an invalid direction" do
-      expected_msg = "invalid direction :down for attribute :b - use :asc or :desc"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        order_by(Module2, b: :down)
-      end
-    end
-
-    test "raises on an invalid entry" do
-      expected_msg =
-        "invalid order_by entry 123 - use an attribute name or an {attribute, :asc | :desc} tuple"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        order_by(Module2, [123])
-      end
-    end
-
-    test "raises on a to-one reference field" do
-      expected_msg =
-        "unknown attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :created_at, :id, :updated_at"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        order_by(Module3, :c_id)
-      end
-    end
-
-    test "raises on an unknown attribute" do
-      expected_msg =
-        "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        order_by(Module2, :x)
-      end
-    end
-  end
-
   describe "paginate/2" do
     test "accepts a placeholder page" do
       query = paginate(Module2, page: %Placeholder{name: :page}, size: 20)
@@ -2194,7 +2067,7 @@ defmodule Hologram.Query.StageTest do
         |> filter([{%Placeholder{name: :field}, 5}])
         |> limit(%Placeholder{name: :size})
         |> offset(%Placeholder{name: :start})
-        |> order_by([{%Placeholder{name: :sort}, %Placeholder{name: :dir}}])
+        |> sort([{%Placeholder{name: :sort}, %Placeholder{name: :dir}}])
 
       assert placeholder_names(query) == [:min_b, :field, :size, :start, :sort, :dir]
     end
@@ -2391,6 +2264,133 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         put_attribute(entity, :nope, 1)
+      end
+    end
+  end
+
+  describe "sort/2" do
+    test "accepts a keyword spec with directions" do
+      query = sort(Module2, b: :desc, c: :asc)
+
+      assert query.sort == [{:b, :desc}, {:c, :asc}]
+    end
+
+    test "accepts a mixed list of names and direction tuples" do
+      query = sort(Module2, [:c, {:b, :desc}])
+
+      assert query.sort == [{:c, :asc}, {:b, :desc}]
+    end
+
+    test "accepts a placeholder as a bare spec" do
+      query = sort(Module2, %Placeholder{name: :sort})
+
+      assert query.sort == [{{:placeholder, :sort}, :asc}]
+    end
+
+    test "accepts a placeholder as a direction" do
+      query = sort(Module2, c: %Placeholder{name: :dir})
+
+      assert query.sort == [{:c, {:placeholder, :dir}}]
+    end
+
+    test "accepts a placeholder as an ordering key" do
+      query = sort(Module2, [{%Placeholder{name: :sort}, :desc}])
+
+      assert query.sort == [{{:placeholder, :sort}, :desc}]
+    end
+
+    test "composes with filtering" do
+      query =
+        Module2
+        |> filter(a: true)
+        |> sort(:c)
+
+      assert query.filter == [{:a, :==, true}]
+      assert query.sort == [{:c, :asc}]
+    end
+
+    test "defaults a bare attribute name to ascending" do
+      assert sort(Module2, :c) == %Query{entity: Module2, sort: [{:c, :asc}]}
+    end
+
+    test "defaults list entries to ascending" do
+      query = sort(Module2, [:c, :a])
+
+      assert query.sort == [{:c, :asc}, {:a, :asc}]
+    end
+
+    test "replaces a prior sort" do
+      query =
+        Module2
+        |> sort(:c)
+        |> sort(b: :desc)
+
+      assert query.sort == [{:b, :desc}]
+    end
+
+    test "sorts by a system attribute" do
+      query = sort(Module2, :created_at)
+
+      assert query.sort == [{:created_at, :asc}]
+    end
+
+    # The declared `values:` list is the order, so nothing about an enum keeps it from being an
+    # ordering key - both executors sort by a value's position in that list.
+    test "sorts by an enum attribute" do
+      query = sort(Module4, :c)
+
+      assert query.sort == [{:c, :asc}]
+    end
+
+    test "raises on a non-atom spec" do
+      expected_msg = "sort spec must be an attribute name or a list, got: 123"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module2, 123)
+      end
+    end
+
+    test "raises on a relationship name" do
+      expected_msg =
+        ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be ordered"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module3, :c)
+      end
+    end
+
+    test "raises on an invalid direction" do
+      expected_msg = "invalid direction :down for attribute :b - use :asc or :desc"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module2, b: :down)
+      end
+    end
+
+    test "raises on an invalid entry" do
+      expected_msg =
+        "invalid sort entry 123 - use an attribute name or an {attribute, :asc | :desc} tuple"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module2, [123])
+      end
+    end
+
+    test "raises on a to-one reference field" do
+      expected_msg =
+        "unknown attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :created_at, :id, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module3, :c_id)
+      end
+    end
+
+    test "raises on an unknown attribute" do
+      expected_msg =
+        "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module2, :x)
       end
     end
   end

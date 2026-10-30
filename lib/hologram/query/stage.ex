@@ -235,16 +235,6 @@ defmodule Hologram.Query.Stage do
   end
 
   @doc false
-  @spec order_by(module | Query.t(), atom | list) :: Query.t()
-  def order_by(query, spec) do
-    term = to_term(query)
-
-    entries = order_entries!(spec, term.entity)
-
-    %{term | sort: entries}
-  end
-
-  @doc false
   @spec paginate(module | Query.t(), keyword) :: Query.t()
   def paginate(query, opts) do
     if not Keyword.keyword?(opts) do
@@ -375,6 +365,16 @@ defmodule Hologram.Query.Stage do
   @spec put_attribute(Entity.t(), atom, any) :: Entity.t()
   def put_attribute(entity, name, value) do
     put_attribute(entity, [{name, value}])
+  end
+
+  @doc false
+  @spec sort(module | Query.t(), atom | list) :: Query.t()
+  def sort(query, spec) do
+    term = to_term(query)
+
+    entries = order_entries!(spec, term.entity)
+
+    %{term | sort: entries}
   end
 
   # Returns every predicate triple of the given filter clauses, in order, the ones inside a
@@ -684,7 +684,7 @@ defmodule Hologram.Query.Stage do
 
   defp order_entries!(spec, _entity_type) do
     raise ArgumentError,
-      message: "order_by spec must be an attribute name or a list, got: #{inspect(spec)}"
+      message: "sort spec must be an attribute name or a list, got: #{inspect(spec)}"
   end
 
   defp order_entry!({name, direction}, entity_type) when is_atom(name) do
@@ -712,7 +712,7 @@ defmodule Hologram.Query.Stage do
   defp order_entry!(entry, _entity_type) do
     raise ArgumentError,
       message:
-        "invalid order_by entry #{inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple"
+        "invalid sort entry #{inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple"
   end
 
   defp ordering_triple!(name, operator, operand, entity_type) do
