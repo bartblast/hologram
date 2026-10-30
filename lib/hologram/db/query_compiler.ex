@@ -106,7 +106,7 @@ defmodule Hologram.DB.QueryCompiler do
       )
 
     where_sql = where_clause(authored_conditions ++ policy_conditions)
-    order_sql = order_clause(term.order_by, entity_mapping)
+    order_sql = order_clause(term.sort, entity_mapping)
     sql = statement(term, entity_mapping, where_sql, order_sql, include_sql)
 
     %{params: Enum.reverse(all_reversed_params), sql: sql}
@@ -1164,12 +1164,12 @@ defmodule Hologram.DB.QueryCompiler do
         "FROM #{qualified_table(join_table.name)} AS #{quoted_join} " <>
         ~s|WHERE #{quoted_join}."source_id" = #{parent_prefix}."id")| <>
         filter_sql <>
-        order_clause(sub_term.order_by, target_mapping) <>
+        order_clause(sub_term.sort, target_mapping) <>
         bounds_clause(sub_term)
 
     expression =
       "(SELECT COALESCE(jsonb_agg(jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_wrapper)}#{nested_pairs})" <>
-        aggregate_order(sub_term.order_by, target_mapping, quoted_wrapper) <>
+        aggregate_order(sub_term.sort, target_mapping, quoted_wrapper) <>
         "), '[]'::jsonb) FROM (#{inner_sql}) AS #{quoted_wrapper})"
 
     {expression, new_acc}

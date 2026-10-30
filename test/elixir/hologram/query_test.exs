@@ -240,7 +240,7 @@ defmodule Hologram.QueryTest do
         |> paginate(page: 2, size: 20)
 
       assert inspect(term) ==
-               "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module2, limit: 20, offset: 20, order_by: [c: :asc]}"
+               "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module2, limit: 20, offset: 20, sort: [c: :asc]}"
     end
 
     test "shows the trust mark" do
@@ -297,23 +297,23 @@ defmodule Hologram.QueryTest do
 
   describe "order_by/2" do
     test "lowers a bare name" do
-      assert order_by(Module2, c).order_by == [c: :asc]
+      assert order_by(Module2, c).sort == [c: :asc]
     end
 
     test "lowers a keyword list with a pinned direction" do
       direction = :desc
 
-      assert order_by(Module2, c: ^direction).order_by == [c: :desc]
+      assert order_by(Module2, c: ^direction).sort == [c: :desc]
     end
 
     test "lowers a list of bare names" do
-      assert order_by(Module2, [a, c]).order_by == [a: :asc, c: :asc]
+      assert order_by(Module2, [a, c]).sort == [a: :asc, c: :asc]
     end
 
     test "takes a pinned spec" do
       spec = [c: :desc]
 
-      assert order_by(Module2, ^spec).order_by == [c: :desc]
+      assert order_by(Module2, ^spec).sort == [c: :desc]
     end
 
     test "raises the lowering's compile error" do

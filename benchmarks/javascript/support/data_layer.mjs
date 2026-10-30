@@ -64,7 +64,7 @@ export function pageTerms() {
     include: {},
     limit: null,
     offset: null,
-    orderBy: [["id", "asc"]],
+    sort: [["id", "asc"]],
   };
 
   return [
@@ -73,7 +73,7 @@ export function pageTerms() {
       ...base,
       filter: [["done", "==", false]],
       limit: 50,
-      orderBy: [
+      sort: [
         ["title", "asc"],
         ["id", "asc"],
       ],

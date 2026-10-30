@@ -241,7 +241,7 @@ defmodule Hologram.Query.Stage do
 
     entries = order_entries!(spec, term.entity)
 
-    %{term | order_by: entries}
+    %{term | sort: entries}
   end
 
   @doc false
@@ -285,7 +285,7 @@ defmodule Hologram.Query.Stage do
     bound_names = Enum.flat_map([term.limit, term.offset], &value_placeholder_names/1)
 
     order_names =
-      Enum.flat_map(term.order_by, fn {key, direction} ->
+      Enum.flat_map(term.sort, fn {key, direction} ->
         value_placeholder_names(key) ++ value_placeholder_names(direction)
       end)
 
@@ -632,12 +632,12 @@ defmodule Hologram.Query.Stage do
   end
 
   defp normalized_order(term) do
-    ordering_keys = Enum.map(term.order_by, fn {name, _direction} -> name end)
+    ordering_keys = Enum.map(term.sort, fn {name, _direction} -> name end)
 
     cond do
       term.cardinality == :count -> []
-      :id in ordering_keys -> term.order_by
-      true -> List.insert_at(term.order_by, -1, {:id, :asc})
+      :id in ordering_keys -> term.sort
+      true -> List.insert_at(term.sort, -1, {:id, :asc})
     end
   end
 
@@ -652,7 +652,7 @@ defmodule Hologram.Query.Stage do
       term
       | filter: normalized_filter(term.filter),
         include: normalized_includes(term),
-        order_by: normalized_order(term)
+        sort: normalized_order(term)
     }
   end
 
@@ -1009,7 +1009,7 @@ defmodule Hologram.Query.Stage do
   end
 
   defp sub_term_has_clauses?(sub_term) do
-    sub_term.filter != [] or sub_term.order_by != [] or sub_term.limit != nil or
+    sub_term.filter != [] or sub_term.sort != [] or sub_term.limit != nil or
       sub_term.offset != nil
   end
 

@@ -1376,7 +1376,7 @@ defmodule Hologram.Query.StageTest do
       expected_sub_term = %{
         base_term(Module2)
         | filter: [{:a, :==, false}],
-          order_by: [{:c, :asc}]
+          sort: [{:c, :asc}]
       }
 
       assert query.include == %{a: expected_sub_term}
@@ -1765,7 +1765,7 @@ defmodule Hologram.Query.StageTest do
         |> order_by(%Placeholder{name: :sort})
         |> normalize()
 
-      assert query.order_by == [{{:placeholder, :sort}, :asc}, {:id, :asc}]
+      assert query.sort == [{{:placeholder, :sort}, :asc}, {:id, :asc}]
     end
 
     test "appends an ascending id tiebreaker to orderings" do
@@ -1774,11 +1774,11 @@ defmodule Hologram.Query.StageTest do
         |> order_by(:c)
         |> normalize()
 
-      assert query.order_by == [{:c, :asc}, {:id, :asc}]
+      assert query.sort == [{:c, :asc}, {:id, :asc}]
     end
 
     test "defaults an empty ordering to the id order" do
-      assert normalize(Module2) == %Query{entity: Module2, order_by: [{:id, :asc}]}
+      assert normalize(Module2) == %Query{entity: Module2, sort: [{:id, :asc}]}
     end
 
     test "drops the ordering from counting queries" do
@@ -1788,7 +1788,7 @@ defmodule Hologram.Query.StageTest do
         |> count()
         |> normalize()
 
-      assert query.order_by == []
+      assert query.sort == []
     end
 
     test "is idempotent" do
@@ -1823,7 +1823,7 @@ defmodule Hologram.Query.StageTest do
         |> order_by(id: :desc)
         |> normalize()
 
-      assert query.order_by == [{:id, :desc}]
+      assert query.sort == [{:id, :desc}]
     end
 
     test "normalizes includes nested under a to-one include" do
@@ -1834,8 +1834,8 @@ defmodule Hologram.Query.StageTest do
 
       nested_sub_term = query.include.a.include.a
 
-      assert query.include.a.order_by == []
-      assert nested_sub_term.order_by == [{:id, :asc}]
+      assert query.include.a.sort == []
+      assert nested_sub_term.sort == [{:id, :asc}]
     end
 
     test "normalizes to-many sub-terms" do
@@ -1845,7 +1845,7 @@ defmodule Hologram.Query.StageTest do
         |> normalize()
 
       assert query.include.a.filter == [{:a, :==, true}, {:c, :==, "x"}]
-      assert query.include.a.order_by == [{:id, :asc}]
+      assert query.include.a.sort == [{:id, :asc}]
     end
 
     test "skips ordering for to-one includes" do
@@ -1854,7 +1854,7 @@ defmodule Hologram.Query.StageTest do
         |> include(:c)
         |> normalize()
 
-      assert query.include.c.order_by == []
+      assert query.include.c.sort == []
     end
 
     test "sorts a disjunction before the predicates beside it" do
@@ -1974,31 +1974,31 @@ defmodule Hologram.Query.StageTest do
     test "accepts a keyword spec with directions" do
       query = order_by(Module2, b: :desc, c: :asc)
 
-      assert query.order_by == [{:b, :desc}, {:c, :asc}]
+      assert query.sort == [{:b, :desc}, {:c, :asc}]
     end
 
     test "accepts a mixed list of names and direction tuples" do
       query = order_by(Module2, [:c, {:b, :desc}])
 
-      assert query.order_by == [{:c, :asc}, {:b, :desc}]
+      assert query.sort == [{:c, :asc}, {:b, :desc}]
     end
 
     test "accepts a placeholder as a bare spec" do
       query = order_by(Module2, %Placeholder{name: :sort})
 
-      assert query.order_by == [{{:placeholder, :sort}, :asc}]
+      assert query.sort == [{{:placeholder, :sort}, :asc}]
     end
 
     test "accepts a placeholder as a direction" do
       query = order_by(Module2, c: %Placeholder{name: :dir})
 
-      assert query.order_by == [{:c, {:placeholder, :dir}}]
+      assert query.sort == [{:c, {:placeholder, :dir}}]
     end
 
     test "accepts a placeholder as an ordering key" do
       query = order_by(Module2, [{%Placeholder{name: :sort}, :desc}])
 
-      assert query.order_by == [{{:placeholder, :sort}, :desc}]
+      assert query.sort == [{{:placeholder, :sort}, :desc}]
     end
 
     test "composes with filtering" do
@@ -2008,23 +2008,23 @@ defmodule Hologram.Query.StageTest do
         |> order_by(:c)
 
       assert query.filter == [{:a, :==, true}]
-      assert query.order_by == [{:c, :asc}]
+      assert query.sort == [{:c, :asc}]
     end
 
     test "defaults a bare attribute name to ascending" do
-      assert order_by(Module2, :c) == %Query{entity: Module2, order_by: [{:c, :asc}]}
+      assert order_by(Module2, :c) == %Query{entity: Module2, sort: [{:c, :asc}]}
     end
 
     test "defaults list entries to ascending" do
       query = order_by(Module2, [:c, :a])
 
-      assert query.order_by == [{:c, :asc}, {:a, :asc}]
+      assert query.sort == [{:c, :asc}, {:a, :asc}]
     end
 
     test "orders by a system attribute" do
       query = order_by(Module2, :created_at)
 
-      assert query.order_by == [{:created_at, :asc}]
+      assert query.sort == [{:created_at, :asc}]
     end
 
     # The declared `values:` list is the order, so nothing about an enum keeps it from being an
@@ -2032,7 +2032,7 @@ defmodule Hologram.Query.StageTest do
     test "orders by an enum attribute" do
       query = order_by(Module4, :c)
 
-      assert query.order_by == [{:c, :asc}]
+      assert query.sort == [{:c, :asc}]
     end
 
     test "replaces prior ordering" do
@@ -2041,7 +2041,7 @@ defmodule Hologram.Query.StageTest do
         |> order_by(:c)
         |> order_by(b: :desc)
 
-      assert query.order_by == [{:b, :desc}]
+      assert query.sort == [{:b, :desc}]
     end
 
     test "raises on a non-atom spec" do

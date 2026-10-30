@@ -9,7 +9,7 @@ defmodule Hologram.Query do
   # A query term - what the stages build and the executors run. Each field is named for the stage
   # that sets it, with one exception: one/1 and count/1 set cardinality, since a term cannot be
   # both. A term records fields, not the order the stages were called in - filter appends,
-  # order_by replaces, include adds a key or merges into one - so two pipes reaching the same
+  # sort replaces, include adds a key or merges into one - so two pipes reaching the same
   # fields are one query, which is what Hologram.Query.Registry.id/1 relies on. A term is always
   # about one entity type, so a struct written without one is refused at the literal.
   @enforce_keys [:entity]
@@ -20,7 +20,7 @@ defmodule Hologram.Query do
             include: %{},
             limit: nil,
             offset: nil,
-            order_by: [],
+            sort: [],
             trust: false
 
   # Another attribute of the same row, or a path to an attribute of a related row, compared with
@@ -60,7 +60,7 @@ defmodule Hologram.Query do
           include: %{atom => t},
           limit: bound,
           offset: bound,
-          order_by: list(ordering),
+          sort: list(ordering),
           trust: boolean
         }
 
@@ -569,7 +569,7 @@ defmodule Hologram.Query do
             include: term.include,
             limit: term.limit,
             offset: term.offset,
-            order_by: term.order_by,
+            sort: term.sort,
             trust: term.trust
           ],
           fn {name, value} -> value == Map.fetch!(defaults, name) end

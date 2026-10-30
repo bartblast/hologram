@@ -73,7 +73,7 @@ defmodule Hologram.Query.Interpreter do
 
   defp arrange(rows, term) do
     rows
-    |> sort(term.order_by, term.entity)
+    |> sort(term.sort, term.entity)
     |> bound(term)
   end
 
@@ -347,11 +347,11 @@ defmodule Hologram.Query.Interpreter do
     compare_ordering_values(value, operand, ranks) in [:eq, :gt]
   end
 
-  defp sort(rows, order_by, entity_type) do
-    names = Enum.map(order_by, fn {name, _direction} -> name end)
+  defp sort(rows, keys, entity_type) do
+    names = Enum.map(keys, fn {name, _direction} -> name end)
     ranks = enum_ranks(entity_type, names)
 
-    Enum.sort(rows, &precedes?(&1, &2, order_by, ranks))
+    Enum.sort(rows, &precedes?(&1, &2, keys, ranks))
   end
 
   # Every key of the order is spent before two rows are called equal, and the last of them is

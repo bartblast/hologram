@@ -112,7 +112,7 @@ defmodule Hologram.Query.RegistryTest do
     test "returns a lowercase hex string of the truncated SHA-256" do
       term = Stage.normalize(Module2)
 
-      assert id(term) == "9317a68e9efcf026cad4c38995d6966c"
+      assert id(term) == "7ff9f7de8b52f651e54d1ba96b0fe8f2"
     end
   end
 

@@ -314,7 +314,7 @@ describe("QueryKernel", () => {
           include: {},
           limit: null,
           offset: null,
-          orderBy: [["id", "asc"]],
+          sort: [["id", "asc"]],
         },
         overrides,
       );
@@ -366,7 +366,7 @@ describe("QueryKernel", () => {
 
       it("orders by an attribute", () => {
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "asc"],
             ["id", "asc"],
           ],
@@ -381,7 +381,7 @@ describe("QueryKernel", () => {
 
       it("orders by an attribute descending", () => {
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "desc"],
             ["id", "asc"],
           ],
@@ -402,7 +402,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t2", position: null, title: "bob"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "asc"],
             ["id", "asc"],
           ],
@@ -417,7 +417,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t2", position: null, title: "bob"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "desc"],
             ["id", "asc"],
           ],
@@ -433,7 +433,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t2", position: 7, title: "dana"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "asc"],
             ["title", "asc"],
             ["id", "asc"],
@@ -460,7 +460,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t4", title: "bob", title_sort: "bob"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["title", "asc"],
             ["id", "asc"],
           ],
@@ -483,7 +483,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t2", title: "Zoe", title_sort: "zoe"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["title", "asc"],
             ["id", "asc"],
           ],
@@ -506,7 +506,7 @@ describe("QueryKernel", () => {
       // values, so an order that matches the declared one matches it on purpose.
       it("orders by the declared position, not the label", () => {
         const ordered = term({
-          orderBy: [
+          sort: [
             ["priority", "asc"],
             ["id", "asc"],
           ],
@@ -522,7 +522,7 @@ describe("QueryKernel", () => {
 
       it("orders by the declared position descending", () => {
         const ordered = term({
-          orderBy: [
+          sort: [
             ["priority", "desc"],
             ["id", "asc"],
           ],
@@ -541,7 +541,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t6", priority: "medium", title: "f"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["priority", "asc"],
             ["title", "asc"],
             ["id", "asc"],
@@ -639,7 +639,7 @@ describe("QueryKernel", () => {
             include: {},
             limit: null,
             offset: null,
-            orderBy: [["id", "asc"]],
+            sort: [["id", "asc"]],
           },
           overrides,
         );
@@ -742,7 +742,7 @@ describe("QueryKernel", () => {
         const include = {
           tasks: subTerm({
             limit: 2,
-            orderBy: [
+            sort: [
               ["position", "asc"],
               ["id", "asc"],
             ],
@@ -1401,7 +1401,7 @@ describe("QueryKernel", () => {
         include: {},
         limit: null,
         offset: null,
-        orderBy: [["id", "asc"]],
+        sort: [["id", "asc"]],
       };
 
       assert.deepStrictEqual(

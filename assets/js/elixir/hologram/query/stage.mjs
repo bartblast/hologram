@@ -478,9 +478,9 @@ function normalizedOrder(term) {
     return [];
   }
 
-  return term.orderBy.some(([name]) => name === "id")
-    ? term.orderBy
-    : [...term.orderBy, ["id", "asc"]];
+  return term.sort.some(([name]) => name === "id")
+    ? term.sort
+    : [...term.sort, ["id", "asc"]];
 }
 
 function normalizedTerm(term) {
@@ -488,7 +488,7 @@ function normalizedTerm(term) {
     ...term,
     filter: sortedFilter(term.filter),
     include: normalizedIncludes(term),
-    orderBy: normalizedOrder(term),
+    sort: normalizedOrder(term),
   };
 }
 
@@ -649,7 +649,7 @@ function structName(value) {
 function subTermHasClauses(subTerm) {
   return (
     subTerm.filter.length > 0 ||
-    subTerm.orderBy.length > 0 ||
+    subTerm.sort.length > 0 ||
     subTerm.limit !== null ||
     subTerm.offset !== null
   );
@@ -775,7 +775,7 @@ function toTerm(query) {
     include: {},
     limit: null,
     offset: null,
-    orderBy: [],
+    sort: [],
   };
 }
 
@@ -1470,7 +1470,7 @@ const Elixir_Hologram_Query_Stage = {
   "order_by/2": (query, spec) => {
     const term = toTerm(query);
 
-    return {...term, orderBy: orderEntries(spec, term.entity)};
+    return {...term, sort: orderEntries(spec, term.entity)};
   },
 
   "put_attribute/2": (entity, values) => {

@@ -93,7 +93,7 @@ export default class QueryKernel {
 
   static #arrange(rows, term) {
     return QueryKernel.#bound(
-      QueryKernel.#sort(rows, term.orderBy, term.entity),
+      QueryKernel.#sort(rows, term.sort, term.entity),
       term,
     );
   }
@@ -135,8 +135,8 @@ export default class QueryKernel {
     return direction === "desc" ? -result : result;
   }
 
-  static #compareRows(left, right, orderBy, ranks) {
-    for (const [name, direction] of orderBy) {
+  static #compareRows(left, right, keys, ranks) {
+    for (const [name, direction] of keys) {
       const result = QueryKernel.#compareKeys(
         left,
         right,
@@ -455,12 +455,12 @@ export default class QueryKernel {
 
   // Every key of the order is spent before two rows are called equal, and the last of them is
   // always the id, so no two rows ever are.
-  static #sort(rows, orderBy, entityType) {
-    const names = orderBy.map(([name]) => name);
+  static #sort(rows, keys, entityType) {
+    const names = keys.map(([name]) => name);
     const ranks = QueryKernel.#enumRanks(entityType, names);
 
     return [...rows].sort((left, right) =>
-      QueryKernel.#compareRows(left, right, orderBy, ranks),
+      QueryKernel.#compareRows(left, right, keys, ranks),
     );
   }
 

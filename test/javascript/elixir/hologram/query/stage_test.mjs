@@ -55,7 +55,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     include: {},
     limit: null,
     offset: null,
-    orderBy: [],
+    sort: [],
   });
 
   const freshTerm = baseTerm(TASK);
@@ -2270,7 +2270,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         tasks: {
           ...freshTerm,
           filter: [["done", "==", false]],
-          orderBy: [["position", "asc"]],
+          sort: [["position", "asc"]],
         },
       });
     });
@@ -2500,7 +2500,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("appends an ascending id tiebreaker to orderings", () => {
       const query = normalize(orderBy(task, Type.atom("position")));
 
-      assert.deepStrictEqual(query.orderBy, [
+      assert.deepStrictEqual(query.sort, [
         ["position", "asc"],
         ["id", "asc"],
       ]);
@@ -2509,14 +2509,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("defaults an empty ordering to the id order", () => {
       assert.deepStrictEqual(normalize(task), {
         ...freshTerm,
-        orderBy: [["id", "asc"]],
+        sort: [["id", "asc"]],
       });
     });
 
     it("drops the ordering from counting queries", () => {
       const query = normalize(count(orderBy(task, Type.atom("position"))));
 
-      assert.deepStrictEqual(query.orderBy, []);
+      assert.deepStrictEqual(query.sort, []);
     });
 
     it("is idempotent", () => {
@@ -2551,7 +2551,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("id"), Type.atom("desc")]),
       ]);
 
-      assert.deepStrictEqual(normalize(orderBy(task, spec)).orderBy, [
+      assert.deepStrictEqual(normalize(orderBy(task, spec)).sort, [
         ["id", "desc"],
       ]);
     });
@@ -2625,9 +2625,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       const query = normalize(include(project, spec, Type.nil()));
 
-      assert.deepStrictEqual(query.include.owner.orderBy, []);
+      assert.deepStrictEqual(query.include.owner.sort, []);
 
-      assert.deepStrictEqual(query.include.owner.include.projects.orderBy, [
+      assert.deepStrictEqual(query.include.owner.include.projects.sort, [
         ["id", "asc"],
       ]);
     });
@@ -2654,13 +2654,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ["title", "==", "x"],
       ]);
 
-      assert.deepStrictEqual(query.include.tasks.orderBy, [["id", "asc"]]);
+      assert.deepStrictEqual(query.include.tasks.sort, [["id", "asc"]]);
     });
 
     it("skips ordering for to-one includes", () => {
       const query = normalize(include(project, Type.atom("owner"), Type.nil()));
 
-      assert.deepStrictEqual(query.include.owner.orderBy, []);
+      assert.deepStrictEqual(query.include.owner.sort, []);
     });
 
     it("sorts filter predicates canonically", () => {
@@ -2724,7 +2724,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
   // could not have answered anyway.
   describe("order_by/2", () => {
     it("defaults a bare attribute name to ascending", () => {
-      assert.deepStrictEqual(orderBy(task, Type.atom("title")).orderBy, [
+      assert.deepStrictEqual(orderBy(task, Type.atom("title")).sort, [
         ["title", "asc"],
       ]);
     });
@@ -2732,7 +2732,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("defaults list entries to ascending", () => {
       const spec = Type.list([Type.atom("title"), Type.atom("done")]);
 
-      assert.deepStrictEqual(orderBy(task, spec).orderBy, [
+      assert.deepStrictEqual(orderBy(task, spec).sort, [
         ["title", "asc"],
         ["done", "asc"],
       ]);
@@ -2743,7 +2743,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("title"), Type.atom("desc")]),
       ]);
 
-      assert.deepStrictEqual(orderBy(task, spec).orderBy, [["title", "desc"]]);
+      assert.deepStrictEqual(orderBy(task, spec).sort, [["title", "desc"]]);
     });
 
     it("accepts a mixed list of names and direction tuples", () => {
@@ -2752,7 +2752,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("title"), Type.atom("desc")]),
       ]);
 
-      assert.deepStrictEqual(orderBy(task, spec).orderBy, [
+      assert.deepStrictEqual(orderBy(task, spec).sort, [
         ["done", "asc"],
         ["title", "desc"],
       ]);
@@ -2764,11 +2764,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.atom("title"),
       );
 
-      assert.deepStrictEqual(query.orderBy, [["title", "asc"]]);
+      assert.deepStrictEqual(query.sort, [["title", "asc"]]);
     });
 
     it("orders by a system attribute", () => {
-      assert.deepStrictEqual(orderBy(task, Type.atom("created_at")).orderBy, [
+      assert.deepStrictEqual(orderBy(task, Type.atom("created_at")).sort, [
         ["created_at", "asc"],
       ]);
     });
@@ -2776,7 +2776,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // The declared `values:` list is the order, so nothing about an enum keeps it from being an
     // ordering key - both executors sort by a value's position in that list.
     it("orders by an enum attribute", () => {
-      assert.deepStrictEqual(orderBy(task, Type.atom("status")).orderBy, [
+      assert.deepStrictEqual(orderBy(task, Type.atom("status")).sort, [
         ["status", "asc"],
       ]);
     });
