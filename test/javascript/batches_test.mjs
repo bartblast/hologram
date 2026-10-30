@@ -16,6 +16,7 @@ import Model from "../../assets/js/model.mjs";
 import Mutations from "../../assets/js/mutations.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import Replica from "../../assets/js/replica.mjs";
+import Serializer from "../../assets/js/serializer.mjs";
 import Sse from "../../assets/js/sse.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
@@ -421,7 +422,7 @@ describe("Batches", () => {
       sealed(creating("t1", "first"));
 
       sendStub.resolves({
-        reason: 'Type.atom("nope")',
+        reason: Serializer.serialize(Type.atom("nope")),
         status: "rejected",
         write: 0,
       });
@@ -437,14 +438,15 @@ describe("Batches", () => {
       assert.equal(Batches.rejected[0].state, "rejected");
     });
 
-    // The answer arrives as the server spelled it, so the term a refusal carries is built here -
+    // The answer arrives as the server spelled it, so the term a refusal carries is read here -
     // the one place anything needs it rather than the JSON it travelled as.
-    it("reads the term a refusal's reason was encoded as", async () => {
+    it("reads the term a refusal's reason was serialized as", async () => {
       sealed(creating("t1", "first"));
 
       sendStub.resolves({
-        reason:
-          'Type.map([[Type.atom("slug"), Type.list([Type.atom("unique")])]])',
+        reason: Serializer.serialize(
+          Type.map([[Type.atom("slug"), Type.list([Type.atom("unique")])]]),
+        ),
         status: "rejected",
         write: 0,
       });
@@ -476,7 +478,7 @@ describe("Batches", () => {
       sealed(creating("t1", "first"));
 
       sendStub.resolves({
-        reason: 'Type.atom("nope")',
+        reason: Serializer.serialize(Type.atom("nope")),
         status: "rejected",
         write: 0,
       });
@@ -619,7 +621,7 @@ describe("Batches", () => {
         sealed(creating("t1", "first"));
 
         sendStub.resolves({
-          reason: 'Type.atom("nope")',
+          reason: Serializer.serialize(Type.atom("nope")),
           status: "rejected",
           write: 0,
         });
@@ -1089,7 +1091,7 @@ describe("Batches", () => {
       queued(3, "t1");
 
       Batches.settle(3, {
-        reason: 'Type.atom("nope")',
+        reason: Serializer.serialize(Type.atom("nope")),
         status: "rejected",
         write: 0,
       });

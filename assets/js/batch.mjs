@@ -26,7 +26,7 @@ export default class Batch {
   // pending, still the user's unanswered work, and only the fold passes over it.
   landed = new Set();
 
-  // What the server refused, as its answer spells it - a decoded client term. A batch that was
+  // What the server refused, as its answer spells it - a deserialized term. A batch that was
   // never refused carries none. Nothing app-facing reads it yet: a rejection after the client has
   // navigated away arrives when the component's page bundle is not even loaded, so the channel
   // that can always reach app code is a handler in the runtime bundle, and that is step 10's to

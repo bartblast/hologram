@@ -31,7 +31,7 @@ export default class Mutations {
   //
   //   {status: "confirmed", dropped, kept} - applied; dropped names the values that LOST and
   //                                          kept the ones standing in their place
-  //   {status: "rejected", write, reason}  - refused; reason is an encoded client term
+  //   {status: "rejected", write, reason}  - refused; reason is a serialized term
   //   {status: "failed", httpStatus}       - no verdict at all, so the batch is still pending
   //
   // A confirmation is handed back exactly as it arrived. Both of its maps are keyed by the
@@ -82,7 +82,7 @@ export default class Mutations {
         return {httpStatus: response.status, status: "failed"};
       }
 
-      // Answered exactly as the server spelled it, the encoded reason of a refusal included.
+      // Answered exactly as the server spelled it, the serialized reason of a refusal included.
       // Reading that term is the queue's, at the one place a reason is ever looked at - which is
       // what leaves this answer a plain JSON value, and so something a browser can hand from one
       // tab to another the way it hands a frame.

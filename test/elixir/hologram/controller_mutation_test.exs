@@ -5,7 +5,6 @@ defmodule Hologram.ControllerMutationTest do
 
   import Hologram.Controller
 
-  alias Hologram.Compiler.Encoder
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -16,6 +15,7 @@ defmodule Hologram.ControllerMutationTest do
   alias Hologram.Realtime.Tombstone
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.ReplicaIdentity
+  alias Hologram.Runtime.Serializer
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -203,7 +203,7 @@ defmodule Hologram.ControllerMutationTest do
       assert Jason.decode!(conn.resp_body) == %{
                "status" => "rejected",
                "write" => 0,
-               "reason" => Encoder.encode_client_term!(%{slug: [:required]})
+               "reason" => Serializer.serialize!(%{slug: [:required]})
              }
     end
 
@@ -244,7 +244,7 @@ defmodule Hologram.ControllerMutationTest do
       assert Jason.decode!(conn.resp_body) == %{
                "status" => "rejected",
                "write" => nil,
-               "reason" => Encoder.encode_client_term!(:stale_build)
+               "reason" => Serializer.serialize!(:stale_build)
              }
     end
 

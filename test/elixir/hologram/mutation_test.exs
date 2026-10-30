@@ -6,7 +6,6 @@ defmodule Hologram.MutationTest do
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
-  alias Hologram.Compiler.Encoder
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -14,6 +13,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Mutation.Record
+  alias Hologram.Runtime.Serializer
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -215,7 +215,7 @@ defmodule Hologram.MutationTest do
   defp rejected(index, reason) do
     {:ok,
      %{
-       "reason" => Encoder.encode_client_term!(reason),
+       "reason" => Serializer.serialize!(reason),
        "status" => "rejected",
        "write" => index
      }}

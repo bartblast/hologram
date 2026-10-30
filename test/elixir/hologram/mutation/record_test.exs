@@ -7,7 +7,7 @@ defmodule Hologram.Mutation.RecordTest do
   alias Hologram.DB.Connection
   alias Hologram.Entity
 
-  @answer %{"reason" => "Type.atom(\"not_found\")", "status" => "rejected", "write" => 0}
+  @answer %{"reason" => ~s'[4,"anot_found"]', "status" => "rejected", "write" => 0}
   @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @envelope %{"replica_id" => "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f", "seq" => 1, "writes" => []}
   @other_replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"

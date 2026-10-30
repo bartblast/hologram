@@ -13,7 +13,6 @@ defmodule Hologram.Mutation do
   alias Hologram.Auth
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
-  alias Hologram.Compiler.Encoder
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -25,6 +24,7 @@ defmodule Hologram.Mutation do
   alias Hologram.Mutation.Record
   alias Hologram.Mutation.Ref
   alias Hologram.Mutation.Write
+  alias Hologram.Runtime.Serializer
   alias Hologram.Server
   alias Hologram.Sync.WireData
 
@@ -477,14 +477,14 @@ defmodule Hologram.Mutation do
   end
 
   # The answer a refusal travels as: the position of the write it names - nil for a refusal of the
-  # whole batch - and the reason as an encoded client term, since a reason is an arbitrary term (a
-  # field-keyed map holding a regex or a range, an exception struct) that JSON cannot spell and the
-  # client's interpreter already reads. Built here and nowhere else, so that what the record stores
-  # is byte for byte what the wire carried.
+  # whole batch - and the reason as a serialized term, since a reason is an arbitrary term (a
+  # field-keyed map holding a regex or a range, an exception struct) that plain JSON cannot spell
+  # and the client's term reader already reads. Built here and nowhere else, so that what the
+  # record stores is byte for byte what the wire carried.
   @spec rejection(non_neg_integer | nil, rejection) :: map
   defp rejection(index, reason) do
     %{
-      "reason" => Encoder.encode_client_term!(reason),
+      "reason" => Serializer.serialize!(reason),
       "status" => "rejected",
       "write" => index
     }

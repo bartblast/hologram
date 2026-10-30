@@ -2,6 +2,7 @@
 
 import Batch from "./batch.mjs";
 import Clock from "./clock.mjs";
+import Deserializer from "./deserializer.mjs";
 import Durability from "./durability.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -562,10 +563,10 @@ export default class Batches {
 
     batch.mark("rejected");
 
-    // Read HERE and nowhere earlier: the reason is a client term the server encoded, and the
-    // answer carrying it stays a plain JSON value until it reaches the one reader that needs the
-    // term itself.
-    batch.reason = Interpreter.evaluateJavaScriptExpression(answer.reason);
+    // Read HERE and nowhere earlier: the reason is a term the server serialized, and the answer
+    // carrying it stays a plain JSON value until it reaches the one reader that needs the term
+    // itself.
+    batch.reason = Deserializer.deserialize(answer.reason);
 
     batch.write = answer.write;
 

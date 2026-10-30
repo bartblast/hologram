@@ -41,7 +41,6 @@ defmodule Hologram.AuthContentionTest do
 
   alias Hologram.Auth.Context
   alias Hologram.Auth.RoleGrant
-  alias Hologram.Compiler.Encoder
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -50,6 +49,7 @@ defmodule Hologram.AuthContentionTest do
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Mutation
+  alias Hologram.Runtime.Serializer
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
@@ -490,7 +490,7 @@ defmodule Hologram.AuthContentionTest do
     rejected =
       {:ok,
        %{
-         "reason" => Encoder.encode_client_term!(%Hologram.AccessDeniedError{message: message}),
+         "reason" => Serializer.serialize!(%Hologram.AccessDeniedError{message: message}),
          "status" => "rejected",
          "write" => 0
        }}

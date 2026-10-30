@@ -5,9 +5,9 @@ defmodule Hologram.Mutation.ClockAllowanceTest do
 
   import Hologram.Mutation
 
-  alias Hologram.Compiler.Encoder
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Runtime.Serializer
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Policy.Module2
 
@@ -39,7 +39,7 @@ defmodule Hologram.Mutation.ClockAllowanceTest do
       assert run(envelope(a_second_ahead), %Server{}) ==
                {:ok,
                 %{
-                  "reason" => Encoder.encode_client_term!(:clock),
+                  "reason" => Serializer.serialize!(:clock),
                   "status" => "rejected",
                   "write" => 0
                 }}
