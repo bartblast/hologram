@@ -17,6 +17,6 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
   end
 
   defp jobs_query do
-    order_by(RestockItem, amount)
+    sort(RestockItem, amount)
   end
 end

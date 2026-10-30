@@ -19,6 +19,6 @@ defmodule HologramFeatureTests.Components.Queries.Component15 do
   defp active_stops_query do
     Stop
     |> filter(trip.archived == false)
-    |> order_by(name)
+    |> sort(name)
   end
 end

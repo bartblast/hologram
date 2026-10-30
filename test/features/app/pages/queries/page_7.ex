@@ -38,7 +38,7 @@ defmodule HologramFeatureTests.Queries.Page7 do
     names =
       Stop
       |> filter(trip.name == ^trip_name)
-      |> order_by(name)
+      |> sort(name)
       |> DB.read()
       |> Enum.map_join(",", & &1.name)
 

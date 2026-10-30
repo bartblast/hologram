@@ -37,7 +37,7 @@ defmodule HologramFeatureTests.Queries.Page4 do
     titles =
       Ticket
       |> filter(^predicates)
-      |> order_by(title)
+      |> sort(title)
       |> DB.read()
       |> Enum.map_join(",", & &1.title)
 

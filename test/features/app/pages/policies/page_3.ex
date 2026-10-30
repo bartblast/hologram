@@ -32,7 +32,7 @@ defmodule HologramFeatureTests.Policies.Page3 do
   def action(:check_unconfirmable_locally, _params, component) do
     names =
       Booking
-      |> order_by(name)
+      |> sort(name)
       |> DB.read()
       |> Enum.reject(&can?(nil, :confirm, &1))
       |> Enum.map_join(",", & &1.name)

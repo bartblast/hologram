@@ -23,7 +23,7 @@ defmodule HologramFeatureTests.Components.Queries.Component11 do
     Ticket
     |> filter(priority >= ^min_priority and title != ^skipped_title)
     |> filter(title not in ["zz"])
-    |> order_by(priority: :desc, title: :asc)
-    |> limit(^page_size)
+    |> sort(priority: :desc, title: :asc)
+    |> take(^page_size)
   end
 end

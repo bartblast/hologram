@@ -29,7 +29,7 @@ defmodule HologramFeatureTests.Components.Policies.Component5 do
   end
 
   defp documents_query do
-    order_by(Document, title)
+    sort(Document, title)
   end
 
   defp titles_held(user, role, documents) do

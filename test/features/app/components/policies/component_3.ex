@@ -22,7 +22,7 @@ defmodule HologramFeatureTests.Components.Policies.Component3 do
   end
 
   defp memos_query do
-    order_by(Memo, body)
+    sort(Memo, body)
   end
 
   defp pinnable(user, memos) do

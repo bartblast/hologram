@@ -20,7 +20,7 @@ defmodule HologramFeatureTests.Components.Policies.Component8 do
   end
 
   defp cabins_query do
-    order_by(Cabin, name)
+    sort(Cabin, name)
   end
 
   defp renamable(user, cabins) do

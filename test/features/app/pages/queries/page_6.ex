@@ -33,7 +33,7 @@ defmodule HologramFeatureTests.Queries.Page6 do
     names =
       Booking
       |> filter(guests >= capacity)
-      |> order_by(name)
+      |> sort(name)
       |> DB.read()
       |> Enum.map_join(",", & &1.name)
 

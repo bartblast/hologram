@@ -20,6 +20,6 @@ defmodule HologramFeatureTests.Components.Queries.Component4 do
   defp reviews_query(product) do
     Review
     |> filter(product_id: ^product.id)
-    |> order_by(rating)
+    |> sort(rating)
   end
 end

@@ -22,7 +22,7 @@ defmodule HologramFeatureTests.Components.Policies.Component4 do
   end
 
   defp bookings_query do
-    order_by(Booking, name)
+    sort(Booking, name)
   end
 
   defp confirmable(user, bookings) do

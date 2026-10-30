@@ -22,6 +22,6 @@ defmodule HologramFeatureTests.Components.TimeAttribute.Shops do
   end
 
   defp shops_query do
-    order_by(Shop, opens_at)
+    sort(Shop, opens_at)
   end
 end
