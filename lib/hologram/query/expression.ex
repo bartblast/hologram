@@ -37,7 +37,7 @@ defmodule Hologram.Query.Expression do
 
   @keyword_value_description "a keyword predicate value is a literal or a pinned expression"
 
-  @ordering_names %{stage: "order_by", names: "an attribute", spelled: "a bare name"}
+  @ordering_names %{stage: "sort", names: "an attribute", spelled: "a bare name"}
 
   @range_operators [:.., :..//]
 
@@ -161,7 +161,7 @@ defmodule Hologram.Query.Expression do
   def name!(ast, names, env), do: name_error!(ast, names, env)
 
   @doc """
-  Lowers the spec argument of `order_by/2` to the AST of what `Hologram.Query.Stage.order_by/2`
+  Lowers the spec argument of `sort/2` to the AST of what `Hologram.Query.Stage.sort/2`
   takes: an attribute name, or a list of names and `{name, direction}` pairs.
 
   An attribute is a bare name (`priority`), lowering to `:priority`. A list holds names and pairs,

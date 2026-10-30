@@ -862,7 +862,7 @@ defmodule Hologram.Compiler do
 
   Raises Hologram.CompileError when a registered query reads an entity type declaring no allow
   lines - default deny makes it statically dead, returning no rows when it is the query's root and
-  no embedded row when it is an include target - when a registered query filters or orders on
+  no embedded row when it is an include target - when a registered query filters or sorts on
   a server-only attribute, which the client never holds and so could never evaluate locally, and
   when a registered query claims the server's own authority with trust/1, which a component's
   query has no authority to claim on either tier.
@@ -4676,7 +4676,7 @@ defmodule Hologram.Compiler do
   end
 
   defp server_only_query_message(module, references) do
-    "the registered query in #{inspect(module)} filters or orders on server_only attributes (#{server_only_listing(references)}) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API."
+    "the registered query in #{inspect(module)} filters or sorts on server_only attributes (#{server_only_listing(references)}) - the client never holds those values, so it could not evaluate the reference locally. Drop the reference, or read the rows through the trusted backend API."
   end
 
   # Pairs each entity type with the server-only attributes a term's filter and sort name on it -

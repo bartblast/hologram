@@ -57,10 +57,10 @@ defmodule Hologram.DB do
           limit: 2,
           offset: 2,
           one: 1,
-          order_by: 2,
           paginate: 2,
           put_attribute: 2,
           put_attribute: 3,
+          sort: 2,
           trust: 1
         ]
 

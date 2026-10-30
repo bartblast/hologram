@@ -17,12 +17,12 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module112 do
   end
 
   defp chained_query do
-    order_by(PolicyModule8, created_at)
+    sort(PolicyModule8, created_at)
   end
 
   defp entities_query do
     PolicyModule1
     |> filter(public == true)
-    |> order_by(priority)
+    |> sort(priority)
   end
 end

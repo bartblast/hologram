@@ -16,6 +16,6 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1 do
   defp entities_query do
     Entity2
     |> filter(a: true)
-    |> order_by(c)
+    |> sort(c)
   end
 end

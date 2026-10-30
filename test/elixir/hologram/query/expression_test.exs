@@ -436,25 +436,25 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a call" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: order_by names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: sort_key() - a value from the surrounding code is pinned: ^sort_key()",
+                   "lib/my_app/queries.ex:12: sort names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: sort_key() - a value from the surrounding code is pinned: ^sort_key()",
                    fn -> lower_ordering("sort_key()") end
     end
 
     test "raises on a dot path" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: order_by names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: entity.field - a value from the surrounding code is pinned: ^entity.field",
+                   "lib/my_app/queries.ex:12: sort names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: entity.field - a value from the surrounding code is pinned: ^entity.field",
                    fn -> lower_ordering("entity.field") end
     end
 
     test "raises on an atom" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: order_by names an attribute with a bare name, got: :priority - write priority",
+                   "lib/my_app/queries.ex:7: sort names an attribute with a bare name, got: :priority - write priority",
                    fn -> lower_ordering(":priority") end
     end
 
     test "raises on an atom in a list" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: order_by names an attribute with a bare name, got: :created_at - write created_at",
+                   "lib/my_app/queries.ex:7: sort names an attribute with a bare name, got: :created_at - write created_at",
                    fn -> lower_ordering("[priority, :created_at]") end
     end
   end

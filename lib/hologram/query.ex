@@ -219,7 +219,7 @@ defmodule Hologram.Query do
   things on the two execution tiers. A comparison on an enum attribute reads the declared
   `values:` order, so `priority >= :medium` on `[:low, :medium, :high]` means medium or high, and
   the operand must be one of the declared values. A comparison on a string attribute reads the
-  order `order_by` sorts it in - case and diacritics fold the way they do in the list - and a
+  order `sort` puts it in - case and diacritics fold the way they do in the list - and a
   bound names a position in that list, spelled the way the list spells it: `name >= "M"` reaches
   `M`, `m`, `Mango`, while `name >= "m"` starts at `m`.
 
@@ -327,13 +327,13 @@ defmodule Hologram.Query do
   computed amount passes through with its sign, and decrement/3 is the readable spelling for a
   literal move down. The amount is recorded in the struct's metadata as an increment op under
   the attribute's name (decrement/3 records a negative one), and several increments and
-  decrements of one attribute add up, so a sum that reaches zero leaves nothing recorded. The struct's own field moves with it, so a caller
-  reads back the value it asked for - a preview: what the attribute ends up holding is the
-  row's to compute at the write, from whatever value it holds then, which is what lets two
-  writers moving one attribute add up instead of one overwriting the other. Only the recorded
-  amount is written, never the field. The attribute's constraints are judged on that result at
-  the write, so a move that would cross a declared minimum, maximum or range is reported by
-  DB.update/1.
+  decrements of one attribute add up, so a sum that reaches zero leaves nothing recorded. The
+  struct's own field moves with it, so a caller reads back the value it asked for - a preview:
+  what the attribute ends up holding is the row's to compute at the write, from whatever value it
+  holds then, which is what lets two writers moving one attribute add up instead of one
+  overwriting the other. Only the recorded amount is written, never the field. The attribute's
+  constraints are judged on that result at the write, so a move that would cross a declared
+  minimum, maximum or range is reported by DB.update/1.
 
   Stages apply in order and the struct holds one op per attribute: moving an attribute the
   struct already carries a put value for folds the amount into that value (put 10 then
@@ -406,44 +406,6 @@ defmodule Hologram.Query do
   defdelegate one(query), to: Stage
 
   @doc """
-  Sets the given query's ordering keys and returns the resulting query term.
-
-  The query is an entity type module (starting a fresh query term) or an already built
-  query term. The spec is an attribute named with a bare name (ascending), or a list of
-  attributes and `{attribute, :asc | :desc}` pairs - keyword syntax reads naturally:
-
-      Task |> order_by(priority)
-      Task |> order_by([priority, title])
-      Task |> order_by(priority: :desc, title: :asc)
-
-  An attribute chosen at runtime is pinned, as is a direction or a whole spec -
-  `order_by(^sort_field)`, `order_by(title: ^direction)`, `order_by(^[{sort_by, sort_dir}])`.
-  Each entry becomes an `{attribute, direction}` pair, in the given order.
-
-  An ordering is atomic - a later call replaces the ordering an earlier one set rather
-  than adding to it. Precedence is positional, so an ordering states itself in one place
-  or not at all.
-
-  An enum attribute orders by the position of its values in the declared `values:` list -
-  `[:low, :medium, :high]` sorts low, medium, high, on both execution tiers.
-
-  Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
-  (`order_by(:priority)` is refused in favour of `order_by(priority)`), when a direction is
-  neither an atom nor pinned, or when the spec or an entry is neither a bare name, a pair nor
-  pinned. Raises ArgumentError when the query is neither an entity type module nor a query term,
-  when the spec is neither an attribute name nor a list, when an entry names a relationship or an
-  unknown attribute - which is how a forgotten pin on a variable reads - or when a direction is
-  neither :asc nor :desc.
-  """
-  defmacro order_by(query, spec) do
-    lowered = Expression.ordering(spec, __CALLER__)
-
-    quote do
-      Stage.sort(unquote(query), unquote(lowered))
-    end
-  end
-
-  @doc """
   Sets the given query's view bounds to the requested page and returns the resulting
   query term.
 
@@ -499,6 +461,46 @@ defmodule Hologram.Query do
   """
   @spec put_attribute(Entity.t(), atom, any) :: Entity.t()
   defdelegate put_attribute(entity, name, value), to: Stage
+
+  @doc """
+  Sets the given query's sort order and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The spec is an attribute named with a bare name (ascending), or a list of
+  attributes and `{attribute, :asc | :desc}` pairs - keyword syntax reads naturally:
+
+      Task |> sort(priority)
+      Task |> sort([priority, title])
+      Task |> sort(priority: :desc, title: :asc)
+
+  An attribute chosen at runtime is pinned, as is a direction or a whole spec -
+  `sort(^sort_field)`, `sort(title: ^direction)`, `sort(^[{sort_by, sort_dir}])`.
+  Each entry becomes an `{attribute, direction}` pair, in the given order.
+
+  A later call replaces the order an earlier one set rather than adding to it, so
+  `Task |> sort(title) |> sort(priority)` sorts by priority alone. Two `Enum.sort_by` calls in
+  a row work the other way: the sort is stable, so the first one survives as the tiebreaker. A
+  query names its secondary key in the same call, after the first - `sort([priority, title])`.
+  Precedence is positional, so an order states itself in one place or not at all.
+
+  An enum attribute sorts by the position of its values in the declared `values:` list -
+  `[:low, :medium, :high]` sorts low, medium, high, on both execution tiers.
+
+  Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
+  (`sort(:priority)` is refused in favour of `sort(priority)`), when a direction is
+  neither an atom nor pinned, or when the spec or an entry is neither a bare name, a pair nor
+  pinned. Raises ArgumentError when the query is neither an entity type module nor a query term,
+  when the spec is neither an attribute name nor a list, when an entry names a relationship or an
+  unknown attribute - which is how a forgotten pin on a variable reads - or when a direction is
+  neither :asc nor :desc.
+  """
+  defmacro sort(query, spec) do
+    lowered = Expression.ordering(spec, __CALLER__)
+
+    quote do
+      Stage.sort(unquote(query), unquote(lowered))
+    end
+  end
 
   @doc """
   Claims the server's own authority for the given entity struct and returns the struct - the

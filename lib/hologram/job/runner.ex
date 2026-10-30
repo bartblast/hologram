@@ -6,7 +6,7 @@ defmodule Hologram.Job.Runner do
   # must not hold a connection while it does, and because the claim has to be visible to every
   # other node before the work starts - which is what stops two nodes running one job.
 
-  import Hologram.Query, only: [filter: 2, order_by: 2]
+  import Hologram.Query, only: [filter: 2, sort: 2]
 
   alias Hologram.Auth.Context
   alias Hologram.DB
@@ -127,7 +127,7 @@ defmodule Hologram.Job.Runner do
   defp ran_count(job_type) do
     job_type
     |> filter(status: :queued)
-    |> order_by(created_at)
+    |> sort(created_at)
     |> DB.read()
     |> Enum.count(&(process(job_type, &1.id) != :taken))
   end

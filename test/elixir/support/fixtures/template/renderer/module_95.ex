@@ -17,6 +17,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module95 do
   end
 
   defp entities_query do
-    order_by(Module15, label)
+    sort(Module15, label)
   end
 end

@@ -18,6 +18,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module111 do
     Entity25
     |> include(h)
     |> filter(h.title != "nothing")
-    |> order_by(created_at)
+    |> sort(created_at)
   end
 end

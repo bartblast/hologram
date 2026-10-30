@@ -182,7 +182,7 @@ defmodule Hologram.Query.WindowTest do
       term =
         Module2
         |> filter(a: true)
-        |> order_by(c)
+        |> sort(c)
         |> limit(20)
         |> offset(40)
         |> Stage.normalize()
@@ -197,7 +197,7 @@ defmodule Hologram.Query.WindowTest do
       window =
         Module2
         |> filter(a: true)
-        |> order_by(c)
+        |> sort(c)
         |> Stage.normalize()
         |> derive(false)
 
@@ -393,7 +393,7 @@ defmodule Hologram.Query.WindowTest do
       term =
         Module5
         |> filter(a.b.c == "x")
-        |> order_by(id: :desc)
+        |> sort(id: :desc)
         |> limit(3)
         |> Stage.normalize()
 

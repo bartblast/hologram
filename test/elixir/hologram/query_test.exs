@@ -236,7 +236,7 @@ defmodule Hologram.QueryTest do
     test "shows the ordering and the view bounds" do
       term =
         Module2
-        |> order_by(c)
+        |> sort(c)
         |> paginate(page: 2, size: 20)
 
       assert inspect(term) ==
@@ -295,39 +295,6 @@ defmodule Hologram.QueryTest do
     end
   end
 
-  describe "order_by/2" do
-    test "lowers a bare name" do
-      assert order_by(Module2, c).sort == [c: :asc]
-    end
-
-    test "lowers a keyword list with a pinned direction" do
-      direction = :desc
-
-      assert order_by(Module2, c: ^direction).sort == [c: :desc]
-    end
-
-    test "lowers a list of bare names" do
-      assert order_by(Module2, [a, c]).sort == [a: :asc, c: :asc]
-    end
-
-    test "takes a pinned spec" do
-      spec = [c: :desc]
-
-      assert order_by(Module2, ^spec).sort == [c: :desc]
-    end
-
-    test "raises the lowering's compile error" do
-      code = """
-      import Hologram.Query
-      order_by(Hologram.Test.Fixtures.Entity.Module2, :c)
-      """
-
-      assert_error Hologram.CompileError,
-                   "nofile:2: order_by names an attribute with a bare name, got: :c - write c",
-                   fn -> Code.eval_string(code) end
-    end
-  end
-
   describe "paginate/2" do
     test "lowers a pinned option" do
       page = 2
@@ -353,6 +320,39 @@ defmodule Hologram.QueryTest do
 
       assert_error Hologram.CompileError,
                    "nofile:2: a paginate option takes an integer or a pinned expression, got: page - a value from the surrounding code is pinned: ^page",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
+  describe "sort/2" do
+    test "lowers a bare name" do
+      assert sort(Module2, c).sort == [c: :asc]
+    end
+
+    test "lowers a keyword list with a pinned direction" do
+      direction = :desc
+
+      assert sort(Module2, c: ^direction).sort == [c: :desc]
+    end
+
+    test "lowers a list of bare names" do
+      assert sort(Module2, [a, c]).sort == [a: :asc, c: :asc]
+    end
+
+    test "takes a pinned spec" do
+      spec = [c: :desc]
+
+      assert sort(Module2, ^spec).sort == [c: :desc]
+    end
+
+    test "raises the lowering's compile error" do
+      code = """
+      import Hologram.Query
+      sort(Hologram.Test.Fixtures.Entity.Module2, :c)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: sort names an attribute with a bare name, got: :c - write c",
                    fn -> Code.eval_string(code) end
     end
   end
