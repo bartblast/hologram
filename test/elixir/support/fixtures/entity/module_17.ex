@@ -4,4 +4,6 @@ defmodule Hologram.Test.Fixtures.Entity.Module17 do
 
   attribute :priority, :enum, values: [:low, :medium, :high], optional: true
   attribute :label, :string
+
+  allow :read
 end

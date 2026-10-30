@@ -15,7 +15,7 @@ defmodule Hologram.Test.Fixtures.Entity.Module13 do
 
   allow :read, when: public == true
   allow :read, to: [:editor, :owner]
-  allow :publish, via: {:read, parent}
+  allow :publish, when: public == true
   allow :triage, when: priority >= 3
   allow :unlink, when: parent_id == nil
 end

@@ -60,7 +60,7 @@ defmodule Hologram.EntityTest do
       assert Module13.__policies__() == [
                {:read, nil, nil, [public: {:==, true}]},
                {:read, [:editor, :owner], nil, []},
-               {:publish, nil, {:read, :parent}, []},
+               {:publish, nil, nil, [public: {:==, true}]},
                {:triage, nil, nil, [priority: {:>=, 3}]},
                {:unlink, nil, nil, [parent_id: {:==, nil}]}
              ]

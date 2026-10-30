@@ -16,6 +16,7 @@ defmodule Hologram.PolicyTest do
       read_roles_qualifying_role_modules: 1,
       read_roles_qualifying_roles: 1,
       related_chains: 1,
+      related_chains: 2,
       revoke_role_qualifying_roles: 1,
       revoke_role_qualifying_roles: 2,
       validate_operation!: 2
@@ -800,6 +801,24 @@ defmodule Hologram.PolicyTest do
 
     test "returns no chains for the grant store" do
       assert related_chains(RoleGrant) == []
+    end
+  end
+
+  describe "related_chains/2" do
+    test "returns the rows the given operation's rules read" do
+      assert related_chains(Policy.Module12, :delete) == [[:parent, :parent]]
+    end
+
+    # The row two relationships away delegates its own publish rule to its parent in turn.
+    test "returns the rows a delegation reads under the operation it asks" do
+      assert related_chains(Policy.Module12, :publish) == [
+               [:parent, :parent],
+               [:parent, :parent, :parent]
+             ]
+    end
+
+    test "returns no chains for an operation with no rules" do
+      assert related_chains(Policy.Module12, :create) == []
     end
   end
 

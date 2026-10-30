@@ -46,7 +46,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
-  alias Hologram.Test.Fixtures.Entity.Module17, as: Entity17
   alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
@@ -1999,7 +1998,7 @@ defmodule Hologram.CompilerTest do
       sync_constants =
         derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
 
-      assert MapSet.member?(sync_constants.entity_types, Entity17)
+      assert MapSet.member?(sync_constants.entity_types, Entity1)
     end
 
     test "leaves an unqueried type declaring roles out when no page checks permissions on the client",

@@ -28,6 +28,9 @@ defmodule Hologram.Policy.Validator do
     Enum.each(entity_types, &validate_entity_policies!/1)
 
     validate_via_cycles!(entity_types)
+
+    # After the cycle check: the chains follow delegation to its end.
+    validate_readable_chains!(entity_types)
   end
 
   @doc """
@@ -71,6 +74,13 @@ defmodule Hologram.Policy.Validator do
 
     {hops_before_start, hops_from_start} = Enum.split(cycle, start_index)
     hops_from_start ++ hops_before_start
+  end
+
+  # The type each relationship of a chain leads to, in order, with its position.
+  defp chain_hop_types(entity_type, chain) do
+    chain
+    |> Enum.scan(entity_type, &Entity.relationship_target(&2, &1))
+    |> Enum.with_index()
   end
 
   defp declared_role_names(entity_type) do
@@ -242,6 +252,23 @@ defmodule Hologram.Policy.Validator do
     raise Hologram.CompileError,
       message:
         "cyclic policy delegation for allow #{inspect(operation)} - a via chain can't return to the entity type it starts from:\n#{descriptions}"
+  end
+
+  # A type whose rows some session may read - the grant store's are, through rules the framework
+  # supplies rather than declarations.
+  defp readable_type?(entity_type) do
+    entity_type
+    |> Policy.build()
+    |> Map.get(:read, [])
+    |> Kernel.!=([])
+  end
+
+  defp related_chain_operations(entity_type) do
+    entity_type
+    |> Policy.build()
+    |> Map.keys()
+    |> Enum.reject(&(&1 == :read))
+    |> Enum.sort()
   end
 
   # A relationship name, or a path - two or more of them.
@@ -441,6 +468,33 @@ defmodule Hologram.Policy.Validator do
         "invalid predicate for allow #{inspect(operation)} in #{location} - #{Exception.message(error)}"
 
       reraise Hologram.CompileError, [message: message], __STACKTRACE__
+  end
+
+  # A rule reading a related row through a type nobody may read answers no in every browser - the
+  # row never reaches one - while the server reads the row as stored and may answer yes, the
+  # client-locality defect validate_server_only_predicates!/4 refuses for a value, one relationship
+  # away. A type's own read rules are left out for the same reason they are there: a row reaches
+  # the browser only once the server's read rules admitted it, so the browser never decides them.
+  # A rule delegating to a read rule is not a read rule, and its chains stay checked.
+  defp validate_readable_chains!(entity_types) do
+    unreadable_hops =
+      for entity_type <- Enum.sort(entity_types),
+          operation <- related_chain_operations(entity_type),
+          chain <- Policy.related_chains(entity_type, operation),
+          {hop_type, index} <- chain_hop_types(entity_type, chain),
+          not readable_type?(hop_type) do
+        {entity_type, operation, Enum.take(chain, index + 1), hop_type}
+      end
+
+    case unreadable_hops do
+      [] ->
+        :ok
+
+      [{entity_type, operation, chain, hop_type} | _later_hops] ->
+        raise Hologram.CompileError,
+          message:
+            "allow #{inspect(operation)} in #{inspect(entity_type)} reads #{inspect(hop_type)} through #{Enum.join(chain, ".")}, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on #{inspect(hop_type)}, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+    end
   end
 
   defp validate_relationship_reference!(entity_type, operation, relationship, role_name, location) do

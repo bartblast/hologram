@@ -413,9 +413,26 @@ defmodule Hologram.Policy do
   def related_chains(entity_type) do
     entity_type
     |> build()
-    |> Enum.flat_map(fn {_operation, rules} ->
-      Enum.flat_map(rules, &rule_chains(entity_type, &1))
-    end)
+    |> Map.keys()
+    |> Enum.flat_map(&related_chains(entity_type, &1))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Returns the chains of to-one relationship names whose rows the given entity type's rules for the
+  given operation read, sorted - the chains `related_chains/1` returns, for one operation. A
+  delegation's chains are those of the operation it asks the related row, whatever operation
+  delegates. An operation with no rules gives none.
+
+  Takes a validated data model, for the reason `related_chains/1` does.
+  """
+  @spec related_chains(module, Entity.operation()) :: list(list(atom))
+  def related_chains(entity_type, operation) do
+    entity_type
+    |> build()
+    |> Map.get(operation, [])
+    |> Enum.flat_map(&rule_chains(entity_type, &1))
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -567,9 +584,7 @@ defmodule Hologram.Policy do
 
     lifted_chains =
       target_type
-      |> build()
-      |> Map.get(operation, [])
-      |> Enum.flat_map(&rule_chains(target_type, &1))
+      |> related_chains(operation)
       |> Enum.map(&(relationship_names ++ &1))
 
     [relationship_names | lifted_chains]
