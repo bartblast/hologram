@@ -15,6 +15,7 @@ defmodule Hologram.PolicyTest do
       operations: 1,
       read_roles_qualifying_role_modules: 1,
       read_roles_qualifying_roles: 1,
+      related_chains: 1,
       revoke_role_qualifying_roles: 1,
       revoke_role_qualifying_roles: 2,
       validate_operation!: 2
@@ -752,6 +753,53 @@ defmodule Hologram.PolicyTest do
 
     test "defaults to the roles qualifying to grant or revoke" do
       assert read_roles_qualifying_roles(Policy.Module1) == [:owner]
+    end
+  end
+
+  describe "related_chains/1" do
+    # [:parent] is the role reference's chain without its last relationship - the id it holds is
+    # read off the row before it. The third hop is the publish delegation's: the row two
+    # relationships away delegates its own publish rule to its parent.
+    test "returns the rows a path in a condition reads" do
+      assert related_chains(Policy.Module12) == [
+               [:link],
+               [:parent],
+               [:parent, :parent],
+               [:parent, :parent, :parent]
+             ]
+    end
+
+    test "reads no row through a role reference one relationship away" do
+      assert related_chains(Policy.Module13) == []
+    end
+
+    # Each chain has one source: the path compared against, the path inside an alternative, and a
+    # delegation to an operation its target declares no rule for, which reads the row it leads to
+    # and nothing through it.
+    test "returns the rows an operand path, an alternative and a ruleless delegation read" do
+      assert related_chains(Policy.Module14) == [[:group], [:owner], [:peer]]
+    end
+
+    test "returns the row a delegation leads to" do
+      assert related_chains(Policy.Module1) == [[:parent]]
+    end
+
+    test "follows a delegation into the rows its target's rules read" do
+      assert related_chains(Policy.Module8) == [[:parent], [:parent, :parent]]
+    end
+
+    # The parent's update rule reads only the parent's own attribute, so the self-reference ends at
+    # the row it delegates to.
+    test "ends a delegation to the type itself at the row it leads to" do
+      assert related_chains(Policy.Module9) == [[:parent]]
+    end
+
+    test "returns no chains for a type whose rules read only its own rows" do
+      assert related_chains(Policy.Module7) == []
+    end
+
+    test "returns no chains for the grant store" do
+      assert related_chains(RoleGrant) == []
     end
   end
 
