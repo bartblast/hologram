@@ -8,9 +8,9 @@
 // touches.
 //
 // Computes practical-order sort keys for string attribute values - the derived values that
-// order_by companion columns store and both tiers compare. Hologram.DB.SortKey is the reference
-// implementation: the version 1 rules are frozen, and a version bump regenerates every stored key
-// from source values on both tiers.
+// the sort stage's companion columns store and both tiers compare. Hologram.DB.SortKey is the
+// reference implementation: the version 1 rules are frozen, and a version bump regenerates every
+// stored key from source values on both tiers.
 //
 // Where the tiers cannot be made to agree: the two runtimes carry Unicode case tables of different
 // vintages, so a handful of very recently assigned codepoints (measured at 28 in V8 under Node 23

@@ -9,7 +9,7 @@ defmodule Hologram.Query do
   # A query term - what the stages build and the executors run. Each field is named for the stage
   # that sets it, with one exception: one/1 and count/1 set cardinality, since a term cannot be
   # both. A term records fields, not the order the stages were called in - filter appends,
-  # order_by replaces, include adds a key or merges into one - so two pipes reaching the same
+  # sort replaces, include adds a key or merges into one - so two pipes reaching the same
   # fields are one query, which is what Hologram.Query.Registry.id/1 relies on. A term is always
   # about one entity type, so a struct written without one is refused at the literal.
   @enforce_keys [:entity]
@@ -18,9 +18,9 @@ defmodule Hologram.Query do
             entity: nil,
             filter: [],
             include: %{},
-            limit: nil,
-            offset: nil,
-            order_by: [],
+            skip: nil,
+            sort: [],
+            take: nil,
             trust: false
 
   # Another attribute of the same row, or a path to an attribute of a related row, compared with
@@ -58,9 +58,9 @@ defmodule Hologram.Query do
           entity: module,
           filter: list(clause),
           include: %{atom => t},
-          limit: bound,
-          offset: bound,
-          order_by: list(ordering),
+          skip: bound,
+          sort: list(ordering),
+          take: bound,
           trust: boolean
         }
 
@@ -219,7 +219,7 @@ defmodule Hologram.Query do
   things on the two execution tiers. A comparison on an enum attribute reads the declared
   `values:` order, so `priority >= :medium` on `[:low, :medium, :high]` means medium or high, and
   the operand must be one of the declared values. A comparison on a string attribute reads the
-  order `order_by` sorts it in - case and diacritics fold the way they do in the list - and a
+  order `sort` puts it in - case and diacritics fold the way they do in the list - and a
   bound names a position in that list, spelled the way the list spells it: `name >= "M"` reaches
   `M`, `m`, `Mango`, while `name >= "m"` starts at `m`.
 
@@ -327,13 +327,13 @@ defmodule Hologram.Query do
   computed amount passes through with its sign, and decrement/3 is the readable spelling for a
   literal move down. The amount is recorded in the struct's metadata as an increment op under
   the attribute's name (decrement/3 records a negative one), and several increments and
-  decrements of one attribute add up, so a sum that reaches zero leaves nothing recorded. The struct's own field moves with it, so a caller
-  reads back the value it asked for - a preview: what the attribute ends up holding is the
-  row's to compute at the write, from whatever value it holds then, which is what lets two
-  writers moving one attribute add up instead of one overwriting the other. Only the recorded
-  amount is written, never the field. The attribute's constraints are judged on that result at
-  the write, so a move that would cross a declared minimum, maximum or range is reported by
-  DB.update/1.
+  decrements of one attribute add up, so a sum that reaches zero leaves nothing recorded. The
+  struct's own field moves with it, so a caller reads back the value it asked for - a preview:
+  what the attribute ends up holding is the row's to compute at the write, from whatever value it
+  holds then, which is what lets two writers moving one attribute add up instead of one
+  overwriting the other. Only the recorded amount is written, never the field. The attribute's
+  constraints are judged on that result at the write, so a move that would cross a declared
+  minimum, maximum or range is reported by DB.update/1.
 
   Stages apply in order and the struct holds one op per attribute: moving an attribute the
   struct already carries a put value for folds the amount into that value (put 10 then
@@ -350,48 +350,6 @@ defmodule Hologram.Query do
   defdelegate increment(entity, name, amount), to: Stage
 
   @doc """
-  Sets the given query's limit - the maximum number of results the query evaluates
-  to - and returns the resulting query term.
-
-  The query is an entity type module (starting a fresh query term) or an already built
-  query term. The limit is a non-negative integer, written as a literal or pinned when it
-  comes from the surrounding code - `limit(20)`, `limit(^page_size)`. It bounds what the query
-  evaluates to, not the underlying data. A later call replaces a limit an earlier one set.
-
-  Raises Hologram.CompileError, naming the location, when the limit is neither an integer
-  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
-  query term, or when the limit is not a non-negative integer.
-  """
-  defmacro limit(query, value) do
-    lowered = Expression.bound(value, :limit, __CALLER__)
-
-    quote do
-      Stage.limit(unquote(query), unquote(lowered))
-    end
-  end
-
-  @doc """
-  Sets the given query's offset - the number of results skipped before the query's
-  results begin - and returns the resulting query term.
-
-  The query is an entity type module (starting a fresh query term) or an already built
-  query term. The offset is a non-negative integer, written as a literal or pinned when it
-  comes from the surrounding code - `offset(40)`, `offset(^skip)`. It slices what the query
-  evaluates to, not the underlying data. A later call replaces an offset an earlier one set.
-
-  Raises Hologram.CompileError, naming the location, when the offset is neither an integer
-  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
-  query term, or when the offset is not a non-negative integer.
-  """
-  defmacro offset(query, value) do
-    lowered = Expression.bound(value, :offset, __CALLER__)
-
-    quote do
-      Stage.offset(unquote(query), unquote(lowered))
-    end
-  end
-
-  @doc """
   Marks the given query as single-result and returns the resulting query term.
 
   The query is an entity type module (starting a fresh query term) or an already built
@@ -406,44 +364,6 @@ defmodule Hologram.Query do
   defdelegate one(query), to: Stage
 
   @doc """
-  Sets the given query's ordering keys and returns the resulting query term.
-
-  The query is an entity type module (starting a fresh query term) or an already built
-  query term. The spec is an attribute named with a bare name (ascending), or a list of
-  attributes and `{attribute, :asc | :desc}` pairs - keyword syntax reads naturally:
-
-      Task |> order_by(priority)
-      Task |> order_by([priority, title])
-      Task |> order_by(priority: :desc, title: :asc)
-
-  An attribute chosen at runtime is pinned, as is a direction or a whole spec -
-  `order_by(^sort_field)`, `order_by(title: ^direction)`, `order_by(^[{sort_by, sort_dir}])`.
-  Each entry becomes an `{attribute, direction}` pair, in the given order.
-
-  An ordering is atomic - a later call replaces the ordering an earlier one set rather
-  than adding to it. Precedence is positional, so an ordering states itself in one place
-  or not at all.
-
-  An enum attribute orders by the position of its values in the declared `values:` list -
-  `[:low, :medium, :high]` sorts low, medium, high, on both execution tiers.
-
-  Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
-  (`order_by(:priority)` is refused in favour of `order_by(priority)`), when a direction is
-  neither an atom nor pinned, or when the spec or an entry is neither a bare name, a pair nor
-  pinned. Raises ArgumentError when the query is neither an entity type module nor a query term,
-  when the spec is neither an attribute name nor a list, when an entry names a relationship or an
-  unknown attribute - which is how a forgotten pin on a variable reads - or when a direction is
-  neither :asc nor :desc.
-  """
-  defmacro order_by(query, spec) do
-    lowered = Expression.ordering(spec, __CALLER__)
-
-    quote do
-      Stage.order_by(unquote(query), unquote(lowered))
-    end
-  end
-
-  @doc """
   Sets the given query's view bounds to the requested page and returns the resulting
   query term.
 
@@ -451,9 +371,9 @@ defmodule Hologram.Query do
   query term. Options are `page:` (a positive integer, 1-based) and `size:` (a positive
   integer, the number of results per page), both required, each written as a literal or pinned
   when it comes from the surrounding code - `paginate(page: ^page, size: 25)` - or the whole
-  options pinned. Pagination expands into the offset and limit view bounds -
-  `paginate(page: 2, size: 20)` sets offset 20 and limit 20 - and slices what the query
-  evaluates to, not the underlying data, replacing view bounds already set.
+  options pinned. A page sets the skip and take bounds - `paginate(page: 3, size: 20)` skips 40
+  and takes 20 - and slices what the query evaluates to, not the underlying data, replacing
+  bounds already set by paginate/2, skip/2 or take/2.
 
   Raises Hologram.CompileError, naming the location, when an option value is neither an
   integer literal nor pinned, or when the options are neither a keyword list nor pinned. Raises
@@ -499,6 +419,94 @@ defmodule Hologram.Query do
   """
   @spec put_attribute(Entity.t(), atom, any) :: Entity.t()
   defdelegate put_attribute(entity, name, value), to: Stage
+
+  @doc """
+  Sets how many results the given query skips before its results begin and returns the
+  resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The count is a non-negative integer, written as a literal or pinned when it
+  comes from the surrounding code - `skip(40)`, `skip(^start)`. It slices what the query
+  evaluates to, not the underlying data.
+
+  A later call replaces the count an earlier one set rather than adding to it, so
+  `skip(20) |> skip(20)` skips 20 - where two `Enum.drop` calls in a row drop 40.
+
+  Raises Hologram.CompileError, naming the location, when the count is neither an integer
+  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
+  query term, or when the count is not a non-negative integer.
+  """
+  defmacro skip(query, value) do
+    lowered = Expression.bound(value, :skip, __CALLER__)
+
+    quote do
+      Stage.skip(unquote(query), unquote(lowered))
+    end
+  end
+
+  @doc """
+  Sets the given query's sort order and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The spec is an attribute named with a bare name (ascending), or a list of
+  attributes and `{attribute, :asc | :desc}` pairs - keyword syntax reads naturally:
+
+      Task |> sort(priority)
+      Task |> sort([priority, title])
+      Task |> sort(priority: :desc, title: :asc)
+
+  An attribute chosen at runtime is pinned, as is a direction or a whole spec -
+  `sort(^sort_field)`, `sort(title: ^direction)`, `sort(^[{sort_by, sort_dir}])`.
+  Each entry becomes an `{attribute, direction}` pair, in the given order.
+
+  A later call replaces the order an earlier one set rather than adding to it, so
+  `Task |> sort(title) |> sort(priority)` sorts by priority alone. Two `Enum.sort_by` calls in
+  a row work the other way: the sort is stable, so the first one survives as the tiebreaker. A
+  query names its secondary key in the same call, after the first - `sort([priority, title])`.
+  Precedence is positional, so an order states itself in one place or not at all.
+
+  An enum attribute sorts by the position of its values in the declared `values:` list -
+  `[:low, :medium, :high]` sorts low, medium, high, on both execution tiers.
+
+  Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
+  (`sort(:priority)` is refused in favour of `sort(priority)`), when a direction is
+  neither an atom nor pinned, or when the spec or an entry is neither a bare name, a pair nor
+  pinned. Raises ArgumentError when the query is neither an entity type module nor a query term,
+  when the spec is neither an attribute name nor a list, when an entry names a relationship or an
+  unknown attribute - which is how a forgotten pin on a variable reads - or when a direction is
+  neither :asc nor :desc.
+  """
+  defmacro sort(query, spec) do
+    lowered = Expression.ordering(spec, __CALLER__)
+
+    quote do
+      Stage.sort(unquote(query), unquote(lowered))
+    end
+  end
+
+  @doc """
+  Sets how many results the given query takes at most and returns the resulting query term.
+
+  The query is an entity type module (starting a fresh query term) or an already built
+  query term. The count is a non-negative integer, written as a literal or pinned when it
+  comes from the surrounding code - `take(20)`, `take(^page_size)`. It bounds what the query
+  evaluates to, not the underlying data.
+
+  A later call replaces the count an earlier one set, so `take(20) |> take(50)` takes 50 - where
+  two `Enum.take` calls in a row keep the smaller count. A negative count is refused rather than
+  read as "the last N" the way `Enum.take` reads it.
+
+  Raises Hologram.CompileError, naming the location, when the count is neither an integer
+  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
+  query term, or when the count is not a non-negative integer.
+  """
+  defmacro take(query, value) do
+    lowered = Expression.bound(value, :take, __CALLER__)
+
+    quote do
+      Stage.take(unquote(query), unquote(lowered))
+    end
+  end
 
   @doc """
   Claims the server's own authority for the given entity struct and returns the struct - the
@@ -567,9 +575,9 @@ defmodule Hologram.Query do
             entity: term.entity,
             filter: term.filter,
             include: term.include,
-            limit: term.limit,
-            offset: term.offset,
-            order_by: term.order_by,
+            skip: term.skip,
+            sort: term.sort,
+            take: term.take,
             trust: term.trust
           ],
           fn {name, value} -> value == Map.fetch!(defaults, name) end

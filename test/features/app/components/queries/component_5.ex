@@ -17,6 +17,6 @@ defmodule HologramFeatureTests.Components.Queries.Component5 do
 
   # The column to order by is not known until the component is given one.
   defp reviews_query(sort_field) do
-    order_by(Review, ^sort_field)
+    sort(Review, ^sort_field)
   end
 end

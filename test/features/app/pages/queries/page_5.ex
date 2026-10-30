@@ -34,7 +34,7 @@ defmodule HologramFeatureTests.Queries.Page5 do
     titles =
       Ticket
       |> filter(title == "alpha" or (priority == :high and title != "zz"))
-      |> order_by(title)
+      |> sort(title)
       |> DB.read()
       |> Enum.map_join(",", & &1.title)
 

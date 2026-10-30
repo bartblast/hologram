@@ -386,13 +386,6 @@ export default class DataLayer {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
-      "limit/2",
-      "public",
-      ManuallyPortedElixirHologramQueryStage["limit/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query.Stage",
       "normalize/1",
       "public",
       ManuallyPortedElixirHologramQueryStage["normalize/1"],
@@ -400,23 +393,9 @@ export default class DataLayer {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.Query.Stage",
-      "offset/2",
-      "public",
-      ManuallyPortedElixirHologramQueryStage["offset/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query.Stage",
       "one/1",
       "public",
       ManuallyPortedElixirHologramQueryStage["one/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Hologram.Query.Stage",
-      "order_by/2",
-      "public",
-      ManuallyPortedElixirHologramQueryStage["order_by/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -431,6 +410,27 @@ export default class DataLayer {
       "put_attribute/3",
       "public",
       ManuallyPortedElixirHologramQueryStage["put_attribute/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query.Stage",
+      "skip/2",
+      "public",
+      ManuallyPortedElixirHologramQueryStage["skip/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query.Stage",
+      "sort/2",
+      "public",
+      ManuallyPortedElixirHologramQueryStage["sort/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Query.Stage",
+      "take/2",
+      "public",
+      ManuallyPortedElixirHologramQueryStage["take/2"],
     );
 
     Interpreter.defineManuallyPortedFunction(

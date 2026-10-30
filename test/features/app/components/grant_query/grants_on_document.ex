@@ -29,6 +29,6 @@ defmodule HologramFeatureTests.Components.GrantQuery.GrantsOnDocument do
   defp grants_query(document_id) do
     RoleGrant
     |> filter(entity_id: ^document_id, entity_type: Document)
-    |> order_by(created_at)
+    |> sort(created_at)
   end
 end

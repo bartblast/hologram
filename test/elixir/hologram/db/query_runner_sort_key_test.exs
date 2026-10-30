@@ -69,7 +69,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
 
       term =
         Module2
-        |> order_by(c)
+        |> sort(c)
         |> Stage.normalize()
 
       assert [%{c: "apple"}, %{c: "Łódź"}, %{c: "Zürich"}] = run(term, companion_mapping())
@@ -113,7 +113,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
     end
   end
 
-  # A bound is a position in the list `order_by(c)` renders, so what sorts at or after it is
+  # A bound is a position in the list `sort(c)` renders, so what sorts at or after it is
   # what the comparison matches - the key carries the order and the value settles the ties.
   describe "run/3 - comparing strings" do
     test "matches the rows at or after a string bound in the order they sort" do
@@ -122,7 +122,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
       term =
         Module2
         |> filter(c >= "m")
-        |> order_by(c)
+        |> sort(c)
         |> Stage.normalize()
 
       assert matched_values(term) == ["Mango", "Zürich"]
@@ -134,7 +134,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
       term =
         Module2
         |> filter(c > "Zebra")
-        |> order_by(c)
+        |> sort(c)
         |> Stage.normalize()
 
       assert matched_values(term) == ["zebra", "Zürich"]
@@ -148,7 +148,7 @@ defmodule Hologram.DB.QueryRunnerSortKeyTest do
       term =
         Module2
         |> filter(c >= ^%Placeholder{name: :min})
-        |> order_by(c)
+        |> sort(c)
         |> Stage.normalize()
 
       values =

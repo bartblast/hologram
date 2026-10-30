@@ -21,7 +21,7 @@ defmodule Hologram.Query.ExpressionTest do
     value
   end
 
-  defp lower_bound(code, binding \\ []), do: lower(&bound(&1, :limit, env()), code, binding)
+  defp lower_bound(code, binding \\ []), do: lower(&bound(&1, :take, env()), code, binding)
 
   defp lower_condition(code, binding \\ []), do: lower(&condition(&1, env()), code, binding)
 
@@ -53,31 +53,31 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a bare name" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: limit takes an integer or a pinned expression, got: page_size - a value from the surrounding code is pinned: ^page_size",
+                   "lib/my_app/queries.ex:12: take takes an integer or a pinned expression, got: page_size - a value from the surrounding code is pinned: ^page_size",
                    fn -> lower_bound("page_size") end
     end
 
-    test "raises on a bare name for offset" do
+    test "raises on a bare name for skip" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: offset takes an integer or a pinned expression, got: skip - a value from the surrounding code is pinned: ^skip",
-                   fn -> lower(&bound(&1, :offset, env()), "skip") end
+                   "lib/my_app/queries.ex:12: skip takes an integer or a pinned expression, got: start - a value from the surrounding code is pinned: ^start",
+                   fn -> lower(&bound(&1, :skip, env()), "start") end
     end
 
     test "raises on a dot chain" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: limit takes an integer or a pinned expression, got: bounds.limit - a value from the surrounding code is pinned: ^bounds.limit",
+                   "lib/my_app/queries.ex:12: take takes an integer or a pinned expression, got: bounds.limit - a value from the surrounding code is pinned: ^bounds.limit",
                    fn -> lower_bound("bounds.limit") end
     end
 
     test "raises on an atom" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: limit takes an integer or a pinned expression, got: :all",
+                   "lib/my_app/queries.ex:7: take takes an integer or a pinned expression, got: :all",
                    fn -> lower_bound(":all") end
     end
 
     test "raises on an operator expression" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: limit takes an integer or a pinned expression, got: n + 1 - a value from the surrounding code is pinned: ^(n + 1)",
+                   "lib/my_app/queries.ex:12: take takes an integer or a pinned expression, got: n + 1 - a value from the surrounding code is pinned: ^(n + 1)",
                    fn -> lower_bound("n + 1") end
     end
   end
@@ -436,25 +436,25 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a call" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: order_by names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: sort_key() - a value from the surrounding code is pinned: ^sort_key()",
+                   "lib/my_app/queries.ex:12: sort names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: sort_key() - a value from the surrounding code is pinned: ^sort_key()",
                    fn -> lower_ordering("sort_key()") end
     end
 
     test "raises on a dot path" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: order_by names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: entity.field - a value from the surrounding code is pinned: ^entity.field",
+                   "lib/my_app/queries.ex:12: sort names an attribute with a bare name, or with a pinned expression when the name comes from the surrounding code, got: entity.field - a value from the surrounding code is pinned: ^entity.field",
                    fn -> lower_ordering("entity.field") end
     end
 
     test "raises on an atom" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: order_by names an attribute with a bare name, got: :priority - write priority",
+                   "lib/my_app/queries.ex:7: sort names an attribute with a bare name, got: :priority - write priority",
                    fn -> lower_ordering(":priority") end
     end
 
     test "raises on an atom in a list" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: order_by names an attribute with a bare name, got: :created_at - write created_at",
+                   "lib/my_app/queries.ex:7: sort names an attribute with a bare name, got: :created_at - write created_at",
                    fn -> lower_ordering("[priority, :created_at]") end
     end
   end

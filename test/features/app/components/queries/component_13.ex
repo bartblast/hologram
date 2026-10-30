@@ -21,6 +21,6 @@ defmodule HologramFeatureTests.Components.Queries.Component13 do
   defp tickets_query(skipped_title) do
     Ticket
     |> filter((priority == :high and title != ^skipped_title) or priority == :low)
-    |> order_by(title)
+    |> sort(title)
   end
 end

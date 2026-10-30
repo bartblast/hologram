@@ -1207,7 +1207,7 @@ defmodule Hologram.CompilerTest do
 
       window =
         TwoHopDelegationPolicyEntity
-        |> order_by(created_at)
+        |> sort(created_at)
         |> Stage.normalize()
         |> Window.derive(true)
 
@@ -1223,7 +1223,7 @@ defmodule Hologram.CompilerTest do
 
       window =
         TwoHopDelegationPolicyEntity
-        |> order_by(created_at)
+        |> sort(created_at)
         |> Stage.normalize()
         |> Window.derive(false)
 
@@ -1570,7 +1570,7 @@ defmodule Hologram.CompilerTest do
       module_1_term =
         Entity2
         |> filter(a: true)
-        |> order_by(c)
+        |> sort(c)
         |> Stage.normalize()
 
       module_11_term =
@@ -1732,7 +1732,7 @@ defmodule Hologram.CompilerTest do
       entity_types: entity_types
     } do
       expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module17 filters or orders on " <>
+        "the registered query in Hologram.Test.Fixtures.Component.Module17 filters or sorts on " <>
           "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
@@ -1749,7 +1749,7 @@ defmodule Hologram.CompilerTest do
       entity_types: entity_types
     } do
       expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module32 filters or orders on " <>
+        "the registered query in Hologram.Test.Fixtures.Component.Module32 filters or sorts on " <>
           "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
@@ -1766,7 +1766,7 @@ defmodule Hologram.CompilerTest do
       entity_types: entity_types
     } do
       expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module18 filters or orders on " <>
+        "the registered query in Hologram.Test.Fixtures.Component.Module18 filters or sorts on " <>
           "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
@@ -1784,7 +1784,7 @@ defmodule Hologram.CompilerTest do
            entity_types: entity_types
          } do
       expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module30 filters or orders on " <>
+        "the registered query in Hologram.Test.Fixtures.Component.Module30 filters or sorts on " <>
           "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
@@ -1801,7 +1801,7 @@ defmodule Hologram.CompilerTest do
       entity_types: entity_types
     } do
       expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module31 filters or orders on " <>
+        "the registered query in Hologram.Test.Fixtures.Component.Module31 filters or sorts on " <>
           "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
@@ -1819,7 +1819,7 @@ defmodule Hologram.CompilerTest do
            entity_types: entity_types
          } do
       expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module19 filters or orders on " <>
+        "the registered query in Hologram.Test.Fixtures.Component.Module19 filters or sorts on " <>
           "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
           "never holds those values, so it could not evaluate the reference locally. Drop the " <>
           "reference, or read the rows through the trusted backend API."
@@ -5981,7 +5981,7 @@ defmodule Hologram.CompilerTest do
       module_1_term =
         Entity2
         |> filter(a: true)
-        |> order_by(c)
+        |> sort(c)
         |> Stage.normalize()
 
       module_11_term =

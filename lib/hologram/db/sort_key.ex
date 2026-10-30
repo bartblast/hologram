@@ -9,10 +9,10 @@ defmodule Hologram.DB.SortKey do
   # from the server's, silently, and only for the values the rule touches.
   #
   # Computes practical-order sort keys for string attribute values - the derived
-  # values that `order_by` companion columns store and both tiers compare. The
-  # rule set is versioned: keys are always recomputable from source values, so a
-  # version bump regenerates them (server-side by the reconciler, client-side
-  # from local rows) without migrations or wire cost.
+  # values that the `sort` stage's companion columns store and both tiers
+  # compare. The rule set is versioned: keys are always recomputable from source
+  # values, so a version bump regenerates them (server-side by the reconciler,
+  # client-side from local rows) without migrations or wire cost.
   #
   # Where the tiers cannot be made to agree: the two runtimes carry Unicode case
   # tables of different vintages, so a handful of very recently assigned

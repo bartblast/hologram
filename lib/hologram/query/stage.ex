@@ -181,12 +181,6 @@ defmodule Hologram.Query.Stage do
 
   def inspect_name(name), do: inspect(name)
 
-  @doc false
-  @spec limit(module | Query.t(), non_neg_integer) :: Query.t()
-  def limit(query, value) do
-    set_view_bound!(query, :limit, value)
-  end
-
   # Returns the canonical form of the given query - the form executors run literally
   # and the registry hashes. Normalization: sorts filter clauses into canonical order,
   # disjunctions all the way down, gives every set-returning shape a total
@@ -216,12 +210,6 @@ defmodule Hologram.Query.Stage do
   end
 
   @doc false
-  @spec offset(module | Query.t(), non_neg_integer) :: Query.t()
-  def offset(query, value) do
-    set_view_bound!(query, :offset, value)
-  end
-
-  @doc false
   @spec one(module | Query.t()) :: Query.t()
   def one(query) do
     term = to_term(query)
@@ -232,16 +220,6 @@ defmodule Hologram.Query.Stage do
     end
 
     %{term | cardinality: :one}
-  end
-
-  @doc false
-  @spec order_by(module | Query.t(), atom | list) :: Query.t()
-  def order_by(query, spec) do
-    term = to_term(query)
-
-    entries = order_entries!(spec, term.entity)
-
-    %{term | order_by: entries}
   end
 
   @doc false
@@ -264,8 +242,8 @@ defmodule Hologram.Query.Stage do
     size = validate_paginate_option!(opts, :size)
 
     query
-    |> offset(paginate_offset(page, size))
-    |> limit(size)
+    |> skip(paginate_skip(page, size))
+    |> take(size)
   end
 
   @doc """
@@ -282,10 +260,10 @@ defmodule Hologram.Query.Stage do
         value_placeholder_names(name) ++ value_placeholder_names(value)
       end)
 
-    bound_names = Enum.flat_map([term.limit, term.offset], &value_placeholder_names/1)
+    bound_names = Enum.flat_map([term.take, term.skip], &value_placeholder_names/1)
 
     order_names =
-      Enum.flat_map(term.order_by, fn {key, direction} ->
+      Enum.flat_map(term.sort, fn {key, direction} ->
         value_placeholder_names(key) ++ value_placeholder_names(direction)
       end)
 
@@ -377,6 +355,28 @@ defmodule Hologram.Query.Stage do
     put_attribute(entity, [{name, value}])
   end
 
+  @doc false
+  @spec skip(module | Query.t(), non_neg_integer) :: Query.t()
+  def skip(query, value) do
+    set_view_bound!(query, :skip, value)
+  end
+
+  @doc false
+  @spec sort(module | Query.t(), atom | list) :: Query.t()
+  def sort(query, spec) do
+    term = to_term(query)
+
+    entries = order_entries!(spec, term.entity)
+
+    %{term | sort: entries}
+  end
+
+  @doc false
+  @spec take(module | Query.t(), non_neg_integer) :: Query.t()
+  def take(query, value) do
+    set_view_bound!(query, :take, value)
+  end
+
   # Returns every predicate triple of the given filter clauses, in order, the ones inside a
   # disjunction's alternatives included.
   @doc false
@@ -428,14 +428,6 @@ defmodule Hologram.Query.Stage do
     end)
   end
 
-  defp attribute_names(entity_type) do
-    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
-
-    definitions
-    |> Enum.map(fn {name, _type, _opts} -> name end)
-    |> Enum.sort()
-  end
-
   # A path is defined where it ends, so its last name is looked up on the type its relationships
   # lead to.
   defp attribute_definition(entity_type, name) do
@@ -445,6 +437,14 @@ defmodule Hologram.Query.Stage do
     Enum.find(definitions, fn {definition_name, _type, _opts} ->
       definition_name == subject_name
     end)
+  end
+
+  defp attribute_names(entity_type) do
+    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+
+    definitions
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+    |> Enum.sort()
   end
 
   defp attribute_triple!(name, operator, other, entity_type) do
@@ -506,45 +506,6 @@ defmodule Hologram.Query.Stage do
     {:or, Enum.map(alternatives, &predicate_triples!(entity_type, &1))}
   end
 
-  # Keyword.keyword?/1 with placeholder keys and paths admitted - a placeholder names an attribute
-  # nobody knows yet, and a path one of a related row.
-  defp filterable_predicates?(predicates) when is_list(predicates) do
-    Enum.all?(predicates, fn
-      {%Placeholder{}, _value} -> true
-      {name, _value} when is_atom(name) -> true
-      {name, _value} -> path?(name)
-      _entry -> false
-    end)
-  end
-
-  defp filterable_predicates?(_predicates), do: false
-
-  # Nothing about a placeholder-keyed predicate can be checked - the attribute is unknown, so its type,
-  # its operators and its operand's shape are all unknown with it. The triple records what was
-  # written and Hologram.Query.Window drops it from the download, the real builder validating for
-  # real once the attribute arrives.
-  #
-  # A bare attribute operand is an equality, as it is under an attribute's own name - read as an
-  # operator tuple, it would store :attribute where the operator goes.
-  defp placeholder_key_triple(placeholder_name, {:attribute, _other} = operand) do
-    {{:placeholder, placeholder_name}, :==, operand}
-  end
-
-  defp placeholder_key_triple(placeholder_name, {operator, value}) when is_atom(operator) do
-    {{:placeholder, placeholder_name}, operator, placeholder_operand(value)}
-  end
-
-  defp placeholder_key_triple(placeholder_name, value) do
-    {{:placeholder, placeholder_name}, :==, placeholder_operand(value)}
-  end
-
-  defp placeholder_operand(%Placeholder{name: placeholder_name}),
-    do: {:placeholder, placeholder_name}
-
-  defp placeholder_operand(values) when is_list(values), do: normalize_membership_values(values)
-
-  defp placeholder_operand(value), do: value
-
   # A stage on an entity struct: the struct's type, or a refusal naming the stage.
   defp entity_type!(%{__struct__: entity_type}, stage) do
     if Reflection.entity?(entity_type) do
@@ -565,10 +526,6 @@ defmodule Hologram.Query.Stage do
     Keyword.fetch!(opts, :values)
   end
 
-  defp filterable_names(entity_type) do
-    Enum.sort(attribute_names(entity_type) ++ reference_field_names(entity_type))
-  end
-
   defp equality_triple!(name, operator, operand) do
     if is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
       raise ArgumentError,
@@ -578,6 +535,23 @@ defmodule Hologram.Query.Stage do
 
     {name, operator, operand}
   end
+
+  defp filterable_names(entity_type) do
+    Enum.sort(attribute_names(entity_type) ++ reference_field_names(entity_type))
+  end
+
+  # Keyword.keyword?/1 with placeholder keys and paths admitted - a placeholder names an attribute
+  # nobody knows yet, and a path one of a related row.
+  defp filterable_predicates?(predicates) when is_list(predicates) do
+    Enum.all?(predicates, fn
+      {%Placeholder{}, _value} -> true
+      {name, _value} when is_atom(name) -> true
+      {name, _value} -> path?(name)
+      _entry -> false
+    end)
+  end
+
+  defp filterable_predicates?(_predicates), do: false
 
   defp include_spec_entry!(term, name) when is_atom(name) do
     include(term, name)
@@ -621,6 +595,25 @@ defmodule Hologram.Query.Stage do
     %{included | include: merged_include}
   end
 
+  defp moved_value(entity, name, entity_type, delta, stage) do
+    case Map.fetch!(entity, name) do
+      value when is_integer(value) ->
+        value + delta
+
+      nil ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} in #{inspect(entity_type)} holds nil - a counter always holds a number, so there is nothing for #{stage} to move - read the row first, or give the attribute a default"
+    end
+  end
+
+  defp normalize_membership_values(values) do
+    Enum.map(values, fn
+      %Placeholder{name: placeholder_name} -> {:placeholder, placeholder_name}
+      value -> value
+    end)
+  end
+
   defp normalized_clause({:or, alternatives}) do
     sorted_alternatives =
       alternatives
@@ -639,12 +632,12 @@ defmodule Hologram.Query.Stage do
   end
 
   defp normalized_order(term) do
-    ordering_keys = Enum.map(term.order_by, fn {name, _direction} -> name end)
+    ordering_keys = Enum.map(term.sort, fn {name, _direction} -> name end)
 
     cond do
       term.cardinality == :count -> []
-      :id in ordering_keys -> term.order_by
-      true -> List.insert_at(term.order_by, -1, {:id, :asc})
+      :id in ordering_keys -> term.sort
+      true -> List.insert_at(term.sort, -1, {:id, :asc})
     end
   end
 
@@ -659,7 +652,7 @@ defmodule Hologram.Query.Stage do
       term
       | filter: normalized_filter(term.filter),
         include: normalized_includes(term),
-        order_by: normalized_order(term)
+        sort: normalized_order(term)
     }
   end
 
@@ -691,14 +684,7 @@ defmodule Hologram.Query.Stage do
 
   defp order_entries!(spec, _entity_type) do
     raise ArgumentError,
-      message: "order_by spec must be an attribute name or a list, got: #{inspect(spec)}"
-  end
-
-  defp normalize_membership_values(values) do
-    Enum.map(values, fn
-      %Placeholder{name: placeholder_name} -> {:placeholder, placeholder_name}
-      value -> value
-    end)
+      message: "sort spec must be an attribute name or a list, got: #{inspect(spec)}"
   end
 
   defp order_entry!({name, direction}, entity_type) when is_atom(name) do
@@ -726,26 +712,8 @@ defmodule Hologram.Query.Stage do
   defp order_entry!(entry, _entity_type) do
     raise ArgumentError,
       message:
-        "invalid order_by entry #{inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple"
+        "invalid sort entry #{inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple"
   end
-
-  # The offset a page produces depends on both options, so a placeholder in either makes it one too -
-  # named for whichever option it varies with, page first.
-  #
-  # THE NAME IS NOT A BINDING KEY. A leaf names the ARGUMENT a value derives from, never the value
-  # itself, which is why `offset(^((page - 1) * size))` written out by hand yields this same leaf, and
-  # why `filter(b: ^(n * 2))` yields `{:b, :==, {:placeholder, :n}}`. Nothing ever turns a leaf back
-  # into a value: both tiers call the real builder with the component's real props, so the offset
-  # that executes is the computed one.
-  defp paginate_offset(%Placeholder{} = page, _size), do: page
-
-  defp paginate_offset(_page, %Placeholder{} = size), do: size
-
-  defp paginate_offset(page, size), do: (page - 1) * size
-
-  defp path?([_hop, _name | _rest] = names), do: Enum.all?(names, &is_atom/1)
-
-  defp path?(_name), do: false
 
   defp ordering_triple!(name, operator, operand, entity_type) do
     validate_orderable_attribute!(name, entity_type, operator)
@@ -759,6 +727,54 @@ defmodule Hologram.Query.Stage do
     validate_enum_operand!(name, operand, entity_type)
 
     {name, operator, operand}
+  end
+
+  # The skip a page produces depends on both options, so a placeholder in either makes it one too -
+  # named for whichever option it varies with, page first.
+  #
+  # THE NAME IS NOT A BINDING KEY. A leaf names the ARGUMENT a value derives from, never the value
+  # itself, which is why `skip(^((page - 1) * size))` written out by hand yields this same leaf, and
+  # why `filter(b: ^(n * 2))` yields `{:b, :==, {:placeholder, :n}}`. Nothing ever turns a leaf back
+  # into a value: both tiers call the real builder with the component's real props, so the skip
+  # that executes is the computed one.
+  defp paginate_skip(%Placeholder{} = page, _size), do: page
+
+  defp paginate_skip(_page, %Placeholder{} = size), do: size
+
+  defp paginate_skip(page, size), do: (page - 1) * size
+
+  defp path?([_hop, _name | _rest] = names), do: Enum.all?(names, &is_atom/1)
+
+  defp path?(_name), do: false
+
+  # Nothing about a placeholder-keyed predicate can be checked - the attribute is unknown, so its type,
+  # its operators and its operand's shape are all unknown with it. The triple records what was
+  # written and Hologram.Query.Window drops it from the download, the real builder validating for
+  # real once the attribute arrives.
+  #
+  # A bare attribute operand is an equality, as it is under an attribute's own name - read as an
+  # operator tuple, it would store :attribute where the operator goes.
+  defp placeholder_key_triple(placeholder_name, {:attribute, _other} = operand) do
+    {{:placeholder, placeholder_name}, :==, operand}
+  end
+
+  defp placeholder_key_triple(placeholder_name, {operator, value}) when is_atom(operator) do
+    {{:placeholder, placeholder_name}, operator, placeholder_operand(value)}
+  end
+
+  defp placeholder_key_triple(placeholder_name, value) do
+    {{:placeholder, placeholder_name}, :==, placeholder_operand(value)}
+  end
+
+  defp placeholder_operand(%Placeholder{name: placeholder_name}),
+    do: {:placeholder, placeholder_name}
+
+  defp placeholder_operand(values) when is_list(values), do: normalize_membership_values(values)
+
+  defp placeholder_operand(value), do: value
+
+  defp plain_value?(value) do
+    not is_tuple(value) and not is_list(value) and not is_struct(value, Range)
   end
 
   defp predicate_triples!(name, {:in, %Range{} = range}, entity_type) do
@@ -858,10 +874,6 @@ defmodule Hologram.Query.Stage do
 
   defp predicate_triples!(name, value, _entity_type), do: [{name, :==, value}]
 
-  defp plain_value?(value) do
-    not is_tuple(value) and not is_list(value) and not is_struct(value, Range)
-  end
-
   # The two claim stages share everything but the claim they record. A second claim is refused
   # here, where it is written - a struct carrying two authorities would have to pick one at the
   # write, silently.
@@ -914,18 +926,6 @@ defmodule Hologram.Query.Stage do
     end
   end
 
-  defp moved_value(entity, name, entity_type, delta, stage) do
-    case Map.fetch!(entity, name) do
-      value when is_integer(value) ->
-        value + delta
-
-      nil ->
-        raise ArgumentError,
-          message:
-            "#{inspect(name)} in #{inspect(entity_type)} holds nil - a counter always holds a number, so there is nothing for #{stage} to move - read the row first, or give the attribute a default"
-    end
-  end
-
   defp put_included!(include, name, sub_term) do
     case Map.fetch(include, name) do
       {:ok, included} -> Map.put(include, name, merged_sub_term!(included, sub_term, name))
@@ -951,15 +951,15 @@ defmodule Hologram.Query.Stage do
     Map.put(entity, :__meta__, %Metadata{metadata | relationship_ops: recorded_ops})
   end
 
-  defp recorded_increment(nil), do: 0
-
-  defp recorded_increment({:increment, amount}), do: amount
-
   defp raise_unknown_operator!(operator, name) do
     raise ArgumentError,
       message:
         "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect_name(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
   end
+
+  defp recorded_increment(nil), do: 0
+
+  defp recorded_increment({:increment, amount}), do: amount
 
   defp reference(path) when is_list(path) do
     {relationship_names, [name]} = Enum.split(path, -1)
@@ -1009,8 +1009,8 @@ defmodule Hologram.Query.Stage do
   end
 
   defp sub_term_has_clauses?(sub_term) do
-    sub_term.filter != [] or sub_term.order_by != [] or sub_term.limit != nil or
-      sub_term.offset != nil
+    sub_term.filter != [] or sub_term.sort != [] or sub_term.take != nil or
+      sub_term.skip != nil
   end
 
   # Where a name is declared: an attribute on the queried type, a path's last name on the type its
@@ -1130,37 +1130,6 @@ defmodule Hologram.Query.Stage do
     end
   end
 
-  defp validate_filtered_name!(name, entity_type) do
-    filterable_names = filterable_names(entity_type)
-
-    cond do
-      name in filterable_names ->
-        :ok
-
-      name in to_one_relationship_names(entity_type) ->
-        raise ArgumentError,
-          message:
-            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered - filter its reference via :#{name}_id"
-
-      name in relationship_names(entity_type) ->
-        raise ArgumentError,
-          message:
-            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered"
-
-      true ->
-        known = Enum.map_join(filterable_names, ", ", &inspect/1)
-
-        raise ArgumentError,
-          message:
-            "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
-    end
-  end
-
-  # A comparison operand on an enum is one of the values it declares, refused where it is written
-  # rather than where it is run: the database refuses an undeclared label too, but only once the
-  # statement reaches it, and by then nothing can name the values there were to choose from.
-  # A declared to-many relationship - refused where it is written, with the fix named for the
-  # names an edge stage is most often given by mistake.
   defp validate_delta_name!(name, entity_type, stage) do
     counter_names = counter_attribute_names(entity_type)
     system_names = system_attribute_names(entity_type)
@@ -1198,6 +1167,8 @@ defmodule Hologram.Query.Stage do
     end
   end
 
+  # A declared to-many relationship - refused where it is written, with the fix named for the
+  # names an edge stage is most often given by mistake.
   defp validate_edge_relationship_name!(name, entity_type) do
     to_many_names = to_many_relationship_names(entity_type)
 
@@ -1224,6 +1195,9 @@ defmodule Hologram.Query.Stage do
     end
   end
 
+  # A comparison operand on an enum is one of the values it declares, refused where it is written
+  # rather than where it is run: the database refuses an undeclared label too, but only once the
+  # statement reaches it, and by then nothing can name the values there were to choose from.
   defp validate_enum_operand!(name, operand, entity_type) do
     case attribute_definition(entity_type, name) do
       {_name, :enum, opts} ->
@@ -1237,6 +1211,32 @@ defmodule Hologram.Query.Stage do
 
       _other ->
         :ok
+    end
+  end
+
+  defp validate_filtered_name!(name, entity_type) do
+    filterable_names = filterable_names(entity_type)
+
+    cond do
+      name in filterable_names ->
+        :ok
+
+      name in to_one_relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered - filter its reference via :#{name}_id"
+
+      name in relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered"
+
+      true ->
+        known = Enum.map_join(filterable_names, ", ", &inspect/1)
+
+        raise ArgumentError,
+          message:
+            "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
     end
   end
 

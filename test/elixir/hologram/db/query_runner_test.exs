@@ -525,7 +525,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> include(a, fn related_query ->
           related_query
           |> filter(a: true)
-          |> order_by(c)
+          |> sort(c)
         end)
         |> Stage.normalize()
 
@@ -738,7 +738,7 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> include(a, fn related_query ->
           related_query
           |> filter(source_id >= 2)
-          |> order_by(source_id)
+          |> sort(source_id)
         end)
         |> Stage.normalize()
 
@@ -783,7 +783,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       term =
         Module2
         |> filter(a: true)
-        |> order_by(c)
+        |> sort(c)
         |> Stage.normalize()
 
       assert [
@@ -810,7 +810,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module2
-        |> order_by(c)
+        |> sort(c)
         |> one()
         |> Stage.normalize()
 

@@ -15,6 +15,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module108 do
   end
 
   defp entities_query do
-    order_by(PolicyEntity, priority)
+    sort(PolicyEntity, priority)
   end
 end

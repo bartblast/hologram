@@ -73,14 +73,14 @@ defmodule Hologram.Query.Interpreter do
 
   defp arrange(rows, term) do
     rows
-    |> sort(term.order_by, term.entity)
+    |> sort(term.sort, term.entity)
     |> bound(term)
   end
 
   defp bound(rows, term) do
     rows
-    |> Enum.drop(term.offset || 0)
-    |> take(term.limit)
+    |> Enum.drop(term.skip || 0)
+    |> take(term.take)
   end
 
   # Values of one kind, compared the way that kind is ordered rather than the way its
@@ -347,11 +347,11 @@ defmodule Hologram.Query.Interpreter do
     compare_ordering_values(value, operand, ranks) in [:eq, :gt]
   end
 
-  defp sort(rows, order_by, entity_type) do
-    names = Enum.map(order_by, fn {name, _direction} -> name end)
+  defp sort(rows, keys, entity_type) do
+    names = Enum.map(keys, fn {name, _direction} -> name end)
     ranks = enum_ranks(entity_type, names)
 
-    Enum.sort(rows, &precedes?(&1, &2, order_by, ranks))
+    Enum.sort(rows, &precedes?(&1, &2, keys, ranks))
   end
 
   # Every key of the order is spent before two rows are called equal, and the last of them is
@@ -414,7 +414,7 @@ defmodule Hologram.Query.Interpreter do
 
   defp take(rows, nil), do: rows
 
-  defp take(rows, limit), do: Enum.take(rows, limit)
+  defp take(rows, count), do: Enum.take(rows, count)
 
   # The values the rank map holds, back in the order the entity declares them - the cold path of
   # a refusal, so the sort costs nothing anything else pays for.

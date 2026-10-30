@@ -39,11 +39,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const increment = Elixir_Hologram_Query_Stage["increment/3"];
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
   const include = Elixir_Hologram_Query_Stage["include/3"];
-  const limit = Elixir_Hologram_Query_Stage["limit/2"];
   const normalize = Elixir_Hologram_Query_Stage["normalize/1"];
-  const offset = Elixir_Hologram_Query_Stage["offset/2"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
-  const orderBy = Elixir_Hologram_Query_Stage["order_by/2"];
+  const skip = Elixir_Hologram_Query_Stage["skip/2"];
+  const sort = Elixir_Hologram_Query_Stage["sort/2"];
+  const take = Elixir_Hologram_Query_Stage["take/2"];
   const trust = Elixir_Hologram_Query_Stage["trust/1"];
   const putAttribute = Elixir_Hologram_Query_Stage["put_attribute/2"];
   const putAttributeValue = Elixir_Hologram_Query_Stage["put_attribute/3"];
@@ -53,9 +53,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     entity: entityType,
     filter: [],
     include: {},
-    limit: null,
-    offset: null,
-    orderBy: [],
+    skip: null,
+    sort: [],
+    take: null,
   });
 
   const freshTerm = baseTerm(TASK);
@@ -1081,10 +1081,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("composes with other stages", () => {
-      const query = count(limit(task, Type.integer(50)));
+      const query = count(take(task, Type.integer(50)));
 
       assert.equal(query.cardinality, "count");
-      assert.equal(query.limit, 50);
+      assert.equal(query.take, 50);
     });
 
     it("raises when cardinality is already marked", () => {
@@ -1232,7 +1232,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(query.filter, [["status", ">", "open"]]);
     });
 
-    // The derived sort key is the order, so a comparison reads it the way `order_by` does - a
+    // The derived sort key is the order, so a comparison reads it the way `sort` does - a
     // bound names a position in the list the attribute sorts into.
     it("builds an ordering triple for a string attribute", () => {
       const value = Type.tuple([Type.atom(">"), Type.bitstring("a")]);
@@ -2259,7 +2259,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         project,
         Type.atom("tasks"),
         subBuilder((related) =>
-          orderBy(
+          sort(
             filter(related, predicates([["done", Type.boolean(false)]])),
             Type.atom("position"),
           ),
@@ -2270,7 +2270,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         tasks: {
           ...freshTerm,
           filter: [["done", "==", false]],
-          orderBy: [["position", "asc"]],
+          sort: [["position", "asc"]],
         },
       });
     });
@@ -2453,54 +2453,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  describe("limit/2", () => {
-    it("accepts zero", () => {
-      assert.equal(limit(task, Type.integer(0)).limit, 0);
-    });
-
-    it("composes with other stages", () => {
-      const query = limit(offset(task, Type.integer(20)), Type.integer(50));
-
-      assert.equal(query.offset, 20);
-      assert.equal(query.limit, 50);
-    });
-
-    it("sets the limit", () => {
-      assert.deepStrictEqual(limit(task, Type.integer(50)), {
-        ...freshTerm,
-        limit: 50,
-      });
-    });
-
-    it("raises on a negative limit", () => {
-      assert.throw(
-        () => limit(task, Type.integer(-5)),
-        HologramBoxedError,
-        "limit must be a non-negative integer, got: -5",
-      );
-    });
-
-    it("raises on a non-integer limit", () => {
-      assert.throw(
-        () => limit(task, Type.float(5.0)),
-        HologramBoxedError,
-        "limit must be a non-negative integer, got: 5.0",
-      );
-    });
-
-    it("replaces a prior limit", () => {
-      assert.equal(
-        limit(limit(task, Type.integer(50)), Type.integer(100)).limit,
-        100,
-      );
-    });
-  });
-
   describe("normalize/1", () => {
     it("appends an ascending id tiebreaker to orderings", () => {
-      const query = normalize(orderBy(task, Type.atom("position")));
+      const query = normalize(sort(task, Type.atom("position")));
 
-      assert.deepStrictEqual(query.orderBy, [
+      assert.deepStrictEqual(query.sort, [
         ["position", "asc"],
         ["id", "asc"],
       ]);
@@ -2509,19 +2466,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("defaults an empty ordering to the id order", () => {
       assert.deepStrictEqual(normalize(task), {
         ...freshTerm,
-        orderBy: [["id", "asc"]],
+        sort: [["id", "asc"]],
       });
     });
 
     it("drops the ordering from counting queries", () => {
-      const query = normalize(count(orderBy(task, Type.atom("position"))));
+      const query = normalize(count(sort(task, Type.atom("position"))));
 
-      assert.deepStrictEqual(query.orderBy, []);
+      assert.deepStrictEqual(query.sort, []);
     });
 
     it("is idempotent", () => {
       const normalized = normalize(
-        orderBy(
+        sort(
           include(
             filter(
               project,
@@ -2551,7 +2508,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("id"), Type.atom("desc")]),
       ]);
 
-      assert.deepStrictEqual(normalize(orderBy(task, spec)).orderBy, [
+      assert.deepStrictEqual(normalize(sort(task, spec)).sort, [
         ["id", "desc"],
       ]);
     });
@@ -2625,9 +2582,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       const query = normalize(include(project, spec, Type.nil()));
 
-      assert.deepStrictEqual(query.include.owner.orderBy, []);
+      assert.deepStrictEqual(query.include.owner.sort, []);
 
-      assert.deepStrictEqual(query.include.owner.include.projects.orderBy, [
+      assert.deepStrictEqual(query.include.owner.include.projects.sort, [
         ["id", "asc"],
       ]);
     });
@@ -2654,13 +2611,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ["title", "==", "x"],
       ]);
 
-      assert.deepStrictEqual(query.include.tasks.orderBy, [["id", "asc"]]);
+      assert.deepStrictEqual(query.include.tasks.sort, [["id", "asc"]]);
     });
 
     it("skips ordering for to-one includes", () => {
       const query = normalize(include(project, Type.atom("owner"), Type.nil()));
 
-      assert.deepStrictEqual(query.include.owner.orderBy, []);
+      assert.deepStrictEqual(query.include.owner.sort, []);
     });
 
     it("sorts filter predicates canonically", () => {
@@ -2681,30 +2638,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  describe("offset/2", () => {
-    it("sets the offset", () => {
-      assert.deepStrictEqual(offset(task, Type.integer(20)), {
-        ...freshTerm,
-        offset: 20,
-      });
-    });
-
-    it("raises on a negative offset", () => {
-      assert.throw(
-        () => offset(task, Type.integer(-5)),
-        HologramBoxedError,
-        "offset must be a non-negative integer, got: -5",
-      );
-    });
-
-    it("replaces a prior offset", () => {
-      assert.equal(
-        offset(offset(task, Type.integer(20)), Type.integer(40)).offset,
-        40,
-      );
-    });
-  });
-
   describe("one/1", () => {
     it("marks the query as single-result", () => {
       assert.deepStrictEqual(one(task), {...freshTerm, cardinality: "one"});
@@ -2719,12 +2652,33 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  // A stage takes the module a query starts from or the term the stage before it returned, and
-  // the term it hands on is what the kernel reads - so what a stage refuses is what the client
-  // could not have answered anyway.
-  describe("order_by/2", () => {
+  describe("skip/2", () => {
+    it("sets how many results it skips", () => {
+      assert.deepStrictEqual(skip(task, Type.integer(20)), {
+        ...freshTerm,
+        skip: 20,
+      });
+    });
+
+    it("raises on a negative count", () => {
+      assert.throw(
+        () => skip(task, Type.integer(-5)),
+        HologramBoxedError,
+        "skip must be a non-negative integer, got: -5",
+      );
+    });
+
+    it("replaces a prior skip", () => {
+      assert.equal(
+        skip(skip(task, Type.integer(20)), Type.integer(40)).skip,
+        40,
+      );
+    });
+  });
+
+  describe("sort/2", () => {
     it("defaults a bare attribute name to ascending", () => {
-      assert.deepStrictEqual(orderBy(task, Type.atom("title")).orderBy, [
+      assert.deepStrictEqual(sort(task, Type.atom("title")).sort, [
         ["title", "asc"],
       ]);
     });
@@ -2732,7 +2686,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("defaults list entries to ascending", () => {
       const spec = Type.list([Type.atom("title"), Type.atom("done")]);
 
-      assert.deepStrictEqual(orderBy(task, spec).orderBy, [
+      assert.deepStrictEqual(sort(task, spec).sort, [
         ["title", "asc"],
         ["done", "asc"],
       ]);
@@ -2743,7 +2697,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("title"), Type.atom("desc")]),
       ]);
 
-      assert.deepStrictEqual(orderBy(task, spec).orderBy, [["title", "desc"]]);
+      assert.deepStrictEqual(sort(task, spec).sort, [["title", "desc"]]);
     });
 
     it("accepts a mixed list of names and direction tuples", () => {
@@ -2752,48 +2706,45 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("title"), Type.atom("desc")]),
       ]);
 
-      assert.deepStrictEqual(orderBy(task, spec).orderBy, [
+      assert.deepStrictEqual(sort(task, spec).sort, [
         ["done", "asc"],
         ["title", "desc"],
       ]);
     });
 
-    it("replaces prior ordering", () => {
-      const query = orderBy(
-        orderBy(task, Type.atom("done")),
-        Type.atom("title"),
-      );
+    it("replaces a prior sort", () => {
+      const query = sort(sort(task, Type.atom("done")), Type.atom("title"));
 
-      assert.deepStrictEqual(query.orderBy, [["title", "asc"]]);
+      assert.deepStrictEqual(query.sort, [["title", "asc"]]);
     });
 
-    it("orders by a system attribute", () => {
-      assert.deepStrictEqual(orderBy(task, Type.atom("created_at")).orderBy, [
+    it("sorts by a system attribute", () => {
+      assert.deepStrictEqual(sort(task, Type.atom("created_at")).sort, [
         ["created_at", "asc"],
       ]);
     });
 
     // The declared `values:` list is the order, so nothing about an enum keeps it from being an
     // ordering key - both executors sort by a value's position in that list.
-    it("orders by an enum attribute", () => {
-      assert.deepStrictEqual(orderBy(task, Type.atom("status")).orderBy, [
+    it("sorts by an enum attribute", () => {
+      assert.deepStrictEqual(sort(task, Type.atom("status")).sort, [
         ["status", "asc"],
       ]);
     });
 
     it("raises on a non-atom spec", () => {
       assert.throw(
-        () => orderBy(task, Type.integer(123)),
+        () => sort(task, Type.integer(123)),
         HologramBoxedError,
-        "order_by spec must be an attribute name or a list, got: 123",
+        "sort spec must be an attribute name or a list, got: 123",
       );
     });
 
     it("raises on an invalid entry", () => {
       assert.throw(
-        () => orderBy(task, Type.list([Type.integer(123)])),
+        () => sort(task, Type.list([Type.integer(123)])),
         HologramBoxedError,
-        "invalid order_by entry 123 - use an attribute name or an {attribute, :asc | :desc} tuple",
+        "invalid sort entry 123 - use an attribute name or an {attribute, :asc | :desc} tuple",
       );
     });
 
@@ -2803,7 +2754,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
 
       assert.throw(
-        () => orderBy(task, spec),
+        () => sort(task, spec),
         HologramBoxedError,
         "invalid direction :down for attribute :title - use :asc or :desc",
       );
@@ -2811,7 +2762,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on a relationship name", () => {
       assert.throw(
-        () => orderBy(Type.alias(PROJECT), Type.atom("tasks")),
+        () => sort(Type.alias(PROJECT), Type.atom("tasks")),
         HologramBoxedError,
         ":tasks is a relationship in MyApp.Project - only attributes can be ordered",
       );
@@ -2821,7 +2772,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // never ordered by.
     it("raises on a to-one reference field", () => {
       assert.throw(
-        () => orderBy(Type.alias(PROJECT), Type.atom("owner_id")),
+        () => sort(Type.alias(PROJECT), Type.atom("owner_id")),
         HologramBoxedError,
         "unknown attribute :owner_id in MyApp.Project - known attributes: :id, :name",
       );
@@ -2829,25 +2780,71 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on an unknown attribute", () => {
       assert.throw(
-        () => orderBy(task, Type.atom("x")),
+        () => sort(task, Type.atom("x")),
         HologramBoxedError,
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );
     });
   });
 
+  describe("take/2", () => {
+    it("accepts zero", () => {
+      assert.equal(take(task, Type.integer(0)).take, 0);
+    });
+
+    it("composes with other stages", () => {
+      const query = take(skip(task, Type.integer(20)), Type.integer(50));
+
+      assert.equal(query.skip, 20);
+      assert.equal(query.take, 50);
+    });
+
+    it("sets how many results it takes", () => {
+      assert.deepStrictEqual(take(task, Type.integer(50)), {
+        ...freshTerm,
+        take: 50,
+      });
+    });
+
+    it("raises on a negative count", () => {
+      assert.throw(
+        () => take(task, Type.integer(-5)),
+        HologramBoxedError,
+        "take must be a non-negative integer, got: -5",
+      );
+    });
+
+    it("raises on a non-integer count", () => {
+      assert.throw(
+        () => take(task, Type.float(5.0)),
+        HologramBoxedError,
+        "take must be a non-negative integer, got: 5.0",
+      );
+    });
+
+    it("replaces a prior take", () => {
+      assert.equal(
+        take(take(task, Type.integer(50)), Type.integer(100)).take,
+        100,
+      );
+    });
+  });
+
+  // A stage takes the module a query starts from or the term the stage before it returned, and
+  // the term it hands on is what the kernel reads - so what a stage refuses is what the client
+  // could not have answered anyway.
   describe("the query a stage starts from", () => {
     it("carries the stages already applied", () => {
-      const query = offset(limit(task, Type.integer(5)), Type.integer(10));
+      const query = skip(take(task, Type.integer(5)), Type.integer(10));
 
-      assert.equal(query.limit, 5);
-      assert.equal(query.offset, 10);
+      assert.equal(query.take, 5);
+      assert.equal(query.skip, 10);
       assert.equal(query.entity, TASK);
     });
 
     it("raises for a value that is neither a module nor a term", () => {
       assert.throw(
-        () => limit(Type.bitstring("MyApp.Task"), Type.integer(5)),
+        () => take(Type.bitstring("MyApp.Task"), Type.integer(5)),
         HologramBoxedError,
         '"MyApp.Task" is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive',
       );
@@ -2857,7 +2854,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // refused where the server would refuse a module that is not an entity type at all.
     it("raises for a type this build never told the client about", () => {
       assert.throw(
-        () => limit(Type.alias("MyApp.Unknown"), Type.integer(5)),
+        () => take(Type.alias("MyApp.Unknown"), Type.integer(5)),
         HologramBoxedError,
         "MyApp.Unknown is not an entity type module or a query term",
       );

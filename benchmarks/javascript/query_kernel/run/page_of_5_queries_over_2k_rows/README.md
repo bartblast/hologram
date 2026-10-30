@@ -1,8 +1,8 @@
 Benchmark
 
 Function: QueryKernel.run()\
-Argument: five terms over a 2,000-row table - a plain filter, a filter ordered by a string with a
-limit, a comparison with a limit, a count, and a single-result lookup by id
+Argument: five terms over a 2,000-row table - a plain filter, a filter sorted by a string taking
+50 rows, a comparison taking 20, a count, and a single-result lookup by id
 
 What it prices: one render's worth of query evaluation under the naive re-run the reactivity
 ruling chose - every from_query prop of a page re-evaluated, against a 16.7 ms frame.

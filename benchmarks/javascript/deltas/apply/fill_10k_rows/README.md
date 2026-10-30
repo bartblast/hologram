@@ -2,7 +2,7 @@ Benchmark
 
 Function: Deltas.apply()\
 Argument: a frame putting 10,000 rows of one entity type - nine attributes wide, two of them
-datetimes, one of them ordered by (so a sort key is derived per row)
+datetimes, one of them sorted by (so a sort key is derived per row)
 
 What it prices: the whole-app fill every client pays on connect, and what the filled database
 costs to hold. The heap figure is the one the plain-row store was chosen on - the same rows as

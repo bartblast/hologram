@@ -20,7 +20,7 @@ defmodule HologramFeatureTests.Components.Queries.Component12 do
   # The ordering key and both page options arrive as props, so each is pinned.
   defp tickets_query(page, size, sort_by) do
     Ticket
-    |> order_by(^[{sort_by, :asc}])
+    |> sort(^[{sort_by, :asc}])
     |> paginate(page: ^page, size: ^size)
   end
 end

@@ -15,7 +15,7 @@ import Type from "../../../type.mjs";
 // ask the entity module for its attributes, and entity modules ship no reflection to the client -
 // but the same declarations are baked into the bundle as the model, which these read instead.
 // What is checked is what the server checks, in the same words: the ArgumentError messages are
-// mirrored, and the consistency suite pins them.
+// mirrored, and the unit tests of both tiers pin the same words.
 
 const EQUALITY_OPERATORS = ["!=", "=="];
 const MEMBERSHIP_OPERATORS = ["in", "not_in"];
@@ -196,7 +196,7 @@ function orderEntries(spec, entityType) {
   }
 
   Interpreter.raiseArgumentError(
-    `order_by spec must be an attribute name or a list, got: ${Interpreter.inspect(spec)}`,
+    `sort spec must be an attribute name or a list, got: ${Interpreter.inspect(spec)}`,
   );
 }
 
@@ -228,7 +228,7 @@ function orderEntry(entry, entityType) {
   }
 
   Interpreter.raiseArgumentError(
-    `invalid order_by entry ${Interpreter.inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple`,
+    `invalid sort entry ${Interpreter.inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple`,
   );
 }
 
@@ -478,9 +478,9 @@ function normalizedOrder(term) {
     return [];
   }
 
-  return term.orderBy.some(([name]) => name === "id")
-    ? term.orderBy
-    : [...term.orderBy, ["id", "asc"]];
+  return term.sort.some(([name]) => name === "id")
+    ? term.sort
+    : [...term.sort, ["id", "asc"]];
 }
 
 function normalizedTerm(term) {
@@ -488,7 +488,7 @@ function normalizedTerm(term) {
     ...term,
     filter: sortedFilter(term.filter),
     include: normalizedIncludes(term),
-    orderBy: normalizedOrder(term),
+    sort: normalizedOrder(term),
   };
 }
 
@@ -649,9 +649,9 @@ function structName(value) {
 function subTermHasClauses(subTerm) {
   return (
     subTerm.filter.length > 0 ||
-    subTerm.orderBy.length > 0 ||
-    subTerm.limit !== null ||
-    subTerm.offset !== null
+    subTerm.sort.length > 0 ||
+    subTerm.take !== null ||
+    subTerm.skip !== null
   );
 }
 
@@ -773,9 +773,9 @@ function toTerm(query) {
     entity: name,
     filter: [],
     include: {},
-    limit: null,
-    offset: null,
-    orderBy: [],
+    skip: null,
+    sort: [],
+    take: null,
   };
 }
 
@@ -1459,19 +1459,10 @@ const Elixir_Hologram_Query_Stage = {
   "increment/3": (entity, name, amount) =>
     putDelta(entity, name, amount, 1, "increment"),
 
-  "limit/2": (query, value) => setViewBound(query, "limit", value),
-
   // The canonical form of a query - what the kernel runs literally.
   "normalize/1": (query) => normalizedTerm(toTerm(query)),
 
-  "offset/2": (query, value) => setViewBound(query, "offset", value),
   "one/1": (query) => setCardinality(query, "one"),
-
-  "order_by/2": (query, spec) => {
-    const term = toTerm(query);
-
-    return {...term, orderBy: orderEntries(spec, term.entity)};
-  },
 
   "put_attribute/2": (entity, values) => {
     const entityType = entityTypeOf(entity, "put_attribute");
@@ -1489,6 +1480,16 @@ const Elixir_Hologram_Query_Stage = {
       entity,
       Type.list([Type.tuple([name, value])]),
     ),
+
+  "skip/2": (query, value) => setViewBound(query, "skip", value),
+
+  "sort/2": (query, spec) => {
+    const term = toTerm(query);
+
+    return {...term, sort: orderEntries(spec, term.entity)};
+  },
+
+  "take/2": (query, value) => setViewBound(query, "take", value),
 
   // Both forms the server accepts - an entity struct and a query - are refused here, in the wire's
   // own words. Trust is the SERVER's authority: a batch claiming it is refused by name, and a read

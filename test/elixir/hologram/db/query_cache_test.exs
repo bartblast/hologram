@@ -51,7 +51,7 @@ defmodule Hologram.DB.QueryCacheTest do
     module_1_term =
       Entity2
       |> filter(a: true)
-      |> order_by(c)
+      |> sort(c)
       |> Stage.normalize()
 
     module_11_term =

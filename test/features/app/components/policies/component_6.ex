@@ -25,6 +25,6 @@ defmodule HologramFeatureTests.Components.Policies.Component6 do
   end
 
   defp trips_query do
-    order_by(Trip, name)
+    sort(Trip, name)
   end
 end

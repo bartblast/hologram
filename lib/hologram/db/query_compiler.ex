@@ -26,7 +26,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   Cardinality shapes the statement: `:set` selects the mapped columns with ordering
   and view bounds, `:one` selects with `LIMIT 1` under the query's total order (a
-  zero limit stays zero), and `:count` selects `count(*)` - over a capped subquery
+  zero take stays zero), and `:count` selects `count(*)` - over a capped subquery
   when view bounds are set, since a counting query counts what it evaluates to.
   Counting queries carry no includes - an embedded entity cannot change the count.
 
@@ -106,7 +106,7 @@ defmodule Hologram.DB.QueryCompiler do
       )
 
     where_sql = where_clause(authored_conditions ++ policy_conditions)
-    order_sql = order_clause(term.order_by, entity_mapping)
+    order_sql = order_clause(term.sort, entity_mapping)
     sql = statement(term, entity_mapping, where_sql, order_sql, include_sql)
 
     %{params: Enum.reverse(all_reversed_params), sql: sql}
@@ -238,8 +238,8 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp bounds_clause(term) do
-    limit_sql = if term.limit, do: " LIMIT #{term.limit}", else: ""
-    offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
+    limit_sql = if term.take, do: " LIMIT #{term.take}", else: ""
+    offset_sql = if term.skip, do: " OFFSET #{term.skip}", else: ""
 
     limit_sql <> offset_sql
   end
@@ -1085,8 +1085,8 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp statement(%{cardinality: :one} = term, entity_mapping, where_sql, order_sql, include_sql) do
-    effective_limit = if term.limit == 0, do: 0, else: 1
-    offset_sql = if term.offset, do: " OFFSET #{term.offset}", else: ""
+    effective_limit = if term.take == 0, do: 0, else: 1
+    offset_sql = if term.skip, do: " OFFSET #{term.skip}", else: ""
 
     "SELECT #{column_list(entity_mapping)}#{include_sql} " <>
       "FROM #{qualified_table(entity_mapping.table)}" <>
@@ -1164,12 +1164,12 @@ defmodule Hologram.DB.QueryCompiler do
         "FROM #{qualified_table(join_table.name)} AS #{quoted_join} " <>
         ~s|WHERE #{quoted_join}."source_id" = #{parent_prefix}."id")| <>
         filter_sql <>
-        order_clause(sub_term.order_by, target_mapping) <>
+        order_clause(sub_term.sort, target_mapping) <>
         bounds_clause(sub_term)
 
     expression =
       "(SELECT COALESCE(jsonb_agg(jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_wrapper)}#{nested_pairs})" <>
-        aggregate_order(sub_term.order_by, target_mapping, quoted_wrapper) <>
+        aggregate_order(sub_term.sort, target_mapping, quoted_wrapper) <>
         "), '[]'::jsonb) FROM (#{inner_sql}) AS #{quoted_wrapper})"
 
     {expression, new_acc}

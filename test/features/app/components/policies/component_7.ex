@@ -29,7 +29,7 @@ defmodule HologramFeatureTests.Components.Policies.Component7 do
   end
 
   defp legs_query do
-    order_by(Leg, name)
+    sort(Leg, name)
   end
 
   defp renamable(user, legs) do
@@ -37,6 +37,6 @@ defmodule HologramFeatureTests.Components.Policies.Component7 do
   end
 
   defp stops_query do
-    order_by(Stop, name)
+    sort(Stop, name)
   end
 end

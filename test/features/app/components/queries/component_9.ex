@@ -22,6 +22,6 @@ defmodule HologramFeatureTests.Components.Queries.Component9 do
   defp products_query do
     Product
     |> filter(name >= "m")
-    |> order_by(name)
+    |> sort(name)
   end
 end

@@ -20,12 +20,12 @@ defmodule HologramFeatureTests.Components.Queries.Component14 do
 
   # Every booking, so the page's local read answers from the whole set.
   defp bookings_query do
-    order_by(Booking, name)
+    sort(Booking, name)
   end
 
   defp reversed_bookings_query do
     Booking
     |> filter(check_out < check_in)
-    |> order_by(name)
+    |> sort(name)
   end
 end

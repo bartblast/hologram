@@ -62,9 +62,9 @@ export function pageTerms() {
     entity: TASK,
     filter: [],
     include: {},
-    limit: null,
-    offset: null,
-    orderBy: [["id", "asc"]],
+    skip: null,
+    sort: [["id", "asc"]],
+    take: null,
   };
 
   return [
@@ -72,13 +72,13 @@ export function pageTerms() {
     {
       ...base,
       filter: [["done", "==", false]],
-      limit: 50,
-      orderBy: [
+      sort: [
         ["title", "asc"],
         ["id", "asc"],
       ],
+      take: 50,
     },
-    {...base, filter: [["position", ">=", 50]], limit: 20},
+    {...base, filter: [["position", ">=", 50]], take: 20},
     {...base, cardinality: "count", filter: [["status", "==", "closed"]]},
     {...base, cardinality: "one", filter: [["id", "==", "t1234"]]},
   ];

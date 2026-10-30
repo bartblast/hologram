@@ -81,8 +81,8 @@ defmodule Hologram.DB.QueryCompilerTest do
         |> include(a, fn related_query ->
           related_query
           |> filter(a: true)
-          |> order_by(c)
-          |> limit(5)
+          |> sort(c)
+          |> take(5)
         end)
         |> Stage.normalize()
 
@@ -104,7 +104,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(a, fn related_query -> order_by(related_query, c) end)
+        |> include(a, fn related_query -> sort(related_query, c) end)
         |> Stage.normalize()
 
       assert %{sql: sql} = compile(term, mapping)
@@ -940,13 +940,13 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s( WHERE "a" != $1))
     end
 
-    test "compiles limit and offset as literal bounds" do
+    test "compiles take and skip as literal LIMIT and OFFSET" do
       mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
-        |> limit(50)
-        |> offset(20)
+        |> take(50)
+        |> skip(20)
         |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
@@ -1052,7 +1052,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> limit(50)
+        |> take(50)
         |> count()
         |> Stage.normalize()
 
@@ -1178,7 +1178,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> order_by(b: :desc, c: :asc)
+        |> sort(b: :desc, c: :asc)
         |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
@@ -1345,19 +1345,19 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module2
-        |> order_by(c: :desc)
+        |> sort(c: :desc)
         |> Stage.normalize()
 
       assert %{params: [], sql: sql} = compile(term, mapping)
       assert String.ends_with?(sql, ~s( ORDER BY "c_$sort" DESC, "c" DESC, "id" ASC))
     end
 
-    test "compiles single-result queries with a zero limit as zero" do
+    test "compiles single-result queries with a zero take as zero" do
       mapping = Mapper.derive!([Module2], [])
 
       term =
         Module2
-        |> limit(0)
+        |> take(0)
         |> one()
         |> Stage.normalize()
 

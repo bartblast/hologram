@@ -312,9 +312,9 @@ describe("QueryKernel", () => {
           entity: TASK,
           filter: [],
           include: {},
-          limit: null,
-          offset: null,
-          orderBy: [["id", "asc"]],
+          skip: null,
+          sort: [["id", "asc"]],
+          take: null,
         },
         overrides,
       );
@@ -366,7 +366,7 @@ describe("QueryKernel", () => {
 
       it("orders by an attribute", () => {
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "asc"],
             ["id", "asc"],
           ],
@@ -381,7 +381,7 @@ describe("QueryKernel", () => {
 
       it("orders by an attribute descending", () => {
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "desc"],
             ["id", "asc"],
           ],
@@ -402,7 +402,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t2", position: null, title: "bob"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "asc"],
             ["id", "asc"],
           ],
@@ -417,7 +417,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t2", position: null, title: "bob"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "desc"],
             ["id", "asc"],
           ],
@@ -433,7 +433,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t2", position: 7, title: "dana"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["position", "asc"],
             ["title", "asc"],
             ["id", "asc"],
@@ -460,7 +460,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t4", title: "bob", title_sort: "bob"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["title", "asc"],
             ["id", "asc"],
           ],
@@ -483,7 +483,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t2", title: "Zoe", title_sort: "zoe"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["title", "asc"],
             ["id", "asc"],
           ],
@@ -506,7 +506,7 @@ describe("QueryKernel", () => {
       // values, so an order that matches the declared one matches it on purpose.
       it("orders by the declared position, not the label", () => {
         const ordered = term({
-          orderBy: [
+          sort: [
             ["priority", "asc"],
             ["id", "asc"],
           ],
@@ -522,7 +522,7 @@ describe("QueryKernel", () => {
 
       it("orders by the declared position descending", () => {
         const ordered = term({
-          orderBy: [
+          sort: [
             ["priority", "desc"],
             ["id", "asc"],
           ],
@@ -541,7 +541,7 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t6", priority: "medium", title: "f"});
 
         const ordered = term({
-          orderBy: [
+          sort: [
             ["priority", "asc"],
             ["title", "asc"],
             ["id", "asc"],
@@ -566,22 +566,22 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t3", position: 3, title: "cleo"});
       });
 
-      it("takes at most the limit", () => {
-        assert.deepEqual(titles(QueryKernel.run(term({limit: 2}))), [
+      it("takes at most as many rows as take sets", () => {
+        assert.deepEqual(titles(QueryKernel.run(term({take: 2}))), [
           "ada",
           "bob",
         ]);
       });
 
-      it("skips the offset", () => {
-        assert.deepEqual(titles(QueryKernel.run(term({offset: 1}))), [
+      it("skips as many rows as skip sets", () => {
+        assert.deepEqual(titles(QueryKernel.run(term({skip: 1}))), [
           "bob",
           "cleo",
         ]);
       });
 
       it("skips before it takes", () => {
-        const bounded = term({limit: 1, offset: 1});
+        const bounded = term({skip: 1, take: 1});
 
         assert.deepEqual(titles(QueryKernel.run(bounded)), ["bob"]);
       });
@@ -620,7 +620,7 @@ describe("QueryKernel", () => {
       // A count counts what the query evaluates to, so a bounded query counts what its bounds
       // leave rather than what its filter matched.
       it("counts what the view bounds leave", () => {
-        const counting = term({cardinality: "count", limit: 1});
+        const counting = term({cardinality: "count", take: 1});
 
         assert.equal(QueryKernel.run(counting), 1);
       });
@@ -637,9 +637,9 @@ describe("QueryKernel", () => {
             entity: TASK,
             filter: [],
             include: {},
-            limit: null,
-            offset: null,
-            orderBy: [["id", "asc"]],
+            skip: null,
+            sort: [["id", "asc"]],
+            take: null,
           },
           overrides,
         );
@@ -741,11 +741,11 @@ describe("QueryKernel", () => {
 
         const include = {
           tasks: subTerm({
-            limit: 2,
-            orderBy: [
+            sort: [
               ["position", "asc"],
               ["id", "asc"],
             ],
+            take: 2,
           }),
         };
 
@@ -1119,7 +1119,7 @@ describe("QueryKernel", () => {
   });
 
   // Mirrors the reference's "run/3 - comparing strings" case for case: a bound is a position in
-  // the list `order_by` renders, and the key beside the value is what puts it there.
+  // the list `sort` renders, and the key beside the value is what puts it there.
   describe("matches() - comparing strings", () => {
     const rows = [
       {id: "t1", title: "Zürich", title_sort: "zurich"},
@@ -1399,9 +1399,9 @@ describe("QueryKernel", () => {
         entity: MESSAGE,
         filter: [[["channel", "org", "name"], "==", "acme"]],
         include: {},
-        limit: null,
-        offset: null,
-        orderBy: [["id", "asc"]],
+        skip: null,
+        sort: [["id", "asc"]],
+        take: null,
       };
 
       assert.deepStrictEqual(
