@@ -1412,8 +1412,16 @@ defmodule Hologram.Template.Renderer do
 
     # A path reads rows the query does not return, and the client answers the query over what it
     # holds - so the rows along the paths are read with it, the read policy deciding which, and
-    # carried beside the rows it returns. A count is answered by the number alone.
-    read_term = if term.cardinality == :count, do: term, else: Window.embed(term, false)
+    # carried beside the rows it returns. A client checking permissions answers each rule over what
+    # it holds too, so the rows the rules read through relationships are read and carried the same
+    # way, and its first check reads the rows the server's did, as far as the session user may read
+    # them. A count is answered by the number alone.
+    read_term =
+      if term.cardinality == :count do
+        term
+      else
+        Window.embed(term, QueryCache.permission_checking?())
+      end
 
     result =
       read_term

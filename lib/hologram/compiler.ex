@@ -853,8 +853,9 @@ defmodule Hologram.Compiler do
   @doc """
   Derives what a running Hologram app holds for the given registered queries of components, as
   `extract_component_queries/3` extracts them: the registry entries keyed by query content id, the
-  argument names of every parameterized capture keyed by `{module, prop name}`, and the term behind
-  each window keyed by window id.
+  argument names of every parameterized capture keyed by `{module, prop name}`, the term behind
+  each window keyed by window id, and whether the build has a page checking permissions on the
+  client.
 
   The components are every component of the build rather than the ones pages reach, because what
   reads the result is the renderer and the sync layer, which answer for any component that renders.
@@ -875,6 +876,7 @@ defmodule Hologram.Compiler do
   """
   @spec build_queries(%{module => component_queries}, list(module), boolean) :: %{
           entries: %{String.t() => %{atom => any}},
+          permission_checking?: boolean,
           prop_params: %{{module, atom} => list(atom | nil)},
           windows: %{String.t() => Query.t()}
         }
@@ -897,7 +899,12 @@ defmodule Hologram.Compiler do
       |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
       |> put_grants_window(entity_types)
 
-    %{entries: entries, prop_params: prop_params_index(component_queries), windows: windows}
+    %{
+      entries: entries,
+      permission_checking?: permission_checking?,
+      prop_params: prop_params_index(component_queries),
+      windows: windows
+    }
   end
 
   @doc """

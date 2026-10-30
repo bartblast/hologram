@@ -884,7 +884,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Map.keys()
       |> Enum.sort()
 
-    assert query_cache_keys == [:entries, :prop_params, :windows]
+    assert query_cache_keys == [:entries, :permission_checking?, :prop_params, :windows]
+
+    # The fixtures designate a user entity type and hold a page whose template checks permissions.
+    assert queries.permission_checking?
 
     # The two artifacts have to name one window between them: the page windows say which windows a
     # page downloads, and this is where such an id resolves back to the term that fills it.

@@ -15,6 +15,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Entity.Model
+  alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
   alias Hologram.Query.Stage
@@ -39,6 +40,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module31, as: ComponentModule31
   alias Hologram.Test.Fixtures.Component.Module32, as: ComponentModule32
   alias Hologram.Test.Fixtures.Component.Module33, as: ComponentModule33
+  alias Hologram.Test.Fixtures.Component.Module34, as: ComponentModule34
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
@@ -54,12 +56,15 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
   alias Hologram.Test.Fixtures.Page.Module12, as: PageModule12
   alias Hologram.Test.Fixtures.Page.Module13, as: PageModule13
+  alias Hologram.Test.Fixtures.Page.Module15, as: PageModule15
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module8, as: TwoHopDelegationPolicyEntity
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
@@ -1193,6 +1198,38 @@ defmodule Hologram.CompilerTest do
 
       assert page_windows[PageModule7] == []
     end
+
+    # The registered windows of a checking build download the rows the rules read, so the ids a page
+    # subscribes to name those windows.
+    test "derives a checking build's window ids from the windows embedding the rows the rules read",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      page_windows =
+        derive_page_windows([PageModule15], call_graph, module_info_plt, [PageModule15])
+
+      window =
+        TwoHopDelegationPolicyEntity
+        |> order_by(created_at)
+        |> Stage.normalize()
+        |> Window.derive(true)
+
+      assert page_windows[PageModule15] ==
+               Enum.sort([Registry.id(Auth.grants_window()), Registry.id(window)])
+    end
+
+    test "derives an unchecked build's window ids from the plain windows", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      page_windows = derive_page_windows([PageModule15], call_graph, module_info_plt, [])
+
+      window =
+        TwoHopDelegationPolicyEntity
+        |> order_by(created_at)
+        |> Stage.normalize()
+        |> Window.derive(false)
+
+      assert page_windows[PageModule15] == [Registry.id(window)]
+    end
   end
 
   # The gate reads the graph the bundles come from, so what registers the window is what actually
@@ -1573,6 +1610,55 @@ defmodule Hologram.CompilerTest do
       queries = build_queries(component_queries, entity_types -- [RoleGrant], false)
 
       refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
+    end
+
+    # A client checking permissions answers each rule over what it holds, so the window also
+    # downloads the rows the rules read - two rows along this type's delegation chain.
+    test "embeds the rows a type's rules read into its windows when a client checks permissions",
+         %{
+           entity_types: entity_types
+         } do
+      component_queries =
+        extract_component_queries([ComponentModule34], entity_types, PLT.start())
+
+      queries = build_queries(component_queries, entity_types, true)
+
+      [term] = component_queries[ComponentModule34].terms
+      window = queries.entries[Registry.id(term)].window
+
+      assert window == Window.derive(term, true)
+
+      assert window.include == %{
+               parent: %Query{
+                 entity: DelegationPolicyEntity,
+                 include: %{parent: %Query{entity: PolicyEntity}}
+               }
+             }
+
+      assert queries.windows[Registry.id(window)] == window
+    end
+
+    test "embeds no rule's rows when no client checks permissions", %{
+      entity_types: entity_types
+    } do
+      component_queries =
+        extract_component_queries([ComponentModule34], entity_types, PLT.start())
+
+      queries = build_queries(component_queries, entity_types, false)
+
+      [term] = component_queries[ComponentModule34].terms
+
+      assert queries.entries[Registry.id(term)].window.include == %{}
+    end
+
+    test "records whether the build has a page checking permissions on the client", %{
+      entity_types: entity_types
+    } do
+      component_queries =
+        extract_component_queries([QueryExtractorModule1], entity_types, PLT.start())
+
+      assert build_queries(component_queries, entity_types, true).permission_checking?
+      refute build_queries(component_queries, entity_types, false).permission_checking?
     end
 
     test "leaves out a component declaring no parameterized capture", %{

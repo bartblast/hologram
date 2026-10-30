@@ -190,6 +190,12 @@ defmodule Hologram.Entity do
   The options on one line must all hold at once, and several lines for one operation are
   alternatives.
   A line with no options grants the operation unconditionally.
+
+  A client that checks permissions holds the related rows its checks read - the row a `via:` leads
+  to, the rows before the last relationship of a `to:` reference, the rows along a `when:` path -
+  beside the rows it holds, read under the session user's own read rules and kept current. A row
+  the user may not read is missing there and compares as nil, and a change to a related row
+  answers the check again.
   """
   @spec allow(operation, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do

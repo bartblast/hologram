@@ -30,6 +30,9 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyParent
+  alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyMiddle
+  alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyChained
   alias Hologram.Test.Fixtures.Template.Renderer.Module100
   alias Hologram.Test.Fixtures.Template.Renderer.Module101
   alias Hologram.Test.Fixtures.Template.Renderer.Module102
@@ -41,6 +44,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module109
   alias Hologram.Test.Fixtures.Template.Renderer.Module110
   alias Hologram.Test.Fixtures.Template.Renderer.Module111
+  alias Hologram.Test.Fixtures.Template.Renderer.Module112
+  alias Hologram.Test.Fixtures.Template.Renderer.Module113
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
   alias Hologram.Test.Fixtures.Template.Renderer.Module97
   alias Hologram.Test.Fixtures.Template.Renderer.Module98
@@ -412,6 +417,114 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       assert String.contains?(html, "titles = shown,,")
       assert carried_titles() == ["shown"]
+    end
+  end
+
+  # A client checking permissions answers each rule over the rows it holds, so a render reads the
+  # rows the queried types' rules read through relationships and hands them over with the rows the
+  # queries return - under the session user's own read rules.
+  describe "the rows a query's rules read" do
+    setup do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+      setup_page_digest_registry(PageDigestRegistryStub)
+
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module113, :dummy_module_113_digest)
+
+      dump_query_cache(QueryCacheStub, [Module112], true)
+      QueryCache.init(nil)
+
+      :ok
+    end
+
+    defp carried_ids(html, type) do
+      html
+      |> boot_data()
+      |> get_in(["syncRows", "put_entity", inspect(type)])
+      |> List.wrap()
+      |> Enum.map(& &1["id"])
+    end
+
+    # Two public rows, each delegating its publish rule to a parent of its own, and a user who may
+    # read only the first parent.
+    defp create_parented_entities do
+      {:ok, user} =
+        %{email: "renderer_rules_#{System.unique_integer([:positive])}@example.com"}
+        |> Module14.new()
+        |> create()
+
+      {:ok, readable_parent} = create(PolicyParent.new())
+      {:ok, unreadable_parent} = create(PolicyParent.new())
+
+      Auth.grant_role(user, :member, readable_parent)
+
+      Enum.each([{1, readable_parent}, {2, unreadable_parent}], fn {priority, parent} ->
+        {:ok, _entity} =
+          %{parent_id: parent.id, priority: priority, public: true}
+          |> PolicyEntity.new()
+          |> create()
+      end)
+
+      %{readable_parent: readable_parent, user: user}
+    end
+
+    test "carries the rows the rules read that the session may read" do
+      %{readable_parent: readable_parent, user: user} = create_parented_entities()
+
+      html = render_page_html(Module113, %Server{user_id: user.id})
+
+      assert carried_ids(html, PolicyParent) == [readable_parent.id]
+    end
+
+    # The row two relationships away is not public, so no query returns it - it arrives for the
+    # rule alone, read through the viewer's grant.
+    test "carries the rows along a delegation chain two rows long" do
+      {:ok, user} =
+        %{email: "renderer_rules_chain@example.com"}
+        |> Module14.new()
+        |> create()
+
+      {:ok, top} = create(PolicyEntity.new())
+
+      Auth.grant_role(user, :viewer, top)
+
+      {:ok, middle} =
+        %{parent_id: top.id}
+        |> PolicyMiddle.new()
+        |> create()
+
+      {:ok, _chained} =
+        %{parent_id: middle.id}
+        |> PolicyChained.new()
+        |> create()
+
+      html = render_page_html(Module113, %Server{user_id: user.id})
+
+      assert carried_ids(html, PolicyMiddle) == [middle.id]
+      assert carried_ids(html, PolicyEntity) == [top.id]
+    end
+
+    test "hands the template no relationship the rules read" do
+      %{user: user} = create_parented_entities()
+
+      html = render_page_html(Module113, %Server{user_id: user.id})
+
+      not_included = inspect(%NotIncluded{relationship: :parent})
+
+      assert String.contains?(html, "parents = #{not_included},#{not_included}")
+    end
+
+    test "carries no rule's rows when no client checks permissions" do
+      dump_query_cache(QueryCacheStub, [Module112], false)
+      QueryCache.init(nil)
+
+      %{user: user} = create_parented_entities()
+
+      html = render_page_html(Module113, %Server{user_id: user.id})
+
+      assert carried_ids(html, PolicyParent) == []
     end
   end
 
