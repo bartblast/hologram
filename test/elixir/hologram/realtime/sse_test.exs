@@ -276,15 +276,6 @@ defmodule Hologram.Realtime.SSETest do
              |> encode_broadcast_envelope(:ping, %{}, ["page"])
              |> decode_envelope() == {"broadcast", 1, %{"chunks" => [], "data" => expected}}
     end
-  end
-
-  describe "encode_compilation_error_envelope/2" do
-    test "wraps the JSON-encoded lines in a compilation_error SSE event envelope" do
-      lines = [[%{text: "** (CompileError) boom", tone: :banner}]]
-
-      assert encode_compilation_error_envelope(42, lines) ==
-               ~s|event: compilation_error\nid: 42\ndata: [[{"text":"** (CompileError) boom","tone":"banner"}]]\n\n|
-    end
 
     test "replaces server-only attribute values in the broadcast params with the sentinel" do
       row = %Module15{
@@ -299,6 +290,15 @@ defmodule Hologram.Realtime.SSETest do
       assert String.contains?(envelope, @server_only_token)
       refute String.contains?(envelope, "note_secret_v2")
       refute String.contains?(envelope, "tok_M6zY")
+    end
+  end
+
+  describe "encode_compilation_error_envelope/2" do
+    test "wraps the JSON-encoded lines in a compilation_error SSE event envelope" do
+      lines = [[%{text: "** (CompileError) boom", tone: :banner}]]
+
+      assert encode_compilation_error_envelope(42, lines) ==
+               ~s|event: compilation_error\nid: 42\ndata: [[{"text":"** (CompileError) boom","tone":"banner"}]]\n\n|
     end
   end
 
