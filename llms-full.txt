@@ -1256,6 +1256,8 @@ Keyboard events (`$key_down`, `$key_up`) include:
 - `repeat` - whether the key is being held down and auto-repeating
 - `shift_key` - whether the Shift key was held
 
+Some keyboard events carry no key at all. Chrome and other Chromium-based browsers send a `keydown` and a `keyup` with no key when the user fills a field from an autofill suggestion, and a script or browser extension can dispatch a plain `Event` named `keydown` or `keyup` too. Hologram ignores these events, so the handler does not run for them and `key` is always a string.
+
 To run a handler only for specific keys or key combinations, see the "Keyboard Key Filters" section below.
 
 ##### Mouse Events

@@ -35,8 +35,15 @@ describe("KeyboardEvent", () => {
     );
   });
 
-  it("isEventIgnored()", () => {
-    assert.isFalse(KeyboardEvent.isEventIgnored({}));
+  describe("isEventIgnored()", () => {
+    it("is false for a keyboard event with a key", () => {
+      assert.isFalse(KeyboardEvent.isEventIgnored({key: "k"}));
+    });
+
+    it("is true for an event with no key", () => {
+      // A bare Event dispatched as keydown has no key, code or modifier flags.
+      assert.isTrue(KeyboardEvent.isEventIgnored({}));
+    });
   });
 
   describe("matchesKeyFilter()", () => {
@@ -119,6 +126,12 @@ describe("KeyboardEvent", () => {
           shiftKey: true,
         }),
       );
+    });
+
+    it("does not match an event with no key", () => {
+      const filter = Type.list([Type.bitstring("enter")]);
+
+      assert.isFalse(KeyboardEvent.matchesKeyFilter(filter, {}));
     });
   });
 });

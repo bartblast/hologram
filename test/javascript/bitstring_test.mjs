@@ -117,7 +117,7 @@ describe("Bitstring", () => {
         assert.equal(result, -1);
       });
 
-      it("falls through when one bitstring is not text-based", () => {
+      it("falls through when one bitstring has no text yet", () => {
         const bitstring1 = Type.bitstring("abc");
         const bitstring2 = Bitstring.fromBytes([97, 98, 99]); // "abc" in bytes
         const result = Bitstring.compare(bitstring1, bitstring2);
@@ -128,6 +128,30 @@ describe("Bitstring", () => {
       it("handles Unicode text comparison", () => {
         const bitstring1 = Type.bitstring("全"); // Unicode character
         const bitstring2 = Type.bitstring("息"); // Different Unicode character
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+
+      it("falls through when both decoded as not text", () => {
+        const bitstring1 = Bitstring.fromBytes([0xff]);
+        Bitstring.maybeSetTextFromBytes(bitstring1);
+
+        const bitstring2 = Bitstring.fromBytes([0xfe]);
+        Bitstring.maybeSetTextFromBytes(bitstring2);
+
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 1);
+      });
+
+      it("falls through when both decoded as not text and lengths differ", () => {
+        const bitstring1 = Bitstring.fromBytes([0xff]);
+        Bitstring.maybeSetTextFromBytes(bitstring1);
+
+        const bitstring2 = Bitstring.fromBytes([0xff, 0x00, 0xff, 0x00]);
+        Bitstring.maybeSetTextFromBytes(bitstring2);
+
         const result = Bitstring.compare(bitstring1, bitstring2);
 
         assert.equal(result, -1);
