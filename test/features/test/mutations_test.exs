@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.MutationsTest do
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Runtime.ReplicaIdentity
+  alias Hologram.Runtime.Serializer
   alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
@@ -248,7 +249,7 @@ defmodule HologramFeatureTests.MutationsTest do
 
     assert response["status"] == "rejected"
     assert response["write"] == nil
-    assert response["reason"] == ~s[Type.atom("stale_build")]
+    assert response["reason"] == Serializer.serialize!(:stale_build)
 
     assert DB.read(Note) == []
     assert Model.hash() != "not-this-build"
@@ -296,7 +297,7 @@ defmodule HologramFeatureTests.MutationsTest do
     first = await_response(session)
 
     assert first["status"] == "rejected"
-    assert first["reason"] == ~s[Type.atom("not_found")]
+    assert first["reason"] == Serializer.serialize!(:not_found)
 
     # The world changes between the two posts: the row the write names now exists, so a second
     # evaluation would answer something else - a denial, since a row created from the test process
@@ -404,8 +405,7 @@ defmodule HologramFeatureTests.MutationsTest do
     assert response["status"] == "rejected"
     assert response["write"] == 0
 
-    assert response["reason"] ==
-             ~s|Type.map([[Type.atom("stock"), Type.list([Type.tuple([Type.atom("min"), Type.integer(0n)])])]])|
+    assert response["reason"] == Serializer.serialize!(%{stock: [{:min, 0}]})
 
     assert [%Item{stock: 1}] = DB.read(Item)
   end
