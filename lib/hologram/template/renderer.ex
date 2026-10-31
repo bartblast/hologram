@@ -982,7 +982,9 @@ defmodule Hologram.Template.Renderer do
     do: Enum.map(rows, &included_as_asked(&1, term))
 
   defp included_as_asked(%entity_type{} = row, term) do
-    Enum.reduce(entity_type.__relationships__(), row, fn {name, _target, _opts}, acc ->
+    entity_type
+    |> Entity.includable_names()
+    |> Enum.reduce(row, fn name, acc ->
       case Map.fetch(term.include, name) do
         {:ok, sub_term} -> Map.update!(acc, name, &included_as_asked(&1, sub_term))
         :error -> Map.put(acc, name, %NotIncluded{relationship: name})

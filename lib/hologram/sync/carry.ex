@@ -20,6 +20,7 @@ defmodule Hologram.Sync.Carry do
   # on every render function. Both are request-scoped and neither outlives the response.
 
   alias Hologram.DB.Codec
+  alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Sync.WireData
 
@@ -93,6 +94,9 @@ defmodule Hologram.Sync.Carry do
   Records the entities the given query result holds - the rows themselves and everything they
   embed, however deep.
 
+  A row reached more than once - in several places of one result, or by several results - is
+  recorded once, carrying every relationship any of its copies included.
+
   A result that is a count rather than rows holds no entity and records nothing.
   """
   @spec collect(any) :: :ok
@@ -100,7 +104,9 @@ defmodule Hologram.Sync.Carry do
     collected =
       result
       |> entities()
-      |> Enum.reduce(gathered(), &Map.put_new(&2, key(&1), &1))
+      |> Enum.reduce(gathered(), fn entity, acc ->
+        Map.update(acc, key(entity), entity, &Entity.merge_copies(&1, entity))
+      end)
 
     Process.put(@key, collected)
 
@@ -163,9 +169,9 @@ defmodule Hologram.Sync.Carry do
 
   defp entities(%entity_type{} = entity) do
     embedded =
-      Enum.flat_map(entity_type.__relationships__(), fn {name, _target, _opts} ->
-        entities(Map.fetch!(entity, name))
-      end)
+      entity_type
+      |> Entity.includable_names()
+      |> Enum.flat_map(&entities(Map.fetch!(entity, &1)))
 
     [entity | embedded]
   end

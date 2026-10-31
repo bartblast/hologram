@@ -12,11 +12,20 @@ defmodule Hologram.Sync.DiffTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
+
+  # Two ids ordered so a round of a few rows walks the first before the last - a map this small
+  # hands its values over by key.
+  @first_id "00000000-0000-7000-8000-000000000001"
+  @last_id "ffffffff-ffff-7fff-bfff-ffffffffffff"
 
   defp events(entity_id, names) do
     data = Map.new(names, &{&1, "whatever the log said"})
@@ -358,6 +367,170 @@ defmodule Hologram.Sync.DiffTest do
       deltas = deltas(result([task]), MapSet.new([task.id]), nil, events(task.id, ["c"]))
 
       assert deltas.edges == []
+    end
+  end
+
+  describe "deltas/4 - inverses" do
+    setup do
+      channel =
+        %{name: "general"}
+        |> Module26.new()
+        |> DB.create!()
+
+      message =
+        %{body: "hi", channel_id: channel.id, position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      %{channel: channel, message: message}
+    end
+
+    test "returns a row reached only through an inverse", %{channel: channel, message: message} do
+      deltas =
+        deltas(result([%{channel | messages: [message]}]), MapSet.new([channel.id]), nil, [])
+
+      assert deltas.appeared == [message]
+    end
+
+    # Both channels are in the round, so the message moving between them stays a member and is
+    # patched rather than dropped and put again.
+    test "patches a row moving between two rows an inverse holds", %{
+      channel: channel,
+      message: message
+    } do
+      other_channel =
+        %{name: "random"}
+        |> Module26.new()
+        |> DB.create!()
+
+      moved = %{message | channel_id: other_channel.id}
+
+      events = [
+        {200,
+         [
+           %{
+             op: :patch_entity,
+             type: Module28,
+             entity_id: message.id,
+             data: %{"channel_id" => other_channel.id}
+           }
+         ]}
+      ]
+
+      held = MapSet.new([channel.id, other_channel.id, message.id])
+      rows = [%{channel | messages: []}, %{other_channel | messages: [moved]}]
+
+      deltas = deltas(result(rows), held, nil, events)
+
+      assert deltas.patched == [{moved, %{channel_id: other_channel.id}}]
+      assert deltas.vanished == []
+    end
+
+    test "returns nothing for a row an inverse still holds", %{channel: channel, message: message} do
+      held = MapSet.new([channel.id, message.id])
+
+      deltas = deltas(result([%{channel | messages: [message]}]), held, nil, [])
+
+      assert deltas.vanished == []
+    end
+
+    test "returns the id of a row that left an inverse", %{channel: channel, message: message} do
+      held = MapSet.new([channel.id, message.id])
+
+      deltas = deltas(result([%{channel | messages: []}]), held, nil, [])
+
+      assert deltas.vanished == [message.id]
+    end
+
+    test "scrubs a row the client may not read out of an inverse's ids" do
+      shown =
+        %{body: "shown", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      hidden =
+        %{body: "hidden", position: 2}
+        |> Module28.new()
+        |> DB.create!()
+
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      deltas = deltas(result([%{label | messages: [shown, hidden]}]), MapSet.new(), nil, [])
+
+      assert [scrubbed_label] = Enum.filter(deltas.appeared, &(&1.id == label.id))
+      assert scrubbed_label.messages == [shown]
+      refute Enum.any?(deltas.appeared, &(&1.id == hidden.id))
+    end
+
+    # The channel sits at the root without its topic and again under its message with it - the
+    # topic is reached only through the second copy.
+    test "returns a row embedded under a second copy of a row", %{
+      channel: channel,
+      message: message
+    } do
+      topic =
+        %{channel_id: channel.id, summary: "welcome"}
+        |> Module27.new()
+        |> DB.create!()
+
+      under_message = %{message | channel: %{channel | topic: topic}}
+      root = %{channel | messages: [under_message]}
+
+      deltas = deltas(result([root]), MapSet.new([channel.id, message.id]), nil, [])
+
+      assert deltas.appeared == [topic]
+    end
+
+    # Whichever copy the walk meets first, the member carries every relationship either copy
+    # included - a row met first as another row's embed keeps its own includes.
+    test "merges the copies of a row into one member carrying what each included" do
+      message =
+        %{body: "tagged", id: @first_id, position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      label =
+        %{id: @last_id, name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      # The ids put the message first in the walk (see @first_id), so it meets the label under it
+      # without the label's own messages - the label's root copy, holding them, comes after.
+      message_root = %{message | labels: [label]}
+      label_root = %{label | messages: [message]}
+
+      deltas = deltas(result([message_root, label_root]), MapSet.new(), nil, [])
+
+      assert [appeared_label] = Enum.filter(deltas.appeared, &(&1.id == label.id))
+      assert Enum.map(appeared_label.messages, & &1.id) == [message.id]
+    end
+
+    # The same shape without an inverse: a folder met first as another folder's child, where its
+    # own children are not included, still goes out with them.
+    test "merges the copies of a row a to-many of its own type reaches" do
+      defmodule FolderEntityFixture do
+        use Hologram.Entity
+
+        attribute :name, :string
+
+        relationship :children, [__MODULE__]
+
+        allow :read
+      end
+
+      child = FolderEntityFixture.new(%{id: @last_id, name: "child"})
+      grandchild = FolderEntityFixture.new(%{id: Entity.generate_id(), name: "grandchild"})
+
+      parent = FolderEntityFixture.new(%{id: @first_id, name: "parent"})
+      rows = [%{parent | children: [child]}, %{child | children: [grandchild]}]
+
+      deltas = deltas(result(rows), MapSet.new(), nil, [])
+
+      assert [appeared_child] = Enum.filter(deltas.appeared, &(&1.id == child.id))
+      assert Enum.map(appeared_child.children, & &1.id) == [grandchild.id]
     end
   end
 

@@ -15,7 +15,8 @@ defmodule Hologram.Sync.WireData do
   # read: an attribute is always there (null when it is unset), a server-only attribute never is,
   # a to-many relationship is there exactly when the window includes it (as the target ids - the
   # rows travel once each, as their own deltas), and a to-one never is, because its reference
-  # field already carries the id.
+  # field already carries the id. An inverse of a to-many travels as a to-many does, and an inverse
+  # of a to-one, a set or single, never does, because its rows' reference fields carry the ids.
   #
   # The row's per-column revisions travel beside its data, as `$revisions` - a name no attribute
   # can have, since a declared name never carries the seam, so a client reads them apart from the
@@ -46,7 +47,9 @@ defmodule Hologram.Sync.WireData do
 
   An included to-many relationship travels as the ids of the rows it holds - the fact, never the
   rows, which travel once each as their own deltas. A to-one adds nothing beside its reference
-  field, which already carries the id.
+  field, which already carries the id. An included inverse of a to-many travels as a to-many does,
+  and an inverse of a to-one, a set or a single row, adds nothing, since its rows' reference fields
+  carry the ids.
   """
   @spec row(struct) :: map
   def row(%entity_type{} = entity) do
@@ -77,16 +80,25 @@ defmodule Hologram.Sync.WireData do
   defp encode_field({name, value}, model) do
     cond do
       MapSet.member?(model.server_only, name) -> []
+      MapSet.member?(model.unspelled, name) -> []
       Map.has_key?(model.relationships, name) -> relationship_field(name, value)
       true -> [{name, Codec.encode_json(value, Map.get(model.attribute_types, name, :uuid))}]
     end
   end
 
+  # An inverse of a to-one adds nothing beside its rows, whose reference fields already say which
+  # row each belongs to - the way a to-one adds nothing beside its own reference field.
   defp encode_fields(fields, entity_type) do
+    {unspelled_inverses, spelled_inverses} =
+      Enum.split_with(entity_type.__inverse_relationships__(), fn {name, _type, _opts} ->
+        Entity.inverse_relationship(entity_type, name).reference?
+      end)
+
     model = %{
       attribute_types: attribute_types(entity_type),
-      relationships: relationships(entity_type),
-      server_only: server_only(entity_type)
+      relationships: relationships(entity_type, spelled_inverses),
+      server_only: server_only(entity_type),
+      unspelled: MapSet.new(unspelled_inverses, fn {name, _type, _opts} -> name end)
     }
 
     fields
@@ -100,8 +112,12 @@ defmodule Hologram.Sync.WireData do
 
   defp relationship_field(_name, _target), do: []
 
-  defp relationships(entity_type) do
-    Map.new(entity_type.__relationships__(), fn {name, type, _opts} -> {name, type} end)
+  # An inverse of a to-many travels the way a to-many does, as the ids of the rows it holds - its
+  # rows' own facts say nothing about it the client could read it from.
+  defp relationships(entity_type, spelled_inverses) do
+    entity_type.__relationships__()
+    |> Enum.concat(spelled_inverses)
+    |> Map.new(fn {name, type, _opts} -> {name, type} end)
   end
 
   defp server_only(entity_type) do

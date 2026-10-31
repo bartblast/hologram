@@ -455,6 +455,23 @@ defmodule Hologram.Entity do
     end
   end
 
+  # One row read twice - at the root and as another row's embed, or by two queries of one render -
+  # arrives as two copies whose includes differ. The kept copy keeps its values and takes every
+  # relationship it did not include from the other one, so whichever copy is met first, the row
+  # carries what either included.
+  @doc false
+  @spec merge_copies(struct, struct) :: struct
+  def merge_copies(%entity_type{} = kept, copy) do
+    entity_type
+    |> includable_names()
+    |> Enum.reduce(kept, fn name, merged ->
+      case {Map.fetch!(merged, name), Map.fetch!(copy, name)} do
+        {%NotIncluded{}, included} -> Map.put(merged, name, included)
+        {_included, _other} -> merged
+      end
+    end)
+  end
+
   @doc false
   @spec register_attributes_accumulator() :: AST.t()
   def register_attributes_accumulator do

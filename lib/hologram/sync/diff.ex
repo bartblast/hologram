@@ -7,6 +7,7 @@ defmodule Hologram.Sync.Diff do
   # both of those live here rather than in the query.
 
   alias Hologram.Auth
+  alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
 
   @doc """
@@ -209,14 +210,21 @@ defmodule Hologram.Sync.Diff do
     end)
   end
 
+  # Every copy of a row is walked, since each carries the includes of the place it sits in - a
+  # channel at the root and again under each of its messages can hold its topic only under the
+  # messages. The copies are one member, merged: a relationship the kept copy did not include takes
+  # what another copy included, so the member carries every relationship the round read for it.
   defp collect(row, members) do
-    if Map.has_key?(members, row.id) do
-      members
-    else
-      row.__struct__.__relationships__()
-      |> Enum.flat_map(fn {name, _target, _opts} -> embedded_rows(Map.fetch!(row, name)) end)
-      |> Enum.reduce(Map.put(members, row.id, row), &collect/2)
-    end
+    member =
+      case Map.fetch(members, row.id) do
+        {:ok, kept} -> Entity.merge_copies(kept, row)
+        :error -> row
+      end
+
+    row.__struct__
+    |> Entity.includable_names()
+    |> Enum.flat_map(&embedded_rows(Map.fetch!(row, &1)))
+    |> Enum.reduce(Map.put(members, row.id, member), &collect/2)
   end
 
   defp edge(event, visible) do
@@ -301,15 +309,15 @@ defmodule Hologram.Sync.Diff do
 
   defp hidden_target?(_edge, _visible_ids), do: false
 
-  # Every row a round carries, keyed by id: the roots and every row embedded under them, however
-  # deep. One id can arrive in more than one place, and the first copy found keeps the spot - every
-  # copy was read by the same query in the same round, so they hold the same values.
   defp member_ids(members) do
     members
     |> Map.keys()
     |> MapSet.new()
   end
 
+  # Every row a round carries, keyed by id: the roots and every row embedded under them, however
+  # deep. One id can arrive in more than one place, each copy with its own includes, so every copy
+  # is walked and the copies are merged into one member.
   defp members(rows) do
     Enum.reduce(rows, %{}, fn {_id, row}, members -> collect(row, members) end)
   end
@@ -368,13 +376,13 @@ defmodule Hologram.Sync.Diff do
   defp revision_names(_effect), do: :all
 
   # What leaves here is what this client may see, embedded lists included: an unreadable member
-  # loses its slot in every to-many list, however deep, not only its own deltas. To-one embeds
-  # stay as they are - the wire never spells them (the reference field carries the id), so there
-  # is nothing to hide. Scrubbing at the source rather than at the spelling covers every path a
+  # loses its slot in every included set, however deep, not only its own deltas. A single embedded
+  # row stays as it is - the wire never spells one (a reference field carries the id), so there is
+  # nothing to hide. Scrubbing at the source rather than at the spelling covers every path a
   # row takes out, the catch-up store included.
   defp scrub(row, visible_ids) do
     updates =
-      for {name, _target, _opts} <- row.__struct__.__relationships__(),
+      for name <- Entity.includable_names(row.__struct__),
           targets = Map.fetch!(row, name),
           is_list(targets) do
         {name, scrub_targets(targets, visible_ids)}

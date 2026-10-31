@@ -28,6 +28,8 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
@@ -40,6 +42,7 @@ defmodule Hologram.Sync.SessionTest do
   @board_window "w_board"
   @other_replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
   @include_window "w_include"
+  @inverse_window "w_inverse"
   @other_page MyApp.SettingsPage
   @other_window "w_other"
   @page MyApp.BoardPage
@@ -1384,7 +1387,8 @@ defmodule Hologram.Sync.SessionTest do
         prop_params: %{},
         windows: %{
           @board_window => Stage.normalize(Module2),
-          @include_window => include_window_term()
+          @include_window => include_window_term(),
+          @inverse_window => inverse_window_term()
         }
       })
 
@@ -1466,6 +1470,48 @@ defmodule Hologram.Sync.SessionTest do
              ]
     end
 
+    test "drops a row reached only through an inverse once it moves out of the reach" do
+      general =
+        %{name: "general"}
+        |> Module26.new()
+        |> DB.create!()
+
+      random =
+        %{name: "random"}
+        |> Module26.new()
+        |> DB.create!()
+
+      message =
+        %{body: "hi", channel_id: general.id, position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      windows(%{@page => [@inverse_window]})
+      hold_windows([@inverse_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, _fill_cursor, fill, _applied_seq}
+      assert_receive {:sync_synced, :all, _cursor}
+
+      assert Enum.any?(fill, &(&1.op == :put_entity and &1.id == message.id))
+
+      # The message moves to a channel the window does not hold - out of the window's reach, but
+      # still in the database.
+      DB.update(Module28, message.id, %{channel_id: random.id})
+
+      Evaluator.round(@inverse_window, [])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               %{
+                 id: message.id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module28"
+               }
+             ]
+    end
+
     test "replays a gap touching a row held only through reach" do
       child = create("moved while away")
       include_source(child)
@@ -1521,6 +1567,13 @@ defmodule Hologram.Sync.SessionTest do
   defp include_window_term do
     Module3
     |> Query.include(a)
+    |> Stage.normalize()
+  end
+
+  defp inverse_window_term do
+    Module26
+    |> Query.filter(name: "general")
+    |> Query.include(messages)
     |> Stage.normalize()
   end
 
