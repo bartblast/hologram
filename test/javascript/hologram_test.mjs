@@ -1037,10 +1037,15 @@ describe("Hologram", () => {
         ],
       ]);
 
+      // The click begins a navigation of its own, which takes over from any page on its way.
+      const navigationCount = Hologram.navigationCount;
+
       Hologram.executeLoadPrefetchedPageAction(
         loadPrefetchedPageAction,
         eventTargetNode,
       );
+
+      assert.equal(Hologram.navigationCount, navigationCount + 1);
 
       // Can't use assert.deepStrictEqual for Maps
       assert.instanceOf(Hologram.prefetchedPages, Map);
@@ -1052,6 +1057,7 @@ describe("Hologram", () => {
       assert.deepStrictEqual(mapValue, {
         payload: null,
         isNavigateConfirmed: true,
+        navigation: navigationCount + 1,
         pagePath: pagePath,
         timestamp: mapValue.timestamp,
       });
@@ -1108,12 +1114,17 @@ describe("Hologram", () => {
         ],
       ]);
 
+      const navigationCount = Hologram.navigationCount;
+
       Hologram.executeLoadPrefetchedPageAction(
         loadPrefetchedPageAction,
         eventTargetNode,
       );
 
       assert.equal(Hologram.prefetchedPages.size, 0);
+
+      // The browser takes over from any page still on its way.
+      assert.equal(Hologram.navigationCount, navigationCount + 1);
 
       sinon.assert.calledOnceWithExactly(navigateBrowserToStub, pagePath);
       sinon.assert.notCalled(loadNewPageStub);
@@ -3616,6 +3627,7 @@ describe("Hologram", () => {
           {
             isNavigateConfirmed: true,
             isPage: true,
+            navigation: Hologram.navigationCount,
             pagePath: "/my-page-path",
             payload: null,
             timestamp: Date.now(),
@@ -3630,6 +3642,28 @@ describe("Hologram", () => {
         navigateBrowserToStub,
         "/my-page-path",
       );
+    });
+
+    // Going back or forward, or another click, after the click on the link.
+    it("stays in the app when a navigation was begun after the click", () => {
+      Hologram.prefetchedPages = new Map([
+        [
+          "dummy_map_key",
+          {
+            isNavigateConfirmed: true,
+            isPage: true,
+            navigation: Hologram.navigationCount - 1,
+            pagePath: "/my-page-path",
+            payload: null,
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.handlePrefetchPageNotPage("dummy_map_key");
+
+      assert.equal(Hologram.prefetchedPages.size, 0);
+      sinon.assert.notCalled(navigateBrowserToStub);
     });
 
     // Before the click, the answer is only remembered: leaving the app on hover would take the
@@ -3697,6 +3731,7 @@ describe("Hologram", () => {
           {
             payload: null,
             isNavigateConfirmed: true,
+            navigation: Hologram.navigationCount,
             pagePath: "/my-page-path",
             timestamp: Date.now(),
           },
@@ -3712,6 +3747,28 @@ describe("Hologram", () => {
       sinon.assert.calledOnceWithExactly(loadNewPageStub, "/my-page-path", {
         type: "page",
       });
+    });
+
+    // Going back or forward, or another click, after the click on the link, while the page was
+    // still being fetched.
+    it("drops the page when a navigation was begun after the click", () => {
+      Hologram.prefetchedPages = new Map([
+        [
+          "dummy_map_key",
+          {
+            payload: null,
+            isNavigateConfirmed: true,
+            navigation: Hologram.navigationCount - 1,
+            pagePath: "/my-page-path",
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.handlePrefetchPageSuccess("dummy_map_key", {type: "page"});
+
+      assert.equal(Hologram.prefetchedPages.size, 0);
+      sinon.assert.notCalled(loadNewPageStub);
     });
 
     it("navigate hasn't been confirmed", () => {
@@ -4433,6 +4490,29 @@ describe("Hologram", () => {
           fetchPageStub.firstCall.args[0],
           Type.tuple([pageModule, Type.map()]),
         );
+      });
+
+      // The fetch is a round trip, and a click on a link meanwhile takes over even before its own
+      // page has arrived.
+      it("leaves the entry's page off screen when the visitor began another navigation while it was fetched", async () => {
+        seedSnapshot("history-identity-6", {identityPeriod: endPeriod()});
+
+        await Hologram.handlePopstateEvent({state: "history-identity-6"});
+        await flushPromises();
+
+        // What a click on a link does (see executeLoadPrefetchedPageAction).
+        Hologram.navigationCount += 1;
+
+        const [_toParam, showPage] = fetchPageStub.firstCall.args;
+        const loadNewPageStub = sinon.stub(Hologram, "loadNewPage");
+
+        try {
+          showPage({type: "page"});
+
+          sinon.assert.notCalled(loadNewPageStub);
+        } finally {
+          loadNewPageStub.restore();
+        }
       });
 
       it("is passed over when it holds no identity period", async () => {

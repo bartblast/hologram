@@ -101,6 +101,13 @@ export default class Hologram {
   static isRendering = false;
 
   // Made public to make tests easier
+  // The navigations begun so far: every click on a link and every page an action puts, every page
+  // loadNewPage is asked for, and every popstate. A page on its way - its fetch, a redirect's hop,
+  // the frame it is shown in - is dropped when a navigation was begun after it, so that what the
+  // visitor did last is what they get.
+  static navigationCount = 0;
+
+  // Made public to make tests easier
   // The identity period the page on screen was produced in (see IdentityTracker): the one its
   // server response arrived in, or for a restored page the one its snapshot answers for. The
   // page's snapshot is stamped with it.
@@ -167,11 +174,6 @@ export default class Hologram {
   // adjacent: when the destination's code has not loaded yet the mount runs from the bundle's
   // announcement instead, so the state waits here rather than being passed along.
   static #mountData = null;
-
-  // The navigations begun so far: every page loadNewPage is asked for, and every popstate
-  // handlePopstateEvent acts on. A page is shown in a frame of its own, and a navigation begun
-  // before that frame takes over from it (see loadNewPage).
-  static #navigationCount = 0;
 
   static #pageModule = null;
   static #pageParams = null;
@@ -339,10 +341,15 @@ export default class Hologram {
     }
 
     if (mapValue.isPage === false) {
+      // Handed to the browser, which takes over from any page still on its way.
+      $.#beginNavigation();
       Hologram.prefetchedPages.delete(mapKey);
       Hologram.navigateBrowserTo(pagePath);
     } else if (mapValue.payload === null) {
+      // The navigation begins at the click, while the page is still being fetched, so that going
+      // back or forward meanwhile, or another click, takes over from it.
       mapValue.isNavigateConfirmed = true;
+      mapValue.navigation = $.#beginNavigation();
     } else {
       Hologram.prefetchedPages.delete(mapKey);
       Hologram.loadNewPage(pagePath, mapValue.payload);
@@ -396,9 +403,13 @@ export default class Hologram {
       return;
     }
 
+    // A navigation begun after the click takes over (see executeLoadPrefetchedPageAction).
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.navigateBrowserTo(mapValue.pagePath);
+
+      if ($.navigationCount === mapValue.navigation) {
+        Hologram.navigateBrowserTo(mapValue.pagePath);
+      }
     } else {
       mapValue.isPage = false;
     }
@@ -411,9 +422,13 @@ export default class Hologram {
       return;
     }
 
+    // A navigation begun after the click takes over (see executeLoadPrefetchedPageAction).
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.loadNewPage(mapValue.pagePath, payload);
+
+      if ($.navigationCount === mapValue.navigation) {
+        Hologram.loadNewPage(mapValue.pagePath, payload);
+      }
     } else {
       mapValue.payload = payload;
     }
@@ -598,8 +613,7 @@ export default class Hologram {
     hopCount = 0,
     historyEntryId = null,
   ) {
-    $.#navigationCount += 1;
-    const navigation = $.#navigationCount;
+    const navigation = $.#beginNavigation();
 
     if (payload.type === "redirect") {
       return Hologram.#followRedirect(
@@ -632,7 +646,7 @@ export default class Hologram {
       // A navigation begun since takes over: another page asked for, or the browser gone back or
       // forward. Showing this page now would undo what the visitor did last, and the entry it was
       // meant for may not be the browser's any more.
-      if ($.#navigationCount !== navigation) {
+      if ($.navigationCount !== navigation) {
         return;
       }
 
@@ -992,6 +1006,13 @@ export default class Hologram {
     if (IdentityTracker.isCurrentTag(storedEts?.identityTag)) {
       ERTS.ets = storedEts.tables;
     }
+  }
+
+  // Takes the next number for a navigation the visitor began (see navigationCount).
+  static #beginNavigation() {
+    $.navigationCount += 1;
+
+    return $.navigationCount;
   }
 
   static #buildPagePath(toParam) {
@@ -1448,7 +1469,7 @@ export default class Hologram {
     // The browser has gone back or forward, which takes over from a page still on its way, waiting
     // for its frame or a redirect's hop. Counted before the early returns below too: a Back between
     // #fragments of the page on screen is still what the visitor did last.
-    $.#navigationCount += 1;
+    const navigation = $.#beginNavigation();
 
     // The browser fires popstate for a jump to a #fragment too, with the entry it made for it and
     // gave no id. Such an entry shows the page on screen, so it takes that page's id, and Back or
@@ -1524,7 +1545,12 @@ export default class Hologram {
     // A snapshot that cannot be restored gives way to the entry's page, asked for the way a fresh
     // visit asks for it: its middleware runs, so a page that requires a login redirects.
     if (isSnapshotUnusable) {
-      return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
+      return $.#loadHistoryEntryPage(
+        historyEntryId,
+        pageSnapshot,
+        epoch,
+        navigation,
+      );
     }
 
     // Every entry the tab has left has a snapshot, saved in memory as it was left, so one with
@@ -1560,7 +1586,12 @@ export default class Hologram {
       // The identity can have changed while the chunks loaded: a command's reply that was in
       // flight.
       if (!loaded || !$.#isSnapshotOfCurrentIdentity(pageSnapshot)) {
-        return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
+        return $.#loadHistoryEntryPage(
+          historyEntryId,
+          pageSnapshot,
+          epoch,
+          navigation,
+        );
       }
 
       $.historyId = historyEntryId;
@@ -1872,8 +1903,19 @@ export default class Hologram {
   // entry's snapshot cannot be restored. The page is asked for the way a navigation asks for one,
   // and goes into the entry that exists already. Nothing of the tab is given up for it: the
   // runtime, the realtime stream and the instance id stay.
-  static async #loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch) {
-    const isSuperseded = () => Math.max($.domEpoch, $.registryEpoch) !== epoch;
+  //
+  // The fetch is a round trip, and a navigation the visitor began meanwhile takes over from it even
+  // before its own page has arrived to move the epoch on: a click on a link, or a page an action
+  // put.
+  static async #loadHistoryEntryPage(
+    historyEntryId,
+    pageSnapshot,
+    epoch,
+    navigation,
+  ) {
+    const isSuperseded = () =>
+      Math.max($.domEpoch, $.registryEpoch) !== epoch ||
+      $.navigationCount !== navigation;
 
     // A mount still waiting belongs to a navigation this one supersedes.
     MountGate.cancel();
@@ -2033,10 +2075,16 @@ export default class Hologram {
   static async #navigateToPage(toParam) {
     const pagePath = $.#buildPagePath(toParam);
 
+    // The navigation begins here rather than when the page arrives: the fetch is a round trip,
+    // and going back or forward meanwhile, or asking for another page, takes over from it.
+    const navigation = $.#beginNavigation();
+    const isTakenOver = () => $.navigationCount !== navigation;
+
     return Client.fetchPage(
       toParam,
-      (payload) => Hologram.loadNewPage(pagePath, payload),
-      () => Hologram.navigateBrowserTo(pagePath),
+      (payload) =>
+        isTakenOver() ? null : Hologram.loadNewPage(pagePath, payload),
+      () => (isTakenOver() ? null : Hologram.navigateBrowserTo(pagePath)),
     );
   }
 
@@ -2112,7 +2160,7 @@ export default class Hologram {
       Interpreter.evaluateJavaScriptExpression(payload.pageParams),
     ]);
 
-    const isTakenOver = () => $.#navigationCount !== navigation;
+    const isTakenOver = () => $.navigationCount !== navigation;
 
     return Client.fetchPage(
       toParam,
