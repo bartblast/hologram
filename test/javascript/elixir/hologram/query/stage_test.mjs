@@ -18,11 +18,13 @@ defineRuntimeGlobals();
 // and with the same raise messages. What differs is the term: these stages build the plain term
 // the client's kernel evaluates, where the Elixir ones build a boxed map keyed by atoms.
 describe("Elixir_Hologram_Query_Stage", () => {
+  const BOARD = "MyApp.Board";
   const BOOKING = "MyApp.Booking";
   const CHANNEL = "MyApp.Channel";
   const ITEM = "MyApp.Item";
   const LABEL = "MyApp.Label";
   const MESSAGE = "MyApp.Message";
+  const TOPIC = "MyApp.Topic";
   const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
   const USER = "MyApp.User";
@@ -141,7 +143,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             messages: {
               forward: "channel",
               reference: true,
-              sort: [],
+              sort: [["position", "asc"]],
               toMany: true,
               type: "MyApp.Message",
             },
@@ -151,6 +153,25 @@ describe("Elixir_Hologram_Query_Stage", () => {
               sort: [],
               toMany: false,
               type: "MyApp.Topic",
+            },
+          },
+          relationships: {owner: {toMany: false, type: USER}},
+          serverOnly: [],
+        },
+        // An inverse set declaring a list order, a direction in it.
+        [BOARD]: {
+          attributes: {id: "uuid"},
+          enumValues: {},
+          inverses: {
+            messages: {
+              forward: "board",
+              reference: true,
+              sort: [
+                ["position", "desc"],
+                ["body", "asc"],
+              ],
+              toMany: true,
+              type: "MyApp.Message",
             },
           },
           relationships: {},
@@ -190,7 +211,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
         },
         // The stored side of CHANNEL's messages, so a path can reach the inverse on a later hop.
         [MESSAGE]: {
-          attributes: {body: "string", id: "uuid"},
+          attributes: {body: "string", id: "uuid", position: "integer"},
+          enumValues: {},
+          relationships: {channel: {toMany: false, type: CHANNEL}},
+          serverOnly: [],
+        },
+        // The single inverse's side, so including CHANNEL's topic has a type to build a term for.
+        [TOPIC]: {
+          attributes: {id: "uuid", title: "string"},
           enumValues: {},
           relationships: {channel: {toMany: false, type: CHANNEL}},
           serverOnly: [],
@@ -979,7 +1007,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             predicates([["constructor", Type.integer(1)]]),
           ),
         HologramBoxedError,
-        "unknown attribute :constructor in MyApp.Channel - known attributes: :name",
+        "unknown attribute :constructor in MyApp.Channel - known attributes: :name, :owner_id",
       );
     });
 
@@ -2178,6 +2206,46 @@ describe("Elixir_Hologram_Query_Stage", () => {
   });
 
   describe("include/3", () => {
+    it("includes an inverse set", () => {
+      const query = include(
+        Type.alias(CHANNEL),
+        Type.atom("messages"),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {messages: baseTerm(MESSAGE)});
+    });
+
+    it("includes a single inverse", () => {
+      const query = include(
+        Type.alias(CHANNEL),
+        Type.atom("topic"),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {topic: baseTerm(TOPIC)});
+    });
+
+    it("includes an inverse of a to-many", () => {
+      const query = include(
+        Type.alias(LABEL),
+        Type.atom("messages"),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {messages: baseTerm(MESSAGE)});
+    });
+
+    it("merges two includes of one inverse", () => {
+      const query = include(
+        include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+        Type.atom("messages"),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {messages: baseTerm(MESSAGE)});
+    });
+
     it("accepts a sub-builder as a spec value", () => {
       const spec = Type.list([
         Type.tuple([
@@ -2619,6 +2687,44 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    it("raises on clauses for a single inverse", () => {
+      assert.throw(
+        () =>
+          include(
+            Type.alias(CHANNEL),
+            Type.atom("topic"),
+            subBuilder((related) =>
+              filter(related, predicates([["title", Type.bitstring("x")]])),
+            ),
+          ),
+        HologramBoxedError,
+        "to-one relationship :topic takes no clauses - clauses apply to to-many includes",
+      );
+    });
+
+    it("raises on an unknown relationship, naming the inverses among the known ones", () => {
+      assert.throw(
+        () => include(Type.alias(CHANNEL), Type.atom("x"), Type.nil()),
+        HologramBoxedError,
+        "unknown relationship :x in MyApp.Channel - known relationships: :messages, :owner, :topic",
+      );
+    });
+
+    it("raises on a second include of an inverse when either carries clauses", () => {
+      assert.throw(
+        () =>
+          include(
+            include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+            Type.atom("messages"),
+            subBuilder((related) =>
+              filter(related, predicates([["body", Type.bitstring("x")]])),
+            ),
+          ),
+        HologramBoxedError,
+        "relationship :messages is already included",
+      );
+    });
+
     it("raises on an unknown relationship", () => {
       assert.throw(
         () => include(project, Type.atom("x"), Type.nil()),
@@ -2644,6 +2750,68 @@ describe("Elixir_Hologram_Query_Stage", () => {
   });
 
   describe("normalize/1", () => {
+    it("orders an included inverse set by its declared order, then by id", () => {
+      const query = normalize(
+        include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+      );
+
+      assert.deepStrictEqual(query.include.messages.sort, [
+        ["position", "asc"],
+        ["id", "asc"],
+      ]);
+    });
+
+    it("orders an included inverse set by the include's own order over the declared one", () => {
+      const query = normalize(
+        include(
+          Type.alias(CHANNEL),
+          Type.atom("messages"),
+          subBuilder((related) => sort(related, Type.atom("body"))),
+        ),
+      );
+
+      assert.deepStrictEqual(query.include.messages.sort, [
+        ["body", "asc"],
+        ["id", "asc"],
+      ]);
+    });
+
+    it("orders an included inverse set by a declared list, directions kept, then by id", () => {
+      const query = normalize(
+        include(Type.alias(BOARD), Type.atom("messages"), Type.nil()),
+      );
+
+      assert.deepStrictEqual(query.include.messages.sort, [
+        ["position", "desc"],
+        ["body", "asc"],
+        ["id", "asc"],
+      ]);
+    });
+
+    it("normalizes a term including an inverse the same way twice", () => {
+      const query = normalize(
+        include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+      );
+
+      assert.deepStrictEqual(normalize(query), query);
+    });
+
+    it("orders an included inverse set declaring no order by id", () => {
+      const query = normalize(
+        include(Type.alias(LABEL), Type.atom("messages"), Type.nil()),
+      );
+
+      assert.deepStrictEqual(query.include.messages.sort, [["id", "asc"]]);
+    });
+
+    it("gives an included single inverse no order", () => {
+      const query = normalize(
+        include(Type.alias(CHANNEL), Type.atom("topic"), Type.nil()),
+      );
+
+      assert.deepStrictEqual(query.include.topic.sort, []);
+    });
+
     it("appends an ascending id tiebreaker to orderings", () => {
       const query = normalize(sort(task, Type.atom("position")));
 

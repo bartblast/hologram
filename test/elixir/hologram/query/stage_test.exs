@@ -15,6 +15,7 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
@@ -1320,6 +1321,33 @@ defmodule Hologram.Query.StageTest do
   end
 
   describe "include/3" do
+    test "includes an inverse set" do
+      query = include(Module26, :messages)
+
+      assert query.include == %{messages: base_term(Module28)}
+    end
+
+    test "includes a single inverse" do
+      query = include(Module26, :topic)
+
+      assert query.include == %{topic: base_term(Module27)}
+    end
+
+    test "includes an inverse of a to-many" do
+      query = include(Module29, :messages)
+
+      assert query.include == %{messages: base_term(Module28)}
+    end
+
+    test "merges two includes of one inverse" do
+      query =
+        Module26
+        |> include(:messages)
+        |> include(:messages)
+
+      assert query.include == %{messages: base_term(Module28)}
+    end
+
     test "accepts a sub-builder as a spec value" do
       query = include(Module3, a: &filter(&1, a: true))
 
@@ -1596,6 +1624,42 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "raises on clauses for a single inverse" do
+      expected_msg =
+        "to-one relationship :topic takes no clauses - clauses apply to to-many includes"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module26, :topic, &filter(&1, summary: "x"))
+      end
+    end
+
+    test "raises on an unknown relationship, naming the inverses among the known ones" do
+      defmodule KnownRelationshipsFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        relationship :a, Module1
+        relationship :b, [Module28], inverse: channel
+        relationship :c, Module1
+      end
+
+      expected_msg =
+        "unknown relationship :x in Hologram.Query.StageTest.KnownRelationshipsFixture - known relationships: :a, :b, :c"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(KnownRelationshipsFixture, :x)
+      end
+    end
+
+    test "raises on a second include of an inverse when either carries clauses" do
+      assert_error ArgumentError, "relationship :messages is already included", fn ->
+        Module26
+        |> include(:messages)
+        |> include(:messages, &filter(&1, body: "x"))
+      end
+    end
+
     test "raises on an unknown relationship" do
       expected_msg =
         "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c"
@@ -1798,6 +1862,68 @@ defmodule Hologram.Query.StageTest do
   end
 
   describe "normalize/1" do
+    test "orders an included inverse set by its declared order, then by id" do
+      query =
+        Module26
+        |> include(:messages)
+        |> normalize()
+
+      assert query.include.messages.sort == [{:position, :asc}, {:id, :asc}]
+    end
+
+    test "orders an included inverse set by the include's own order over the declared one" do
+      query =
+        Module26
+        |> include(:messages, &sort(&1, :body))
+        |> normalize()
+
+      assert query.include.messages.sort == [{:body, :asc}, {:id, :asc}]
+    end
+
+    test "orders an included inverse set by a declared list, directions kept, then by id" do
+      defmodule DeclaredListOrderFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        relationship :messages, [Module28], inverse: channel, sort: [position: :desc, body: :asc]
+      end
+
+      query =
+        DeclaredListOrderFixture
+        |> include(:messages)
+        |> normalize()
+
+      assert query.include.messages.sort == [{:position, :desc}, {:body, :asc}, {:id, :asc}]
+    end
+
+    test "normalizes a term including an inverse the same way twice" do
+      query =
+        Module26
+        |> include(:messages)
+        |> normalize()
+
+      assert normalize(query) == query
+    end
+
+    test "orders an included inverse set declaring no order by id" do
+      query =
+        Module29
+        |> include(:messages)
+        |> normalize()
+
+      assert query.include.messages.sort == [{:id, :asc}]
+    end
+
+    test "gives an included single inverse no order" do
+      query =
+        Module26
+        |> include(:topic)
+        |> normalize()
+
+      assert query.include.topic.sort == []
+    end
+
     test "appends an ascending id tiebreaker after a placeholder ordering key" do
       query =
         Module2

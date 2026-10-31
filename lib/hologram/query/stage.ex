@@ -644,7 +644,9 @@ defmodule Hologram.Query.Stage do
 
   defp normalized_includes(term) do
     Map.new(term.include, fn {name, sub_term} ->
-      {name, normalized_sub_term(sub_term, relationship_kind(term.entity, name))}
+      ordered_sub_term = with_declared_order(sub_term, term.entity, name)
+
+      {name, normalized_sub_term(ordered_sub_term, relationship_kind(term.entity, name))}
     end)
   end
 
@@ -1448,8 +1450,11 @@ defmodule Hologram.Query.Stage do
     end
   end
 
+  # A stored relationship or an inverse - a set of either is included as a to-many, a single
+  # inverse as a to-one.
   defp validate_relationship_name!(name, entity_type) do
-    definitions = entity_type.__relationships__()
+    definitions =
+      Enum.concat(entity_type.__relationships__(), entity_type.__inverse_relationships__())
 
     case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
       {_name, [target], _opts} ->
@@ -1465,8 +1470,10 @@ defmodule Hologram.Query.Stage do
               "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only relationships can be included"
         end
 
-        relationship_names = relationship_names(entity_type)
-        known = Enum.map_join(relationship_names, ", ", &inspect/1)
+        known =
+          entity_type
+          |> Entity.includable_names()
+          |> Enum.map_join(", ", &inspect/1)
 
         raise ArgumentError,
           message:
@@ -1516,6 +1523,22 @@ defmodule Hologram.Query.Stage do
     do: Enum.flat_map(values, &value_placeholder_names/1)
 
   defp value_placeholder_names(_value), do: []
+
+  # An inverse set is read in the order its declaration names when the include sets none, the way a
+  # later sort replaces an earlier one - so a sub-builder's own order wins. Applied here rather than
+  # where the include is built, so two includes of one inverse still merge: a built order would be
+  # a clause on each.
+  defp with_declared_order(%{sort: []} = sub_term, entity_type, name) do
+    case Entity.inverse_relationship(entity_type, name) do
+      %{sort: declared} when declared != [] ->
+        %{sub_term | sort: order_entries!(declared, sub_term.entity)}
+
+      _no_declared_order ->
+        sub_term
+    end
+  end
+
+  defp with_declared_order(sub_term, _entity_type, _name), do: sub_term
 
   defp written_operand_name(name) when is_atom(name), do: [name]
 

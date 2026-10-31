@@ -459,20 +459,18 @@ function normalizedIncludes(term) {
   return Object.fromEntries(
     Object.entries(term.include).map(([name, subTerm]) => {
       const {kind} = validateRelationshipName(Type.atom(name), term.entity);
+      const orderedSubTerm = withDeclaredOrder(subTerm, term.entity, name);
 
       return [
         name,
         kind === "to_many"
-          ? normalizedTerm(subTerm)
-          : {...subTerm, include: normalizedIncludes(subTerm)},
+          ? normalizedTerm(orderedSubTerm)
+          : {...orderedSubTerm, include: normalizedIncludes(orderedSubTerm)},
       ];
     }),
   );
 }
 
-// Every set-returning shape gets a total order, since two rows the ordering does not tell apart
-// would otherwise come back in whatever order the rows happen to sit in. A count is order-blind,
-// and a to-one embeds a single entity, so neither takes one.
 function normalizedOrder(term) {
   if (term.cardinality === "count") {
     return [];
@@ -1195,8 +1193,16 @@ function validatePathHop(hop, entityType) {
   );
 }
 
+// A stored relationship or an inverse - a set of either is included as a to-many, a single
+// inverse as a to-one.
 function validateRelationshipName(name, entityType) {
-  const relationship = Model.entry(entityType).relationships[name.value];
+  const entry = Model.entry(entityType);
+
+  const relationship = Object.hasOwn(entry.relationships, name.value)
+    ? entry.relationships[name.value]
+    : Object.hasOwn(entry.inverses, name.value)
+      ? entry.inverses[name.value]
+      : null;
 
   if (relationship) {
     return {
@@ -1212,6 +1218,8 @@ function validateRelationshipName(name, entityType) {
   }
 
   const known = relationshipNames(entityType)
+    .concat(Object.keys(entry.inverses))
+    .sort()
     .map((relationshipName) => `:${relationshipName}`)
     .join(", ");
 
@@ -1391,6 +1399,23 @@ function validatePutName(name, entityType) {
   );
 }
 
+// An inverse set is read in the order its declaration names when the include sets none, as the
+// server normalizes it. The build bakes that order already spelled the way a term spells one.
+function withDeclaredOrder(subTerm, entityType, name) {
+  const inverses = Model.inverses(entityType);
+
+  if (subTerm.sort.length > 0 || !Object.hasOwn(inverses, name)) {
+    return subTerm;
+  }
+
+  const declared = inverses[name].sort;
+
+  return declared.length > 0 ? {...subTerm, sort: declared} : subTerm;
+}
+
+// Every set-returning shape gets a total order, since two rows the ordering does not tell apart
+// would otherwise come back in whatever order the rows happen to sit in. A count is order-blind,
+// and a to-one embeds a single entity, so neither takes one.
 const Elixir_Hologram_Query_Stage = {
   "add_relationship/3": (entity, relationshipName, targetId) =>
     putRelationshipOp(
