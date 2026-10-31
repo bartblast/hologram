@@ -43,6 +43,8 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Entity.Module23,
                     Entity.Module24,
                     Entity.Module25,
+                    Entity.Module26,
+                    Entity.Module27,
                     Entity.Module3,
                     Entity.Module4,
                     Entity.Module5,

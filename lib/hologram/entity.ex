@@ -229,6 +229,13 @@ defmodule Hologram.Entity do
   @doc """
   Accumulates the given relationship definition in __relationships__ module attribute.
   A relationship is to-one when its type is a module and to-many when its type is a one-element list wrapping a module.
+
+  The options:
+
+    * `optional:` - a to-one may reference nothing, its reference holding nil.
+    * `unique:` - no two rows of the entity type reference the same row, enforced in the
+      database. To-one only. An optional unique to-one admits any number of rows referencing
+      nothing.
   """
   @spec relationship(atom, module | list(module), T.opts()) :: Macro.t()
   defmacro relationship(name, type, opts \\ []) do

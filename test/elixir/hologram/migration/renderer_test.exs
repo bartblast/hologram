@@ -252,6 +252,60 @@ defmodule Hologram.Migration.RendererTest do
       assert create_index.concurrently == true
     end
 
+    test "builds a unique reference index of a table born in the file inside the transaction" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Task, line: 3},
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :parent,
+          type: MyApp.Task,
+          opts: [optional: true, unique: true],
+          line: 4
+        }
+      ]
+
+      result = render(ops, Model.empty())
+
+      assert result.tail == []
+
+      index_names =
+        result.transactional
+        |> Enum.filter(&(&1.op == :create_index))
+        |> Enum.map(& &1.index)
+
+      assert "my_app_task_parent_id_$uidx" in index_names
+      refute "my_app_task_parent_id_$idx" in index_names
+    end
+
+    test "builds a unique reference index of a table that predates the file in the tail" do
+      pre =
+        model(%{
+          MyApp.Task => %{relationships: [{:parent, MyApp.Task, [optional: true]}]}
+        })
+
+      ops = [
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :parent,
+          changes: [unique: true],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert [create_index] = result.tail
+
+      assert create_index.index == "my_app_task_parent_id_$uidx"
+      assert create_index.unique == true
+      assert create_index.concurrently == true
+
+      assert %{index: "my_app_task_parent_id_$idx"} =
+               Enum.find(result.transactional, &(&1.op == :drop_index))
+    end
+
     test "defers the referencing ops past the objects they name" do
       ops = [
         %{op: :create_entity, entity: MyApp.Task, line: 3},

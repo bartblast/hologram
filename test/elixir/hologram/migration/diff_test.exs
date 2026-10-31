@@ -450,6 +450,40 @@ defmodule Hologram.Migration.DiffTest do
              }
     end
 
+    test "emits change_relationship when a to-one relationship becomes unique" do
+      replayed = model(%{MyApp.Task => %{relationships: [{:owner, MyApp.User, []}]}})
+      current = model(%{MyApp.Task => %{relationships: [{:owner, MyApp.User, [unique: true]}]}})
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :change_relationship,
+                   entity: MyApp.Task,
+                   name: :owner,
+                   changes: [unique: true]
+                 }
+               ],
+               questions: []
+             }
+    end
+
+    test "emits change_relationship when a to-one relationship stops being unique" do
+      replayed = model(%{MyApp.Task => %{relationships: [{:owner, MyApp.User, [unique: true]}]}})
+      current = model(%{MyApp.Task => %{relationships: [{:owner, MyApp.User, []}]}})
+
+      assert diff(replayed, current) == %{
+               ops: [
+                 %{
+                   op: :change_relationship,
+                   entity: MyApp.Task,
+                   name: :owner,
+                   changes: [unique: false]
+                 }
+               ],
+               questions: []
+             }
+    end
+
     test "withholds member additions and deletions into a question" do
       replayed =
         model(%{

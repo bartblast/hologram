@@ -58,7 +58,7 @@ defmodule Hologram.Entity.Validator do
     :uuid
   ]
 
-  @valid_relationship_opts [:optional]
+  @valid_relationship_opts [:optional, :unique]
 
   @valid_role_opts [:extends, :granted_to]
 
@@ -319,6 +319,7 @@ defmodule Hologram.Entity.Validator do
     validate_relationship_name!(module, name)
     validate_relationship_type!(module, name, type)
     validate_relationship_opts!(module, name, opts)
+    validate_unique_relationship!(module, name, type, opts)
     validate_field_collision!(module, "relationship", name, relationship_field_names(name, type))
     :ok
   end
@@ -848,7 +849,7 @@ defmodule Hologram.Entity.Validator do
     validate_known_opts!(module, "attribute", name, opts, @valid_attribute_opts)
     validate_optional_opt!(module, "attribute", name, opts)
     validate_server_only_opt!(module, name, opts)
-    validate_unique_opt!(module, name, opts)
+    validate_unique_opt!(module, "attribute", name, opts)
   end
 
   defp validate_attribute_type!(module, name, type) do
@@ -1315,6 +1316,7 @@ defmodule Hologram.Entity.Validator do
     validate_opts_shape!(module, "relationship", name, opts)
     validate_known_opts!(module, "relationship", name, opts, @valid_relationship_opts)
     validate_optional_opt!(module, "relationship", name, opts)
+    validate_unique_opt!(module, "relationship", name, opts)
   end
 
   defp validate_relationship_type!(module, name, type) do
@@ -1384,12 +1386,12 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp validate_unique_opt!(module, name, opts) do
+  defp validate_unique_opt!(module, kind, name, opts) do
     case Keyword.fetch(opts, :unique) do
       {:ok, value} when not is_boolean(value) ->
         raise Hologram.CompileError,
           message:
-            "invalid unique option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the unique option must be true or false"
+            "invalid unique option #{inspect(value)} for #{kind} #{inspect(name)} in #{inspect(module)} - the unique option must be true or false"
 
       _fetch_result ->
         :ok
@@ -1411,6 +1413,20 @@ defmodule Hologram.Entity.Validator do
 
     :ok
   end
+
+  # Uniqueness is over the reference a to-one stores on its row. A to-many stores none there - its
+  # edges are pairs in a join table - so there is nothing on the row for the option to constrain.
+  defp validate_unique_relationship!(module, name, [_target], opts) do
+    if Keyword.get(opts, :unique) == true do
+      raise Hologram.CompileError,
+        message:
+          "invalid unique option for relationship #{inspect(name)} in #{inspect(module)} - unique applies to a to-one relationship, and a to-many holds no reference to repeat"
+    end
+
+    :ok
+  end
+
+  defp validate_unique_relationship!(_module, _name, _target, _opts), do: :ok
 
   defp validate_use_opt_keys!(module, opts) do
     Enum.each(opts, fn {key, _value} ->

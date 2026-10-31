@@ -1740,6 +1740,26 @@ defmodule Hologram.Entity.ValidatorTest do
   end
 
   describe "validate_relationship!/4" do
+    test "accepts a unique to-one relationship" do
+      defmodule InlineEntityFixture109 do
+        use Hologram.Entity
+
+        relationship :owner, Module1, unique: true
+      end
+
+      assert InlineEntityFixture109.__relationships__() == [{:owner, Module1, [unique: true]}]
+    end
+
+    test "accepts a disabled unique option on a relationship" do
+      defmodule InlineEntityFixture110 do
+        use Hologram.Entity
+
+        relationship :owner, Module1, unique: false
+      end
+
+      assert InlineEntityFixture110.__relationships__() == [{:owner, Module1, [unique: false]}]
+    end
+
     test "rejects a to-one reference field colliding with an attribute" do
       expected_msg =
         "relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture27 derives entity field :owner_id, which collides with attribute :owner_id - every declaration must derive distinct fields"
@@ -1792,6 +1812,32 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           relationship :owner, Module1, optional: 1
+        end
+      end
+    end
+
+    test "rejects non-boolean unique option on a relationship" do
+      expected_msg =
+        "invalid unique option :yes for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture111 - the unique option must be true or false"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture111 do
+          use Hologram.Entity
+
+          relationship :owner, Module1, unique: :yes
+        end
+      end
+    end
+
+    test "rejects a unique to-many relationship" do
+      expected_msg =
+        "invalid unique option for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture112 - unique applies to a to-one relationship, and a to-many holds no reference to repeat"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture112 do
+          use Hologram.Entity
+
+          relationship :owners, [Module1], unique: true
         end
       end
     end
@@ -1903,7 +1949,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown relationship option" do
       expected_msg =
-        "unknown option :default for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture12 - valid relationship options are: :optional"
+        "unknown option :default for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture12 - valid relationship options are: :optional, :unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture12 do
@@ -1916,7 +1962,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects the server_only option on a relationship" do
       expected_msg =
-        "unknown option :server_only for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture87 - valid relationship options are: :optional"
+        "unknown option :server_only for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture87 - valid relationship options are: :optional, :unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture87 do

@@ -33,9 +33,9 @@ defmodule Hologram.DB.Mapper do
   nil otherwise), :fk_constraint (the derived `<table>_<column>_$fk` constraint name for
   reference columns, nil otherwise), :index (the derived index name for the columns that
   carry one - `<table>_<column>_$idx` on a to-one reference, which PostgreSQL never indexes
-  automatically, and `<table>_<attribute>_$sort_$idx` on a sort-key companion, so an ordering
-  or a comparison on the attribute is served from the key rather than from a sort - nil
-  otherwise), and :source (:system, :revisions, or the declaration the column is derived from).
+  automatically (a unique to-one carries none here, its unique index serving instead), and
+  `<table>_<attribute>_$sort_$idx` on a sort-key companion, so an ordering or a comparison on
+  the attribute is served from the key rather than from a sort - nil otherwise), and :source (:system, :revisions, or the declaration the column is derived from).
   To-many relationships derive no columns - they live in join tables.
 
   Each :string attribute derives a nullable `<attribute>_$sort` companion column (source
@@ -77,7 +77,8 @@ defmodule Hologram.DB.Mapper do
   entities) - and returns a map from entity type module to its mapping: :table (the table
   name), :pk_constraint (the derived `<table>_$pk` constraint name), :columns (as returned
   by columns/1), :indexes (index name to %{columns:, nulls_distinct:, unique:} - a
-  `<table>_<attribute>_$uidx` entry per `unique: true` attribute, plus the role grant store's
+  `<table>_<attribute>_$uidx` entry per `unique: true` attribute, a `<table>_<column>_$uidx`
+  entry per `unique: true` to-one over its reference column, plus the role grant store's
   framework-owned one), and :join_tables (as returned by join_tables/1).
   """
   @spec derive!(list(module), list(module)) :: %{module => %{atom => any}}
@@ -325,6 +326,14 @@ defmodule Hologram.DB.Mapper do
       entry.relationships
       |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
       |> Enum.map(fn {name, target, opts} ->
+        # A unique reference is indexed by its unique index instead (see entity_indexes/3).
+        index =
+          if Keyword.get(opts, :unique) == true do
+            nil
+          else
+            fit_identifier("#{table_name}_#{name}_id_$idx")
+          end
+
         %{
           name: fit_identifier("#{name}_id"),
           type: :uuid,
@@ -335,7 +344,7 @@ defmodule Hologram.DB.Mapper do
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
           fk_constraint: fit_identifier("#{table_name}_#{name}_id_$fk"),
-          index: fit_identifier("#{table_name}_#{name}_id_$idx"),
+          index: index,
           source: {:relationship, name}
         }
       end)
@@ -386,6 +395,11 @@ defmodule Hologram.DB.Mapper do
   # Nulls stay distinct, so an optional unique attribute admits any number of rows holding
   # none: uniqueness is over the values an attribute holds, and nil is the absence of one.
   #
+  # A unique to-one's reference column gets one too, under the same rule - an optional one admits
+  # any number of rows referencing nothing. It stands in for the plain index the column would
+  # otherwise carry: every lookup that one served, this one serves, and a second index over the
+  # same column would only cost each write.
+  #
   # The index is over the raw column, so a string value is bounded by the btree entry limit -
   # the validator refuses a unique string above it, so the engine never gets to. The sort-key
   # companion sidesteps the same limit by indexing a bounded key, which a unique index cannot
@@ -393,12 +407,26 @@ defmodule Hologram.DB.Mapper do
   # TODO: a unique index over a hash expression lifts the bound for unbounded strings, once a
   # declaration needs it - it teaches the whole index chain an expression shape.
   defp entity_indexes(entity_type, entry, table_name) do
-    entry.attributes
-    |> Enum.filter(fn {_name, _type, opts} -> Keyword.get(opts, :unique) == true end)
-    |> Map.new(fn {name, _type, _opts} ->
-      {fit_identifier("#{table_name}_#{name}_$uidx"),
-       %{columns: [Atom.to_string(name)], nulls_distinct: true, unique: true}}
-    end)
+    attribute_indexes =
+      entry.attributes
+      |> Enum.filter(fn {_name, _type, opts} -> Keyword.get(opts, :unique) == true end)
+      |> Map.new(fn {name, _type, _opts} ->
+        {fit_identifier("#{table_name}_#{name}_$uidx"),
+         %{columns: [Atom.to_string(name)], nulls_distinct: true, unique: true}}
+      end)
+
+    reference_indexes =
+      entry.relationships
+      |> Enum.filter(fn {_name, type, opts} ->
+        not is_list(type) and Keyword.get(opts, :unique) == true
+      end)
+      |> Map.new(fn {name, _type, _opts} ->
+        {fit_identifier("#{table_name}_#{name}_id_$uidx"),
+         %{columns: [fit_identifier("#{name}_id")], nulls_distinct: true, unique: true}}
+      end)
+
+    attribute_indexes
+    |> Map.merge(reference_indexes)
     |> Map.merge(framework_indexes(entity_type))
   end
 
