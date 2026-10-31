@@ -1,7 +1,7 @@
 defmodule HologramFeatureTests.QueriesTest do
   use HologramFeatureTests.TestCase, async: false
 
-  import Hologram.Query, only: [add_relationship: 3]
+  import Hologram.Query, only: [add_relationship: 3, delete_relationship: 3]
 
   alias Hologram.DB
   alias Hologram.DB.Connection
@@ -293,6 +293,115 @@ defmodule HologramFeatureTests.QueriesTest do
     refute html =~ ~s("off-topic")
   end
 
+  # Each of these changes the database once the client holds its fill, so what moves on screen is
+  # what the stream told the browser, on the same page load.
+  feature "moves a message into a channel's inverse in position order", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    DB.update!(Message, rows.bye.id, channel_id: rows.general.id)
+
+    session
+    |> assert_text(css("#channel_messages"), ~r/^general: hi, bye, there \| topic: welcome$/)
+    |> assert_same_page_load()
+  end
+
+  feature "moves a message out of a channel's inverse", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    DB.update!(Message, rows.hi.id, channel_id: rows.random.id)
+
+    session
+    |> assert_text(css("#channel_messages"), ~r/^general: there \| topic: welcome$/)
+    |> assert_same_page_load()
+  end
+
+  feature "adds a created message to its channel's inverse in position order", %{
+    session: session
+  } do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    %{body: "fresh", channel_id: rows.general.id, position: 2}
+    |> Message.new()
+    |> DB.create!()
+
+    session
+    |> assert_text(
+      css("#channel_messages"),
+      ~r/^general: hi, fresh, there \| topic: welcome$/
+    )
+    |> assert_same_page_load()
+  end
+
+  feature "removes a deleted message from its channel's inverse", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    DB.delete!(Message, rows.there.id)
+
+    session
+    |> assert_text(css("#channel_messages"), ~r/^general: hi \| topic: welcome$/)
+    |> assert_same_page_load()
+  end
+
+  feature "adds a message to a label's inverse when it gains the label", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    rows.bye
+    |> add_relationship(:labels, rows.urgent.id)
+    |> DB.update!()
+
+    session
+    |> assert_text(css("#label_messages"), ~r/^urgent: bye, hi, there$/)
+    |> assert_same_page_load()
+  end
+
+  feature "removes a message from a label's inverse when it loses the label", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    rows.there
+    |> delete_relationship(:labels, rows.urgent.id)
+    |> DB.update!()
+
+    session
+    |> assert_text(css("#label_messages"), ~r/^urgent: hi$/)
+    |> assert_same_page_load()
+  end
+
   # Two products so the parent's ordering picks a definite one to pass down, and reviews split
   # across both so a query filtering by the passed product reads fewer rows than one that does not.
   defp seed_products_and_reviews do
@@ -322,7 +431,8 @@ defmodule HologramFeatureTests.QueriesTest do
   end
 
   # General's messages are created out of position order, so the order they render in is the
-  # inverse's declared one. Random and later are what the page's render never reads.
+  # inverse's declared one - and random's bye sits between them, so a move into general shows
+  # where it lands. Random and later are what the page's render never reads.
   defp seed_channels do
     general =
       %{name: "general"}
@@ -343,7 +453,7 @@ defmodule HologramFeatureTests.QueriesTest do
     |> DB.create!()
 
     there =
-      %{body: "there", channel_id: general.id, position: 2}
+      %{body: "there", channel_id: general.id, position: 3}
       |> Message.new()
       |> DB.create!()
 
@@ -353,7 +463,7 @@ defmodule HologramFeatureTests.QueriesTest do
       |> DB.create!()
 
     bye =
-      %{body: "bye", channel_id: random.id, position: 1}
+      %{body: "bye", channel_id: random.id, position: 2}
       |> Message.new()
       |> DB.create!()
 
@@ -372,6 +482,8 @@ defmodule HologramFeatureTests.QueriesTest do
       |> add_relationship(:labels, label.id)
       |> DB.update!()
     end)
+
+    %{bye: bye, general: general, hi: hi, random: random, there: there, urgent: urgent}
   end
 
   # Distinct titles, so no ordering leans on the id tiebreaker.
