@@ -103,6 +103,21 @@ export default class Client {
     HttpTransport.restartPing(sendImmediatePing);
   }
 
+  // Asks the server for the tag of the identity the browser's session holds now (see
+  // Hologram.checkIdentity). Answers null when no answer comes - offline, say - which says nothing
+  // about the identity.
+  static async fetchIdentityTag() {
+    try {
+      const response = await fetch("/hologram/identity-tag", {
+        cache: "no-store",
+      });
+
+      return response.headers.get(IdentityTracker.HEADER);
+    } catch {
+      return null;
+    }
+  }
+
   // Asks the server to describe a page rather than render it, for a client that renders it itself.
   //
   // The answer is a page only when it says so: a page's middleware can answer the request instead,

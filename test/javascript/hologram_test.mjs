@@ -57,6 +57,62 @@ const clearIdentityTracker = () => {
 };
 
 describe("Hologram", () => {
+  describe("checkIdentity()", () => {
+    let fetchIdentityTagStub, reloadStub;
+
+    beforeEach(() => {
+      IdentityTracker.init("tag-1");
+      fetchIdentityTagStub = sinon.stub(Client, "fetchIdentityTag");
+      reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+    });
+
+    afterEach(() => {
+      reloadStub.restore();
+      fetchIdentityTagStub.restore();
+      clearIdentityTracker();
+    });
+
+    // A logout in a document loaded after this one, for one.
+    it("loads the page afresh when the identity changed", async () => {
+      fetchIdentityTagStub.resolves("tag-2");
+
+      await Hologram.checkIdentity();
+
+      sinon.assert.calledOnce(reloadStub);
+      assert.equal(IdentityTracker.tag, "tag-2");
+    });
+
+    // A click or a queued command can come back while the check waits for its answer, and see the
+    // change first.
+    it("loads the page afresh when another response saw the change first", async () => {
+      fetchIdentityTagStub.callsFake(async () => {
+        IdentityTracker.observe("tag-2");
+        return "tag-2";
+      });
+
+      await Hologram.checkIdentity();
+
+      sinon.assert.calledOnce(reloadStub);
+    });
+
+    it("leaves the page as it is when the identity is the same", async () => {
+      fetchIdentityTagStub.resolves("tag-1");
+
+      await Hologram.checkIdentity();
+
+      sinon.assert.notCalled(reloadStub);
+    });
+
+    // Offline, say.
+    it("leaves the page as it is when no answer comes", async () => {
+      fetchIdentityTagStub.resolves(null);
+
+      await Hologram.checkIdentity();
+
+      sinon.assert.notCalled(reloadStub);
+    });
+  });
+
   // A navigation that fails records its epoch dead for the rest of the session, and every later
   // dispatch stamped with that epoch is dropped. Left in place, a test's failed navigation would
   // decide the outcome of whichever test reuses the epoch next.

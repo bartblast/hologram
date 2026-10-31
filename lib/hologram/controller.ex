@@ -415,6 +415,26 @@ defmodule Hologram.Controller do
   end
 
   @doc """
+  Handles the identity tag HTTP GET request: answers with no body and the tag of the identity the
+  request's session holds in the `hologram-identity-tag` header (see
+  `Hologram.Runtime.Session.identity_tag/1`).
+
+  The client asks for it when the browser brings a page back from its back/forward cache, as it
+  was left, since the identity can have changed while the page was away. Reading the tag starts no
+  session: a request with none gets the tag of no identity, which matches no page's. The answer
+  is never stored, since it is only true at the moment it is sent.
+  """
+  @spec handle_identity_tag_request(Plug.Conn.t()) :: Plug.Conn.t()
+  def handle_identity_tag_request(initial_conn) do
+    initial_conn
+    |> PlugConnUtils.init_conn()
+    |> put_identity_tag_header()
+    |> Plug.Conn.put_resp_header("cache-control", "no-store")
+    |> Plug.Conn.send_resp(204, "")
+    |> Plug.Conn.halt()
+  end
+
+  @doc """
   Handles the initial page HTTP GET request by building HTTP response.
 
   ## Parameters

@@ -191,6 +191,23 @@ export default class Hologram {
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
 
+  // Made public to make tests easier
+  //
+  // Asks the server who is logged in now, and loads the page afresh when that is another identity
+  // than the one the tab knew. Run for a document the browser brings back from its back/forward
+  // cache, which is exactly as it was left, page and runtime state included, while the identity
+  // can have changed in the meantime: a logout in a document loaded after it, for one. A page for
+  // a logged-in user is sent so that the browser keeps none, but an app can set its own caching,
+  // and a page for no logged-in user is kept. With no answer the page stays as it is.
+  static async checkIdentity() {
+    const period = IdentityTracker.period;
+    const identityTag = await Client.fetchIdentityTag();
+
+    if (IdentityTracker.observe(identityTag) !== period) {
+      Hologram.reloadBrowserLocation();
+    }
+  }
+
   // Public API for dispatching actions from JavaScript.
   // Converts plain JS values to Hologram types and schedules the action for execution.
   // Example: globalThis.Hologram.dispatchAction("increment", "page", {amount: 5})
@@ -1699,6 +1716,11 @@ export default class Hologram {
     window.addEventListener("popstate", Hologram.handlePopstateEvent);
 
     window.addEventListener("pageshow", (event) => {
+      // A page the browser brings back from its back/forward cache.
+      if (event.persisted) {
+        Hologram.checkIdentity();
+      }
+
       // Reconnect when page is restored from bfcache OR when navigating back from external page
       if (event.persisted || !Client.isConnected()) {
         Client.connect(true);

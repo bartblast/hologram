@@ -2051,6 +2051,51 @@ defmodule Hologram.ControllerTest do
     end
   end
 
+  describe "handle_identity_tag_request/1" do
+    test "answers with no body and the tag of the identity the request's session holds" do
+      session = %{hologram_session_id: "test-session-id", hologram_user_id: 7}
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/identity-tag")
+        |> Plug.Test.init_test_session(session)
+        |> handle_identity_tag_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 204
+      assert conn.resp_body == ""
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [
+               identity_tag_of(session)
+             ]
+    end
+
+    # The answer is only true at the moment it is sent.
+    test "keeps the answer out of caches" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/identity-tag")
+        |> Plug.Test.init_test_session(%{hologram_session_id: "test-session-id"})
+        |> handle_identity_tag_request()
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    # A check must not create what it checks: a request with no session gets the tag of no
+    # identity, which matches no page's.
+    test "starts no session" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/identity-tag")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_identity_tag_request()
+
+      assert Session.get_session_id(conn) == nil
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [identity_tag_of(%{})]
+    end
+  end
+
   describe "handle_initial_page_request/2" do
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)

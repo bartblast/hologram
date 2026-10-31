@@ -331,6 +331,38 @@ describe("Client", () => {
     });
   });
 
+  describe("fetchIdentityTag()", () => {
+    afterEach(() => sinon.restore());
+
+    // The answer is only true at the moment it is sent.
+    it("asks the identity tag route past the browser's cache", async () => {
+      const fetchStub = sinon
+        .stub(globalThis, "fetch")
+        .resolves({headers: new Headers()});
+
+      await Client.fetchIdentityTag();
+
+      sinon.assert.calledOnceWithExactly(fetchStub, "/hologram/identity-tag", {
+        cache: "no-store",
+      });
+    });
+
+    it("answers the tag the response carries", async () => {
+      sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers({"hologram-identity-tag": "tag-2"}),
+      });
+
+      assert.equal(await Client.fetchIdentityTag(), "tag-2");
+    });
+
+    // Offline, say. No answer says nothing about the identity.
+    it("answers null when no answer comes", async () => {
+      sinon.stub(globalThis, "fetch").rejects(new TypeError("Failed to fetch"));
+
+      assert.isNull(await Client.fetchIdentityTag());
+    });
+  });
+
   describe("fetchPage()", () => {
     let fetchStub, onNotPageStub, onSuccessStub, originalInstanceId;
 
