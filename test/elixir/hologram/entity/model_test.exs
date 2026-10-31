@@ -15,6 +15,10 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
@@ -1469,6 +1473,20 @@ defmodule Hologram.Entity.ModelTest do
       assert from_modules([InlineUniqueRelationshipFixture]).entities[
                InlineUniqueRelationshipFixture
              ].relationships == [{:owner, Module1, [unique: true]}, {:reviewer, Module1, []}]
+    end
+
+    # An inverse stores nothing, so declaring or removing one is no change to the model term - no
+    # migration, and no new hash to reload the clients over.
+    test "leaves out inverse relationships" do
+      model = from_modules([Module26, Module27, Module28, Module29])
+
+      assert model.entities[Module26] == %{
+               attributes: [{:name, :string, []}],
+               relationships: [],
+               roles: []
+             }
+
+      assert model.entities[Module29].relationships == []
     end
 
     test "derives global role entries from the given role modules" do

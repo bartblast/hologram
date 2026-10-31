@@ -13,6 +13,8 @@ defmodule Hologram.DB.MapperTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Role
@@ -451,6 +453,22 @@ defmodule Hologram.DB.MapperTest do
 
       assert Enum.find(mapping[Module3].columns, &(&1.name == "c_id")).index ==
                "test_fixtures_entity_module3_c_id_$idx"
+    end
+
+    test "derives no column and no join table for an inverse relationship" do
+      mapping = derive!([Module26, Module27, Module28, Module29], [])
+
+      assert Enum.map(mapping[Module26].columns, & &1.source) == [
+               :system,
+               {:attribute, :name},
+               :system,
+               :system,
+               :revisions,
+               {:sort_key, :name}
+             ]
+
+      assert mapping[Module26].join_tables == []
+      assert mapping[Module29].join_tables == []
     end
 
     test "carries a sort-key companion for every string attribute" do

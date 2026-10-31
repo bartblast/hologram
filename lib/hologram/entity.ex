@@ -79,6 +79,7 @@ defmodule Hologram.Entity do
       register_policy_sources_accumulator(),
       register_role_declarations_accumulator(),
       register_relationships_accumulator(),
+      register_inverse_relationships_accumulator(),
       register_roles_attribute()
     ] ++ user_entity_marker(opts)
   end
@@ -121,6 +122,12 @@ defmodule Hologram.Entity do
       def __attributes__, do: Enum.sort(@__attributes__)
 
       @doc """
+      Returns the list of inverse relationship definitions for the compiled entity type, sorted by relationship name - relationships declared with the inverse option, which store nothing of their own and read the relationship they reverse on the related type.
+      """
+      @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
+      def __inverse_relationships__, do: Enum.sort(@__inverse_relationships__)
+
+      @doc """
       Returns the list of policy definitions for the compiled entity type, in declaration order.
       Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
       """
@@ -134,6 +141,7 @@ defmodule Hologram.Entity do
 
       @doc """
       Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
+      Inverse relationships are listed apart, with the inverse relationship definitions.
       """
       @spec __relationships__() :: list({atom, module | list(module), keyword})
       def __relationships__, do: Enum.sort(@__relationships__)
@@ -228,27 +236,39 @@ defmodule Hologram.Entity do
   end
 
   @doc """
-  Accumulates the given relationship definition in __relationships__ module attribute.
+  Accumulates the given relationship definition - in __relationships__ module attribute, or in
+  __inverse_relationships__ module attribute for an inverse.
   A relationship is to-one when its type is a module and to-many when its type is a one-element list wrapping a module.
 
   The options:
 
+    * `inverse:` - the relationship is the inverse of one the related type declares, named bare:
+      `relationship :messages, [Message], inverse: channel` holds the messages whose `channel`
+      is the row, `relationship :posts, [Post], inverse: tags` the posts whose `tags` hold it,
+      and `relationship :profile, Profile, inverse: user` the one profile whose `user` is the
+      row. An inverse stores nothing of its own, so declaring or removing one never moves data.
+      It takes no `optional:` or `unique:`, since the relationship it reverses carries both.
     * `optional:` - a to-one may reference nothing, its reference holding nil.
+    * `sort:` - the order of an inverse set, named bare and read on the related type:
+      `sort: created_at`, `sort: [created_at: :desc]`.
     * `unique:` - no two rows of the entity type reference the same row, enforced in the
       database and reported by the write verbs as `:unique` on the `<name>_id` field. To-one
       only. An optional unique to-one admits any number of rows referencing nothing.
+
+  `inverse:` and `sort:` name the related type's vocabulary and are written in place on the line.
+  A value chosen in the surrounding code is pinned, `inverse: ^name`.
   """
   @spec relationship(atom, module | list(module), T.opts()) :: Macro.t()
   defmacro relationship(name, type, opts \\ []) do
     lowered_opts = Expression.relationship_opts(opts, __CALLER__)
 
     quote do
-      name = unquote(name)
-      type = unquote(type)
-      opts = unquote(lowered_opts)
-
-      Validator.validate_relationship!(__MODULE__, name, type, opts)
-      Module.put_attribute(__MODULE__, :__relationships__, {name, type, opts})
+      Entity.__put_relationship__(
+        __MODULE__,
+        unquote(name),
+        unquote(type),
+        unquote(lowered_opts)
+      )
     end
   end
 
@@ -327,6 +347,23 @@ defmodule Hologram.Entity do
     :ok
   end
 
+  # An inverse goes into a list of its own: every reader of the stored relationships reads what a
+  # row stores, and an inverse stores nothing.
+  @doc false
+  @spec __put_relationship__(module, atom, any, T.opts()) :: :ok
+  def __put_relationship__(module, name, type, opts) do
+    Validator.validate_relationship!(module, name, type, opts)
+
+    accumulator =
+      if Keyword.has_key?(opts, :inverse),
+        do: :__inverse_relationships__,
+        else: :__relationships__
+
+    Module.put_attribute(module, accumulator, {name, type, opts})
+
+    :ok
+  end
+
   # A role name is one role, however many places declare it - a policy taken on, another policy
   # nested inside it, and the entity type itself. The RAW declarations are kept beside the merged
   # list, because a merged entry cannot say which source declared which extends target, which is
@@ -354,6 +391,14 @@ defmodule Hologram.Entity do
   def register_attributes_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__attributes__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_inverse_relationships_accumulator() :: AST.t()
+  def register_inverse_relationships_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__inverse_relationships__, accumulate: true)
     end
   end
 
@@ -546,7 +591,15 @@ defmodule Hologram.Entity do
           [{:"#{name}_id", nil}, {name, %NotIncluded{relationship: name}}]
       end)
 
-    Enum.sort(system_attribute_fields ++ attribute_fields ++ relationship_fields)
+    # An inverse stores no reference, so it holds the one field its rows are embedded in.
+    inverse_fields =
+      module
+      |> Module.get_attribute(:__inverse_relationships__)
+      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{relationship: name}} end)
+
+    Enum.sort(
+      system_attribute_fields ++ attribute_fields ++ relationship_fields ++ inverse_fields
+    )
   end
 
   @doc """
@@ -636,6 +689,11 @@ defmodule Hologram.Entity do
       |> Module.get_attribute(:__relationships__)
       |> Enum.flat_map(&relationship_field_type_asts/1)
 
+    inverse_field_types =
+      module
+      |> Module.get_attribute(:__inverse_relationships__)
+      |> Enum.map(&inverse_field_type_ast/1)
+
     system_attribute_field_types =
       Enum.map(@system_attributes, fn {name, type, opts} ->
         {name, attribute_field_type_ast(type, opts)}
@@ -646,6 +704,7 @@ defmodule Hologram.Entity do
       | Enum.concat([
           attribute_field_types,
           relationship_field_types,
+          inverse_field_types,
           system_attribute_field_types
         ])
     ]
@@ -658,6 +717,17 @@ defmodule Hologram.Entity do
       Enum.group_by(errors, fn {name, _reason} -> name end, fn {_name, reason} -> reason end)
 
     {:error, grouped}
+  end
+
+  # An inverse holds its sentinel when not included, and once included a list of the related type's
+  # structs for a set, one struct or nil for a single one.
+  defp inverse_field_type_ast({name, [target], _opts}) do
+    {name,
+     type_union([{:list, [], [remote_type_ast(target)]}, remote_type_ast(Entity.NotIncluded)])}
+  end
+
+  defp inverse_field_type_ast({name, target, _opts}) do
+    {name, type_union([remote_type_ast(target), remote_type_ast(Entity.NotIncluded), nil])}
   end
 
   # Spelled with the module ATOM rather than with an alias, so that an entity module's own

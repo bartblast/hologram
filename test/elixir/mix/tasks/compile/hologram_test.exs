@@ -96,6 +96,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     @spec __attributes__() :: list({atom, atom, keyword})
     def __attributes__, do: [{:owner_id, :string, []}]
 
+    @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
+    def __inverse_relationships__, do: []
+
     @spec __is_hologram_entity__() :: boolean
     def __is_hologram_entity__, do: true
 

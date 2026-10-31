@@ -15,6 +15,9 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module20
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -37,6 +40,19 @@ defmodule Hologram.EntityTest do
 
   test "__is_hologram_entity__/0" do
     assert Module1.__is_hologram_entity__()
+  end
+
+  describe "__inverse_relationships__/0" do
+    test "returns empty list for entity type with no inverse relationship declarations" do
+      assert Module1.__inverse_relationships__() == []
+    end
+
+    test "returns inverse relationship definitions sorted by name" do
+      assert Module26.__inverse_relationships__() == [
+               {:messages, [Module28], [inverse: :channel, sort: :position]},
+               {:topic, Module27, [inverse: :channel]}
+             ]
+    end
   end
 
   describe "__is_hologram_user_entity__/0" do
@@ -102,6 +118,10 @@ defmodule Hologram.EntityTest do
       assert Module1.__relationships__() == []
     end
 
+    test "leaves out inverse relationships" do
+      assert Module26.__relationships__() == []
+    end
+
     test "returns relationship definitions sorted by name regardless of declaration order" do
       assert Module3.__relationships__() == [
                {:a, [Module2], []},
@@ -153,6 +173,19 @@ defmodule Hologram.EntityTest do
         |> Enum.sort()
 
       assert field_names == [:__meta__, :created_at, :id, :updated_at]
+    end
+
+    test "derives one field per inverse relationship and no reference field" do
+      field_names =
+        %Module26{}
+        |> Map.from_struct()
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert field_names == [:__meta__, :created_at, :id, :messages, :name, :topic, :updated_at]
+
+      assert %Module26{}.messages == %NotIncluded{relationship: :messages}
+      assert %Module26{}.topic == %NotIncluded{relationship: :topic}
     end
 
     test "includes declared attribute fields" do
@@ -813,6 +846,20 @@ defmodule Hologram.EntityTest do
                b_id: "Hologram.Entity.id() | nil",
                created_at: "DateTime.t() | nil",
                id: "Hologram.Entity.id() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types an inverse set as a list and a single inverse as one row or nil" do
+      assert struct_field_types(Module26) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               created_at: "DateTime.t() | nil",
+               id: "Hologram.Entity.id() | nil",
+               messages:
+                 "[Hologram.Test.Fixtures.Entity.Module28.t()] | Hologram.Entity.NotIncluded.t()",
+               name: "String.t() | nil",
+               topic:
+                 "Hologram.Test.Fixtures.Entity.Module27.t() | Hologram.Entity.NotIncluded.t() | nil",
                updated_at: "DateTime.t() | nil"
              }
     end
