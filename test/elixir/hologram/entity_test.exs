@@ -18,6 +18,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -333,6 +334,23 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "describe_inverse/2" do
+    test "names the reference column an inverse of a to-one reads" do
+      assert describe_inverse(Module26, :messages) ==
+               "the channel_id reference of Hologram.Test.Fixtures.Entity.Module28"
+    end
+
+    test "names the reference column a single inverse of a unique to-one reads" do
+      assert describe_inverse(Module26, :topic) ==
+               "the channel_id reference of Hologram.Test.Fixtures.Entity.Module27"
+    end
+
+    test "names the to-many relationship an inverse of one reads" do
+      assert describe_inverse(Module29, :messages) ==
+               "the labels relationship of Hologram.Test.Fixtures.Entity.Module28"
+    end
+  end
+
   describe "expand_role/2" do
     test "returns the role name alone when no other role extends it" do
       assert expand_role(Module12, :admin) == [:admin]
@@ -377,6 +395,68 @@ defmodule Hologram.EntityTest do
 
       assert embedded_unix_ms >= unix_ms_before
       assert embedded_unix_ms <= unix_ms_after
+    end
+  end
+
+  describe "includable_names/1" do
+    test "returns the stored and inverse relationship names, sorted" do
+      defmodule IncludableNamesFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        relationship :a, Module1
+        relationship :b, [Module28], inverse: channel
+        relationship :c, Module1
+      end
+
+      assert includable_names(IncludableNamesFixture) == [:a, :b, :c]
+    end
+
+    test "returns the names of each kind of relationship" do
+      assert includable_names(Module26) == [:messages, :topic]
+      assert includable_names(Module28) == [:channel, :labels]
+      assert includable_names(Module29) == [:messages]
+    end
+
+    test "returns no names for an entity type with no relationships" do
+      assert includable_names(Module1) == []
+    end
+  end
+
+  describe "inverse_relationship/2" do
+    test "describes an inverse set of a to-one" do
+      assert inverse_relationship(Module26, :messages) == %{
+               forward: :channel,
+               reference?: true,
+               sort: :position,
+               target: Module28,
+               to_many?: true
+             }
+    end
+
+    test "describes a single inverse of a unique to-one" do
+      assert inverse_relationship(Module26, :topic) == %{
+               forward: :channel,
+               reference?: true,
+               sort: [],
+               target: Module27,
+               to_many?: false
+             }
+    end
+
+    test "describes an inverse set of a to-many" do
+      assert inverse_relationship(Module29, :messages) == %{
+               forward: :labels,
+               reference?: false,
+               sort: [],
+               target: Module28,
+               to_many?: true
+             }
+    end
+
+    test "returns nil for a stored relationship" do
+      assert inverse_relationship(Module28, :channel) == nil
     end
   end
 
@@ -464,6 +544,13 @@ defmodule Hologram.EntityTest do
 
       assert entity.created_at == nil
       assert entity.updated_at == nil
+    end
+
+    test "refuses a value for an inverse relationship" do
+      expected_msg =
+        "relationship :messages of Hologram.Test.Fixtures.Entity.Module26 cannot be assigned at construction - it is an inverse that reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so write that instead"
+
+      assert_error ArgumentError, expected_msg, fn -> new(Module26, messages: []) end
     end
 
     test "applies declared defaults to absent attributes" do

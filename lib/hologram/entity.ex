@@ -386,6 +386,70 @@ defmodule Hologram.Entity do
     :ok
   end
 
+  # How a refusal names where the fact behind a declared inverse lives: the reference column of the
+  # related type for an inverse of a to-one, the related type's relationship for an inverse of a
+  # to-many.
+  @doc false
+  @spec describe_inverse(module, atom) :: String.t()
+  def describe_inverse(entity_type, name) do
+    inverse = inverse_relationship(entity_type, name)
+
+    if inverse.reference? do
+      "the #{inverse.forward}_id reference of #{inspect(inverse.target)}"
+    else
+      "the #{inverse.forward} relationship of #{inspect(inverse.target)}"
+    end
+  end
+
+  # The fields of the entity type that can hold embedded rows: its stored relationships and its
+  # inverses.
+  @doc false
+  @spec includable_names(module) :: list(atom)
+  def includable_names(entity_type) do
+    entity_type.__relationships__()
+    |> Enum.concat(entity_type.__inverse_relationships__())
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+    |> Enum.sort()
+  end
+
+  # What an inverse reads: the related type, the relationship it reverses there and whether
+  # that one is a to-one (read from its reference column) or a to-many (read from its join table),
+  # the declared order in the sort stage's data form, and whether the inverse is a set. Nil for a
+  # name that is no inverse of the entity type. The related type has to be compiled and to declare
+  # the reversed relationship.
+  @doc false
+  @spec inverse_relationship(module, atom) ::
+          %{
+            forward: atom,
+            reference?: boolean,
+            sort: atom | list,
+            target: module,
+            to_many?: boolean
+          }
+          | nil
+  def inverse_relationship(entity_type, name) do
+    case Enum.find(entity_type.__inverse_relationships__(), &(elem(&1, 0) == name)) do
+      {_name, type, opts} ->
+        target =
+          type
+          |> List.wrap()
+          |> hd()
+
+        forward = Keyword.fetch!(opts, :inverse)
+
+        %{
+          forward: forward,
+          reference?: not is_list(relationship_target(target, forward)),
+          sort: Keyword.get(opts, :sort, []),
+          target: target,
+          to_many?: is_list(type)
+        }
+
+      nil ->
+        nil
+    end
+  end
+
   @doc false
   @spec register_attributes_accumulator() :: AST.t()
   def register_attributes_accumulator do
@@ -806,6 +870,17 @@ defmodule Hologram.Entity do
   end
 
   defp validate_construction_values!(entity_type, values_map) do
+    assigned_inverse_name =
+      entity_type.__inverse_relationships__()
+      |> Enum.map(fn {name, _type, _opts} -> name end)
+      |> Enum.find(&Map.has_key?(values_map, &1))
+
+    if assigned_inverse_name do
+      raise ArgumentError,
+        message:
+          "relationship #{inspect(assigned_inverse_name)} of #{inspect(entity_type)} cannot be assigned at construction - it is an inverse that reads #{describe_inverse(entity_type, assigned_inverse_name)}, so write that instead"
+    end
+
     assigned_relationship_name =
       entity_type.__relationships__()
       |> Enum.map(fn {name, _type, _opts} -> name end)
