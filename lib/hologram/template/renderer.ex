@@ -195,6 +195,17 @@ defmodule Hologram.Template.Renderer do
   end
 
   @doc """
+  Substitutes the `$IDENTITY_TAG_JS_PLACEHOLDER` token in the given HTML with the identity tag
+  supplied by the caller, as a JavaScript string (see `Hologram.Runtime.Session.identity_tag/1`).
+  The tag is of the identity the whole request leaves behind, which is known only once the render
+  and the response's decorations are done.
+  """
+  @spec interpolate_identity_tag_js(String.t(), String.t()) :: String.t()
+  def interpolate_identity_tag_js(html, identity_tag) do
+    String.replace(html, "$IDENTITY_TAG_JS_PLACEHOLDER", Jason.encode!(identity_tag))
+  end
+
+  @doc """
   Substitutes the `$SELF_ECHOES_JS_PLACEHOLDER` token in the given HTML with
   the encoded list of actions supplied by the caller.
   """

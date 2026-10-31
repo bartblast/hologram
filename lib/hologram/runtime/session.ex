@@ -42,6 +42,27 @@ defmodule Hologram.Runtime.Session do
   end
 
   @doc """
+  Returns the tag of the identity the conn's session holds: who is logged in, in which session.
+
+  The client stamps the pages it saves for Back and Forward with the tag they were rendered
+  under, and restores one only while the tag is the same, so that a page never comes back for
+  another user than the one it was rendered for. The tag changes with the Hologram session ID
+  (a new session) and with the user ID (a login or a logout), and with nothing else the session
+  holds.
+
+  The tag is a digest only for its form, a fixed 43 characters that fit in a response header
+  whatever the user ID is. It hides nothing, and the server never trusts it.
+  """
+  @spec identity_tag(Plug.Conn.t()) :: String.t()
+  def identity_tag(conn) do
+    data = :erlang.term_to_binary({get_session_id(conn), get_user_id(conn)}, [:deterministic])
+
+    :sha256
+    |> :crypto.hash(data)
+    |> Base.url_encode64(padding: false)
+  end
+
+  @doc """
   Ensures a Hologram session ID is present in the Phoenix session.
 
   Mints a UUIDv4 under the `#{inspect(@session_id_key)}` key if absent.
