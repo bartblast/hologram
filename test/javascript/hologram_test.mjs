@@ -2595,6 +2595,21 @@ describe("Hologram", () => {
 
       // The property the whole feature rests on: what the server described is on screen while the
       // page's own code is still in flight.
+      // An entry with no state is taken for the page on screen only under its path.
+      it("records the path the page is shown under", async () => {
+        const originalHistoryId = Hologram.historyId;
+        const originalPagePath = Hologram.pagePath;
+
+        try {
+          await Hologram.loadNewPage("/target-path", payloadFor("path"));
+
+          assert.equal(Hologram.pagePath, "/target-path");
+        } finally {
+          Hologram.historyId = originalHistoryId;
+          Hologram.pagePath = originalPagePath;
+        }
+      });
+
       it("puts the page on screen before its bundle has run", async () => {
         await Hologram.loadNewPage("/target", payloadFor("aaa", "new content"));
 
@@ -3972,6 +3987,241 @@ describe("Hologram", () => {
       });
     });
 
+    // The browser fires popstate for a jump to a #fragment too, with an entry it made for it and
+    // gave no id.
+    describe("entry the browser made for a #fragment", () => {
+      let consoleErrorStub,
+        originalHistoryId,
+        originalPagePath,
+        replaceStateStub,
+        serializeSpy;
+
+      beforeEach(() => {
+        originalHistoryId = Hologram.historyId;
+        Hologram.historyId = "history-fragment-page";
+
+        // The browser's entry for a #fragment keeps the page's path.
+        originalPagePath = Hologram.pagePath;
+        Hologram.pagePath = window.location.pathname;
+
+        consoleErrorStub = sinon.stub(console, "error");
+        replaceStateStub = sinon.stub(history, "replaceState");
+
+        // A page that is left is saved first, so a save means the handler left the page.
+        serializeSpy = sinon.spy(Serializer, "serialize");
+      });
+
+      afterEach(() => {
+        serializeSpy.restore();
+        replaceStateStub.restore();
+        consoleErrorStub.restore();
+
+        Hologram.historyId = originalHistoryId;
+        Hologram.pagePath = originalPagePath;
+        Hologram.domEpoch = 0;
+        Hologram.isMounting = false;
+        Hologram.registryEpoch = 0;
+      });
+
+      it("takes the id of the page on screen, and the page stays as it is", async () => {
+        await Hologram.handlePopstateEvent({state: null});
+
+        sinon.assert.calledOnceWithExactly(
+          replaceStateStub,
+          "history-fragment-page",
+          null,
+        );
+
+        sinon.assert.notCalled(serializeSpy);
+        assert.equal(Hologram.registryEpoch, 0);
+      });
+
+      it("leaves the page as it is on Back or Forward between #fragments of the page on screen", async () => {
+        await Hologram.handlePopstateEvent({state: "history-fragment-page"});
+
+        sinon.assert.notCalled(replaceStateStub);
+        sinon.assert.notCalled(serializeSpy);
+        assert.equal(Hologram.registryEpoch, 0);
+      });
+
+      // The page on screen is then giving way to another, whose id the history id does not hold
+      // yet: going back to it is a navigation of its own.
+      it("is not left alone while a navigation is under way", async () => {
+        const fetchPageStub = sinon.stub(Client, "fetchPage");
+
+        // A restore that has been decided on and is not mounted yet.
+        Hologram.registryEpoch = 1;
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-fragment-page"});
+
+          sinon.assert.calledOnce(serializeSpy);
+          sinon.assert.calledOnce(fetchPageStub);
+          assert.isAbove(Hologram.registryEpoch, 1);
+        } finally {
+          fetchPageStub.restore();
+          sessionStorage.clear();
+        }
+      });
+
+      // The page on screen is giving way to another, so an entry with no id cannot be one the
+      // browser made for it.
+      it("reloads an entry with no id while a navigation is under way", async () => {
+        const reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+
+        // A restore that has been decided on and is not mounted yet.
+        Hologram.registryEpoch = 1;
+
+        try {
+          await Hologram.handlePopstateEvent({state: null});
+
+          sinon.assert.notCalled(replaceStateStub);
+          sinon.assert.calledOnce(reloadStub);
+        } finally {
+          reloadStub.restore();
+          sessionStorage.clear();
+        }
+      });
+
+      it("is not left alone while the page is mounting", async () => {
+        const fetchPageStub = sinon.stub(Client, "fetchPage");
+        Hologram.isMounting = true;
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-fragment-page"});
+
+          sinon.assert.calledOnce(serializeSpy);
+        } finally {
+          fetchPageStub.restore();
+          sessionStorage.clear();
+        }
+      });
+
+      // Until a popstate's handler advances the epoch, the browser is on the entry it went to while
+      // the history id still names the page being left. Forward back to that page in this window
+      // must not be taken for a move between its #fragments.
+      it("is not left alone while another popstate is deciding what to show", async () => {
+        const fetchPageStub = sinon.stub(Client, "fetchPage");
+        const reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+
+        try {
+          const first = Hologram.handlePopstateEvent({state: "history-other"});
+
+          const second = Hologram.handlePopstateEvent({
+            state: "history-fragment-page",
+          });
+
+          await Promise.all([first, second]);
+
+          sinon.assert.calledTwice(serializeSpy);
+        } finally {
+          reloadStub.restore();
+          fetchPageStub.restore();
+          sessionStorage.clear();
+        }
+      });
+    });
+
+    // Every entry the tab has left has a snapshot, so one with none is an entry whose snapshot
+    // could not be read back, and the state the document was loaded with is no stand-in for it.
+    it("reloads an entry that has no snapshot", async () => {
+      const consoleErrorStub = sinon.stub(console, "error");
+      const fetchPageStub = sinon.stub(Client, "fetchPage");
+      const reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+
+      try {
+        await Hologram.handlePopstateEvent({state: "history-without-snapshot"});
+
+        sinon.assert.calledOnce(reloadStub);
+        sinon.assert.notCalled(fetchPageStub);
+      } finally {
+        reloadStub.restore();
+        fetchPageStub.restore();
+        consoleErrorStub.restore();
+        sessionStorage.clear();
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      }
+    });
+
+    // App code can push entries of its own with no state, which come with no id too.
+    describe("entry app code pushed with no state", () => {
+      let consoleErrorStub,
+        originalHistoryId,
+        originalPagePath,
+        replaceStateStub,
+        serializeSpy;
+
+      beforeEach(() => {
+        originalHistoryId = Hologram.historyId;
+        Hologram.historyId = "history-app-page";
+
+        originalPagePath = Hologram.pagePath;
+        Hologram.pagePath = window.location.pathname;
+
+        consoleErrorStub = sinon.stub(console, "error");
+        replaceStateStub = sinon.stub(history, "replaceState");
+
+        // A page that is left is saved first, so a save means the handler left the page.
+        serializeSpy = sinon.spy(Serializer, "serialize");
+      });
+
+      afterEach(() => {
+        serializeSpy.restore();
+        replaceStateStub.restore();
+        consoleErrorStub.restore();
+
+        Hologram.historyId = originalHistoryId;
+        Hologram.pagePath = originalPagePath;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      });
+
+      // For a query string of the page's own, a tab or a filter, with Back and Forward to it
+      // handled by the app.
+      it("takes the id of the page on screen when it is under the page's path, whatever its query string", async () => {
+        const originalState = history.state;
+        const originalUrl = window.location.href;
+        history.pushState(null, "", `${window.location.pathname}?tab=reviews`);
+
+        try {
+          await Hologram.handlePopstateEvent({state: null});
+
+          sinon.assert.calledOnceWithExactly(
+            replaceStateStub,
+            "history-app-page",
+            null,
+          );
+
+          sinon.assert.notCalled(serializeSpy);
+        } finally {
+          replaceStateStub.wrappedMethod.call(
+            history,
+            originalState,
+            "",
+            originalUrl,
+          );
+        }
+      });
+
+      // Pushed while another page was on screen. Nothing was saved for it, and taking it for the
+      // page on screen would leave that page under its URL.
+      it("is reloaded when it is under another page's path", async () => {
+        const reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+        Hologram.pagePath = "/cart";
+
+        try {
+          await Hologram.handlePopstateEvent({state: null});
+
+          sinon.assert.notCalled(replaceStateStub);
+          sinon.assert.calledOnce(reloadStub);
+        } finally {
+          reloadStub.restore();
+          sessionStorage.clear();
+        }
+      });
+    });
+
     // A snapshot taken for another identity can hold another user's state.
     describe("snapshot taken for another identity", () => {
       const pageModule = Type.atom(
@@ -4009,10 +4259,15 @@ describe("Hologram", () => {
         return endedPeriod;
       };
 
-      let consoleErrorStub, fetchPageDigestStub, fetchPageStub, instanceId;
+      let consoleErrorStub,
+        fetchPageDigestStub,
+        fetchPageStub,
+        instanceId,
+        originalHistoryId;
 
       beforeEach(() => {
         instanceId = App.instanceId;
+        originalHistoryId = Hologram.historyId;
         consoleErrorStub = sinon.stub(console, "error");
         fetchPageStub = sinon.stub(Client, "fetchPage");
 
@@ -4045,6 +4300,7 @@ describe("Hologram", () => {
         sessionStorage.clear();
         ComponentRegistry.clear();
         App.instanceId = instanceId;
+        Hologram.historyId = originalHistoryId;
         Hologram.domEpoch = 0;
         Hologram.registryEpoch = 0;
       });
@@ -4089,6 +4345,25 @@ describe("Hologram", () => {
         assert.strictEqual(App.instanceId, "restored-instance");
         assert.equal(Hologram.pageIdentityPeriod, IdentityTracker.period);
         sinon.assert.notCalled(fetchPageStub);
+      });
+
+      // An entry with no id is taken for the page on screen only under its path.
+      it("records the path the restored page is shown under", async () => {
+        const originalPagePath = Hologram.pagePath;
+        Hologram.pagePath = "/left-page";
+
+        try {
+          seedSnapshot("history-identity-5", {
+            identityPeriod: IdentityTracker.period,
+          });
+
+          await Hologram.handlePopstateEvent({state: "history-identity-5"});
+          await flushPromises();
+
+          assert.equal(Hologram.pagePath, window.location.pathname);
+        } finally {
+          Hologram.pagePath = originalPagePath;
+        }
       });
 
       // The address bar shows the entry's URL already, and a replace to it is only a jump within
