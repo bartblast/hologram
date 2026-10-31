@@ -80,6 +80,7 @@ defmodule Hologram.Entity do
       register_role_declarations_accumulator(),
       register_relationships_accumulator(),
       register_inverse_relationships_accumulator(),
+      register_relationship_locations_accumulator(),
       register_roles_attribute()
     ] ++ user_entity_marker(opts)
   end
@@ -99,69 +100,66 @@ defmodule Hologram.Entity do
 
     struct_type = struct_type(env.module)
 
-    quote do
-      # The metadata struct is expanded HERE, in the entity's own module body, so the module
-      # carries a compile-time dependency on it. Escaping a pre-built one instead bakes a copy of
-      # whatever shape it had when the FRAMEWORK compiled, and an incremental build never
-      # revisits it: a field added to the metadata would leave every entity holding the old
-      # shape, disagreeing with a freshly constructed one for as long as the build lasts.
-      defstruct Enum.sort([
-                  {:__meta__, %Hologram.Entity.Metadata{}} | unquote(struct_fields)
-                ])
+    [
+      quote do
+        # The metadata struct is expanded HERE, in the entity's own module body, so the module
+        # carries a compile-time dependency on it. Escaping a pre-built one instead bakes a copy of
+        # whatever shape it had when the FRAMEWORK compiled, and an incremental build never
+        # revisits it: a field added to the metadata would leave every entity holding the old
+        # shape, disagreeing with a freshly constructed one for as long as the build lasts.
+        defstruct Enum.sort([
+                    {:__meta__, %Hologram.Entity.Metadata{}} | unquote(struct_fields)
+                  ])
 
-      @typedoc """
-      An entity struct of this entity type.
-      Every attribute field admits nil - a struct carries whatever it was built with, and declarations are checked at the write.
-      """
-      @type t :: unquote(struct_type)
+        @typedoc """
+        An entity struct of this entity type.
+        Every attribute field admits nil - a struct carries whatever it was built with, and declarations are checked at the write.
+        """
+        @type t :: unquote(struct_type)
 
-      @doc """
-      Returns the list of attribute definitions for the compiled entity type, sorted by attribute name.
-      """
-      @spec __attributes__() :: list({atom, atom, keyword})
-      def __attributes__, do: Enum.sort(@__attributes__)
+        @doc """
+        Returns the list of attribute definitions for the compiled entity type, sorted by attribute name.
+        """
+        @spec __attributes__() :: list({atom, atom, keyword})
+        def __attributes__, do: Enum.sort(@__attributes__)
 
-      @doc """
-      Returns the list of inverse relationship definitions for the compiled entity type, sorted by relationship name - relationships declared with the inverse option, which store nothing of their own and read the relationship they reverse on the related type.
-      """
-      @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
-      def __inverse_relationships__, do: Enum.sort(@__inverse_relationships__)
+        @doc """
+        Returns the list of policy definitions for the compiled entity type, in declaration order.
+        Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
+        """
+        @spec __policies__() ::
+                list({Hologram.Entity.operation(), term, atom | {atom, atom} | nil, keyword})
+        def __policies__, do: Enum.reverse(@__policies__)
 
-      @doc """
-      Returns the list of policy definitions for the compiled entity type, in declaration order.
-      Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
-      """
-      @spec __policies__() ::
-              list({Hologram.Entity.operation(), term, atom | {atom, atom} | nil, keyword})
-      def __policies__, do: Enum.reverse(@__policies__)
+        @doc false
+        @spec __policy_sources__() :: list(module)
+        def __policy_sources__, do: Enum.reverse(@__policy_sources__)
 
-      @doc false
-      @spec __policy_sources__() :: list(module)
-      def __policy_sources__, do: Enum.reverse(@__policy_sources__)
+        @doc """
+        Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
+        Inverse relationships are listed apart, with the inverse relationship definitions.
+        """
+        @spec __relationships__() :: list({atom, module | list(module), keyword})
+        def __relationships__, do: Enum.sort(@__relationships__)
 
-      @doc """
-      Returns the list of relationship definitions for the compiled entity type, sorted by relationship name.
-      Inverse relationships are listed apart, with the inverse relationship definitions.
-      """
-      @spec __relationships__() :: list({atom, module | list(module), keyword})
-      def __relationships__, do: Enum.sort(@__relationships__)
+        @doc false
+        @spec __role_declarations__() :: list({atom, keyword, module})
+        def __role_declarations__, do: Enum.reverse(@__role_declarations__)
 
-      @doc false
-      @spec __role_declarations__() :: list({atom, keyword, module})
-      def __role_declarations__, do: Enum.reverse(@__role_declarations__)
+        @doc """
+        Returns the list of role definitions for the compiled entity type, sorted by role name.
+        """
+        @spec __roles__() :: list({atom, keyword})
+        def __roles__, do: Enum.sort(@__roles__)
 
-      @doc """
-      Returns the list of role definitions for the compiled entity type, sorted by role name.
-      """
-      @spec __roles__() :: list({atom, keyword})
-      def __roles__, do: Enum.sort(@__roles__)
-
-      @doc """
-      Returns the list of system attribute definitions present on every entity type, sorted by attribute name.
-      """
-      @spec __system_attributes__() :: list({atom, atom, keyword})
-      def __system_attributes__, do: unquote(system_attributes)
-    end
+        @doc """
+        Returns the list of system attribute definitions present on every entity type, sorted by attribute name.
+        """
+        @spec __system_attributes__() :: list({atom, atom, keyword})
+        def __system_attributes__, do: unquote(system_attributes)
+      end,
+      relationship_reflection()
+    ]
   end
 
   @doc """
@@ -261,13 +259,15 @@ defmodule Hologram.Entity do
   @spec relationship(atom, module | list(module), T.opts()) :: Macro.t()
   defmacro relationship(name, type, opts \\ []) do
     lowered_opts = Expression.relationship_opts(opts, __CALLER__)
+    location = {__CALLER__.file, __CALLER__.line}
 
     quote do
       Entity.__put_relationship__(
         __MODULE__,
         unquote(name),
         unquote(type),
-        unquote(lowered_opts)
+        unquote(lowered_opts),
+        unquote(location)
       )
     end
   end
@@ -348,10 +348,12 @@ defmodule Hologram.Entity do
   end
 
   # An inverse goes into a list of its own: every reader of the stored relationships reads what a
-  # row stores, and an inverse stores nothing.
+  # row stores, and an inverse stores nothing. Where each line was written is kept for the checks
+  # made once every entity type is compiled, whose messages point at the line the way a compile
+  # error does.
   @doc false
-  @spec __put_relationship__(module, atom, any, T.opts()) :: :ok
-  def __put_relationship__(module, name, type, opts) do
+  @spec __put_relationship__(module, atom, any, T.opts(), {String.t(), pos_integer}) :: :ok
+  def __put_relationship__(module, name, type, opts, location) do
     Validator.validate_relationship!(module, name, type, opts)
 
     accumulator =
@@ -360,6 +362,7 @@ defmodule Hologram.Entity do
         else: :__relationships__
 
     Module.put_attribute(module, accumulator, {name, type, opts})
+    Module.put_attribute(module, :__relationship_locations__, {name, location})
 
     :ok
   end
@@ -479,6 +482,14 @@ defmodule Hologram.Entity do
   def register_policy_sources_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__policy_sources__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_relationship_locations_accumulator() :: AST.t()
+  def register_relationship_locations_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__relationship_locations__, accumulate: true)
     end
   end
 
@@ -792,6 +803,24 @@ defmodule Hologram.Entity do
 
   defp inverse_field_type_ast({name, target, _opts}) do
     {name, type_union([remote_type_ast(target), remote_type_ast(Entity.NotIncluded), nil])}
+  end
+
+  # The reflection of the relationships kept apart from the stored ones - the inverses and where each
+  # relationship was declared - generated beside the rest of __before_compile__, in a quote of its
+  # own so the one __before_compile__ builds stays within the complexity the project's linter
+  # allows.
+  defp relationship_reflection do
+    quote do
+      @doc """
+      Returns the list of inverse relationship definitions for the compiled entity type, sorted by relationship name - relationships declared with the inverse option, which store nothing of their own and read the relationship they reverse on the related type.
+      """
+      @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
+      def __inverse_relationships__, do: Enum.sort(@__inverse_relationships__)
+
+      @doc false
+      @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
+      def __relationship_locations__, do: Map.new(@__relationship_locations__)
+    end
   end
 
   # Spelled with the module ATOM rather than with an alias, so that an entity module's own

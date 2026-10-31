@@ -25,6 +25,17 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Policy.Module11, as: PolicyModule11
 
+  defp fixture_file(name), do: Path.expand("test/elixir/support/fixtures/entity/#{name}")
+
+  # The number of the first line of the given file holding the given text.
+  defp line_of(file, text) do
+    file
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.find_value(fn {line, number} -> if String.contains?(line, text), do: number end)
+  end
+
   describe "__attributes__/0" do
     test "returns empty list for entity type with no attribute declarations" do
       assert Module1.__attributes__() == []
@@ -111,6 +122,26 @@ defmodule Hologram.EntityTest do
                Hologram.Test.Fixtures.Policy.Shared.Module1,
                PolicySourcesEntityFixture
              ]
+    end
+  end
+
+  describe "__relationship_locations__/0" do
+    test "returns the file and line of each inverse relationship declaration" do
+      file = fixture_file("module_26.ex")
+
+      assert Module26.__relationship_locations__() == %{
+               messages: {file, line_of(file, "relationship :messages")},
+               topic: {file, line_of(file, "relationship :topic")}
+             }
+    end
+
+    test "returns the file and line of each stored relationship declaration" do
+      file = fixture_file("module_28.ex")
+
+      assert Module28.__relationship_locations__() == %{
+               channel: {file, line_of(file, "relationship :channel")},
+               labels: {file, line_of(file, "relationship :labels")}
+             }
     end
   end
 

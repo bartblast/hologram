@@ -146,6 +146,10 @@ defmodule Hologram.Auth.RoleGrant do
   @spec __policy_sources__() :: list(module)
   def __policy_sources__, do: []
 
+  @doc false
+  @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
+  def __relationship_locations__, do: %{}
+
   @doc """
   Returns the list of relationship definitions for the role grant entity type, sorted by relationship name.
   Both targets are the app's designated user entity type, computed from the compiled data model.
