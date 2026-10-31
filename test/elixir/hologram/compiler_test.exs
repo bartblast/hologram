@@ -48,6 +48,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
   alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module26, as: Entity26
+  alias Hologram.Test.Fixtures.Entity.Module29, as: Entity29
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
@@ -3347,7 +3349,7 @@ defmodule Hologram.CompilerTest do
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
                  ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
                  ~s/"defaults":{"c":Type.atom("x")},/ <>
-                 ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],/ <>
+                 ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],"inverses":{},/ <>
                  ~s/"operations":["create","delete","grant_role","read","read_roles",/ <>
                  ~s/"revoke_role","update"],"policy":{},/ <>
                  ~s/"relationships":{},"roles":[],"serverOnly":[]}}/
@@ -3712,6 +3714,39 @@ defmodule Hologram.CompilerTest do
                ~s/"relationships":{"a":{"optional":false,"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
                  ~s/"b":{"optional":true,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
                  ~s/"c":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
+             )
+    end
+
+    test "injects the inverses with what they reverse, their cardinality and their order", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([Entity26, Entity29])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"inverses":{"messages":{"forward":"channel","reference":true,"sort":[["position","asc"]],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"},/ <>
+                 ~s/"topic":{"forward":"channel","reference":true,"sort":[],"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module27"}}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"inverses":{"messages":{"forward":"labels","reference":false,"sort":[],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"}}/
              )
     end
 

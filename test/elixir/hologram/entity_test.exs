@@ -577,13 +577,6 @@ defmodule Hologram.EntityTest do
       assert entity.updated_at == nil
     end
 
-    test "refuses a value for an inverse relationship" do
-      expected_msg =
-        "relationship :messages of Hologram.Test.Fixtures.Entity.Module26 cannot be assigned at construction - it is an inverse that reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so write that instead"
-
-      assert_error ArgumentError, expected_msg, fn -> new(Module26, messages: []) end
-    end
-
     test "applies declared defaults to absent attributes" do
       entity = new(Module2)
 
@@ -626,6 +619,13 @@ defmodule Hologram.EntityTest do
       assert_error ArgumentError, expected_msg, fn ->
         new(Hologram.Auth.RoleGrant)
       end
+    end
+
+    test "raises on an assigned inverse value" do
+      expected_msg =
+        "relationship :messages of Hologram.Test.Fixtures.Entity.Module26 cannot be assigned at construction - it is an inverse that reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so write that instead"
+
+      assert_error ArgumentError, expected_msg, fn -> new(Module26, messages: []) end
     end
 
     test "raises on an assigned relationship value" do

@@ -515,6 +515,57 @@ describe("Model", () => {
     });
   });
 
+  describe("box() of a type declaring inverses", () => {
+    const INVERSES = {
+      labels: {
+        forward: "projects",
+        reference: false,
+        sort: [],
+        toMany: true,
+        type: "MyApp.Label",
+      },
+      tasks: {
+        forward: "project",
+        reference: true,
+        sort: [["position", "asc"]],
+        toMany: true,
+        type: TASK,
+      },
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync.model[PROJECT].inverses = INVERSES;
+
+      Model.reset();
+    });
+
+    it("boxes an inverse nobody asked for as the sentinel naming it", () => {
+      const boxed = Model.box(PROJECT, {id: "p1", name: "Launch"});
+
+      assert.deepEqual(field(boxed, "tasks"), Model.notIncluded("tasks"));
+      assert.deepEqual(field(boxed, "labels"), Model.notIncluded("labels"));
+    });
+
+    it("boxes an included inverse as what was included of it", () => {
+      const included = Type.list([]);
+      const boxed = Model.box(
+        PROJECT,
+        {id: "p1", name: "Launch"},
+        {tasks: included},
+      );
+
+      assert.deepEqual(field(boxed, "tasks"), included);
+    });
+
+    it("boxes no reference field for an inverse", () => {
+      const boxed = Model.box(PROJECT, {id: "p1", name: "Launch"});
+
+      assert.isFalse(
+        Object.values(boxed.data).some(([key]) => key.value === "tasks_id"),
+      );
+    });
+  });
+
   describe("boxResult()", () => {
     const node = (overrides = {}) => ({includes: {}, row: row(overrides)});
 
@@ -796,6 +847,43 @@ describe("Model", () => {
     });
   });
 
+  describe("describeInverse()", () => {
+    beforeEach(() => {
+      globalThis.Hologram.sync.model[PROJECT].inverses = {
+        labels: {
+          forward: "projects",
+          reference: false,
+          sort: [],
+          toMany: true,
+          type: "MyApp.Label",
+        },
+        tasks: {
+          forward: "project",
+          reference: true,
+          sort: [],
+          toMany: true,
+          type: TASK,
+        },
+      };
+
+      Model.reset();
+    });
+
+    it("names the reference column an inverse of a to-one reads", () => {
+      assert.equal(
+        Model.describeInverse(PROJECT, "tasks"),
+        "the project_id reference of MyApp.Task",
+      );
+    });
+
+    it("names the to-many relationship an inverse of one reads", () => {
+      assert.equal(
+        Model.describeInverse(PROJECT, "labels"),
+        "the projects relationship of MyApp.Label",
+      );
+    });
+  });
+
   describe("emptyMetadata()", () => {
     // Equal to what a row carrying no revisions is boxed with, which is the point: one list of
     // fields answers for a struct that was read and for one built from nothing.
@@ -936,6 +1024,12 @@ describe("Model", () => {
         HologramRuntimeError,
         "entity type MyApp.Unknown is not part of this build's data model",
       );
+    });
+  });
+
+  describe("inverses()", () => {
+    it("returns no inverses for an entry baked without any", () => {
+      assert.deepEqual(Model.inverses(TASK), {});
     });
   });
 
