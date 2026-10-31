@@ -9,6 +9,7 @@ defmodule HologramFeatureTests.DurabilityTest do
   alias HologramFeatureTests.DurabilityPage
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Cabin
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
@@ -20,6 +21,7 @@ defmodule HologramFeatureTests.DurabilityTest do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
+  alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
@@ -57,6 +59,7 @@ defmodule HologramFeatureTests.DurabilityTest do
       [
         Account,
         Booking,
+        Cabin,
         Channel,
         Document,
         Folder,
@@ -70,6 +73,7 @@ defmodule HologramFeatureTests.DurabilityTest do
         RestockItem,
         Review,
         RoleGrant,
+        Ship,
         Shop,
         Stop,
         Ticket,
