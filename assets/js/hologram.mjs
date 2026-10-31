@@ -16,6 +16,7 @@ import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import IdentityTracker from "./identity_tracker.mjs";
 import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
 import LiveReload from "./live_reload.mjs";
@@ -1485,6 +1486,10 @@ export default class Hologram {
       (event) => Debouncer.flushWithin(event.target),
       true,
     );
+
+    // The identity the server rendered the document for, which the responses that follow are
+    // compared with.
+    IdentityTracker.init(globalThis.Hologram.identityTag);
 
     // Check if there's already a history state (e.g., when navigating back from external page)
     if (history.state) {
