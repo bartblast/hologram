@@ -168,6 +168,11 @@ export default class Hologram {
   // announcement instead, so the state waits here rather than being passed along.
   static #mountData = null;
 
+  // The navigations begun so far: every page loadNewPage is asked for, and every popstate
+  // handlePopstateEvent acts on. A page is shown in a frame of its own, and a navigation begun
+  // before that frame takes over from it (see loadNewPage).
+  static #navigationCount = 0;
+
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
@@ -593,8 +598,16 @@ export default class Hologram {
     hopCount = 0,
     historyEntryId = null,
   ) {
+    $.#navigationCount += 1;
+    const navigation = $.#navigationCount;
+
     if (payload.type === "redirect") {
-      return Hologram.#followRedirect(payload, hopCount, historyEntryId);
+      return Hologram.#followRedirect(
+        payload,
+        hopCount,
+        historyEntryId,
+        navigation,
+      );
     }
 
     const pageModule = Interpreter.evaluateJavaScriptExpression(
@@ -609,21 +622,24 @@ export default class Hologram {
       return;
     }
 
+    // A page going into an entry the browser went to saves nothing here: the page being left was
+    // saved when the browser left its entry.
     if (historyEntryId === null) {
       await $.#savePageSnapshot();
-    } else {
-      // The page being left was saved when the browser left its entry. From here on the tab
-      // answers for this one.
-      $.historyId = historyEntryId;
     }
 
     window.requestAnimationFrame(() => {
-      // The new entry's id is taken in the frame that pushes the entry. Until then the page being
-      // left is on screen and its entry is the browser's, so an entry the browser makes meanwhile
-      // for a jump to a #fragment belongs to that page (see handlePopstateEvent).
-      if (historyEntryId === null) {
-        $.historyId = Utils.randomUUID();
+      // A navigation begun since takes over: another page asked for, or the browser gone back or
+      // forward. Showing this page now would undo what the visitor did last, and the entry it was
+      // meant for may not be the browser's any more.
+      if ($.#navigationCount !== navigation) {
+        return;
       }
+
+      // The entry's id is taken in the frame that shows the page. Until then the page being left
+      // is on screen, and a popstate meanwhile saves it under its own entry's id, or takes an
+      // entry the browser makes for a jump to a #fragment for it (see handlePopstateEvent).
+      $.historyId = historyEntryId ?? Utils.randomUUID();
 
       Hologram.#showNewPage(payload);
       window.scrollTo(0, 0);
@@ -1429,6 +1445,11 @@ export default class Hologram {
 
   // Made public to make tests easier
   static async handlePopstateEvent(event) {
+    // The browser has gone back or forward, which takes over from a page still on its way, waiting
+    // for its frame or a redirect's hop. Counted before the early returns below too: a Back between
+    // #fragments of the page on screen is still what the visitor did last.
+    $.#navigationCount += 1;
+
     // The browser fires popstate for a jump to a #fragment too, with the entry it made for it and
     // gave no id. Such an entry shows the page on screen, so it takes that page's id, and Back or
     // Forward between it and its page's other entries then names the page on screen as well. The
@@ -2071,7 +2092,10 @@ export default class Hologram {
   // A target outside the app carries no page to ask for, so the browser takes it. The hop limit is
   // there because a redirect can point at a page that redirects again: a cycle would otherwise
   // fetch forever, silently.
-  static #followRedirect(payload, hopCount, historyEntryId) {
+  //
+  // The hop is a round trip, and a navigation begun meanwhile takes over from it, as it would from
+  // the page's frame (see loadNewPage).
+  static #followRedirect(payload, hopCount, historyEntryId, navigation) {
     if (!payload.pageModule) {
       $.#handToBrowser(payload.to, historyEntryId);
       return null;
@@ -2088,16 +2112,21 @@ export default class Hologram {
       Interpreter.evaluateJavaScriptExpression(payload.pageParams),
     ]);
 
+    const isTakenOver = () => $.#navigationCount !== navigation;
+
     return Client.fetchPage(
       toParam,
       (nextPayload) =>
-        Hologram.loadNewPage(
-          payload.to,
-          nextPayload,
-          hopCount + 1,
-          historyEntryId,
-        ),
-      () => $.#handToBrowser(payload.to, historyEntryId),
+        isTakenOver()
+          ? null
+          : Hologram.loadNewPage(
+              payload.to,
+              nextPayload,
+              hopCount + 1,
+              historyEntryId,
+            ),
+      () =>
+        isTakenOver() ? null : $.#handToBrowser(payload.to, historyEntryId),
     );
   }
 

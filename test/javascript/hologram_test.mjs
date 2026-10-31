@@ -3116,6 +3116,115 @@ describe("Hologram", () => {
       });
     });
 
+    // A page is shown in the next frame, and the visitor can do something else before it comes.
+    describe("a later navigation before the page's frame", () => {
+      let consoleErrorStub,
+        frames,
+        originalHistoryId,
+        pushStateStub,
+        reloadStub,
+        replaceStateStub;
+
+      // What the browser does once the frame comes.
+      const runFrames = () => frames.splice(0).forEach((frame) => frame());
+
+      beforeEach(() => {
+        frames = [];
+        window.requestAnimationFrame = (callback) => frames.push(callback);
+        seedCurrentPage();
+
+        originalHistoryId = Hologram.historyId;
+        Hologram.historyId = "history-left-page";
+
+        consoleErrorStub = sinon.stub(console, "error");
+        pushStateStub = sinon.stub(history, "pushState");
+        replaceStateStub = sinon.stub(history, "replaceState");
+
+        // The popstate below finds nothing saved for the entry it goes to.
+        reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+      });
+
+      afterEach(() => {
+        reloadStub.restore();
+        replaceStateStub.restore();
+        pushStateStub.restore();
+        consoleErrorStub.restore();
+
+        Hologram.historyId = originalHistoryId;
+        delete window.requestAnimationFrame;
+        Hologram.virtualDocument = null;
+        sessionStorage.clear();
+        removeBundleScripts();
+      });
+
+      // A click on a link, then Back before the clicked page's frame.
+      it("leaves the page off screen when the browser went back or forward before its frame", async () => {
+        await Hologram.loadNewPage("/clicked", payloadFor("superseded-1"));
+        await Hologram.handlePopstateEvent({state: "history-elsewhere"});
+        runFrames();
+
+        sinon.assert.notCalled(pushStateStub);
+        assert.isNull(bundleScript("superseded-1"));
+      });
+
+      // Back to an entry whose snapshot was refused, so that its page is asked for afresh, then
+      // Back again before that page's frame. The entry the browser went to last is not the one the
+      // page was meant for, and the page on screen keeps its own entry's id.
+      it("leaves the entry the browser went to as it is when the browser went back or forward again before the page's frame", async () => {
+        await Hologram.loadNewPage(
+          "/entry",
+          payloadFor("superseded-2"),
+          0,
+          "history-entry-refused",
+        );
+
+        await Hologram.handlePopstateEvent({state: "history-elsewhere"});
+        runFrames();
+
+        sinon.assert.notCalled(replaceStateStub);
+        assert.equal(Hologram.historyId, "history-left-page");
+      });
+
+      // A Back between #fragments of the page on screen is still what the visitor did last.
+      it("leaves the page off screen when the browser moved between #fragments before its frame", async () => {
+        await Hologram.loadNewPage("/clicked", payloadFor("superseded-5"));
+        await Hologram.handlePopstateEvent({state: "history-left-page"});
+        runFrames();
+
+        sinon.assert.notCalled(pushStateStub);
+      });
+
+      // A redirect's hop is a round trip, which the browser going back or forward can come in.
+      it("leaves the redirect's target off screen when the browser went back or forward during the hop", async () => {
+        let showTarget;
+
+        // The outer describe stubs the page fetch already.
+        fetchPageStub.callsFake((_toParam, onSuccess, _onNotPage) => {
+          showTarget = onSuccess;
+          return null;
+        });
+
+        await Hologram.loadNewPage("/clicked", redirectTo("/target"));
+        await Hologram.handlePopstateEvent({state: "history-elsewhere"});
+
+        await showTarget(payloadFor("superseded-6"));
+        runFrames();
+
+        sinon.assert.notCalled(pushStateStub);
+        assert.isNull(bundleScript("superseded-6"));
+      });
+
+      it("shows the later page when another page was asked for before the frame", async () => {
+        await Hologram.loadNewPage("/first", payloadFor("superseded-3"));
+        await Hologram.loadNewPage("/second", payloadFor("superseded-4"));
+        runFrames();
+
+        sinon.assert.calledOnce(pushStateStub);
+        assert.equal(pushStateStub.firstCall.args[2], "/second");
+        assert.isNull(bundleScript("superseded-3"));
+      });
+    });
+
     // A value of a struct type whose protocol implementations no bundle carries needs the chunks
     // that hold them, and so does the page's own code for the types it names. The server says
     // which, by digest.
