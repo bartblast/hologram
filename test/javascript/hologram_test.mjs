@@ -23,6 +23,7 @@ import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
+import IdentityTracker from "../../assets/js/identity_tracker.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import LiveReload from "../../assets/js/live_reload.mjs";
 import MountGate from "../../assets/js/mount_gate.mjs";
@@ -44,6 +45,14 @@ defineModule7Fixture();
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
 const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
+
+// Undoes IdentityTracker.init(), so that a test that started the tracker leaves no period behind
+// for the next one.
+const clearIdentityTracker = () => {
+  IdentityTracker.documentPeriod = null;
+  IdentityTracker.period = null;
+  IdentityTracker.tag = null;
+};
 
 describe("Hologram", () => {
   // A navigation that fails records its epoch dead for the rest of the session, and every later
@@ -2411,6 +2420,36 @@ describe("Hologram", () => {
         delete window.requestAnimationFrame;
         serializeStub.restore();
         removeBundleScripts();
+        clearIdentityTracker();
+        Hologram.pageIdentityPeriod = null;
+      });
+
+      it("is stamped with the identity its page was put on screen for", async () => {
+        IdentityTracker.init("tag-1");
+        Hologram.pageIdentityPeriod = IdentityTracker.period;
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        assert.equal(snapshot.identityPeriod, IdentityTracker.period);
+        assert.equal(snapshot.identityTag, "tag-1");
+      });
+
+      // A logout on the page leaves it holding what both identities put in it, so no document may
+      // restore it.
+      it("is stamped with no identity tag when the identity changed since its page was put on screen", async () => {
+        IdentityTracker.init("tag-1");
+        const pagePeriod = IdentityTracker.period;
+        Hologram.pageIdentityPeriod = pagePeriod;
+        IdentityTracker.observe("tag-2");
+
+        await Hologram.loadNewPage("/target", payloadFor("new"));
+
+        const snapshot = serializeStub.firstCall.args[0];
+
+        assert.equal(snapshot.identityPeriod, pagePeriod);
+        assert.isNull(snapshot.identityTag);
       });
 
       it("is stamped with the code it was taken with", async () => {
@@ -3072,12 +3111,17 @@ describe("Hologram", () => {
       beforeEach(() => {
         window.requestAnimationFrame = (callback) => callback();
         seedCurrentPage();
+
+        // Some of these tests restore a snapshot, which takes one taken for the current identity.
+        IdentityTracker.init("tag-1");
       });
 
       afterEach(() => {
         delete window.requestAnimationFrame;
         Hologram.virtualDocument = null;
         removeBundleScripts();
+        clearIdentityTracker();
+        Hologram.pageIdentityPeriod = null;
       });
 
       it("are fetched", async () => {
@@ -3182,6 +3226,7 @@ describe("Hologram", () => {
         const pageSnapshot = {
           chunkDigests: ["AAAAAAAA"],
           componentRegistryEntries: Type.map(),
+          identityPeriod: IdentityTracker.period,
           instanceId: "superseded-restore-instance",
           pageModule: Type.atom(
             "Elixir.Hologram.Test.Fixtures.SupersededRestore",
@@ -3247,6 +3292,7 @@ describe("Hologram", () => {
         const pageSnapshot = {
           chunkDigests: ["AAAAAAAA"],
           componentRegistryEntries: Type.map(),
+          identityPeriod: IdentityTracker.period,
           instanceId: "waiting-restore-instance",
           pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.WaitingRestore"),
           pageParams: Type.map(),
@@ -3579,6 +3625,15 @@ describe("Hologram", () => {
   });
 
   describe("handlePopstateEvent()", () => {
+    // A snapshot is restored only for the identity it was taken for, so the tests that restore one
+    // seed it with the current period.
+    beforeEach(() => IdentityTracker.init("tag-1"));
+
+    afterEach(() => {
+      clearIdentityTracker();
+      Hologram.pageIdentityPeriod = null;
+    });
+
     // The history's side of the navigation boundary. The handler needs a page to restore, and
     // the only way in from outside is the storage it reads: a snapshot is seeded under the key
     // the handler derives from the history id, and in jsdom the OPFS read throws into the
@@ -3589,6 +3644,7 @@ describe("Hologram", () => {
 
       const pageSnapshot = {
         componentRegistryEntries: Type.map(),
+        identityPeriod: IdentityTracker.period,
         instanceId: "popstate-instance",
         pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Module7"),
         pageParams: Type.map(),
@@ -3663,6 +3719,7 @@ describe("Hologram", () => {
         const pageSnapshot = {
           chunkDigests: ["SNAPSHOT"],
           componentRegistryEntries: Type.map(),
+          identityPeriod: IdentityTracker.period,
           instanceId: "restored-instance",
           pageModule: snapshotPageModule,
           pageParams: Type.map(),
@@ -3772,6 +3829,7 @@ describe("Hologram", () => {
             {
               chunkDigests: ["SNAPSHOT"],
               componentRegistryEntries: Type.map(),
+              identityPeriod: IdentityTracker.period,
               instanceId: "restored-instance",
               pageDigest: "outdated-1",
               pageModule: pageModule,
@@ -3797,6 +3855,21 @@ describe("Hologram", () => {
           fetchPageStub.firstCall.args[0],
           Type.tuple([pageModule, Type.map()]),
         );
+      });
+
+      // A command's reply that was in flight can say the identity changed while the chunks load.
+      it("is passed over, and the entry's page asked for, when the identity changes while its chunks load", async () => {
+        seedSnapshot("history-chunks-5");
+
+        await Hologram.handlePopstateEvent({state: "history-chunks-5"});
+        await flushPromises();
+
+        IdentityTracker.observe("tag-2");
+        announce("SNAPSHOT");
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, instanceId);
+        sinon.assert.calledOnce(fetchPageStub);
       });
 
       it("is restored at once when the tab has its chunks", async () => {
@@ -3897,6 +3970,214 @@ describe("Hologram", () => {
           sseConnectStub.restore();
         }
       });
+    });
+
+    // A snapshot taken for another identity can hold another user's state.
+    describe("snapshot taken for another identity", () => {
+      const pageModule = Type.atom(
+        "Elixir.Hologram.Test.Fixtures.RestoredForIdentity",
+      );
+
+      const flushPromises = () =>
+        new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Filed under a history id of its own each time, since the handler keeps what it reads. A
+      // snapshot with no period is one taken before snapshots were stamped.
+      const seedSnapshot = (historyId, identityPeriodFields) => {
+        const pageSnapshot = {
+          chunkDigests: [],
+          componentRegistryEntries: Type.map(),
+          ...identityPeriodFields,
+          instanceId: "restored-instance",
+          pageModule: pageModule,
+          pageParams: Type.map(),
+          scrollPosition: [0, 0],
+          subscriptionReceipts: [],
+        };
+
+        sessionStorage.setItem(
+          `hologram_page_snapshot_${historyId}`,
+          Serializer.serialize(pageSnapshot, "client"),
+        );
+      };
+
+      // Leaves the period the tests seed a snapshot with behind, as a logout would.
+      const endPeriod = () => {
+        const endedPeriod = IdentityTracker.period;
+        IdentityTracker.observe("tag-2");
+
+        return endedPeriod;
+      };
+
+      let consoleErrorStub, fetchPageDigestStub, fetchPageStub, instanceId;
+
+      beforeEach(() => {
+        instanceId = App.instanceId;
+        consoleErrorStub = sinon.stub(console, "error");
+        fetchPageStub = sinon.stub(Client, "fetchPage");
+
+        fetchPageDigestStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            if (onSuccess) {
+              onSuccess("restored-for-identity-1");
+            }
+
+            return Promise.resolve("restored-for-identity-1");
+          });
+      });
+
+      afterEach(() => {
+        fetchPageDigestStub.restore();
+        fetchPageStub.restore();
+        consoleErrorStub.restore();
+        globalThis.Hologram.config.liveReload = false;
+
+        document.head
+          .querySelectorAll("script[src^='/hologram/']")
+          .forEach((script) => script.remove());
+
+        ScriptRegistry.statuses.clear();
+        MountGate.require([]);
+        MountGate.cancel();
+        LiveReload.pageBundleDigests.delete(pageModule.value);
+
+        sessionStorage.clear();
+        ComponentRegistry.clear();
+        App.instanceId = instanceId;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      });
+
+      // The page is asked for the way a fresh visit asks for it, so its middleware runs. The
+      // identity is asked about before the code, which where live reload runs is a round trip.
+      it("is passed over, and the entry's page asked for, when the identity changed since it was taken", async () => {
+        globalThis.Hologram.config.liveReload = true;
+        seedSnapshot("history-identity-1", {identityPeriod: endPeriod()});
+
+        await Hologram.handlePopstateEvent({state: "history-identity-1"});
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, instanceId);
+        sinon.assert.notCalled(fetchPageDigestStub);
+        sinon.assert.calledOnce(fetchPageStub);
+
+        assert.deepStrictEqual(
+          fetchPageStub.firstCall.args[0],
+          Type.tuple([pageModule, Type.map()]),
+        );
+      });
+
+      it("is passed over when it holds no identity period", async () => {
+        seedSnapshot("history-identity-2", {});
+
+        await Hologram.handlePopstateEvent({state: "history-identity-2"});
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, instanceId);
+        sinon.assert.calledOnce(fetchPageStub);
+      });
+
+      it("is restored for the identity it was taken for, and the page takes its period", async () => {
+        seedSnapshot("history-identity-3", {
+          identityPeriod: IdentityTracker.period,
+        });
+
+        await Hologram.handlePopstateEvent({state: "history-identity-3"});
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, "restored-instance");
+        assert.equal(Hologram.pageIdentityPeriod, IdentityTracker.period);
+        sinon.assert.notCalled(fetchPageStub);
+      });
+
+      // The address bar shows the entry's URL already, and a replace to it is only a jump within
+      // the document when the URL has a fragment.
+      it("reloads the entry when the server answers it with something other than a page", async () => {
+        const reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+        const replaceStub = sinon.stub(Hologram, "replaceBrowserLocation");
+
+        try {
+          seedSnapshot("history-identity-4", {identityPeriod: endPeriod()});
+
+          await Hologram.handlePopstateEvent({state: "history-identity-4"});
+          await flushPromises();
+
+          const [_toParam, _onSuccess, onNotPage] =
+            fetchPageStub.firstCall.args;
+          onNotPage();
+
+          sinon.assert.calledOnce(reloadStub);
+          sinon.assert.notCalled(replaceStub);
+        } finally {
+          reloadStub.restore();
+          replaceStub.restore();
+        }
+      });
+    });
+  });
+
+  describe("isDocumentSnapshotRestorable()", () => {
+    const snapshot = (fields = {}) => ({
+      identityTag: "tag-1",
+      pageDigest: "page-1",
+      runtimeDigest: null,
+      ...fields,
+    });
+
+    let originalInitialPageDigest;
+
+    beforeEach(() => {
+      IdentityTracker.init("tag-1");
+      originalInitialPageDigest = globalThis.Hologram.initialPageDigest;
+    });
+
+    afterEach(() => {
+      clearIdentityTracker();
+      globalThis.Hologram.config.liveReload = false;
+      globalThis.Hologram.initialPageDigest = originalInitialPageDigest;
+    });
+
+    it("restores a snapshot taken for the identity the document was rendered for", () => {
+      assert.isTrue(Hologram.isDocumentSnapshotRestorable(snapshot(), false));
+    });
+
+    it("passes over a snapshot taken for another identity", () => {
+      assert.isFalse(
+        Hologram.isDocumentSnapshotRestorable(
+          snapshot({identityTag: "tag-2"}),
+          false,
+        ),
+      );
+    });
+
+    // Taken before snapshots were tagged, or after the identity changed under its page.
+    it("passes over a snapshot with no identity tag", () => {
+      const untagged = {pageDigest: "page-1", runtimeDigest: null};
+
+      assert.isFalse(
+        Hologram.isDocumentSnapshotRestorable(
+          snapshot({identityTag: null}),
+          false,
+        ),
+      );
+
+      assert.isFalse(Hologram.isDocumentSnapshotRestorable(untagged, false));
+    });
+
+    it("passes over a snapshot on a reload", () => {
+      assert.isFalse(Hologram.isDocumentSnapshotRestorable(snapshot(), true));
+    });
+
+    it("passes over a missing snapshot", () => {
+      assert.isFalse(Hologram.isDocumentSnapshotRestorable(null, false));
+    });
+
+    it("passes over a snapshot that does not fit the code", () => {
+      globalThis.Hologram.config.liveReload = true;
+      globalThis.Hologram.initialPageDigest = "page-2";
+
+      assert.isFalse(Hologram.isDocumentSnapshotRestorable(snapshot(), false));
     });
   });
 

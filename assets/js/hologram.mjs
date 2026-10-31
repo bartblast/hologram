@@ -96,6 +96,12 @@ export default class Hologram {
   static isRendering = false;
 
   // Made public to make tests easier
+  // The identity period the page on screen was produced in (see IdentityTracker): the one its
+  // server response arrived in, or for a restored page the one its snapshot answers for. The
+  // page's snapshot is stamped with it.
+  static pageIdentityPeriod = null;
+
+  // Made public to make tests easier
   static prefetchedPages = new Map();
 
   // Made public to make tests easier
@@ -534,6 +540,30 @@ export default class Hologram {
 
   // Made public to make tests easier
   //
+  // Whether the snapshot of the history entry a new document is loaded for can be restored into
+  // it: only for Back and Forward, not for a reload; only for the identity the server has just
+  // rendered the document for, since a snapshot taken for another can hold another user's state;
+  // and only into the code it was taken with, as a snapshot that does not fit mounts from the
+  // state the server has just rendered instead.
+  //
+  // A snapshot with no identity tag is passed over too: it was taken before snapshots were tagged,
+  // or after the identity changed under its page, and can hold anyone's state. So the first Back
+  // past a reload or an external site after an upgrade renders the page fresh, once.
+  static isDocumentSnapshotRestorable(pageSnapshot, isPageReload) {
+    return (
+      pageSnapshot !== null &&
+      !isPageReload &&
+      IdentityTracker.isCurrentTag(pageSnapshot.identityTag) &&
+      LiveReload.snapshotFits(
+        pageSnapshot,
+        globalThis.Hologram.initialPageDigest,
+        $.#runtimeDigest(),
+      )
+    );
+  }
+
+  // Made public to make tests easier
+  //
   // Takes the page the server described, or where it says to go instead. A redirect is followed by
   // asking for the page it names, so only the page actually arrived at is mounted and only its path
   // enters history - the same trail a browser leaves, where the pages passed through on the way are
@@ -639,6 +669,15 @@ export default class Hologram {
     for (const action of selfEchoes.data) {
       Hologram.enqueueActionAfterDelay(action, $.registryEpoch);
     }
+  }
+
+  // Made public to make tests easier
+  //
+  // Loads the document afresh in the history entry the tab is on, whatever its URL holds. Unlike
+  // replaceBrowserLocation() with the URL the address bar shows, this also loads an entry whose URL
+  // has a fragment, which a replace treats as a jump within the document.
+  static reloadBrowserLocation() {
+    window.location.reload();
   }
 
   // Made public to make tests easier
@@ -759,7 +798,9 @@ export default class Hologram {
 
       if (isRestorable) {
         $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
-        $.#restorePageSnapshot(pageSnapshot);
+        // The snapshot's tag matched the identity this document was rendered for (see
+        // isDocumentSnapshotRestorable), so its state belongs to this document's first period.
+        $.#restorePageSnapshot(pageSnapshot, IdentityTracker.documentPeriod);
 
         // The mount after a restore reads no mount data, which is where a page's bundle digest is
         // recorded, so this document's is recorded here: the snapshot it saves on leaving is
@@ -1293,11 +1334,14 @@ export default class Hologram {
 
     const pageSnapshot = await $.#getPageSnapshot(event.state);
 
-    // Asked before anything of the page being left is given up: where live reload runs, this is a
-    // round trip to the server.
-    const isSnapshotOutdated = pageSnapshot
-      ? await $.#isSnapshotOutdated(pageSnapshot)
-      : false;
+    // A snapshot is not restored when it was taken for another identity, where it can hold
+    // another user's state, or with code other than the page's current one. Asked before anything
+    // of the page being left is given up, and the identity first, since it needs no round trip:
+    // where live reload runs, the code is a round trip to the server.
+    const isSnapshotUnusable =
+      pageSnapshot !== null &&
+      (!$.#isSnapshotOfCurrentIdentity(pageSnapshot) ||
+        (await $.#isSnapshotOutdated(pageSnapshot)));
 
     // What the registry answers for is about to change either way: a restore swaps it for the
     // snapshot's, a snapshot that cannot be restored gives way to the page the server renders, and
@@ -1319,8 +1363,9 @@ export default class Hologram {
     // under that page's entry.
     const historyEntryId = event.state;
 
-    // A snapshot taken with code other than the page's current one is not restored.
-    if (isSnapshotOutdated) {
+    // A snapshot that cannot be restored gives way to the entry's page, asked for the way a fresh
+    // visit asks for it: its middleware runs, so a page that requires a login redirects.
+    if (isSnapshotUnusable) {
       return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
     }
 
@@ -1357,12 +1402,14 @@ export default class Hologram {
           return;
         }
 
-        if (!loaded) {
+        // The identity can have changed while the chunks loaded: a command's reply that was in
+        // flight.
+        if (!loaded || !$.#isSnapshotOfCurrentIdentity(pageSnapshot)) {
           return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
         }
 
         $.#historyId = historyEntryId;
-        $.#restorePageSnapshot(pageSnapshot);
+        $.#restorePageSnapshot(pageSnapshot, pageSnapshot.identityPeriod);
       }
 
       $.#mountWhenReady(isPageModuleRegistered);
@@ -1496,18 +1543,7 @@ export default class Hologram {
       $.#historyId = history.state;
       const pageSnapshot = await $.#getPageSnapshot(history.state);
 
-      // Only restore state for back/forward navigation, not page reloads, and only into the code
-      // the snapshot was taken with: this document runs the page's current code, and one that does
-      // not fit mounts from the state the server has just rendered instead.
-      if (
-        !$.#isPageReload() &&
-        pageSnapshot &&
-        LiveReload.snapshotFits(
-          pageSnapshot,
-          globalThis.Hologram.initialPageDigest,
-          $.#runtimeDigest(),
-        )
-      ) {
+      if ($.isDocumentSnapshotRestorable(pageSnapshot, $.#isPageReload())) {
         $.#documentSnapshot = pageSnapshot;
       }
     } else {
@@ -1598,6 +1634,13 @@ export default class Hologram {
     );
   }
 
+  // Whether the identity has stayed the same since the page the snapshot holds was put on screen.
+  // A period is this document's own, so only a snapshot this document took can answer yes: one
+  // another document took names a period of that document's.
+  static #isSnapshotOfCurrentIdentity(pageSnapshot) {
+    return IdentityTracker.isCurrent(pageSnapshot.identityPeriod);
+  }
+
   // Whether a snapshot Back or Forward is about to restore was taken with code other than the
   // page's current one, or the tab holds the page's code in an older version: either way, the
   // page is loaded afresh instead. Asks the server which bundle serves the page now, which is worth
@@ -1684,9 +1727,11 @@ export default class Hologram {
           isSuperseded()
             ? null
             : Hologram.loadNewPage(pagePath, payload, 0, historyEntryId),
+        // Reloaded rather than replaced with the path: the address bar shows the entry's URL
+        // already, and a replace to it is a jump within the document when it has a fragment.
         () => {
           if (!isSuperseded()) {
-            Hologram.replaceBrowserLocation(pagePath);
+            Hologram.reloadBrowserLocation();
           }
         },
       );
@@ -1704,8 +1749,10 @@ export default class Hologram {
   // defines pageMountData - the one channel markup has for structured state.
   static #loadMountData() {
     // A loaded document's bundle digest comes with the other values its boot script sets.
+    // Its state was rendered for the identity the document was loaded for.
     const mountData = $.#mountData ?? {
       ...globalThis.Hologram.pageMountData(Hologram.#deps),
+      identityPeriod: IdentityTracker.documentPeriod,
       pageDigest: globalThis.Hologram.initialPageDigest,
     };
 
@@ -1713,6 +1760,8 @@ export default class Hologram {
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
+
+    $.pageIdentityPeriod = mountData.identityPeriod ?? null;
 
     LiveReload.recordPageBundle(mountData.pageModule, mountData.pageDigest);
 
@@ -1966,11 +2015,13 @@ export default class Hologram {
     $.requestChunks(chunkDigests);
 
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
-    // the browser then runs. The page module is already decoded above, so it is reused.
+    // the browser then runs. The page module is already decoded above, so it is reused. A payload
+    // with no identity period gives a page whose snapshot is never restored.
     $.#mountData = {
       componentRegistry: Interpreter.evaluateJavaScriptExpression(
         payload.componentRegistry,
       ),
+      identityPeriod: payload.identityPeriod ?? null,
       pageDigest: payload.pageDigest,
       pageModule: pageModule,
       pageParams: Interpreter.evaluateJavaScriptExpression(payload.pageParams),
@@ -2147,7 +2198,8 @@ export default class Hologram {
     }
   }
 
-  static #restorePageSnapshot(pageSnapshot) {
+  // The identity period is the one the restored state answers for, which the page keeps.
+  static #restorePageSnapshot(pageSnapshot, identityPeriod) {
     const {
       componentRegistryEntries,
       instanceId,
@@ -2168,6 +2220,8 @@ export default class Hologram {
 
     Hologram.#pageModule = pageModule;
     Hologram.#pageParams = pageParams;
+
+    $.pageIdentityPeriod = identityPeriod;
 
     $.#scrollPosition = scrollPosition;
     $.#shouldLoadMountData = false;
@@ -2330,6 +2384,11 @@ export default class Hologram {
         ScriptRegistry.isLoaded([digest]),
       ),
       componentRegistryEntries: ComponentRegistry.entries,
+      // The identity the page's state was produced for. The snapshot is restored only for it: in
+      // this document while the period lasts, in another when the tag matches (see
+      // #isSnapshotOfCurrentIdentity and isDocumentSnapshotRestorable).
+      identityPeriod: $.pageIdentityPeriod,
+      identityTag: IdentityTracker.tagFor($.pageIdentityPeriod),
       instanceId: App.instanceId,
       pageDigest: LiveReload.heldPageDigest(Hologram.#pageModule),
       pageModule: Hologram.#pageModule,
