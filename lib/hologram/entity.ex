@@ -2,6 +2,7 @@ defmodule Hologram.Entity do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Entity
+  alias Hologram.Entity.Expression
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
   alias Hologram.Entity.Validator
@@ -239,10 +240,12 @@ defmodule Hologram.Entity do
   """
   @spec relationship(atom, module | list(module), T.opts()) :: Macro.t()
   defmacro relationship(name, type, opts \\ []) do
+    lowered_opts = Expression.relationship_opts(opts, __CALLER__)
+
     quote do
       name = unquote(name)
       type = unquote(type)
-      opts = unquote(opts)
+      opts = unquote(lowered_opts)
 
       Validator.validate_relationship!(__MODULE__, name, type, opts)
       Module.put_attribute(__MODULE__, :__relationships__, {name, type, opts})

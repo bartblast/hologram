@@ -562,6 +562,34 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "relationship/3" do
+    test "keeps options read from module attributes" do
+      defmodule AttributeOptionsFixture do
+        use Hologram.Entity
+
+        @optional true
+
+        relationship :owner, Module1, optional: @optional
+      end
+
+      assert AttributeOptionsFixture.__relationships__() == [{:owner, Module1, [optional: true]}]
+    end
+
+    test "refuses a relationship option naming entity vocabulary with an atom" do
+      code = """
+      defmodule Hologram.EntityTest.AtomInverseFixture do
+        use Hologram.Entity
+
+        relationship :owners, [Hologram.Test.Fixtures.Entity.Module1], inverse: :owner
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:4: inverse names the relationship it reverses with a bare name, got: :owner - write owner",
+                   fn -> Code.eval_string(code) end
+    end
+  end
+
   describe "role/2" do
     test "unifies an identical re-declaration" do
       defmodule InlineRoleFixture1 do
