@@ -244,7 +244,9 @@ defmodule Hologram.Entity do
       `relationship :messages, [Message], inverse: channel` holds the messages whose `channel`
       is the row, `relationship :posts, [Post], inverse: tags` the posts whose `tags` hold it,
       and `relationship :profile, Profile, inverse: user` the one profile whose `user` is the
-      row. An inverse stores nothing of its own, so declaring or removing one never moves data.
+      row. An inverse stores nothing of its own, so declaring or removing one never moves data,
+      and it is read-only: a write goes to the row that stores the fact, and a path in a
+      condition, `via:` and the relationship of a `to:` reference go through stored to-ones only.
       It takes no `optional:` or `unique:`, since the relationship it reverses carries both.
     * `optional:` - a to-one may reference nothing, its reference holding nil.
     * `sort:` - the order of an inverse set, named bare and read on the related type:

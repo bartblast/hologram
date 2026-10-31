@@ -24,6 +24,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.WriteError
@@ -482,6 +483,23 @@ defmodule Hologram.DBTest do
           "relationship only"
 
       assert_error ArgumentError, expected_msg, fn -> join_table_name(Module3, :c) end
+    end
+
+    test "raises for an inverse of a to-one" do
+      expected_msg =
+        "relationship :messages of Hologram.Test.Fixtures.Entity.Module26 is an inverse - it " <>
+          "reads the channel_id column of Hologram.Test.Fixtures.Entity.Module28's table, and a " <>
+          "join table backs a stored to-many relationship only"
+
+      assert_error ArgumentError, expected_msg, fn -> join_table_name(Module26, :messages) end
+    end
+
+    test "raises for an inverse of a to-many" do
+      expected_msg =
+        "relationship :messages of Hologram.Test.Fixtures.Entity.Module29 is an inverse - it " <>
+          "reads the join table of the labels relationship of Hologram.Test.Fixtures.Entity.Module28"
+
+      assert_error ArgumentError, expected_msg, fn -> join_table_name(Module29, :messages) end
     end
 
     test "raises for an undeclared relationship" do

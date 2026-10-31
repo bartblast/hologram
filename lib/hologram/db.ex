@@ -785,20 +785,33 @@ defmodule Hologram.DB do
     end
   end
 
-  # A to-one relationship is the one name a caller can reasonably expect a join table for and not
-  # get, so it is told where that relationship lives instead.
+  # A to-one relationship or an inverse is a name a caller can reasonably expect a join table for and
+  # not get, so it is told where that relationship's fact lives instead.
   defp join_table_refusal(entity_type, relationship) do
     declared? =
       Enum.any?(entity_type.__relationships__(), fn {name, _target, _opts} ->
         name == relationship
       end)
 
-    if declared? do
-      "relationship #{inspect(relationship)} of #{inspect(entity_type)} is a to-one " <>
-        "relationship, stored as the #{relationship}_id column of the entity's own table - a " <>
-        "join table backs a to-many relationship only"
-    else
-      "#{inspect(entity_type)} declares no relationship #{inspect(relationship)}"
+    inverse = Entity.inverse_relationship(entity_type, relationship)
+
+    cond do
+      inverse && inverse.reference? ->
+        "relationship #{inspect(relationship)} of #{inspect(entity_type)} is an inverse - it " <>
+          "reads the #{inverse.forward}_id column of #{inspect(inverse.target)}'s table, and a " <>
+          "join table backs a stored to-many relationship only"
+
+      inverse ->
+        "relationship #{inspect(relationship)} of #{inspect(entity_type)} is an inverse - it " <>
+          "reads the join table of #{Entity.describe_inverse(entity_type, relationship)}"
+
+      declared? ->
+        "relationship #{inspect(relationship)} of #{inspect(entity_type)} is a to-one " <>
+          "relationship, stored as the #{relationship}_id column of the entity's own table - a " <>
+          "join table backs a to-many relationship only"
+
+      true ->
+        "#{inspect(entity_type)} declares no relationship #{inspect(relationship)}"
     end
   end
 

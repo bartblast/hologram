@@ -19,7 +19,10 @@ defineRuntimeGlobals();
 // the client's kernel evaluates, where the Elixir ones build a boxed map keyed by atoms.
 describe("Elixir_Hologram_Query_Stage", () => {
   const BOOKING = "MyApp.Booking";
+  const CHANNEL = "MyApp.Channel";
   const ITEM = "MyApp.Item";
+  const LABEL = "MyApp.Label";
+  const MESSAGE = "MyApp.Message";
   const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
   const USER = "MyApp.User";
@@ -129,6 +132,30 @@ describe("Elixir_Hologram_Query_Stage", () => {
           },
           serverOnly: [],
         },
+        // A type declaring inverses of both kinds, read off MyApp.Message's reference field and,
+        // for LABEL below, off its to-many - the stages only refuse writing or pathing through them.
+        [CHANNEL]: {
+          attributes: {id: "uuid", name: "string"},
+          enumValues: {},
+          inverses: {
+            messages: {
+              forward: "channel",
+              reference: true,
+              sort: [],
+              toMany: true,
+              type: "MyApp.Message",
+            },
+            topic: {
+              forward: "channel",
+              reference: true,
+              sort: [],
+              toMany: false,
+              type: "MyApp.Topic",
+            },
+          },
+          relationships: {},
+          serverOnly: [],
+        },
         // A counter type of its own rather than another attribute on TASK, whose known-name lists
         // four assertions already pin: count is a counter, priority is an optional integer and so
         // is not, and bio is there to be refused for its type.
@@ -144,6 +171,28 @@ describe("Elixir_Hologram_Query_Stage", () => {
           constraints: {priority: {optional: true}},
           enumValues: {},
           relationships: {},
+          serverOnly: [],
+        },
+        [LABEL]: {
+          attributes: {id: "uuid", name: "string"},
+          enumValues: {},
+          inverses: {
+            messages: {
+              forward: "labels",
+              reference: false,
+              sort: [],
+              toMany: true,
+              type: "MyApp.Message",
+            },
+          },
+          relationships: {},
+          serverOnly: [],
+        },
+        // The stored side of CHANNEL's messages, so a path can reach the inverse on a later hop.
+        [MESSAGE]: {
+          attributes: {body: "string", id: "uuid"},
+          enumValues: {},
+          relationships: {channel: {toMany: false, type: CHANNEL}},
           serverOnly: [],
         },
         [PROJECT]: {
@@ -312,6 +361,45 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "add"));
     });
 
+    it("raises on an inverse of a to-one", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(CHANNEL),
+            Type.atom("messages"),
+            Type.bitstring("m1"),
+          ),
+        HologramBoxedError,
+        ":messages is an inverse relationship in MyApp.Channel - it reads the channel_id reference of MyApp.Message, so set that reference on the MyApp.Message row via put_attribute(:channel_id, id)",
+      );
+    });
+
+    it("raises on a single inverse", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(CHANNEL),
+            Type.atom("topic"),
+            Type.bitstring("t1"),
+          ),
+        HologramBoxedError,
+        ":topic is an inverse relationship in MyApp.Channel - it reads the channel_id reference of MyApp.Topic, so set that reference on the MyApp.Topic row via put_attribute(:channel_id, id)",
+      );
+    });
+
+    it("raises on an inverse of a to-many", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(LABEL),
+            Type.atom("messages"),
+            Type.bitstring("m1"),
+          ),
+        HologramBoxedError,
+        ":messages is an inverse relationship in MyApp.Label - it reads the labels relationship of MyApp.Message, so record the edge on the MyApp.Message row via add_relationship(:labels, id)",
+      );
+    });
+
     it("raises on a to-one relationship name", () => {
       assert.throw(
         () =>
@@ -409,6 +497,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
 
       assert.deepStrictEqual(edgeOps(result), edge("tasks", "t1", "delete"));
+    });
+
+    it("raises on an inverse of a to-many in its own stage's words", () => {
+      assert.throw(
+        () =>
+          deleteRelationship(
+            entity(LABEL),
+            Type.atom("messages"),
+            Type.bitstring("m1"),
+          ),
+        HologramBoxedError,
+        ":messages is an inverse relationship in MyApp.Label - it reads the labels relationship of MyApp.Message, so record the edge on the MyApp.Message row via delete_relationship(:labels, id)",
+      );
     });
 
     it("raises on a to-one relationship name", () => {
@@ -866,6 +967,31 @@ describe("Elixir_Hologram_Query_Stage", () => {
           putAttribute(entity(PROJECT), predicates([["tasks", Type.list()]])),
         HologramBoxedError,
         ":tasks is a relationship in MyApp.Project - only attributes can be put - add its edges via add_relationship",
+      );
+    });
+
+    // A name an object inherits is no inverse - only the ones the model bakes are.
+    it("raises on a name every object inherits as an unknown attribute", () => {
+      assert.throw(
+        () =>
+          putAttribute(
+            entity(CHANNEL),
+            predicates([["constructor", Type.integer(1)]]),
+          ),
+        HologramBoxedError,
+        "unknown attribute :constructor in MyApp.Channel - known attributes: :name",
+      );
+    });
+
+    it("raises on an inverse relationship name", () => {
+      assert.throw(
+        () =>
+          putAttribute(
+            entity(CHANNEL),
+            predicates([["messages", Type.list()]]),
+          ),
+        HologramBoxedError,
+        ":messages is an inverse relationship in MyApp.Channel - only attributes can be put - it reads the channel_id reference of MyApp.Message, so write that instead",
       );
     });
 
@@ -1618,6 +1744,58 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    it("raises on a path through an inverse relationship", () => {
+      assert.throw(
+        () =>
+          filter(
+            Type.alias(CHANNEL),
+            pathPredicates(["messages", "body"], Type.bitstring("x")),
+          ),
+        HologramBoxedError,
+        ":messages is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference",
+      );
+    });
+
+    it("raises on a path reaching an inverse relationship on a later hop", () => {
+      assert.throw(
+        () =>
+          filter(
+            Type.alias(MESSAGE),
+            pathPredicates(
+              ["channel", "messages", "body"],
+              Type.bitstring("x"),
+            ),
+          ),
+        HologramBoxedError,
+        ":messages is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference",
+      );
+    });
+
+    it("raises on an attribute operand reading a path through an inverse relationship", () => {
+      const value = Type.tuple([
+        Type.atom("=="),
+        Type.tuple([Type.atom("attribute"), path("messages", "body")]),
+      ]);
+
+      assert.throw(
+        () => filter(Type.alias(CHANNEL), predicates([["name", value]])),
+        HologramBoxedError,
+        ":messages is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference",
+      );
+    });
+
+    it("raises on a path through a single inverse", () => {
+      assert.throw(
+        () =>
+          filter(
+            Type.alias(CHANNEL),
+            pathPredicates(["topic", "title"], Type.bitstring("x")),
+          ),
+        HologramBoxedError,
+        ":topic is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference",
+      );
+    });
+
     it("raises on a path through a to-many relationship", () => {
       assert.throw(
         () =>
@@ -1721,6 +1899,18 @@ describe("Elixir_Hologram_Query_Stage", () => {
           filter(Type.alias(PROJECT), predicates([["owner", Type.integer(1)]])),
         HologramBoxedError,
         ":owner is a relationship in MyApp.Project - only attributes can be filtered - filter its reference via :owner_id",
+      );
+    });
+
+    it("raises on an inverse relationship", () => {
+      assert.throw(
+        () =>
+          filter(
+            Type.alias(CHANNEL),
+            predicates([["messages", Type.integer(1)]]),
+          ),
+        HologramBoxedError,
+        ":messages is a relationship in MyApp.Channel - only attributes can be filtered",
       );
     });
 

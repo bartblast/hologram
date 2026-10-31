@@ -14,6 +14,9 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module25
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -79,6 +82,39 @@ defmodule Hologram.Query.StageTest do
         |> add_relationship(:a, target_id)
 
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
+    end
+
+    test "raises on an inverse of a to-one" do
+      entity = Module26.new()
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - it reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so set that reference on the Hologram.Test.Fixtures.Entity.Module28 row via put_attribute(:channel_id, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :messages, Entity.generate_id())
+      end
+    end
+
+    test "raises on a single inverse" do
+      entity = Module26.new()
+
+      expected_msg =
+        ":topic is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - it reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module27, so set that reference on the Hologram.Test.Fixtures.Entity.Module27 row via put_attribute(:channel_id, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :topic, Entity.generate_id())
+      end
+    end
+
+    test "raises on an inverse of a to-many" do
+      entity = Module29.new()
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module29 - it reads the labels relationship of Hologram.Test.Fixtures.Entity.Module28, so record the edge on the Hologram.Test.Fixtures.Entity.Module28 row via add_relationship(:labels, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :messages, Entity.generate_id())
+      end
     end
 
     test "raises on a to-one relationship name" do
@@ -326,6 +362,17 @@ defmodule Hologram.Query.StageTest do
         |> delete_relationship(:a, target_id)
 
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :delete}
+    end
+
+    test "raises on an inverse of a to-many in its own stage's words" do
+      entity = Module29.new()
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module29 - it reads the labels relationship of Hologram.Test.Fixtures.Entity.Module28, so record the edge on the Hologram.Test.Fixtures.Entity.Module28 row via delete_relationship(:labels, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        delete_relationship(entity, :messages, Entity.generate_id())
+      end
     end
 
     test "raises on a to-one relationship name" do
@@ -906,6 +953,42 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "raises on a path through an inverse relationship" do
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, [{[:messages, :body], "x"}])
+      end
+    end
+
+    test "raises on a path reaching an inverse relationship on a later hop" do
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module28, [{[:channel, :messages, :body], "x"}])
+      end
+    end
+
+    test "raises on an attribute operand reading a path through an inverse relationship" do
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, [{:name, {:==, {:attribute, [:messages, :body]}}}])
+      end
+    end
+
+    test "raises on a path through a single inverse" do
+      expected_msg =
+        ":topic is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, [{[:topic, :summary], "x"}])
+      end
+    end
+
     test "raises on a path through a to-many relationship" do
       expected_msg =
         ":a is a to-many relationship in Hologram.Test.Fixtures.Entity.Module3 - a path in a condition goes through to-one relationships only"
@@ -966,6 +1049,15 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module3, c: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+      end
+    end
+
+    test "raises on a predicate naming an inverse relationship" do
+      expected_msg =
+        ":messages is a relationship in Hologram.Test.Fixtures.Entity.Module26 - only attributes can be filtered"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, messages: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
       end
     end
 
@@ -2116,6 +2208,17 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         put_attribute(entity, a: [])
+      end
+    end
+
+    test "raises on an inverse relationship name" do
+      entity = Module26.new()
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - only attributes can be put - it reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so write that instead"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, messages: [])
       end
     end
 

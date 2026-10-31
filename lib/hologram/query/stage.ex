@@ -578,6 +578,23 @@ defmodule Hologram.Query.Stage do
     |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
+  defp inverse_relationship_names(entity_type) do
+    Enum.map(entity_type.__inverse_relationships__(), fn {name, _type, _opts} -> name end)
+  end
+
+  # Where the write an inverse reads goes instead: the reference field of the related row for an
+  # inverse of a to-one, the related row's own edge for an inverse of a to-many.
+  defp inverse_write_fix(entity_type, name, stage) do
+    inverse = Entity.inverse_relationship(entity_type, name)
+    row = "the #{inspect(inverse.target)} row"
+
+    if inverse.reference? do
+      "set that reference on #{row} via put_attribute(:#{inverse.forward}_id, id)"
+    else
+      "record the edge on #{row} via #{stage}(:#{inverse.forward}, id)"
+    end
+  end
+
   # Two includes of one relationship are one include when neither narrows it: what each includes
   # merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
   # than the other, so a relationship included twice with clauses on either side is refused.
@@ -937,7 +954,7 @@ defmodule Hologram.Query.Stage do
   defp put_relationship_op(entity, relationship_name, target_id, op, stage) do
     entity_type = entity_type!(entity, stage)
 
-    validate_edge_relationship_name!(relationship_name, entity_type)
+    validate_edge_relationship_name!(relationship_name, entity_type, stage)
 
     if not is_binary(target_id) do
       raise ArgumentError,
@@ -1168,13 +1185,19 @@ defmodule Hologram.Query.Stage do
   end
 
   # A declared to-many relationship - refused where it is written, with the fix named for the
-  # names an edge stage is most often given by mistake.
-  defp validate_edge_relationship_name!(name, entity_type) do
+  # names an edge stage is most often given by mistake. An inverse holds no edges of its own, so it
+  # is refused naming where the fact it reads is written.
+  defp validate_edge_relationship_name!(name, entity_type, stage) do
     to_many_names = to_many_relationship_names(entity_type)
 
     cond do
       name in to_many_names ->
         :ok
+
+      name in inverse_relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is an inverse relationship in #{inspect(entity_type)} - it reads #{Entity.describe_inverse(entity_type, name)}, so #{inverse_write_fix(entity_type, name, stage)}"
 
       name in to_one_relationship_names(entity_type) ->
         raise ArgumentError,
@@ -1226,7 +1249,7 @@ defmodule Hologram.Query.Stage do
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered - filter its reference via :#{name}_id"
 
-      name in relationship_names(entity_type) ->
+      name in relationship_names(entity_type) or name in inverse_relationship_names(entity_type) ->
         raise ArgumentError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered"
@@ -1347,6 +1370,12 @@ defmodule Hologram.Query.Stage do
   defp validate_path_hop!(hop, entity_type) do
     definitions = entity_type.__relationships__()
 
+    if hop in inverse_relationship_names(entity_type) do
+      raise ArgumentError,
+        message:
+          "#{inspect(hop)} is an inverse relationship in #{inspect(entity_type)} - a path in a condition goes through to-one relationships that hold their reference"
+    end
+
     case Enum.find(definitions, fn {name, _type, _opts} -> name == hop end) do
       {_name, [_target], _opts} ->
         raise ArgumentError,
@@ -1394,6 +1423,11 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be put - set its reference via :#{name}_id"
+
+      name in inverse_relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is an inverse relationship in #{inspect(entity_type)} - only attributes can be put - it reads #{Entity.describe_inverse(entity_type, name)}, so write that instead"
 
       name in relationship_names(entity_type) ->
         raise ArgumentError,
