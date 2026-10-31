@@ -22,6 +22,8 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module20
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -1068,6 +1070,25 @@ defmodule Hologram.MutationTest do
       write = readable_write(Module19, Entity.generate_id(), %{"slug" => "taken"})
 
       assert run(envelope([write]), server()) == rejected(0, %{slug: [:unique]})
+    end
+
+    test "refuses a second reference to the target of a unique to-one" do
+      channel =
+        %{name: "general"}
+        |> Module26.new()
+        |> DB.create!()
+
+      %{channel_id: channel.id, summary: "first"}
+      |> Module27.new()
+      |> DB.create!()
+
+      write =
+        readable_write(Module27, Entity.generate_id(), %{
+          "channel_id" => channel.id,
+          "summary" => "second"
+        })
+
+      assert run(envelope([write]), server()) == rejected(0, %{channel_id: [:unique]})
     end
 
     test "refuses a reference naming no row" do

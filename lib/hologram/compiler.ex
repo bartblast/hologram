@@ -3844,6 +3844,7 @@ defmodule Hologram.Compiler do
       {"enumValues", render_enum_values(entity_type)},
       {"expandedRoles", render_expanded_roles(entity_type)},
       {"frameworkAttributes", render_framework_attributes(entity_type)},
+      {"inverses", render_inverses(entity_type)},
       {"operations", render_operations(entity_type)},
       {"policy", render_policy(entity_type, permission_checking?)},
       {"relationships", render_relationships(entity_type)},
@@ -3938,6 +3939,46 @@ defmodule Hologram.Compiler do
     |> Enum.sort_by(fn {key, _value} -> key end)
     |> Enum.map_join(",", fn {key, value} -> ~s/#{Jason.encode!(key)}:#{value}/ end)
     |> then(&"{#{&1}}")
+  end
+
+  # An inverse is spelled apart from the stored relationships, because nothing on its row stores
+  # the reference: it reverses a relationship of the related type - read off the related rows'
+  # reference field when that one is a to-one, a to-many's facts otherwise - in its declared order,
+  # spelled the way a query term spells an order, so normalizing a term in the browser applies it
+  # the way the server does.
+  defp render_inverses(entity_type) do
+    entity_type.__inverse_relationships__()
+    |> Enum.map(fn {name, _type, _opts} ->
+      inverse = Entity.inverse_relationship(entity_type, name)
+
+      sort =
+        inverse.target
+        |> Stage.sort(inverse.sort)
+        |> Map.fetch!(:sort)
+        |> Enum.map(fn {key, direction} -> [Atom.to_string(key), Atom.to_string(direction)] end)
+
+      type =
+        inverse.target
+        |> Codec.encode_enum_value()
+        |> Jason.encode!()
+
+      forward =
+        inverse.forward
+        |> Atom.to_string()
+        |> Jason.encode!()
+
+      entry =
+        render_json_object([
+          {"forward", forward},
+          {"reference", Jason.encode!(inverse.reference?)},
+          {"sort", Jason.encode!(sort)},
+          {"toMany", Jason.encode!(inverse.to_many?)},
+          {"type", type}
+        ])
+
+      {Atom.to_string(name), entry}
+    end)
+    |> render_json_object()
   end
 
   # A to-many is spelled apart from a to-one because they are read apart: a to-many is assembled

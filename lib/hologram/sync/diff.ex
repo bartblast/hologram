@@ -7,6 +7,7 @@ defmodule Hologram.Sync.Diff do
   # both of those live here rather than in the query.
 
   alias Hologram.Auth
+  alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
 
   @doc """
@@ -39,6 +40,10 @@ defmodule Hologram.Sync.Diff do
   row the round does not hold, which is what removing it means, so it is never measured against
   what the round makes visible. Each carries the type of the row the relationship lives on, which
   is what names it on the wire.
+
+  An edge of a to-many is also reported from its target's side, for a target whose type declares
+  an inverse of that relationship and whose set the window embeds - the set a client files under
+  the target, which nothing else would tell it moved. It is read and withheld the same way.
 
   Vanishing is reported per window. Whether the client is told to drop the row depends on the
   rest of what it holds, which only the session knows.
@@ -209,14 +214,21 @@ defmodule Hologram.Sync.Diff do
     end)
   end
 
+  # Every copy of a row is walked, since each carries the includes of the place it sits in - a
+  # channel at the root and again under each of its messages can hold its topic only under the
+  # messages. The copies are one member, merged: a relationship the kept copy did not include takes
+  # what another copy included, so the member carries every relationship the round read for it.
   defp collect(row, members) do
-    if Map.has_key?(members, row.id) do
-      members
-    else
-      row.__struct__.__relationships__()
-      |> Enum.flat_map(fn {name, _target, _opts} -> embedded_rows(Map.fetch!(row, name)) end)
-      |> Enum.reduce(Map.put(members, row.id, row), &collect/2)
-    end
+    member =
+      case Map.fetch(members, row.id) do
+        {:ok, kept} -> Entity.merge_copies(kept, row)
+        :error -> row
+      end
+
+    row.__struct__
+    |> Entity.includable_names()
+    |> Enum.flat_map(&embedded_rows(Map.fetch!(row, &1)))
+    |> Enum.reduce(Map.put(members, row.id, member), &collect/2)
   end
 
   defp edge(event, visible) do
@@ -270,7 +282,7 @@ defmodule Hologram.Sync.Diff do
     transactions
     |> Enum.flat_map(fn {_tx, events} -> events end)
     |> Enum.filter(&(&1.op in [:add_relationship, :del_relationship]))
-    |> Enum.flat_map(&edge(&1, visible))
+    |> Enum.flat_map(&(edge(&1, visible) ++ reverse_edges(&1, visible)))
     |> Enum.reject(&hidden_target?(&1, visible_ids))
     |> Enum.uniq()
   end
@@ -301,15 +313,15 @@ defmodule Hologram.Sync.Diff do
 
   defp hidden_target?(_edge, _visible_ids), do: false
 
-  # Every row a round carries, keyed by id: the roots and every row embedded under them, however
-  # deep. One id can arrive in more than one place, and the first copy found keeps the spot - every
-  # copy was read by the same query in the same round, so they hold the same values.
   defp member_ids(members) do
     members
     |> Map.keys()
     |> MapSet.new()
   end
 
+  # Every row a round carries, keyed by id: the roots and every row embedded under them, however
+  # deep. One id can arrive in more than one place, each copy with its own includes, so every copy
+  # is walked and the copies are merged into one member.
   defp members(rows) do
     Enum.reduce(rows, %{}, fn {_id, row}, members -> collect(row, members) end)
   end
@@ -357,6 +369,37 @@ defmodule Hologram.Sync.Diff do
     |> Enum.any?(&edge_reaches?(&1, row, named_types, moved))
   end
 
+  defp reverse_edge(row, name, source_id) do
+    case Map.fetch!(row, name) do
+      sources when is_list(sources) ->
+        [
+          %{
+            entity_id: row.id,
+            op: edge_op(sources, source_id),
+            relationship: Atom.to_string(name),
+            target_id: source_id,
+            type: row.__struct__
+          }
+        ]
+
+      %NotIncluded{} ->
+        []
+    end
+  end
+
+  # The same edge read from its target's side: a target whose type files an inverse of the
+  # relationship gets the edge in that set, read the same way from what the round holds there.
+  defp reverse_edges(event, visible) do
+    with %{"relationship" => forward_name, "target_id" => target_id} <- event.data,
+         %{} = row <- Map.get(visible, target_id) do
+      row.__struct__
+      |> Entity.inverses_of_to_many(event.type, forward_name)
+      |> Enum.flat_map(&reverse_edge(row, &1, event.entity_id))
+    else
+      _no_edge_to_report -> []
+    end
+  end
+
   # An effect that recorded no revisions - a delete, a relationship edge - says nothing about which
   # columns moved, so it stands for all of them.
   defp revision_names(%{revisions: revisions}) when is_map(revisions) do
@@ -368,13 +411,13 @@ defmodule Hologram.Sync.Diff do
   defp revision_names(_effect), do: :all
 
   # What leaves here is what this client may see, embedded lists included: an unreadable member
-  # loses its slot in every to-many list, however deep, not only its own deltas. To-one embeds
-  # stay as they are - the wire never spells them (the reference field carries the id), so there
-  # is nothing to hide. Scrubbing at the source rather than at the spelling covers every path a
+  # loses its slot in every included set, however deep, not only its own deltas. A single embedded
+  # row stays as it is - the wire never spells one (a reference field carries the id), so there is
+  # nothing to hide. Scrubbing at the source rather than at the spelling covers every path a
   # row takes out, the catch-up store included.
   defp scrub(row, visible_ids) do
     updates =
-      for {name, _target, _opts} <- row.__struct__.__relationships__(),
+      for name <- Entity.includable_names(row.__struct__),
           targets = Map.fetch!(row, name),
           is_list(targets) do
         {name, scrub_targets(targets, visible_ids)}

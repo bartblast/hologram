@@ -7,8 +7,16 @@ defmodule Hologram.Entity.ValidatorTest do
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module4
+
+  # Where a declaration on the given line of this file is, as a whole-model refusal spells it.
+  defp location(line), do: "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: "
 
   describe "attribute_value_valid?/3" do
     test "validates :boolean values" do
@@ -1687,6 +1695,8 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "rejects a relationship targeting a non-entity module" do
+      line = __ENV__.line + 5
+
       defmodule InlineEntityFixture22 do
         use Hologram.Entity
 
@@ -1694,7 +1704,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       expected_msg =
-        "invalid data model:\n  * relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture22 targets Hologram.Reflection, which is not an entity type module"
+        "invalid data model:\n  * #{location(line)}relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture22 targets Hologram.Reflection, which is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlineEntityFixture22])
@@ -1702,6 +1712,8 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "rejects a relationship targeting a nonexistent module" do
+      line = __ENV__.line + 5
+
       defmodule InlineEntityFixture23 do
         use Hologram.Entity
 
@@ -1709,7 +1721,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       expected_msg =
-        "invalid data model:\n  * relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture23 targets NonExistent.Module, which is not an entity type module"
+        "invalid data model:\n  * #{location(line)}relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture23 targets NonExistent.Module, which is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlineEntityFixture23])
@@ -1717,11 +1729,15 @@ defmodule Hologram.Entity.ValidatorTest do
     end
 
     test "collects all violations across the model and raises once" do
+      a_line = __ENV__.line + 5
+
       defmodule InlineEntityFixture24 do
         use Hologram.Entity
 
         relationship :a, Hologram.Reflection
       end
+
+      b_line = __ENV__.line + 5
 
       defmodule InlineEntityFixture25 do
         use Hologram.Entity
@@ -1731,15 +1747,298 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       expected_msg =
-        "invalid data model:\n  * relationship :a in Hologram.Entity.ValidatorTest.InlineEntityFixture24 targets Hologram.Reflection, which is not an entity type module\n  * relationship :b in Hologram.Entity.ValidatorTest.InlineEntityFixture25 targets NonExistent.Module, which is not an entity type module"
+        "invalid data model:\n  * #{location(a_line)}relationship :a in Hologram.Entity.ValidatorTest.InlineEntityFixture24 targets Hologram.Reflection, which is not an entity type module\n  * #{location(b_line)}relationship :b in Hologram.Entity.ValidatorTest.InlineEntityFixture25 targets NonExistent.Module, which is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlineEntityFixture24, InlineEntityFixture25])
       end
     end
+
+    test "returns :ok when every inverse reverses a relationship of its related type" do
+      assert validate_model!([Module26, Module27, Module28, Module29]) == :ok
+    end
+
+    test "returns :ok for a self-referencing inverse" do
+      defmodule InlineEntityFixture127 do
+        use Hologram.Entity
+
+        relationship :parent, __MODULE__, optional: true
+        relationship :children, [__MODULE__], inverse: parent, sort: created_at
+      end
+
+      assert validate_model!([InlineEntityFixture127]) == :ok
+    end
+
+    test "returns :ok for self-referencing inverses of a to-one and of a to-many" do
+      assert validate_model!([Module30]) == :ok
+    end
+
+    test "returns :ok for an inverse set of a unique to-one" do
+      defmodule InlineEntityFixture139 do
+        use Hologram.Entity
+
+        relationship :owner, Hologram.Entity.ValidatorTest.InlineEntityFixture140, unique: true
+      end
+
+      defmodule InlineEntityFixture140 do
+        use Hologram.Entity
+
+        relationship :owned, [Hologram.Entity.ValidatorTest.InlineEntityFixture139],
+          inverse: owner
+      end
+
+      assert validate_model!([InlineEntityFixture139, InlineEntityFixture140]) == :ok
+    end
+
+    test "lists every violation of one inverse in the order its checks run" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture141 do
+        use Hologram.Entity
+
+        relationship :messages, [Module28], inverse: chanel, sort: posted_at
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture141 is the inverse of :chanel, which Hologram.Test.Fixtures.Entity.Module28 does not declare - its relationships are: :channel, :labels\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture141 has an invalid sort option - unknown attribute :posted_at in Hologram.Test.Fixtures.Entity.Module28 - known attributes: :body, :created_at, :id, :position, :updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture141])
+      end
+    end
+
+    test "rejects an inverse targeting a non-entity module" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture128 do
+        use Hologram.Entity
+
+        relationship :owners, [Hologram.Reflection], inverse: owner
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture128 targets Hologram.Reflection, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture128])
+      end
+    end
+
+    test "rejects an inverse of a relationship the related type does not declare" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture129 do
+        use Hologram.Entity
+
+        relationship :messages, [Module28], inverse: chanel
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture129 is the inverse of :chanel, which Hologram.Test.Fixtures.Entity.Module28 does not declare - its relationships are: :channel, :labels"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture129])
+      end
+    end
+
+    test "rejects an inverse of a relationship on a related type declaring none" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture130 do
+        use Hologram.Entity
+
+        relationship :owners, [Module1], inverse: owner
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture130 is the inverse of :owner, which Hologram.Test.Fixtures.Entity.Module1 does not declare - it declares none"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture130])
+      end
+    end
+
+    test "rejects an inverse of an inverse" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture131 do
+        use Hologram.Entity
+
+        relationship :channels, [Module26], inverse: messages
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :channels in Hologram.Entity.ValidatorTest.InlineEntityFixture131 is the inverse of :messages, which is itself an inverse in Hologram.Test.Fixtures.Entity.Module26 - an inverse reverses a stored relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture131])
+      end
+    end
+
+    test "rejects an inverse of a relationship pointing at another type" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture132 do
+        use Hologram.Entity
+
+        relationship :messages, [Module28], inverse: channel
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture132 is the inverse of :channel, which points at Hologram.Test.Fixtures.Entity.Module26 in Hologram.Test.Fixtures.Entity.Module28, not at Hologram.Entity.ValidatorTest.InlineEntityFixture132"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture132])
+      end
+    end
+
+    test "rejects a single inverse of a to-many" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture133 do
+        use Hologram.Entity
+
+        relationship :label_owner, Hologram.Entity.ValidatorTest.InlineEntityFixture134,
+          inverse: labels
+      end
+
+      defmodule InlineEntityFixture134 do
+        use Hologram.Entity
+
+        relationship :labels, [Hologram.Entity.ValidatorTest.InlineEntityFixture133]
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :label_owner in Hologram.Entity.ValidatorTest.InlineEntityFixture133 is the inverse of :labels, which is to-many in Hologram.Entity.ValidatorTest.InlineEntityFixture134 - declare it as [Hologram.Entity.ValidatorTest.InlineEntityFixture134]"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture133, InlineEntityFixture134])
+      end
+    end
+
+    test "rejects a single inverse of a to-one that is not unique" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture135 do
+        use Hologram.Entity
+
+        relationship :owned, Hologram.Entity.ValidatorTest.InlineEntityFixture136, inverse: owner
+      end
+
+      defmodule InlineEntityFixture136 do
+        use Hologram.Entity
+
+        relationship :owner, Hologram.Entity.ValidatorTest.InlineEntityFixture135
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :owned in Hologram.Entity.ValidatorTest.InlineEntityFixture135 is the inverse of :owner, which is not unique in Hologram.Entity.ValidatorTest.InlineEntityFixture136 - declare it as [Hologram.Entity.ValidatorTest.InlineEntityFixture136], or make Hologram.Entity.ValidatorTest.InlineEntityFixture136's owner unique: true"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture135, InlineEntityFixture136])
+      end
+    end
+
+    test "rejects an invalid sort option on an inverse" do
+      defmodule InlineEntityFixture137 do
+        use Hologram.Entity
+
+        relationship :channel, Hologram.Entity.ValidatorTest.InlineEntityFixture138
+      end
+
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture138 do
+        use Hologram.Entity
+
+        relationship :messages, [Hologram.Entity.ValidatorTest.InlineEntityFixture137],
+          inverse: channel,
+          sort: posted_at
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :messages in Hologram.Entity.ValidatorTest.InlineEntityFixture138 has an invalid sort option - unknown attribute :posted_at in Hologram.Entity.ValidatorTest.InlineEntityFixture137 - known attributes: :created_at, :id, :updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture137, InlineEntityFixture138])
+      end
+    end
   end
 
   describe "validate_relationship!/4" do
+    test "accepts an inverse set" do
+      defmodule InlineEntityFixture113 do
+        use Hologram.Entity
+
+        relationship :owners, [Module1], inverse: owner
+      end
+
+      assert InlineEntityFixture113.__inverse_relationships__() == [
+               {:owners, [Module1], [inverse: :owner]}
+             ]
+    end
+
+    test "accepts a single inverse" do
+      defmodule InlineEntityFixture114 do
+        use Hologram.Entity
+
+        relationship :owner, Module1, inverse: owned
+      end
+
+      assert InlineEntityFixture114.__inverse_relationships__() == [
+               {:owner, Module1, [inverse: :owned]}
+             ]
+    end
+
+    test "accepts the sort option of an inverse set as a name and as a list" do
+      defmodule InlineEntityFixture115 do
+        use Hologram.Entity
+
+        relationship :drafts, [Module1], inverse: owner, sort: title
+        relationship :owners, [Module1], inverse: owner, sort: [title, created_at: :desc]
+      end
+
+      assert InlineEntityFixture115.__inverse_relationships__() == [
+               {:drafts, [Module1], [inverse: :owner, sort: :title]},
+               {:owners, [Module1], [inverse: :owner, sort: [:title, created_at: :desc]]}
+             ]
+    end
+
+    # An inverse stores no reference, so the field a to-one would derive is free.
+    test "accepts an attribute named like the reference field a single inverse does not derive" do
+      defmodule InlineEntityFixture116 do
+        use Hologram.Entity
+
+        attribute :owner_id, :string
+
+        relationship :owner, Module1, inverse: owned
+      end
+
+      assert InlineEntityFixture116.__inverse_relationships__() == [
+               {:owner, Module1, [inverse: :owned]}
+             ]
+    end
+
+    test "accepts a unique to-one relationship" do
+      defmodule InlineEntityFixture109 do
+        use Hologram.Entity
+
+        relationship :owner, Module1, unique: true
+      end
+
+      assert InlineEntityFixture109.__relationships__() == [{:owner, Module1, [unique: true]}]
+    end
+
+    test "accepts a disabled unique option on a relationship" do
+      defmodule InlineEntityFixture110 do
+        use Hologram.Entity
+
+        relationship :owner, Module1, unique: false
+      end
+
+      assert InlineEntityFixture110.__relationships__() == [{:owner, Module1, [unique: false]}]
+    end
+
     test "rejects a to-one reference field colliding with an attribute" do
       expected_msg =
         "relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture27 derives entity field :owner_id, which collides with attribute :owner_id - every declaration must derive distinct fields"
@@ -1792,6 +2091,167 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           relationship :owner, Module1, optional: 1
+        end
+      end
+    end
+
+    test "rejects non-boolean unique option on a relationship" do
+      expected_msg =
+        "invalid unique option :yes for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture111 - the unique option must be true or false"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture111 do
+          use Hologram.Entity
+
+          relationship :owner, Module1, unique: :yes
+        end
+      end
+    end
+
+    test "rejects a unique to-many relationship" do
+      expected_msg =
+        "invalid unique option for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture112 - unique applies to a to-one relationship, and a to-many holds no reference to repeat"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture112 do
+          use Hologram.Entity
+
+          relationship :owners, [Module1], unique: true
+        end
+      end
+    end
+
+    test "rejects an inverse naming a relationship with a value that is not an atom" do
+      expected_msg =
+        "invalid inverse option \"owner\" for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture117 - the inverse option names the relationship it reverses on the related type"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture117 do
+          use Hologram.Entity
+
+          relationship :owners, [Module1], inverse: ^"owner"
+        end
+      end
+    end
+
+    test "rejects an inverse naming nothing" do
+      expected_msg =
+        "invalid inverse option nil for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture125 - the inverse option names the relationship it reverses on the related type"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture125 do
+          use Hologram.Entity
+
+          relationship :owners, [Module1], inverse: ^nil
+        end
+      end
+    end
+
+    test "rejects a to-one whose reference field collides with a declared inverse" do
+      expected_msg =
+        "relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture126 derives entity field :owner_id, which collides with relationship :owner_id - every declaration must derive distinct fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture126 do
+          use Hologram.Entity
+
+          relationship :owner_id, Module1, inverse: owned
+          relationship :owner, Module1
+        end
+      end
+    end
+
+    test "rejects the optional option on an inverse" do
+      expected_msg =
+        "invalid optional option for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture118 - an inverse takes its semantics from the relationship it reverses"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture118 do
+          use Hologram.Entity
+
+          relationship :owners, [Module1], inverse: owner, optional: true
+        end
+      end
+    end
+
+    test "rejects the unique option on an inverse" do
+      expected_msg =
+        "invalid unique option for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture119 - an inverse takes its semantics from the relationship it reverses"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture119 do
+          use Hologram.Entity
+
+          relationship :owner, Module1, inverse: owned, unique: true
+        end
+      end
+    end
+
+    test "rejects the sort option on a relationship that is not an inverse" do
+      expected_msg =
+        "invalid sort option for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture120 - sort applies to an inverse to-many"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture120 do
+          use Hologram.Entity
+
+          relationship :owners, [Module1], sort: title
+        end
+      end
+    end
+
+    test "rejects the sort option on a single inverse" do
+      expected_msg =
+        "invalid sort option for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture121 - sort applies to an inverse to-many"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture121 do
+          use Hologram.Entity
+
+          relationship :owner, Module1, inverse: owned, sort: title
+        end
+      end
+    end
+
+    test "rejects a sort option of another shape" do
+      expected_msg =
+        "invalid sort option [] for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture122 - the sort option takes an attribute name or a list of names and {name, :asc | :desc} pairs"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture122 do
+          use Hologram.Entity
+
+          relationship :owners, [Module1], inverse: owner, sort: ^[]
+        end
+      end
+    end
+
+    test "rejects an inverse named like a declared attribute" do
+      expected_msg =
+        "duplicate name :owners used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture123 - attribute and relationship names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture123 do
+          use Hologram.Entity
+
+          attribute :owners, :string
+
+          relationship :owners, [Module1], inverse: owner
+        end
+      end
+    end
+
+    test "rejects an attribute named like a declared inverse" do
+      expected_msg =
+        "duplicate name :owners used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture124 - attribute and relationship names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture124 do
+          use Hologram.Entity
+
+          relationship :owners, [Module1], inverse: owner
+
+          attribute :owners, :string
         end
       end
     end
@@ -1903,7 +2363,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects unknown relationship option" do
       expected_msg =
-        "unknown option :default for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture12 - valid relationship options are: :optional"
+        "unknown option :default for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture12 - valid relationship options are: :inverse, :optional, :sort, :unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture12 do
@@ -1916,7 +2376,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects the server_only option on a relationship" do
       expected_msg =
-        "unknown option :server_only for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture87 - valid relationship options are: :optional"
+        "unknown option :server_only for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture87 - valid relationship options are: :inverse, :optional, :sort, :unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture87 do

@@ -252,6 +252,60 @@ defmodule Hologram.Migration.RendererTest do
       assert create_index.concurrently == true
     end
 
+    test "builds a unique reference index of a table born in the file inside the transaction" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.Task, line: 3},
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :parent,
+          type: MyApp.Task,
+          opts: [optional: true, unique: true],
+          line: 4
+        }
+      ]
+
+      result = render(ops, Model.empty())
+
+      assert result.tail == []
+
+      index_names =
+        result.transactional
+        |> Enum.filter(&(&1.op == :create_index))
+        |> Enum.map(& &1.index)
+
+      assert "my_app_task_parent_id_$uidx" in index_names
+      refute "my_app_task_parent_id_$idx" in index_names
+    end
+
+    test "builds a unique reference index of a table that predates the file in the tail" do
+      pre =
+        model(%{
+          MyApp.Task => %{relationships: [{:parent, MyApp.Task, [optional: true]}]}
+        })
+
+      ops = [
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :parent,
+          changes: [unique: true],
+          line: 3
+        }
+      ]
+
+      result = render(ops, pre)
+
+      assert [create_index] = result.tail
+
+      assert create_index.index == "my_app_task_parent_id_$uidx"
+      assert create_index.unique == true
+      assert create_index.concurrently == true
+
+      assert %{index: "my_app_task_parent_id_$idx"} =
+               Enum.find(result.transactional, &(&1.op == :drop_index))
+    end
+
     test "defers the referencing ops past the objects they name" do
       ops = [
         %{op: :create_entity, entity: MyApp.Task, line: 3},
@@ -416,6 +470,182 @@ defmodule Hologram.Migration.RendererTest do
                  op: :rename_index,
                  from: "my_app_task_author_id_$idx",
                  to: "my_app_task_creator_id_$idx"
+               }
+             ]
+    end
+
+    test "renames a unique attribute's index with it" do
+      pre = model(%{MyApp.Task => %{attributes: [{:slug, :string, [unique: true]}]}})
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3}]
+
+      result = render(ops, pre)
+
+      assert Enum.filter(result.transactional, &(&1.op == :rename_index)) == [
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$sort_$idx",
+                 to: "my_app_task_handle_$sort_$idx"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$uidx",
+                 to: "my_app_task_handle_$uidx"
+               }
+             ]
+    end
+
+    test "renames a unique to-one relationship's index with it" do
+      pre =
+        model(%{
+          MyApp.Task => %{relationships: [{:author, MyApp.User, [unique: true]}]},
+          MyApp.User => %{}
+        })
+
+      ops = [
+        %{op: :rename_relationship, entity: MyApp.Task, from: :author, to: :creator, line: 3}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "author_id", to: "creator_id"},
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task",
+                 from: "my_app_task_author_id_$fk",
+                 to: "my_app_task_creator_id_$fk"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_author_id_$uidx",
+                 to: "my_app_task_creator_id_$uidx"
+               }
+             ]
+    end
+
+    test "renames a unique attribute's index with its entity" do
+      pre = model(%{MyApp.Task => %{attributes: [{:slug, :string, [unique: true]}]}})
+
+      ops = [%{op: :rename_entity, from: MyApp.Task, to: MyApp.Ticket, line: 3}]
+
+      result = render(ops, pre)
+
+      assert Enum.filter(result.transactional, &(&1.op == :rename_index)) == [
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$sort_$idx",
+                 to: "my_app_ticket_slug_$sort_$idx"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$uidx",
+                 to: "my_app_ticket_slug_$uidx"
+               }
+             ]
+    end
+
+    test "leaves another entity type's attributes of the same names alone" do
+      pre =
+        model(%{
+          MyApp.Project => %{attributes: [{:handle, :string, []}, {:slug, :string, []}]},
+          MyApp.Task => %{attributes: [{:slug, :string, []}]}
+        })
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "slug", to: "handle"},
+               %{
+                 op: :rename_column,
+                 table: "my_app_task",
+                 from: "slug_$sort",
+                 to: "handle_$sort"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$sort_$idx",
+                 to: "my_app_task_handle_$sort_$idx"
+               }
+             ]
+    end
+
+    test "leaves another entity type's relationships of the same names alone" do
+      pre =
+        model(%{
+          MyApp.Project => %{
+            relationships: [{:author, MyApp.User, []}, {:creator, MyApp.User, []}]
+          },
+          MyApp.Task => %{relationships: [{:author, MyApp.User, []}]},
+          MyApp.User => %{}
+        })
+
+      ops = [
+        %{op: :rename_relationship, entity: MyApp.Task, from: :author, to: :creator, line: 3}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "author_id", to: "creator_id"},
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task",
+                 from: "my_app_task_author_id_$fk",
+                 to: "my_app_task_creator_id_$fk"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_author_id_$idx",
+                 to: "my_app_task_creator_id_$idx"
+               }
+             ]
+    end
+
+    test "leaves another entity type's to-many relationships of the same names alone" do
+      pre =
+        model(%{
+          MyApp.Project => %{
+            relationships: [{:labels, [MyApp.Tag], []}, {:tags, [MyApp.Tag], []}]
+          },
+          MyApp.Tag => %{},
+          MyApp.Task => %{relationships: [{:tags, [MyApp.Tag], []}]}
+        })
+
+      ops = [%{op: :rename_relationship, entity: MyApp.Task, from: :tags, to: :labels, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{
+                 op: :rename_table,
+                 from: "my_app_task_tags_$join",
+                 to: "my_app_task_labels_$join"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task_labels_$join",
+                 from: "my_app_task_tags_$join_$pk",
+                 to: "my_app_task_labels_$join_$pk"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task_labels_$join",
+                 from: "my_app_task_tags_$join_source_id_$fk",
+                 to: "my_app_task_labels_$join_source_id_$fk"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task_labels_$join",
+                 from: "my_app_task_tags_$join_target_id_$fk",
+                 to: "my_app_task_labels_$join_target_id_$fk"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_tags_$join_target_id_$idx",
+                 to: "my_app_task_labels_$join_target_id_$idx"
                }
              ]
     end

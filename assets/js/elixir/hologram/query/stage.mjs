@@ -459,20 +459,18 @@ function normalizedIncludes(term) {
   return Object.fromEntries(
     Object.entries(term.include).map(([name, subTerm]) => {
       const {kind} = validateRelationshipName(Type.atom(name), term.entity);
+      const orderedSubTerm = withDeclaredOrder(subTerm, term.entity, name);
 
       return [
         name,
         kind === "to_many"
-          ? normalizedTerm(subTerm)
-          : {...subTerm, include: normalizedIncludes(subTerm)},
+          ? normalizedTerm(orderedSubTerm)
+          : {...orderedSubTerm, include: normalizedIncludes(orderedSubTerm)},
       ];
     }),
   );
 }
 
-// Every set-returning shape gets a total order, since two rows the ordering does not tell apart
-// would otherwise come back in whatever order the rows happen to sit in. A count is order-blind,
-// and a to-one embeds a single entity, so neither takes one.
 function normalizedOrder(term) {
   if (term.cardinality === "count") {
     return [];
@@ -657,6 +655,16 @@ function subTermHasClauses(subTerm) {
 
 function referenceFieldNames(entityType) {
   return toOneRelationshipNames(entityType).map((name) => `${name}_id`);
+}
+
+// Where the write an inverse reads goes instead - Hologram.Query.Stage's inverse_write_fix/3.
+function inverseWriteFix(entityType, name, stage) {
+  const inverse = Model.inverses(entityType)[name];
+  const row = `the ${inverse.type} row`;
+
+  return inverse.reference
+    ? `set that reference on ${row} via put_attribute(:${inverse.forward}_id, id)`
+    : `record the edge on ${row} via ${stage}(:${inverse.forward}, id)`;
 }
 
 function relationshipNames(entityType) {
@@ -872,7 +880,7 @@ function putIncluded(include, name, subTerm) {
 function putRelationshipOp(entity, relationshipName, targetId, op, stage) {
   const entityType = entityTypeOf(entity, stage);
 
-  validateEdgeRelationshipName(relationshipName, entityType);
+  validateEdgeRelationshipName(relationshipName, entityType, stage);
 
   if (!Type.isBitstring(targetId)) {
     Interpreter.raiseArgumentError(
@@ -1032,7 +1040,7 @@ function validateFilteredName(name, entityType) {
     );
   }
 
-  if (relationship) {
+  if (relationship || Object.hasOwn(Model.inverses(entityType), name.value)) {
     Interpreter.raiseArgumentError(
       `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be filtered`,
     );
@@ -1152,6 +1160,12 @@ function validatePath(path, entityType) {
 }
 
 function validatePathHop(hop, entityType) {
+  if (Object.hasOwn(Model.inverses(entityType), hop.value)) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(hop)} is an inverse relationship in ${entityType} - a path in a condition goes through to-one relationships that hold their reference`,
+    );
+  }
+
   const relationship = Model.entry(entityType).relationships[hop.value];
 
   if (relationship && relationship.toMany) {
@@ -1179,8 +1193,16 @@ function validatePathHop(hop, entityType) {
   );
 }
 
+// A stored relationship or an inverse - a set of either is included as a to-many, a single
+// inverse as a to-one.
 function validateRelationshipName(name, entityType) {
-  const relationship = Model.entry(entityType).relationships[name.value];
+  const entry = Model.entry(entityType);
+
+  const relationship = Object.hasOwn(entry.relationships, name.value)
+    ? entry.relationships[name.value]
+    : Object.hasOwn(entry.inverses, name.value)
+      ? entry.inverses[name.value]
+      : null;
 
   if (relationship) {
     return {
@@ -1196,6 +1218,8 @@ function validateRelationshipName(name, entityType) {
   }
 
   const known = relationshipNames(entityType)
+    .concat(Object.keys(entry.inverses))
+    .sort()
     .map((relationshipName) => `:${relationshipName}`)
     .join(", ");
 
@@ -1299,7 +1323,7 @@ function validateDeltaName(name, entityType, stage) {
   );
 }
 
-function validateEdgeRelationshipName(name, entityType) {
+function validateEdgeRelationshipName(name, entityType, stage) {
   const toManyNames = toManyRelationshipNames(entityType);
   const named = Type.isAtom(name) ? name.value : null;
 
@@ -1308,6 +1332,12 @@ function validateEdgeRelationshipName(name, entityType) {
   }
 
   const spelled = Interpreter.inspect(name);
+
+  if (named !== null && Object.hasOwn(Model.inverses(entityType), named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is an inverse relationship in ${entityType} - it reads ${Model.describeInverse(entityType, named)}, so ${inverseWriteFix(entityType, named, stage)}`,
+    );
+  }
 
   if (named !== null && toOneRelationshipNames(entityType).includes(named)) {
     Interpreter.raiseArgumentError(
@@ -1344,6 +1374,12 @@ function validatePutName(name, entityType) {
     );
   }
 
+  if (named !== null && Object.hasOwn(Model.inverses(entityType), named)) {
+    Interpreter.raiseArgumentError(
+      `${spelled} is an inverse relationship in ${entityType} - only attributes can be put - it reads ${Model.describeInverse(entityType, named)}, so write that instead`,
+    );
+  }
+
   if (named !== null && relationshipNames(entityType).includes(named)) {
     Interpreter.raiseArgumentError(
       `${spelled} is a relationship in ${entityType} - only attributes can be put - add its edges via add_relationship`,
@@ -1363,6 +1399,23 @@ function validatePutName(name, entityType) {
   );
 }
 
+// An inverse set is read in the order its declaration names when the include sets none, as the
+// server normalizes it. The build bakes that order already spelled the way a term spells one.
+function withDeclaredOrder(subTerm, entityType, name) {
+  const inverses = Model.inverses(entityType);
+
+  if (subTerm.sort.length > 0 || !Object.hasOwn(inverses, name)) {
+    return subTerm;
+  }
+
+  const declared = inverses[name].sort;
+
+  return declared.length > 0 ? {...subTerm, sort: declared} : subTerm;
+}
+
+// Every set-returning shape gets a total order, since two rows the ordering does not tell apart
+// would otherwise come back in whatever order the rows happen to sit in. A count is order-blind,
+// and a to-one embeds a single entity, so neither takes one.
 const Elixir_Hologram_Query_Stage = {
   "add_relationship/3": (entity, relationshipName, targetId) =>
     putRelationshipOp(

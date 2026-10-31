@@ -120,6 +120,13 @@ defmodule Hologram.Auth.RoleGrant do
   end
 
   @doc """
+  Returns the list of inverse relationship definitions for the role grant entity type.
+  Empty - a grant row reverses no relationship.
+  """
+  @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
+  def __inverse_relationships__, do: []
+
+  @doc """
   Returns true to indicate that the callee module is an entity type module.
   """
   @spec __is_hologram_entity__() :: boolean
@@ -138,6 +145,10 @@ defmodule Hologram.Auth.RoleGrant do
   """
   @spec __policy_sources__() :: list(module)
   def __policy_sources__, do: []
+
+  @doc false
+  @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
+  def __relationship_locations__, do: %{}
 
   @doc """
   Returns the list of relationship definitions for the role grant entity type, sorted by relationship name.

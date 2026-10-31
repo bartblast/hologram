@@ -34,6 +34,15 @@ describe("Deltas", () => {
             note: "string",
             title: "string",
           },
+          inverses: {
+            owners: {
+              forward: "tasks",
+              reference: false,
+              sort: [],
+              toMany: true,
+              type: PROJECT,
+            },
+          },
           relationships: {},
           serverOnly: [],
         },
@@ -91,6 +100,23 @@ describe("Deltas", () => {
         LocalDatabase.getTargetIds(PROJECT, "tasks", "p1"),
         new Set(["t1", "t2"]),
       );
+    });
+
+    // An inverse of a to-many is held as the ids the server read for the row, kept current by the
+    // edges it reports for them - so it is filed the way a to-many's ids are.
+    it("records the ids an inverse of a to-many names as facts", () => {
+      Deltas.apply({
+        put_entity: {
+          [TASK]: [{id: "t1", owners: ["p1", "p2"], title: "Draft"}],
+        },
+      });
+
+      assert.deepEqual(
+        LocalDatabase.getTargetIds(TASK, "owners", "t1"),
+        new Set(["p1", "p2"]),
+      );
+
+      assert.notProperty(LocalDatabase.baseRow(TASK, "t1"), "owners");
     });
 
     // The pot is flat: what a row states about a relationship lives in the facts, so a row left

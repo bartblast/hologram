@@ -392,8 +392,10 @@ defmodule Hologram.DB.EntityOperations do
   defp advisory_reference_candidates(entity_type, values, violations) do
     entity_type.__relationships__()
     |> Enum.reject(fn {_name, target, _opts} -> is_list(target) end)
-    |> Enum.map(fn {name, target, _opts} -> {String.to_existing_atom("#{name}_id"), target} end)
-    |> Enum.filter(fn {field, _target} ->
+    |> Enum.map(fn {name, target, opts} ->
+      {name, String.to_existing_atom("#{name}_id"), target, Keyword.get(opts, :unique) == true}
+    end)
+    |> Enum.filter(fn {_name, field, _target, _unique?} ->
       not Map.has_key?(violations, field) and not is_nil(values[field])
     end)
   end
@@ -402,12 +404,13 @@ defmodule Hologram.DB.EntityOperations do
   # and abandons the statement, so every unique attribute it never reached is asked about here,
   # as is every one of them when the values failed and no write was attempted at all. References
   # are asked about the same way and for the same reason: a foreign key is enforced by a trigger
-  # after the row goes in, and the first one that fails abandons the rest. The candidate filters
-  # leave a field that already carries a violation alone, so an authoritative answer is never
-  # replaced by an advisory one - and references read the attributes' result rather than the
-  # original map, so one pass cannot overwrite the other. Advisory by nature: what is taken now
-  # may be free by the resubmit, and a target alive now may be gone - the resubmit is answered
-  # by the write.
+  # after the row goes in, and the first one that fails abandons the rest. A unique reference whose
+  # target is there is asked whether another row already names it - one whose target is gone has
+  # nothing another row could be naming. The candidate filters leave a field that already carries
+  # a violation alone, so an authoritative answer is never replaced by an advisory one - and
+  # references read the attributes' result rather than the original map, so one pass cannot
+  # overwrite the other. Advisory by nature: what is taken now may be free by the resubmit, and a
+  # target alive now may be gone - the resubmit is answered by the write.
   defp advisory_violations(entity_type, values, id, violations) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
@@ -426,11 +429,16 @@ defmodule Hologram.DB.EntityOperations do
 
     entity_type
     |> advisory_reference_candidates(values, attribute_violations)
-    |> Enum.reduce(attribute_violations, fn {field, target}, acc ->
-      if reference_target_exists?(target, values[field]) do
-        acc
-      else
-        Map.put(acc, field, [:not_found])
+    |> Enum.reduce(attribute_violations, fn {name, field, target, unique?}, acc ->
+      cond do
+        not reference_target_exists?(target, values[field]) ->
+          Map.put(acc, field, [:not_found])
+
+        unique? and reference_taken?(table, columns, name, values[field], id) ->
+          Map.put(acc, field, [:unique])
+
+        true ->
+          acc
       end
     end)
   end
@@ -800,6 +808,12 @@ defmodule Hologram.DB.EntityOperations do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
   end
 
+  defp reference_taken?(table, columns, relationship_name, target_id, id) do
+    column = Enum.find(columns, &(&1.source == {:relationship, relationship_name}))
+
+    unique_value_taken?(table, column.name, target_id, :uuid, id)
+  end
+
   # Whether the row a reference names is there, asked of the TARGET type's own table - the one
   # question the mapping cannot answer from a declaration.
   # sobelow_skip ["SQL.Query"]
@@ -858,21 +872,16 @@ defmodule Hologram.DB.EntityOperations do
     |> Map.new()
   end
 
-  # A unique index derived from a `unique: true` attribute names that attribute back, so a
-  # duplicate is answered the way a value violation is - by field, in Entity.validate/2's shape.
-  # Any other unique index is not ours to explain and keeps raising: a duplicate primary key is
-  # a framework bug rather than something a caller did, and the grant store's index is over four
-  # columns, so neither matches the single-attribute shape below.
-  # The row being updated is excluded the way the unique index excludes it, so a resubmitted
-  # form holding a row's own unchanged value is not refused. A create passes an id no row
-  # carries yet, which excludes nothing.
-  # sobelow_skip ["SQL.Query"]
   # The columns a client can write, which is what a revision is kept for - the system ones and
   # the sort-key companions are nobody's to set.
   defp settable?(column) do
     match?({:attribute, _name}, column.source) or match?({:relationship, _name}, column.source)
   end
 
+  # The row being updated is excluded the way the unique index excludes it, so a resubmitted
+  # form holding a row's own unchanged value is not refused. A create passes an id no row
+  # carries yet, which excludes nothing.
+  # sobelow_skip ["SQL.Query"]
   defp unique_value_taken?(table, column_name, value, type, id) do
     statement =
       ~s|SELECT EXISTS (SELECT 1 FROM #{qualified_table(table)} WHERE #{Mapper.quote_identifier(column_name)} = $1 AND "id" != $2)|
@@ -885,14 +894,21 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # A unique index derived from a `unique: true` attribute or to-one names that declaration back,
+  # so a duplicate is answered the way a value violation is - by field, in Entity.validate/2's
+  # shape, a reference by its `<name>_id` field. Any other unique index is not ours to explain
+  # and keeps raising: a duplicate primary key is a framework bug rather than something a caller
+  # did, and the grant store's index is over four columns, so neither matches the shape below -
+  # one column, derived from an attribute or a to-one.
   defp unique_violations(entity_type, %Postgrex.Error{
          postgres: %{code: :unique_violation, constraint: constraint}
        }) do
     %{columns: columns, indexes: indexes} = Map.fetch!(DB.mapping(), entity_type)
 
     with %{unique: true, columns: [column_name]} <- indexes[constraint],
-         %{source: {:attribute, name}} <- Enum.find(columns, &(&1.name == column_name)) do
-      %{name => [:unique]}
+         %{source: {kind, _name}} = column when kind in [:attribute, :relationship] <-
+           Enum.find(columns, &(&1.name == column_name)) do
+      %{field_name(column) => [:unique]}
     else
       _no_match -> nil
     end

@@ -155,6 +155,15 @@ defmodule Hologram.Query.Interpreter do
     end)
   end
 
+  defp embedded_set(rows, sub_term, database, opts) do
+    scope = match_scope(sub_term, database, opts)
+
+    rows
+    |> Enum.filter(&matches?(&1, sub_term.filter, scope))
+    |> arrange(sub_term)
+    |> Enum.map(&embed(&1, sub_term, database, opts))
+  end
+
   defp embedded_value(row, name, :to_one, sub_term, database, opts) do
     reference = Map.fetch!(row, reference_field(name))
 
@@ -171,13 +180,36 @@ defmodule Hologram.Query.Interpreter do
   defp embedded_value(row, name, :to_many, sub_term, database, opts) do
     target_ids = Map.get(database.facts, {row.__struct__, name, row.id}, [])
     targets = table(database, sub_term.entity)
-    scope = match_scope(sub_term, database, opts)
 
     target_ids
     |> Enum.map(fn target_id -> Enum.find(targets, &(&1.id == target_id)) end)
-    |> Enum.filter(&(not is_nil(&1) and matches?(&1, sub_term.filter, scope)))
-    |> arrange(sub_term)
-    |> Enum.map(&embed(&1, sub_term, database, opts))
+    |> Enum.reject(&is_nil/1)
+    |> embedded_set(sub_term, database, opts)
+  end
+
+  # An inverse is read from where the relationship it reverses is stored: the related rows whose
+  # reference names the row, or the ones whose pairs name it as the target. A row whose reference
+  # is nil names no row, so it belongs to no inverse. A single inverse is the one related row - the
+  # first by id should two ever claim it, which the unique index keeps from happening.
+  defp embedded_value(
+         row,
+         _name,
+         {:inverse, %{to_many?: true} = inverse},
+         sub_term,
+         database,
+         opts
+       ) do
+    row
+    |> inverse_rows(inverse, database)
+    |> embedded_set(sub_term, database, opts)
+  end
+
+  defp embedded_value(row, _name, {:inverse, inverse}, sub_term, database, opts) do
+    row
+    |> inverse_rows(inverse, database)
+    |> Enum.sort_by(& &1.id)
+    |> List.first()
+    |> embed(sub_term, database, opts)
   end
 
   # What an enum compares by: each declared value against its position in the list the entity
@@ -211,6 +243,27 @@ defmodule Hologram.Query.Interpreter do
   defp flip(:gt), do: :lt
 
   defp flip(:lt), do: :gt
+
+  defp inverse_rows(row, %{reference?: true} = inverse, database) do
+    reference_field = reference_field(inverse.forward)
+
+    database
+    |> table(inverse.target)
+    |> Enum.filter(&(Map.fetch!(&1, reference_field) == row.id))
+  end
+
+  defp inverse_rows(row, inverse, database) do
+    targets = table(database, inverse.target)
+
+    database.facts
+    |> Enum.filter(fn {{type, relationship, _source_id}, target_ids} ->
+      type == inverse.target and relationship == inverse.forward and row.id in target_ids
+    end)
+    |> Enum.map(fn {{_type, _relationship, source_id}, _target_ids} ->
+      Enum.find(targets, &(&1.id == source_id))
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
 
   # What matching a term's filter reads besides the row: the rest of the database, which a path
   # follows into, the options a predicate resolves its operands by, and the ranks its enums compare
@@ -388,11 +441,13 @@ defmodule Hologram.Query.Interpreter do
   end
 
   defp relationship_kind(entity_type, name) do
-    case Enum.find(entity_type.__relationships__(), fn {field, _target, _opts} ->
-           field == name
-         end) do
-      {_field, [_target], _opts} -> :to_many
-      _to_one -> :to_one
+    inverse = Entity.inverse_relationship(entity_type, name)
+    relationship = List.keyfind(entity_type.__relationships__(), name, 0)
+
+    cond do
+      inverse -> {:inverse, inverse}
+      match?({_name, [_target], _opts}, relationship) -> :to_many
+      true -> :to_one
     end
   end
 

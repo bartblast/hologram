@@ -14,6 +14,10 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module25
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -79,6 +83,39 @@ defmodule Hologram.Query.StageTest do
         |> add_relationship(:a, target_id)
 
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :add}
+    end
+
+    test "raises on an inverse of a to-one" do
+      entity = Module26.new()
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - it reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so set that reference on the Hologram.Test.Fixtures.Entity.Module28 row via put_attribute(:channel_id, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :messages, Entity.generate_id())
+      end
+    end
+
+    test "raises on a single inverse" do
+      entity = Module26.new()
+
+      expected_msg =
+        ":topic is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - it reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module27, so set that reference on the Hologram.Test.Fixtures.Entity.Module27 row via put_attribute(:channel_id, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :topic, Entity.generate_id())
+      end
+    end
+
+    test "raises on an inverse of a to-many" do
+      entity = Module29.new()
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module29 - it reads the labels relationship of Hologram.Test.Fixtures.Entity.Module28, so record the edge on the Hologram.Test.Fixtures.Entity.Module28 row via add_relationship(:labels, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(entity, :messages, Entity.generate_id())
+      end
     end
 
     test "raises on a to-one relationship name" do
@@ -326,6 +363,17 @@ defmodule Hologram.Query.StageTest do
         |> delete_relationship(:a, target_id)
 
       assert result.__meta__.relationship_ops == %{{:a, target_id} => :delete}
+    end
+
+    test "raises on an inverse of a to-many in its own stage's words" do
+      entity = Module29.new()
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module29 - it reads the labels relationship of Hologram.Test.Fixtures.Entity.Module28, so record the edge on the Hologram.Test.Fixtures.Entity.Module28 row via delete_relationship(:labels, id)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        delete_relationship(entity, :messages, Entity.generate_id())
+      end
     end
 
     test "raises on a to-one relationship name" do
@@ -906,6 +954,42 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "raises on a path through an inverse relationship" do
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, [{[:messages, :body], "x"}])
+      end
+    end
+
+    test "raises on a path reaching an inverse relationship on a later hop" do
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module28, [{[:channel, :messages, :body], "x"}])
+      end
+    end
+
+    test "raises on an attribute operand reading a path through an inverse relationship" do
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, [{:name, {:==, {:attribute, [:messages, :body]}}}])
+      end
+    end
+
+    test "raises on a path through a single inverse" do
+      expected_msg =
+        ":topic is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, [{[:topic, :summary], "x"}])
+      end
+    end
+
     test "raises on a path through a to-many relationship" do
       expected_msg =
         ":a is a to-many relationship in Hologram.Test.Fixtures.Entity.Module3 - a path in a condition goes through to-one relationships only"
@@ -966,6 +1050,15 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module3, c: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
+      end
+    end
+
+    test "raises on a predicate naming an inverse relationship" do
+      expected_msg =
+        ":messages is a relationship in Hologram.Test.Fixtures.Entity.Module26 - only attributes can be filtered"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, messages: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
       end
     end
 
@@ -1228,6 +1321,33 @@ defmodule Hologram.Query.StageTest do
   end
 
   describe "include/3" do
+    test "includes an inverse set" do
+      query = include(Module26, :messages)
+
+      assert query.include == %{messages: base_term(Module28)}
+    end
+
+    test "includes a single inverse" do
+      query = include(Module26, :topic)
+
+      assert query.include == %{topic: base_term(Module27)}
+    end
+
+    test "includes an inverse of a to-many" do
+      query = include(Module29, :messages)
+
+      assert query.include == %{messages: base_term(Module28)}
+    end
+
+    test "merges two includes of one inverse" do
+      query =
+        Module26
+        |> include(:messages)
+        |> include(:messages)
+
+      assert query.include == %{messages: base_term(Module28)}
+    end
+
     test "accepts a sub-builder as a spec value" do
       query = include(Module3, a: &filter(&1, a: true))
 
@@ -1504,6 +1624,42 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
+    test "raises on clauses for a single inverse" do
+      expected_msg =
+        "to-one relationship :topic takes no clauses - clauses apply to to-many includes"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module26, :topic, &filter(&1, summary: "x"))
+      end
+    end
+
+    test "raises on an unknown relationship, naming the inverses among the known ones" do
+      defmodule KnownRelationshipsFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        relationship :a, Module1
+        relationship :b, [Module28], inverse: channel
+        relationship :c, Module1
+      end
+
+      expected_msg =
+        "unknown relationship :x in Hologram.Query.StageTest.KnownRelationshipsFixture - known relationships: :a, :b, :c"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(KnownRelationshipsFixture, :x)
+      end
+    end
+
+    test "raises on a second include of an inverse when either carries clauses" do
+      assert_error ArgumentError, "relationship :messages is already included", fn ->
+        Module26
+        |> include(:messages)
+        |> include(:messages, &filter(&1, body: "x"))
+      end
+    end
+
     test "raises on an unknown relationship" do
       expected_msg =
         "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c"
@@ -1706,6 +1862,68 @@ defmodule Hologram.Query.StageTest do
   end
 
   describe "normalize/1" do
+    test "orders an included inverse set by its declared order, then by id" do
+      query =
+        Module26
+        |> include(:messages)
+        |> normalize()
+
+      assert query.include.messages.sort == [{:position, :asc}, {:id, :asc}]
+    end
+
+    test "orders an included inverse set by the include's own order over the declared one" do
+      query =
+        Module26
+        |> include(:messages, &sort(&1, :body))
+        |> normalize()
+
+      assert query.include.messages.sort == [{:body, :asc}, {:id, :asc}]
+    end
+
+    test "orders an included inverse set by a declared list, directions kept, then by id" do
+      defmodule DeclaredListOrderFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        relationship :messages, [Module28], inverse: channel, sort: [position: :desc, body: :asc]
+      end
+
+      query =
+        DeclaredListOrderFixture
+        |> include(:messages)
+        |> normalize()
+
+      assert query.include.messages.sort == [{:position, :desc}, {:body, :asc}, {:id, :asc}]
+    end
+
+    test "normalizes a term including an inverse the same way twice" do
+      query =
+        Module26
+        |> include(:messages)
+        |> normalize()
+
+      assert normalize(query) == query
+    end
+
+    test "orders an included inverse set declaring no order by id" do
+      query =
+        Module29
+        |> include(:messages)
+        |> normalize()
+
+      assert query.include.messages.sort == [{:id, :asc}]
+    end
+
+    test "gives an included single inverse no order" do
+      query =
+        Module26
+        |> include(:topic)
+        |> normalize()
+
+      assert query.include.topic.sort == []
+    end
+
     test "appends an ascending id tiebreaker after a placeholder ordering key" do
       query =
         Module2
@@ -2116,6 +2334,17 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         put_attribute(entity, a: [])
+      end
+    end
+
+    test "raises on an inverse relationship name" do
+      entity = Module26.new()
+
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - only attributes can be put - it reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so write that instead"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(entity, messages: [])
       end
     end
 

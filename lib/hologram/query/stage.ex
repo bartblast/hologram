@@ -578,6 +578,23 @@ defmodule Hologram.Query.Stage do
     |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
+  defp inverse_relationship_names(entity_type) do
+    Enum.map(entity_type.__inverse_relationships__(), fn {name, _type, _opts} -> name end)
+  end
+
+  # Where the write an inverse reads goes instead: the reference field of the related row for an
+  # inverse of a to-one, the related row's own edge for an inverse of a to-many.
+  defp inverse_write_fix(entity_type, name, stage) do
+    inverse = Entity.inverse_relationship(entity_type, name)
+    row = "the #{inspect(inverse.target)} row"
+
+    if inverse.reference? do
+      "set that reference on #{row} via put_attribute(:#{inverse.forward}_id, id)"
+    else
+      "record the edge on #{row} via #{stage}(:#{inverse.forward}, id)"
+    end
+  end
+
   # Two includes of one relationship are one include when neither narrows it: what each includes
   # merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
   # than the other, so a relationship included twice with clauses on either side is refused.
@@ -627,7 +644,9 @@ defmodule Hologram.Query.Stage do
 
   defp normalized_includes(term) do
     Map.new(term.include, fn {name, sub_term} ->
-      {name, normalized_sub_term(sub_term, relationship_kind(term.entity, name))}
+      ordered_sub_term = with_declared_order(sub_term, term.entity, name)
+
+      {name, normalized_sub_term(ordered_sub_term, relationship_kind(term.entity, name))}
     end)
   end
 
@@ -937,7 +956,7 @@ defmodule Hologram.Query.Stage do
   defp put_relationship_op(entity, relationship_name, target_id, op, stage) do
     entity_type = entity_type!(entity, stage)
 
-    validate_edge_relationship_name!(relationship_name, entity_type)
+    validate_edge_relationship_name!(relationship_name, entity_type, stage)
 
     if not is_binary(target_id) do
       raise ArgumentError,
@@ -1168,13 +1187,19 @@ defmodule Hologram.Query.Stage do
   end
 
   # A declared to-many relationship - refused where it is written, with the fix named for the
-  # names an edge stage is most often given by mistake.
-  defp validate_edge_relationship_name!(name, entity_type) do
+  # names an edge stage is most often given by mistake. An inverse holds no edges of its own, so it
+  # is refused naming where the fact it reads is written.
+  defp validate_edge_relationship_name!(name, entity_type, stage) do
     to_many_names = to_many_relationship_names(entity_type)
 
     cond do
       name in to_many_names ->
         :ok
+
+      name in inverse_relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is an inverse relationship in #{inspect(entity_type)} - it reads #{Entity.describe_inverse(entity_type, name)}, so #{inverse_write_fix(entity_type, name, stage)}"
 
       name in to_one_relationship_names(entity_type) ->
         raise ArgumentError,
@@ -1226,7 +1251,7 @@ defmodule Hologram.Query.Stage do
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered - filter its reference via :#{name}_id"
 
-      name in relationship_names(entity_type) ->
+      name in relationship_names(entity_type) or name in inverse_relationship_names(entity_type) ->
         raise ArgumentError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered"
@@ -1347,6 +1372,12 @@ defmodule Hologram.Query.Stage do
   defp validate_path_hop!(hop, entity_type) do
     definitions = entity_type.__relationships__()
 
+    if hop in inverse_relationship_names(entity_type) do
+      raise ArgumentError,
+        message:
+          "#{inspect(hop)} is an inverse relationship in #{inspect(entity_type)} - a path in a condition goes through to-one relationships that hold their reference"
+    end
+
     case Enum.find(definitions, fn {name, _type, _opts} -> name == hop end) do
       {_name, [_target], _opts} ->
         raise ArgumentError,
@@ -1395,6 +1426,11 @@ defmodule Hologram.Query.Stage do
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be put - set its reference via :#{name}_id"
 
+      name in inverse_relationship_names(entity_type) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is an inverse relationship in #{inspect(entity_type)} - only attributes can be put - it reads #{Entity.describe_inverse(entity_type, name)}, so write that instead"
+
       name in relationship_names(entity_type) ->
         raise ArgumentError,
           message:
@@ -1414,8 +1450,11 @@ defmodule Hologram.Query.Stage do
     end
   end
 
+  # A stored relationship or an inverse - a set of either is included as a to-many, a single
+  # inverse as a to-one.
   defp validate_relationship_name!(name, entity_type) do
-    definitions = entity_type.__relationships__()
+    definitions =
+      Enum.concat(entity_type.__relationships__(), entity_type.__inverse_relationships__())
 
     case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
       {_name, [target], _opts} ->
@@ -1431,8 +1470,10 @@ defmodule Hologram.Query.Stage do
               "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only relationships can be included"
         end
 
-        relationship_names = relationship_names(entity_type)
-        known = Enum.map_join(relationship_names, ", ", &inspect/1)
+        known =
+          entity_type
+          |> Entity.includable_names()
+          |> Enum.map_join(", ", &inspect/1)
 
         raise ArgumentError,
           message:
@@ -1482,6 +1523,22 @@ defmodule Hologram.Query.Stage do
     do: Enum.flat_map(values, &value_placeholder_names/1)
 
   defp value_placeholder_names(_value), do: []
+
+  # An inverse set is read in the order its declaration names when the include sets none, the way a
+  # later sort replaces an earlier one - so a sub-builder's own order wins. Applied here rather than
+  # where the include is built, so two includes of one inverse still merge: a built order would be
+  # a clause on each.
+  defp with_declared_order(%{sort: []} = sub_term, entity_type, name) do
+    case Entity.inverse_relationship(entity_type, name) do
+      %{sort: declared} when declared != [] ->
+        %{sub_term | sort: order_entries!(declared, sub_term.entity)}
+
+      _no_declared_order ->
+        sub_term
+    end
+  end
+
+  defp with_declared_order(sub_term, _entity_type, _name), do: sub_term
 
   defp written_operand_name(name) when is_atom(name), do: [name]
 

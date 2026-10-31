@@ -1,15 +1,21 @@
 defmodule HologramFeatureTests.QueriesTest do
   use HologramFeatureTests.TestCase, async: false
 
+  import Hologram.Query, only: [add_relationship: 3, delete_relationship: 3]
+
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Channel
+  alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
+  alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
+  alias HologramFeatureTests.Entities.Topic
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Queries.Page1
   alias HologramFeatureTests.Queries.Page3
@@ -17,19 +23,26 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Queries.Page5
   alias HologramFeatureTests.Queries.Page6
   alias HologramFeatureTests.Queries.Page7
+  alias HologramFeatureTests.Queries.Page8
 
   # The client's local database is filled by evaluators that outlive a test, and a TRUNCATE never
   # reaches the operations log they read, so they drain before the tables empty. The tables
-  # truncate in one statement: the review table's foreign key to the product table, the stop
-  # table's to the trip table and the leg table's to the stop table make Postgres reject truncating
-  # the referenced table alone.
+  # truncate in one statement: the foreign keys between them - a review's to its product, a
+  # message's to its channel and the message labels' join table's to both its sides, among others -
+  # make Postgres reject truncating a referenced table alone.
   setup do
     await_evaluator_drain()
 
+    entity_tables =
+      Enum.map(
+        [Booking, Channel, Label, Leg, Message, Product, Review, Stop, Ticket, Topic, Trip],
+        &Mapper.table_name/1
+      )
+
     tables =
-      Enum.map_join([Booking, Leg, Product, Review, Stop, Ticket, Trip], ", ", fn entity_type ->
-        ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
-      end)
+      entity_tables
+      |> Enum.concat([DB.join_table_name(Message, :labels)])
+      |> Enum.map_join(", ", &~s("hologram_data"."#{&1}"))
 
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 
@@ -236,6 +249,159 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_same_page_load()
   end
 
+  # The messages and the topic reach the client only through the inverses - no page roots one -
+  # general's in position order. Once the page has mounted, what is on screen is the browser's own
+  # render, answered from its database, on the same page load, and the page the server sent is read
+  # as well.
+  feature "renders inverse relationships", %{session: session} do
+    seed_channels()
+
+    session
+    |> visit(Page8)
+    |> mark_this_page_load()
+    |> await_page_mount(Page8)
+    |> assert_text(css("#channel_messages"), ~r/^general: hi, there \| topic: welcome$/)
+    |> assert_text(css("#label_messages"), ~r/^urgent: hi, there$/)
+    |> assert_same_page_load()
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/8")
+
+    assert html =~
+             ~r{<strong id="channel_messages"><code>general: hi, there \| topic: welcome</code></strong>}
+
+    assert html =~ ~r{<strong id="label_messages"><code>urgent: hi, there</code></strong>}
+  end
+
+  # Random's message and topic and later's messages, read through the inverses. The render reads
+  # only general and urgent, so bye and off-topic can only have come with the stream's fill.
+  feature "reads inverse relationships over local data", %{session: session} do
+    seed_channels()
+
+    session
+    |> visit(Page8)
+    |> await_local_fill()
+    |> click(button("Read unrendered messages locally"))
+    |> assert_text(css("#local_unrendered_messages"), ~r{^bye/off-topic; bye,hi$})
+
+    # The page the server sent carries neither row, rendered or handed over beside the render - a
+    # handed-over value is a JSON string, so it is looked for quoted, which no token on the page is,
+    # and a message the render read is there in that form.
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/8")
+
+    assert html =~ ~s("there")
+    refute html =~ ~s("bye")
+    refute html =~ ~s("off-topic")
+  end
+
+  # Each of these changes the database once the client holds its fill, so what moves on screen is
+  # what the stream told the browser, on the same page load.
+  feature "moves a message into a channel's inverse in position order", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    DB.update!(Message, rows.bye.id, channel_id: rows.general.id)
+
+    session
+    |> assert_text(css("#channel_messages"), ~r/^general: hi, bye, there \| topic: welcome$/)
+    |> assert_same_page_load()
+  end
+
+  feature "moves a message out of a channel's inverse", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    DB.update!(Message, rows.hi.id, channel_id: rows.random.id)
+
+    session
+    |> assert_text(css("#channel_messages"), ~r/^general: there \| topic: welcome$/)
+    |> assert_same_page_load()
+  end
+
+  feature "adds a created message to its channel's inverse in position order", %{
+    session: session
+  } do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    %{body: "fresh", channel_id: rows.general.id, position: 2}
+    |> Message.new()
+    |> DB.create!()
+
+    session
+    |> assert_text(
+      css("#channel_messages"),
+      ~r/^general: hi, fresh, there \| topic: welcome$/
+    )
+    |> assert_same_page_load()
+  end
+
+  feature "removes a deleted message from its channel's inverse", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    DB.delete!(Message, rows.there.id)
+
+    session
+    |> assert_text(css("#channel_messages"), ~r/^general: hi \| topic: welcome$/)
+    |> assert_same_page_load()
+  end
+
+  feature "adds a message to a label's inverse when it gains the label", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    rows.bye
+    |> add_relationship(:labels, rows.urgent.id)
+    |> DB.update!()
+
+    session
+    |> assert_text(css("#label_messages"), ~r/^urgent: bye, hi, there$/)
+    |> assert_same_page_load()
+  end
+
+  feature "removes a message from a label's inverse when it loses the label", %{session: session} do
+    rows = seed_channels()
+
+    session =
+      session
+      |> visit(Page8)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    rows.there
+    |> delete_relationship(:labels, rows.urgent.id)
+    |> DB.update!()
+
+    session
+    |> assert_text(css("#label_messages"), ~r/^urgent: hi$/)
+    |> assert_same_page_load()
+  end
+
   # Two products so the parent's ordering picks a definite one to pass down, and reviews split
   # across both so a query filtering by the passed product reads fewer rows than one that does not.
   defp seed_products_and_reviews do
@@ -262,6 +428,62 @@ defmodule HologramFeatureTests.QueriesTest do
     |> DB.create!()
 
     :ok
+  end
+
+  # General's messages are created out of position order, so the order they render in is the
+  # inverse's declared one - and random's bye sits between them, so a move into general shows
+  # where it lands. Random and later are what the page's render never reads.
+  defp seed_channels do
+    general =
+      %{name: "general"}
+      |> Channel.new()
+      |> DB.create!()
+
+    random =
+      %{name: "random"}
+      |> Channel.new()
+      |> DB.create!()
+
+    %{channel_id: general.id, title: "welcome"}
+    |> Topic.new()
+    |> DB.create!()
+
+    %{channel_id: random.id, title: "off-topic"}
+    |> Topic.new()
+    |> DB.create!()
+
+    there =
+      %{body: "there", channel_id: general.id, position: 3}
+      |> Message.new()
+      |> DB.create!()
+
+    hi =
+      %{body: "hi", channel_id: general.id, position: 1}
+      |> Message.new()
+      |> DB.create!()
+
+    bye =
+      %{body: "bye", channel_id: random.id, position: 2}
+      |> Message.new()
+      |> DB.create!()
+
+    later =
+      %{name: "later"}
+      |> Label.new()
+      |> DB.create!()
+
+    urgent =
+      %{name: "urgent"}
+      |> Label.new()
+      |> DB.create!()
+
+    Enum.each([{bye, later}, {hi, later}, {hi, urgent}, {there, urgent}], fn {message, label} ->
+      message
+      |> add_relationship(:labels, label.id)
+      |> DB.update!()
+    end)
+
+    %{bye: bye, general: general, hi: hi, random: random, there: there, urgent: urgent}
   end
 
   # Distinct titles, so no ordering leans on the id tiebreaker.

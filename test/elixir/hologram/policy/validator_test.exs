@@ -405,6 +405,48 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a to option referencing a role on an inverse relationship" do
+      defmodule InlinePolicyFixture76 do
+        use Hologram.Entity
+
+        relationship :topic, Hologram.Policy.ValidatorTest.InlinePolicyFixture80, inverse: channel
+
+        allow :update, to: {:editor, topic}
+      end
+
+      defmodule InlinePolicyFixture80 do
+        use Hologram.Entity
+
+        relationship :channel, Hologram.Policy.ValidatorTest.InlinePolicyFixture76, unique: true
+      end
+
+      expected_msg =
+        "invalid to option {:editor, :topic} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture76 - relationship :topic is an inverse that reads the channel_id reference of Hologram.Policy.ValidatorTest.InlinePolicyFixture80, but a role reference requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, InlinePolicyFixture76, InlinePolicyFixture80], [])
+      end
+    end
+
+    test "rejects a to option through a path reaching an inverse relationship on a later hop" do
+      defmodule InlinePolicyFixture81 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module26
+
+        relationship :channel, Module26
+
+        allow :update, to: {:editor, channel.topic}
+      end
+
+      expected_msg =
+        "invalid to option {:editor, channel.topic} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture81 - relationship :topic in Hologram.Test.Fixtures.Entity.Module26 is an inverse that reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module27, but a role reference requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, InlinePolicyFixture81], [])
+      end
+    end
+
     test "rejects a to option through a path with a to-many relationship on a later hop" do
       defmodule InlinePolicyFixture56 do
         use Hologram.Entity
@@ -493,6 +535,67 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture23], [])
+      end
+    end
+
+    test "rejects a via option naming an inverse relationship" do
+      defmodule InlinePolicyFixture75 do
+        use Hologram.Entity
+
+        relationship :topic, Hologram.Policy.ValidatorTest.InlinePolicyFixture77, inverse: channel
+
+        allow :read, via: topic
+      end
+
+      defmodule InlinePolicyFixture77 do
+        use Hologram.Entity
+
+        relationship :channel, Hologram.Policy.ValidatorTest.InlinePolicyFixture75, unique: true
+      end
+
+      expected_msg =
+        "invalid via option :topic for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture75 - relationship :topic is an inverse that reads the channel_id reference of Hologram.Policy.ValidatorTest.InlinePolicyFixture77, but delegation requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture75, InlinePolicyFixture77], [])
+      end
+    end
+
+    test "rejects a via option through a path reaching an inverse relationship on a later hop" do
+      defmodule InlinePolicyFixture78 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module26
+
+        relationship :channel, Module26
+
+        allow :read, via: channel.topic
+      end
+
+      expected_msg =
+        "invalid via option channel.topic for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture78 - relationship :topic in Hologram.Test.Fixtures.Entity.Module26 is an inverse that reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module27, but delegation requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture78], [])
+      end
+    end
+
+    test "rejects a condition through a path reaching an inverse relationship" do
+      defmodule InlinePolicyFixture79 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module26
+
+        relationship :channel, Module26
+
+        allow :read, when: channel.topic.summary == "x"
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture79 - :topic is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture79], [])
       end
     end
 

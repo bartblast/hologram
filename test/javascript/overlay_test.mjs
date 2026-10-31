@@ -589,6 +589,107 @@ describe("Overlay", () => {
     });
   });
 
+  describe("foldTargetIds() of an inverse of a to-many", () => {
+    const LABEL = "MyApp.Label";
+
+    beforeEach(() => {
+      globalThis.Hologram.sync.model[TODO].relationships.labels = {
+        optional: false,
+        toMany: true,
+        type: LABEL,
+      };
+
+      globalThis.Hologram.sync.model[LABEL] = {
+        attributes: {id: "uuid", name: "string"},
+        constraints: {},
+        defaults: {},
+        enumValues: {},
+        frameworkAttributes: [],
+        inverses: {
+          todos: {
+            forward: "labels",
+            reference: false,
+            sort: [],
+            toMany: true,
+            type: TODO,
+          },
+        },
+        relationships: {},
+        serverOnly: [],
+      };
+
+      Model.reset();
+    });
+
+    const labelEdge = (overrides = {}) =>
+      Object.assign(
+        {
+          id: "t1",
+          op: "add_relationship",
+          relationship: "labels",
+          target_id: "l1",
+          type: TODO,
+        },
+        overrides,
+      );
+
+    it("answers the base itself when no pending write is of the related type", () => {
+      const held = new Set(["t2"]);
+
+      assert.strictEqual(
+        Overlay.foldTargetIds(LABEL, "todos", "l1", held),
+        held,
+      );
+    });
+
+    it("adds the related row a pending edge to the row comes from", () => {
+      pushed(labelEdge());
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(LABEL, "todos", "l1", new Set(["t2"])),
+        new Set(["t1", "t2"]),
+      );
+    });
+
+    it("removes the related row a pending deleted edge comes from", () => {
+      pushed(labelEdge({op: "delete_relationship"}));
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(LABEL, "todos", "l1", new Set(["t1", "t2"])),
+        new Set(["t2"]),
+      );
+    });
+
+    it("removes a related row a pending delete takes away", () => {
+      pushed(updateWrite({id: "t2", op: "delete"}));
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(LABEL, "todos", "l1", new Set(["t1", "t2"])),
+        new Set(["t1"]),
+      );
+    });
+
+    it("passes over a pending edge to another row", () => {
+      pushed(labelEdge({id: "t3", target_id: "l2"}), labelEdge());
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(LABEL, "todos", "l1", new Set(["t2"])),
+        new Set(["t1", "t2"]),
+      );
+    });
+
+    it("passes over an edge whose frame has already arrived", () => {
+      const batch = pushed(labelEdge());
+
+      batch.land(new Set([`${TODO} t1`]));
+
+      assert.deepStrictEqual(
+        Overlay.foldTargetIds(LABEL, "todos", "l1", new Set(["t2"])),
+        new Set(["t2"]),
+      );
+    });
+  });
+
   describe("names()", () => {
     it("answers for the rows a batch's writes name, and no others", () => {
       pushed(createWrite());
@@ -621,6 +722,92 @@ describe("Overlay", () => {
       Overlay.promote(batch, {});
 
       assert.equal(LocalDatabase.baseRow(TODO, "t1").votes, 5);
+    });
+
+    describe("of an edge an inverse of a to-many reads", () => {
+      const LABEL = "MyApp.Label";
+
+      beforeEach(() => {
+        globalThis.Hologram.sync.model[TODO].relationships.labels = {
+          optional: false,
+          toMany: true,
+          type: LABEL,
+        };
+
+        globalThis.Hologram.sync.model[LABEL] = {
+          attributes: {id: "uuid", name: "string"},
+          constraints: {},
+          defaults: {},
+          enumValues: {},
+          frameworkAttributes: [],
+          inverses: {
+            todos: {
+              forward: "labels",
+              reference: false,
+              sort: [],
+              toMany: true,
+              type: TODO,
+            },
+          },
+          relationships: {},
+          serverOnly: [],
+        };
+
+        Model.reset();
+      });
+
+      const labelEdge = (op) => ({
+        id: "t1",
+        op,
+        relationship: "labels",
+        target_id: "l1",
+        type: TODO,
+      });
+
+      // The answer can land before the frame carrying the same edge on the label, and the label's
+      // set would lose the row in between if only the to-many's own facts moved.
+      it("promotes a confirmed edge into the ids filed for the inverse", () => {
+        LocalDatabase.replaceFacts(LABEL, "todos", "l1", ["t2"]);
+
+        Overlay.promote(pushed(labelEdge("add_relationship")), {});
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2", "t1"]),
+        );
+
+        // The frame carrying the same edge lands afterwards and changes nothing.
+        LocalDatabase.addFact(LABEL, "todos", "l1", "t1");
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2", "t1"]),
+        );
+      });
+
+      it("promotes a confirmed deleted edge out of the ids filed for the inverse", () => {
+        LocalDatabase.replaceFacts(LABEL, "todos", "l1", ["t1", "t2"]);
+
+        Overlay.promote(pushed(labelEdge("delete_relationship")), {});
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2"]),
+        );
+
+        LocalDatabase.deleteFact(LABEL, "todos", "l1", "t1");
+
+        assert.deepStrictEqual(
+          LocalDatabase.baseTargetIds(LABEL, "todos", "l1"),
+          new Set(["t2"]),
+        );
+      });
+
+      it("files nothing for an inverse whose ids were never filed", () => {
+        Overlay.promote(pushed(labelEdge("add_relationship")), {});
+
+        assert.isFalse(LocalDatabase.hasFacts(LABEL, "todos", "l1"));
+      });
     });
 
     it("promotes a write no frame has carried", () => {

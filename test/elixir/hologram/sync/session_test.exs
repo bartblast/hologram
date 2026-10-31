@@ -28,6 +28,9 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
@@ -37,9 +40,13 @@ defmodule Hologram.Sync.SessionTest do
 
   setup :set_mox_global
 
+  @bare_label_window "w_bare_label"
   @board_window "w_board"
   @other_replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
   @include_window "w_include"
+  @inverse_window "w_inverse"
+  @label_window "w_label"
+  @message_window "w_message"
   @other_page MyApp.SettingsPage
   @other_window "w_other"
   @page MyApp.BoardPage
@@ -1383,8 +1390,12 @@ defmodule Hologram.Sync.SessionTest do
         entries: %{},
         prop_params: %{},
         windows: %{
+          @bare_label_window => Stage.normalize(Module29),
           @board_window => Stage.normalize(Module2),
-          @include_window => include_window_term()
+          @include_window => include_window_term(),
+          @inverse_window => inverse_window_term(),
+          @label_window => label_window_term(),
+          @message_window => Stage.normalize(Module28)
         }
       })
 
@@ -1466,6 +1477,100 @@ defmodule Hologram.Sync.SessionTest do
              ]
     end
 
+    test "drops a row reached only through an inverse once it moves out of the reach" do
+      general =
+        %{name: "general"}
+        |> Module26.new()
+        |> DB.create!()
+
+      random =
+        %{name: "random"}
+        |> Module26.new()
+        |> DB.create!()
+
+      message =
+        %{body: "hi", channel_id: general.id, position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      windows(%{@page => [@inverse_window]})
+      hold_windows([@inverse_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, _fill_cursor, fill, _applied_seq}
+      assert_receive {:sync_synced, :all, _cursor}
+
+      assert Enum.any?(fill, &(&1.op == :put_entity and &1.id == message.id))
+
+      # The message moves to a channel the window does not hold - out of the window's reach, but
+      # still in the database.
+      DB.update(Module28, message.id, %{channel_id: random.id})
+
+      Evaluator.round(@inverse_window, [])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               %{
+                 id: message.id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module28"
+               }
+             ]
+    end
+
+    # The message stays with the client through the message window, so nothing re-puts it - the
+    # label's own set is what tells the client the edge is gone.
+    test "tells a client holding a row through another window that it left an inverse" do
+      %{label: label, message: message} = labelled_message()
+      windows(%{@page => [@label_window, @message_window]})
+      hold_windows([@label_window, @message_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, _label_cursor, _label_fill, _applied_seq}
+      assert_receive {:sync_deltas, _message_cursor, _message_fill, _applied_seq}
+      assert_receive {:sync_synced, :all, _cursor}
+
+      message
+      |> delete_relationship(:labels, label.id)
+      |> DB.update()
+
+      edge = %{
+        data: %{"relationship" => "labels", "target_id" => label.id},
+        entity_id: message.id,
+        mutation_ref: nil,
+        op: :del_relationship,
+        type: Module28
+      }
+
+      Evaluator.round(@label_window, [{200, [edge]}])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               %{
+                 data: %{relationship: "messages", target_id: message.id},
+                 id: label.id,
+                 op: :del_relationship,
+                 type: "Hologram.Test.Fixtures.Entity.Module29"
+               }
+             ]
+    end
+
+    test "replays a gap holding an edge by handing over its target" do
+      assert_replayed_with_set([@label_window])
+    end
+
+    # A copy of the label without its messages, arriving after the one holding them, never stands
+    # for it - nor the other way round.
+    test "replays an edge's target with its set while another window holds it bare" do
+      assert_replayed_with_set([@label_window, @bare_label_window])
+    end
+
+    test "replays an edge's target with its set while another window listed first holds it bare" do
+      assert_replayed_with_set([@bare_label_window, @label_window])
+    end
+
     test "replays a gap touching a row held only through reach" do
       child = create("moved while away")
       include_source(child)
@@ -1501,6 +1606,32 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
+  defp assert_replayed_with_set(window_ids) do
+    %{label: label, message: message} = labelled_message()
+    windows(%{@page => window_ids})
+    hold_windows(window_ids)
+
+    # Every window answers before the session subscribes, so it delivers them in the page's order
+    # rather than in whichever order their first rounds finish.
+    Enum.each(window_ids, &Evaluator.round(&1, []))
+    wait_until(fn -> Enum.all?(window_ids, &(ResultStore.versions(&1) != [])) end)
+
+    edge =
+      message.id
+      |> gap_effect()
+      |> Map.merge(%{
+        data: %{"relationship" => "labels", "target_id" => label.id},
+        op: :add_relationship,
+        type: Module28
+      })
+
+    start_session!(gap: [edge])
+
+    assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+    assert [%{data: data, op: :put_entity}] = Enum.filter(deltas, &(&1.id == label.id))
+    assert data.messages == [message.id]
+  end
+
   # A row of the include window's reach without being any window's root - what the child of the
   # reach tests is held through.
   defp include_source(child) do
@@ -1522,6 +1653,37 @@ defmodule Hologram.Sync.SessionTest do
     Module3
     |> Query.include(a)
     |> Stage.normalize()
+  end
+
+  defp inverse_window_term do
+    Module26
+    |> Query.filter(name: "general")
+    |> Query.include(messages)
+    |> Stage.normalize()
+  end
+
+  defp label_window_term do
+    Module29
+    |> Query.include(messages)
+    |> Stage.normalize()
+  end
+
+  defp labelled_message do
+    label =
+      %{name: "urgent"}
+      |> Module29.new()
+      |> DB.create!()
+
+    message =
+      %{body: "tagged", position: 1}
+      |> Module28.new()
+      |> DB.create!()
+
+    message
+    |> add_relationship(:labels, label.id)
+    |> DB.update()
+
+    %{label: label, message: message}
   end
 
   defp other_window_term do

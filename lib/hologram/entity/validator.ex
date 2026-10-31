@@ -4,6 +4,7 @@ defmodule Hologram.Entity.Validator do
   alias Hologram.Commons.Types, as: T
   alias Hologram.DB.Codec
   alias Hologram.Entity
+  alias Hologram.Query.Stage
   alias Hologram.Reflection
 
   @bounded_attribute_types [:date, :datetime, :float, :integer, :time]
@@ -58,7 +59,7 @@ defmodule Hologram.Entity.Validator do
     :uuid
   ]
 
-  @valid_relationship_opts [:optional]
+  @valid_relationship_opts [:inverse, :optional, :sort, :unique]
 
   @valid_role_opts [:extends, :granted_to]
 
@@ -286,20 +287,22 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given data model as a whole, taking the list of all compiled entity type modules.
 
-  Returns :ok, or raises Hologram.CompileError listing every relationship whose target is not an entity type module.
+  Returns :ok, or raises Hologram.CompileError listing every relationship whose target is not an entity type module, and every inverse that does not reverse a stored relationship of its related type pointing back - one naming a relationship the related type does not declare, one naming an inverse the related type declares, one naming a relationship pointing at another type, a single inverse of a to-many, a single inverse of a to-one that is not unique - or whose order names what the related type cannot be sorted by. Each line starts with the file and line the relationship is declared on, for every entity type declared with the entity macro.
   This check is possible only after all entity type modules are compiled - relationship declarations verify the type shape alone, because the target module may not be compiled yet while the declaring module's body is executing.
   """
   @spec validate_model!(list(module)) :: :ok
   def validate_model!(entity_types) do
+    # Sorted by type and relationship only, so the lines about one relationship keep the order its
+    # checks run in.
     violations =
       entity_types
-      |> Enum.flat_map(&relationship_target_violations/1)
-      |> Enum.sort()
+      |> Enum.flat_map(&relationship_violations/1)
+      |> Enum.sort_by(fn {entity_type, name, _description} -> {entity_type, name} end)
 
     if violations != [] do
       descriptions =
-        Enum.map_join(violations, "\n", fn {entity_type, name, target} ->
-          "  * relationship #{inspect(name)} in #{inspect(entity_type)} targets #{inspect(target)}, which is not an entity type module"
+        Enum.map_join(violations, "\n", fn {entity_type, name, description} ->
+          "  * #{declaration_location(entity_type, name)}#{description}"
         end)
 
       raise Hologram.CompileError, message: "invalid data model:\n#{descriptions}"
@@ -313,13 +316,23 @@ defmodule Hologram.Entity.Validator do
 
   Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type shape, options).
   The type is checked for shape only (an entity type module or a one-element list wrapping one) - whether it names an actual entity type module is not verified here, because the target module may not be compiled yet while the declaring module's body is executing.
+  For the same reason an inverse's inverse and sort options are checked for shape only.
   """
   @spec validate_relationship!(module, atom, any, T.opts()) :: :ok
   def validate_relationship!(module, name, type, opts) do
     validate_relationship_name!(module, name)
     validate_relationship_type!(module, name, type)
     validate_relationship_opts!(module, name, opts)
-    validate_field_collision!(module, "relationship", name, relationship_field_names(name, type))
+    validate_inverse_opts!(module, name, type, opts)
+    validate_unique_relationship!(module, name, type, opts)
+
+    validate_field_collision!(
+      module,
+      "relationship",
+      name,
+      relationship_field_names(name, type, opts)
+    )
+
     :ok
   end
 
@@ -541,14 +554,31 @@ defmodule Hologram.Entity.Validator do
 
     relationship_fields =
       module
-      |> Module.get_attribute(:__relationships__)
-      |> Enum.flat_map(fn {name, type, _opts} ->
+      |> declared_relationships()
+      |> Enum.flat_map(fn {name, type, opts} ->
         name
-        |> relationship_field_names(type)
+        |> relationship_field_names(type, opts)
         |> Enum.map(&{&1, "relationship #{inspect(name)}"})
       end)
 
     attribute_fields ++ relationship_fields
+  end
+
+  # Stored and inverse relationships alike - every one is a field and a name of the entity.
+  defp declared_relationships(module) do
+    Module.get_attribute(module, :__relationships__) ++
+      Module.get_attribute(module, :__inverse_relationships__)
+  end
+
+  # Where a relationship is declared, as a compile error spells it - nothing for a type the macro
+  # did not build, which records no lines.
+  defp declaration_location(entity_type, name) do
+    locations = entity_type.__relationship_locations__()
+
+    case Map.fetch(locations, name) do
+      {:ok, {file, line}} -> "#{Path.relative_to_cwd(file)}:#{line}: "
+      :error -> ""
+    end
   end
 
   defp describe_role_cycle([first_name | _later_hops] = cycle, declarations, module) do
@@ -662,6 +692,73 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  # The relationship an inverse reverses, judged on the related type, compiled by now: there,
+  # stored, pointing back, and for a single inverse a unique to-one.
+  defp inverse_forward_violation(entity_type, name, type, opts, target) do
+    forward = Keyword.fetch!(opts, :inverse)
+
+    description =
+      "relationship #{inspect(name)} in #{inspect(entity_type)} is the inverse of #{inspect(forward)}"
+
+    case List.keyfind(target.__relationships__(), forward, 0) do
+      nil ->
+        unknown_forward_violation(description, forward, target)
+
+      {_forward, forward_type, forward_opts} ->
+        forward_target = relationship_target(forward_type)
+
+        cond do
+          forward_target != entity_type ->
+            "#{description}, which points at #{inspect(forward_target)} in #{inspect(target)}, not at #{inspect(entity_type)}"
+
+          is_list(type) ->
+            nil
+
+          is_list(forward_type) ->
+            "#{description}, which is to-many in #{inspect(target)} - declare it as [#{inspect(target)}]"
+
+          Keyword.get(forward_opts, :unique) != true ->
+            "#{description}, which is not unique in #{inspect(target)} - declare it as [#{inspect(target)}], or make #{inspect(target)}'s #{forward} unique: true"
+
+          true ->
+            nil
+        end
+    end
+  end
+
+  defp inverse_sort_violation(entity_type, name, opts, target) do
+    case Keyword.fetch(opts, :sort) do
+      {:ok, sort} ->
+        Stage.sort(target, sort)
+
+        nil
+
+      :error ->
+        nil
+    end
+  rescue
+    error in ArgumentError ->
+      "relationship #{inspect(name)} in #{inspect(entity_type)} has an invalid sort option - #{Exception.message(error)}"
+  end
+
+  defp inverse_violations(entity_type) do
+    Enum.flat_map(entity_type.__inverse_relationships__(), fn {name, type, opts} ->
+      target = relationship_target(type)
+
+      descriptions =
+        if Reflection.entity?(target) do
+          [
+            inverse_forward_violation(entity_type, name, type, opts, target),
+            inverse_sort_violation(entity_type, name, opts, target)
+          ]
+        else
+          [target_violation(entity_type, name, target)]
+        end
+
+      for description <- descriptions, description != nil, do: {entity_type, name, description}
+    end)
+  end
+
   defp length_errors(name, value, opts) do
     case Keyword.take(opts, [:length, :min_length, :max_length]) do
       [] ->
@@ -682,6 +779,12 @@ defmodule Hologram.Entity.Validator do
   defp length_satisfied?(count, :min_length, bound), do: count >= bound
 
   defp length_satisfied?(count, :max_length, bound), do: count <= bound
+
+  defp raise_sort_misplaced!(module, name) do
+    raise Hologram.CompileError,
+      message:
+        "invalid sort option for relationship #{inspect(name)} in #{inspect(module)} - sort applies to an inverse to-many"
+  end
 
   defp reference_change_errors(field, nil, optional?) do
     if optional?, do: [], else: [{field, :required}]
@@ -718,9 +821,15 @@ defmodule Hologram.Entity.Validator do
     |> Enum.map(fn {field, _optional?} -> field end)
   end
 
-  defp relationship_field_names(name, [_target]), do: [Atom.to_string(name)]
-
-  defp relationship_field_names(name, _target), do: [Atom.to_string(name), "#{name}_id"]
+  # An inverse stores nothing on the row, so it derives the one field its rows are embedded in,
+  # whatever its cardinality.
+  defp relationship_field_names(name, type, opts) do
+    if is_list(type) or Keyword.has_key?(opts, :inverse) do
+      [Atom.to_string(name)]
+    else
+      [Atom.to_string(name), "#{name}_id"]
+    end
+  end
 
   defp relationship_target([target]), do: target
 
@@ -730,7 +839,13 @@ defmodule Hologram.Entity.Validator do
     entity_type.__relationships__()
     |> Enum.map(fn {name, type, _opts} -> {name, relationship_target(type)} end)
     |> Enum.reject(fn {_name, target} -> Reflection.entity?(target) end)
-    |> Enum.map(fn {name, target} -> {entity_type, name, target} end)
+    |> Enum.map(fn {name, target} ->
+      {entity_type, name, target_violation(entity_type, name, target)}
+    end)
+  end
+
+  defp relationship_violations(entity_type) do
+    relationship_target_violations(entity_type) ++ inverse_violations(entity_type)
   end
 
   defp relationship_type_valid?(type) when is_atom(type), do: Reflection.alias?(type)
@@ -777,6 +892,24 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp unique_bytes_errors(_name, _value, _type, _opts), do: []
+
+  defp unknown_forward_violation(description, forward, target) do
+    inverse_names = Enum.map(target.__inverse_relationships__(), &elem(&1, 0))
+
+    if forward in inverse_names do
+      "#{description}, which is itself an inverse in #{inspect(target)} - an inverse reverses a stored relationship"
+    else
+      relationship_names = Enum.map(target.__relationships__(), &elem(&1, 0))
+
+      declared =
+        case relationship_names do
+          [] -> "it declares none"
+          names -> "its relationships are: #{Enum.map_join(names, ", ", &inspect/1)}"
+        end
+
+      "#{description}, which #{inspect(target)} does not declare - #{declared}"
+    end
+  end
 
   defp validate_attribute_bounds!(module, name, type, opts) do
     Enum.each([:min, :max], &validate_bound_opt!(module, name, type, opts, &1))
@@ -848,7 +981,7 @@ defmodule Hologram.Entity.Validator do
     validate_known_opts!(module, "attribute", name, opts, @valid_attribute_opts)
     validate_optional_opt!(module, "attribute", name, opts)
     validate_server_only_opt!(module, name, opts)
-    validate_unique_opt!(module, name, opts)
+    validate_unique_opt!(module, "attribute", name, opts)
   end
 
   defp validate_attribute_type!(module, name, type) do
@@ -1137,6 +1270,43 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  defp validate_inverse_exclusive!(module, name, opts, key) do
+    if Keyword.has_key?(opts, key) do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{key} option for relationship #{inspect(name)} in #{inspect(module)} - an inverse takes its semantics from the relationship it reverses"
+    end
+
+    :ok
+  end
+
+  # An inverse names the relationship it reverses, and takes everything else from it - cardinality
+  # aside, which its own type states - so options that would restate the reversed relationship's
+  # semantics are refused. Its order is the one option of its own, and only a set has an order.
+  defp validate_inverse_opts!(module, name, type, opts) do
+    case Keyword.fetch(opts, :inverse) do
+      {:ok, inverse} ->
+        validate_inverse_value!(module, name, inverse)
+
+        Enum.each([:optional, :unique], &validate_inverse_exclusive!(module, name, opts, &1))
+
+        validate_sort_opt!(module, name, type, opts)
+
+      :error ->
+        validate_sort_absent!(module, name, opts)
+    end
+  end
+
+  defp validate_inverse_value!(module, name, inverse) do
+    if not is_atom(inverse) or inverse in [nil, true, false] do
+      raise Hologram.CompileError,
+        message:
+          "invalid inverse option #{inspect(inverse)} for relationship #{inspect(name)} in #{inspect(module)} - the inverse option names the relationship it reverses on the related type"
+    end
+
+    :ok
+  end
+
   defp validate_known_opts!(module, kind, name, opts, valid_opts) do
     Enum.each(opts, fn {key, _value} ->
       if key not in valid_opts do
@@ -1199,9 +1369,7 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_name_uniqueness!(module, kind, name) do
-    declarations =
-      Module.get_attribute(module, :__attributes__) ++
-        Module.get_attribute(module, :__relationships__)
+    declarations = Module.get_attribute(module, :__attributes__) ++ declared_relationships(module)
 
     declared_names = Enum.map(declarations, fn {declared_name, _type, _opts} -> declared_name end)
 
@@ -1290,6 +1458,21 @@ defmodule Hologram.Entity.Validator do
 
   defp role_operation_valid?(_operation), do: false
 
+  defp sort_name?(name), do: is_atom(name) and name not in [nil, true, false]
+
+  defp sort_value_valid?([_first_entry | _later_entries] = entries) do
+    Enum.all?(entries, fn
+      {name, direction} -> sort_name?(name) and is_atom(direction)
+      name -> sort_name?(name)
+    end)
+  end
+
+  defp sort_value_valid?(sort), do: sort_name?(sort)
+
+  defp target_violation(entity_type, name, target) do
+    "relationship #{inspect(name)} in #{inspect(entity_type)} targets #{inspect(target)}, which is not an entity type module"
+  end
+
   defp to_reference_valid?(value) when is_atom(value), do: true
 
   defp to_reference_valid?({role_name, reference}) when is_atom(role_name) and is_atom(reference),
@@ -1315,6 +1498,7 @@ defmodule Hologram.Entity.Validator do
     validate_opts_shape!(module, "relationship", name, opts)
     validate_known_opts!(module, "relationship", name, opts, @valid_relationship_opts)
     validate_optional_opt!(module, "relationship", name, opts)
+    validate_unique_opt!(module, "relationship", name, opts)
   end
 
   defp validate_relationship_type!(module, name, type) do
@@ -1384,12 +1568,41 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp validate_unique_opt!(module, name, opts) do
+  defp validate_sort_absent!(module, name, opts) do
+    if Keyword.has_key?(opts, :sort) do
+      raise_sort_misplaced!(module, name)
+    end
+
+    :ok
+  end
+
+  # The shape alone - whether the names are attributes of the related type is judged once that type
+  # is compiled.
+  defp validate_sort_opt!(module, name, type, opts) do
+    case Keyword.fetch(opts, :sort) do
+      {:ok, _sort} when not is_list(type) ->
+        raise_sort_misplaced!(module, name)
+
+      {:ok, sort} ->
+        if not sort_value_valid?(sort) do
+          raise Hologram.CompileError,
+            message:
+              "invalid sort option #{inspect(sort)} for relationship #{inspect(name)} in #{inspect(module)} - the sort option takes an attribute name or a list of names and {name, :asc | :desc} pairs"
+        end
+
+        :ok
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp validate_unique_opt!(module, kind, name, opts) do
     case Keyword.fetch(opts, :unique) do
       {:ok, value} when not is_boolean(value) ->
         raise Hologram.CompileError,
           message:
-            "invalid unique option #{inspect(value)} for attribute #{inspect(name)} in #{inspect(module)} - the unique option must be true or false"
+            "invalid unique option #{inspect(value)} for #{kind} #{inspect(name)} in #{inspect(module)} - the unique option must be true or false"
 
       _fetch_result ->
         :ok
@@ -1411,6 +1624,20 @@ defmodule Hologram.Entity.Validator do
 
     :ok
   end
+
+  # Uniqueness is over the reference a to-one stores on its row. A to-many stores none there - its
+  # edges are pairs in a join table - so there is nothing on the row for the option to constrain.
+  defp validate_unique_relationship!(module, name, [_target], opts) do
+    if Keyword.get(opts, :unique) == true do
+      raise Hologram.CompileError,
+        message:
+          "invalid unique option for relationship #{inspect(name)} in #{inspect(module)} - unique applies to a to-one relationship, and a to-many holds no reference to repeat"
+    end
+
+    :ok
+  end
+
+  defp validate_unique_relationship!(_module, _name, _target, _opts), do: :ok
 
   defp validate_use_opt_keys!(module, opts) do
     Enum.each(opts, fn {key, _value} ->

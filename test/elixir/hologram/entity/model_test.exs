@@ -15,6 +15,10 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
@@ -236,6 +240,33 @@ defmodule Hologram.Entity.ModelTest do
 
       assert fold(model, ops) ==
                task_model(%{relationships: [{:tags, [MyApp.Label], [optional: true]}]})
+    end
+
+    test "changes a to-one relationship to unique and back" do
+      model = task_model(%{relationships: [{:owner, MyApp.User, []}]})
+
+      unique_model =
+        fold(model, [
+          %{
+            op: :change_relationship,
+            entity: MyApp.Task,
+            name: :owner,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
+
+      assert unique_model == task_model(%{relationships: [{:owner, MyApp.User, [unique: true]}]})
+
+      assert fold(unique_model, [
+               %{
+                 op: :change_relationship,
+                 entity: MyApp.Task,
+                 name: :owner,
+                 changes: [unique: false],
+                 line: 4
+               }
+             ]) == model
     end
 
     test "changes a global role's extends as deltas" do
@@ -746,6 +777,45 @@ defmodule Hologram.Entity.ModelTest do
       ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 5}]
 
       expected_msg = "entity MyApp.Sketch already exists at this point in migration history"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when adding a unique to-many relationship" do
+      model = task_model(%{})
+
+      ops = [
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :tags,
+          type: [MyApp.Tag],
+          opts: [unique: true],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "unique relationship :tags on MyApp.Task is to-many at this point in migration history - unique applies to a to-one relationship, and a to-many holds no reference to repeat"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
+    end
+
+    test "raises when a change leaves a to-many relationship unique" do
+      model = task_model(%{relationships: [{:owner, MyApp.User, [unique: true]}]})
+
+      ops = [
+        %{
+          op: :change_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          changes: [type: [MyApp.User]],
+          line: 3
+        }
+      ]
+
+      expected_msg =
+        "unique relationship :owner on MyApp.Task is to-many at this point in migration history - unique applies to a to-one relationship, and a to-many holds no reference to repeat"
 
       assert_error Hologram.CompileError, expected_msg, fn -> fold(model, ops) end
     end
@@ -1390,6 +1460,33 @@ defmodule Hologram.Entity.ModelTest do
                roles: %{},
                user_entity: nil
              }
+    end
+
+    test "keeps a relationship's unique option and drops a disabled one" do
+      defmodule InlineUniqueRelationshipFixture do
+        use Hologram.Entity
+
+        relationship :owner, Module1, unique: true
+        relationship :reviewer, Module1, unique: false
+      end
+
+      assert from_modules([InlineUniqueRelationshipFixture]).entities[
+               InlineUniqueRelationshipFixture
+             ].relationships == [{:owner, Module1, [unique: true]}, {:reviewer, Module1, []}]
+    end
+
+    # An inverse stores nothing, so declaring or removing one is no change to the model term - no
+    # migration, and no new hash to reload the clients over.
+    test "leaves out inverse relationships" do
+      model = from_modules([Module26, Module27, Module28, Module29])
+
+      assert model.entities[Module26] == %{
+               attributes: [{:name, :string, []}],
+               relationships: [],
+               roles: []
+             }
+
+      assert model.entities[Module29].relationships == []
     end
 
     test "derives global role entries from the given role modules" do

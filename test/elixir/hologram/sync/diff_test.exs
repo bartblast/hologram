@@ -12,11 +12,21 @@ defmodule Hologram.Sync.DiffTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
+
+  # Two ids ordered so a round of a few rows walks the first before the last - a map this small
+  # hands its values over by key.
+  @first_id "00000000-0000-7000-8000-000000000001"
+  @last_id "ffffffff-ffff-7fff-bfff-ffffffffffff"
 
   defp events(entity_id, names) do
     data = Map.new(names, &{&1, "whatever the log said"})
@@ -358,6 +368,331 @@ defmodule Hologram.Sync.DiffTest do
       deltas = deltas(result([task]), MapSet.new([task.id]), nil, events(task.id, ["c"]))
 
       assert deltas.edges == []
+    end
+  end
+
+  describe "deltas/4 - inverses" do
+    setup do
+      channel =
+        %{name: "general"}
+        |> Module26.new()
+        |> DB.create!()
+
+      message =
+        %{body: "hi", channel_id: channel.id, position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      %{channel: channel, message: message}
+    end
+
+    test "returns a row reached only through an inverse", %{channel: channel, message: message} do
+      deltas =
+        deltas(result([%{channel | messages: [message]}]), MapSet.new([channel.id]), nil, [])
+
+      assert deltas.appeared == [message]
+    end
+
+    # Both channels are in the round, so the message moving between them stays a member and is
+    # patched rather than dropped and put again.
+    test "patches a row moving between two rows an inverse holds", %{
+      channel: channel,
+      message: message
+    } do
+      other_channel =
+        %{name: "random"}
+        |> Module26.new()
+        |> DB.create!()
+
+      moved = %{message | channel_id: other_channel.id}
+
+      events = [
+        {200,
+         [
+           %{
+             op: :patch_entity,
+             type: Module28,
+             entity_id: message.id,
+             data: %{"channel_id" => other_channel.id}
+           }
+         ]}
+      ]
+
+      held = MapSet.new([channel.id, other_channel.id, message.id])
+      rows = [%{channel | messages: []}, %{other_channel | messages: [moved]}]
+
+      deltas = deltas(result(rows), held, nil, events)
+
+      assert deltas.patched == [{moved, %{channel_id: other_channel.id}}]
+      assert deltas.vanished == []
+    end
+
+    test "returns nothing for a row an inverse still holds", %{channel: channel, message: message} do
+      held = MapSet.new([channel.id, message.id])
+
+      deltas = deltas(result([%{channel | messages: [message]}]), held, nil, [])
+
+      assert deltas.vanished == []
+    end
+
+    test "returns the id of a row that left an inverse", %{channel: channel, message: message} do
+      held = MapSet.new([channel.id, message.id])
+
+      deltas = deltas(result([%{channel | messages: []}]), held, nil, [])
+
+      assert deltas.vanished == [message.id]
+    end
+
+    test "scrubs a row the client may not read out of an inverse's ids" do
+      shown =
+        %{body: "shown", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      hidden =
+        %{body: "hidden", position: 2}
+        |> Module28.new()
+        |> DB.create!()
+
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      deltas = deltas(result([%{label | messages: [shown, hidden]}]), MapSet.new(), nil, [])
+
+      assert [scrubbed_label] = Enum.filter(deltas.appeared, &(&1.id == label.id))
+      assert scrubbed_label.messages == [shown]
+      refute Enum.any?(deltas.appeared, &(&1.id == hidden.id))
+    end
+
+    # The channel sits at the root without its topic and again under its message with it - the
+    # topic is reached only through the second copy.
+    test "returns a row embedded under a second copy of a row", %{
+      channel: channel,
+      message: message
+    } do
+      topic =
+        %{channel_id: channel.id, summary: "welcome"}
+        |> Module27.new()
+        |> DB.create!()
+
+      under_message = %{message | channel: %{channel | topic: topic}}
+      root = %{channel | messages: [under_message]}
+
+      deltas = deltas(result([root]), MapSet.new([channel.id, message.id]), nil, [])
+
+      assert deltas.appeared == [topic]
+    end
+
+    # Whichever copy the walk meets first, the member carries every relationship either copy
+    # included - a row met first as another row's embed keeps its own includes.
+    test "merges the copies of a row into one member carrying what each included" do
+      message =
+        %{body: "tagged", id: @first_id, position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      label =
+        %{id: @last_id, name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      # The ids put the message first in the walk (see @first_id), so it meets the label under it
+      # without the label's own messages - the label's root copy, holding them, comes after.
+      message_root = %{message | labels: [label]}
+      label_root = %{label | messages: [message]}
+
+      deltas = deltas(result([message_root, label_root]), MapSet.new(), nil, [])
+
+      assert [appeared_label] = Enum.filter(deltas.appeared, &(&1.id == label.id))
+      assert Enum.map(appeared_label.messages, & &1.id) == [message.id]
+    end
+
+    # The same shape without an inverse: a folder met first as another folder's child, where its
+    # own children are not included, still goes out with them.
+    test "merges the copies of a row a to-many of its own type reaches" do
+      defmodule FolderEntityFixture do
+        use Hologram.Entity
+
+        attribute :name, :string
+
+        relationship :children, [__MODULE__]
+
+        allow :read
+      end
+
+      child = FolderEntityFixture.new(%{id: @last_id, name: "child"})
+      grandchild = FolderEntityFixture.new(%{id: Entity.generate_id(), name: "grandchild"})
+
+      parent = FolderEntityFixture.new(%{id: @first_id, name: "parent"})
+      rows = [%{parent | children: [child]}, %{child | children: [grandchild]}]
+
+      deltas = deltas(result(rows), MapSet.new(), nil, [])
+
+      assert [appeared_child] = Enum.filter(deltas.appeared, &(&1.id == child.id))
+      assert Enum.map(appeared_child.children, & &1.id) == [grandchild.id]
+    end
+  end
+
+  describe "deltas/4 - edges of inverses" do
+    setup do
+      message =
+        %{body: "tagged", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      %{label: label, message: message}
+    end
+
+    defp label_events(op, message_id, label_id) do
+      data = %{"relationship" => "labels", "target_id" => label_id}
+
+      [{200, [%{op: op, type: Module28, entity_id: message_id, data: data}]}]
+    end
+
+    test "reports an edge a row gained on the inverse of its target", %{
+      label: label,
+      message: message
+    } do
+      events = label_events(:add_relationship, message.id, label.id)
+      held = MapSet.new([label.id, message.id])
+
+      deltas = deltas(result([%{label | messages: [message]}]), held, nil, events)
+
+      assert deltas.edges == [
+               %{
+                 entity_id: label.id,
+                 op: :add_relationship,
+                 relationship: "messages",
+                 target_id: message.id,
+                 type: Module29
+               }
+             ]
+    end
+
+    test "reports an edge a row lost on the inverse of its target", %{
+      label: label,
+      message: message
+    } do
+      events = label_events(:del_relationship, message.id, label.id)
+
+      deltas = deltas(result([%{label | messages: []}]), MapSet.new([label.id]), nil, events)
+
+      assert deltas.edges == [
+               %{
+                 entity_id: label.id,
+                 op: :del_relationship,
+                 relationship: "messages",
+                 target_id: message.id,
+                 type: Module29
+               }
+             ]
+    end
+
+    test "withholds an added edge naming a row the client may not read", %{label: label} do
+      hidden =
+        %{body: "hidden", position: 2}
+        |> Module28.new()
+        |> DB.create!()
+
+      events = label_events(:add_relationship, hidden.id, label.id)
+
+      deltas =
+        deltas(result([%{label | messages: [hidden]}]), MapSet.new([label.id]), nil, events)
+
+      assert deltas.edges == []
+    end
+
+    test "reports nothing for a target whose inverse the window does not include", %{
+      label: label,
+      message: message
+    } do
+      events = label_events(:add_relationship, message.id, label.id)
+
+      deltas = deltas(result([label]), MapSet.new([label.id]), nil, events)
+
+      assert deltas.edges == []
+    end
+
+    # The type declares the inverse of its own to-many, so one type takes both sides of the edge:
+    # the fan's follows and the followed row's followers.
+    test "reports an edge of the type's own to-many on both of its sides" do
+      fan =
+        %{body: "fan"}
+        |> Module30.new()
+        |> DB.create!()
+
+      followed =
+        %{body: "followed"}
+        |> Module30.new()
+        |> DB.create!()
+
+      data = %{"relationship" => "follows", "target_id" => followed.id}
+      events = [{200, [%{op: :add_relationship, type: Module30, entity_id: fan.id, data: data}]}]
+
+      rows = [%{fan | follows: [followed]}, %{followed | followers: [fan]}]
+
+      deltas = deltas(result(rows), MapSet.new([fan.id, followed.id]), nil, events)
+
+      assert Enum.sort_by(deltas.edges, & &1.relationship) == [
+               %{
+                 entity_id: followed.id,
+                 op: :add_relationship,
+                 relationship: "followers",
+                 target_id: fan.id,
+                 type: Module30
+               },
+               %{
+                 entity_id: fan.id,
+                 op: :add_relationship,
+                 relationship: "follows",
+                 target_id: followed.id,
+                 type: Module30
+               }
+             ]
+    end
+
+    test "reports the edge on every inverse of the relationship the target declares" do
+      defmodule ItemEntityFixture do
+        use Hologram.Entity
+
+        alias Hologram.Sync.DiffTest.TagEntityFixture
+
+        relationship :tags, [TagEntityFixture]
+
+        allow :read
+      end
+
+      defmodule TagEntityFixture do
+        use Hologram.Entity
+
+        alias Hologram.Sync.DiffTest.ItemEntityFixture
+
+        relationship :items, [ItemEntityFixture], inverse: tags
+        relationship :tagged, [ItemEntityFixture], inverse: tags
+
+        allow :read
+      end
+
+      item = ItemEntityFixture.new()
+      tag = TagEntityFixture.new()
+      data = %{"relationship" => "tags", "target_id" => tag.id}
+
+      events = [
+        {200, [%{op: :add_relationship, type: ItemEntityFixture, entity_id: item.id, data: data}]}
+      ]
+
+      rows = [%{tag | items: [item], tagged: [item]}]
+
+      deltas = deltas(result(rows), MapSet.new([tag.id, item.id]), nil, events)
+
+      assert Enum.map(deltas.edges, & &1.relationship) == ["items", "tagged"]
     end
   end
 

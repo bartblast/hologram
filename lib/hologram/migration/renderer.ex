@@ -82,22 +82,35 @@ defmodule Hologram.Migration.Renderer do
   defp concurrent?(_op, _born_here), do: false
 
   # The renamed member's derivations live under its new name afterwards, so the pairing
-  # follows the rename rather than the name.
-  defp corresponding_source({:attribute, name}, %{op: :rename_attribute, from: name} = op) do
+  # follows the rename rather than the name - on the entity type the op names only, since
+  # another type may declare members under the same names and keeps them.
+  defp corresponding_source(
+         {:attribute, name},
+         entity_type,
+         %{op: :rename_attribute, entity: entity_type, from: name} = op
+       ) do
     {:attribute, op.to}
   end
 
-  defp corresponding_source({:relationship, name}, %{op: :rename_relationship, from: name} = op) do
+  defp corresponding_source(
+         {:relationship, name},
+         entity_type,
+         %{op: :rename_relationship, entity: entity_type, from: name} = op
+       ) do
     {:relationship, op.to}
   end
 
   # A companion follows its attribute through a rename as a RENAME COLUMN - a key does not
   # depend on the attribute's name, so the rows keep theirs.
-  defp corresponding_source({:sort_key, name}, %{op: :rename_attribute, from: name} = op) do
+  defp corresponding_source(
+         {:sort_key, name},
+         entity_type,
+         %{op: :rename_attribute, entity: entity_type, from: name} = op
+       ) do
     {:sort_key, op.to}
   end
 
-  defp corresponding_source(source, _op), do: source
+  defp corresponding_source(source, _entity_type, _op), do: source
 
   defp entity_after(entity_type, %{op: :rename_entity, from: entity_type} = op), do: op.to
 
@@ -166,9 +179,9 @@ defmodule Hologram.Migration.Renderer do
   defp enum_value_ops(_op, _pre_mapping, _post_mapping), do: []
 
   # Every derived name of the entity, paired before and after the rename - whatever
-  # differs is renamed. The table goes first, so the constraint and index renames that
+  # differs is renamed. The table goes first, so the column and constraint renames that
   # follow already name it as it now stands.
-  defp physical_renames(pre_entity, post_entity, op) do
+  defp physical_renames(entity_type, pre_entity, post_entity, op) do
     table = post_entity.table
 
     table_ops = name_op(:rename_table, nil, pre_entity.table, post_entity.table)
@@ -176,35 +189,71 @@ defmodule Hologram.Migration.Renderer do
     pk_ops =
       name_op(:rename_constraint, table, pre_entity.pk_constraint, post_entity.pk_constraint)
 
-    # Declared columns and their sort-key companions pair by source: the system ones share
-    # the :system source and carry fixed names, so they never take part in a rename.
-    column_ops =
-      Enum.flat_map(pre_entity.columns, fn pre_column ->
-        source = corresponding_source(pre_column.source, op)
-        post_column = Enum.find(post_entity.columns, &(&1.source == source))
+    column_pairs = column_pairs(entity_type, pre_entity, post_entity, op)
 
-        if paired?(pre_column) and post_column do
-          column_renames(pre_column, post_column, table)
-        else
-          []
-        end
+    column_ops =
+      Enum.flat_map(column_pairs, fn {pre_column, post_column} ->
+        column_renames(pre_column, post_column, table)
       end)
 
     join_table_ops =
       Enum.flat_map(pre_entity.join_tables, fn pre_join ->
-        {:relationship, name} = corresponding_source({:relationship, pre_join.relationship}, op)
+        {:relationship, name} =
+          corresponding_source({:relationship, pre_join.relationship}, entity_type, op)
+
         post_join = Enum.find(post_entity.join_tables, &(&1.relationship == name))
 
         if post_join, do: join_table_renames(pre_join, post_join), else: []
       end)
 
-    table_ops ++ pk_ops ++ column_ops ++ join_table_ops
+    index_ops = index_renames(pre_entity, post_entity, column_pairs)
+
+    table_ops ++ pk_ops ++ column_ops ++ join_table_ops ++ index_ops
+  end
+
+  # Declared columns and their sort-key companions pair by source: the system ones share the
+  # :system source and carry fixed names, so they never take part in a rename.
+  defp column_pairs(entity_type, pre_entity, post_entity, op) do
+    pre_entity.columns
+    |> Enum.filter(&paired?/1)
+    |> Enum.flat_map(fn pre_column ->
+      source = corresponding_source(pre_column.source, entity_type, op)
+
+      case Enum.find(post_entity.columns, &(&1.source == source)) do
+        nil -> []
+        post_column -> [{pre_column, post_column}]
+      end
+    end)
+  end
+
+  # The entity's own indexes - a unique attribute's or a unique to-one's, and the framework's -
+  # carry no source of their own, so each pairs with the index over the same columns after the
+  # rename, a renamed column counting as the column it became. PostgreSQL keeps an index on a
+  # column through a rename of the column or of its table, so only the name is left to follow.
+  defp index_renames(pre_entity, post_entity, column_pairs) do
+    column_names =
+      Map.new(column_pairs, fn {pre_column, post_column} ->
+        {pre_column.name, post_column.name}
+      end)
+
+    Enum.flat_map(pre_entity.indexes, fn {pre_name, pre_index} ->
+      columns = Enum.map(pre_index.columns, &Map.get(column_names, &1, &1))
+
+      case Enum.find(post_entity.indexes, &same_index?(&1, columns, pre_index.unique)) do
+        {post_name, _post_index} -> name_op(:rename_index, nil, pre_name, post_name)
+        nil -> []
+      end
+    end)
   end
 
   defp paired?(%{source: {kind, _name}}) when kind in [:attribute, :relationship, :sort_key],
     do: true
 
   defp paired?(_column), do: false
+
+  defp same_index?({_name, index}, columns, unique?) do
+    index.columns == columns and index.unique == unique?
+  end
 
   defp column_renames(pre_column, post_column, table) do
     name_op(:rename_column, table, pre_column.name, post_column.name) ++
@@ -483,7 +532,7 @@ defmodule Hologram.Migration.Renderer do
       Enum.flat_map(pre_mapping, fn {entity_type, pre_entity} ->
         post_entity = post_mapping[entity_after(entity_type, op)]
 
-        if post_entity, do: physical_renames(pre_entity, post_entity, op), else: []
+        if post_entity, do: physical_renames(entity_type, pre_entity, post_entity, op), else: []
       end)
 
     entity_ops ++ enum_value_ops(op, pre_mapping, post_mapping)

@@ -11,6 +11,8 @@ defmodule Hologram.Sync.ScoperTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
@@ -50,6 +52,12 @@ defmodule Hologram.Sync.ScoperTest do
       windows = [{:board, term(Module3, %{a: term(Module2)})}]
 
       assert affected(events([Module2]), windows, %{}) == [:board]
+    end
+
+    test "includes a window whose query reaches the changed type through an inverse" do
+      windows = [{:channel, term(Module26, %{messages: term(Module28)})}]
+
+      assert affected(events([Module28]), windows, %{}) == [:channel]
     end
 
     test "includes a window reaching the changed type through a nested include" do

@@ -71,8 +71,17 @@ export default class Overlay {
     return table;
   }
 
-  // The target ids of one relationship of one row, as the pending edge writes leave them.
+  // The target ids of one relationship of one row, as the pending edge writes leave them. An
+  // inverse of a to-many holds the ids of the related rows whose own edges name this row, so it
+  // is folded with THEIR pending writes - an edge added or removed on one of them, or the row
+  // deleted.
   static foldTargetIds(type, relationship, sourceId, base) {
+    const inverse = Overlay.#joinInverse(type, relationship);
+
+    if (inverse) {
+      return Overlay.#foldInverseIds(inverse, sourceId, base);
+    }
+
     if (!Overlay.names(type, sourceId)) {
       return base;
     }
@@ -307,10 +316,88 @@ export default class Overlay {
     }
   }
 
+  static #foldInverseIds(inverse, targetId, base) {
+    if (!Overlay.#namesType(inverse.type)) {
+      return base;
+    }
+
+    const sourceIds = new Set(base);
+
+    for (const batch of Overlay.#batches) {
+      batch.writes.forEach((write, index) => {
+        if (write.type !== inverse.type || batch.isLanded(index)) {
+          return;
+        }
+
+        if (write.op === "delete") {
+          sourceIds.delete(write.id);
+        } else if (
+          write.relationship === inverse.forward &&
+          write.target_id === targetId
+        ) {
+          if (write.op === "add_relationship") {
+            sourceIds.add(write.id);
+          } else if (write.op === "delete_relationship") {
+            sourceIds.delete(write.id);
+          }
+        }
+      });
+    }
+
+    return sourceIds;
+  }
+
+  // The inverse of a to-many the given relationship of the given type is, when it is one - an
+  // entry the build bakes for a type this client holds.
+  static #joinInverse(type, relationship) {
+    if (!Model.isEntityType(type)) {
+      return null;
+    }
+
+    const inverses = Model.inverses(type);
+
+    if (!Object.hasOwn(inverses, relationship)) {
+      return null;
+    }
+
+    const inverse = inverses[relationship];
+
+    return inverse.reference ? null : inverse;
+  }
+
   static #namesType(type) {
     return Overlay.#batches.some((batch) =>
       batch.writes.some((write) => write.type === type),
     );
+  }
+
+  // A confirmed edge is the server's, so the inverses reading it hold it too - promoted into the
+  // ids filed for the target row, where those are filed at all, so a confirmation landing before
+  // the frame carrying the same edge shows nothing in between. An unfiled set is not this client's
+  // to start: the row it would belong to was never sent with it.
+  static #promoteInverseEdge(write, apply) {
+    if (!Model.isEntityType(write.type)) {
+      return;
+    }
+
+    const relationship = Model.relationships(write.type)[write.relationship];
+
+    if (!relationship || !Model.isEntityType(relationship.type)) {
+      return;
+    }
+
+    for (const [name, inverse] of Object.entries(
+      Model.inverses(relationship.type),
+    )) {
+      if (
+        !inverse.reference &&
+        inverse.forward === write.relationship &&
+        inverse.type === write.type &&
+        LocalDatabase.hasFacts(relationship.type, name, write.target_id)
+      ) {
+        apply(relationship.type, name, write.target_id, write.id);
+      }
+    }
   }
 
   static #promoteWrite(write) {
@@ -322,6 +409,8 @@ export default class Overlay {
         write.target_id,
       );
 
+      Overlay.#promoteInverseEdge(write, LocalDatabase.addFact);
+
       return;
     }
 
@@ -332,6 +421,8 @@ export default class Overlay {
         write.id,
         write.target_id,
       );
+
+      Overlay.#promoteInverseEdge(write, LocalDatabase.deleteFact);
 
       return;
     }

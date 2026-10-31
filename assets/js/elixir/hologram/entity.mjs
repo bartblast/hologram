@@ -43,8 +43,8 @@ function attributeValue(entry, given, name) {
 
 // The struct as Model.box builds one for a row, in the same field order, so a row constructed
 // here and a row that arrived read alike: the type, the framework's own state, every declared
-// and system attribute, and per relationship its reference field and the sentinel saying nobody
-// asked for it.
+// and system attribute, per relationship its reference field and the sentinel saying nobody
+// asked for it, and per inverse the sentinel alone.
 function buildStruct(entityType, entry, pairs) {
   const given = new Map(pairs);
 
@@ -70,6 +70,10 @@ function buildStruct(entityType, entry, pairs) {
       ]);
     }
 
+    data.push([Type.atom(name), Model.notIncluded(name)]);
+  }
+
+  for (const name of Object.keys(entry.inverses)) {
     data.push([Type.atom(name), Model.notIncluded(name)]);
   }
 
@@ -132,8 +136,20 @@ function refuseFrameworkAttribute(entry, type, pairs) {
   }
 }
 
+// An inverse is asked about first, the order the server's own check runs in, so a construction
+// naming both kinds is refused for the same one on both tiers.
 function refuseRelationshipAssignment(entry, type, pairs) {
   const given = new Map(pairs);
+  const inverseName = Object.keys(entry.inverses).find((each) =>
+    given.has(each),
+  );
+
+  if (inverseName) {
+    Interpreter.raiseArgumentError(
+      `relationship ${Interpreter.inspect(Type.atom(inverseName))} of ${type} cannot be assigned at construction - it is an inverse that reads ${Model.describeInverse(type, inverseName)}, so write that instead`,
+    );
+  }
+
   const name = Object.keys(entry.relationships).find((each) => given.has(each));
 
   if (name) {

@@ -4,28 +4,11 @@ defmodule HologramFeatureTests.SyncTest do
 
   import Hologram.DB.EntityOperations, only: [delete: 2, update: 3]
 
-  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
-  alias Hologram.DB.Connection
-  alias Hologram.DB.Mapper
   alias Hologram.Test.SyncClient
-  alias HologramFeatureTests.Entities.Account
-  alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
-  alias HologramFeatureTests.Entities.Item
-  alias HologramFeatureTests.Entities.Leg
-  alias HologramFeatureTests.Entities.Memo
-  alias HologramFeatureTests.Entities.Note
-  alias HologramFeatureTests.Entities.Product
-  alias HologramFeatureTests.Entities.Review
-  alias HologramFeatureTests.Entities.Shop
-  alias HologramFeatureTests.Entities.Stop
-  alias HologramFeatureTests.Entities.Ticket
-  alias HologramFeatureTests.Entities.Todo
-  alias HologramFeatureTests.Entities.Trip
-  alias HologramFeatureTests.Entities.User
-  alias HologramFeatureTests.Jobs.RestockItem
+  alias HologramFeatureTests.SyncPage
 
   @base_url "http://localhost:4002"
 
@@ -34,36 +17,7 @@ defmodule HologramFeatureTests.SyncTest do
   # and make "the first deltas frame" mean different things on different runs.
   setup do
     await_evaluator_drain()
-
-    tables =
-      Enum.map_join(
-        [
-          Account,
-          Booking,
-          Document,
-          Folder,
-          Item,
-          Leg,
-          Memo,
-          Note,
-          Product,
-          RestockItem,
-          Review,
-          RoleGrant,
-          Shop,
-          Stop,
-          Ticket,
-          Todo,
-          Trip,
-          User
-        ],
-        ", ",
-        fn entity_type ->
-          ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
-        end
-      )
-
-    {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
+    truncate_every_entity_table()
 
     :ok
   end
@@ -101,6 +55,29 @@ defmodule HologramFeatureTests.SyncTest do
     end
   end
 
+  # The page shows what its database held when the button was last clicked, so the read is asked
+  # again until it answers as expected - the change reaches the browser on its own time.
+  defp await_local_folder(session, expected, attempts_left \\ 100)
+
+  defp await_local_folder(session, expected, 0) do
+    flunk(
+      "the local folder read never answered #{inspect(expected)}, last: " <>
+        inspect(local_folder(session))
+    )
+  end
+
+  defp await_local_folder(session, expected, attempts_left) do
+    clicked = click(session, button("Read folder locally"))
+
+    Process.sleep(50)
+
+    if local_folder(clicked) == expected do
+      clicked
+    else
+      await_local_folder(clicked, expected, attempts_left - 1)
+    end
+  end
+
   # The stream is cut when the test ends, taking the server-side session and its evaluators with
   # it - a connection left open would keep them alive into the next test, serving stale rounds.
   defp connect(opts \\ []) do
@@ -132,6 +109,13 @@ defmodule HologramFeatureTests.SyncTest do
     assert all_synced["data"] =~ ~s["scope":"all"]
 
     filled_client
+  end
+
+  defp local_folder(session) do
+    script_result(
+      session,
+      "return document.getElementById('local_folder')?.textContent ?? null;"
+    )
   end
 
   feature "fills a connecting client with the rows it may read", %{session: _session} do
@@ -241,6 +225,35 @@ defmodule HologramFeatureTests.SyncTest do
 
     assert [%{"id" => patched_id, "name" => "folder_after_patch"}] = folder_rows
     assert patched_id == folder.id
+  end
+
+  # The other half of reach: a row no window roots, held only through an include, leaves the
+  # browser's database once nothing the client holds includes it any more. The document stays -
+  # it is public - while the folder it pointed at is reached by nothing, on the same page load.
+  feature "drops a row once no include reaches it", %{session: session} do
+    folder =
+      %{name: "kept_folder", public: true}
+      |> Folder.new()
+      |> DB.create!()
+
+    document =
+      %{folder_id: folder.id, public: true, title: "points_at_the_folder"}
+      |> Document.new()
+      |> DB.create!()
+
+    session =
+      session
+      |> visit(SyncPage)
+      |> await_local_fill()
+      |> mark_this_page_load()
+      |> click(button("Read folder locally"))
+      |> assert_text(css("#local_folder"), ~r/^kept_folder$/)
+
+    DB.update!(Document, document.id, folder_id: nil)
+
+    session
+    |> await_local_folder("none")
+    |> assert_same_page_load()
   end
 
   feature "delivers a row created while the client watches, whole", %{session: _session} do

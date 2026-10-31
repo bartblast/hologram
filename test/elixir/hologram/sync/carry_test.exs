@@ -9,6 +9,10 @@ defmodule Hologram.Sync.CarryTest do
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
 
   @module_2_type "Hologram.Test.Fixtures.Entity.Module2"
@@ -111,6 +115,50 @@ defmodule Hologram.Sync.CarryTest do
       assert length(carried.put_entity[@module_3_type]) == 2
     end
 
+    # The second label is met first as the message's, where its own messages are not included -
+    # its root copy, holding them, comes after.
+    test "records a row reached several times with what each copy included" do
+      message = struct(Module28, %{body: "tagged", id: Entity.generate_id()})
+      first_label = struct(Module29, %{id: Entity.generate_id(), name: "first"})
+      second_label = struct(Module29, %{id: Entity.generate_id(), name: "second"})
+
+      tagged = %{message | labels: [first_label, second_label]}
+
+      collect([%{first_label | messages: [tagged]}, %{second_label | messages: [message]}])
+
+      carried = take()
+
+      assert carried.put_entity["Hologram.Test.Fixtures.Entity.Module29"]
+             |> Enum.find(&(&1.id == second_label.id))
+             |> Map.fetch!(:messages) == [message.id]
+    end
+
+    # The same shape without an inverse: a folder met first as another folder's child, where its
+    # own children are not included, still carries them.
+    test "records a row a to-many of its own type reaches with what each copy included" do
+      defmodule FolderEntityFixture do
+        use Hologram.Entity
+
+        attribute :name, :string
+
+        relationship :children, [__MODULE__]
+
+        allow :read
+      end
+
+      child = FolderEntityFixture.new(%{name: "child"})
+      grandchild = FolderEntityFixture.new(%{name: "grandchild"})
+      parent = FolderEntityFixture.new(%{name: "parent"})
+
+      collect([%{parent | children: [child]}, %{child | children: [grandchild]}])
+
+      carried = take()
+
+      assert carried.put_entity[inspect(FolderEntityFixture)]
+             |> Enum.find(&(&1.id == child.id))
+             |> Map.fetch!(:children) == [grandchild.id]
+    end
+
     test "gathers the rows of every result collected" do
       collect([module_2(c: "from the first prop")])
       collect([module_2(c: "from the second prop")])
@@ -120,6 +168,20 @@ defmodule Hologram.Sync.CarryTest do
       assert rows
              |> Enum.map(& &1.c)
              |> Enum.sort() == ["from the first prop", "from the second prop"]
+    end
+
+    test "records the rows an included inverse holds" do
+      channel = struct(Module26, %{id: Entity.generate_id(), name: "general"})
+      message = struct(Module28, %{body: "hi", channel_id: channel.id, id: Entity.generate_id()})
+      topic = struct(Module27, %{channel_id: channel.id, id: Entity.generate_id()})
+
+      collect([%{channel | messages: [message], topic: topic}])
+
+      carried = take()
+
+      assert [%{body: "hi"}] = carried.put_entity["Hologram.Test.Fixtures.Entity.Module28"]
+      assert [%{id: topic_id}] = carried.put_entity["Hologram.Test.Fixtures.Entity.Module27"]
+      assert topic_id == topic.id
     end
 
     test "passes over a relationship the query did not ask for" do

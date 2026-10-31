@@ -230,10 +230,32 @@ export default class QueryKernel {
     return ranks;
   }
 
+  // The held rows the ids filed for the row name. A pair naming a row the database does not hold is
+  // passed over: a fill arrives in pieces, and a parent can be told about a child that has not
+  // landed yet.
+  static #heldTargets(entityType, name, row, table) {
+    return Array.from(LocalDatabase.getTargetIds(entityType, name, row.id))
+      .map((targetId) => table[targetId] ?? null)
+      .filter((target) => target !== null);
+  }
+
   // A relationship the query asked for is filled from the rest of the database - a to-one by
   // following the id its row carries, a to-many by reading the pairs it is the source of. A row
   // does not say what type it is, and does not need to: the term reading it does.
   static #included(row, entityType, name, subTerm, context) {
+    const inverses = Model.inverses(entityType);
+
+    if (Object.hasOwn(inverses, name)) {
+      return QueryKernel.#includedInverse(
+        row,
+        entityType,
+        name,
+        inverses[name],
+        subTerm,
+        context,
+      );
+    }
+
     const {toMany} = Model.relationships(entityType)[name];
     const table = LocalDatabase.getTable(subTerm.entity);
 
@@ -243,27 +265,66 @@ export default class QueryKernel {
       return target ? QueryKernel.#node(target, subTerm, context) : null;
     }
 
-    // A pair naming a row the database does not hold is passed over: a fill arrives in pieces,
-    // and a parent can be told about a child that has not landed yet.
+    return QueryKernel.#includedSet(
+      QueryKernel.#heldTargets(entityType, name, row, table),
+      subTerm,
+      context,
+    );
+  }
+
+  // An inverse is read from where the relationship it reverses is stored. Of a to-one, it is the
+  // related rows whose reference field names the row - read off the table, where a pending move
+  // is already folded in. Of a to-many, it is the ids filed for the row itself, the overlay folding
+  // in the pending edges of the related rows. A row whose reference is nil names no row, so it
+  // belongs to no inverse. A single inverse is the one related row, the first by id while two
+  // pending writes disagree about which.
+  //
+  // The reference kinds scan the related type's table once per parent row - a cost that grows
+  // with rows times parents, acceptable at the sizes a client holds.
+  static #includedInverse(row, entityType, name, inverse, subTerm, context) {
+    const table = LocalDatabase.getTable(subTerm.entity);
+
+    if (!inverse.reference) {
+      return QueryKernel.#includedSet(
+        QueryKernel.#heldTargets(entityType, name, row, table),
+        subTerm,
+        context,
+      );
+    }
+
+    const referenceField = `${inverse.forward}_id`;
+
+    const related = Object.values(table).filter(
+      (candidate) => candidate[referenceField] === row.id,
+    );
+
+    if (inverse.toMany) {
+      return QueryKernel.#includedSet(related, subTerm, context);
+    }
+
+    const [first] = related.sort((left, right) =>
+      QueryKernel.#compare(left.id, right.id),
+    );
+
+    return first ? QueryKernel.#node(first, subTerm, context) : null;
+  }
+
+  // A set of related rows, put through the clauses the include carries - filtered, ordered and
+  // bounded like any other.
+  static #includedSet(targets, subTerm, context) {
     const ranks = QueryKernel.#ranksFor(subTerm.entity, subTerm.filter);
 
-    const targets = Array.from(
-      LocalDatabase.getTargetIds(entityType, name, row.id),
-    )
-      .map((targetId) => table[targetId] ?? null)
-      .filter(
-        (target) =>
-          target !== null &&
-          QueryKernel.#matches(
-            target,
-            subTerm.filter,
-            context,
-            ranks,
-            subTerm.entity,
-          ),
-      );
+    const matching = targets.filter((target) =>
+      QueryKernel.#matches(
+        target,
+        subTerm.filter,
+        context,
+        ranks,
+        subTerm.entity,
+      ),
+    );
 
-    return QueryKernel.#arrange(targets, subTerm).map((target) =>
+    return QueryKernel.#arrange(matching, subTerm).map((target) =>
       QueryKernel.#node(target, subTerm, context),
     );
   }

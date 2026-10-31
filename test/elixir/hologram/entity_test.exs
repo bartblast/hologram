@@ -15,11 +15,27 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module20
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Policy.Module11, as: PolicyModule11
+
+  defp fixture_file(name), do: Path.expand("test/elixir/support/fixtures/entity/#{name}")
+
+  # The number of the first line of the given file holding the given text.
+  defp line_of(file, text) do
+    file
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.find_value(fn {line, number} -> if String.contains?(line, text), do: number end)
+  end
 
   describe "__attributes__/0" do
     test "returns empty list for entity type with no attribute declarations" do
@@ -37,6 +53,19 @@ defmodule Hologram.EntityTest do
 
   test "__is_hologram_entity__/0" do
     assert Module1.__is_hologram_entity__()
+  end
+
+  describe "__inverse_relationships__/0" do
+    test "returns empty list for entity type with no inverse relationship declarations" do
+      assert Module1.__inverse_relationships__() == []
+    end
+
+    test "returns inverse relationship definitions sorted by name" do
+      assert Module26.__inverse_relationships__() == [
+               {:messages, [Module28], [inverse: :channel, sort: :position]},
+               {:topic, Module27, [inverse: :channel]}
+             ]
+    end
   end
 
   describe "__is_hologram_user_entity__/0" do
@@ -97,9 +126,33 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "__relationship_locations__/0" do
+    test "returns the file and line of each inverse relationship declaration" do
+      file = fixture_file("module_26.ex")
+
+      assert Module26.__relationship_locations__() == %{
+               messages: {file, line_of(file, "relationship :messages")},
+               topic: {file, line_of(file, "relationship :topic")}
+             }
+    end
+
+    test "returns the file and line of each stored relationship declaration" do
+      file = fixture_file("module_28.ex")
+
+      assert Module28.__relationship_locations__() == %{
+               channel: {file, line_of(file, "relationship :channel")},
+               labels: {file, line_of(file, "relationship :labels")}
+             }
+    end
+  end
+
   describe "__relationships__/0" do
     test "returns empty list for entity type with no relationship declarations" do
       assert Module1.__relationships__() == []
+    end
+
+    test "leaves out inverse relationships" do
+      assert Module26.__relationships__() == []
     end
 
     test "returns relationship definitions sorted by name regardless of declaration order" do
@@ -153,6 +206,19 @@ defmodule Hologram.EntityTest do
         |> Enum.sort()
 
       assert field_names == [:__meta__, :created_at, :id, :updated_at]
+    end
+
+    test "derives one field per inverse relationship and no reference field" do
+      field_names =
+        %Module26{}
+        |> Map.from_struct()
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert field_names == [:__meta__, :created_at, :id, :messages, :name, :topic, :updated_at]
+
+      assert %Module26{}.messages == %NotIncluded{relationship: :messages}
+      assert %Module26{}.topic == %NotIncluded{relationship: :topic}
     end
 
     test "includes declared attribute fields" do
@@ -300,6 +366,23 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "describe_inverse/2" do
+    test "names the reference column an inverse of a to-one reads" do
+      assert describe_inverse(Module26, :messages) ==
+               "the channel_id reference of Hologram.Test.Fixtures.Entity.Module28"
+    end
+
+    test "names the reference column a single inverse of a unique to-one reads" do
+      assert describe_inverse(Module26, :topic) ==
+               "the channel_id reference of Hologram.Test.Fixtures.Entity.Module27"
+    end
+
+    test "names the to-many relationship an inverse of one reads" do
+      assert describe_inverse(Module29, :messages) ==
+               "the labels relationship of Hologram.Test.Fixtures.Entity.Module28"
+    end
+  end
+
   describe "expand_role/2" do
     test "returns the role name alone when no other role extends it" do
       assert expand_role(Module12, :admin) == [:admin]
@@ -344,6 +427,138 @@ defmodule Hologram.EntityTest do
 
       assert embedded_unix_ms >= unix_ms_before
       assert embedded_unix_ms <= unix_ms_after
+    end
+  end
+
+  describe "includable_names/1" do
+    test "returns the stored and inverse relationship names, sorted" do
+      defmodule IncludableNamesFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        relationship :a, Module1
+        relationship :b, [Module28], inverse: channel
+        relationship :c, Module1
+      end
+
+      assert includable_names(IncludableNamesFixture) == [:a, :b, :c]
+    end
+
+    test "returns the names of each kind of relationship" do
+      assert includable_names(Module26) == [:messages, :topic]
+      assert includable_names(Module28) == [:channel, :labels]
+      assert includable_names(Module29) == [:messages]
+    end
+
+    test "returns no names for an entity type with no relationships" do
+      assert includable_names(Module1) == []
+    end
+  end
+
+  describe "inverse_relationship/2" do
+    test "describes an inverse set of a to-one" do
+      assert inverse_relationship(Module26, :messages) == %{
+               forward: :channel,
+               reference?: true,
+               sort: :position,
+               target: Module28,
+               to_many?: true
+             }
+    end
+
+    test "describes a single inverse of a unique to-one" do
+      assert inverse_relationship(Module26, :topic) == %{
+               forward: :channel,
+               reference?: true,
+               sort: [],
+               target: Module27,
+               to_many?: false
+             }
+    end
+
+    test "describes an inverse set of a to-many" do
+      assert inverse_relationship(Module29, :messages) == %{
+               forward: :labels,
+               reference?: false,
+               sort: [],
+               target: Module28,
+               to_many?: true
+             }
+    end
+
+    test "describes an inverse set of a to-one of the type's own" do
+      assert inverse_relationship(Module30, :replies) == %{
+               forward: :parent,
+               reference?: true,
+               sort: :body,
+               target: Module30,
+               to_many?: true
+             }
+    end
+
+    test "describes an inverse set of a to-many of the type's own" do
+      assert inverse_relationship(Module30, :followers) == %{
+               forward: :follows,
+               reference?: false,
+               sort: [],
+               target: Module30,
+               to_many?: true
+             }
+    end
+
+    test "returns nil for a stored relationship" do
+      assert inverse_relationship(Module28, :channel) == nil
+    end
+  end
+
+  describe "inverses_of_to_many/3" do
+    test "returns the inverses reversing the given to-many" do
+      assert inverses_of_to_many(Module29, Module28, "labels") == [:messages]
+    end
+
+    test "returns the inverses reversing a to-many of the type's own" do
+      assert inverses_of_to_many(Module30, Module30, "follows") == [:followers]
+    end
+
+    test "returns nothing for a to-many of another type" do
+      assert inverses_of_to_many(Module29, Module3, "labels") == []
+    end
+
+    test "returns nothing for a name the type declares no to-many under" do
+      assert inverses_of_to_many(Module29, Module28, "tags") == []
+    end
+
+    test "returns nothing for an inverse of a to-one" do
+      assert inverses_of_to_many(Module26, Module28, "channel") == []
+    end
+  end
+
+  describe "merge_copies/2" do
+    test "takes a relationship the kept copy did not include from the other copy" do
+      message = Module28.new(body: "hi", position: 1)
+      label = Module29.new(name: "urgent")
+
+      merged = merge_copies(label, %{label | messages: [message]})
+
+      assert merged.messages == [message]
+    end
+
+    test "keeps a relationship the kept copy included" do
+      message = Module28.new(body: "hi", position: 1)
+      label = Module29.new(name: "urgent")
+
+      merged = merge_copies(%{label | messages: []}, %{label | messages: [message]})
+
+      assert merged.messages == []
+    end
+
+    test "keeps the kept copy's values" do
+      label = Module29.new(name: "urgent")
+
+      merged = merge_copies(label, %{label | name: "renamed"})
+
+      assert merged.name == "urgent"
     end
   end
 
@@ -477,6 +692,13 @@ defmodule Hologram.EntityTest do
       end
     end
 
+    test "raises on an assigned inverse value" do
+      expected_msg =
+        "relationship :messages of Hologram.Test.Fixtures.Entity.Module26 cannot be assigned at construction - it is an inverse that reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so write that instead"
+
+      assert_error ArgumentError, expected_msg, fn -> new(Module26, messages: []) end
+    end
+
     test "raises on an assigned relationship value" do
       expected_msg =
         "relationship :c of Hologram.Test.Fixtures.Entity.Module3 cannot be assigned at construction - set a to-one reference via the :c_id field, to-many edges via add_relationship"
@@ -559,6 +781,34 @@ defmodule Hologram.EntityTest do
       end
 
       assert ExtendsEntityFixture.__roles__() == [{:owner, [extends: :viewer]}, {:viewer, []}]
+    end
+  end
+
+  describe "relationship/3" do
+    test "keeps options read from module attributes" do
+      defmodule AttributeOptionsFixture do
+        use Hologram.Entity
+
+        @optional true
+
+        relationship :owner, Module1, optional: @optional
+      end
+
+      assert AttributeOptionsFixture.__relationships__() == [{:owner, Module1, [optional: true]}]
+    end
+
+    test "refuses a relationship option naming entity vocabulary with an atom" do
+      code = """
+      defmodule Hologram.EntityTest.AtomInverseFixture do
+        use Hologram.Entity
+
+        relationship :owners, [Hologram.Test.Fixtures.Entity.Module1], inverse: :owner
+      end
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:4: inverse names the relationship it reverses with a bare name, got: :owner - write owner",
+                   fn -> Code.eval_string(code) end
     end
   end
 
@@ -785,6 +1035,20 @@ defmodule Hologram.EntityTest do
                b_id: "Hologram.Entity.id() | nil",
                created_at: "DateTime.t() | nil",
                id: "Hologram.Entity.id() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types an inverse set as a list and a single inverse as one row or nil" do
+      assert struct_field_types(Module26) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               created_at: "DateTime.t() | nil",
+               id: "Hologram.Entity.id() | nil",
+               messages:
+                 "[Hologram.Test.Fixtures.Entity.Module28.t()] | Hologram.Entity.NotIncluded.t()",
+               name: "String.t() | nil",
+               topic:
+                 "Hologram.Test.Fixtures.Entity.Module27.t() | Hologram.Entity.NotIncluded.t() | nil",
                updated_at: "DateTime.t() | nil"
              }
     end

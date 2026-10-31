@@ -517,14 +517,23 @@ describe("LocalDatabase", () => {
     const TAG = "MyApp.Tag";
     const TASK = "MyApp.Task";
 
-    // The model is read for one thing only - which of a type's relationships are to-many - so what
-    // is baked here is that and the little Model.entry insists on.
+    // The model is read for one thing only - which of a type's relationships and inverses hold
+    // facts - so what is baked here is that and the little Model.entry insists on.
     beforeEach(() => {
       globalThis.Hologram.sync = {
         model: {
           [TAG]: {
             attributes: {id: "uuid", name: "string"},
             enumValues: {},
+            inverses: {
+              tasks: {
+                forward: "tags",
+                reference: false,
+                sort: [],
+                toMany: true,
+                type: TASK,
+              },
+            },
             relationships: {},
             serverOnly: [],
           },
@@ -568,6 +577,17 @@ describe("LocalDatabase", () => {
 
       assert.deepStrictEqual(LocalDatabase.records([`${TAG} g1`]), [
         {facts: {}, id: "g1", row, type: TAG},
+      ]);
+    });
+
+    it("snapshots the facts of an inverse of a to-many beside the row", () => {
+      const row = {id: "g1", name: "urgent"};
+
+      LocalDatabase.putRow(TAG, row);
+      LocalDatabase.replaceFacts(TAG, "tasks", "g1", ["t1"]);
+
+      assert.deepStrictEqual(LocalDatabase.records([`${TAG} g1`]), [
+        {facts: {tasks: ["t1"]}, id: "g1", row, type: TAG},
       ]);
     });
 

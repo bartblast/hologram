@@ -80,6 +80,12 @@ export default class Model {
       data.push([Type.atom(name), includes[name] ?? Model.notIncluded(name)]);
     }
 
+    // An inverse stores nothing on the row, so it has no reference field - only what was included
+    // of it, or the sentinel.
+    for (const name of Object.keys(entry.inverses)) {
+      data.push([Type.atom(name), includes[name] ?? Model.notIncluded(name)]);
+    }
+
     return Type.map(data);
   }
 
@@ -153,6 +159,21 @@ export default class Model {
       : entry[1].value.replace(/^Elixir\./, "");
   }
 
+  // The client's Hologram.Entity.describe_inverse/2: where the fact behind a declared inverse
+  // lives, as a refusal names it - the reference column of the related type for an inverse of a
+  // to-one, the related type's relationship for an inverse of a to-many.
+  static describeInverse(type, name) {
+    const inverse = Model.inverses(type)[name];
+
+    return inverse.reference
+      ? `the ${inverse.forward}_id reference of ${inverse.type}`
+      : `the ${inverse.forward} relationship of ${inverse.type}`;
+  }
+
+  static inverses(type) {
+    return Model.entry(type).inverses;
+  }
+
   // Whether this build carries the given entity type - the client's answer to the server's
   // Reflection.entity?/1. A type a page neither queries nor mentions is not baked, so what this
   // can say is "not an entity type THIS BUILD knows", which is the same divergence Entity.new
@@ -176,7 +197,8 @@ export default class Model {
       );
     }
 
-    // The three the write path INDEXES into stand in for themselves when a baked entry does not
+    // The four every struct is built and written through - the three the write path INDEXES into,
+    // and the inverses each boxed row walks - stand in for themselves when a baked entry does not
     // carry them, where the ones that are only carried can stay undefined: a reader asking what
     // an attribute declares has to be told "nothing" rather than meet a crash. A build writes all
     // of them for every type - what has fewer keys is a hand-built entry, which is how most of
@@ -187,6 +209,7 @@ export default class Model {
       defaults: baked.defaults ?? {},
       enumValues: baked.enumValues,
       frameworkAttributes: baked.frameworkAttributes ?? [],
+      inverses: baked.inverses ?? {},
       policy: baked.policy,
       relationships: baked.relationships,
       serverOnly: new Set(baked.serverOnly),

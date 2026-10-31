@@ -96,6 +96,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     @spec __attributes__() :: list({atom, atom, keyword})
     def __attributes__, do: [{:owner_id, :string, []}]
 
+    @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
+    def __inverse_relationships__, do: []
+
     @spec __is_hologram_entity__() :: boolean
     def __is_hologram_entity__, do: true
 
@@ -104,6 +107,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     @spec __policy_sources__() :: list(module)
     def __policy_sources__, do: []
+
+    @spec __relationship_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __relationship_locations__, do: %{}
 
     @spec __relationships__() :: list({atom, module | list(module), keyword})
     def __relationships__, do: [{:owner, Entity1, []}]
@@ -1130,6 +1136,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "validates the data model even when compilation is skipped", %{opts: opts} do
       System.delete_env("HOLOGRAM_START")
 
+      line = __ENV__.line + 5
+
       defmodule InvalidEntityFixture do
         use Hologram.Entity
 
@@ -1141,7 +1149,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       load_entity_fixture_app(:hologram_invalid_entity_fixture_app, [InvalidEntityFixture])
 
       expected_msg =
-        "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.InvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
+        "invalid data model:\n  * #{Path.relative_to_cwd(__ENV__.file)}:#{line}: relationship :owner in Mix.Tasks.Compile.HologramTest.InvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         run(opts)
@@ -1151,6 +1159,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "records nothing when the data model fails validation and compilation is skipped",
          %{opts: opts} do
       System.delete_env("HOLOGRAM_START")
+
+      line = __ENV__.line + 5
 
       defmodule UnrecordedInvalidEntityFixture do
         use Hologram.Entity
@@ -1163,7 +1173,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       ])
 
       expected_msg =
-        "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.UnrecordedInvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
+        "invalid data model:\n  * #{Path.relative_to_cwd(__ENV__.file)}:#{line}: relationship :owner in Mix.Tasks.Compile.HologramTest.UnrecordedInvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         run(opts)
@@ -1179,6 +1189,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # The record of a validation against the manifests as they are now.
       assert run(opts) == :noop
 
+      line = __ENV__.line + 5
+
       defmodule RevalidatedInvalidEntityFixture do
         use Hologram.Entity
 
@@ -1192,7 +1204,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fake_recompile()
 
       expected_msg =
-        "invalid data model:\n  * relationship :owner in Mix.Tasks.Compile.HologramTest.RevalidatedInvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
+        "invalid data model:\n  * #{Path.relative_to_cwd(__ENV__.file)}:#{line}: relationship :owner in Mix.Tasks.Compile.HologramTest.RevalidatedInvalidEntityFixture targets NonExistent.Module, which is not an entity type module"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         run(opts)

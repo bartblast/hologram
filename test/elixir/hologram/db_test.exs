@@ -22,6 +22,9 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module13
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.WriteError
@@ -295,6 +298,29 @@ defmodule Hologram.DBTest do
       assert error.reason == %{slug: [:unique]}
     end
 
+    test "raises a write error naming a taken unique reference" do
+      channel =
+        %{name: "general"}
+        |> Module26.new()
+        |> create!()
+
+      %{channel_id: channel.id, summary: "first"}
+      |> Module27.new()
+      |> create!()
+
+      expected_msg =
+        normalize_newlines("""
+        cannot create Hologram.Test.Fixtures.Entity.Module27:
+          * reference :channel_id "#{channel.id}" is already taken\
+        """)
+
+      assert_error Hologram.WriteError, expected_msg, fn ->
+        %{channel_id: channel.id, summary: "second"}
+        |> Module27.new()
+        |> create!()
+      end
+    end
+
     test "raises naming the missing target" do
       gone_id = Entity.generate_id()
 
@@ -457,6 +483,23 @@ defmodule Hologram.DBTest do
           "relationship only"
 
       assert_error ArgumentError, expected_msg, fn -> join_table_name(Module3, :c) end
+    end
+
+    test "raises for an inverse of a to-one" do
+      expected_msg =
+        "relationship :messages of Hologram.Test.Fixtures.Entity.Module26 is an inverse - it " <>
+          "reads the channel_id column of Hologram.Test.Fixtures.Entity.Module28's table, and a " <>
+          "join table backs a stored to-many relationship only"
+
+      assert_error ArgumentError, expected_msg, fn -> join_table_name(Module26, :messages) end
+    end
+
+    test "raises for an inverse of a to-many" do
+      expected_msg =
+        "relationship :messages of Hologram.Test.Fixtures.Entity.Module29 is an inverse - it " <>
+          "reads the join table of the labels relationship of Hologram.Test.Fixtures.Entity.Module28"
+
+      assert_error ArgumentError, expected_msg, fn -> join_table_name(Module29, :messages) end
     end
 
     test "raises for an undeclared relationship" do

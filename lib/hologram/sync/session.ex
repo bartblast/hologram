@@ -14,6 +14,7 @@ defmodule Hologram.Sync.Session do
 
   use GenServer, restart: :temporary
 
+  alias Hologram.Entity
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Diff
@@ -263,7 +264,9 @@ defmodule Hologram.Sync.Session do
   # What a grant change decided differently, told after the rows the gap named and before the
   # client is told its store is answerable. A row the gap named is left out: the replay has
   # already handed it over as it stands, or already taken it away, and saying so twice would
-  # have the client apply an answer to a question it was given the answer to.
+  # have the client apply an answer to a question it was given the answer to. The target of an
+  # edge the replay handed over beside it can be put again here - the same row as it now stands,
+  # which a second put leaves as it was.
   defp tell_shift(state) do
     named = MapSet.new(state.gap, & &1.entity_id)
 
@@ -469,10 +472,14 @@ defmodule Hologram.Sync.Session do
   defp replaying?(state), do: state.gap != nil
 
   # While a client is being caught up nothing goes out, so the gap cannot be undone by a round
-  # that reaches it first. What the rounds are read for is the rows the gap names - and only
-  # those, so what is held here is bounded by what moved rather than by what the client holds.
+  # that reaches it first. What the rounds are read for is the rows the gap names - an edge naming
+  # its target as well as its source, since the target's inverse of it moves too - and only those,
+  # so what is held here is bounded by what moved rather than by what the client holds.
   defp remember_touched(state, deltas) do
-    touched_ids = MapSet.new(state.gap, & &1.entity_id)
+    touched_ids =
+      state.gap
+      |> Enum.flat_map(&gap_ids/1)
+      |> MapSet.new()
 
     rows =
       deltas.patched
@@ -481,8 +488,22 @@ defmodule Hologram.Sync.Session do
       |> Enum.filter(&MapSet.member?(touched_ids, &1.id))
       |> Map.new(&{&1.id, &1})
 
-    %{state | touched: Map.merge(state.touched, rows)}
+    # Two windows can hold one row with different includes, so a later copy keeps what an earlier
+    # one included and it did not - its own values, read later, standing.
+    touched =
+      Map.merge(state.touched, rows, fn _id, earlier, later ->
+        Entity.merge_copies(later, earlier)
+      end)
+
+    %{state | touched: touched}
   end
+
+  defp gap_ids(%{data: %{"target_id" => target_id}, entity_id: entity_id, op: op})
+       when op in [:add_relationship, :del_relationship] do
+    [entity_id, target_id]
+  end
+
+  defp gap_ids(effect), do: [effect.entity_id]
 
   defp send_deltas(state, window_id, deltas) do
     if replaying?(state) do

@@ -27,6 +27,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module25
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
@@ -46,6 +48,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module111
   alias Hologram.Test.Fixtures.Template.Renderer.Module112
   alias Hologram.Test.Fixtures.Template.Renderer.Module113
+  alias Hologram.Test.Fixtures.Template.Renderer.Module114
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
   alias Hologram.Test.Fixtures.Template.Renderer.Module97
   alias Hologram.Test.Fixtures.Template.Renderer.Module98
@@ -417,6 +420,28 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       assert String.contains?(html, "titles = shown,,")
       assert carried_titles() == ["shown"]
+    end
+
+    # A path inside an included inverse reads its rows' relationships too - and the template is
+    # handed the inverse's rows as the query asked for them, without what the path read.
+    test "hands the template no relationship of an inverse's rows the query did not include" do
+      {:ok, channel} =
+        %{name: "general"}
+        |> Module26.new()
+        |> create()
+
+      {:ok, _message} =
+        %{body: "hi", channel_id: channel.id, position: 1}
+        |> Module28.new()
+        |> create()
+
+      node = {:component, Module114, [], []}
+
+      {html, _component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      not_included = inspect(%NotIncluded{relationship: :channel})
+
+      assert String.contains?(html, "channel = #{not_included}")
     end
   end
 

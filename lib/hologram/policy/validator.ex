@@ -299,6 +299,12 @@ defmodule Hologram.Policy.Validator do
     definitions = entity_type.__relationships__()
     in_type = if index == 0, do: "", else: " in #{inspect(entity_type)}"
 
+    if Entity.inverse_relationship(entity_type, relationship_name) do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{context.option} option #{context.written} for allow #{inspect(context.operation)} in #{context.location} - relationship #{inspect(relationship_name)}#{in_type} is an inverse that reads #{Entity.describe_inverse(entity_type, relationship_name)}, but #{context.requirement}"
+    end
+
     case Enum.find(definitions, fn {name, _type, _opts} -> name == relationship_name end) do
       {_name, [_target], _opts} ->
         raise Hologram.CompileError,

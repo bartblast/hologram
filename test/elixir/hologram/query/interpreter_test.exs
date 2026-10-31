@@ -9,6 +9,7 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryRunner
+  alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
@@ -20,7 +21,12 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module25
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
 
@@ -33,7 +39,12 @@ defmodule Hologram.Query.InterpreterTest do
     Module2,
     Module24,
     Module25,
+    Module26,
+    Module27,
+    Module28,
+    Module29,
     Module3,
+    Module30,
     Module4,
     Module5
   ]
@@ -60,6 +71,8 @@ defmodule Hologram.Query.InterpreterTest do
 
     actual
   end
+
+  defp bodies(rows), do: Enum.map(rows, & &1.body)
 
   defp created(entity_type, attributes) do
     {:ok, entity} =
@@ -112,6 +125,10 @@ defmodule Hologram.Query.InterpreterTest do
     end)
   end
 
+  defp message(channel, body, position) do
+    created(Module28, body: body, channel_id: channel && channel.id, position: position)
+  end
+
   defp module_10(attributes) do
     {:ok, entity} =
       attributes
@@ -155,6 +172,16 @@ defmodule Hologram.Query.InterpreterTest do
       |> create()
 
     entity
+  end
+
+  # The general channel of the inverse include tests, alone - two channels created in one
+  # millisecond come back in no order a test can name.
+  defp general_with(query \\ Module26), do: filter(query, name == "general")
+
+  defp matched_bodies(rows) do
+    rows
+    |> Enum.map(& &1.body)
+    |> Enum.sort()
   end
 
   defp matched_ids(rows) do
@@ -1239,6 +1266,190 @@ defmodule Hologram.Query.InterpreterTest do
       row = Enum.find(matched, &(&1.id == deepest.id))
 
       assert row.b.b.b.id == root.id
+    end
+  end
+
+  describe "run/3 - inverse includes" do
+    setup do
+      general = created(Module26, name: "general")
+      random = created(Module26, name: "random")
+
+      %{general: general, random: random}
+    end
+
+    test "fills an inverse set with the related rows naming the row, in the declared order", %{
+      general: general,
+      random: random
+    } do
+      message(general, "second", 2)
+      message(general, "first", 1)
+      message(random, "elsewhere", 1)
+
+      rows = agreed(include(Module26, messages))
+
+      assert Map.new(rows, &{&1.name, bodies(&1.messages)}) == %{
+               "general" => ["first", "second"],
+               "random" => ["elsewhere"]
+             }
+    end
+
+    # The ids are minted out of order, so only the id tiebreaker can put them back in it.
+    test "breaks a tie in the declared order by id", %{general: general} do
+      [lower_id, higher_id] = Enum.sort([Entity.generate_id(), Entity.generate_id()])
+
+      created(Module28, body: "b", channel_id: general.id, id: higher_id, position: 1)
+      created(Module28, body: "a", channel_id: general.id, id: lower_id, position: 1)
+
+      assert [row] = agreed(include(general_with(), messages))
+      assert Enum.map(row.messages, & &1.id) == [lower_id, higher_id]
+    end
+
+    test "puts an inverse set through the include's own clauses", %{general: general} do
+      message(general, "one", 1)
+      message(general, "two", 2)
+      message(general, "three", 3)
+
+      query =
+        Module26
+        |> filter(name == "general")
+        |> include(messages, fn messages ->
+          messages
+          |> filter(position > 1)
+          |> sort(position: :desc)
+          |> take(1)
+        end)
+
+      assert [row] = agreed(query)
+      assert bodies(row.messages) == ["three"]
+    end
+
+    test "leaves a related row whose reference is nil out of every inverse", %{general: general} do
+      message(general, "kept", 1)
+      message(nil, "orphan", 1)
+
+      rows = agreed(include(Module26, messages))
+
+      assert Map.new(rows, &{&1.name, bodies(&1.messages)}) == %{
+               "general" => ["kept"],
+               "random" => []
+             }
+    end
+
+    test "fills an inverse of a to-many with the related rows whose pairs name the row" do
+      urgent = created(Module29, name: "urgent")
+      later = created(Module29, name: "later")
+      tagged = message(nil, "tagged", 1)
+      both = message(nil, "both", 2)
+      message(nil, "untagged", 3)
+
+      :ok = add_relationship(Module28, tagged.id, :labels, urgent.id)
+      :ok = add_relationship(Module28, both.id, :labels, urgent.id)
+      :ok = add_relationship(Module28, both.id, :labels, later.id)
+
+      rows = agreed(include(Module29, messages))
+
+      assert Map.new(rows, &{&1.name, matched_bodies(&1.messages)}) == %{
+               "later" => ["both"],
+               "urgent" => ["both", "tagged"]
+             }
+    end
+
+    test "fills a single inverse with the row naming it, or nil", %{general: general} do
+      created(Module27, channel_id: general.id, summary: "welcome")
+
+      rows = agreed(include(Module26, topic))
+
+      assert Map.new(rows, &{&1.name, &1.topic && &1.topic.summary}) == %{
+               "general" => "welcome",
+               "random" => nil
+             }
+    end
+
+    test "nests an include under an inverse set", %{general: general} do
+      urgent = created(Module29, name: "urgent")
+      tagged = message(general, "tagged", 1)
+
+      :ok = add_relationship(Module28, tagged.id, :labels, urgent.id)
+
+      assert [row] = agreed(include(general_with(), messages.labels))
+      assert [included] = row.messages
+      assert Enum.map(included.labels, & &1.name) == ["urgent"]
+    end
+
+    # Below the root an inverse is matched to the row that included it, not to the queried one.
+    test "reads an inverse below the root, matched to the row including it", %{
+      general: general,
+      random: random
+    } do
+      created(Module27, channel_id: general.id, summary: "welcome")
+      in_general = message(general, "in general", 1)
+      message(random, "in random", 1)
+
+      query =
+        Module28
+        |> filter(body == "in general")
+        |> include(channel.topic)
+        |> include(channel.messages)
+
+      assert [row] = agreed(query)
+      assert row.id == in_general.id
+      assert row.channel.topic.summary == "welcome"
+      assert bodies(row.channel.messages) == ["in general"]
+    end
+
+    # An inverse's rows are read under their type's read rules, the way any include's are - a row
+    # the session may not read drops out of a set, and a single inverse naming one reads as nil.
+    test "reads an inverse under the related type's read rules", %{general: general} do
+      message(general, "shown", 1)
+      message(general, "hidden", 2)
+      created(Module27, channel_id: general.id, summary: "hidden")
+
+      term =
+        general_with()
+        |> include([messages, topic])
+        |> Stage.normalize()
+
+      assert [row] = run(term, readable_database(nil))
+      assert [row] == QueryRunner.run_policied(term, @mapping, nil)
+      assert bodies(row.messages) == ["shown"]
+      assert row.topic == nil
+    end
+  end
+
+  # An inverse of the type's own relationship reads the type's own rows on both sides - the table
+  # it reads from is the one the query is on, and the join table holds the type at both ends.
+  describe "run/3 - self-referencing inverses" do
+    test "fills an inverse of a to-one of the type's own with the rows naming the row" do
+      parent = created(Module30, body: "parent")
+      created(Module30, body: "second reply", parent_id: parent.id)
+      created(Module30, body: "first reply", parent_id: parent.id)
+
+      rows = agreed(include(Module30, replies))
+
+      assert Map.new(rows, &{&1.body, bodies(&1.replies)}) == %{
+               "first reply" => [],
+               "parent" => ["first reply", "second reply"],
+               "second reply" => []
+             }
+    end
+
+    # Reading the join table the wrong way round would hand the followed row its follows.
+    test "fills an inverse of a to-many of the type's own with the rows whose pairs name the row" do
+      followed = created(Module30, body: "followed")
+      fan = created(Module30, body: "fan")
+      other_fan = created(Module30, body: "other fan")
+
+      :ok = add_relationship(Module30, fan.id, :follows, followed.id)
+      :ok = add_relationship(Module30, other_fan.id, :follows, followed.id)
+      :ok = add_relationship(Module30, followed.id, :follows, fan.id)
+
+      rows = agreed(include(Module30, followers))
+
+      assert Map.new(rows, &{&1.body, matched_bodies(&1.followers)}) == %{
+               "fan" => ["followed"],
+               "followed" => ["fan", "other fan"],
+               "other fan" => []
+             }
     end
   end
 

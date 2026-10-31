@@ -18,6 +18,8 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Role
@@ -65,6 +67,13 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   # exactly the entity types the test names (its user references would otherwise point
   # at a table outside the mapping). Tests converging the store itself use
   # reconcile_context_with_grant_store/1.
+  # The indexes the database holds over Module27's channel reference, by name.
+  defp channel_indexes do
+    indexes = Introspection.schema().tables["test_fixtures_entity_module27"].indexes
+
+    Map.filter(indexes, fn {_name, index} -> index.columns == ["channel_id"] end)
+  end
+
   defp insert_module2_rows(c_values) do
     c_values
     |> Enum.with_index(1)
@@ -88,6 +97,19 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     {:ok, %{rows: rows}} = Connection.query(select_statement)
 
     rows
+  end
+
+  # Module27's mapping as it would stand if its channel reference were not unique: the plain
+  # reference index the column otherwise carries, and no unique one.
+  defp non_unique_channel_context do
+    [Module26, Module27]
+    |> reconcile_context()
+    |> update_mapping_column(Module27, "channel_id", fn column ->
+      %{column | index: "test_fixtures_entity_module27_channel_id_$idx"}
+    end)
+    |> update_mapping_indexes(Module27, fn indexes ->
+      Map.delete(indexes, "test_fixtures_entity_module27_channel_id_$uidx")
+    end)
   end
 
   defp reconcile_context(entity_types) do
@@ -514,6 +536,60 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert Introspection.schema() == Schema.from_mapping(context.mapping)
     end
 
+    test "converges a unique to-one's reference index" do
+      context = reconcile_context([Module26, Module27])
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      assert channel_indexes() == %{
+               "test_fixtures_entity_module27_channel_id_$uidx" => %{
+                 columns: ["channel_id"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             }
+    end
+
+    test "converges a to-one that becomes unique" do
+      reconcile(non_unique_channel_context())
+
+      context = reconcile_context([Module26, Module27])
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      assert channel_indexes() == %{
+               "test_fixtures_entity_module27_channel_id_$uidx" => %{
+                 columns: ["channel_id"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             }
+    end
+
+    test "converges a to-one that stops being unique" do
+      reconcile(reconcile_context([Module26, Module27]))
+
+      assert Map.keys(channel_indexes()) == ["test_fixtures_entity_module27_channel_id_$uidx"]
+
+      context = non_unique_channel_context()
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      assert channel_indexes() == %{
+               "test_fixtures_entity_module27_channel_id_$idx" => %{
+                 columns: ["channel_id"],
+                 nulls_distinct: true,
+                 unique: false
+               }
+             }
+    end
+
     test "converges a new required unique column on an empty table" do
       reconcile(reconcile_context([Module2]))
 
@@ -906,6 +982,39 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
+      end
+    end
+
+    test "raises when making a to-one unique over rows that repeat a reference" do
+      reconcile(non_unique_channel_context())
+
+      {:ok, _result} =
+        Connection.query("""
+        INSERT INTO "hologram_data"."test_fixtures_entity_module26"
+          ("id", "name", "name_$sort", "created_at", "updated_at", "$revisions")
+        VALUES ('00000000-0000-0000-0000-000000000001', 'general', NULL,
+                '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+        """)
+
+      Enum.each(1..2, fn index ->
+        {:ok, _result} =
+          Connection.query("""
+          INSERT INTO "hologram_data"."test_fixtures_entity_module27"
+            ("id", "channel_id", "code", "summary", "summary_$sort", "created_at", "updated_at",
+             "$revisions")
+          VALUES ('00000000-0000-0000-0000-00000000001#{index}',
+                  '00000000-0000-0000-0000-000000000001', NULL, 'welcome', NULL,
+                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+          """)
+      end)
+
+      expected_msg =
+        ~s{found 1 duplicate key in "test_fixtures_entity_module27" over ("channel_id") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(reconcile_context([Module26, Module27]))
       end
     end
   end

@@ -4,6 +4,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.IR
+  alias Hologram.Entity
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
@@ -247,8 +248,9 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp relationship_names(%Query{entity: entity_type}), do: relationship_names(entity_type)
 
+  # Every name an include takes, inverses included.
   defp relationship_names(entity_type) when is_atom(entity_type) do
-    Enum.map(entity_type.__relationships__(), fn {name, _target, _opts} -> name end)
+    Entity.includable_names(entity_type)
   end
 
   # A stage call the developer wrote is theirs to read, so a refusal from it is reraised carrying

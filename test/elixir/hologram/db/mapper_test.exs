@@ -11,6 +11,10 @@ defmodule Hologram.DB.MapperTest do
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Role
@@ -423,6 +427,50 @@ defmodule Hologram.DB.MapperTest do
       assert mapping[Module2].indexes == %{}
     end
 
+    test "derives a unique index over a unique to-one's reference column in place of its plain one" do
+      mapping = derive!([Module26, Module27], [])
+
+      assert mapping[Module27].indexes == %{
+               "test_fixtures_entity_module27_channel_id_$uidx" => %{
+                 columns: ["channel_id"],
+                 nulls_distinct: true,
+                 unique: true
+               },
+               "test_fixtures_entity_module27_code_$uidx" => %{
+                 columns: ["code"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             }
+
+      assert Enum.find(mapping[Module27].columns, &(&1.name == "channel_id")).index == nil
+    end
+
+    test "derives a plain index and no unique one for a to-one that is not unique" do
+      mapping = derive!([Module1, Module2, Module3], [])
+
+      assert mapping[Module3].indexes == %{}
+
+      assert Enum.find(mapping[Module3].columns, &(&1.name == "c_id")).index ==
+               "test_fixtures_entity_module3_c_id_$idx"
+    end
+
+    test "derives no column and no join table for an inverse relationship" do
+      mapping = derive!([Module26, Module27, Module28, Module29], [])
+
+      assert Enum.map(mapping[Module26].columns, & &1.source) == [
+               :system,
+               {:attribute, :name},
+               :system,
+               :system,
+               :revisions,
+               {:sort_key, :name}
+             ]
+
+      assert mapping[Module26].join_tables == []
+      assert mapping[Module29].join_tables == []
+    end
+
     test "carries a sort-key companion for every string attribute" do
       mapping = derive!([Module2], [])
 
@@ -615,6 +663,33 @@ defmodule Hologram.DB.MapperTest do
                  unique: true
                }
              }
+    end
+
+    test "derives a unique index from a term's to-one relationship options" do
+      model = %{
+        entities: %{
+          Nonexistent.Ghost => %{
+            attributes: [],
+            relationships: [{:owner, Nonexistent.Ghost, [optional: true, unique: true]}],
+            roles: []
+          }
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      mapping = derive_from_model!(model)
+
+      assert mapping[Nonexistent.Ghost].indexes == %{
+               "nonexistent_ghost_owner_id_$uidx" => %{
+                 columns: ["owner_id"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             }
+
+      assert Enum.find(mapping[Nonexistent.Ghost].columns, &(&1.name == "owner_id")).index ==
+               nil
     end
 
     test "derives without consulting any module" do

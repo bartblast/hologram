@@ -232,7 +232,11 @@ defmodule Hologram.Entity.Model do
   end
 
   defp apply_op(%{op: :add_relationship} = op, model) do
-    add_member(model, op.entity, :relationships, "relationship", {op.name, op.type, op.opts})
+    member = {op.name, op.type, op.opts}
+
+    validate_unique_relationship!(member, op.entity)
+
+    add_member(model, op.entity, :relationships, "relationship", member)
   end
 
   defp apply_op(%{op: :add_role, entity: _entity} = op, model) do
@@ -270,8 +274,11 @@ defmodule Hologram.Entity.Model do
       {name, type, opts} ->
         new_type = Keyword.get(op.changes, :type, type)
         new_opts = Keyword.merge(opts, Keyword.delete(op.changes, :type))
+        member = {name, new_type, normalize_opts(new_opts)}
 
-        {name, new_type, normalize_opts(new_opts)}
+        validate_unique_relationship!(member, op.entity)
+
+        member
     end)
   end
 
@@ -999,6 +1006,22 @@ defmodule Hologram.Entity.Model do
           "add `delete_role_grants()` above it, which empties the role grant store in " <>
           "the same migration"
   end
+
+  # The declaration refuses a unique to-many, so only a hand-written op reaches this - a unique
+  # index is over the reference a to-one stores on its row, and a to-many stores none there.
+  defp validate_unique_relationship!({name, [_target], opts}, entity_type) do
+    if Keyword.get(opts, :unique) == true do
+      raise Hologram.CompileError,
+        message:
+          "unique relationship #{inspect(name)} on #{inspect(entity_type)} is to-many at this " <>
+            "point in migration history - unique applies to a to-one relationship, and a " <>
+            "to-many holds no reference to repeat"
+    end
+
+    :ok
+  end
+
+  defp validate_unique_relationship!(_member, _entity_type), do: :ok
 
   defp validate_values_change!(op, old_type, new_type) do
     becoming_enum? = old_type != :enum and new_type == :enum

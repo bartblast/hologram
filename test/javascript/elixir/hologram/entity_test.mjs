@@ -28,6 +28,7 @@ describe("Elixir_Hologram_Entity", () => {
   const SERVER_ONLY = "Hologram.Entity.ServerOnly";
 
   const ACCOUNT = "MyApp.Account";
+  const CHANNEL = "MyApp.Channel";
   const DOC = "MyApp.Doc";
   const ITEM = "MyApp.Item";
   const EMPTY = "MyApp.Empty";
@@ -88,8 +89,8 @@ describe("Elixir_Hologram_Entity", () => {
   };
 
   // One entry per shape the mirrored cases need: a type declaring nothing, one declaring a
-  // default and an optional attribute, one declaring relationships of both cardinalities, and a
-  // job, whose three framework-owned attributes no caller may set.
+  // default and an optional attribute, one declaring relationships of both cardinalities, one
+  // declaring an inverse, and a job, whose three framework-owned attributes no caller may set.
   beforeEach(() => {
     globalThis.Hologram.sync = {
       model: {
@@ -104,6 +105,24 @@ describe("Elixir_Hologram_Entity", () => {
           defaults: {public: Type.boolean(false)},
           enumValues: {},
           frameworkAttributes: [],
+          relationships: {},
+          serverOnly: [],
+        },
+        [CHANNEL]: {
+          attributes: {...systemAttributes, name: "string"},
+          constraints: {},
+          defaults: {},
+          enumValues: {},
+          frameworkAttributes: [],
+          inverses: {
+            messages: {
+              forward: "channel",
+              reference: true,
+              sort: [],
+              toMany: true,
+              type: "MyApp.Message",
+            },
+          },
           relationships: {},
           serverOnly: [],
         },
@@ -338,6 +357,29 @@ describe("Elixir_Hologram_Entity", () => {
         () => newEntity(Type.alias("Hologram.Auth.RoleGrant")),
         "ArgumentError",
         "role grants are written only through grant_role/revoke_role",
+      );
+    });
+
+    it("leaves an inverse unasked-for and derives no reference field for it", () => {
+      const entity = newEntity(Type.alias(CHANNEL));
+
+      assert.deepEqual(
+        field(entity, "messages"),
+        Model.notIncluded("messages"),
+      );
+
+      assert.isFalse(
+        Object.values(entity.data).some(([key]) => key.value === "messages_id"),
+      );
+    });
+
+    it("raises on an assigned inverse value", () => {
+      const values = Type.map([[Type.atom("messages"), Type.list([])]]);
+
+      assertBoxedError(
+        () => newEntityWithValues(Type.alias(CHANNEL), values),
+        "ArgumentError",
+        `relationship :messages of ${CHANNEL} cannot be assigned at construction - it is an inverse that reads the channel_id reference of MyApp.Message, so write that instead`,
       );
     });
 

@@ -8,6 +8,10 @@ defmodule Hologram.Sync.WireDataTest do
   alias Hologram.Entity.ServerOnly
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
 
@@ -229,6 +233,27 @@ defmodule Hologram.Sync.WireDataTest do
       wire = row(entity)
 
       assert Map.fetch(wire, :a) == {:ok, []}
+    end
+
+    test "writes nothing for an included inverse of a to-one, a set or a single row" do
+      message = struct(Module28, %{body: "hi", id: @target_id, position: 1})
+      topic = struct(Module27, %{id: @target_id, summary: "welcome"})
+
+      wire =
+        row(
+          struct(Module26, %{id: @entity_id, messages: [message], name: "general", topic: topic})
+        )
+
+      refute Map.has_key?(wire, :messages)
+      refute Map.has_key?(wire, :topic)
+    end
+
+    test "writes an included inverse of a to-many as the ids of the rows it holds" do
+      message = struct(Module28, %{body: "hi", id: @target_id, position: 1})
+
+      wire = row(struct(Module29, %{id: @entity_id, messages: [message], name: "urgent"}))
+
+      assert wire.messages == [@target_id]
     end
 
     test "writes the row's revisions and nothing else of its metadata" do
