@@ -17,6 +17,8 @@ import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
 import Debouncer from "../../assets/js/debouncer.mjs";
+import Deserializer from "../../assets/js/deserializer.mjs";
+import ERTS from "../../assets/js/erts.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
@@ -5151,6 +5153,104 @@ describe("Hologram", () => {
       );
 
       assert.equal(ScriptRegistry.statuses.get("AAAAAAAA"), "failed");
+    });
+  });
+
+  // jsdom has no OPFS, so the tables go through session storage.
+  describe("restoreEts()", () => {
+    const tables = {my_table: Type.atom("my_value")};
+
+    const store = (record) =>
+      sessionStorage.setItem(
+        "hologram_ets",
+        Serializer.serialize(record, "client"),
+      );
+
+    beforeEach(() => {
+      IdentityTracker.init("tag-1");
+      ERTS.ets = {};
+    });
+
+    afterEach(() => {
+      clearIdentityTracker();
+      ERTS.ets = {};
+      sessionStorage.clear();
+    });
+
+    it("takes in tables stored for the identity the document was rendered for", async () => {
+      store({identityTag: "tag-1", tables: tables});
+
+      await Hologram.restoreEts();
+
+      assert.deepStrictEqual(ERTS.ets, tables);
+    });
+
+    // They can hold another user's data.
+    it("leaves the tables empty when they were stored for another identity", async () => {
+      store({identityTag: "tag-2", tables: tables});
+
+      await Hologram.restoreEts();
+
+      assert.deepStrictEqual(ERTS.ets, {});
+    });
+
+    // Stored after the identity changed under them, so they can hold what two identities put in
+    // them.
+    it("leaves the tables empty when they were stored with no identity tag", async () => {
+      store({identityTag: null, tables: tables});
+
+      await Hologram.restoreEts();
+
+      assert.deepStrictEqual(ERTS.ets, {});
+    });
+
+    it("leaves the tables empty when they were stored before stored tables were tagged", async () => {
+      store(tables);
+
+      await Hologram.restoreEts();
+
+      assert.deepStrictEqual(ERTS.ets, {});
+    });
+  });
+
+  // jsdom has no OPFS, so the tables go through session storage.
+  describe("saveEts()", () => {
+    const tables = {my_table: Type.atom("my_value")};
+
+    const storedRecord = () =>
+      Deserializer.deserialize(sessionStorage.getItem("hologram_ets"));
+
+    let consoleErrorStub;
+
+    beforeEach(() => {
+      IdentityTracker.init("tag-1");
+      ERTS.ets = tables;
+      consoleErrorStub = sinon.stub(console, "error");
+    });
+
+    afterEach(() => {
+      consoleErrorStub.restore();
+      clearIdentityTracker();
+      ERTS.ets = {};
+      sessionStorage.clear();
+    });
+
+    it("stamps the tables with the identity the document was rendered for", async () => {
+      await Hologram.saveEts();
+
+      const record = storedRecord();
+
+      assert.equal(record.identityTag, "tag-1");
+      assert.deepStrictEqual(record.tables, tables);
+    });
+
+    // The tables live for the whole document, so they can hold what both identities put in them.
+    it("stamps the tables with no identity tag when the identity changed since the document was loaded", async () => {
+      IdentityTracker.observe("tag-2");
+
+      await Hologram.saveEts();
+
+      assert.isNull(storedRecord().identityTag);
     });
   });
 

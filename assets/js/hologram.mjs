@@ -800,6 +800,40 @@ export default class Hologram {
     );
   }
 
+  // Made public to make tests easier
+  //
+  // Takes in the client ETS tables a document stored on leaving, when they were stored for the
+  // identity this document was rendered for (see #adoptStoredEts).
+  static async restoreEts() {
+    const storageKey = $.#ETS_STORAGE_KEY;
+
+    // Try OPFS first
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(storageKey, {create: false});
+      const file = await fileHandle.getFile();
+      const serialized = await file.text();
+      $.#adoptStoredEts(Deserializer.deserialize(serialized));
+      return;
+    } catch {
+      // Fall through to session storage
+    }
+
+    // Fallback to session storage if OPFS fails
+    const serialized = sessionStorage.getItem(storageKey);
+
+    if (serialized) {
+      try {
+        $.#adoptStoredEts(Deserializer.deserialize(serialized));
+      } catch (error) {
+        console.error("Failed to restore ETS from session storage:", error);
+        ERTS.ets = {}; // Reset to empty on deserialization failure
+      }
+    } else {
+      // No stored state found, keep current (likely empty) state
+    }
+  }
+
   static run() {
     Hologram.#onReady(async () => {
       if (!Hologram.#isInitiated) {
@@ -837,6 +871,45 @@ export default class Hologram {
 
       Hologram.#mountWhenReady(false);
     });
+  }
+
+  // Made public to make tests easier
+  //
+  // Stores the client ETS tables for the next document. They live for the whole document and can
+  // hold what any identity it was in put in them, so they are stamped with the document's
+  // identity only while its first period lasts (see IdentityTracker.tagFor).
+  static async saveEts() {
+    const storageKey = $.#ETS_STORAGE_KEY;
+
+    const serializedEts = Serializer.serialize(
+      {
+        identityTag: IdentityTracker.tagFor(IdentityTracker.documentPeriod),
+        tables: ERTS.ets,
+      },
+      "client",
+    );
+
+    // Save to session storage first (guaranteed to complete synchronously)
+    try {
+      sessionStorage.setItem(storageKey, serializedEts);
+    } catch (error) {
+      console.error("Failed to save ETS to session storage:", error);
+    }
+
+    // Then try OPFS (async, may not complete before page unload on beforeunload)
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(storageKey, {create: true});
+      const writable = await fileHandle.createWritable();
+      await writable.write(serializedEts);
+      await writable.close();
+
+      // Successfully saved to OPFS, clear session storage
+      sessionStorage.removeItem(storageKey);
+    } catch (opfsError) {
+      console.error("Failed to save ETS to OPFS:", opfsError);
+      // Session storage still has the data as fallback
+    }
   }
 
   // Runs the action once its delay has elapsed. The timer's callback is a new task, so the browser
@@ -893,6 +966,16 @@ export default class Hologram {
         );
       },
     );
+  }
+
+  // Takes in the tables a document stored, when they were stored for the identity this document
+  // was rendered for. Tables stored for another identity can hold another user's data, and ones
+  // stored with no tag - before stored tables were tagged, or after the identity changed under
+  // them - can hold anyone's: the tables are left as they are then, which at boot is empty.
+  static #adoptStoredEts(storedEts) {
+    if (IdentityTracker.isCurrentTag(storedEts?.identityTag)) {
+      ERTS.ets = storedEts.tables;
+    }
   }
 
   static #buildPagePath(toParam) {
@@ -1558,7 +1641,7 @@ export default class Hologram {
       // Force synchronous session storage save since async OPFS may not complete before page termination
       Hologram.#savePageSnapshot(true);
 
-      Hologram.#saveEts();
+      Hologram.saveEts();
     });
 
     window.addEventListener("popstate", Hologram.handlePopstateEvent);
@@ -1610,7 +1693,7 @@ export default class Hologram {
       history.replaceState($.historyId, null);
     }
 
-    await $.#restoreEts();
+    await $.restoreEts();
 
     App.maybeLoadInstanceId();
     Client.connect(false);
@@ -2233,36 +2316,6 @@ export default class Hologram {
     );
   }
 
-  static async #restoreEts() {
-    const storageKey = $.#ETS_STORAGE_KEY;
-
-    // Try OPFS first
-    try {
-      const root = await navigator.storage.getDirectory();
-      const fileHandle = await root.getFileHandle(storageKey, {create: false});
-      const file = await fileHandle.getFile();
-      const serialized = await file.text();
-      ERTS.ets = Deserializer.deserialize(serialized);
-      return;
-    } catch {
-      // Fall through to session storage
-    }
-
-    // Fallback to session storage if OPFS fails
-    const serialized = sessionStorage.getItem(storageKey);
-
-    if (serialized) {
-      try {
-        ERTS.ets = Deserializer.deserialize(serialized);
-      } catch (error) {
-        console.error("Failed to restore ETS from session storage:", error);
-        ERTS.ets = {}; // Reset to empty on deserialization failure
-      }
-    } else {
-      // No stored state found, keep current (likely empty) state
-    }
-  }
-
   // The identity period is the one the restored state answers for, which the page keeps.
   static #restorePageSnapshot(pageSnapshot, identityPeriod) {
     const {
@@ -2406,33 +2459,6 @@ export default class Hologram {
     const path = globalThis.Hologram.assetManifest?.["hologram/runtime.js"];
 
     return path?.match(/-([^-]+)\.js$/)?.[1] ?? null;
-  }
-
-  static async #saveEts() {
-    const storageKey = $.#ETS_STORAGE_KEY;
-    const serializedEts = Serializer.serialize(ERTS.ets, "client");
-
-    // Save to session storage first (guaranteed to complete synchronously)
-    try {
-      sessionStorage.setItem(storageKey, serializedEts);
-    } catch (error) {
-      console.error("Failed to save ETS to session storage:", error);
-    }
-
-    // Then try OPFS (async, may not complete before page unload on beforeunload)
-    try {
-      const root = await navigator.storage.getDirectory();
-      const fileHandle = await root.getFileHandle(storageKey, {create: true});
-      const writable = await fileHandle.createWritable();
-      await writable.write(serializedEts);
-      await writable.close();
-
-      // Successfully saved to OPFS, clear session storage
-      sessionStorage.removeItem(storageKey);
-    } catch (opfsError) {
-      console.error("Failed to save ETS to OPFS:", opfsError);
-      // Session storage still has the data as fallback
-    }
   }
 
   static async #savePageSnapshot(forceSync = false) {
