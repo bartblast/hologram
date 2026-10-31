@@ -17,6 +17,7 @@ defmodule Hologram.Sync.DiffTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
@@ -617,6 +618,44 @@ defmodule Hologram.Sync.DiffTest do
       deltas = deltas(result([label]), MapSet.new([label.id]), nil, events)
 
       assert deltas.edges == []
+    end
+
+    # The type declares the inverse of its own to-many, so one type takes both sides of the edge:
+    # the fan's follows and the followed row's followers.
+    test "reports an edge of the type's own to-many on both of its sides" do
+      fan =
+        %{body: "fan"}
+        |> Module30.new()
+        |> DB.create!()
+
+      followed =
+        %{body: "followed"}
+        |> Module30.new()
+        |> DB.create!()
+
+      data = %{"relationship" => "follows", "target_id" => followed.id}
+      events = [{200, [%{op: :add_relationship, type: Module30, entity_id: fan.id, data: data}]}]
+
+      rows = [%{fan | follows: [followed]}, %{followed | followers: [fan]}]
+
+      deltas = deltas(result(rows), MapSet.new([fan.id, followed.id]), nil, events)
+
+      assert Enum.sort_by(deltas.edges, & &1.relationship) == [
+               %{
+                 entity_id: followed.id,
+                 op: :add_relationship,
+                 relationship: "followers",
+                 target_id: fan.id,
+                 type: Module30
+               },
+               %{
+                 entity_id: fan.id,
+                 op: :add_relationship,
+                 relationship: "follows",
+                 target_id: followed.id,
+                 type: Module30
+               }
+             ]
     end
 
     test "reports the edge on every inverse of the relationship the target declares" do

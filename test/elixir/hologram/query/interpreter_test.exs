@@ -26,6 +26,7 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
 
@@ -43,6 +44,7 @@ defmodule Hologram.Query.InterpreterTest do
     Module28,
     Module29,
     Module3,
+    Module30,
     Module4,
     Module5
   ]
@@ -1411,6 +1413,43 @@ defmodule Hologram.Query.InterpreterTest do
       assert [row] == QueryRunner.run_policied(term, @mapping, nil)
       assert bodies(row.messages) == ["shown"]
       assert row.topic == nil
+    end
+  end
+
+  # An inverse of the type's own relationship reads the type's own rows on both sides - the table
+  # it reads from is the one the query is on, and the join table holds the type at both ends.
+  describe "run/3 - self-referencing inverses" do
+    test "fills an inverse of a to-one of the type's own with the rows naming the row" do
+      parent = created(Module30, body: "parent")
+      created(Module30, body: "second reply", parent_id: parent.id)
+      created(Module30, body: "first reply", parent_id: parent.id)
+
+      rows = agreed(include(Module30, replies))
+
+      assert Map.new(rows, &{&1.body, bodies(&1.replies)}) == %{
+               "first reply" => [],
+               "parent" => ["first reply", "second reply"],
+               "second reply" => []
+             }
+    end
+
+    # Reading the join table the wrong way round would hand the followed row its follows.
+    test "fills an inverse of a to-many of the type's own with the rows whose pairs name the row" do
+      followed = created(Module30, body: "followed")
+      fan = created(Module30, body: "fan")
+      other_fan = created(Module30, body: "other fan")
+
+      :ok = add_relationship(Module30, fan.id, :follows, followed.id)
+      :ok = add_relationship(Module30, other_fan.id, :follows, followed.id)
+      :ok = add_relationship(Module30, followed.id, :follows, fan.id)
+
+      rows = agreed(include(Module30, followers))
+
+      assert Map.new(rows, &{&1.body, matched_bodies(&1.followers)}) == %{
+               "fan" => ["followed"],
+               "followed" => ["fan", "other fan"],
+               "other fan" => []
+             }
     end
   end
 

@@ -20,6 +20,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
@@ -486,6 +487,26 @@ defmodule Hologram.EntityTest do
              }
     end
 
+    test "describes an inverse set of a to-one of the type's own" do
+      assert inverse_relationship(Module30, :replies) == %{
+               forward: :parent,
+               reference?: true,
+               sort: :body,
+               target: Module30,
+               to_many?: true
+             }
+    end
+
+    test "describes an inverse set of a to-many of the type's own" do
+      assert inverse_relationship(Module30, :followers) == %{
+               forward: :follows,
+               reference?: false,
+               sort: [],
+               target: Module30,
+               to_many?: true
+             }
+    end
+
     test "returns nil for a stored relationship" do
       assert inverse_relationship(Module28, :channel) == nil
     end
@@ -494,6 +515,10 @@ defmodule Hologram.EntityTest do
   describe "inverses_of_to_many/3" do
     test "returns the inverses reversing the given to-many" do
       assert inverses_of_to_many(Module29, Module28, "labels") == [:messages]
+    end
+
+    test "returns the inverses reversing a to-many of the type's own" do
+      assert inverses_of_to_many(Module30, Module30, "follows") == [:followers]
     end
 
     test "returns nothing for a to-many of another type" do

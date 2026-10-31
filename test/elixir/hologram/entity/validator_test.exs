@@ -12,6 +12,7 @@ defmodule Hologram.Entity.ValidatorTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module4
 
   # Where a declaration on the given line of this file is, as a whole-model refusal spells it.
@@ -1766,6 +1767,10 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       assert validate_model!([InlineEntityFixture127]) == :ok
+    end
+
+    test "returns :ok for self-referencing inverses of a to-one and of a to-many" do
+      assert validate_model!([Module30]) == :ok
     end
 
     test "returns :ok for an inverse set of a unique to-one" do

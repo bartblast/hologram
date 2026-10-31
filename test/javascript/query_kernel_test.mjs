@@ -1181,6 +1181,143 @@ describe("QueryKernel", () => {
     });
   });
 
+  // Mirrors the interpreter's "run/3 - self-referencing inverses" describe, then the case only a
+  // client has: a write it has not sent yet, folded into the side of the edge it names.
+  describe("run() - self-referencing inverses", () => {
+    const POST = "MyApp.Post";
+
+    const node = (include = {}, sort = [["id", "asc"]]) => ({
+      cardinality: "set",
+      entity: POST,
+      filter: [],
+      include,
+      skip: null,
+      sort,
+      take: null,
+    });
+
+    const byBody = (nodes, name) =>
+      Object.fromEntries(
+        nodes.map((each) => [
+          each.row.body,
+          each.includes[name].map((included) => included.row.body),
+        ]),
+      );
+
+    const post = (id, body, parentId = null) =>
+      LocalDatabase.putRow(POST, {body, id, parent_id: parentId});
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [POST]: {
+            attributes: {body: "string", id: "uuid"},
+            enumValues: {},
+            inverses: {
+              followers: {
+                forward: "follows",
+                reference: false,
+                sort: [],
+                toMany: true,
+                type: POST,
+              },
+              replies: {
+                forward: "parent",
+                reference: true,
+                sort: [["body", "asc"]],
+                toMany: true,
+                type: POST,
+              },
+            },
+            relationships: {
+              follows: {toMany: true, type: POST},
+              parent: {optional: true, toMany: false, type: POST},
+            },
+            serverOnly: [],
+          },
+        },
+      };
+
+      LocalDatabase.reset();
+      Model.reset();
+      Overlay.reset();
+    });
+
+    afterEach(() => {
+      Overlay.reset();
+    });
+
+    it("fills an inverse of a to-one of the type's own with the rows naming the row", () => {
+      post("p1", "parent");
+      post("p2", "second reply", "p1");
+      post("p3", "first reply", "p1");
+
+      const replies = node({}, [
+        ["body", "asc"],
+        ["id", "asc"],
+      ]);
+
+      const nodes = QueryKernel.run(node({replies}));
+
+      assert.deepEqual(byBody(nodes, "replies"), {
+        "first reply": [],
+        parent: ["first reply", "second reply"],
+        "second reply": [],
+      });
+    });
+
+    it("fills an inverse of a to-many of the type's own with the rows its ids name", () => {
+      post("p1", "followed");
+      post("p2", "fan");
+      post("p3", "other fan");
+      LocalDatabase.replaceFacts(POST, "followers", "p1", ["p2", "p3"]);
+      LocalDatabase.replaceFacts(POST, "followers", "p2", ["p1"]);
+      LocalDatabase.replaceFacts(POST, "followers", "p3", []);
+
+      const nodes = QueryKernel.run(node({followers: node()}));
+
+      assert.deepEqual(byBody(nodes, "followers"), {
+        fan: ["followed"],
+        followed: ["fan", "other fan"],
+        "other fan": [],
+      });
+    });
+
+    // The write names the fan's follows, so only the followed row gains a follower from it.
+    it("folds a pending edge of the type's own to-many into the side it names", () => {
+      post("p1", "followed");
+      post("p2", "fan");
+      LocalDatabase.replaceFacts(POST, "follows", "p1", []);
+      LocalDatabase.replaceFacts(POST, "follows", "p2", []);
+      LocalDatabase.replaceFacts(POST, "followers", "p1", []);
+      LocalDatabase.replaceFacts(POST, "followers", "p2", []);
+
+      const batch = new Batch("posts");
+
+      batch.append({
+        id: "p2",
+        op: "add_relationship",
+        relationship: "follows",
+        target_id: "p1",
+        type: POST,
+      });
+
+      Overlay.push(batch);
+
+      const nodes = QueryKernel.run(node({followers: node(), follows: node()}));
+
+      assert.deepEqual(byBody(nodes, "followers"), {
+        fan: [],
+        followed: ["fan"],
+      });
+
+      assert.deepEqual(byBody(nodes, "follows"), {
+        fan: ["followed"],
+        followed: [],
+      });
+    });
+  });
+
   // Mirrors the interpreter's "run/3 - comparing attributes" describe case for case.
   describe("matches() - comparing attributes", () => {
     const BOOKING = "MyApp.Booking";
