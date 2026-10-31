@@ -21,17 +21,20 @@ defmodule Hologram.Sync.Catchup do
   alias Hologram.Auth
   alias Hologram.Auth.RoleGrant
   alias Hologram.DB.Oplog
+  alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Frame
 
   # The most effects a replay will carry, and past it the client is sent everything instead.
   #
-  # A COUNT is an honest bound here only because the history read leaves the payload behind: an
-  # effect it returns is 31 words whatever the row was, where one carrying `data` runs from 33 for
-  # a delete to 337 for a wide entity's put - a tenfold spread a count cannot see. The connection
-  # process reads the gap and is killed at a million words, so 5,000 of them is 1.2 MB against a
-  # 7 MB cap, a sixth of it, and that fraction does not move with what the app stores.
+  # A COUNT is an honest bound here only because the history read leaves a row's payload behind:
+  # an effect it returns is 33 words whatever the row was, where one carrying the row's `data` runs
+  # from 33 for a delete to 337 for a wide entity's put - a tenfold spread a count cannot see. An
+  # edge keeps its payload, a relationship name and an id, at about 60 words whatever the entity.
+  # The connection process reads the gap and is killed at a million words, so 5,000 of them is
+  # 1.3 MB against a 7 MB cap, under a fifth of it, and a third were every one an edge - neither
+  # fraction moves with what the app stores.
   #
   # The economics set the ceiling rather than the memory does, which is why the number is thousands
   # and not tens of thousands: a replay re-reads every row it names, so by a few thousand touched
@@ -44,6 +47,10 @@ defmodule Hologram.Sync.Catchup do
   # narrow ones is kilobytes, which is why this is smaller than the gap limit by an order of
   # magnitude rather than equal to it. Policy: it trades frames-per-fill against bytes-per-frame,
   # and neither end is dangerous.
+  #
+  # A replay frame is cut by the effects it answers rather than by rows, since each claims the
+  # place of its last effect - so one can carry up to twice this, every effect an edge whose target
+  # is handed over beside the row it names.
   @default_rows_per_frame 500
 
   @doc """
@@ -80,15 +87,30 @@ defmodule Hologram.Sync.Catchup do
   A row touched many times while the client was away is spoken of once - it has one current state,
   however many times it got there.
 
+  An edge moves its target's side too when the target's type declares an inverse of the
+  relationship - a label's messages hold the message that gained the label. So the target is handed
+  over whole as well, when the pot holds it. One it does not hold is a row the client does not
+  hold, and there is nothing to say about it.
+
   Nothing is said about a type this build has never compiled: a peer running a newer model can
   write names this build has never heard of, and a client of this build has nowhere to put them.
   """
   @spec deltas(list(map), map) :: list(map)
   def deltas(effects, pot) do
-    effects
-    |> Enum.filter(&is_atom(&1.type))
-    |> Enum.uniq_by(& &1.entity_id)
+    known = Enum.filter(effects, &is_atom(&1.type))
+
+    named = Enum.uniq_by(known, & &1.entity_id)
+    named_ids = MapSet.new(named, & &1.entity_id)
+
+    targets =
+      known
+      |> Enum.flat_map(&inverse_target(&1, pot))
+      |> Enum.uniq_by(& &1.id)
+      |> Enum.reject(&MapSet.member?(named_ids, &1.id))
+
+    named
     |> Enum.map(&delta(&1, pot))
+    |> Enum.concat(Enum.map(targets, &Frame.put_entity/1))
   end
 
   @doc """
@@ -186,6 +208,19 @@ defmodule Hologram.Sync.Catchup do
       :error -> Frame.unsync_entity(effect.entity_id, effect.type)
     end
   end
+
+  defp inverse_target(%{op: op, data: data, type: type}, pot)
+       when op in [:add_relationship, :del_relationship] do
+    with %{"relationship" => forward_name, "target_id" => target_id} <- data,
+         {:ok, target} <- Map.fetch(pot, target_id),
+         [_name | _more] <- Entity.inverses_of_to_many(target.__struct__, type, forward_name) do
+      [target]
+    else
+      _nothing_to_say -> []
+    end
+  end
+
+  defp inverse_target(_effect, _pot), do: []
 
   defp decode_place(cursor) do
     case Cursor.decode(cursor) do

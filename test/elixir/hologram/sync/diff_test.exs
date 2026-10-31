@@ -534,6 +534,129 @@ defmodule Hologram.Sync.DiffTest do
     end
   end
 
+  describe "deltas/4 - edges of inverses" do
+    setup do
+      message =
+        %{body: "tagged", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      %{label: label, message: message}
+    end
+
+    defp label_events(op, message_id, label_id) do
+      data = %{"relationship" => "labels", "target_id" => label_id}
+
+      [{200, [%{op: op, type: Module28, entity_id: message_id, data: data}]}]
+    end
+
+    test "reports an edge a row gained on the inverse of its target", %{
+      label: label,
+      message: message
+    } do
+      events = label_events(:add_relationship, message.id, label.id)
+      held = MapSet.new([label.id, message.id])
+
+      deltas = deltas(result([%{label | messages: [message]}]), held, nil, events)
+
+      assert deltas.edges == [
+               %{
+                 entity_id: label.id,
+                 op: :add_relationship,
+                 relationship: "messages",
+                 target_id: message.id,
+                 type: Module29
+               }
+             ]
+    end
+
+    test "reports an edge a row lost on the inverse of its target", %{
+      label: label,
+      message: message
+    } do
+      events = label_events(:del_relationship, message.id, label.id)
+
+      deltas = deltas(result([%{label | messages: []}]), MapSet.new([label.id]), nil, events)
+
+      assert deltas.edges == [
+               %{
+                 entity_id: label.id,
+                 op: :del_relationship,
+                 relationship: "messages",
+                 target_id: message.id,
+                 type: Module29
+               }
+             ]
+    end
+
+    test "withholds an added edge naming a row the client may not read", %{label: label} do
+      hidden =
+        %{body: "hidden", position: 2}
+        |> Module28.new()
+        |> DB.create!()
+
+      events = label_events(:add_relationship, hidden.id, label.id)
+
+      deltas =
+        deltas(result([%{label | messages: [hidden]}]), MapSet.new([label.id]), nil, events)
+
+      assert deltas.edges == []
+    end
+
+    test "reports nothing for a target whose inverse the window does not include", %{
+      label: label,
+      message: message
+    } do
+      events = label_events(:add_relationship, message.id, label.id)
+
+      deltas = deltas(result([label]), MapSet.new([label.id]), nil, events)
+
+      assert deltas.edges == []
+    end
+
+    test "reports the edge on every inverse of the relationship the target declares" do
+      defmodule ItemEntityFixture do
+        use Hologram.Entity
+
+        alias Hologram.Sync.DiffTest.TagEntityFixture
+
+        relationship :tags, [TagEntityFixture]
+
+        allow :read
+      end
+
+      defmodule TagEntityFixture do
+        use Hologram.Entity
+
+        alias Hologram.Sync.DiffTest.ItemEntityFixture
+
+        relationship :items, [ItemEntityFixture], inverse: tags
+        relationship :tagged, [ItemEntityFixture], inverse: tags
+
+        allow :read
+      end
+
+      item = ItemEntityFixture.new()
+      tag = TagEntityFixture.new()
+      data = %{"relationship" => "tags", "target_id" => tag.id}
+
+      events = [
+        {200, [%{op: :add_relationship, type: ItemEntityFixture, entity_id: item.id, data: data}]}
+      ]
+
+      rows = [%{tag | items: [item], tagged: [item]}]
+
+      deltas = deltas(result(rows), MapSet.new([tag.id, item.id]), nil, events)
+
+      assert Enum.map(deltas.edges, & &1.relationship) == ["items", "tagged"]
+    end
+  end
+
   describe "deltas/4 - vanished" do
     test "returns an id the round no longer holds" do
       task = row("first")

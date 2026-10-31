@@ -41,6 +41,10 @@ defmodule Hologram.Sync.Diff do
   what the round makes visible. Each carries the type of the row the relationship lives on, which
   is what names it on the wire.
 
+  An edge of a to-many is also reported from its target's side, for a target whose type declares
+  an inverse of that relationship and whose set the window embeds - the set a client files under
+  the target, which nothing else would tell it moved. It is read and withheld the same way.
+
   Vanishing is reported per window. Whether the client is told to drop the row depends on the
   rest of what it holds, which only the session knows.
   """
@@ -278,7 +282,7 @@ defmodule Hologram.Sync.Diff do
     transactions
     |> Enum.flat_map(fn {_tx, events} -> events end)
     |> Enum.filter(&(&1.op in [:add_relationship, :del_relationship]))
-    |> Enum.flat_map(&edge(&1, visible))
+    |> Enum.flat_map(&(edge(&1, visible) ++ reverse_edges(&1, visible)))
     |> Enum.reject(&hidden_target?(&1, visible_ids))
     |> Enum.uniq()
   end
@@ -363,6 +367,37 @@ defmodule Hologram.Sync.Diff do
     edges
     |> Map.get({row.__struct__, :read}, [])
     |> Enum.any?(&edge_reaches?(&1, row, named_types, moved))
+  end
+
+  defp reverse_edge(row, name, source_id) do
+    case Map.fetch!(row, name) do
+      sources when is_list(sources) ->
+        [
+          %{
+            entity_id: row.id,
+            op: edge_op(sources, source_id),
+            relationship: Atom.to_string(name),
+            target_id: source_id,
+            type: row.__struct__
+          }
+        ]
+
+      %NotIncluded{} ->
+        []
+    end
+  end
+
+  # The same edge read from its target's side: a target whose type files an inverse of the
+  # relationship gets the edge in that set, read the same way from what the round holds there.
+  defp reverse_edges(event, visible) do
+    with %{"relationship" => forward_name, "target_id" => target_id} <- event.data,
+         %{} = row <- Map.get(visible, target_id) do
+      row.__struct__
+      |> Entity.inverses_of_to_many(event.type, forward_name)
+      |> Enum.flat_map(&reverse_edge(row, &1, event.entity_id))
+    else
+      _no_edge_to_report -> []
+    end
   end
 
   # An effect that recorded no revisions - a delete, a relationship edge - says nothing about which

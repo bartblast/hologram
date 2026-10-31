@@ -19,12 +19,25 @@ defmodule Hologram.Sync.CatchupTest do
   alias Hologram.Sync.WireData
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
+  alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+  @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
 
   defp effect(entity_type, entity_id) do
     %{entity_id: entity_id, op: :patch_entity, type: entity_type}
+  end
+
+  defp edge_effect(op, entity_type, entity_id, relationship, target_id) do
+    %{
+      data: %{"relationship" => relationship, "target_id" => target_id},
+      entity_id: entity_id,
+      op: op,
+      type: entity_type
+    }
   end
 
   defp places do
@@ -140,6 +153,72 @@ defmodule Hologram.Sync.CatchupTest do
 
       assert [%{data: data, op: :put_entity}] = deltas(effects, %{@entity_id => row})
       assert data.c == "moved three times"
+    end
+
+    # The label's messages hold the message that gained the label, so the label is handed over too,
+    # with the list as it now stands.
+    test "hands over the target of an edge whose type declares an inverse of it" do
+      message = %Module28{body: "tagged", id: @entity_id}
+      label = %Module29{id: @target_id, messages: [message], name: "urgent"}
+      effects = [edge_effect(:add_relationship, Module28, @entity_id, "labels", @target_id)]
+
+      assert [%{id: @entity_id, op: :put_entity}, %{data: data, id: @target_id, op: :put_entity}] =
+               deltas(effects, %{@entity_id => message, @target_id => label})
+
+      assert data.messages == [@entity_id]
+    end
+
+    test "hands over the target of several edges once" do
+      label = %Module29{id: @target_id, messages: [], name: "urgent"}
+      other_id = "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e11"
+
+      effects = [
+        edge_effect(:del_relationship, Module28, @entity_id, "labels", @target_id),
+        edge_effect(:del_relationship, Module28, other_id, "labels", @target_id)
+      ]
+
+      targets =
+        effects
+        |> deltas(%{@target_id => label})
+        |> Enum.filter(&(&1.id == @target_id))
+
+      assert length(targets) == 1
+    end
+
+    test "hands over the target of an edge the gap names as well once" do
+      label = %Module29{id: @target_id, messages: [], name: "renamed"}
+
+      effects = [
+        effect(Module29, @target_id),
+        edge_effect(:del_relationship, Module28, @entity_id, "labels", @target_id)
+      ]
+
+      targets =
+        effects
+        |> deltas(%{@target_id => label})
+        |> Enum.filter(&(&1.id == @target_id))
+
+      assert length(targets) == 1
+    end
+
+    test "says nothing about the target of an edge the client does not hold" do
+      message = %Module28{body: "tagged", id: @entity_id}
+      effects = [edge_effect(:add_relationship, Module28, @entity_id, "labels", @target_id)]
+
+      assert [%{id: @entity_id, op: :put_entity}] = deltas(effects, %{@entity_id => message})
+    end
+
+    test "says nothing more about the target of an edge whose type declares no inverse of it" do
+      target = %Module2{a: true, c: "a target", id: @target_id}
+      effects = [edge_effect(:add_relationship, Module3, @entity_id, "a", @target_id)]
+
+      assert deltas(effects, %{@target_id => target}) == [
+               %{
+                 id: @entity_id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module3"
+               }
+             ]
     end
 
     test "says nothing about a type this build has never compiled" do

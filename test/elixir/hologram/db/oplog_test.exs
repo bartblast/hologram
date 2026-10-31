@@ -195,11 +195,24 @@ defmodule Hologram.DB.OplogTest do
       seed(200, "patch_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{"c" => "x"})
 
       assert [event] = read_after(0, 0, 10)
-      refute Map.has_key?(event, :data)
+      assert event.data == nil
 
       # The windowed read, which diffs against values, still carries it.
       assert [{200, [windowed]}] = read_window(200, 201)
       assert windowed.data == %{"c" => "x"}
+    end
+
+    # An edge names a second row that moved - its target - in two short strings whatever the
+    # entity, so its payload stays without making the size vary.
+    test "returns the payload of an edge" do
+      data = %{"relationship" => "a", "target_id" => @target_id}
+
+      seed(200, "add_relationship", "Hologram.Test.Fixtures.Entity.Module3", @entity_id, data)
+      seed(200, "del_relationship", "Hologram.Test.Fixtures.Entity.Module3", @entity_id, data)
+
+      assert [added, removed] = read_after(0, 0, 10)
+      assert added.data == data
+      assert removed.data == data
     end
 
     # Not a page - nothing resumes from where this stopped. It is what keeps a reader from pulling

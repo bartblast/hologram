@@ -455,6 +455,21 @@ defmodule Hologram.Entity do
     end
   end
 
+  # The inverses of the entity type reversing the given to-many of another type - the sets a client
+  # files under this type's rows that an edge of that relationship moves. The relationship comes
+  # by name as an effect spells it, so a name this node never compiled matches nothing.
+  @doc false
+  @spec inverses_of_to_many(module, module, String.t()) :: list(atom)
+  def inverses_of_to_many(entity_type, forward_type, forward_name) do
+    entity_type.__inverse_relationships__()
+    |> Enum.map(fn {name, _type, _opts} -> {name, inverse_relationship(entity_type, name)} end)
+    |> Enum.filter(fn {_name, inverse} ->
+      not inverse.reference? and inverse.target == forward_type and
+        Atom.to_string(inverse.forward) == forward_name
+    end)
+    |> Enum.map(fn {name, _inverse} -> name end)
+  end
+
   # One row read twice - at the root and as another row's embed, or by two queries of one render -
   # arrives as two copies whose includes differ. The kept copy keeps its values and takes every
   # relationship it did not include from the other one, so whichever copy is met first, the row

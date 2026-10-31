@@ -491,6 +491,52 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "inverses_of_to_many/3" do
+    test "returns the inverses reversing the given to-many" do
+      assert inverses_of_to_many(Module29, Module28, "labels") == [:messages]
+    end
+
+    test "returns nothing for a to-many of another type" do
+      assert inverses_of_to_many(Module29, Module3, "labels") == []
+    end
+
+    test "returns nothing for a name the type declares no to-many under" do
+      assert inverses_of_to_many(Module29, Module28, "tags") == []
+    end
+
+    test "returns nothing for an inverse of a to-one" do
+      assert inverses_of_to_many(Module26, Module28, "channel") == []
+    end
+  end
+
+  describe "merge_copies/2" do
+    test "takes a relationship the kept copy did not include from the other copy" do
+      message = Module28.new(body: "hi", position: 1)
+      label = Module29.new(name: "urgent")
+
+      merged = merge_copies(label, %{label | messages: [message]})
+
+      assert merged.messages == [message]
+    end
+
+    test "keeps a relationship the kept copy included" do
+      message = Module28.new(body: "hi", position: 1)
+      label = Module29.new(name: "urgent")
+
+      merged = merge_copies(%{label | messages: []}, %{label | messages: [message]})
+
+      assert merged.messages == []
+    end
+
+    test "keeps the kept copy's values" do
+      label = Module29.new(name: "urgent")
+
+      merged = merge_copies(label, %{label | name: "renamed"})
+
+      assert merged.name == "urgent"
+    end
+  end
+
   describe "new/1" do
     test "builds the struct the engine builds for the type" do
       entity = Module2.new(c: "text_4")

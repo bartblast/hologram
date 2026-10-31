@@ -142,19 +142,23 @@ defmodule Hologram.DB.Oplog do
   from pulling an unbounded tail into memory, and a caller that gets `limit` rows back should treat
   the gap as too big to replay rather than as all of it.
 
-  **`data` is not read.** History is used as an index of ids: it says which rows moved, and the
-  values come from reading those rows as they now stand. Leaving the payload behind is what makes
-  an effect here a FIXED size, so a count is an honest bound on what a gap costs to hold - a wide
-  entity's `put_entity` carries several times a narrow one's, and a reader that fetched it could
-  not tell from the count how much memory it had asked for.
+  **`data` is read for edges alone.** History is used as an index of ids: it says which rows
+  moved, and the values come from reading those rows as they now stand. Leaving the payload behind
+  is what keeps an effect here a FIXED size, so a count is an honest bound on what a gap costs to
+  hold - a wide entity's `put_entity` carries several times a narrow one's, and a reader that
+  fetched it could not tell from the count how much memory it had asked for. An edge's payload is
+  the exception, since it names a second row that moved - the target, whose inverse of the
+  relationship holds the edge too - and it is two short strings whatever the entity, so the size
+  stays fixed. Every other effect comes back with `data` nil.
 
   Effects arrive flat rather than grouped, for the same reason.
   """
   @spec read_after(non_neg_integer, non_neg_integer, pos_integer) :: list(map)
   def read_after(tx, seq, limit) do
     statement = """
-    SELECT "seq", "op", "type", "entity_id", "tx", "model_hash", "actor_id", "revisions",
-           "mutation_ref"
+    SELECT "seq", "op", "type", "entity_id",
+           CASE WHEN "op" IN ('add_relationship', 'del_relationship') THEN "data" END AS "data",
+           "tx", "model_hash", "actor_id", "revisions", "mutation_ref"
     FROM "#{Mapper.system_schema()}"."oplog"
     WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
     ORDER BY "tx", "seq"
@@ -163,7 +167,7 @@ defmodule Hologram.DB.Oplog do
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [tx, seq, limit])
 
-    Enum.map(rows, &place_event/1)
+    Enum.map(rows, &event/1)
   end
 
   @doc """
@@ -296,24 +300,6 @@ defmodule Hologram.DB.Oplog do
     String.to_existing_atom(label)
   rescue
     ArgumentError -> label
-  end
-
-  # The history read's shape: everything the windowed read gives except the payload, which nothing
-  # replaying it looks at. Fixed size by construction, which is what lets its caller bound a gap by
-  # counting - the batch a write belongs to is bookkeeping of a bounded size, where the payload is
-  # the part that runs from a delete's nothing to a wide entity's kilobytes.
-  defp place_event([seq, op, type, entity_id, tx, model_hash, actor_id, revisions, mutation_ref]) do
-    %{
-      actor_id: Codec.decode(actor_id, :uuid),
-      entity_id: Codec.decode(entity_id, :uuid),
-      model_hash: model_hash,
-      mutation_ref: mutation_ref,
-      op: operation(op),
-      revisions: revisions,
-      seq: seq,
-      tx: tx,
-      type: entity_type(type)
-    }
   end
 
   defp event([seq, op, type, entity_id, data, tx, model_hash, actor_id, revisions, mutation_ref]) do
