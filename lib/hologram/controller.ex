@@ -738,6 +738,22 @@ defmodule Hologram.Controller do
     end
   end
 
+  # A response for a logged-in user must not outlive the login on the device. The browser can keep a
+  # page it left frozen in its back/forward cache, out of reach of a logout, and bring it back for
+  # whoever presses Back next. So it is told to store nothing of the response, unless the page,
+  # its middleware or the command set the caching itself on the server struct. A value a plug
+  # ahead of Hologram set is replaced, which only ever makes it stricter. Only full page loads can be kept that
+  # way; on the other responses, which are never stored, the header changes nothing.
+  defp maybe_forbid_storing(conn, %Server{user_id: nil}), do: conn
+
+  defp maybe_forbid_storing(conn, %Server{response_headers: %{"cache-control" => _value}}) do
+    conn
+  end
+
+  defp maybe_forbid_storing(conn, _server) do
+    Plug.Conn.put_resp_header(conn, "cache-control", "no-store")
+  end
+
   # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
   # it rendered last.
   defp maybe_note_page_rendered(nil, _page_module), do: :ok
@@ -885,6 +901,7 @@ defmodule Hologram.Controller do
     |> apply_session_ops(final_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(final_server_struct.__meta__.cookie_ops)
     |> maybe_persist_user_id(server_struct, final_server_struct)
+    |> maybe_forbid_storing(final_server_struct)
     |> put_identity_tag_header()
   end
 

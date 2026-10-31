@@ -60,6 +60,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module42
   alias Hologram.Test.Fixtures.Controller.Module43
   alias Hologram.Test.Fixtures.Controller.Module44
+  alias Hologram.Test.Fixtures.Controller.Module45
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
@@ -1876,6 +1877,27 @@ defmodule Hologram.ControllerTest do
       assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
     end
 
+    test "tells the browser to store nothing of the response of a command that logs the user in" do
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
     test "tags the response with the identity the request came with when the command leaves it alone" do
       conn = execute_successful_command_request()
 
@@ -2313,6 +2335,70 @@ defmodule Hologram.ControllerTest do
         |> handle_initial_page_request(Module37)
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    # The browser's back/forward cache could otherwise keep the page past a logout.
+    test "tells the browser to store nothing of a page rendered for a logged-in user" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{hologram_user_id: 7})
+        |> handle_initial_page_request(Module5)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    test "tells the browser to store nothing of a page whose init/3 logs the user in" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module21")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module21)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    # Middleware answers before init/3 runs, and the answer goes out with the same decorations.
+    test "tells the browser to store nothing of a middleware's answer for a logged-in user" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module28")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module28)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    test "leaves the caching of a page rendered for no logged-in user as it is" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module5)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+               "max-age=0, private, must-revalidate"
+             ]
+    end
+
+    test "keeps the caching a page rendered for a logged-in user sets itself" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module45, :dummy_module_45_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module45")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module45)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["private, max-age=60"]
     end
 
     test "sends the response headers a non-terminal middleware set" do
@@ -3056,6 +3142,17 @@ defmodule Hologram.ControllerTest do
       assert response["type"] == "redirect"
       assert response["to"] == Module4.__route__()
       assert response["pageModule"] == Encoder.encode_term!(Module4)
+    end
+
+    test "tells the browser to store nothing of a page described for a logged-in user" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn(%{hologram_user_id: 7})
+        |> handle_subsequent_page_request(Module4)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
     end
 
     test "tags a page response with the identity the request leaves" do
