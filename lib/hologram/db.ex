@@ -77,14 +77,14 @@ defmodule Hologram.DB do
   Returns {:ok, entity} with the stamped entity, or {:error, violations} - the map
   Entity.validate/1 returns, naming each field that broke its declaration: the declared
   constraints its value breaks (type, enum values, required presence, the constraint
-  options), :unique for a unique attribute whose value another row already holds, and
-  :not_found for a to-one reference whose target row does not exist. Values are judged
-  before any SQL runs, and a write is attempted only once they pass. Uniqueness and
-  reference existence are reported by the write itself for the constraint it refuses, and
-  asked advisorily for every unique attribute and to-one reference the write did not answer
-  for - an advisory answer describes the moment it was asked, and a value free then can be
-  taken by the next attempt. A write refuses at the first violated database constraint and
-  reports no other of its own.
+  options), :unique for a unique attribute whose value another row already holds or a unique
+  to-one reference whose target another row already references, and :not_found for a to-one
+  reference whose target row does not exist. Values are judged before any SQL runs, and a
+  write is attempted only once they pass. Uniqueness and reference existence are reported by
+  the write itself for the constraint it refuses, and asked advisorily for every unique
+  attribute and to-one reference the write did not answer for - an advisory answer describes
+  the moment it was asked, and a value free then can be taken by the next attempt. A write
+  refuses at the first violated database constraint and reports no other of its own.
 
   With an acting user set, the write is evaluated against that user's policies for :create - or
   for the operation the entity claims through authorize/2 - against the row being inserted, and
@@ -475,7 +475,8 @@ defmodule Hologram.DB do
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
   changed field that broke its declaration: the declared constraints its value breaks (type,
   enum values, the required-nil rule, the constraint options), :unique for a changed unique
-  attribute whose new value another row already holds, and :not_found for a changed to-one
+  attribute whose new value another row already holds or a changed unique to-one reference
+  whose new target another row already references, and :not_found for a changed to-one
   reference whose target row does not exist. A row's own current value never conflicts with
   itself. Values are judged before any SQL runs, and a write is attempted only once they pass.
   Uniqueness and reference existence are reported by the write itself for the constraint it
@@ -680,7 +681,7 @@ defmodule Hologram.DB do
     |> Enum.sort()
     |> Enum.map_join("\n", fn
       {field, :unique} ->
-        "  * attribute #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
+        "  * #{unique_kind(entity_type, field)} #{inspect(field)} #{inspect(Map.fetch!(values, field))} is already taken"
 
       {field, :not_found} ->
         "  * reference #{inspect(field)} #{inspect(Map.fetch!(values, field))} names no existing entity"
@@ -809,6 +810,15 @@ defmodule Hologram.DB do
   # received value.
   defp put_values(attribute_ops) do
     for {name, {:put, value}} <- attribute_ops, into: %{}, do: {name, value}
+  end
+
+  # A unique field is a declared attribute or the reference field of a unique to-one, and the line
+  # names which, the way the :not_found line names a reference.
+  defp unique_kind(entity_type, field) do
+    attribute? =
+      Enum.any?(entity_type.__attributes__(), fn {name, _type, _opts} -> name == field end)
+
+    if attribute?, do: "attribute", else: "reference"
   end
 
   defp validate_entity_type!(term, hint) do

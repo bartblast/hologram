@@ -234,8 +234,8 @@ defmodule Hologram.Entity do
 
     * `optional:` - a to-one may reference nothing, its reference holding nil.
     * `unique:` - no two rows of the entity type reference the same row, enforced in the
-      database. To-one only. An optional unique to-one admits any number of rows referencing
-      nothing.
+      database and reported by the write verbs as `:unique` on the `<name>_id` field. To-one
+      only. An optional unique to-one admits any number of rows referencing nothing.
   """
   @spec relationship(atom, module | list(module), T.opts()) :: Macro.t()
   defmacro relationship(name, type, opts \\ []) do

@@ -17,6 +17,8 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module19
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module20
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -33,6 +35,15 @@ defmodule Hologram.DB.EntityOperationsTest do
       Connection.query(count_sql, [encoded_source_id, encoded_target_id])
 
     count
+  end
+
+  defp create_channel! do
+    {:ok, channel} =
+      %{name: "general"}
+      |> Module26.new()
+      |> create()
+
+    channel
   end
 
   defp oplog_effects do
@@ -529,6 +540,68 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert create(Module19.new(code: "both_code", slug: "both_slug")) ==
                {:error, %{code: [:unique], slug: [:unique]}}
+    end
+
+    test "returns the violation from the write itself when a unique reference's target is taken" do
+      channel = create_channel!()
+
+      {:ok, _topic} =
+        %{channel_id: channel.id, summary: "first"}
+        |> Module27.new()
+        |> create()
+
+      result =
+        %{channel_id: channel.id, summary: "second"}
+        |> Module27.new()
+        |> create()
+
+      assert result == {:error, %{channel_id: [:unique]}}
+    end
+
+    # Uniqueness is over the rows a reference names, and nil names none.
+    test "admits any number of nils in an optional unique reference" do
+      assert {:ok, _first} =
+               %{channel_id: nil, summary: "first"}
+               |> Module27.new()
+               |> create()
+
+      assert {:ok, _second} =
+               %{channel_id: nil, summary: "second"}
+               |> Module27.new()
+               |> create()
+    end
+
+    # Whichever of the two unique indexes PostgreSQL refuses first, the other is asked about after
+    # the write - an attribute and a reference are completed the same way.
+    test "reports a taken unique attribute and a taken unique reference together" do
+      channel = create_channel!()
+
+      {:ok, _topic} =
+        %{channel_id: channel.id, code: "taken", summary: "first"}
+        |> Module27.new()
+        |> create()
+
+      assert create(Module27.new(channel_id: channel.id, code: "taken", summary: "second")) ==
+               {:error, %{channel_id: [:unique], code: [:unique]}}
+    end
+
+    # The values failed, so no write was attempted - the reference is asked about all the same.
+    test "reports a taken unique reference beside a value violation" do
+      channel = create_channel!()
+
+      {:ok, _topic} =
+        %{channel_id: channel.id, summary: "first"}
+        |> Module27.new()
+        |> create()
+
+      assert create(Module27.new(channel_id: channel.id, summary: 123)) ==
+               {:error, %{channel_id: [:unique], summary: [type: :string]}}
+    end
+
+    # No row can reference a row that is not there, so a missing target is the whole answer.
+    test "reports a missing target of a unique reference as not found" do
+      assert create(Module27.new(channel_id: Entity.generate_id(), summary: 123)) ==
+               {:error, %{channel_id: [:not_found], summary: [type: :string]}}
     end
 
     # A value that is not even the right type cannot be compared against what other rows hold,
@@ -1517,6 +1590,66 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert update(Module19, entity.id, %{code: entity.code, slug: 123}) ==
                {:error, %{slug: [type: :string]}}
+    end
+
+    test "returns the violation from the write itself when a unique reference's new target is taken" do
+      channel = create_channel!()
+
+      {:ok, _first} =
+        %{channel_id: channel.id, summary: "first"}
+        |> Module27.new()
+        |> create()
+
+      {:ok, second} =
+        %{channel_id: nil, summary: "second"}
+        |> Module27.new()
+        |> create()
+
+      assert update(Module27, second.id, channel_id: channel.id) ==
+               {:error, %{channel_id: [:unique]}}
+    end
+
+    # A row is not its own duplicate - the index excludes it, and so must a resubmitted form that
+    # changed nothing about the reference.
+    test "updates a unique reference to its own current target" do
+      channel = create_channel!()
+
+      {:ok, topic} =
+        %{channel_id: channel.id, summary: "own"}
+        |> Module27.new()
+        |> create()
+
+      assert update(Module27, topic.id, channel_id: channel.id) == :ok
+    end
+
+    # The advisory query excludes the row being updated, the way the unique index does.
+    test "does not count the row's own reference as taken" do
+      channel = create_channel!()
+
+      {:ok, topic} =
+        %{channel_id: channel.id, summary: "own"}
+        |> Module27.new()
+        |> create()
+
+      assert update(Module27, topic.id, %{channel_id: channel.id, summary: 123}) ==
+               {:error, %{summary: [type: :string]}}
+    end
+
+    test "reports a taken unique reference beside a value violation" do
+      channel = create_channel!()
+
+      {:ok, _first} =
+        %{channel_id: channel.id, summary: "first"}
+        |> Module27.new()
+        |> create()
+
+      {:ok, second} =
+        %{channel_id: nil, summary: "second"}
+        |> Module27.new()
+        |> create()
+
+      assert update(Module27, second.id, %{channel_id: channel.id, summary: 123}) ==
+               {:error, %{channel_id: [:unique], summary: [type: :string]}}
     end
 
     test "returns every change violation without writing" do
