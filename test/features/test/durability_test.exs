@@ -9,11 +9,14 @@ defmodule HologramFeatureTests.DurabilityTest do
   alias HologramFeatureTests.DurabilityPage
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
   alias HologramFeatureTests.Entities.Memo
+  alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
@@ -21,6 +24,7 @@ defmodule HologramFeatureTests.DurabilityTest do
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
   alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.Topic
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Jobs.RestockItem
@@ -44,36 +48,39 @@ defmodule HologramFeatureTests.DurabilityTest do
     :ok
   end
 
-  # Every table, not only the products: the client's pot is app-wide, so a row left in ANY synced
-  # table by an earlier file would arrive in the fill and could stand in for what the browser is
-  # supposed to have kept. One statement, because PostgreSQL refuses to truncate a table another
-  # one references without it.
+  # Every table, the join table behind a message's labels among them, not only the products: the
+  # client's pot is app-wide, so a row left in ANY synced table by an earlier file would arrive in
+  # the fill and could stand in for what the browser is supposed to have kept. One statement,
+  # because PostgreSQL refuses to truncate a table another one references without it.
   defp truncate_every_entity_table do
     tables =
-      Enum.map_join(
-        [
-          Account,
-          Booking,
-          Document,
-          Folder,
-          Item,
-          Leg,
-          Memo,
-          Note,
-          Product,
-          RestockItem,
-          Review,
-          RoleGrant,
-          Shop,
-          Stop,
-          Ticket,
-          Todo,
-          Trip,
-          User
-        ],
-        ", ",
-        fn entity_type -> ~s("hologram_data"."#{Mapper.table_name(entity_type)}") end
-      )
+      [
+        Account,
+        Booking,
+        Channel,
+        Document,
+        Folder,
+        Item,
+        Label,
+        Leg,
+        Memo,
+        Message,
+        Note,
+        Product,
+        RestockItem,
+        Review,
+        RoleGrant,
+        Shop,
+        Stop,
+        Ticket,
+        Todo,
+        Topic,
+        Trip,
+        User
+      ]
+      |> Enum.map(&Mapper.table_name/1)
+      |> Enum.concat([DB.join_table_name(Message, :labels)])
+      |> Enum.map_join(", ", &~s("hologram_data"."#{&1}"))
 
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
   end

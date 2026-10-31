@@ -11,11 +11,14 @@ defmodule HologramFeatureTests.SyncTest do
   alias Hologram.Test.SyncClient
   alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
   alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
   alias HologramFeatureTests.Entities.Memo
+  alias HologramFeatureTests.Entities.Message
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Review
@@ -23,45 +26,48 @@ defmodule HologramFeatureTests.SyncTest do
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Ticket
   alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.Topic
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Jobs.RestockItem
 
   @base_url "http://localhost:4002"
 
-  # Every entity table truncates, not only the documents: the client's pot is app-wide, so a row
-  # left in ANY synced table by an earlier test file would arrive in this client's initial fill
-  # and make "the first deltas frame" mean different things on different runs.
+  # Every entity table truncates, the join table behind a message's labels among them, not only the
+  # documents: the client's pot is app-wide, so a row left in ANY synced table by an earlier test
+  # file would arrive in this client's initial fill and make "the first deltas frame" mean
+  # different things on different runs.
   setup do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join(
-        [
-          Account,
-          Booking,
-          Document,
-          Folder,
-          Item,
-          Leg,
-          Memo,
-          Note,
-          Product,
-          RestockItem,
-          Review,
-          RoleGrant,
-          Shop,
-          Stop,
-          Ticket,
-          Todo,
-          Trip,
-          User
-        ],
-        ", ",
-        fn entity_type ->
-          ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
-        end
-      )
+      [
+        Account,
+        Booking,
+        Channel,
+        Document,
+        Folder,
+        Item,
+        Label,
+        Leg,
+        Memo,
+        Message,
+        Note,
+        Product,
+        RestockItem,
+        Review,
+        RoleGrant,
+        Shop,
+        Stop,
+        Ticket,
+        Todo,
+        Topic,
+        Trip,
+        User
+      ]
+      |> Enum.map(&Mapper.table_name/1)
+      |> Enum.concat([DB.join_table_name(Message, :labels)])
+      |> Enum.map_join(", ", &~s("hologram_data"."#{&1}"))
 
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 
