@@ -4,17 +4,38 @@ defmodule HologramFeatureTests.Helpers do
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
   alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Sync.Session
+  alias HologramFeatureTests.Entities.Account
   alias HologramFeatureTests.Entities.Booking
+  alias HologramFeatureTests.Entities.Cabin
+  alias HologramFeatureTests.Entities.Channel
+  alias HologramFeatureTests.Entities.Document
+  alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Label
+  alias HologramFeatureTests.Entities.Leg
+  alias HologramFeatureTests.Entities.Memo
+  alias HologramFeatureTests.Entities.Message
+  alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.Product
+  alias HologramFeatureTests.Entities.Review
+  alias HologramFeatureTests.Entities.Ship
+  alias HologramFeatureTests.Entities.Shop
   alias HologramFeatureTests.Entities.Stop
+  alias HologramFeatureTests.Entities.Ticket
   alias HologramFeatureTests.Entities.Todo
+  alias HologramFeatureTests.Entities.Topic
   alias HologramFeatureTests.Entities.Trip
+  alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
   alias Wallaby.Browser
@@ -851,6 +872,50 @@ defmodule HologramFeatureTests.Helpers do
       |> Code.eval_string()
 
     term
+  end
+
+  @doc """
+  Truncates every entity table of the app, the join table behind a message's labels among them,
+  in one statement - PostgreSQL refuses to truncate a table another one references without it.
+
+  For a test whose client's pot is app-wide: a row left in ANY synced table by an earlier file
+  would arrive in the client's fill.
+  """
+  def truncate_every_entity_table do
+    tables =
+      [
+        Account,
+        Booking,
+        Cabin,
+        Channel,
+        Document,
+        Folder,
+        Item,
+        Label,
+        Leg,
+        Memo,
+        Message,
+        Note,
+        Product,
+        RestockItem,
+        Review,
+        RoleGrant,
+        Ship,
+        Shop,
+        Stop,
+        Ticket,
+        Todo,
+        Topic,
+        Trip,
+        User
+      ]
+      |> Enum.map(&Mapper.table_name/1)
+      |> Enum.concat([DB.join_table_name(Message, :labels)])
+      |> Enum.map_join(", ", &~s("hologram_data"."#{&1}"))
+
+    {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
+
+    :ok
   end
 
   @doc """
