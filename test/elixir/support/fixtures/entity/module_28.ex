@@ -11,5 +11,5 @@ defmodule Hologram.Test.Fixtures.Entity.Module28 do
   relationship :channel, Module26, optional: true
   relationship :labels, [Module29]
 
-  allow :read
+  allow :read, when: body != "hidden"
 end

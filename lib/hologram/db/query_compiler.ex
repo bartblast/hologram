@@ -37,7 +37,11 @@ defmodule Hologram.DB.QueryCompiler do
   reference is. A to-many subselect aggregates the related set through its join table
   into a jsonb array (empty set = empty array), applying the sub-term's filter,
   ordering, and view bounds inside the aggregation - include param slots follow the
-  root's in parameter order.
+  root's in parameter order. An inverse is read from where the relationship it reverses is
+  stored: an inverse set of a to-one aggregates the related rows whose reference names the
+  row, an inverse set of a to-many the related rows whose join table pairs name it as the
+  target, each like a to-many, and a single inverse is the one related row whose reference
+  names the row, like a to-one.
 
   A compiled policy composes into the statement when one is given: its rules render as an
   OR group ANDed after the authored filter, so a row must satisfy the query and at least one
@@ -475,6 +479,15 @@ defmodule Hologram.DB.QueryCompiler do
       end)
 
     target_type
+  end
+
+  # A to-one's related row: the one its reference column names.
+  defp reference_match(name, parent_mapping, parent_prefix) do
+    column = Enum.find(parent_mapping.columns, &(&1.source == {:relationship, name}))
+
+    fn quoted_alias ->
+      ~s|#{quoted_alias}."id" = #{parent_prefix}.#{Mapper.quote_identifier(column.name)}|
+    end
   end
 
   defp reference_column(entity_mapping, relationship_name) do
@@ -915,21 +928,40 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  defp include_expression({name, sub_term}, parent_mapping, mapping, policy, parent_prefix, acc) do
+  # Every kind of include is one of two shapes - a set aggregated like a to-many, or one row like a
+  # to-one - and differs only in how a related row is matched to the parent row.
+  defp include_expression(
+         {name, sub_term},
+         parent_type,
+         parent_mapping,
+         mapping,
+         policy,
+         parent_prefix,
+         acc
+       ) do
     join_table = Enum.find(parent_mapping.join_tables, &(&1.relationship == name))
+    inverse = Entity.inverse_relationship(parent_type, name)
 
-    if join_table do
-      to_many_include_expression(sub_term, join_table, mapping, policy, parent_prefix, acc)
-    else
-      to_one_include_expression(
-        name,
-        sub_term,
-        parent_mapping,
-        mapping,
-        policy,
-        parent_prefix,
-        acc
-      )
+    cond do
+      inverse && inverse.to_many? ->
+        membership = inverse_membership(inverse, mapping, parent_prefix)
+
+        to_many_include_expression(sub_term, membership, mapping, policy, acc)
+
+      inverse ->
+        match = inverse_match(inverse, mapping, parent_prefix)
+
+        to_one_include_expression(sub_term, match, mapping, policy, acc)
+
+      join_table ->
+        membership = join_membership(join_table, parent_prefix)
+
+        to_many_include_expression(sub_term, membership, mapping, policy, acc)
+
+      true ->
+        match = reference_match(name, parent_mapping, parent_prefix)
+
+        to_one_include_expression(sub_term, match, mapping, policy, acc)
     end
   end
 
@@ -939,7 +971,15 @@ defmodule Hologram.DB.QueryCompiler do
       |> Enum.sort_by(fn {entry_name, _sub_term} -> entry_name end)
       |> Enum.map_reduce(acc, fn {entry_name, _sub_term} = entry, inner_acc ->
         {expression, next_acc} =
-          include_expression(entry, target_mapping, mapping, policy, quoted_alias, inner_acc)
+          include_expression(
+            entry,
+            term.entity,
+            target_mapping,
+            mapping,
+            policy,
+            quoted_alias,
+            inner_acc
+          )
 
         {", '#{entry_name}', #{expression}", next_acc}
       end)
@@ -979,12 +1019,72 @@ defmodule Hologram.DB.QueryCompiler do
       |> Enum.sort_by(fn {name, _sub_term} -> name end)
       |> Enum.map_reduce({reversed_params, 1}, fn {name, _sub_term} = entry, acc ->
         {expression, new_acc} =
-          include_expression(entry, entity_mapping, mapping, policy, quoted_prefix, acc)
+          include_expression(
+            entry,
+            term.entity,
+            entity_mapping,
+            mapping,
+            policy,
+            quoted_prefix,
+            acc
+          )
 
         {", #{expression} AS #{Mapper.quote_identifier(Atom.to_string(name))}", new_acc}
       end)
 
     {Enum.join(fragments, ""), new_params}
+  end
+
+  # A single inverse's related row is the one whose reference names the parent row.
+  defp inverse_match(inverse, mapping, parent_prefix) do
+    column = inverse_reference_column(inverse, mapping)
+
+    fn quoted_alias ->
+      ~s|#{quoted_alias}.#{Mapper.quote_identifier(column.name)} = #{parent_prefix}."id"|
+    end
+  end
+
+  # An inverse set's related rows: those whose reference names the parent row when the inverse
+  # reverses a to-one, those the related type's join table pairs with the parent row as the target
+  # when it reverses a to-many - the pairs read the other way, through the table's target index.
+  defp inverse_membership(%{reference?: true} = inverse, mapping, parent_prefix) do
+    column = inverse_reference_column(inverse, mapping)
+
+    fn quoted_target, _quoted_join ->
+      ~s|#{quoted_target}.#{Mapper.quote_identifier(column.name)} = #{parent_prefix}."id"|
+    end
+  end
+
+  defp inverse_membership(inverse, mapping, parent_prefix) do
+    join_table =
+      mapping
+      |> Map.fetch!(inverse.target)
+      |> Map.fetch!(:join_tables)
+      |> Enum.find(&(&1.relationship == inverse.forward))
+
+    fn quoted_target, quoted_join ->
+      ~s|#{quoted_target}."id" IN | <>
+        ~s|(SELECT #{quoted_join}."source_id" | <>
+        "FROM #{qualified_table(join_table.name)} AS #{quoted_join} " <>
+        ~s|WHERE #{quoted_join}."target_id" = #{parent_prefix}."id")|
+    end
+  end
+
+  defp inverse_reference_column(inverse, mapping) do
+    mapping
+    |> Map.fetch!(inverse.target)
+    |> Map.fetch!(:columns)
+    |> Enum.find(&(&1.source == {:relationship, inverse.forward}))
+  end
+
+  # A to-many's related rows: those its own join table pairs with the parent row as the source.
+  defp join_membership(join_table, parent_prefix) do
+    fn quoted_target, quoted_join ->
+      ~s|#{quoted_target}."id" IN | <>
+        ~s|(SELECT #{quoted_join}."target_id" | <>
+        "FROM #{qualified_table(join_table.name)} AS #{quoted_join} " <>
+        ~s|WHERE #{quoted_join}."source_id" = #{parent_prefix}."id")|
+    end
   end
 
   defp jsonb_pairs(target_mapping, quoted_alias) do
@@ -1114,14 +1214,7 @@ defmodule Hologram.DB.QueryCompiler do
     {path_sql, Map.put(column, :null, true), new_params}
   end
 
-  defp to_many_include_expression(
-         sub_term,
-         join_table,
-         mapping,
-         policy,
-         parent_prefix,
-         {reversed_params, index}
-       ) do
+  defp to_many_include_expression(sub_term, membership, mapping, policy, {reversed_params, index}) do
     target_mapping = Map.fetch!(mapping, sub_term.entity)
     quoted_wrapper = Mapper.quote_identifier("$i#{index}")
     quoted_join = Mapper.quote_identifier("$j#{index}")
@@ -1152,17 +1245,14 @@ defmodule Hologram.DB.QueryCompiler do
         {policied_params, index + 1}
       )
 
-    # The edge scan is a nested subselect (not a join) so that only the target
-    # table is in scope where the sub-term's filter and ordering render their
-    # unqualified identifiers - a join would make target columns named like the
-    # join-table columns (source_id/target_id) ambiguous.
+    # The membership condition is a nested subselect or a plain comparison (not a
+    # join) so that only the target table is in scope where the sub-term's filter
+    # and ordering render their unqualified identifiers - a join would make target
+    # columns named like the join-table columns (source_id/target_id) ambiguous.
     inner_sql =
       "SELECT #{quoted_target}.* " <>
         "FROM #{qualified_table(target_mapping.table)} AS #{quoted_target} " <>
-        ~s|WHERE #{quoted_target}."id" IN | <>
-        ~s|(SELECT #{quoted_join}."target_id" | <>
-        "FROM #{qualified_table(join_table.name)} AS #{quoted_join} " <>
-        ~s|WHERE #{quoted_join}."source_id" = #{parent_prefix}."id")| <>
+        "WHERE #{membership.(quoted_target, quoted_join)}" <>
         filter_sql <>
         order_clause(sub_term.sort, target_mapping) <>
         bounds_clause(sub_term)
@@ -1175,18 +1265,7 @@ defmodule Hologram.DB.QueryCompiler do
     {expression, new_acc}
   end
 
-  defp to_one_include_expression(
-         name,
-         sub_term,
-         parent_mapping,
-         mapping,
-         policy,
-         parent_prefix,
-         {reversed_params, index}
-       ) do
-    reference_column =
-      Enum.find(parent_mapping.columns, &(&1.source == {:relationship, name}))
-
+  defp to_one_include_expression(sub_term, match, mapping, policy, {reversed_params, index}) do
     target_mapping = Map.fetch!(mapping, sub_term.entity)
     quoted_alias = Mapper.quote_identifier("$i#{index}")
 
@@ -1214,7 +1293,7 @@ defmodule Hologram.DB.QueryCompiler do
     expression =
       "(SELECT jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_alias)}#{nested_pairs}) " <>
         "FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} " <>
-        ~s|WHERE #{quoted_alias}."id" = #{parent_prefix}.#{Mapper.quote_identifier(reference_column.name)}| <>
+        "WHERE #{match.(quoted_alias)}" <>
         policy_sql <> ")"
 
     {expression, new_acc}

@@ -16,6 +16,10 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module25
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -1435,6 +1439,92 @@ defmodule Hologram.DB.QueryCompilerTest do
                sql,
                ~s|FROM "hologram_data"."test_fixtures_entity_module6_a_$join" AS "$j1"|
              )
+    end
+
+    test "reads an inverse set of a to-one through the related rows' reference column" do
+      mapping = Mapper.derive!([Module26, Module27, Module28, Module29], [])
+
+      term =
+        Module26
+        |> include(messages)
+        |> Stage.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [],
+               sql:
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", "name_$sort", | <>
+                   ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
+                   ~s|'id', "$i1"."id", 'body', "$i1"."body", 'position', "$i1"."position", 'channel_id', "$i1"."channel_id", | <>
+                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
+                   ~s|'body_$sort', "$i1"."body_$sort") | <>
+                   ~s|ORDER BY "$i1"."position" ASC, "$i1"."id" ASC), '[]'::jsonb) | <>
+                   ~s|FROM (SELECT "$t1".* FROM "hologram_data"."test_fixtures_entity_module28" AS "$t1" | <>
+                   ~s|WHERE "$t1"."channel_id" = "test_fixtures_entity_module26"."id" | <>
+                   ~s|ORDER BY "position" ASC, "id" ASC) AS "$i1") AS "messages" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_entity_module26" ORDER BY "id" ASC|
+             }
+    end
+
+    test "reads a single inverse through the related row's reference column" do
+      mapping = Mapper.derive!([Module26, Module27, Module28, Module29], [])
+
+      term =
+        Module26
+        |> include(topic)
+        |> Stage.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [],
+               sql:
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", "name_$sort", | <>
+                   ~s|(SELECT jsonb_build_object(| <>
+                   ~s|'id', "$i1"."id", 'code', "$i1"."code", 'summary', "$i1"."summary", 'channel_id', "$i1"."channel_id", | <>
+                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
+                   ~s|'code_$sort', "$i1"."code_$sort", 'summary_$sort', "$i1"."summary_$sort") | <>
+                   ~s|FROM "hologram_data"."test_fixtures_entity_module27" AS "$i1" | <>
+                   ~s|WHERE "$i1"."channel_id" = "test_fixtures_entity_module26"."id") AS "topic" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_entity_module26" ORDER BY "id" ASC|
+             }
+    end
+
+    test "reads an inverse set of a to-many through the related type's join table, read backwards" do
+      mapping = Mapper.derive!([Module26, Module27, Module28, Module29], [])
+
+      term =
+        Module29
+        |> include(messages)
+        |> Stage.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [],
+               sql:
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", "name_$sort", | <>
+                   ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
+                   ~s|'id', "$i1"."id", 'body', "$i1"."body", 'position', "$i1"."position", 'channel_id', "$i1"."channel_id", | <>
+                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
+                   ~s|'body_$sort', "$i1"."body_$sort") | <>
+                   ~s|ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
+                   ~s|FROM (SELECT "$t1".* FROM "hologram_data"."test_fixtures_entity_module28" AS "$t1" | <>
+                   ~s|WHERE "$t1"."id" IN (SELECT "$j1"."source_id" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$j1" | <>
+                   ~s|WHERE "$j1"."target_id" = "test_fixtures_entity_module29"."id") | <>
+                   ~s|ORDER BY "id" ASC) AS "$i1") AS "messages" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_entity_module29" ORDER BY "id" ASC|
+             }
+    end
+
+    test "matches an inverse below the root to the row including it" do
+      mapping = Mapper.derive!([Module26, Module27, Module28, Module29], [])
+
+      term =
+        Module28
+        |> include([channel.messages, channel.topic])
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s|WHERE "$t2"."channel_id" = "$i1"."id"|)
+      assert String.contains?(sql, ~s|WHERE "$i3"."channel_id" = "$i1"."id"|)
     end
 
     test "omits includes from counting queries" do

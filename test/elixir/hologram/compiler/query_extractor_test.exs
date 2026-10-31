@@ -52,6 +52,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module48
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module49
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module50
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module51
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
@@ -131,6 +132,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       terms = extract_module_queries(Module37, entity_types, ir_plt)
 
       assert Enum.map(terms, &Map.keys(&1.include)) == [[:a], [:b], [:c]]
+    end
+
+    test "extracts every inverse of the target too when an include name is an argument", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      terms = extract_module_queries(Module51, entity_types, ir_plt)
+
+      assert Enum.map(terms, &Map.keys(&1.include)) == [[:messages], [:topic]]
     end
 
     test "extracts every entity and relationship pair when both are arguments", %{
