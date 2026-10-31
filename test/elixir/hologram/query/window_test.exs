@@ -8,9 +8,13 @@ defmodule Hologram.Query.WindowTest do
   alias Hologram.DB.QueryRunner
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Entity.Module6
@@ -218,14 +222,59 @@ defmodule Hologram.Query.WindowTest do
 
     test "embeds the relationships a path goes through inside an included query's window" do
       base_term =
-        Module6
-        |> include(a)
+        Module26
+        |> include(messages)
         |> Stage.normalize()
 
-      sub_term = %{base_term.include.a | filter: [{[:b, :a], :==, true}]}
-      term = %{base_term | include: %{a: sub_term}}
+      sub_term = %{base_term.include.messages | filter: [{[:channel, :name], :==, "general"}]}
+      term = %{base_term | include: %{messages: sub_term}}
 
-      assert derive(term, false).include.a.include == %{b: %Query{entity: Module2}}
+      assert derive(term, false).include.messages.include == %{
+               channel: %Query{entity: Module26}
+             }
+    end
+
+    test "embeds the relationships a path reads inside an included to-many downloaded whole" do
+      term =
+        Module6
+        |> include(a, &filter(&1, b.a == true))
+        |> Stage.normalize()
+
+      assert derive(term, false).include.a == %Query{
+               entity: Module3,
+               include: %{b: %Query{entity: Module2}}
+             }
+    end
+
+    test "embeds the relationships a path reads inside an included inverse of a to-many downloaded whole" do
+      term =
+        Module29
+        |> include(messages, &filter(&1, channel.name == "general"))
+        |> Stage.normalize()
+
+      assert derive(term, false).include.messages == %Query{
+               entity: Module28,
+               include: %{channel: %Query{entity: Module26}}
+             }
+    end
+
+    test "downloads a to-many included under a to-many whole too" do
+      term =
+        Module6
+        |> include(a, &include(&1, a, fn nested -> filter(nested, a == true) end))
+        |> Stage.normalize()
+
+      assert derive(term, false).include.a.include.a == %Query{entity: Module2}
+    end
+
+    test "keeps the narrowing of an inverse of a to-one included under a set downloaded whole" do
+      term =
+        Module29
+        |> include(messages.channel.messages, &filter(&1, position == 1))
+        |> Stage.normalize()
+
+      assert derive(term, false).include.messages.include.channel.include.messages ==
+               %Query{entity: Module28, filter: [{:position, :==, 1}]}
     end
 
     test "merges a path's relationships into the query's own includes" do
@@ -343,20 +392,83 @@ defmodule Hologram.Query.WindowTest do
       assert is_list(QueryRunner.run(window, DB.mapping()))
     end
 
+    # An inverse of a to-one is read off each related row's own reference field, with no ids filed
+    # for the row, so its window keeps a literal narrowing like any query.
     test "derives the window of an included query too" do
       base_term =
-        Module3
-        |> include(a)
+        Module26
+        |> include(messages)
         |> Stage.normalize()
 
       sub_term = %{
-        base_term.include.a
-        | filter: [{:c, :==, {:placeholder, :search}}, {:a, :==, true}]
+        base_term.include.messages
+        | filter: [{:body, :==, {:placeholder, :search}}, {:position, :==, 1}]
       }
 
-      term = %{base_term | include: %{a: sub_term}}
+      term = %{base_term | include: %{messages: sub_term}}
 
-      assert derive(term, false).include.a == %Query{entity: Module2, filter: [{:a, :==, true}]}
+      assert derive(term, false).include.messages == %Query{
+               entity: Module28,
+               filter: [{:position, :==, 1}]
+             }
+    end
+
+    test "downloads an included to-many whole, whatever its query narrows" do
+      term =
+        Module3
+        |> include(a, &filter(&1, a == true))
+        |> Stage.normalize()
+
+      assert derive(term, false).include.a == %Query{entity: Module2}
+    end
+
+    test "downloads an included inverse of a to-many whole, whatever its query narrows" do
+      term =
+        Module29
+        |> include(messages, &filter(&1, position == 1))
+        |> Stage.normalize()
+
+      assert derive(term, false).include.messages == %Query{entity: Module28}
+    end
+
+    # Every window holding a row shares the one set the client files for it, so a window narrowing
+    # the set would overwrite the complete one another window reads - and report an edge outside
+    # its narrowing as gone.
+    test "runs to every related row of an included to-many, whatever its query narrows" do
+      red =
+        %{a: true, c: "red"}
+        |> Module2.new()
+        |> DB.create!()
+
+      blue =
+        %{a: false, c: "blue"}
+        |> Module2.new()
+        |> DB.create!()
+
+      required = DB.create!(Module1.new())
+
+      source =
+        %{c_id: required.id}
+        |> Module3.new()
+        |> DB.create!()
+
+      source
+      |> add_relationship(:a, red.id)
+      |> add_relationship(:a, blue.id)
+      |> DB.update!()
+
+      window =
+        Module3
+        |> include(a, &filter(&1, a == true))
+        |> Stage.normalize()
+        |> derive(false)
+        |> Stage.normalize()
+
+      assert [row] = QueryRunner.run(window, DB.mapping())
+
+      assert row.a
+             |> Enum.map(& &1.id)
+             |> Enum.sort() == Enum.sort([red.id, blue.id])
     end
 
     test "gives two queries choosing different values one window" do
