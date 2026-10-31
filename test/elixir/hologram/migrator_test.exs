@@ -465,6 +465,32 @@ defmodule Hologram.MigratorTest do
       assert check_drift!(Mapper.derive_from_model!(post_model)) == :ok
     end
 
+    test "renames a unique attribute's index with it and passes the drift check" do
+      create =
+        migration("20260813091522", [
+          %{op: :create_entity, entity: MyApp.Task, line: 3},
+          %{
+            op: :add_attribute,
+            entity: MyApp.Task,
+            name: :slug,
+            type: :string,
+            opts: [optional: true, unique: true],
+            line: 4
+          }
+        ])
+
+      model = apply_pending([create], Model.empty(), @context)
+
+      rename =
+        migration("20260813142237", [
+          %{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3}
+        ])
+
+      post_model = apply_pending([rename], model, @context)
+
+      assert check_drift!(Mapper.derive_from_model!(post_model)) == :ok
+    end
+
     test "leaves the earlier files applied when a later one refuses" do
       create =
         migration("20260813091522", [

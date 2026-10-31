@@ -474,6 +474,182 @@ defmodule Hologram.Migration.RendererTest do
              ]
     end
 
+    test "renames a unique attribute's index with it" do
+      pre = model(%{MyApp.Task => %{attributes: [{:slug, :string, [unique: true]}]}})
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3}]
+
+      result = render(ops, pre)
+
+      assert Enum.filter(result.transactional, &(&1.op == :rename_index)) == [
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$sort_$idx",
+                 to: "my_app_task_handle_$sort_$idx"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$uidx",
+                 to: "my_app_task_handle_$uidx"
+               }
+             ]
+    end
+
+    test "renames a unique to-one relationship's index with it" do
+      pre =
+        model(%{
+          MyApp.Task => %{relationships: [{:author, MyApp.User, [unique: true]}]},
+          MyApp.User => %{}
+        })
+
+      ops = [
+        %{op: :rename_relationship, entity: MyApp.Task, from: :author, to: :creator, line: 3}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "author_id", to: "creator_id"},
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task",
+                 from: "my_app_task_author_id_$fk",
+                 to: "my_app_task_creator_id_$fk"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_author_id_$uidx",
+                 to: "my_app_task_creator_id_$uidx"
+               }
+             ]
+    end
+
+    test "renames a unique attribute's index with its entity" do
+      pre = model(%{MyApp.Task => %{attributes: [{:slug, :string, [unique: true]}]}})
+
+      ops = [%{op: :rename_entity, from: MyApp.Task, to: MyApp.Ticket, line: 3}]
+
+      result = render(ops, pre)
+
+      assert Enum.filter(result.transactional, &(&1.op == :rename_index)) == [
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$sort_$idx",
+                 to: "my_app_ticket_slug_$sort_$idx"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$uidx",
+                 to: "my_app_ticket_slug_$uidx"
+               }
+             ]
+    end
+
+    test "leaves another entity type's attributes of the same names alone" do
+      pre =
+        model(%{
+          MyApp.Project => %{attributes: [{:handle, :string, []}, {:slug, :string, []}]},
+          MyApp.Task => %{attributes: [{:slug, :string, []}]}
+        })
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "slug", to: "handle"},
+               %{
+                 op: :rename_column,
+                 table: "my_app_task",
+                 from: "slug_$sort",
+                 to: "handle_$sort"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_$sort_$idx",
+                 to: "my_app_task_handle_$sort_$idx"
+               }
+             ]
+    end
+
+    test "leaves another entity type's relationships of the same names alone" do
+      pre =
+        model(%{
+          MyApp.Project => %{
+            relationships: [{:author, MyApp.User, []}, {:creator, MyApp.User, []}]
+          },
+          MyApp.Task => %{relationships: [{:author, MyApp.User, []}]},
+          MyApp.User => %{}
+        })
+
+      ops = [
+        %{op: :rename_relationship, entity: MyApp.Task, from: :author, to: :creator, line: 3}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "author_id", to: "creator_id"},
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task",
+                 from: "my_app_task_author_id_$fk",
+                 to: "my_app_task_creator_id_$fk"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_author_id_$idx",
+                 to: "my_app_task_creator_id_$idx"
+               }
+             ]
+    end
+
+    test "leaves another entity type's to-many relationships of the same names alone" do
+      pre =
+        model(%{
+          MyApp.Project => %{
+            relationships: [{:labels, [MyApp.Tag], []}, {:tags, [MyApp.Tag], []}]
+          },
+          MyApp.Tag => %{},
+          MyApp.Task => %{relationships: [{:tags, [MyApp.Tag], []}]}
+        })
+
+      ops = [%{op: :rename_relationship, entity: MyApp.Task, from: :tags, to: :labels, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{
+                 op: :rename_table,
+                 from: "my_app_task_tags_$join",
+                 to: "my_app_task_labels_$join"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task_labels_$join",
+                 from: "my_app_task_tags_$join_$pk",
+                 to: "my_app_task_labels_$join_$pk"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task_labels_$join",
+                 from: "my_app_task_tags_$join_source_id_$fk",
+                 to: "my_app_task_labels_$join_source_id_$fk"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "my_app_task_labels_$join",
+                 from: "my_app_task_tags_$join_target_id_$fk",
+                 to: "my_app_task_labels_$join_target_id_$fk"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_tags_$join_target_id_$idx",
+                 to: "my_app_task_labels_$join_target_id_$idx"
+               }
+             ]
+    end
+
     test "renders a to-many relationship rename as its join table and derived names" do
       pre = model(%{MyApp.Tag => %{}, MyApp.Task => %{relationships: [{:tags, [MyApp.Tag], []}]}})
 
