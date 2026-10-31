@@ -302,6 +302,8 @@ export default class LocalDatabase {
     LocalDatabase.#carried = new Set();
   }
 
+  // The facts a row is filed with: its to-many relationships', and its inverses' of a to-many.
+  //
   // A relationship nothing has FILED a set for is left out, rather than written down as empty.
   // `baseTargetIds` answers an empty set for both, so storing what it returns would turn "nobody
   // has said" into "the server said none" - an assertion nobody made, which `restore` would then
@@ -310,10 +312,17 @@ export default class LocalDatabase {
   static #toManyFacts(type, id) {
     const facts = {};
 
-    for (const [name, relationship] of Object.entries(
-      Model.relationships(type),
-    )) {
-      if (relationship.toMany && LocalDatabase.hasFacts(type, name, id)) {
+    const factNames = Object.entries(Model.relationships(type))
+      .filter(([_name, relationship]) => relationship.toMany)
+      .concat(
+        Object.entries(Model.inverses(type)).filter(
+          ([_name, inverse]) => !inverse.reference,
+        ),
+      )
+      .map(([name]) => name);
+
+    for (const name of factNames) {
+      if (LocalDatabase.hasFacts(type, name, id)) {
         facts[name] = Array.from(LocalDatabase.baseTargetIds(type, name, id));
       }
     }

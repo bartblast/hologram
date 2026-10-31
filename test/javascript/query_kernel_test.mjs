@@ -2,9 +2,11 @@
 
 import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
 
+import Batch from "../../assets/js/batch.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import Model from "../../assets/js/model.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 import QueryKernel from "../../assets/js/query_kernel.mjs";
 
 defineRuntimeGlobals();
@@ -812,6 +814,370 @@ describe("QueryKernel", () => {
 
         assert.deepEqual(node.includes, {});
       });
+    });
+  });
+
+  // Mirrors the interpreter's "run/3 - inverse includes" describe case for case, then the cases only
+  // a client has: writes it has not sent yet, folded into what an inverse reads.
+  describe("run() - inverse includes", () => {
+    const CHANNEL = "MyApp.Channel";
+    const LABEL = "MyApp.Label";
+    const MESSAGE = "MyApp.Message";
+    const TOPIC = "MyApp.Topic";
+
+    const node = (entity, include = {}, overrides = {}) =>
+      Object.assign(
+        {
+          cardinality: "set",
+          entity,
+          filter: [],
+          include,
+          skip: null,
+          sort: [["id", "asc"]],
+          take: null,
+        },
+        overrides,
+      );
+
+    // The term as normalization leaves it: the declared order, then the id.
+    const messagesTerm = (overrides = {}) =>
+      node(
+        MESSAGE,
+        {},
+        Object.assign(
+          {
+            sort: [
+              ["position", "asc"],
+              ["id", "asc"],
+            ],
+          },
+          overrides,
+        ),
+      );
+
+    const bodies = (nodes) => nodes.map((each) => each.row.body);
+
+    const byName = (nodes, read) =>
+      Object.fromEntries(nodes.map((each) => [each.row.name, read(each)]));
+
+    const pushed = (...writes) => {
+      const batch = new Batch("messages");
+
+      for (const write of writes) {
+        batch.append(write);
+      }
+
+      Overlay.push(batch);
+
+      return batch;
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [CHANNEL]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            inverses: {
+              messages: {
+                forward: "channel",
+                reference: true,
+                sort: [["position", "asc"]],
+                toMany: true,
+                type: MESSAGE,
+              },
+              topic: {
+                forward: "channel",
+                reference: true,
+                sort: [],
+                toMany: false,
+                type: TOPIC,
+              },
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+          [LABEL]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            inverses: {
+              messages: {
+                forward: "labels",
+                reference: false,
+                sort: [],
+                toMany: true,
+                type: MESSAGE,
+              },
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+          [MESSAGE]: {
+            attributes: {body: "string", id: "uuid", position: "integer"},
+            enumValues: {},
+            relationships: {
+              channel: {optional: true, toMany: false, type: CHANNEL},
+              labels: {toMany: true, type: LABEL},
+            },
+            serverOnly: [],
+          },
+          [TOPIC]: {
+            attributes: {id: "uuid", summary: "string"},
+            enumValues: {},
+            relationships: {
+              channel: {optional: true, toMany: false, type: CHANNEL},
+            },
+            serverOnly: [],
+          },
+        },
+      };
+
+      LocalDatabase.reset();
+      Model.reset();
+      Overlay.reset();
+
+      LocalDatabase.putRow(CHANNEL, {id: "c1", name: "general"});
+      LocalDatabase.putRow(CHANNEL, {id: "c2", name: "random"});
+    });
+
+    afterEach(() => {
+      Overlay.reset();
+    });
+
+    const message = (id, channelId, body, position) =>
+      LocalDatabase.putRow(MESSAGE, {
+        body,
+        channel_id: channelId,
+        id,
+        position,
+      });
+
+    it("fills an inverse set with the related rows naming the row, in the declared order", () => {
+      message("m1", "c1", "second", 2);
+      message("m2", "c1", "first", 1);
+      message("m3", "c2", "elsewhere", 1);
+
+      const nodes = QueryKernel.run(node(CHANNEL, {messages: messagesTerm()}));
+
+      assert.deepEqual(
+        byName(nodes, (each) => bodies(each.includes.messages)),
+        {general: ["first", "second"], random: ["elsewhere"]},
+      );
+    });
+
+    it("breaks a tie in the declared order by id", () => {
+      message("m2", "c1", "b", 1);
+      message("m1", "c1", "a", 1);
+
+      const [general] = QueryKernel.run(
+        node(CHANNEL, {messages: messagesTerm()}),
+      );
+
+      assert.deepEqual(
+        general.includes.messages.map((each) => each.row.id),
+        ["m1", "m2"],
+      );
+    });
+
+    it("puts an inverse set through the include's own clauses", () => {
+      message("m1", "c1", "one", 1);
+      message("m2", "c1", "two", 2);
+      message("m3", "c1", "three", 3);
+
+      const include = {
+        messages: messagesTerm({
+          filter: [["position", ">", 1]],
+          sort: [
+            ["position", "desc"],
+            ["id", "asc"],
+          ],
+          take: 1,
+        }),
+      };
+
+      const [general] = QueryKernel.run(node(CHANNEL, include));
+
+      assert.deepEqual(bodies(general.includes.messages), ["three"]);
+    });
+
+    it("leaves a related row whose reference is nil out of every inverse", () => {
+      message("m1", "c1", "kept", 1);
+      message("m2", null, "orphan", 1);
+
+      const nodes = QueryKernel.run(node(CHANNEL, {messages: messagesTerm()}));
+
+      assert.deepEqual(
+        byName(nodes, (each) => bodies(each.includes.messages)),
+        {general: ["kept"], random: []},
+      );
+    });
+
+    it("fills an inverse of a to-many with the related rows its ids name", () => {
+      LocalDatabase.putRow(LABEL, {id: "l1", name: "urgent"});
+      LocalDatabase.putRow(LABEL, {id: "l2", name: "later"});
+      message("m1", null, "tagged", 1);
+      message("m2", null, "both", 2);
+      message("m3", null, "untagged", 3);
+      LocalDatabase.replaceFacts(LABEL, "messages", "l1", ["m1", "m2"]);
+      LocalDatabase.replaceFacts(LABEL, "messages", "l2", ["m2"]);
+
+      const nodes = QueryKernel.run(node(LABEL, {messages: node(MESSAGE)}, {}));
+
+      assert.deepEqual(
+        byName(nodes, (each) => bodies(each.includes.messages).sort()),
+        {later: ["both"], urgent: ["both", "tagged"]},
+      );
+    });
+
+    it("fills a single inverse with the row naming it, or nil", () => {
+      LocalDatabase.putRow(TOPIC, {
+        channel_id: "c1",
+        id: "t1",
+        summary: "welcome",
+      });
+
+      const nodes = QueryKernel.run(
+        node(CHANNEL, {topic: node(TOPIC, {}, {sort: []})}),
+      );
+
+      assert.deepEqual(
+        byName(nodes, (each) => each.includes.topic?.row.summary ?? null),
+        {general: "welcome", random: null},
+      );
+    });
+
+    it("nests an include under an inverse set", () => {
+      LocalDatabase.putRow(LABEL, {id: "l1", name: "urgent"});
+      message("m1", "c1", "tagged", 1);
+      LocalDatabase.replaceFacts(MESSAGE, "labels", "m1", ["l1"]);
+
+      const include = {
+        messages: messagesTerm({include: {labels: node(LABEL)}}),
+      };
+
+      const [general] = QueryKernel.run(node(CHANNEL, include));
+      const [included] = general.includes.messages;
+
+      assert.deepEqual(
+        included.includes.labels.map((each) => each.row.name),
+        ["urgent"],
+      );
+    });
+
+    it("reads an inverse below the root, matched to the row including it", () => {
+      LocalDatabase.putRow(TOPIC, {
+        channel_id: "c1",
+        id: "t1",
+        summary: "welcome",
+      });
+      message("m1", "c1", "in general", 1);
+      message("m2", "c2", "in random", 1);
+
+      const include = {
+        channel: node(
+          CHANNEL,
+          {messages: messagesTerm(), topic: node(TOPIC, {}, {sort: []})},
+          {sort: []},
+        ),
+      };
+
+      const nodes = QueryKernel.run(
+        node(MESSAGE, include, {filter: [["body", "==", "in general"]]}),
+      );
+
+      assert.equal(nodes.length, 1);
+      assert.equal(
+        nodes[0].includes.channel.includes.topic.row.summary,
+        "welcome",
+      );
+
+      assert.deepEqual(bodies(nodes[0].includes.channel.includes.messages), [
+        "in general",
+      ]);
+    });
+
+    // A row the session may not read never reaches the client, and an id naming a row it does
+    // not hold is passed over - the browser's side of the server's read rules.
+    it("passes over an id naming a row the client does not hold", () => {
+      LocalDatabase.putRow(LABEL, {id: "l1", name: "urgent"});
+      message("m1", null, "shown", 1);
+      LocalDatabase.replaceFacts(LABEL, "messages", "l1", ["m1", "m_hidden"]);
+
+      const [urgent] = QueryKernel.run(node(LABEL, {messages: node(MESSAGE)}));
+
+      assert.deepEqual(bodies(urgent.includes.messages), ["shown"]);
+    });
+
+    it("reads a pending move of a related row under the row it moved to", () => {
+      message("m1", "c1", "moving", 1);
+
+      pushed({
+        data: {channel_id: "c2"},
+        id: "m1",
+        op: "update",
+        stamp: 1_756_100_000_123 * 1024,
+        type: MESSAGE,
+      });
+
+      const nodes = QueryKernel.run(node(CHANNEL, {messages: messagesTerm()}));
+
+      assert.deepEqual(
+        byName(nodes, (each) => bodies(each.includes.messages)),
+        {general: [], random: ["moving"]},
+      );
+    });
+
+    it("reads a pending edge of a related row through an inverse of a to-many", () => {
+      LocalDatabase.putRow(LABEL, {id: "l1", name: "urgent"});
+      message("m1", null, "added", 1);
+      message("m2", null, "removed", 2);
+      LocalDatabase.replaceFacts(LABEL, "messages", "l1", ["m2"]);
+
+      pushed(
+        {
+          id: "m1",
+          op: "add_relationship",
+          relationship: "labels",
+          target_id: "l1",
+          type: MESSAGE,
+        },
+        {
+          id: "m2",
+          op: "delete_relationship",
+          relationship: "labels",
+          target_id: "l1",
+          type: MESSAGE,
+        },
+      );
+
+      const [urgent] = QueryKernel.run(node(LABEL, {messages: node(MESSAGE)}));
+
+      assert.deepEqual(bodies(urgent.includes.messages), ["added"]);
+    });
+
+    it("drops a related row a pending delete takes away from an inverse of a to-many", () => {
+      LocalDatabase.putRow(LABEL, {id: "l1", name: "urgent"});
+      message("m1", null, "deleted", 1);
+      message("m2", null, "kept", 2);
+      LocalDatabase.replaceFacts(LABEL, "messages", "l1", ["m1", "m2"]);
+
+      pushed({id: "m1", op: "delete", type: MESSAGE});
+
+      const [urgent] = QueryKernel.run(node(LABEL, {messages: node(MESSAGE)}));
+
+      assert.deepEqual(bodies(urgent.includes.messages), ["kept"]);
+    });
+
+    it("drops a related row a pending delete takes away", () => {
+      message("m1", "c1", "deleted", 1);
+
+      pushed({id: "m1", op: "delete", type: MESSAGE});
+
+      const [general] = QueryKernel.run(
+        node(CHANNEL, {messages: messagesTerm()}),
+      );
+
+      assert.deepEqual(general.includes.messages, []);
     });
   });
 

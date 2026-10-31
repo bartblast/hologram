@@ -145,13 +145,20 @@ export default class Deltas {
     return row.id;
   }
 
+  // A to-many's ids and an inverse of a to-many's ids are facts - the second read off the related
+  // rows' edges by the server, and kept current by the edges it reports for them.
   static #fileRow(type, row) {
     const relationships = Model.relationships(type);
+    const inverses = Model.inverses(type);
     const attributes = {};
     const facts = [];
 
     for (const [key, value] of Object.entries(row)) {
-      if (relationships[key]?.toMany) {
+      const factKey =
+        (Object.hasOwn(relationships, key) && relationships[key].toMany) ||
+        (Object.hasOwn(inverses, key) && !inverses[key].reference);
+
+      if (factKey) {
         facts.push([key, value]);
       } else {
         attributes[key] = value;
