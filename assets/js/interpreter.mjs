@@ -859,10 +859,6 @@ export default class Interpreter {
       context.vars.__matched__ = {};
     }
 
-    if (Interpreter.#hasUnresolvedVariablePattern(right)) {
-      return Type.matchPattern(left, right);
-    }
-
     if (left.type === "match_pattern") {
       // The term has to hold against both sides, so a side that doesn't hold
       // fails the whole match, even where failing is answered rather than raised.
@@ -887,10 +883,6 @@ export default class Interpreter {
 
     if (Type.isMatchPlaceholder(left)) {
       return right;
-    }
-
-    if (Type.isMatchPlaceholder(right)) {
-      return left;
     }
 
     if (Type.isVariablePattern(left)) {
@@ -2198,58 +2190,6 @@ export default class Interpreter {
     return false;
   }
 
-  static #hasUnresolvedVariablePattern(term) {
-    const termType = term.type;
-
-    if (
-      termType === "anonymous_function" ||
-      termType === "atom" ||
-      termType === "bitstring" ||
-      termType === "float" ||
-      termType === "integer" ||
-      termType === "match_placeholder"
-    ) {
-      return false;
-    }
-
-    if (termType === "variable_pattern") {
-      return true;
-    }
-
-    if (termType === "cons_pattern") {
-      return (
-        Interpreter.#hasUnresolvedVariablePattern(term.head) ||
-        Interpreter.#hasUnresolvedVariablePattern(term.tail)
-      );
-    }
-
-    if (termType === "list" || termType === "tuple") {
-      return term.data.some((item) =>
-        Interpreter.#hasUnresolvedVariablePattern(item),
-      );
-    }
-
-    if (termType === "map") {
-      for (const [key, value] of Object.values(term.data)) {
-        if (
-          Interpreter.#hasUnresolvedVariablePattern(key) ||
-          Interpreter.#hasUnresolvedVariablePattern(value)
-        ) {
-          return true;
-        }
-      }
-    }
-
-    if (termType === "match_pattern") {
-      return (
-        Interpreter.#hasUnresolvedVariablePattern(term.left) ||
-        Interpreter.#hasUnresolvedVariablePattern(term.right)
-      );
-    }
-
-    return false;
-  }
-
   static #inspectAnonymousFunction(term, _opts) {
     if (term.capturedModule) {
       return `&${term.capturedModule}.${term.capturedFunction}/${term.arity}`;
@@ -2510,7 +2450,7 @@ export default class Interpreter {
   // }
 
   static #matchBitstringPattern(right, left, context, raiseMatchError) {
-    if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
+    if (right.type !== "bitstring") {
       return $.#handleMatchFail(right, raiseMatchError);
     }
 
