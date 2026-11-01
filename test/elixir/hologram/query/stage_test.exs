@@ -1320,6 +1320,215 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "filter/2 - quantifiers" do
+    test "quantifies over an inverse of a to-one" do
+      query = filter(Module26, any: {[:messages], [body: "hi"]})
+
+      assert query.filter == [{:any, {[:messages], [{:body, :==, "hi"}]}}]
+    end
+
+    test "quantifies over a stored to-many" do
+      query = filter(Module28, any: {[:labels], [name: "urgent"]})
+
+      assert query.filter == [{:any, {[:labels], [{:name, :==, "urgent"}]}}]
+    end
+
+    test "quantifies over an inverse of a to-many" do
+      query = filter(Module29, any: {[:messages], [body: "hi"]})
+
+      assert query.filter == [{:any, {[:messages], [{:body, :==, "hi"}]}}]
+    end
+
+    test "quantifies with no condition" do
+      query = filter(Module26, any: {[:messages], []})
+
+      assert query.filter == [{:any, {[:messages], []}}]
+    end
+
+    test "quantifies with none" do
+      query = filter(Module26, none: {[:messages], [body: "hi"]})
+
+      assert query.filter == [{:none, {[:messages], [{:body, :==, "hi"}]}}]
+    end
+
+    test "quantifies with all" do
+      query = filter(Module26, all: {[:messages], [position: {:>, 1}]})
+
+      assert query.filter == [{:all, {[:messages], [{:position, :>, 1}]}}]
+    end
+
+    test "quantifies over a set reached through a to-one" do
+      query = filter(Module28, any: {[:channel, :messages], [body: "hi"]})
+
+      assert query.filter == [{:any, {[:channel, :messages], [{:body, :==, "hi"}]}}]
+    end
+
+    test "quantifies inside a quantifier's condition, over the related row's set" do
+      query = filter(Module26, any: {[:messages], [any: {[:labels], [name: "urgent"]}]})
+
+      assert query.filter == [
+               {:any, {[:messages], [{:any, {[:labels], [{:name, :==, "urgent"}]}}]}}
+             ]
+    end
+
+    test "reads a path of the related row" do
+      query = filter(Module26, any: {[:messages], [{[:channel, :name], "general"}]})
+
+      assert query.filter == [{:any, {[:messages], [{[:channel, :name], :==, "general"}]}}]
+    end
+
+    test "takes a quantifier as an alternative of a disjunction" do
+      query = filter(Module26, or: [[name: "general"], [any: {[:messages], []}]])
+
+      assert query.filter == [{:or, [[{:name, :==, "general"}], [{:any, {[:messages], []}}]]}]
+    end
+
+    test "keeps an attribute named like a quantifier an attribute" do
+      defmodule AnyAttributeFixture do
+        use Hologram.Entity
+
+        attribute :any, :boolean, default: false
+      end
+
+      query = filter(AnyAttributeFixture, any: true, any: {:!=, false})
+
+      assert query.filter == [{:any, :==, true}, {:any, :!=, false}]
+    end
+
+    test "raises on a source ending at a to-one relationship" do
+      expected_msg =
+        ":channel is a to-one relationship in Hologram.Test.Fixtures.Entity.Module28 - any, none and all ask about the rows of a to-many relationship - compare the related row through a path: channel.<attribute>"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module28, any: {[:channel], []})
+      end
+    end
+
+    test "raises on a source ending at a single inverse" do
+      expected_msg =
+        ":topic is an inverse relationship holding one row in Hologram.Test.Fixtures.Entity.Module26 - any, none and all ask about the rows of a to-many relationship"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:topic], []})
+      end
+    end
+
+    test "raises on a source going through a to-many relationship" do
+      expected_msg =
+        ":labels is a to-many relationship in Hologram.Test.Fixtures.Entity.Module28 - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module28, any: {[:labels, :messages], []})
+      end
+    end
+
+    test "raises on a source going through an inverse relationship" do
+      expected_msg =
+        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a quantifier's source goes through to-one relationships that hold their reference to a set"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages, :labels], []})
+      end
+    end
+
+    test "raises on a source going through an attribute" do
+      expected_msg =
+        ":body is an attribute in Hologram.Test.Fixtures.Entity.Module28 - a quantifier's source names relationships"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module28, any: {[:body, :messages], []})
+      end
+    end
+
+    test "raises on a source going through an unknown relationship" do
+      expected_msg =
+        "unknown relationship :thread in Hologram.Test.Fixtures.Entity.Module28 - known relationships: :channel"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module28, any: {[:thread, :messages], []})
+      end
+    end
+
+    test "raises on a source naming an attribute" do
+      expected_msg =
+        ":name is an attribute in Hologram.Test.Fixtures.Entity.Module26 - a quantifier's source names relationships"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:name], []})
+      end
+    end
+
+    test "raises on a source naming an unknown relationship" do
+      expected_msg =
+        "unknown relationship :posts in Hologram.Test.Fixtures.Entity.Module26 - known relationships: :messages, :topic"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:posts], []})
+      end
+    end
+
+    test "raises on an empty source" do
+      expected_msg =
+        "a quantifier's source is a list of relationship names, got: []"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[], []})
+      end
+    end
+
+    test "raises on a source holding something other than relationship names" do
+      expected_msg = ~s(a quantifier's source is a list of relationship names, got: ["messages"])
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {["messages"], []})
+      end
+    end
+
+    test "raises on a source the related row does not declare, naming the related type" do
+      expected_msg =
+        "unknown relationship :topic in Hologram.Test.Fixtures.Entity.Module28 - known relationships: :channel, :labels"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [any: {[:topic], []}]})
+      end
+    end
+
+    test "raises on all with no condition" do
+      expected_msg =
+        "all takes a condition - all over no condition says nothing, got: {[:messages], []}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, all: {[:messages], []})
+      end
+    end
+
+    test "raises on a condition that is not a list of name and value pairs" do
+      expected_msg = "a quantifier's condition is a list of name and value pairs, got: [:body]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [:body]})
+      end
+    end
+
+    test "raises on an unknown attribute of the related row" do
+      expected_msg =
+        "unknown attribute :title in Hologram.Test.Fixtures.Entity.Module28 - known attributes: :body, :channel_id, :created_at, :id, :position, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [title: "x"]})
+      end
+    end
+
+    test "raises on an attribute of the related row compared with itself" do
+      expected_msg =
+        "operator :== compares attribute :name in Hologram.Test.Fixtures.Entity.Module29 with itself"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module28, any: {[:labels], [name: {:attribute, :name}]})
+      end
+    end
+  end
+
   describe "include/3" do
     test "includes an inverse set" do
       query = include(Module26, :messages)
@@ -2049,6 +2258,37 @@ defmodule Hologram.Query.StageTest do
 
       assert query.filter == [{:or, [[{:a, :==, true}, {:b, :==, 1}], [{:c, :==, "x"}]]}]
     end
+
+    test "sorts quantifiers among disjunctions, before the predicates beside them" do
+      query =
+        Module26
+        |> filter(name: "general")
+        |> filter(or: [[name: "b"], [name: "a"]])
+        |> filter(none: {[:messages], [position: 2, body: "b"]}, any: {[:messages], []})
+        |> normalize()
+
+      assert query.filter == [
+               {:any, {[:messages], []}},
+               {:none, {[:messages], [{:body, :==, "b"}, {:position, :==, 2}]}},
+               {:or, [[{:name, :==, "a"}], [{:name, :==, "b"}]]},
+               {:name, :==, "general"}
+             ]
+
+      assert normalize(query) == query
+    end
+
+    test "sorts a nested quantifier's predicates" do
+      query =
+        Module26
+        |> filter(any: {[:messages], [any: {[:labels], [name: "b", id: "a"]}]})
+        |> normalize()
+
+      assert query.filter == [
+               {:any, {[:messages], [{:any, {[:labels], [{:id, :==, "a"}, {:name, :==, "b"}]}}]}}
+             ]
+
+      assert normalize(query) == query
+    end
   end
 
   describe "normalized_filter/1" do
@@ -2412,6 +2652,24 @@ defmodule Hologram.Query.StageTest do
       assert_error ArgumentError, expected_msg, fn ->
         put_attribute(entity, :nope, 1)
       end
+    end
+  end
+
+  describe "quantified?/1" do
+    test "holds for a quantifier" do
+      assert quantified?([{:any, {[:messages], []}}])
+    end
+
+    test "holds for a quantifier inside an alternative" do
+      assert quantified?([{:or, [[{:a, :==, 1}], [{:none, {[:messages], []}}]]}])
+    end
+
+    test "fails for predicates and disjunctions alone" do
+      refute quantified?([{:a, :==, 1}, {:or, [[{:b, :==, 2}], [{:c, :==, 3}]]}])
+    end
+
+    test "fails for an attribute named like a quantifier" do
+      refute quantified?([{:any, :==, true}])
     end
   end
 

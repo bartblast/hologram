@@ -20,6 +20,7 @@ defmodule Hologram.Query.Stage do
   @membership_operators [:in, :not_in]
   @orderable_types [:date, :datetime, :enum, :float, :integer, :string, :time]
   @ordering_operators [:<, :<=, :>, :>=]
+  @quantifiers [:all, :any, :none]
 
   # The type pairs whose attributes compare though their types differ, compared on the wider type -
   # a widening keeps the value's meaning. An integer is the same number as a float. A date is not a
@@ -88,6 +89,13 @@ defmodule Hologram.Query.Stage do
   # name of the row at the end - stands wherever an attribute name does, as a key or inside an
   # {:attribute, path} operand, and the triple stores it as is. It is checked by the declaration
   # of the name it ends at.
+  #
+  # An any:, none: or all: entry whose value is a {source, predicates} pair is a quantifier, which
+  # becomes one {quantifier, {source, clauses}} clause holding when any, none or all of the rows of a
+  # related set match the predicates. The source is the list of relationships followed to the set -
+  # to-one ones, then a to-many or an inverse set - and the predicates are about one related row. As
+  # with or:, the shape decides rather than the name, so an attribute named any keeps every other
+  # spelling.
   #
   # A Hologram.Query.Placeholder struct in a value position - bare, as an operator-tuple operand,
   # or as a membership list element - stands for a runtime-bound value: the triple stores a
@@ -294,25 +302,7 @@ defmodule Hologram.Query.Stage do
 
   @doc false
   @spec predicate_triples!(module, Query.predicates()) :: list(Query.clause())
-  def predicate_triples!(entity_type, predicates) do
-    Enum.flat_map(predicates, fn
-      {%Placeholder{name: placeholder_name}, value} ->
-        [placeholder_key_triple(placeholder_name, value)]
-
-      # The shape decides rather than the name, so or is no reserved attribute name: a list of lists
-      # is no value any attribute takes - a membership list holds plain values and a list of
-      # operator tuples holds tuples - and an attribute named or keeps every other spelling.
-      {:or, alternatives} = entry when is_list(alternatives) ->
-        if Enum.all?(alternatives, &is_list/1) do
-          [disjunction!(entity_type, alternatives)]
-        else
-          attribute_triples!(entity_type, entry)
-        end
-
-      entry ->
-        attribute_triples!(entity_type, entry)
-    end)
-  end
+  def predicate_triples!(entity_type, predicates), do: scoped_triples!([entity_type], predicates)
 
   @doc false
   @spec put_attribute(Entity.t(), keyword | map) :: Entity.t()
@@ -353,6 +343,18 @@ defmodule Hologram.Query.Stage do
   @spec put_attribute(Entity.t(), atom, any) :: Entity.t()
   def put_attribute(entity, name, value) do
     put_attribute(entity, [{name, value}])
+  end
+
+  # Returns whether the given filter clauses hold a quantifier, in a disjunction's alternatives
+  # included.
+  @doc false
+  @spec quantified?(list(Query.clause())) :: boolean
+  def quantified?(clauses) do
+    Enum.any?(clauses, fn
+      {:or, alternatives} -> Enum.any?(alternatives, &quantified?/1)
+      {quantifier, {_source, _clauses}} when quantifier in @quantifiers -> true
+      _triple -> false
+    end)
   end
 
   @doc false
@@ -458,7 +460,7 @@ defmodule Hologram.Query.Stage do
     {name, operator, {:attribute, other}}
   end
 
-  defp attribute_triples!(entity_type, {name, value}) do
+  defp attribute_triples!([entity_type | _rows_above], {name, value}) do
     validate_predicate_name!(name, entity_type)
 
     predicate_triples!(name, value, entity_type)
@@ -488,7 +490,7 @@ defmodule Hologram.Query.Stage do
   # One alternative says what its predicates say alone, and an empty one says nothing at all - it
   # would make the disjunction hold for every row - so neither is a disjunction, and every executor
   # is spared both shapes. The lowering never produces either.
-  defp disjunction!(entity_type, alternatives) do
+  defp disjunction!(scope, alternatives) do
     if length(alternatives) < 2 do
       raise ArgumentError,
         message:
@@ -503,7 +505,7 @@ defmodule Hologram.Query.Stage do
       end
     end)
 
-    {:or, Enum.map(alternatives, &predicate_triples!(entity_type, &1))}
+    {:or, Enum.map(alternatives, &scoped_triples!(scope, &1))}
   end
 
   # A stage on an entity struct: the struct's type, or a refusal naming the stage.
@@ -638,6 +640,10 @@ defmodule Hologram.Query.Stage do
       |> Enum.sort()
 
     {:or, sorted_alternatives}
+  end
+
+  defp normalized_clause({quantifier, {source, clauses}}) when quantifier in @quantifiers do
+    {quantifier, {source, normalized_filter(clauses)}}
   end
 
   defp normalized_clause(triple), do: triple
@@ -970,10 +976,54 @@ defmodule Hologram.Query.Stage do
     Map.put(entity, :__meta__, %Metadata{metadata | relationship_ops: recorded_ops})
   end
 
+  # The source decides the related type the predicates are about, and the rows above them stay in
+  # the scope, nearest first.
+  defp quantifier!([entity_type | _rows_above] = scope, quantifier, {source, predicates} = value) do
+    validate_source_shape!(source)
+
+    related_type = validate_source!(source, entity_type)
+
+    if not filterable_predicates?(predicates) do
+      raise ArgumentError,
+        message:
+          "a quantifier's condition is a list of name and value pairs, got: #{inspect(predicates)}"
+    end
+
+    if quantifier == :all and predicates == [] do
+      raise ArgumentError,
+        message:
+          "all takes a condition - all over no condition says nothing, got: #{inspect(value)}"
+    end
+
+    {quantifier, {source, scoped_triples!([related_type | scope], predicates)}}
+  end
+
+  defp quantifier_value?({source, predicates}) when is_list(source) and is_list(predicates),
+    do: true
+
+  defp quantifier_value?(_value), do: false
+
   defp raise_unknown_operator!(operator, name) do
     raise ArgumentError,
       message:
         "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect_name(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
+  end
+
+  # The known relationships are the ones the position takes: to-one ones before the set, every
+  # relationship at the set.
+  @spec raise_unknown_source_name!(atom, module, list(atom)) :: no_return
+  defp raise_unknown_source_name!(name, entity_type, known_names) do
+    if name in attribute_names(entity_type) do
+      raise ArgumentError,
+        message:
+          "#{inspect(name)} is an attribute in #{inspect(entity_type)} - a quantifier's source names relationships"
+    end
+
+    known = Enum.map_join(known_names, ", ", &inspect/1)
+
+    raise ArgumentError,
+      message:
+        "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships: #{known}"
   end
 
   defp recorded_increment(nil), do: 0
@@ -1002,6 +1052,37 @@ defmodule Hologram.Query.Stage do
 
   defp relationship_names(entity_type) do
     Enum.map(entity_type.__relationships__(), fn {name, _type, _opts} -> name end)
+  end
+
+  # The scope is the type of the row the predicates are about, then the type of each row above it,
+  # nearest first - the queried type last.
+  defp scoped_triples!(scope, predicates) do
+    Enum.flat_map(predicates, fn
+      {%Placeholder{name: placeholder_name}, value} ->
+        [placeholder_key_triple(placeholder_name, value)]
+
+      # The shape decides rather than the name, so or is no reserved attribute name: a list of lists
+      # is no value any attribute takes - a membership list holds plain values and a list of
+      # operator tuples holds tuples - and an attribute named or keeps every other spelling.
+      {:or, alternatives} = entry when is_list(alternatives) ->
+        if Enum.all?(alternatives, &is_list/1) do
+          [disjunction!(scope, alternatives)]
+        else
+          attribute_triples!(scope, entry)
+        end
+
+      # The same goes for the quantifiers: a pair whose first element is a list is no operator
+      # tuple, so it is no value of an attribute named any, none or all.
+      {quantifier, value} = entry when quantifier in @quantifiers ->
+        if quantifier_value?(value) do
+          [quantifier!(scope, quantifier, value)]
+        else
+          attribute_triples!(scope, entry)
+        end
+
+      entry ->
+        attribute_triples!(scope, entry)
+    end)
   end
 
   defp set_view_bound!(query, field, %Placeholder{name: placeholder_name}) do
@@ -1478,6 +1559,70 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError,
           message:
             "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships: #{known}"
+    end
+  end
+
+  # A source follows to-one relationships that hold their reference, and ends at a set - a to-many
+  # or an inverse of either kind of relationship - whose type its predicates are about.
+  defp validate_source!(hops, entity_type) do
+    {to_one_hops, [set_name]} = Enum.split(hops, -1)
+
+    set_owner_type = Enum.reduce(to_one_hops, entity_type, &validate_source_hop!/2)
+
+    validate_source_set!(set_name, set_owner_type)
+  end
+
+  defp validate_source_hop!(hop, entity_type) do
+    if hop in inverse_relationship_names(entity_type) do
+      raise ArgumentError,
+        message:
+          "#{inspect(hop)} is an inverse relationship in #{inspect(entity_type)} - a quantifier's source goes through to-one relationships that hold their reference to a set"
+    end
+
+    case List.keyfind(entity_type.__relationships__(), hop, 0) do
+      {_name, [_target], _opts} ->
+        raise ArgumentError,
+          message:
+            "#{inspect(hop)} is a to-many relationship in #{inspect(entity_type)} - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own"
+
+      {_name, target, _opts} ->
+        target
+
+      nil ->
+        raise_unknown_source_name!(hop, entity_type, to_one_relationship_names(entity_type))
+    end
+  end
+
+  defp validate_source_set!(name, entity_type) do
+    case Entity.inverse_relationship(entity_type, name) do
+      %{to_many?: true, target: target} ->
+        target
+
+      %{to_many?: false} ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is an inverse relationship holding one row in #{inspect(entity_type)} - any, none and all ask about the rows of a to-many relationship"
+
+      nil ->
+        case List.keyfind(entity_type.__relationships__(), name, 0) do
+          {_name, [target], _opts} ->
+            target
+
+          {_name, _target, _opts} ->
+            raise ArgumentError,
+              message:
+                "#{inspect(name)} is a to-one relationship in #{inspect(entity_type)} - any, none and all ask about the rows of a to-many relationship - compare the related row through a path: #{name}.<attribute>"
+
+          nil ->
+            raise_unknown_source_name!(name, entity_type, Entity.includable_names(entity_type))
+        end
+    end
+  end
+
+  defp validate_source_shape!(source) do
+    if source == [] or not Enum.all?(source, &is_atom/1) do
+      raise ArgumentError,
+        message: "a quantifier's source is a list of relationship names, got: #{inspect(source)}"
     end
   end
 

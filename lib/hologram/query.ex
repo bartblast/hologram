@@ -25,17 +25,21 @@ defmodule Hologram.Query do
 
   # Another attribute of the same row, or a path to an attribute of a related row, compared with
   # the predicate's attribute.
-  @type attribute_operand :: {:attribute, atom | path}
+  @type attribute_operand :: {:attribute, name}
 
   @type bound :: non_neg_integer | placeholder | nil
 
   @type cardinality :: :count | :one | :set
 
-  @type clause :: predicate | disjunction
+  @type clause :: predicate | disjunction | quantifier
 
   # A disjunction holds when any of its alternatives does, and an alternative is a list of clauses
   # that all hold - so a disjunction nests inside an alternative the way it sits in a filter.
   @type disjunction :: {:or, list(list(clause))}
+
+  # An attribute or a path of the row a clause list is about - the queried row, or inside a
+  # quantifier the related row.
+  @type name :: atom | path
 
   @type operator :: :!= | :< | :<= | :== | :> | :>= | :in | :not_in
 
@@ -47,11 +51,19 @@ defmodule Hologram.Query do
 
   @type placeholder :: {:placeholder, atom}
 
-  # The data form a filter is given in: an attribute, a path or a placeholder paired with a value.
-  @type predicates :: list({atom | path | Placeholder.t(), any})
+  # The data form a filter is given in: a name or a placeholder paired with a value, an or: entry,
+  # or a quantifier's any:, none: or all: entry.
+  @type predicates :: list({name | Placeholder.t(), any})
 
   # The operand is a literal, a placeholder, the acting user ({:actor}) or an attribute_operand.
-  @type predicate :: {atom | path | placeholder, operator, any}
+  @type predicate :: {name | placeholder, operator, any}
+
+  # Holds when any, none or all of the rows of a related set match its clauses, which are about one
+  # related row. The source is the relationships followed to the set from the row the quantifier is
+  # about - to-one ones, and a to-many or an inverse set last.
+  @type quantifier :: {:all | :any | :none, {source, list(clause)}}
+
+  @type source :: list(atom)
 
   @type t :: %__MODULE__{
           cardinality: cardinality,

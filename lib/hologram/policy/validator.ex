@@ -465,6 +465,12 @@ defmodule Hologram.Policy.Validator do
 
   defp validate_predicates!(entity_type, operation, predicates, location) do
     clauses = Stage.predicate_triples!(entity_type, predicates)
+
+    # TODO: lift once policy conditions take quantifiers.
+    if Stage.quantified?(clauses) do
+      raise ArgumentError, message: "a policy condition takes no quantifier (any, none, all)"
+    end
+
     validate_server_only_predicates!(entity_type, operation, clauses, location)
 
     :ok
