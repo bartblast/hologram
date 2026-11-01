@@ -2038,7 +2038,7 @@ Hologram implements several optimizations to make page transitions feel instant:
 
 ##### Prefetching
 
-When a user interacts with a link, Hologram starts prefetching the target page on the `$pointer_down` event. When the `$pointer_up` event occurs, the current page is replaced with the prefetched content, making the transition feel instantaneous.
+When a user interacts with a link, Hologram starts prefetching the target page on the `$pointer_down` event. On the `$click` event that follows, the current page is replaced with the prefetched content, making the transition feel instantaneous. A link followed without a pointer press, like from the keyboard or a screen reader, fetches the target page on the `$click` event instead.
 
 ##### Browser History
 
