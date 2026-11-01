@@ -3184,6 +3184,76 @@ describe("Hologram", () => {
       });
     });
 
+    // A prefetch kept across a logout, or a response read before one.
+    describe("a page described for an identity that has since changed", () => {
+      let frames, pushStateStub, reloadStub;
+
+      beforeEach(() => {
+        frames = [];
+        window.requestAnimationFrame = (callback) => frames.push(callback);
+        pushStateStub = sinon.stub(history, "pushState");
+        reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+        IdentityTracker.init("tag-1");
+      });
+
+      afterEach(() => {
+        reloadStub.restore();
+        pushStateStub.restore();
+        delete window.requestAnimationFrame;
+        clearIdentityTracker();
+        removeBundleScripts();
+      });
+
+      const staleTo = (payload) => {
+        const identityPeriod = IdentityTracker.period;
+        IdentityTracker.observe("tag-2");
+
+        return {...payload, identityPeriod: identityPeriod};
+      };
+
+      it("is handed to the browser, which loads it for the identity the session holds now", async () => {
+        await Hologram.loadNewPage("/target", staleTo(payloadFor("stale-1")));
+
+        assert.deepStrictEqual(assignedUrls, ["/target"]);
+        sinon.assert.notCalled(reloadStub);
+        assert.deepStrictEqual(frames, []);
+        assert.isNull(bundleScript("stale-1"));
+      });
+
+      // The address bar shows the entry's URL already.
+      it("reloads the entry the browser went to when it was meant for one", async () => {
+        await Hologram.loadNewPage(
+          "/entry",
+          staleTo(payloadFor("stale-2")),
+          0,
+          "history-entry-stale",
+        );
+
+        sinon.assert.calledOnce(reloadStub);
+        assert.deepStrictEqual(assignedUrls, []);
+        assert.deepStrictEqual(frames, []);
+      });
+
+      // A redirect a prefetch kept is stale the same way: the page it leads to is the server's
+      // answer for the previous identity.
+      it("is handed to the browser when it is a redirect", async () => {
+        await Hologram.loadNewPage("/clicked", staleTo(redirectTo("/target")));
+
+        assert.deepStrictEqual(assignedUrls, ["/clicked"]);
+        sinon.assert.notCalled(fetchPageStub);
+      });
+
+      it("is shown when it was described for the identity that lasts", async () => {
+        await Hologram.loadNewPage("/target", {
+          ...payloadFor("current-1"),
+          identityPeriod: IdentityTracker.period,
+        });
+
+        assert.deepStrictEqual(assignedUrls, []);
+        assert.equal(frames.length, 1);
+      });
+    });
+
     // A page is shown in the next frame, and the visitor can do something else before it comes.
     describe("a later navigation before the page's frame", () => {
       let consoleErrorStub,

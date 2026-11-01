@@ -632,6 +632,25 @@ export default class Hologram {
   ) {
     const navigation = $.#beginNavigation();
 
+    // A page described for an identity that has since changed, a prefetch kept across a logout or
+    // a response read before one, is loaded afresh instead, so that the page shown is the one the
+    // server renders for the identity the session holds now, with its middleware run for it. A
+    // page loaded into an entry the browser went to reloads that entry: its URL is what the
+    // address bar shows already. A payload stamped with no period predates stamping.
+    if (
+      payload.identityPeriod !== null &&
+      payload.identityPeriod !== undefined &&
+      !IdentityTracker.isCurrent(payload.identityPeriod)
+    ) {
+      if (historyEntryId === null) {
+        Hologram.navigateBrowserTo(pagePath);
+      } else {
+        Hologram.reloadBrowserLocation();
+      }
+
+      return;
+    }
+
     if (payload.type === "redirect") {
       return Hologram.#followRedirect(
         payload,
