@@ -8,7 +8,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - **Never** use HEEx templates. Hologram uses `~HOLO` sigil, not `~H`.
 - Actions use `put_state`, not `assign`. State is accessed with `component.state.key`, not `socket.assigns.key`.
 - Commands use `server` struct, not `socket`. Return `%Server{}`, not `{:noreply, socket}`.
-- Cookie keys are strings (`"my_cookie"`), session keys are atoms or strings (`:user_id`). Mixing these up causes errors.
+- Cookie keys are strings (`"my_cookie"`), session keys are atoms or strings (`:locale`). Mixing these up causes errors.
 - `init/3` for pages receives URL params, not props. Don't confuse with component `init/3` which receives props.
 - Never give a state key the same name as a prop. Templates merge props and state with state winning, so the state key shadows the prop entirely. Copying a prop into a same-named state key in `init` is the usual cause - `init` runs once, so the copy never refreshes and fresh props never reach the template. Use distinct names (an `:initial_count` prop feeding a `:count` state key).
 - Never copy a prop into state so an action can read it. Read it from the struct: `component.props.name`. Props follow whatever the parent passes, so an action always reads the current value.
@@ -207,7 +207,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Read: `get_session(server, :key)` or `get_session(server, :key, default)`.
 - Write: `put_session(server, :key, value)`.
 - Delete: `delete_session(server, :key)`.
-- Session keys must be atoms or strings (atoms are converted to strings, so `:user_id` and `"user_id"` address the same value).
+- Session keys must be atoms or strings (atoms are converted to strings, so `:locale` and `"locale"` address the same value).
 - Sessions can store any Elixir data type (maps, lists, tuples, etc.).
 - Record the logged-in user with `put_user_id/2`, not a session key of your own. Hologram knows the user only through it, for the Back/forward check and realtime subscriptions.
 - Session data cannot be read by client-side code. Use cookies if you need client-side access.

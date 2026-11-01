@@ -1947,7 +1947,7 @@ put_action(server, %Action{name: :my_action})
 Session data can be managed using the session functions. For example, using `put_session/3`:
 
 ```elixir
-put_session(server, :user_id, user.id)
+put_session(server, :locale, "en")
 ```
 
 See the Session documentation for more details on managing session data.
@@ -2422,7 +2422,7 @@ defmodule MyApp.Middleware.RequireAuth do
 
   @impl Hologram.Middleware
   def call(server, _opts) do
-    require_auth(server, get_session(server, :user_id))
+    require_auth(server, server.user_id)
   end
 
   defp require_auth(server, nil), do: put_redirect(server, MyApp.LoginPage)
@@ -2517,7 +2517,7 @@ defmodule MyApp.Middleware.LoadCurrentUser do
 
   @impl Hologram.Middleware
   def call(server, _opts) do
-    load_user(server, get_session(server, :user_id))
+    load_user(server, server.user_id)
   end
 
   defp load_user(server, nil), do: server
@@ -2694,7 +2694,7 @@ Hologram provides the following functions for working with sessions:
 - `put_session(server, key, value)` - writes a session value
 - `delete_session(server, key)` - deletes a session value
 
-**Note:** Session keys must be atoms or strings - other types raise. Atom keys are accepted and converted to strings, so `:user_id` and `"user_id"` address the same value. In embedded mode the session is backed by the Phoenix session store, which keys by string, and recovering the original atom would require an unsafe string-to-atom conversion.
+**Note:** Session keys must be atoms or strings - other types raise. Atom keys are accepted and converted to strings, so `:locale` and `"locale"` address the same value. In embedded mode the session is backed by the Phoenix session store, which keys by string, and recovering the original atom would require an unsafe string-to-atom conversion.
 
 #### Reading Session Data
 
@@ -2706,8 +2706,8 @@ For simple values stored in the session:
 
 ```elixir
 def init(_params, component, server) do
-  user_id = get_session(server, :user_id)
-  put_state(component, :user_id, user_id)
+  locale = get_session(server, :locale)
+  put_state(component, :locale, locale)
 end
 ```
 
@@ -2807,7 +2807,7 @@ def command(:login, params, server) do
   case authenticate_user(params.email, params.password) do
     {:ok, user} ->
       server
-      |> put_session(:user_id, user.id)
+      |> put_user_id(user.id)
       |> put_session(:user_role, user.role)
       |> put_action(:redirect_to_dashboard)
 
@@ -2836,7 +2836,7 @@ end
 ```elixir
 def command(:logout, _params, server) do
   server
-  |> delete_session(:user_id)
+  |> delete_user_id()
   |> delete_session(:user_role)
   |> delete_session(:cart)
   |> put_action(:redirect_to_home)
@@ -3020,11 +3020,10 @@ def command(:load_user_preferences, _params, server) do
   put_action(server, :update_ui_preferences, preferences: preferences)
 end
 
-def command(:logout, _params, server) do
+def command(:reset_preferences, _params, server) do
   server
-  |> delete_cookie("session_id")
   |> delete_cookie("user_preferences")
-  |> put_action(:redirect_to_login)
+  |> put_action(:update_ui_preferences, preferences: nil)
 end
 ```
 
