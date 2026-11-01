@@ -2421,12 +2421,9 @@ defmodule MyApp.Middleware.RequireAuth do
   use Hologram.Middleware
 
   @impl Hologram.Middleware
-  def call(server, _opts) do
-    require_auth(server, server.user_id)
-  end
+  def call(%{user_id: nil} = server, _opts), do: put_redirect(server, MyApp.LoginPage)
 
-  defp require_auth(server, nil), do: put_redirect(server, MyApp.LoginPage)
-  defp require_auth(server, _user_id), do: server
+  def call(server, _opts), do: server
 end
 ```
 
@@ -2516,14 +2513,10 @@ defmodule MyApp.Middleware.LoadCurrentUser do
   use Hologram.Middleware
 
   @impl Hologram.Middleware
+  def call(%{user_id: nil} = server, _opts), do: server
+
   def call(server, _opts) do
-    load_user(server, server.user_id)
-  end
-
-  defp load_user(server, nil), do: server
-
-  defp load_user(server, user_id) do
-    put_stash(server, :current_user, Accounts.get_user(user_id))
+    put_stash(server, :current_user, Accounts.get_user(server.user_id))
   end
 end
 ```
