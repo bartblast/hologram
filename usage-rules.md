@@ -163,7 +163,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - With params: `<Link to={MyPage, id: 123}>text</Link>`.
 - Programmatic navigation from actions: `put_page(component, MyPage)` or `put_page(component, MyPage, id: 123)`.
 - Hologram prefetches pages on `$pointer_down` for near-instant transitions.
-- Each page is loaded fresh from the server. Browser history (back/forward) works automatically.
+- Navigating to a page loads it fresh from the server. Back/forward restores a page as the user left it, except after a login or logout: then the page renders fresh and its middleware runs. Jumps to a `#fragment` are left to the browser.
 
 ## Forms
 
@@ -209,6 +209,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Delete: `delete_session(server, :key)`.
 - Session keys must be atoms or strings (atoms are converted to strings, so `:user_id` and `"user_id"` address the same value).
 - Sessions can store any Elixir data type (maps, lists, tuples, etc.).
+- Record the logged-in user with `put_user_id/2`, not a session key of your own. Hologram knows the user only through it, for the Back/forward check and realtime subscriptions.
 - Session data cannot be read by client-side code. Use cookies if you need client-side access.
 
 ## Cookies

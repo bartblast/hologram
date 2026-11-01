@@ -2044,9 +2044,12 @@ When a user interacts with a link, Hologram starts prefetching the target page o
 
 Hologram properly maintains the browser's history stack, ensuring that:
 
-- Back and forward navigation works as expected
+- Back and forward navigation restores a page the way the visitor left it, its state and scroll position included
 - URL changes are reflected in the browser's address bar
-- Each page is loaded fresh from the server, ensuring up-to-date content
+- Navigating to a page loads it fresh from the server, ensuring up-to-date content
+- Jumps to a `#fragment` within a page are left to the browser, so the page keeps its state
+
+After a login or a logout, Back and forward don't restore a page left before it. The page renders the way a fresh visit would, so its middleware runs, and a page whose middleware requires a login redirects.
 
 ##### Benefits
 
@@ -2744,9 +2747,11 @@ Writing simple values to the session:
 
 ```elixir
 def init(_params, _component, server) do
-  put_session(server, :user_id, 123)
+  put_session(server, :locale, "en")
 end
 ```
+
+To record who is logged in, use `put_user_id/2` rather than a session key of your own (see the "Identity" section in the Middleware documentation). Hologram knows the user only through it, and uses it to keep Back and forward from showing the previous user's pages and to drop the previous user's realtime subscriptions.
 
 ##### Storing Complex Data Structures
 
@@ -2850,7 +2855,7 @@ Understanding when to use Hologram's session system versus direct cookie managem
 
 #### Common Use Cases
 
-- **User authentication** - Store user ID, role, and authentication status
+- **Access control** - Who is logged in and what they may do, when your app manages that itself, for example with `phx.gen.auth`, with the logged-in user also recorded through `put_user_id/2`
 - **Shopping cart** - Temporary cart contents for logged-in users
 - **Multi-page form data** - Form progress and temporary state that spans multiple pages
 - **Flash messages** - Temporary success/error messages that persist across redirects
