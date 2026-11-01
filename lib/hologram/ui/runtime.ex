@@ -18,6 +18,7 @@ defmodule Hologram.UI.Runtime do
         globalThis.Hologram._pendingJsInteropActions = [];
         globalThis.Hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER;
         globalThis.Hologram.csrfToken = "{@csrf_token}";
+        globalThis.Hologram.identityTag = $IDENTITY_TAG_JS_PLACEHOLDER;
         globalThis.Hologram.initialChunkDigests = $CHUNK_DIGESTS_JS_PLACEHOLDER;
         globalThis.Hologram.initialPageDigest = "{@page_digest}";
         globalThis.Hologram.instanceId = "{@instance_id}";

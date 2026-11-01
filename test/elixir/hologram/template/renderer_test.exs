@@ -3108,6 +3108,18 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "interpolate_identity_tag_js/2" do
+    test "substitutes the placeholder with the tag as a JavaScript string" do
+      html = "before identityTag = $IDENTITY_TAG_JS_PLACEHOLDER; after"
+
+      assert Renderer.interpolate_identity_tag_js(
+               html,
+               "dL1-IVjlNPTbpCXxq2po9sjSvNy6ynAys6Nt568Z3-M"
+             ) ==
+               ~s'before identityTag = "dL1-IVjlNPTbpCXxq2po9sjSvNy6ynAys6Nt568Z3-M"; after'
+    end
+  end
+
   describe "interpolate_self_echoes_js/2" do
     test "substitutes the placeholder with the encoded list of actions" do
       html = ~s'before selfEchoes: $SELF_ECHOES_JS_PLACEHOLDER after'

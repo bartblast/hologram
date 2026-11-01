@@ -60,6 +60,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module42
   alias Hologram.Test.Fixtures.Controller.Module43
   alias Hologram.Test.Fixtures.Controller.Module44
+  alias Hologram.Test.Fixtures.Controller.Module45
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
@@ -156,6 +157,13 @@ defmodule Hologram.ControllerTest do
         ]
       }
     ]
+  end
+
+  defp identity_tag_of(session) do
+    :get
+    |> Plug.Test.conn("/")
+    |> Plug.Test.init_test_session(session)
+    |> Session.identity_tag()
   end
 
   defp page_request_body(instance_id \\ "test-instance-id", client_claimed_sub_keys \\ []) do
@@ -1845,6 +1853,83 @@ defmodule Hologram.ControllerTest do
       assert Plug.Conn.get_session(conn, :hologram_user_id) == 7
     end
 
+    test "tags the response with the identity the command left" do
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      expected_tag =
+        identity_tag_of(%{hologram_session_id: @hologram_session_id, hologram_user_id: 7})
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
+    end
+
+    test "tells the browser to store nothing of the response of a command that logs the user in" do
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_changing_user_id,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    test "tags the response with the identity the request came with when the command leaves it alone" do
+      conn = execute_successful_command_request()
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [
+               identity_tag_of(@session)
+             ]
+    end
+
+    test "tags a response that middleware answered with the identity the middleware left" do
+      parsed_json =
+        %{
+          instance_id: "my-instance-id",
+          module: Module27,
+          name: :my_command,
+          params: %{},
+          target: "my_target_1"
+        }
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      expected_tag =
+        identity_tag_of(%{hologram_session_id: @hologram_session_id, hologram_user_id: 7})
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
+    end
+
     test "passes through when the SubscriptionRegistry has no entry for the instance_id" do
       conn = execute_successful_command_request()
 
@@ -1909,6 +1994,49 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "Forbidden"
     end
 
+    test "tags an instance ownership rejection with the caller's identity" do
+      :ok = SubscriptionRegistry.register_connection("my-instance-id", self())
+
+      :ok =
+        SubscriptionRegistry.update_identity(
+          "my-instance-id",
+          @hologram_session_id,
+          "some-user-id"
+        )
+
+      conn =
+        execute_command_request(%{
+          instance_id: "my-instance-id",
+          module: Module6,
+          name: :my_command_a,
+          params: %{},
+          target: "my_target_1"
+        })
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [
+               identity_tag_of(@session)
+             ]
+    end
+
+    # A reset session has no CSRF token, and the request mints a new session ID before the check.
+    test "tags a CSRF rejection with the identity the request leaves" do
+      parsed_json =
+        %{module: Module6, name: :my_command_a, params: %{}, target: "my_target_1"}
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, %{})
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+
+      assert conn.status == 403
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
+    end
+
     test "raises when the command set a content type without a status" do
       assert_error RuntimeError,
                    "Response header content-type was set to \"text/plain\", but Hologram writes this response's body, so it sets the content type itself. Set content-type only on a response that middleware ends with put_status.",
@@ -1920,6 +2048,51 @@ defmodule Hologram.ControllerTest do
                        target: "my_target_1"
                      })
                    end
+    end
+  end
+
+  describe "handle_identity_tag_request/1" do
+    test "answers with no body and the tag of the identity the request's session holds" do
+      session = %{hologram_session_id: "test-session-id", hologram_user_id: 7}
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/identity-tag")
+        |> Plug.Test.init_test_session(session)
+        |> handle_identity_tag_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 204
+      assert conn.resp_body == ""
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [
+               identity_tag_of(session)
+             ]
+    end
+
+    # The answer is only true at the moment it is sent.
+    test "keeps the answer out of caches" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/identity-tag")
+        |> Plug.Test.init_test_session(%{hologram_session_id: "test-session-id"})
+        |> handle_identity_tag_request()
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    # A check must not create what it checks: a request with no session gets the tag of no
+    # identity, which matches no page's.
+    test "starts no session" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/identity-tag")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_identity_tag_request()
+
+      assert Session.get_session_id(conn) == nil
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [identity_tag_of(%{})]
     end
   end
 
@@ -2136,6 +2309,27 @@ defmodule Hologram.ControllerTest do
       assert extract_instance_id(conn_1.resp_body) != extract_instance_id(conn_2.resp_body)
     end
 
+    # The tag is of the identity the whole request leaves, so it names the session ID the request
+    # minted, which the session it came with did not hold.
+    test "writes the tag of the identity the request leaves into the document" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module5)
+
+      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+
+      assert String.contains?(
+               conn.resp_body,
+               ~s(globalThis.Hologram.identityTag = "#{expected_tag}";)
+             )
+
+      refute String.contains?(conn.resp_body, "$IDENTITY_TAG_JS_PLACEHOLDER")
+    end
+
     test "updates Plug.Conn session" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module10, :dummy_module_10_digest)
 
@@ -2186,6 +2380,70 @@ defmodule Hologram.ControllerTest do
         |> handle_initial_page_request(Module37)
 
       assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    # The browser's back/forward cache could otherwise keep the page past a logout.
+    test "tells the browser to store nothing of a page rendered for a logged-in user" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{hologram_user_id: 7})
+        |> handle_initial_page_request(Module5)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    test "tells the browser to store nothing of a page whose init/3 logs the user in" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module21")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module21)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    # Middleware answers before init/3 runs, and the answer goes out with the same decorations.
+    test "tells the browser to store nothing of a middleware's answer for a logged-in user" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module28")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module28)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    test "leaves the caching of a page rendered for no logged-in user as it is" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module5)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+               "max-age=0, private, must-revalidate"
+             ]
+    end
+
+    test "keeps the caching a page rendered for a logged-in user sets itself" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module45, :dummy_module_45_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module45")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module45)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["private, max-age=60"]
     end
 
     test "sends the response headers a non-terminal middleware set" do
@@ -2929,6 +3187,43 @@ defmodule Hologram.ControllerTest do
       assert response["type"] == "redirect"
       assert response["to"] == Module4.__route__()
       assert response["pageModule"] == Encoder.encode_term!(Module4)
+    end
+
+    test "tells the browser to store nothing of a page described for a logged-in user" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn(%{hologram_user_id: 7})
+        |> handle_subsequent_page_request(Module4)
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    test "tags a page response with the identity the request leaves" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module4"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module4)
+
+      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
+    end
+
+    test "tags a redirect response with the identity the request leaves" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module29, :dummy_module_29_digest)
+
+      conn =
+        "/hologram/page/Hologram.Test.Fixtures.Controller.Module29"
+        |> subsequent_page_request_conn()
+        |> handle_subsequent_page_request(Module29)
+
+      expected_tag = identity_tag_of(%{hologram_session_id: Session.get_session_id(conn)})
+
+      assert Plug.Conn.get_resp_header(conn, "hologram-identity-tag") == [expected_tag]
     end
 
     # The redirect itself cannot survive the trip, but a header set alongside it was meant for the

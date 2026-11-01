@@ -8,6 +8,7 @@ import Connection from "./connection.mjs";
 import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import HttpTransport from "./http_transport.mjs";
+import IdentityTracker from "./identity_tracker.mjs";
 import Interpreter from "./interpreter.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -102,6 +103,21 @@ export default class Client {
     HttpTransport.restartPing(sendImmediatePing);
   }
 
+  // Asks the server for the tag of the identity the browser's session holds now (see
+  // Hologram.checkIdentity). Answers null when no answer comes - offline, say - which says nothing
+  // about the identity.
+  static async fetchIdentityTag() {
+    try {
+      const response = await fetch("/hologram/identity-tag", {
+        cache: "no-store",
+      });
+
+      return response.headers.get(IdentityTracker.HEADER);
+    } catch {
+      return null;
+    }
+  }
+
   // Asks the server to describe a page rather than render it, for a client that renders it itself.
   //
   // The answer is a page only when it says so: a page's middleware can answer the request instead,
@@ -131,11 +147,22 @@ export default class Client {
         redirect: "manual",
       });
 
+      // Read whatever the answer is: a page's middleware can log the user in or out and answer
+      // with something other than a page.
+      const identityPeriod = IdentityTracker.observeResponse(response);
+
       // Awaited so that whatever the callback goes on to do is part of this promise. A redirect
       // answers by fetching the next page, and without the await a failure there - the hop limit
       // being one - would reject a promise nobody holds instead of reaching the caller.
       if (response.headers.get("hologram-page-data") === "true") {
-        await onSuccess(await response.json());
+        const payload = await response.json();
+
+        // The period the page's state was rendered in, which the page keeps once it is mounted. A
+        // prefetched page can wait a while before it is shown, and the identity can change
+        // meanwhile.
+        payload.identityPeriod = identityPeriod;
+
+        await onSuccess(payload);
       } else {
         await onNotPage();
       }
@@ -183,6 +210,10 @@ export default class Client {
 
     try {
       const response = await fetch("/hologram/command", opts);
+
+      // Read before the status: a command turned away can still have come with another identity
+      // than the one the client knew, and this reply is where the client learns of it.
+      IdentityTracker.observeResponse(response);
 
       if (!response.ok) {
         $.#failCommand(response.status);
