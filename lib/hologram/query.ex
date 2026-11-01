@@ -24,7 +24,7 @@ defmodule Hologram.Query do
             trust: false
 
   # Another attribute of the same row, or a path to an attribute of a related row, compared with
-  # the predicate's attribute.
+  # the predicate's attribute - either of them read on a row above, inside a quantifier.
   @type attribute_operand :: {:attribute, name}
 
   @type bound :: non_neg_integer | placeholder | nil
@@ -38,8 +38,8 @@ defmodule Hologram.Query do
   @type disjunction :: {:or, list(list(clause))}
 
   # An attribute or a path of the row a clause list is about - the queried row, or inside a
-  # quantifier the related row.
-  @type name :: atom | path
+  # quantifier the related row - or one of the row the given number of quantifiers out.
+  @type name :: atom | path | {:outer, pos_integer, atom | path}
 
   @type operator :: :!= | :< | :<= | :== | :> | :>= | :in | :not_in
 
@@ -59,11 +59,12 @@ defmodule Hologram.Query do
   @type predicate :: {name | placeholder, operator, any}
 
   # Holds when any, none or all of the rows of a related set match its clauses, which are about one
-  # related row. The source is the relationships followed to the set from the row the quantifier is
-  # about - to-one ones, and a to-many or an inverse set last.
+  # related row. The source is the relationships followed to the set - to-one ones and a to-many or
+  # an inverse set last - from the row the quantifier is about, or from the row the given number of
+  # quantifiers out.
   @type quantifier :: {:all | :any | :none, {source, list(clause)}}
 
-  @type source :: list(atom)
+  @type source :: list(atom) | {:outer, pos_integer, list(atom)}
 
   @type t :: %__MODULE__{
           cardinality: cardinality,

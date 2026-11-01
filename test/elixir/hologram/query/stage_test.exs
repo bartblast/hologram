@@ -19,6 +19,7 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module31
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Policy
@@ -1377,6 +1378,66 @@ defmodule Hologram.Query.StageTest do
       assert query.filter == [{:any, {[:messages], [{[:channel, :name], :==, "general"}]}}]
     end
 
+    test "reads an attribute of the row above on the left" do
+      query = filter(Module26, any: {[:messages], [{{:outer, 1, :name}, "general"}]})
+
+      assert query.filter == [{:any, {[:messages], [{{:outer, 1, :name}, :==, "general"}]}}]
+    end
+
+    test "reads a path of the row above" do
+      query = filter(Module28, any: {[:labels], [{{:outer, 1, [:channel, :name]}, "general"}]})
+
+      assert query.filter == [
+               {:any, {[:labels], [{{:outer, 1, [:channel, :name]}, :==, "general"}]}}
+             ]
+    end
+
+    test "compares an attribute with the same attribute of the row above" do
+      query =
+        filter(Module28,
+          any: {[:channel, :messages], [position: {:>, {:attribute, {:outer, 1, :position}}}]}
+        )
+
+      assert query.filter == [
+               {:any,
+                {[:channel, :messages], [{:position, :>, {:attribute, {:outer, 1, :position}}}]}}
+             ]
+    end
+
+    test "compares two enums of two rows declaring the same values" do
+      query =
+        filter(Module31, any: {[:items], [priority: {:>=, {:attribute, {:outer, 1, :floor}}}]})
+
+      assert query.filter == [
+               {:any, {[:items], [{:priority, :>=, {:attribute, {:outer, 1, :floor}}}]}}
+             ]
+    end
+
+    test "reads a set of the row above, counting levels by nesting inside it" do
+      query =
+        filter(Module28,
+          any: {[:labels], [any: {{:outer, 1, [:labels]}, [{{:outer, 2, :body}, "x"}]}]}
+        )
+
+      assert query.filter == [
+               {:any,
+                {[:labels], [{:any, {{:outer, 1, [:labels]}, [{{:outer, 2, :body}, :==, "x"}]}}]}}
+             ]
+    end
+
+    test "reads the queried row two quantifiers out" do
+      query =
+        filter(Module26,
+          any: {[:messages], [any: {[:labels], [name: {:attribute, {:outer, 2, :name}}]}]}
+        )
+
+      assert query.filter == [
+               {:any,
+                {[:messages],
+                 [{:any, {[:labels], [{:name, :==, {:attribute, {:outer, 2, :name}}}]}}]}}
+             ]
+    end
+
     test "takes a quantifier as an alternative of a disjunction" do
       query = filter(Module26, or: [[name: "general"], [any: {[:messages], []}]])
 
@@ -1469,7 +1530,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an empty source" do
       expected_msg =
-        "a quantifier's source is a list of relationship names, got: []"
+        "a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: []"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module26, any: {[], []})
@@ -1477,7 +1538,8 @@ defmodule Hologram.Query.StageTest do
     end
 
     test "raises on a source holding something other than relationship names" do
-      expected_msg = ~s(a quantifier's source is a list of relationship names, got: ["messages"])
+      expected_msg =
+        ~s(a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: ["messages"])
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module26, any: {["messages"], []})
@@ -1525,6 +1587,107 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module28, any: {[:labels], [name: {:attribute, :name}]})
+      end
+    end
+
+    test "raises on an attribute of the row above compared with itself" do
+      expected_msg =
+        "operator :== compares attribute :name in Hologram.Test.Fixtures.Entity.Module26 with itself"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26,
+          any: {[:messages], [{{:outer, 1, :name}, {:attribute, {:outer, 1, :name}}}]}
+        )
+      end
+    end
+
+    test "raises on attributes of two rows having different types" do
+      expected_msg =
+        "operator :== compares attribute :name in Hologram.Test.Fixtures.Entity.Module29 with attribute :position in Hologram.Test.Fixtures.Entity.Module28, which have different types (:string and :integer) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module28, any: {[:labels], [name: {:attribute, {:outer, 1, :position}}]})
+      end
+    end
+
+    test "raises on enums of two rows declaring different values" do
+      expected_msg =
+        "operator :>= compares attribute :priority in Hologram.Test.Fixtures.Entity.Module17 with attribute :tier in Hologram.Test.Fixtures.Entity.Module31, which declare different values ([:low, :medium, :high] and [:low, :high]) - two enum attributes compare only when they declare the same values in the same order"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module31, any: {[:items], [priority: {:>=, {:attribute, {:outer, 1, :tier}}}]})
+      end
+    end
+
+    test "raises on an unknown attribute of the row above" do
+      expected_msg =
+        "unknown attribute :title in Hologram.Test.Fixtures.Entity.Module26 - known attributes: :created_at, :id, :name, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [{{:outer, 1, :title}, "x"}]})
+      end
+    end
+
+    test "raises on a name of a row above outside any quantifier" do
+      expected_msg =
+        "{:outer, 1, :name} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, [{{:outer, 1, :name}, "general"}])
+      end
+    end
+
+    test "raises on a name of a row above reaching past the queried row" do
+      expected_msg =
+        "{:outer, 2, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [{{:outer, 2, :name}, "general"}]})
+      end
+    end
+
+    test "raises on a key naming a row zero levels out" do
+      expected_msg =
+        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [{{:outer, 0, :name}, "x"}]})
+      end
+    end
+
+    test "raises on a malformed attribute operand of a row above, quoting it as written" do
+      expected_msg =
+        ~s(invalid attribute operand {:attribute, {:outer, 1, "name"}} - an attribute is named by an atom, and a path by a list of two or more atoms)
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [body: {:attribute, {:outer, 1, "name"}}]})
+      end
+    end
+
+    test "raises on a source of a row above naming no relationship" do
+      expected_msg =
+        "a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: {:outer, 1, []}"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [any: {{:outer, 1, []}, []}]})
+      end
+    end
+
+    test "raises on a name of a row zero levels out" do
+      expected_msg =
+        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [body: {:attribute, {:outer, 0, :name}}]})
+      end
+    end
+
+    test "raises on a source of a row above reaching past the queried row" do
+      expected_msg =
+        "{:outer, 2, [:messages]} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module26, any: {[:messages], [any: {{:outer, 2, [:messages]}, []}]})
       end
     end
   end
@@ -2067,6 +2230,11 @@ defmodule Hologram.Query.StageTest do
 
     test "spells a path as it is written" do
       assert inspect_name([:channel, :org, :name]) == "channel.org.name"
+    end
+
+    test "spells a name of a row above as the name it carries" do
+      assert inspect_name({:outer, 1, :archived}) == ":archived"
+      assert inspect_name({:outer, 2, [:channel, :name]}) == "channel.name"
     end
   end
 
