@@ -4368,6 +4368,39 @@ describe("Hologram", () => {
       }
     });
 
+    // One corrupt stored snapshot would otherwise break Back for its entry for good.
+    it("reloads an entry whose stored snapshot can't be read back", async () => {
+      const consoleErrorStub = sinon.stub(console, "error");
+      const fetchPageStub = sinon.stub(Client, "fetchPage");
+      const reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+
+      sessionStorage.setItem(
+        "hologram_page_snapshot_history-corrupt-snapshot",
+        "not a serialized snapshot",
+      );
+
+      try {
+        await Hologram.handlePopstateEvent({
+          state: "history-corrupt-snapshot",
+        });
+
+        sinon.assert.calledOnce(reloadStub);
+        sinon.assert.notCalled(fetchPageStub);
+
+        sinon.assert.calledWith(
+          consoleErrorStub,
+          "Failed to restore page snapshot from session storage:",
+        );
+      } finally {
+        reloadStub.restore();
+        fetchPageStub.restore();
+        consoleErrorStub.restore();
+        sessionStorage.clear();
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      }
+    });
+
     // App code can push entries of its own with no state, which come with no id too.
     describe("entry app code pushed with no state", () => {
       let consoleErrorStub,

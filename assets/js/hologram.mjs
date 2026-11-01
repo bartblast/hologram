@@ -1460,8 +1460,21 @@ export default class Hologram {
       const serializedSnapshot = sessionStorage.getItem(snapshotKey);
 
       if (serializedSnapshot) {
-        const deserializedSnapshot =
-          Deserializer.deserialize(serializedSnapshot);
+        let deserializedSnapshot;
+
+        // A stored snapshot that can't be read back counts as none, as an OPFS copy that can't be
+        // read is passed over above: the entry's page is then loaded afresh, rather than Back
+        // failing for good.
+        try {
+          deserializedSnapshot = Deserializer.deserialize(serializedSnapshot);
+        } catch (error) {
+          console.error(
+            "Failed to restore page snapshot from session storage:",
+            error,
+          );
+
+          return null;
+        }
 
         // Cache the deserialized snapshot in memory for faster subsequent access
         $.#pageSnapshots.set(snapshotKey, deserializedSnapshot);
