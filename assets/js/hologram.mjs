@@ -341,7 +341,11 @@ export default class Hologram {
 
   // Made public to make tests easier
   static executeLoadPrefetchedPageAction(action, eventTargetNode) {
-    Hologram.#ensureDomNodeHasHologramId(eventTargetNode);
+    // A click that no pointer press came before - Enter on a focused link, a screen reader,
+    // element.click() - finds nothing prefetched, and one whose press came long ago finds a stale
+    // page, so the click fetches the page itself then. Its fetch is still on its way below, so the
+    // click confirms the navigation and the fetch finishes it.
+    Hologram.executePrefetchPageAction(action, eventTargetNode);
 
     const toParam = Hologram.#getToParam(action);
     const pagePath = Hologram.#buildPagePath(toParam);
@@ -352,10 +356,6 @@ export default class Hologram {
     );
 
     const mapValue = Hologram.prefetchedPages.get(mapKey);
-
-    if (typeof mapValue === "undefined") {
-      return;
-    }
 
     if (mapValue.isPage === false) {
       // Handed to the browser, which takes over from any page still on its way.
@@ -411,8 +411,8 @@ export default class Hologram {
   // Made public to make tests easier
   //
   // What a prefetch found instead of a page: a denial, or a response the page's middleware wrote
-  // itself. The entry is kept rather than dropped, because a click looks the target up here and
-  // would otherwise find nothing and do nothing at all, leaving the link dead.
+  // itself. The entry is kept rather than dropped, so that a click hands the target straight to
+  // the browser instead of fetching it again.
   static handlePrefetchPageNotPage(mapKey) {
     const mapValue = Hologram.prefetchedPages.get(mapKey);
 

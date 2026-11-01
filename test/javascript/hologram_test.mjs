@@ -1036,7 +1036,11 @@ describe("Hologram", () => {
   });
 
   describe("executeLoadPrefetchedPageAction()", () => {
-    let eventTargetNode, loadNewPageStub;
+    let clientFetchPageStub,
+      eventTargetNode,
+      loadNewPageStub,
+      notPageCallbacks,
+      successCallbacks;
 
     const payload = {type: "page"};
 
@@ -1049,6 +1053,16 @@ describe("Hologram", () => {
     const pagePath = "/hologram-test-fixtures-module7";
 
     beforeEach(() => {
+      notPageCallbacks = [];
+      successCallbacks = [];
+
+      clientFetchPageStub = sinon
+        .stub(Client, "fetchPage")
+        .callsFake((_toParam, successCallback, notPageCallback) => {
+          successCallbacks.push(successCallback);
+          notPageCallbacks.push(notPageCallback);
+        });
+
       loadNewPageStub = sinon
         .stub(Hologram, "loadNewPage")
         .callsFake((_pagePath, _payload) => null);
@@ -1056,7 +1070,10 @@ describe("Hologram", () => {
       eventTargetNode = {id: "dummy_event_target_node"};
     });
 
-    afterEach(() => Hologram.loadNewPage.restore());
+    afterEach(() => {
+      Client.fetchPage.restore();
+      Hologram.loadNewPage.restore();
+    });
 
     it("adds a Hologram ID to an event target DOM node that doesn't have one", () => {
       Hologram.executeLoadPrefetchedPageAction(
@@ -1150,8 +1167,8 @@ describe("Hologram", () => {
       sinon.assert.calledOnceWithExactly(loadNewPageStub, pagePath, payload);
     });
 
-    // Dropping the entry instead would leave the link dead: the click looks the target up here,
-    // and an entry that is not there does nothing at all.
+    // Kept rather than dropped, the entry lets the click hand the target straight to the browser
+    // instead of fetching it again.
     it("hands the target to the browser when the prefetch found no page", () => {
       const navigateBrowserToStub = sinon.stub(Hologram, "navigateBrowserTo");
 
@@ -1189,8 +1206,103 @@ describe("Hologram", () => {
       navigateBrowserToStub.restore();
     });
 
-    it("is a no-op if there is no prefeteched pages map entry for the given map key", () => {
-      Hologram.prefetchedPages = new Map();
+    // A click that no pointer press came before: Enter on a focused link, a screen reader,
+    // element.click().
+    describe("nothing prefetched", () => {
+      let navigateBrowserToStub;
+
+      beforeEach(() => {
+        Hologram.prefetchedPages = new Map();
+        navigateBrowserToStub = sinon.stub(Hologram, "navigateBrowserTo");
+      });
+
+      afterEach(() => Hologram.navigateBrowserTo.restore());
+
+      it("fetches the page and confirms navigate", () => {
+        const navigationCount = Hologram.navigationCount;
+
+        Hologram.executeLoadPrefetchedPageAction(
+          loadPrefetchedPageAction,
+          eventTargetNode,
+        );
+
+        const mapKey = `${eventTargetNode.__hologramId__}:${pagePath}`;
+
+        assert.equal(Hologram.navigationCount, navigationCount + 1);
+
+        // Can't use assert.deepStrictEqual for Maps
+        assert.instanceOf(Hologram.prefetchedPages, Map);
+        assert.equal(Hologram.prefetchedPages.size, 1);
+        assert.isTrue(Hologram.prefetchedPages.has(mapKey));
+
+        const mapValue = Hologram.prefetchedPages.get(mapKey);
+
+        assert.deepStrictEqual(mapValue, {
+          isNavigateConfirmed: true,
+          isPage: true,
+          navigation: navigationCount + 1,
+          pagePath: pagePath,
+          payload: null,
+          timestamp: mapValue.timestamp,
+        });
+
+        sinon.assert.calledOnceWithExactly(
+          clientFetchPageStub,
+          module7,
+          sinon.match.func,
+          sinon.match.func,
+        );
+
+        sinon.assert.notCalled(loadNewPageStub);
+      });
+
+      it("loads the page once the fetch succeeds", () => {
+        Hologram.executeLoadPrefetchedPageAction(
+          loadPrefetchedPageAction,
+          eventTargetNode,
+        );
+
+        successCallbacks[0](payload);
+
+        assert.equal(Hologram.prefetchedPages.size, 0);
+
+        sinon.assert.calledOnceWithExactly(loadNewPageStub, pagePath, payload);
+      });
+
+      it("hands the target to the browser once the fetch finds no page", () => {
+        Hologram.executeLoadPrefetchedPageAction(
+          loadPrefetchedPageAction,
+          eventTargetNode,
+        );
+
+        notPageCallbacks[0]();
+
+        assert.equal(Hologram.prefetchedPages.size, 0);
+
+        sinon.assert.calledOnceWithExactly(navigateBrowserToStub, pagePath);
+        sinon.assert.notCalled(loadNewPageStub);
+      });
+    });
+
+    // A press long before the click, e.g. one dragged off the link, left a page that may be stale.
+    it("fetches the page afresh and confirms navigate if the prefetch has timed out", () => {
+      eventTargetNode = {__hologramId__: "dummy_hologram_id"};
+      const mapKey = "dummy_hologram_id:/hologram-test-fixtures-module7";
+
+      Hologram.prefetchedPages = new Map([
+        [
+          mapKey,
+          {
+            isNavigateConfirmed: false,
+            isPage: true,
+            pagePath: pagePath,
+            payload: payload,
+            timestamp: Date.now() - Config.fetchPageTimeoutMs - 1,
+          },
+        ],
+      ]);
+
+      const navigationCount = Hologram.navigationCount;
 
       Hologram.executeLoadPrefetchedPageAction(
         loadPrefetchedPageAction,
@@ -1199,9 +1311,55 @@ describe("Hologram", () => {
 
       // Can't use assert.deepStrictEqual for Maps
       assert.instanceOf(Hologram.prefetchedPages, Map);
-      assert.equal(Hologram.prefetchedPages.size, 0);
+      assert.equal(Hologram.prefetchedPages.size, 1);
+
+      const mapValue = Hologram.prefetchedPages.get(mapKey);
+
+      assert.deepStrictEqual(mapValue, {
+        isNavigateConfirmed: true,
+        isPage: true,
+        navigation: navigationCount + 1,
+        pagePath: pagePath,
+        payload: null,
+        timestamp: mapValue.timestamp,
+      });
+
+      assert.isAtMost(Math.abs(Date.now() - mapValue.timestamp), 100);
+
+      sinon.assert.calledOnceWithExactly(
+        clientFetchPageStub,
+        module7,
+        sinon.match.func,
+        sinon.match.func,
+      );
 
       sinon.assert.notCalled(loadNewPageStub);
+    });
+
+    it("doesn't fetch the page if the prefetch hasn't timed out", () => {
+      eventTargetNode = {__hologramId__: "dummy_hologram_id"};
+      const mapKey = "dummy_hologram_id:/hologram-test-fixtures-module7";
+
+      Hologram.prefetchedPages = new Map([
+        [
+          mapKey,
+          {
+            isNavigateConfirmed: false,
+            isPage: true,
+            pagePath: pagePath,
+            payload: payload,
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.executeLoadPrefetchedPageAction(
+        loadPrefetchedPageAction,
+        eventTargetNode,
+      );
+
+      sinon.assert.notCalled(clientFetchPageStub);
+      sinon.assert.calledOnceWithExactly(loadNewPageStub, pagePath, payload);
     });
   });
 
