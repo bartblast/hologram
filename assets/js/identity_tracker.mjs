@@ -21,6 +21,10 @@ export default class IdentityTracker {
 
   static period = null;
 
+  // Every period this document started, the one that lasts now included. A period is a
+  // document's own, so this is what tells a period of this document's from another document's.
+  static periods = new Set();
+
   // The tag of the identity the latest response was made for. Null while none is known.
   static tag = null;
 
@@ -31,11 +35,17 @@ export default class IdentityTracker {
     $.tag = documentTag ?? null;
     $.period = Utils.randomUUID();
     $.documentPeriod = $.period;
+    $.periods = new Set([$.period]);
   }
 
   // Whether the given period is the one that lasts now.
   static isCurrent(period) {
     return period !== null && period !== undefined && period === $.period;
+  }
+
+  // Whether the given period is one this document started, lasting or ended.
+  static isOwnPeriod(period) {
+    return $.periods.has(period);
   }
 
   // Whether the given tag names the identity the latest response was made for.
@@ -50,6 +60,7 @@ export default class IdentityTracker {
     if (tag !== null && tag !== undefined && tag !== $.tag) {
       $.tag = tag;
       $.period = Utils.randomUUID();
+      $.periods.add($.period);
     }
 
     return $.period;

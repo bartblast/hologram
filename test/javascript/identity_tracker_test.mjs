@@ -12,6 +12,7 @@ describe("IdentityTracker", () => {
   afterEach(() => {
     IdentityTracker.documentPeriod = null;
     IdentityTracker.period = null;
+    IdentityTracker.periods = new Set();
     IdentityTracker.tag = null;
   });
 
@@ -48,6 +49,32 @@ describe("IdentityTracker", () => {
 
       assert.isFalse(IdentityTracker.isCurrent(null));
       assert.isFalse(IdentityTracker.isCurrent(undefined));
+    });
+  });
+
+  describe("isOwnPeriod()", () => {
+    it("is true for the period the document started in", () => {
+      assert.isTrue(
+        IdentityTracker.isOwnPeriod(IdentityTracker.documentPeriod),
+      );
+    });
+
+    it("is true for a later period, lasting or ended", () => {
+      const secondPeriod = IdentityTracker.observe("tag-2");
+      const thirdPeriod = IdentityTracker.observe("tag-3");
+
+      assert.isTrue(IdentityTracker.isOwnPeriod(secondPeriod));
+      assert.isTrue(IdentityTracker.isOwnPeriod(thirdPeriod));
+    });
+
+    // A period another document started, named by a snapshot that document took.
+    it("is false for a period this document never started", () => {
+      assert.isFalse(IdentityTracker.isOwnPeriod("period-of-another-document"));
+    });
+
+    it("is false for no period", () => {
+      assert.isFalse(IdentityTracker.isOwnPeriod(null));
+      assert.isFalse(IdentityTracker.isOwnPeriod(undefined));
     });
   });
 

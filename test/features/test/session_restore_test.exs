@@ -112,7 +112,9 @@ defmodule HologramFeatureTests.SessionRestoreTest do
       |> assert_text(css("#marker"), "none")
     end
 
-    # The new document restores the stored snapshot only for the identity it was rendered for.
+    # The reloaded document keeps the history entries the one before it pushed, so Back reaches
+    # a snapshot the earlier document took, which is restored only for the identity it was taken
+    # for.
     feature "renders the page for the current visitor when Back goes past a full page load", %{
       session: session
     } do

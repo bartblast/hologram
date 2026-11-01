@@ -1583,10 +1583,11 @@ export default class Hologram {
       );
     }
 
-    // Every entry the tab has left has a snapshot, saved in memory as it was left, so one with
-    // none is an entry whose snapshot could not be read back. Nothing else describes its page,
-    // and the state the document was loaded with belongs to whichever page and user the tab
-    // started out with, so the browser loads the entry afresh.
+    // Every entry the tab has left has a snapshot, saved as it was left, in memory or, for an entry
+    // a document before a reload left, in storage. So one with none is an entry whose snapshot
+    // could not be read back. Nothing else describes its page, and the state the document was
+    // loaded with belongs to whichever page and user the tab started out with, so the browser
+    // loads the entry afresh.
     if (pageSnapshot === null) {
       Hologram.reloadBrowserLocation();
       return;
@@ -1626,7 +1627,9 @@ export default class Hologram {
 
       $.historyId = historyEntryId;
       $.pagePath = window.location.pathname;
-      $.#restorePageSnapshot(pageSnapshot, pageSnapshot.identityPeriod);
+      // The snapshot was just found to be of the identity that lasts now, so the page belongs to
+      // the period that lasts now, whichever document took it.
+      $.#restorePageSnapshot(pageSnapshot, IdentityTracker.period);
 
       $.#mountWhenReady(isPageModuleRegistered);
     };
@@ -1869,11 +1872,25 @@ export default class Hologram {
     );
   }
 
-  // Whether the identity has stayed the same since the page the snapshot holds was put on screen.
-  // A period is this document's own, so only a snapshot this document took can answer yes: one
-  // another document took names a period of that document's.
+  // Whether the snapshot was taken for the identity the tab is in now. A snapshot this document
+  // took must be of the period that lasts now: the identity must not have changed since its page
+  // was put on screen, not even to change back. A snapshot another document took names a period
+  // of that document's, and is compared by the tag it was stamped with, as at boot (see
+  // isDocumentSnapshotRestorable). Popstate reaches those too: a reloaded document keeps the
+  // history entries the document before it pushed, and their snapshots are in storage. The tag
+  // is trusted only while the document's first period lasts, the tag the server rendered it with:
+  // after any change a response that left before it can have put an old tag back.
   static #isSnapshotOfCurrentIdentity(pageSnapshot) {
-    return IdentityTracker.isCurrent(pageSnapshot.identityPeriod);
+    const {identityPeriod, identityTag} = pageSnapshot;
+
+    if (IdentityTracker.isOwnPeriod(identityPeriod)) {
+      return IdentityTracker.isCurrent(identityPeriod);
+    }
+
+    return (
+      IdentityTracker.isCurrent(IdentityTracker.documentPeriod) &&
+      IdentityTracker.isCurrentTag(identityTag)
+    );
   }
 
   // Whether a snapshot Back or Forward is about to restore was taken with code other than the

@@ -53,6 +53,7 @@ const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
 const clearIdentityTracker = () => {
   IdentityTracker.documentPeriod = null;
   IdentityTracker.period = null;
+  IdentityTracker.periods = new Set();
   IdentityTracker.tag = null;
 };
 
@@ -4602,6 +4603,85 @@ describe("Hologram", () => {
         } finally {
           loadNewPageStub.restore();
         }
+      });
+
+      // A reloaded document keeps the history entries the document before it pushed, so popstate
+      // reaches snapshots that document took, which name a period of its own.
+      it("is restored when another document took it for the identity the tab is in", async () => {
+        seedSnapshot("history-identity-7", {
+          identityPeriod: "period-of-another-document",
+          identityTag: IdentityTracker.tag,
+        });
+
+        await Hologram.handlePopstateEvent({state: "history-identity-7"});
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, "restored-instance");
+        assert.equal(Hologram.pageIdentityPeriod, IdentityTracker.period);
+        sinon.assert.notCalled(fetchPageStub);
+      });
+
+      it("is passed over when another document took it for another identity", async () => {
+        seedSnapshot("history-identity-8", {
+          identityPeriod: "period-of-another-document",
+          identityTag: "tag-of-another-identity",
+        });
+
+        await Hologram.handlePopstateEvent({state: "history-identity-8"});
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, instanceId);
+        sinon.assert.calledOnce(fetchPageStub);
+      });
+
+      // Its page was on screen when the identity changed under it, in the document that took it.
+      it("is passed over when another document took it with no identity tag", async () => {
+        seedSnapshot("history-identity-9", {
+          identityPeriod: "period-of-another-document",
+          identityTag: null,
+        });
+
+        await Hologram.handlePopstateEvent({state: "history-identity-9"});
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, instanceId);
+        sinon.assert.calledOnce(fetchPageStub);
+      });
+
+      // The identity changed in this document and changed back, so a response that left before
+      // the change can have put the old tag back: the tag is trusted no more.
+      it("is passed over when another document took it and the identity changed here since", async () => {
+        IdentityTracker.observe("tag-2");
+        IdentityTracker.observe("tag-1");
+
+        seedSnapshot("history-identity-10", {
+          identityPeriod: "period-of-another-document",
+          identityTag: "tag-1",
+        });
+
+        await Hologram.handlePopstateEvent({state: "history-identity-10"});
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, instanceId);
+        sinon.assert.calledOnce(fetchPageStub);
+      });
+
+      // Its page can hold what the identity in between put in it.
+      it("is passed over when this document took it before the identity changed and changed back", async () => {
+        const takenInPeriod = IdentityTracker.period;
+        IdentityTracker.observe("tag-2");
+        IdentityTracker.observe("tag-1");
+
+        seedSnapshot("history-identity-11", {
+          identityPeriod: takenInPeriod,
+          identityTag: "tag-1",
+        });
+
+        await Hologram.handlePopstateEvent({state: "history-identity-11"});
+        await flushPromises();
+
+        assert.strictEqual(App.instanceId, instanceId);
+        sinon.assert.calledOnce(fetchPageStub);
       });
 
       it("is passed over when it holds no identity period", async () => {

@@ -393,6 +393,7 @@ describe("Client", () => {
 
       IdentityTracker.documentPeriod = null;
       IdentityTracker.period = null;
+      IdentityTracker.periods = new Set();
       IdentityTracker.tag = null;
     });
 
@@ -616,6 +617,7 @@ describe("Client", () => {
 
       IdentityTracker.documentPeriod = null;
       IdentityTracker.period = null;
+      IdentityTracker.periods = new Set();
       IdentityTracker.tag = null;
     });
 
