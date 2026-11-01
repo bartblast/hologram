@@ -2450,7 +2450,7 @@ export default class Interpreter {
   // }
 
   static #matchBitstringPattern(right, left, context, raiseMatchError) {
-    if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
+    if (right.type !== "bitstring") {
       return $.#handleMatchFail(right, raiseMatchError);
     }
 
