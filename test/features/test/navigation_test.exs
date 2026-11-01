@@ -42,6 +42,33 @@ defmodule HologramFeatureTests.NavigationTest do
       |> assert_text(css("#param_a"), ~s'"hello world"')
       |> assert_text(css("#param_b"), ~s'"foo/bar"')
     end
+
+    # Enter on a focused link fires click with no pointerdown before it.
+    feature "activated with the keyboard", %{session: session} do
+      session
+      |> visit(Page1)
+      |> send_keys(link("Page 2 link"), [:enter])
+      |> assert_page(Page2)
+      |> assert_text("Page 2 title")
+      |> click(button("Put page 2 result A"))
+      |> assert_text("Page 2 result A")
+    end
+
+    # element.click() fires click with no pointerdown before it, the way screen readers often
+    # activate a link.
+    feature "clicked from a script", %{session: session} do
+      session
+      |> visit(Page1)
+      |> execute_script("""
+      Array.from(document.querySelectorAll("a"))
+        .find((link) => link.textContent === "Page 2 link")
+        .click();
+      """)
+      |> assert_page(Page2)
+      |> assert_text("Page 2 title")
+      |> click(button("Put page 2 result A"))
+      |> assert_text("Page 2 result A")
+    end
   end
 
   describe "history" do
