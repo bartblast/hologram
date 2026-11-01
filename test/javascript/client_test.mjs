@@ -17,6 +17,7 @@ import Connection from "../../assets/js/connection.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import HttpTransport from "../../assets/js/http_transport.mjs";
+import IdentityTracker from "../../assets/js/identity_tracker.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -330,6 +331,38 @@ describe("Client", () => {
     });
   });
 
+  describe("fetchIdentityTag()", () => {
+    afterEach(() => sinon.restore());
+
+    // The answer is only true at the moment it is sent.
+    it("asks the identity tag route past the browser's cache", async () => {
+      const fetchStub = sinon
+        .stub(globalThis, "fetch")
+        .resolves({headers: new Headers()});
+
+      await Client.fetchIdentityTag();
+
+      sinon.assert.calledOnceWithExactly(fetchStub, "/hologram/identity-tag", {
+        cache: "no-store",
+      });
+    });
+
+    it("answers the tag the response carries", async () => {
+      sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers({"hologram-identity-tag": "tag-2"}),
+      });
+
+      assert.equal(await Client.fetchIdentityTag(), "tag-2");
+    });
+
+    // Offline, say. No answer says nothing about the identity.
+    it("answers null when no answer comes", async () => {
+      sinon.stub(globalThis, "fetch").rejects(new TypeError("Failed to fetch"));
+
+      assert.isNull(await Client.fetchIdentityTag());
+    });
+  });
+
   describe("fetchPage()", () => {
     let fetchStub, onNotPageStub, onSuccessStub, originalInstanceId;
 
@@ -349,12 +382,19 @@ describe("Client", () => {
 
       originalInstanceId = App.instanceId;
       App.instanceId = "test-instance-id";
+
+      IdentityTracker.init("tag-1");
     });
 
     afterEach(() => {
       sinon.restore();
       App.subscriptionReceiptRegistry.entries.clear();
       App.instanceId = originalInstanceId;
+
+      IdentityTracker.documentPeriod = null;
+      IdentityTracker.period = null;
+      IdentityTracker.periods = new Set();
+      IdentityTracker.tag = null;
     });
 
     it("asks the page data route for the page", async () => {
@@ -428,6 +468,54 @@ describe("Client", () => {
 
       sinon.assert.calledOnceWithExactly(onSuccessStub, payload);
       sinon.assert.notCalled(onNotPageStub);
+    });
+
+    it("takes in the identity tag a page response carries", async () => {
+      sinon.stub(globalThis, "fetch").resolves({
+        ...pageDataResponse({type: "page"}),
+        headers: new Headers({
+          "hologram-identity-tag": "tag-2",
+          "hologram-page-data": "true",
+        }),
+      });
+
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+      assert.equal(IdentityTracker.tag, "tag-2");
+    });
+
+    // The period starts with the response's own tag, not the one the client knew before it.
+    it("stamps a page payload with the identity period its response belongs to", async () => {
+      const periodBefore = IdentityTracker.period;
+
+      sinon.stub(globalThis, "fetch").resolves({
+        ...pageDataResponse({type: "page"}),
+        headers: new Headers({
+          "hologram-identity-tag": "tag-2",
+          "hologram-page-data": "true",
+        }),
+      });
+
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+      const [payload] = onSuccessStub.firstCall.args;
+
+      assert.equal(payload.identityPeriod, IdentityTracker.period);
+      assert.notEqual(payload.identityPeriod, periodBefore);
+    });
+
+    // Middleware can log the user in or out and answer with something other than a page.
+    it("takes in the identity tag of a response that is not a page", async () => {
+      sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers({"hologram-identity-tag": "tag-2"}),
+        ok: false,
+        status: 403,
+      });
+
+      await Client.fetchPage(pageModule, onSuccessStub, onNotPageStub);
+
+      assert.equal(IdentityTracker.tag, "tag-2");
+      sinon.assert.calledOnce(onNotPageStub);
     });
 
     // A page's middleware can answer with any status it likes, a plain 200 included, so the marker
@@ -521,6 +609,8 @@ describe("Client", () => {
       // carry is visibly this describe's.
       originalRegistryEpoch = Hologram.registryEpoch;
       Hologram.registryEpoch = 3;
+
+      IdentityTracker.init("tag-1");
     });
 
     afterEach(() => {
@@ -529,10 +619,16 @@ describe("Client", () => {
       globalThis.Hologram = originalHologram;
       App.instanceId = originalInstanceId;
       Hologram.registryEpoch = originalRegistryEpoch;
+
+      IdentityTracker.documentPeriod = null;
+      IdentityTracker.period = null;
+      IdentityTracker.periods = new Set();
+      IdentityTracker.tag = null;
     });
 
     it("calls fetch with correct URL, options, and payload including CSRF token", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(Type.nil()),
@@ -576,6 +672,7 @@ describe("Client", () => {
 
     it("command succeeds, next action is not nil", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(
@@ -606,6 +703,7 @@ describe("Client", () => {
     // before they are in.
     it("schedules the next action and the self-echoed actions with the reply's chunks", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(
@@ -646,6 +744,7 @@ describe("Client", () => {
 
     it("command succeeds, next action is nil", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(Type.nil()),
@@ -665,6 +764,7 @@ describe("Client", () => {
 
     it("command fails due to response status code", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: false,
         status: 500,
       };
@@ -686,8 +786,47 @@ describe("Client", () => {
       sinon.assert.notCalled(schedulePushedActionStub);
     });
 
+    it("takes in the identity tag the reply carries", async () => {
+      sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers({"hologram-identity-tag": "tag-2"}),
+        ok: true,
+        json: sinon.stub().resolves({
+          action: serialized(Type.nil()),
+          selfEchoes: serialized(Type.list()),
+          status: 1,
+          subReceiptAdds: serialized(Type.list()),
+          subReceiptDrops: serialized(Type.list()),
+        }),
+      });
+
+      await Client.sendCommand(command);
+
+      assert.equal(IdentityTracker.tag, "tag-2");
+    });
+
+    // A command turned away can still be where the client learns the identity changed.
+    it("takes in the identity tag of a reply that failed", async () => {
+      sinon.stub(globalThis, "fetch").resolves({
+        headers: new Headers({"hologram-identity-tag": "tag-2"}),
+        ok: false,
+        status: 403,
+      });
+
+      let thrownError = null;
+
+      try {
+        await Client.sendCommand(command);
+      } catch (error) {
+        thrownError = error;
+      }
+
+      assert.instanceOf(thrownError, HologramRuntimeError);
+      assert.equal(IdentityTracker.tag, "tag-2");
+    });
+
     it("command fails due to result status code", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: "error message from server command handler",
@@ -717,6 +856,7 @@ describe("Client", () => {
 
     it("dispatches each self-echoed action from the selfEchoes field", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(Type.nil()),
@@ -764,6 +904,7 @@ describe("Client", () => {
     // page does not hold, rather than raising for a target the page never had.
     it("skips a self echo whose target is not on the page", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(Type.nil()),
@@ -799,6 +940,7 @@ describe("Client", () => {
 
     it("does not dispatch any self-echo when the selfEchoes field is an empty list", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(Type.nil()),
@@ -818,6 +960,7 @@ describe("Client", () => {
 
     it("dispatches next_action before self-echoed actions", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(
@@ -861,6 +1004,7 @@ describe("Client", () => {
     // stamps it with the page the registry answers for when it arrives, whichever page that is.
     it("stamps the next action with the epoch it is given, and leaves a self echo to be stamped on arrival", async () => {
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(
@@ -912,6 +1056,7 @@ describe("Client", () => {
       Hologram.registryEpoch = 4;
 
       resolveFetch({
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(
@@ -978,6 +1123,7 @@ describe("Client", () => {
       );
 
       const mockResponse = {
+        headers: new Headers(),
         ok: true,
         json: sinon.stub().resolves({
           action: serialized(Type.nil()),

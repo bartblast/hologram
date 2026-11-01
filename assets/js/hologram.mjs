@@ -16,6 +16,7 @@ import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import IdentityTracker from "./identity_tracker.mjs";
 import Interpreter from "./interpreter.mjs";
 import JsInterop from "./js_interop.mjs";
 import LiveReload from "./live_reload.mjs";
@@ -83,6 +84,11 @@ export default class Hologram {
   static domEpoch = 0;
 
   // Made public to make tests easier
+  // The id of the history entry the tab answers for, under which the page on screen is saved when
+  // it is left. Every entry Hologram makes carries one as its history state.
+  static historyId = null;
+
+  // Made public to make tests easier
   // True from the start of a mount to the end of its first render. The registry arrives with every
   // struct's props empty and that render is what writes them, so no action may run before it. Set
   // and cleared by #mountPage.
@@ -101,6 +107,26 @@ export default class Hologram {
   // being reconciled onto it. Set by render() alone: a patch made outside a render is not
   // covered, and has to keep a dispatch out by its own means.
   static isRendering = false;
+
+  // Made public to make tests easier
+  // The navigations begun so far: every click on a link and every page an action puts, every page
+  // loadNewPage is asked for, and every popstate. A page on its way - its fetch, a redirect's hop,
+  // the frame it is shown in - is dropped when a navigation was begun after it, so that what the
+  // visitor did last is what they get.
+  static navigationCount = 0;
+
+  // Made public to make tests easier
+  // The identity period the page on screen was produced in (see IdentityTracker): the one its
+  // server response arrived in, or for a restored page the one its snapshot answers for. The
+  // page's snapshot is stamped with it.
+  static pageIdentityPeriod = null;
+
+  // Made public to make tests easier
+  // The path the page on screen was shown under, as the address bar had it, with no query string
+  // or fragment. An entry with no id is taken for the page's own only when it has this path (see
+  // handlePopstateEvent). Read from the browser rather than built from the route, so that the
+  // two compare whatever the path's encoding.
+  static pagePath = null;
 
   // Made public to make tests easier
   static prefetchedPages = new Map();
@@ -148,7 +174,6 @@ export default class Hologram {
   // once that is settled.
   static #documentSnapshot = null;
 
-  static #historyId = null;
   static #isInitiated = false;
 
   // True while #runActions walks the queue. A running action can enqueue another one synchronously
@@ -165,6 +190,11 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
   static #pendingJsInteropActions = [];
+
+  // The popstates whose handler has not advanced the epoch yet. Until it does, the browser is on
+  // the entry it went to while the history id still names the page being left, and nothing else
+  // says a navigation is under way (see #isNavigationUnderWay).
+  static #popstatesDeciding = 0;
   static #registeredPageModules = new Set();
 
   // For each snapshot restore in flight, the chunks it waits for (see #loadSnapshotChunks).
@@ -172,6 +202,23 @@ export default class Hologram {
 
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
+
+  // Made public to make tests easier
+  //
+  // Asks the server who is logged in now, and loads the page afresh when that is another identity
+  // than the one the tab knew. Run for a document the browser brings back from its back/forward
+  // cache, which is exactly as it was left, page and runtime state included, while the identity
+  // can have changed in the meantime: a logout in a document loaded after it, for one. A page for
+  // a logged-in user is sent so that the browser keeps none, but an app can set its own caching,
+  // and a page for no logged-in user is kept. With no answer the page stays as it is.
+  static async checkIdentity() {
+    const period = IdentityTracker.period;
+    const identityTag = await Client.fetchIdentityTag();
+
+    if (IdentityTracker.observe(identityTag) !== period) {
+      Hologram.reloadBrowserLocation();
+    }
+  }
 
   // Public API for dispatching actions from JavaScript.
   // Converts plain JS values to Hologram types and schedules the action for execution.
@@ -306,7 +353,11 @@ export default class Hologram {
 
   // Made public to make tests easier
   static executeLoadPrefetchedPageAction(action, eventTargetNode) {
-    Hologram.#ensureDomNodeHasHologramId(eventTargetNode);
+    // A click that no pointer press came before - Enter on a focused link, a screen reader,
+    // element.click() - finds nothing prefetched, and one whose press came long ago finds a stale
+    // page, so the click fetches the page itself then. Its fetch is still on its way below, so the
+    // click confirms the navigation and the fetch finishes it.
+    Hologram.executePrefetchPageAction(action, eventTargetNode);
 
     const toParam = Hologram.#getToParam(action);
     const pagePath = Hologram.#buildPagePath(toParam);
@@ -318,15 +369,16 @@ export default class Hologram {
 
     const mapValue = Hologram.prefetchedPages.get(mapKey);
 
-    if (typeof mapValue === "undefined") {
-      return;
-    }
-
     if (mapValue.isPage === false) {
+      // Handed to the browser, which takes over from any page still on its way.
+      $.#beginNavigation();
       Hologram.prefetchedPages.delete(mapKey);
       Hologram.navigateBrowserTo(pagePath);
     } else if (mapValue.payload === null) {
+      // The navigation begins at the click, while the page is still being fetched, so that going
+      // back or forward meanwhile, or another click, takes over from it.
       mapValue.isNavigateConfirmed = true;
+      mapValue.navigation = $.#beginNavigation();
     } else {
       Hologram.prefetchedPages.delete(mapKey);
       Hologram.loadNewPage(pagePath, mapValue.payload);
@@ -371,8 +423,8 @@ export default class Hologram {
   // Made public to make tests easier
   //
   // What a prefetch found instead of a page: a denial, or a response the page's middleware wrote
-  // itself. The entry is kept rather than dropped, because a click looks the target up here and
-  // would otherwise find nothing and do nothing at all, leaving the link dead.
+  // itself. The entry is kept rather than dropped, so that a click hands the target straight to
+  // the browser instead of fetching it again.
   static handlePrefetchPageNotPage(mapKey) {
     const mapValue = Hologram.prefetchedPages.get(mapKey);
 
@@ -380,9 +432,13 @@ export default class Hologram {
       return;
     }
 
+    // A navigation begun after the click takes over (see executeLoadPrefetchedPageAction).
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.navigateBrowserTo(mapValue.pagePath);
+
+      if ($.navigationCount === mapValue.navigation) {
+        Hologram.navigateBrowserTo(mapValue.pagePath);
+      }
     } else {
       mapValue.isPage = false;
     }
@@ -395,9 +451,13 @@ export default class Hologram {
       return;
     }
 
+    // A navigation begun after the click takes over (see executeLoadPrefetchedPageAction).
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.loadNewPage(mapValue.pagePath, payload);
+
+      if ($.navigationCount === mapValue.navigation) {
+        Hologram.loadNewPage(mapValue.pagePath, payload);
+      }
     } else {
       mapValue.payload = payload;
     }
@@ -558,6 +618,30 @@ export default class Hologram {
 
   // Made public to make tests easier
   //
+  // Whether the snapshot of the history entry a new document is loaded for can be restored into
+  // it: only for Back and Forward, not for a reload; only for the identity the server has just
+  // rendered the document for, since a snapshot taken for another can hold another user's state;
+  // and only into the code it was taken with, as a snapshot that does not fit mounts from the
+  // state the server has just rendered instead.
+  //
+  // A snapshot with no identity tag is passed over too: it was taken before snapshots were tagged,
+  // or after the identity changed under its page, and can hold anyone's state. So the first Back
+  // past a reload or an external site after an upgrade renders the page fresh, once.
+  static isDocumentSnapshotRestorable(pageSnapshot, isPageReload) {
+    return (
+      pageSnapshot !== null &&
+      !isPageReload &&
+      IdentityTracker.isCurrentTag(pageSnapshot.identityTag) &&
+      LiveReload.snapshotFits(
+        pageSnapshot,
+        globalThis.Hologram.initialPageDigest,
+        $.#runtimeDigest(),
+      )
+    );
+  }
+
+  // Made public to make tests easier
+  //
   // Takes the page the server described, or where it says to go instead. A redirect is followed by
   // asking for the page it names, so only the page actually arrived at is mounted and only its path
   // enters history - the same trail a browser leaves, where the pages passed through on the way are
@@ -571,8 +655,34 @@ export default class Hologram {
     hopCount = 0,
     historyEntryId = null,
   ) {
+    const navigation = $.#beginNavigation();
+
+    // A page described for an identity that has since changed, a prefetch kept across a logout or
+    // a response read before one, is loaded afresh instead, so that the page shown is the one the
+    // server renders for the identity the session holds now, with its middleware run for it. A
+    // page loaded into an entry the browser went to reloads that entry: its URL is what the
+    // address bar shows already. A payload stamped with no period predates stamping.
+    if (
+      payload.identityPeriod !== null &&
+      payload.identityPeriod !== undefined &&
+      !IdentityTracker.isCurrent(payload.identityPeriod)
+    ) {
+      if (historyEntryId === null) {
+        Hologram.navigateBrowserTo(pagePath);
+      } else {
+        Hologram.reloadBrowserLocation();
+      }
+
+      return;
+    }
+
     if (payload.type === "redirect") {
-      return Hologram.#followRedirect(payload, hopCount, historyEntryId);
+      return Hologram.#followRedirect(
+        payload,
+        hopCount,
+        historyEntryId,
+        navigation,
+      );
     }
 
     const pageModule = Deserializer.deserialize(payload.pageModule);
@@ -585,16 +695,25 @@ export default class Hologram {
       return;
     }
 
+    // A page going into an entry the browser went to saves nothing here: the page being left was
+    // saved when the browser left its entry.
     if (historyEntryId === null) {
       await $.#savePageSnapshot();
-      $.#historyId = Utils.randomUUID();
-    } else {
-      // The page being left was saved when the browser left its entry. From here on the tab
-      // answers for this one.
-      $.#historyId = historyEntryId;
     }
 
     window.requestAnimationFrame(() => {
+      // A navigation begun since takes over: another page asked for, or the browser gone back or
+      // forward. Showing this page now would undo what the visitor did last, and the entry it was
+      // meant for may not be the browser's any more.
+      if ($.navigationCount !== navigation) {
+        return;
+      }
+
+      // The entry's id is taken in the frame that shows the page. Until then the page being left
+      // is on screen, and a popstate meanwhile saves it under its own entry's id, or takes an
+      // entry the browser makes for a jump to a #fragment for it (see handlePopstateEvent).
+      $.historyId = historyEntryId ?? Utils.randomUUID();
+
       // Before the destination appears, so that the focus its appearance settles leaves the
       // focused element scrolled into view, as on a document load, rather than being scrolled
       // back off screen.
@@ -602,11 +721,13 @@ export default class Hologram {
       Hologram.#showNewPage(payload);
 
       if (historyEntryId === null) {
-        history.pushState($.#historyId, null, pagePath);
+        history.pushState($.historyId, null, pagePath);
       } else {
         // A redirect can have led to another path than the one the entry held.
-        history.replaceState($.#historyId, null, pagePath);
+        history.replaceState($.historyId, null, pagePath);
       }
+
+      $.pagePath = window.location.pathname;
     });
   }
 
@@ -708,11 +829,21 @@ export default class Hologram {
 
     globalThis.Hologram.assetManifest = bootData.assetManifest;
     globalThis.Hologram.csrfToken = bootData.csrfToken;
+    globalThis.Hologram.identityTag = bootData.identityTag;
     globalThis.Hologram.initialChunkDigests = bootData.chunks;
     globalThis.Hologram.initialPageDigest = bootData.pageDigest;
     globalThis.Hologram.instanceId = bootData.instanceId;
 
     $.#bootData = bootData;
+  }
+
+  // Made public to make tests easier
+  //
+  // Loads the document afresh in the history entry the tab is on, whatever its URL holds. Unlike
+  // replaceBrowserLocation() with the URL the address bar shows, this also loads an entry whose URL
+  // has a fragment, which a replace treats as a jump within the document.
+  static reloadBrowserLocation() {
+    window.location.reload();
   }
 
   // Made public to make tests easier
@@ -827,6 +958,40 @@ export default class Hologram {
     );
   }
 
+  // Made public to make tests easier
+  //
+  // Takes in the client ETS tables a document stored on leaving, when they were stored for the
+  // identity this document was rendered for (see #adoptStoredEts).
+  static async restoreEts() {
+    const storageKey = $.#ETS_STORAGE_KEY;
+
+    // Try OPFS first
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(storageKey, {create: false});
+      const file = await fileHandle.getFile();
+      const serialized = await file.text();
+      $.#adoptStoredEts(Deserializer.deserialize(serialized));
+      return;
+    } catch {
+      // Fall through to session storage
+    }
+
+    // Fallback to session storage if OPFS fails
+    const serialized = sessionStorage.getItem(storageKey);
+
+    if (serialized) {
+      try {
+        $.#adoptStoredEts(Deserializer.deserialize(serialized));
+      } catch (error) {
+        console.error("Failed to restore ETS from session storage:", error);
+        ERTS.ets = {}; // Reset to empty on deserialization failure
+      }
+    } else {
+      // No stored state found, keep current (likely empty) state
+    }
+  }
+
   static run() {
     Hologram.#onReady(async () => {
       if (!Hologram.#isInitiated) {
@@ -849,7 +1014,9 @@ export default class Hologram {
 
       if (isRestorable) {
         $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
-        $.#restorePageSnapshot(pageSnapshot);
+        // The snapshot's tag matched the identity this document was rendered for (see
+        // isDocumentSnapshotRestorable), so its state belongs to this document's first period.
+        $.#restorePageSnapshot(pageSnapshot, IdentityTracker.documentPeriod);
 
         // The mount after a restore reads no mount data, which is where a page's bundle digest is
         // recorded, so this document's is recorded here: the snapshot it saves on leaving is
@@ -862,6 +1029,45 @@ export default class Hologram {
 
       Hologram.#mountWhenReady(false);
     });
+  }
+
+  // Made public to make tests easier
+  //
+  // Stores the client ETS tables for the next document. They live for the whole document and can
+  // hold what any identity it was in put in them, so they are stamped with the document's
+  // identity only while its first period lasts (see IdentityTracker.tagFor).
+  static async saveEts() {
+    const storageKey = $.#ETS_STORAGE_KEY;
+
+    const serializedEts = Serializer.serialize(
+      {
+        identityTag: IdentityTracker.tagFor(IdentityTracker.documentPeriod),
+        tables: ERTS.ets,
+      },
+      "client",
+    );
+
+    // Save to session storage first (guaranteed to complete synchronously)
+    try {
+      sessionStorage.setItem(storageKey, serializedEts);
+    } catch (error) {
+      console.error("Failed to save ETS to session storage:", error);
+    }
+
+    // Then try OPFS (async, may not complete before page unload on beforeunload)
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(storageKey, {create: true});
+      const writable = await fileHandle.createWritable();
+      await writable.write(serializedEts);
+      await writable.close();
+
+      // Successfully saved to OPFS, clear session storage
+      sessionStorage.removeItem(storageKey);
+    } catch (opfsError) {
+      console.error("Failed to save ETS to OPFS:", opfsError);
+      // Session storage still has the data as fallback
+    }
   }
 
   // Runs the action once its delay has elapsed. The timer's callback is a new task, so the browser
@@ -918,6 +1124,23 @@ export default class Hologram {
         );
       },
     );
+  }
+
+  // Takes in the tables a document stored, when they were stored for the identity this document
+  // was rendered for. Tables stored for another identity can hold another user's data, and ones
+  // stored with no tag - before stored tables were tagged, or after the identity changed under
+  // them - can hold anyone's: the tables are left as they are then, which at boot is empty.
+  static #adoptStoredEts(storedEts) {
+    if (IdentityTracker.isCurrentTag(storedEts?.identityTag)) {
+      ERTS.ets = storedEts.tables;
+    }
+  }
+
+  // Takes the next number for a navigation the visitor began (see navigationCount).
+  static #beginNavigation() {
+    $.navigationCount += 1;
+
+    return $.navigationCount;
   }
 
   // The mount data of the first page, from its boot data block. Its terms are read here rather than
@@ -1367,8 +1590,21 @@ export default class Hologram {
       const serializedSnapshot = sessionStorage.getItem(snapshotKey);
 
       if (serializedSnapshot) {
-        const deserializedSnapshot =
-          Deserializer.deserialize(serializedSnapshot);
+        let deserializedSnapshot;
+
+        // A stored snapshot that can't be read back counts as none, as an OPFS copy that can't be
+        // read is passed over above: the entry's page is then loaded afresh, rather than Back
+        // failing for good.
+        try {
+          deserializedSnapshot = Deserializer.deserialize(serializedSnapshot);
+        } catch (error) {
+          console.error(
+            "Failed to restore page snapshot from session storage:",
+            error,
+          );
+
+          return null;
+        }
 
         // Cache the deserialized snapshot in memory for faster subsequent access
         $.#pageSnapshots.set(snapshotKey, deserializedSnapshot);
@@ -1390,6 +1626,32 @@ export default class Hologram {
 
   // Made public to make tests easier
   static async handlePopstateEvent(event) {
+    // The browser has gone back or forward, which takes over from a page still on its way, waiting
+    // for its frame or a redirect's hop. Counted before the early returns below too: a Back between
+    // #fragments of the page on screen is still what the visitor did last.
+    const navigation = $.#beginNavigation();
+
+    // The browser fires popstate for a jump to a #fragment too, with the entry it made for it and
+    // gave no id. Such an entry shows the page on screen, so it takes that page's id, and Back or
+    // Forward between it and its page's other entries then names the page on screen as well. The
+    // page stays as it is, and the browser scrolls. Not while a navigation is under way: the
+    // page on screen is then giving way to another, whose id the history id does not hold yet.
+    //
+    // App code can push entries with no state too, for a query string of the page's own (a tab, a
+    // filter) and with handling of its own, so an entry with no state under the page's path is left
+    // to it the same way. One under another path is another page's, and takes the path below,
+    // where it is reloaded, since nothing was saved for it.
+    if (!$.#isNavigationUnderWay()) {
+      if (event.state === null && window.location.pathname === $.pagePath) {
+        history.replaceState($.historyId, null);
+        return;
+      }
+
+      if (event.state === $.historyId) {
+        return;
+      }
+    }
+
     // The same boundary as #showNewPage, on the history's side of it. It cannot wait for the
     // restore below, which a popstate carrying no snapshot skips.
     $.#disarmLeftPage();
@@ -1398,23 +1660,35 @@ export default class Hologram {
     // cids. Emptied here for the same reason the timers are cancelled here.
     $.#awaitingTargets.clear();
 
-    await $.#savePageSnapshot();
+    let isSnapshotUnusable, pageSnapshot;
 
-    const pageSnapshot = await $.#getPageSnapshot(event.state);
+    $.#popstatesDeciding += 1;
 
-    // Asked before anything of the page being left is given up: where live reload runs, this is a
-    // round trip to the server.
-    const isSnapshotOutdated = pageSnapshot
-      ? await $.#isSnapshotOutdated(pageSnapshot)
-      : false;
+    try {
+      await $.#savePageSnapshot();
 
-    // What the registry answers for is about to change either way: a restore swaps it for the
-    // snapshot's, a snapshot that cannot be restored gives way to the page the server renders, and
-    // with no snapshot the mount reads the document's mount data instead and repopulates the
-    // registry from it, putting every component back to the state it was rendered with. So the
-    // epoch advances here - otherwise an action armed before this point would settle against
-    // state that has been replaced underneath it.
-    $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+      // An entry with no id is not one Hologram saved a page under.
+      pageSnapshot =
+        event.state === null ? null : await $.#getPageSnapshot(event.state);
+
+      // A snapshot is not restored when it was taken for another identity, where it can hold
+      // another user's state, or with code other than the page's current one. Asked before
+      // anything of the page being left is given up, and the identity first, since it needs no
+      // round trip: where live reload runs, the code is a round trip to the server.
+      isSnapshotUnusable =
+        pageSnapshot !== null &&
+        (!$.#isSnapshotOfCurrentIdentity(pageSnapshot) ||
+          (await $.#isSnapshotOutdated(pageSnapshot)));
+
+      // What the registry answers for is about to change either way: a restore swaps it for the
+      // snapshot's, a snapshot that cannot be restored gives way to the page the server renders,
+      // and with no snapshot the document is loaded afresh. So the epoch advances here -
+      // otherwise an action armed before this point would settle against state that has been
+      // replaced underneath it.
+      $.registryEpoch = Math.max($.domEpoch, $.registryEpoch) + 1;
+    } finally {
+      $.#popstatesDeciding -= 1;
+    }
 
     // The epoch of the navigation this popstate opened. What follows waits, for the snapshot's
     // chunks and for the server, and a later navigation may supersede this one before either
@@ -1428,51 +1702,64 @@ export default class Hologram {
     // under that page's entry.
     const historyEntryId = event.state;
 
-    // A snapshot taken with code other than the page's current one is not restored.
-    if (isSnapshotOutdated) {
-      return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
+    // A snapshot that cannot be restored gives way to the entry's page, asked for the way a fresh
+    // visit asks for it: its middleware runs, so a page that requires a login redirects.
+    if (isSnapshotUnusable) {
+      return $.#loadHistoryEntryPage(
+        historyEntryId,
+        pageSnapshot,
+        epoch,
+        navigation,
+      );
     }
 
-    if (!pageSnapshot) {
-      $.#historyId = historyEntryId;
+    // Every entry the tab has left has a snapshot, saved as it was left, in memory or, for an entry
+    // a document before a reload left, in storage. So one with none is an entry whose snapshot
+    // could not be read back. Nothing else describes its page, and the state the document was
+    // loaded with belongs to whichever page and user the tab started out with, so the browser
+    // loads the entry afresh.
+    if (pageSnapshot === null) {
+      Hologram.reloadBrowserLocation();
+      return;
     }
 
-    // The page on its way: the snapshot's, or with none the one the tab already answers for.
-    const pageModule = pageSnapshot
-      ? pageSnapshot.pageModule
-      : Hologram.#pageModule;
+    const pageModule = pageSnapshot.pageModule;
 
-    let snapshotChunksLoaded = null;
+    // A mount still waiting belongs to a navigation this one supersedes, and nothing is put in its
+    // place until the snapshot's chunks are in.
+    MountGate.cancel();
+    MountGate.require([]);
 
-    if (pageSnapshot) {
-      // A mount still waiting belongs to a navigation this one supersedes, and nothing is put in
-      // its place until the snapshot's chunks are in.
-      MountGate.cancel();
-      MountGate.require([]);
-
-      // Asked for now, so that they load while the server is asked for the page's bundle.
-      snapshotChunksLoaded = $.#loadSnapshotChunks(pageSnapshot);
-    }
+    // Asked for now, so that they load while the server is asked for the page's bundle.
+    const snapshotChunksLoaded = $.#loadSnapshotChunks(pageSnapshot);
 
     // Closes the transition. A snapshot is restored only once its chunks are in, so that one that
     // cannot be restored leaves the tab as it was, and the entry's page is asked for instead.
     const mount = async (isPageModuleRegistered, pageBundleDigests) => {
-      if (pageSnapshot) {
-        const loaded = await snapshotChunksLoaded;
+      const loaded = await snapshotChunksLoaded;
 
-        // A later navigation took over meanwhile, or the page's bundle failed to load, which ended
-        // this navigation already.
-        if (isSuperseded() || ScriptRegistry.hasFailed(pageBundleDigests)) {
-          return;
-        }
-
-        if (!loaded) {
-          return $.#loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch);
-        }
-
-        $.#historyId = historyEntryId;
-        $.#restorePageSnapshot(pageSnapshot);
+      // A later navigation took over meanwhile, or the page's bundle failed to load, which ended
+      // this navigation already.
+      if (isSuperseded() || ScriptRegistry.hasFailed(pageBundleDigests)) {
+        return;
       }
+
+      // The identity can have changed while the chunks loaded: a command's reply that was in
+      // flight.
+      if (!loaded || !$.#isSnapshotOfCurrentIdentity(pageSnapshot)) {
+        return $.#loadHistoryEntryPage(
+          historyEntryId,
+          pageSnapshot,
+          epoch,
+          navigation,
+        );
+      }
+
+      $.historyId = historyEntryId;
+      $.pagePath = window.location.pathname;
+      // The snapshot was just found to be of the identity that lasts now, so the page belongs to
+      // the period that lasts now, whichever document took it.
+      $.#restorePageSnapshot(pageSnapshot, IdentityTracker.period);
 
       $.#mountWhenReady(isPageModuleRegistered);
     };
@@ -1576,12 +1863,17 @@ export default class Hologram {
       // Force synchronous session storage save since async OPFS may not complete before page termination
       Hologram.#savePageSnapshot(true);
 
-      Hologram.#saveEts();
+      Hologram.saveEts();
     });
 
     window.addEventListener("popstate", Hologram.handlePopstateEvent);
 
     window.addEventListener("pageshow", (event) => {
+      // A page the browser brings back from its back/forward cache.
+      if (event.persisted) {
+        Hologram.checkIdentity();
+      }
+
       // Reconnect when page is restored from bfcache OR when navigating back from external page
       if (event.persisted || !Client.isConnected()) {
         Client.connect(true);
@@ -1603,34 +1895,32 @@ export default class Hologram {
       true,
     );
 
+    // The identity the server rendered the document for, which the responses that follow are
+    // compared with.
+    IdentityTracker.init(globalThis.Hologram.identityTag);
+
+    // Recorded before anything is awaited: a jump to a #fragment can come at any point from here
+    // on. Neither branch below changes the URL, and a snapshot restored at boot is of the page the
+    // document was loaded for, under that URL.
+    $.pagePath = window.location.pathname;
+
     // Check if there's already a history state (e.g., when navigating back from external page)
     if (history.state) {
-      $.#historyId = history.state;
+      $.historyId = history.state;
       const pageSnapshot = await $.#getPageSnapshot(history.state);
 
-      // Only restore state for back/forward navigation, not page reloads, and only into the code
-      // the snapshot was taken with: this document runs the page's current code, and one that does
-      // not fit mounts from the state the server has just rendered instead.
-      if (
-        !$.#isPageReload() &&
-        pageSnapshot &&
-        LiveReload.snapshotFits(
-          pageSnapshot,
-          globalThis.Hologram.initialPageDigest,
-          $.#runtimeDigest(),
-        )
-      ) {
+      if ($.isDocumentSnapshotRestorable(pageSnapshot, $.#isPageReload())) {
         $.#documentSnapshot = pageSnapshot;
       }
     } else {
-      $.#historyId = Utils.randomUUID();
+      $.historyId = Utils.randomUUID();
 
       // Only tags the entry with its id. Given no URL, the browser keeps the one the user opened,
       // query string and fragment included.
-      history.replaceState($.#historyId, null);
+      history.replaceState($.historyId, null);
     }
 
-    await $.#restoreEts();
+    await $.restoreEts();
 
     App.maybeLoadInstanceId();
     Client.connect(false);
@@ -1678,6 +1968,15 @@ export default class Hologram {
       : [pageDigest, ...chunkDigests];
   }
 
+  // Whether a navigation has begun whose page is not mounted yet: a popstate is deciding what to
+  // show, or the page it shows is on screen ahead of the registry, or the registry answers for it
+  // ahead of the screen, or it is mounting.
+  static #isNavigationUnderWay() {
+    return (
+      $.#popstatesDeciding > 0 || $.domEpoch !== $.registryEpoch || $.isMounting
+    );
+  }
+
   // Whether the element can be the one the server wrote, as the CSP specification decides whether an
   // element is nonceable: an attribute holding "<script" or "<style" is the trace of an injected
   // unclosed tag that has absorbed the real element's attributes, its nonce among them.
@@ -1717,6 +2016,27 @@ export default class Hologram {
     return (
       Date.now() - Hologram.prefetchedPages.get(mapKey).timestamp >
       Config.fetchPageTimeoutMs
+    );
+  }
+
+  // Whether the snapshot was taken for the identity the tab is in now. A snapshot this document
+  // took must be of the period that lasts now: the identity must not have changed since its page
+  // was put on screen, not even to change back. A snapshot another document took names a period
+  // of that document's, and is compared by the tag it was stamped with, as at boot (see
+  // isDocumentSnapshotRestorable). Popstate reaches those too: a reloaded document keeps the
+  // history entries the document before it pushed, and their snapshots are in storage. The tag
+  // is trusted only while the document's first period lasts, the tag the server rendered it with:
+  // after any change a response that left before it can have put an old tag back.
+  static #isSnapshotOfCurrentIdentity(pageSnapshot) {
+    const {identityPeriod, identityTag} = pageSnapshot;
+
+    if (IdentityTracker.isOwnPeriod(identityPeriod)) {
+      return IdentityTracker.isCurrent(identityPeriod);
+    }
+
+    return (
+      IdentityTracker.isCurrent(IdentityTracker.documentPeriod) &&
+      IdentityTracker.isCurrentTag(identityTag)
     );
   }
 
@@ -1782,8 +2102,19 @@ export default class Hologram {
   // entry's snapshot cannot be restored. The page is asked for the way a navigation asks for one,
   // and goes into the entry that exists already. Nothing of the tab is given up for it: the
   // runtime, the realtime stream and the instance id stay.
-  static async #loadHistoryEntryPage(historyEntryId, pageSnapshot, epoch) {
-    const isSuperseded = () => Math.max($.domEpoch, $.registryEpoch) !== epoch;
+  //
+  // The fetch is a round trip, and a navigation the visitor began meanwhile takes over from it even
+  // before its own page has arrived to move the epoch on: a click on a link, or a page an action
+  // put.
+  static async #loadHistoryEntryPage(
+    historyEntryId,
+    pageSnapshot,
+    epoch,
+    navigation,
+  ) {
+    const isSuperseded = () =>
+      Math.max($.domEpoch, $.registryEpoch) !== epoch ||
+      $.navigationCount !== navigation;
 
     // A mount still waiting belongs to a navigation this one supersedes.
     MountGate.cancel();
@@ -1806,9 +2137,11 @@ export default class Hologram {
           isSuperseded()
             ? null
             : Hologram.loadNewPage(pagePath, payload, 0, historyEntryId),
+        // Reloaded rather than replaced with the path: the address bar shows the entry's URL
+        // already, and a replace to it is a jump within the document when it has a fragment.
         () => {
           if (!isSuperseded()) {
-            Hologram.replaceBrowserLocation(pagePath);
+            Hologram.reloadBrowserLocation();
           }
         },
       );
@@ -1824,12 +2157,18 @@ export default class Hologram {
 
   // A loaded document has no payload, so it carries the same values in its boot data block.
   static #loadMountData() {
-    const mountData = $.#mountData ?? $.#bootMountData();
+    // A loaded document's state was rendered for the identity the document was loaded for.
+    const mountData = $.#mountData ?? {
+      ...$.#bootMountData(),
+      identityPeriod: IdentityTracker.documentPeriod,
+    };
 
     $.#mountData = null;
 
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
+
+    $.pageIdentityPeriod = mountData.identityPeriod ?? null;
 
     LiveReload.recordPageBundle(mountData.pageModule, mountData.pageDigest);
 
@@ -1933,10 +2272,16 @@ export default class Hologram {
   static async #navigateToPage(toParam) {
     const pagePath = $.#buildPagePath(toParam);
 
+    // The navigation begins here rather than when the page arrives: the fetch is a round trip,
+    // and going back or forward meanwhile, or asking for another page, takes over from it.
+    const navigation = $.#beginNavigation();
+    const isTakenOver = () => $.navigationCount !== navigation;
+
     return Client.fetchPage(
       toParam,
-      (payload) => Hologram.loadNewPage(pagePath, payload),
-      () => Hologram.navigateBrowserTo(pagePath),
+      (payload) =>
+        isTakenOver() ? null : Hologram.loadNewPage(pagePath, payload),
+      () => (isTakenOver() ? null : Hologram.navigateBrowserTo(pagePath)),
     );
   }
 
@@ -1992,7 +2337,10 @@ export default class Hologram {
   // A target outside the app carries no page to ask for, so the browser takes it. The hop limit is
   // there because a redirect can point at a page that redirects again: a cycle would otherwise
   // fetch forever, silently.
-  static #followRedirect(payload, hopCount, historyEntryId) {
+  //
+  // The hop is a round trip, and a navigation begun meanwhile takes over from it, as it would from
+  // the page's frame (see loadNewPage).
+  static #followRedirect(payload, hopCount, historyEntryId, navigation) {
     if (!payload.pageModule) {
       $.#handToBrowser(payload.to, historyEntryId);
       return null;
@@ -2009,16 +2357,21 @@ export default class Hologram {
       Deserializer.deserialize(payload.pageParams),
     ]);
 
+    const isTakenOver = () => $.navigationCount !== navigation;
+
     return Client.fetchPage(
       toParam,
       (nextPayload) =>
-        Hologram.loadNewPage(
-          payload.to,
-          nextPayload,
-          hopCount + 1,
-          historyEntryId,
-        ),
-      () => $.#handToBrowser(payload.to, historyEntryId),
+        isTakenOver()
+          ? null
+          : Hologram.loadNewPage(
+              payload.to,
+              nextPayload,
+              hopCount + 1,
+              historyEntryId,
+            ),
+      () =>
+        isTakenOver() ? null : $.#handToBrowser(payload.to, historyEntryId),
     );
   }
 
@@ -2081,9 +2434,11 @@ export default class Hologram {
     $.requestChunks(chunkDigests);
 
     // Readable before the patch, rather than as a side effect of a script the patch inserts and
-    // the browser then runs. The page module is already decoded above, so it is reused.
+    // the browser then runs. The page module is already decoded above, so it is reused. A payload
+    // with no identity period gives a page whose snapshot is never restored.
     $.#mountData = {
       componentRegistry: Deserializer.deserialize(payload.componentRegistry),
+      identityPeriod: payload.identityPeriod ?? null,
       pageDigest: payload.pageDigest,
       pageModule: pageModule,
       pageParams: Deserializer.deserialize(payload.pageParams),
@@ -2236,37 +2591,8 @@ export default class Hologram {
     );
   }
 
-  static async #restoreEts() {
-    const storageKey = $.#ETS_STORAGE_KEY;
-
-    // Try OPFS first
-    try {
-      const root = await navigator.storage.getDirectory();
-      const fileHandle = await root.getFileHandle(storageKey, {create: false});
-      const file = await fileHandle.getFile();
-      const serialized = await file.text();
-      ERTS.ets = Deserializer.deserialize(serialized);
-      return;
-    } catch {
-      // Fall through to session storage
-    }
-
-    // Fallback to session storage if OPFS fails
-    const serialized = sessionStorage.getItem(storageKey);
-
-    if (serialized) {
-      try {
-        ERTS.ets = Deserializer.deserialize(serialized);
-      } catch (error) {
-        console.error("Failed to restore ETS from session storage:", error);
-        ERTS.ets = {}; // Reset to empty on deserialization failure
-      }
-    } else {
-      // No stored state found, keep current (likely empty) state
-    }
-  }
-
-  static #restorePageSnapshot(pageSnapshot) {
+  // The identity period is the one the restored state answers for, which the page keeps.
+  static #restorePageSnapshot(pageSnapshot, identityPeriod) {
     const {
       componentRegistryEntries,
       instanceId,
@@ -2287,6 +2613,8 @@ export default class Hologram {
 
     Hologram.#pageModule = pageModule;
     Hologram.#pageParams = pageParams;
+
+    $.pageIdentityPeriod = identityPeriod;
 
     $.#scrollPosition = scrollPosition;
     $.#shouldLoadMountData = false;
@@ -2408,33 +2736,6 @@ export default class Hologram {
     return path?.match(/-([^-]+)\.js$/)?.[1] ?? null;
   }
 
-  static async #saveEts() {
-    const storageKey = $.#ETS_STORAGE_KEY;
-    const serializedEts = Serializer.serialize(ERTS.ets, "client");
-
-    // Save to session storage first (guaranteed to complete synchronously)
-    try {
-      sessionStorage.setItem(storageKey, serializedEts);
-    } catch (error) {
-      console.error("Failed to save ETS to session storage:", error);
-    }
-
-    // Then try OPFS (async, may not complete before page unload on beforeunload)
-    try {
-      const root = await navigator.storage.getDirectory();
-      const fileHandle = await root.getFileHandle(storageKey, {create: true});
-      const writable = await fileHandle.createWritable();
-      await writable.write(serializedEts);
-      await writable.close();
-
-      // Successfully saved to OPFS, clear session storage
-      sessionStorage.removeItem(storageKey);
-    } catch (opfsError) {
-      console.error("Failed to save ETS to OPFS:", opfsError);
-      // Session storage still has the data as fallback
-    }
-  }
-
   static async #savePageSnapshot(forceSync = false) {
     // The entry's snapshot is still waiting to be restored, and nothing has taken its place: the
     // page is not mounted yet, so there is no state to save over it.
@@ -2449,6 +2750,11 @@ export default class Hologram {
         ScriptRegistry.isLoaded([digest]),
       ),
       componentRegistryEntries: ComponentRegistry.entries,
+      // The identity the page's state was produced for. The snapshot is restored only for it: in
+      // this document while the period lasts, in another when the tag matches (see
+      // #isSnapshotOfCurrentIdentity and isDocumentSnapshotRestorable).
+      identityPeriod: $.pageIdentityPeriod,
+      identityTag: IdentityTracker.tagFor($.pageIdentityPeriod),
       instanceId: App.instanceId,
       pageDigest: LiveReload.heldPageDigest(Hologram.#pageModule),
       pageModule: Hologram.#pageModule,
@@ -2460,7 +2766,7 @@ export default class Hologram {
       ),
     };
 
-    const snapshotKey = $.#pageSnapshotKey($.#historyId);
+    const snapshotKey = $.#pageSnapshotKey($.historyId);
 
     // Always save deserialized object to in-memory cache first (fastest)
     $.#pageSnapshots.set(snapshotKey, pageSnapshot);

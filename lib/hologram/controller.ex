@@ -104,10 +104,13 @@ defmodule Hologram.Controller do
   `build_page_data_payload/1`), so the two cannot drift apart: the chunks, the page digest, the
   mount data and the realtime bookkeeping, every term among them in Hologram's term format as a
   nested JSON value. Without the tree, which the markup itself is. The document-wide values a
-  navigation already has join them: the asset manifest, the CSRF token and the instance id.
+  navigation already has join them: the asset manifest, the CSRF token, the identity tag (see
+  `Hologram.Runtime.Session.identity_tag/1`) and the instance id.
   """
   @spec build_boot_data(map) :: map
-  def build_boot_data(%{csrf_token: csrf_token, instance_id: instance_id} = fields) do
+  def build_boot_data(
+        %{csrf_token: csrf_token, identity_tag: identity_tag, instance_id: instance_id} = fields
+      ) do
     asset_manifest_json = AssetManifestCache.get_manifest_json()
 
     fields
@@ -115,6 +118,7 @@ defmodule Hologram.Controller do
     |> Map.merge(%{
       assetManifest: Jason.Fragment.new(asset_manifest_json),
       csrfToken: csrf_token,
+      identityTag: identity_tag,
       instanceId: instance_id
     })
   end
@@ -288,7 +292,10 @@ defmodule Hologram.Controller do
       else
         Logger.warning("instance_id cross-check failed")
 
+        # The tab's instance was established under another identity than the caller's, so this
+        # reply can be where the client learns the user changed.
         conn
+        |> put_identity_tag_header()
         |> Plug.Conn.put_status(403)
         |> Controller.text("Forbidden")
         |> Plug.Conn.halt()
@@ -296,7 +303,10 @@ defmodule Hologram.Controller do
     else
       Logger.warning("CSRF token validation failed")
 
+      # A session that was reset fails the check, since the token went with it, and Session.init/1
+      # has minted a new session ID by now: the client learns of the new identity here.
       conn
+      |> put_identity_tag_header()
       |> Plug.Conn.put_status(403)
       |> Controller.text("Forbidden")
       |> Plug.Conn.halt()
@@ -418,6 +428,26 @@ defmodule Hologram.Controller do
   end
 
   @doc """
+  Handles the identity tag HTTP GET request: answers with no body and the tag of the identity the
+  request's session holds in the `hologram-identity-tag` header (see
+  `Hologram.Runtime.Session.identity_tag/1`).
+
+  The client asks for it when the browser brings a page back from its back/forward cache, as it
+  was left, since the identity can have changed while the page was away. Reading the tag starts no
+  session: a request with none gets the tag of no identity, which matches no page's. The answer
+  is never stored, since it is only true at the moment it is sent.
+  """
+  @spec handle_identity_tag_request(Plug.Conn.t()) :: Plug.Conn.t()
+  def handle_identity_tag_request(initial_conn) do
+    initial_conn
+    |> PlugConnUtils.init_conn()
+    |> put_identity_tag_header()
+    |> Plug.Conn.put_resp_header("cache-control", "no-store")
+    |> Plug.Conn.send_resp(204, "")
+    |> Plug.Conn.halt()
+  end
+
+  @doc """
   Handles the initial page HTTP GET request by building HTTP response.
 
   ## Parameters
@@ -491,6 +521,7 @@ defmodule Hologram.Controller do
           build_boot_data(%{
             chunk_digests: result.chunk_digests,
             csrf_token: renderer_opts[:csrf_token],
+            identity_tag: Session.identity_tag(conn),
             instance_id: renderer_opts[:instance_id],
             mount_data: result.mount_data,
             page_digest: PageDigestRegistry.lookup(page_module),
@@ -790,6 +821,22 @@ defmodule Hologram.Controller do
     end
   end
 
+  # A response for a logged-in user must not outlive the login on the device. The browser can keep a
+  # page it left frozen in its back/forward cache, out of reach of a logout, and bring it back for
+  # whoever presses Back next. So it is told to store nothing of the response, unless the page,
+  # its middleware or the command set the caching itself on the server struct. A value a plug
+  # ahead of Hologram set is replaced, which only ever makes it stricter. Only full page loads can be kept that
+  # way; on the other responses, which are never stored, the header changes nothing.
+  defp maybe_forbid_storing(conn, %Server{user_id: nil}), do: conn
+
+  defp maybe_forbid_storing(conn, %Server{response_headers: %{"cache-control" => _value}}) do
+    conn
+  end
+
+  defp maybe_forbid_storing(conn, _server) do
+    Plug.Conn.put_resp_header(conn, "cache-control", "no-store")
+  end
+
   # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
   # it rendered last.
   defp maybe_note_page_rendered(nil, _page_module), do: :ok
@@ -878,6 +925,14 @@ defmodule Hologram.Controller do
     end
   end
 
+  # Tells the client which identity this response leaves behind (see Session.identity_tag/1), so it
+  # can tell when the user changed and stop restoring the pages it saved for the previous one.
+  # Read after the session ops and the user id are applied, so it names the identity the browser
+  # holds once it has the response.
+  defp put_identity_tag_header(conn) do
+    Plug.Conn.put_resp_header(conn, "hologram-identity-tag", Session.identity_tag(conn))
+  end
+
   # Everything a page response does before it is a response: session, middleware, render,
   # subscription transition, broadcasts. Returns the connection with every decoration the run
   # accumulated already applied - headers, session and cookie operations, the user id - so the
@@ -960,13 +1015,16 @@ defmodule Hologram.Controller do
   # merge by key, so one the run set replaces a default the connection came with, like the
   # cache-control Plug puts on every response. A content type or a content security policy never
   # reaches here from a render or a command, which raise on either. The page data marker is put
-  # after this by the send that owns it, so it wins.
+  # after this by the send that owns it, so it wins. The identity tag goes last, so it is of the
+  # identity the decorations leave.
   defp decorate_conn(conn, server_struct, final_server_struct) do
     conn
     |> Plug.Conn.merge_resp_headers(Map.to_list(final_server_struct.response_headers))
     |> apply_session_ops(final_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(final_server_struct.__meta__.cookie_ops)
     |> maybe_persist_user_id(server_struct, final_server_struct)
+    |> maybe_forbid_storing(final_server_struct)
+    |> put_identity_tag_header()
   end
 
   # Marks a response as carrying page data, so the client can tell one from a response a page's

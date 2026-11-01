@@ -19,9 +19,10 @@ export default class App {
     App.cspNonce = globalThis.Hologram.cspNonce ?? null;
   }
 
-  // Idempotent: returns early when `App.instanceId` is already set so a
-  // snapshot-restored value survives the boot sequence even though
-  // `#restorePageSnapshot` runs before `App.maybeLoadInstanceId()`.
+  // Idempotent: returns early when `App.instanceId` is already set, so a second
+  // call never replaces the id the tab already uses. The boot calls it before
+  // any snapshot is restored, and a restore then puts the snapshot's id in
+  // place itself (see `Hologram.#restorePageSnapshot`).
   static maybeLoadInstanceId() {
     if (App.instanceId !== null) {
       return;

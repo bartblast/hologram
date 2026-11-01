@@ -105,6 +105,19 @@ defmodule Hologram.RouterTest do
     end
   end
 
+  describe "/hologram/identity-tag" do
+    test "routes GET identity tag request" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/identity-tag")
+        |> Plug.Test.init_test_session(%{})
+        |> call([])
+
+      assert conn.status == 204
+      assert [_identity_tag] = Plug.Conn.get_resp_header(conn, "hologram-identity-tag")
+    end
+  end
+
   describe "/hologram/page" do
     test "routes POST page data request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
