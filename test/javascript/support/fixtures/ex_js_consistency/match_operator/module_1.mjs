@@ -11,12 +11,8 @@ export function defineModule1Fixture() {
     "public",
     [
       {
-        params: (context) => [
-          Interpreter.matchOperator(
-            Type.integer(1n),
-            Type.variablePattern("a"),
-            context,
-          ),
+        params: (_context) => [
+          Type.matchPattern(Type.variablePattern("a"), Type.integer(1n)),
         ],
         guards: [],
         body: (context) => {
@@ -33,12 +29,8 @@ export function defineModule1Fixture() {
     "public",
     [
       {
-        params: (context) => [
-          Interpreter.matchOperator(
-            Type.variablePattern("a"),
-            Type.integer(1n),
-            context,
-          ),
+        params: (_context) => [
+          Type.matchPattern(Type.integer(1n), Type.variablePattern("a")),
         ],
         guards: [],
         body: (context) => {
@@ -55,15 +47,10 @@ export function defineModule1Fixture() {
     "public",
     [
       {
-        params: (context) => [
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Type.integer(1n),
-              Type.variablePattern("b"),
-              context,
-            ),
+        params: (_context) => [
+          Type.matchPattern(
             Type.variablePattern("a"),
-            context,
+            Type.matchPattern(Type.variablePattern("b"), Type.integer(1n)),
           ),
         ],
         guards: [],
@@ -84,15 +71,10 @@ export function defineModule1Fixture() {
     "public",
     [
       {
-        params: (context) => [
-          Interpreter.matchOperator(
-            Interpreter.matchOperator(
-              Type.variablePattern("b"),
-              Type.integer(1n),
-              context,
-            ),
+        params: (_context) => [
+          Type.matchPattern(
             Type.variablePattern("a"),
-            context,
+            Type.matchPattern(Type.integer(1n), Type.variablePattern("b")),
           ),
         ],
         guards: [],
