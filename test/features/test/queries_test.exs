@@ -21,6 +21,8 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Queries.Page1
   alias HologramFeatureTests.Queries.Page10
+  alias HologramFeatureTests.Queries.Page11
+  alias HologramFeatureTests.Queries.Page12
   alias HologramFeatureTests.Queries.Page3
   alias HologramFeatureTests.Queries.Page4
   alias HologramFeatureTests.Queries.Page5
@@ -526,6 +528,63 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_same_page_load()
   end
 
+  # José, Joseph and JOSEPHINE start with jose once case and accents are folded. The browser renders
+  # the list again from its own rows once they land, so the page the server sent is read as well: it
+  # carries the answer the database gave.
+  feature "renders a search that ignores case and accents", %{session: session} do
+    seed_search_tickets()
+
+    session
+    |> visit(Page11)
+    |> await_local_fill()
+    |> assert_text(css("#loose_search"), ~r/^José,Joseph,JOSEPHINE$/)
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/11")
+
+    assert html =~ ~r{<strong id="loose_search"><code>José,Joseph,JOSEPHINE</code></strong>}
+  end
+
+  # Only JOSEPHINE starts with JOSE byte for byte. The page the server sent is read as well.
+  feature "renders an exact search", %{session: session} do
+    seed_search_tickets()
+
+    session
+    |> visit(Page11)
+    |> await_local_fill()
+    |> assert_text(css("#exact_search"), ~r/^JOSEPHINE$/)
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/11")
+
+    assert html =~ ~r{<strong id="exact_search"><code>JOSEPHINE</code></strong>}
+  end
+
+  # The term changes in the browser, and the answer comes from the rows the client holds - a pinned
+  # term doesn't narrow what it downloads, so every ticket is there.
+  feature "runs a search over local data as its term changes", %{session: session} do
+    seed_search_tickets()
+
+    session
+    |> visit(Page11)
+    |> await_local_fill()
+    |> click(button("Search for zoe"))
+    |> assert_text(css("#loose_search"), ~r/^Zoë$/)
+  end
+
+  # 500 days would start with 50% too if the % were a wildcard. The page starts with 50% as its
+  # term, so the server answers it as well as the browser, and the page it sent is read too.
+  feature "reads % in a search term as a plain character", %{session: session} do
+    seed_search_tickets()
+
+    session
+    |> visit(Page12)
+    |> await_local_fill()
+    |> assert_text(css("#exact_search"), ~r/^50% off$/)
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/12")
+
+    assert html =~ ~r{<strong id="exact_search"><code>50% off</code></strong>}
+  end
+
   # Two products so the parent's ordering picks a definite one to pass down, and reviews split
   # across both so a query filtering by the passed product reads fewer rows than one that does not.
   defp seed_products_and_reviews do
@@ -651,6 +710,18 @@ defmodule HologramFeatureTests.QueriesTest do
     |> DB.create!()
 
     %{reply: reply}
+  end
+
+  # Titles a search tells apart only by case, accents or a literal %.
+  defp seed_search_tickets do
+    Enum.each(
+      ["50% off", "500 days", "Johanna", "José", "Joseph", "JOSEPHINE", "Zoë"],
+      fn title ->
+        %{priority: :low, title: title}
+        |> Ticket.new()
+        |> DB.create!()
+      end
+    )
   end
 
   # Distinct titles, so no ordering leans on the id tiebreaker.
