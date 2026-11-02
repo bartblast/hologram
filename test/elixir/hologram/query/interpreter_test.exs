@@ -19,6 +19,7 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Test.Fixtures.Entity.Module15
   alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module25
   alias Hologram.Test.Fixtures.Entity.Module26
@@ -37,6 +38,7 @@ defmodule Hologram.Query.InterpreterTest do
     Module15,
     Module17,
     Module2,
+    Module22,
     Module24,
     Module25,
     Module26,
@@ -691,6 +693,41 @@ defmodule Hologram.Query.InterpreterTest do
       module_10(count: 1)
 
       assert names(agreed(filter(Module10, username >= "a"))) == []
+    end
+  end
+
+  # Two times compared as plain maps read the microseconds before the minutes, and two precisions of
+  # one time as two values.
+  describe "run/3 - times" do
+    setup do
+      %{
+        early: created(Module22, opens_at: ~T[10:05:00.900000]),
+        late: created(Module22, opens_at: ~T[10:30:00.100000]),
+        round: created(Module22, opens_at: ~T[10:00:00.000000])
+      }
+    end
+
+    test "orders times by the time of day they name", %{early: early, round: round} do
+      bound = ~T[10:30:00.100000]
+
+      assert matched_ids(agreed(filter(Module22, opens_at < ^bound))) ==
+               Enum.sort([early.id, round.id])
+    end
+
+    test "sorts times by the time of day they name", %{early: early, late: late, round: round} do
+      ids =
+        Module22
+        |> sort(opens_at)
+        |> agreed()
+        |> Enum.map(& &1.id)
+
+      assert ids == [round.id, early.id, late.id]
+    end
+
+    test "equals a time at another precision", %{round: round} do
+      bound = ~T[10:00:00]
+
+      assert matched_ids(agreed(filter(Module22, opens_at == ^bound))) == [round.id]
     end
   end
 

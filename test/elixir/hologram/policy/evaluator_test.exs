@@ -6,6 +6,7 @@ defmodule Hologram.Policy.EvaluatorTest do
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module12
@@ -125,6 +126,34 @@ defmodule Hologram.Policy.EvaluatorTest do
       assert rule_matches?(rule, %Module1{public: true, priority: 2}, nil, &deny/3)
       assert rule_matches?(rule, %Module1{public: false, priority: 5}, nil, &deny/3)
       refute rule_matches?(rule, %Module1{public: true, priority: 3}, nil, &deny/3)
+    end
+
+    # Two times compared as plain maps read the microseconds before the minutes.
+    test "orders two times by the time of day they name" do
+      entity = %Module22{opens_at: ~T[10:05:00.900000]}
+
+      assert rule_matches?(
+               rule(predicates: [{:opens_at, :<, ~T[10:30:00.100000]}]),
+               entity,
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:opens_at, :>, ~T[10:30:00.100000]}]),
+               entity,
+               nil,
+               &deny/3
+             )
+    end
+
+    test "equals two times naming the same time of day at different precisions" do
+      assert rule_matches?(
+               rule(predicates: [{:opens_at, :==, ~T[10:00:00.000000]}]),
+               %Module22{opens_at: ~T[10:00:00]},
+               nil,
+               &deny/3
+             )
     end
 
     test "evaluates equality with nil as a regular value" do

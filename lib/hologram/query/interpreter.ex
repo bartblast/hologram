@@ -92,6 +92,8 @@ defmodule Hologram.Query.Interpreter do
     DateTime.compare(left, right)
   end
 
+  defp compare_values(%Time{} = left, %Time{} = right), do: Time.compare(left, right)
+
   defp compare_values(left, right) when left < right, do: :lt
 
   defp compare_values(left, right) when left > right, do: :gt
@@ -235,6 +237,8 @@ defmodule Hologram.Query.Interpreter do
   defp equal?(%DateTime{} = left, %DateTime{} = right) do
     DateTime.compare(left, right) == :eq
   end
+
+  defp equal?(%Time{} = left, %Time{} = right), do: Time.compare(left, right) == :eq
 
   defp equal?(left, right), do: left == right
 
