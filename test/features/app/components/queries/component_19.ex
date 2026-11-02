@@ -26,7 +26,7 @@ defmodule HologramFeatureTests.Components.Queries.Component19 do
   # The titles starting with the typed term byte for byte.
   defp exact_tickets_query(query) do
     Ticket
-    |> filter(starts_with(title, ^query, match: :exact))
+    |> filter(starts_with(title, ^query, mode: :exact))
     |> sort(title)
   end
 
