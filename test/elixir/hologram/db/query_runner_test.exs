@@ -22,6 +22,10 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module23
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module31
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -47,6 +51,8 @@ defmodule Hologram.DB.QueryRunnerTest do
                     ],
                     [Role.Module1, Role.Module2]
                   )
+
+  @quantifier_mapping Mapper.derive!([Module26, Module27, Module28, Module29], [])
 
   @time_mapping Mapper.derive!([Module22, Module23], [])
 
@@ -962,6 +968,89 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{search: "x", serach: "y"})
       end
+    end
+  end
+
+  describe "run/3 - quantifiers" do
+    setup do
+      {:ok, general} = create(Module26.new(name: "general"))
+      {:ok, _quiet} = create(Module26.new(name: "quiet"))
+      {:ok, late} = create(Module26.new(name: "late"))
+
+      for {body, position, channel} <- [
+            {"hi", 1, general},
+            {"hidden", 3, general},
+            {"bye", 4, late},
+            {"ciao", 5, late}
+          ] do
+        {:ok, _message} =
+          %{body: body, channel_id: channel.id, position: position}
+          |> Module28.new()
+          |> create()
+      end
+
+      :ok
+    end
+
+    test "answers any, none and all over a channel's messages" do
+      names = fn query ->
+        query
+        |> Stage.normalize()
+        |> run(@quantifier_mapping)
+        |> Enum.map(& &1.name)
+        |> Enum.sort()
+      end
+
+      any_query = filter(Module26, any(message <- messages, message.position > 3))
+      none_query = filter(Module26, none(message <- messages, message.body == "hi"))
+      empty_query = filter(Module26, none(messages))
+      all_query = filter(Module26, all(message <- messages, message.position > 2))
+
+      assert names.(any_query) == ["late"]
+      assert names.(none_query) == ["late", "quiet"]
+      assert names.(empty_query) == ["quiet"]
+      assert names.(all_query) == ["late", "quiet"]
+    end
+
+    test "counts a related row with a missing value against all" do
+      source = create_module_3_entity()
+
+      {:ok, unset} =
+        %{c: "unset"}
+        |> Module2.new()
+        |> create()
+
+      :ok = add_relationship(Module3, source.id, :a, unset.id)
+
+      term =
+        Module3
+        |> filter(all(item <- a, item.b > 1))
+        |> Stage.normalize()
+
+      assert run(term, @mapping) == []
+    end
+  end
+
+  describe "run_policied/4 - quantifiers" do
+    test "leaves a related row the session may not read out of the set" do
+      {:ok, general} = create(Module26.new(name: "general"))
+      {:ok, _quiet} = create(Module26.new(name: "quiet"))
+
+      {:ok, _hidden} =
+        %{body: "hidden", channel_id: general.id, position: 1}
+        |> Module28.new()
+        |> create()
+
+      term =
+        Module26
+        |> filter(none(message <- messages, message.body == "hidden"))
+        |> Stage.normalize()
+
+      policied_rows = run_policied(term, @quantifier_mapping, nil)
+      raw_rows = run(term, @quantifier_mapping)
+
+      assert Enum.map(policied_rows, & &1.name) == ["general", "quiet"]
+      assert Enum.map(raw_rows, & &1.name) == ["quiet"]
     end
   end
 end

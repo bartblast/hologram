@@ -1902,4 +1902,244 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s| AND #{b_a} = $1|)
     end
   end
+
+  describe "compile/2 - quantifiers" do
+    test "compiles any over an inverse of a to-one to an EXISTS on the related rows' reference" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module26, any: {[:messages], [body: "hi"]})
+
+      assert %{params: [{:value, "hi"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(Module28)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."channel_id" = "test_fixtures_entity_module26"."id" AND "body" = $1) ORDER BY|
+             )
+    end
+
+    test "compiles any with no condition to an EXISTS on the membership alone" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module26, any: {[:messages], []})
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(Module28)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."channel_id" = "test_fixtures_entity_module26"."id") ORDER BY|
+             )
+    end
+
+    test "compiles any over a stored to-many through its join table" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module28, any: {[:labels], [name: "urgent"]})
+
+      assert %{params: [{:value, "urgent"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(Module29)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."id" IN (SELECT "$qj1"."target_id" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$qj1" | <>
+                 ~s|WHERE "$qj1"."source_id" = "test_fixtures_entity_module28"."id") AND "name" = $1) ORDER BY|
+             )
+    end
+
+    test "compiles none to a NOT EXISTS" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module26, none: {[:messages], [body: "hi"]})
+
+      assert %{sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE NOT EXISTS (SELECT 1 FROM #{table(Module28)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."channel_id" = "test_fixtures_entity_module26"."id" AND "body" = $1) ORDER BY|
+             )
+    end
+
+    # A comparison with NULL is unknown in SQL, and NOT of unknown is unknown - the row would pass as
+    # no counterexample, where every other tier counts it against all.
+    test "compiles all to a NOT EXISTS of the related rows its condition is not true of" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module29, all: {[:messages], [position: {:>, 1}, body: "x"]})
+
+      assert %{params: [{:value, "x"}, {:value, 1}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE NOT EXISTS (SELECT 1 FROM #{table(Module28)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."id" IN (SELECT "$qj1"."source_id" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$qj1" | <>
+                 ~s|WHERE "$qj1"."target_id" = "test_fixtures_entity_module29"."id") | <>
+                 ~s|AND ("body" = $1 AND "position" > $2) IS NOT TRUE) ORDER BY|
+             )
+    end
+
+    test "compiles a source through a to-one to a membership on the related row's id, and qualifies a name of the row above" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module28,
+          any: {[:channel, :messages], [position: {:>, {:attribute, {:outer, 1, :position}}}]}
+        )
+
+      channel_id =
+        hop(1, Module26, ~s("$p1"."id"), ~s("test_fixtures_entity_module28"."channel_id"))
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(Module28)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."channel_id" = #{channel_id} | <>
+                 ~s|AND "position" > "test_fixtures_entity_module28"."position") ORDER BY|
+             )
+    end
+
+    test "compares a string with one of the row above by both sort-key pairs" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module26, any: {[:messages], [body: {:<, {:attribute, {:outer, 1, :name}}}]})
+
+      assert %{sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND ("body_$sort", "body") < | <>
+                 ~s|("test_fixtures_entity_module26"."name_$sort", "test_fixtures_entity_module26"."name"))|
+             )
+    end
+
+    test "nests a quantifier under the one around it, correlated on its alias" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module26,
+          any: {[:messages], [any: {[:labels], [name: {:attribute, {:outer, 2, :name}}]}]}
+        )
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND EXISTS (SELECT 1 FROM #{table(Module29)} AS "$q2" | <>
+                 ~s|WHERE "$q2"."id" IN (SELECT "$qj2"."target_id" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$qj2" | <>
+                 ~s|WHERE "$qj2"."source_id" = "$q1"."id") | <>
+                 ~s|AND "name" IS NOT DISTINCT FROM "test_fixtures_entity_module26"."name"))|
+             )
+    end
+
+    test "reads a source of a row above on that row's alias" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module28,
+          any:
+            {[:labels], [any: {{:outer, 1, [:labels]}, [name: {:attribute, {:outer, 1, :name}}]}]}
+        )
+
+      assert %{sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "$qj2"."source_id" = "test_fixtures_entity_module28"."id")|
+             )
+    end
+
+    test "qualifies an attribute of the row above on the left" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module26, any: {[:messages], [{{:outer, 1, :name}, "general"}]})
+
+      assert %{params: [{:value, "general"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND "test_fixtures_entity_module26"."name" = $1)|
+             )
+    end
+
+    test "reads a path of the row above on that row, on either side, siblings sharing an alias" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module28,
+          any: {[:labels], [name: {:attribute, {:outer, 1, [:channel, :name]}}]},
+          any: {[:labels], [{{:outer, 1, [:channel, :name]}, "g"}]}
+        )
+
+      channel_name =
+        hop(1, Module26, ~s("$p1"."name"), ~s("test_fixtures_entity_module28"."channel_id"))
+
+      membership =
+        ~s|"$q1"."id" IN (SELECT "$qj1"."target_id" | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$qj1" | <>
+          ~s|WHERE "$qj1"."source_id" = "test_fixtures_entity_module28"."id")|
+
+      assert %{params: [{:value, "g"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(Module29)} AS "$q1" WHERE #{membership} | <>
+                 ~s|AND "name" IS NOT DISTINCT FROM #{channel_name}) | <>
+                 ~s|AND EXISTS (SELECT 1 FROM #{table(Module29)} AS "$q1" WHERE #{membership} | <>
+                 ~s|AND #{channel_name} = $1) ORDER BY|
+             )
+    end
+
+    test "correlates a quantifier in an include's filter on the include's alias" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        Module26
+        |> Stage.include(:messages, &Stage.filter(&1, any: {[:labels], [name: "u"]}))
+        |> Stage.normalize()
+
+      assert %{params: [{:value, "u"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND EXISTS (SELECT 1 FROM #{table(Module29)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."id" IN (SELECT "$qj1"."target_id" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$qj1" | <>
+                 ~s|WHERE "$qj1"."source_id" = "$t1"."id") AND "name" = $1)|
+             )
+    end
+
+    test "numbers the slots inside a quantifier and around it in the order they are written" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module28,
+          body: "a",
+          any: {[:channel, :messages], [body: "b"]},
+          position: 3
+        )
+
+      assert %{params: [{:value, "b"}, {:value, "a"}, {:value, 3}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND "body" = $1) AND "body" = $2 AND "position" = $3 ORDER BY|
+             )
+    end
+
+    test "applies the related type's read policy inside the subquery" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module26, any: {[:messages], [position: 1]})
+      policy = %{anonymous?: true, rules: Policy.build(Module26).read}
+
+      assert %{params: [{:value, "hidden"}, {:value, 1}], sql: sql} =
+               compile(term, mapping, policy)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "$q1"."channel_id" = "test_fixtures_entity_module26"."id" | <>
+                 ~s|AND "body" != $1 AND "position" = $2)|
+             )
+    end
+  end
 end
