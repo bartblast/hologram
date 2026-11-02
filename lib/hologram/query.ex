@@ -189,6 +189,8 @@ defmodule Hologram.Query do
     * alternatives joined with `or` - `owner_id == ^owner_id or shared == true` - where `and`
       binds tighter than `or` and parentheses group, as Elixir reads them: `a and b or c` is
       `(a and b) or c`
+    * a quantifier over a relationship's rows - `any(message <- messages, message.pinned == true)`,
+      `none(messages)` - see below
     * a pinned list of predicates for a filter built at runtime - `filter(^predicates)`, where
       the list holds attribute names paired with values, operator tuples (`{:>=, 3}`,
       `{:in, list}`, `{:not_in, list}`), membership lists, lists of operator tuples applying
@@ -197,10 +199,15 @@ defmodule Hologram.Query do
       a comparison operator (`[due_on: {:<, {:attribute, :starts_on}}]`), where a path is the
       list of its names, as a key or inside an attribute tuple (`[{[:project, :archived], false}]`),
       and where an `or:` entry holding two or more predicate lists is a disjunction, any one of
-      which has to hold (`[status: :todo, or: [[owner_id: id], [shared: true]]]`)
+      which has to hold (`[status: :todo, or: [[owner_id: id], [shared: true]]]`), and where an
+      `any:`, `none:` or `all:` entry pairing a list of relationships with a predicate list about
+      one related row is a quantifier (`[any: {[:messages], [author_id: id]}]`), inside which
+      `{:outer, levels, name}` names an attribute or a path of the row that many quantifiers out
+      (`[any: {[:messages], [created_at: {:>, {:attribute, {:outer, 1, :last_read_at}}}]}]`)
 
-  Each predicate becomes one or more `{attribute, operator, value}` triples, and a disjunction
-  one `{:or, alternatives}` clause, appended in the given order. A query term is a Hologram.Query
+  Each predicate becomes one or more `{attribute, operator, value}` triples, a disjunction one
+  `{:or, alternatives}` clause and a quantifier one `{quantifier, {source, clauses}}` clause,
+  appended in the given order. A query term is a Hologram.Query
   struct - a plain-data description of a query, so building it never executes anything.
 
   Nil is a regular value for `==`, `!=` and membership: `status != :done` also matches a row with
@@ -219,6 +226,34 @@ defmodule Hologram.Query do
   only whether the reference is set. Paths go through any number of to-one relationships, and the
   rows along a path are downloaded and kept current with the query, whether or not it includes
   them.
+
+  A quantifier asks about the rows of a related set: `any(message <- messages,
+  message.author_id == ^user_id)` holds when some message of the row matches the condition,
+  `none(...)` when none does, and `all(...)` when every one does. Without a condition,
+  `any(messages)` asks whether the row has a message and `none(messages)` whether it has none -
+  `all` always takes one. The set is a to-many relationship or an inverse set, reached through
+  to-one relationships when it is written as a path (`channel.messages`). Inside the condition the
+  bound name is one related row and a bare name is still the queried row's -
+  `message.created_at > last_read_at` compares the message with the row being filtered - and a
+  value from the surrounding code is pinned. A bound name hides a relationship or attribute of the
+  queried row of the same name inside the condition.
+
+      Channel |> filter(any(messages))
+      Channel |> filter(none(message <- messages, message.author_id == ^user_id))
+      Project |> filter(all(task <- tasks, task.status == :done))
+
+      ChannelUserState
+      |> filter(any(message <- channel.messages, message.created_at > last_read_at))
+
+  A quantifier is a condition like any other: joined with `and`, one side of `or`, or inside
+  another quantifier's condition, where the names bound around it read their rows -
+  `any(channel <- channels, any(message <- channel.messages, message.created_at >
+  channel.archived_at))`. One quantifier is one related row, so `any(message <- messages,
+  message.pinned == true and message.author_id == ^id)` asks for one message that is both, where
+  two quantifiers may be answered by two messages. Over an empty set `any` fails, and `none` and
+  `all` hold. Nil keeps its meaning inside the condition. A related row the session may not read
+  is not among the rows, and the rows a quantifier reads are downloaded and kept current with the
+  query, so a change to one re-evaluates it.
 
   Two attributes compare when they have the same type, or when one widens to the other - an
   integer to a float, compared as floats. Two enums compare when they declare the same values in
@@ -246,15 +281,21 @@ defmodule Hologram.Query do
   related row's attributes instead.
 
   Raises Hologram.CompileError, naming the location, when a keyword list or a pinned list stands
-  as one side of `and` or `or`, or when the predicates take any other form - a bare name where
-  only a value goes (a keyword value, a membership element, a range bound) is most likely a
-  forgotten pin, and the error says so. Raises ArgumentError when the query is neither an entity
-  type module nor a query term, when pinned predicates are not a list of name and value pairs - a
-  name being an attribute or a path - when a predicate names a relationship or an unknown attribute
-  - on the right side of a comparison, which is how a forgotten pin on a variable reads - when a
-  path goes through a to-many relationship, an attribute or an unknown relationship, or ends at a
-  name the related type does not declare, when a disjunction holds fewer than two predicate lists
-  or one of them is empty or not such a list, when a comparison names an attribute with itself or
+  as one side of `and` or `or` or as a quantifier's condition, when a quantifier has a condition
+  but no bound row, a bound row but no condition, or - for `all` - no condition at all, when a
+  quantifier binds a name an enclosing one already bound, when its relationship is pinned or not a
+  relationship, when a bound row is compared whole rather than through an attribute, or when the
+  predicates take any other form - a bare name where only a value goes (a keyword value, a
+  membership element, a range bound) is most likely a forgotten pin, and the error says so.
+  Raises ArgumentError when the query is neither an entity type module nor a query term, when
+  pinned predicates are not a list of name and value pairs - a name being an attribute or a path -
+  when a predicate names a relationship or an unknown attribute - on the right side of a
+  comparison, which is how a forgotten pin on a variable reads - when a path goes through a
+  to-many relationship, an attribute or an unknown relationship, or ends at a name the related type
+  does not declare, when a quantifier's relationships do not lead through to-one relationships to
+  a to-many relationship or an inverse set, when `{:outer, levels, name}` reaches past the queried
+  row, when a disjunction holds fewer than two predicate lists or one of them is empty or not such
+  a list, when a comparison names an attribute with itself or
   two attributes that do not compare, or when a value is invalid for its attribute or its operator
   - a pinned keyword value holding a list, a tuple or a range is refused as an equality operand,
   since membership and comparisons are written as expressions.

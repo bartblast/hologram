@@ -6,6 +6,8 @@ defmodule Hologram.QueryTest do
   alias Hologram.Query
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module24
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module5
 
@@ -53,6 +55,22 @@ defmodule Hologram.QueryTest do
       min = 3
 
       assert filter(Module2, b >= ^min).filter == [{:b, :>=, 3}]
+    end
+
+    test "lowers a quantifier" do
+      assert filter(Module26, any(message <- messages, message.body == "hi")) == %Query{
+               entity: Module26,
+               filter: [{:any, {[:messages], [{:body, :==, "hi"}]}}]
+             }
+    end
+
+    test "lowers a quantifier comparing the related row with the queried one" do
+      query = filter(Module28, any(message <- channel.messages, message.position > position))
+
+      assert query.filter == [
+               {:any,
+                {[:channel, :messages], [{:position, :>, {:attribute, {:outer, 1, :position}}}]}}
+             ]
     end
 
     test "lowers a range membership into bound triples" do

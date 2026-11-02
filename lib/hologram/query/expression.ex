@@ -16,6 +16,7 @@ defmodule Hologram.Query.Expression do
   # row and may name the acting user, a filter queries rows and takes keyword equalities - the rest
   # of the vocabulary is shared, so the two lowerings are one, told apart by these.
   @condition_names %{
+    bindings: [],
     kind: :condition,
     operand: "a literal, an attribute, a path, user_id() or a pinned expression",
     row: "the entity",
@@ -24,12 +25,15 @@ defmodule Hologram.Query.Expression do
     subject: "a condition"
   }
 
+  # The bindings are the rows the quantifiers around a condition bound, nearest first - none at the
+  # top of a filter, so their count is how deep the condition is nested.
   @filter_names %{
+    bindings: [],
     kind: :filter,
     operand: "a literal, an attribute, a path or a pinned expression",
     row: "the queried entity",
     shapes:
-      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a keyword list of equalities, or a pinned list of predicates",
+      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
     subject: "a filter"
   }
 
@@ -38,6 +42,8 @@ defmodule Hologram.Query.Expression do
   @keyword_value_description "a keyword predicate value is a literal or a pinned expression"
 
   @ordering_names %{stage: "sort", names: "an attribute", spelled: "a bare name"}
+
+  @quantifiers [:all, :any, :none]
 
   @range_operators [:.., :..//]
 
@@ -210,8 +216,20 @@ defmodule Hologram.Query.Expression do
   `channel.archived` - lowers to the list of its names, `[:channel, :archived]`, as a predicate's
   key on the left side and inside an attribute operand on the right.
 
+  A quantifier - `any`, `none` or `all` over a relationship's rows, with a condition binding one of
+  them (`any(message <- messages, message.author_id == ^id)`) or with the relationship alone
+  (`any(messages)`) - lowers to an `{quantifier, {source, predicates}}` entry. The source is the
+  list of relationships its dot chain names, and the predicates are its condition lowered with the
+  bound row as the row they are about: `message.author_id` lowers to `:author_id`. A name of a row
+  above - a bare name, which is the queried row's, or a name bound by an enclosing quantifier -
+  lowers to `{:outer, levels, name}`, the number of quantifiers between them, and a source read
+  from such a row to `{:outer, levels, list}`.
+
   Raises Hologram.CompileError, located at the offending node, on a keyword list or a pinned list as
-  one side of `and` or `or`, and on anything else.
+  one side of `and` or `or` or as a quantifier's condition, on a quantifier written without a
+  binding beside its condition, with a binding and no condition, as `all` with no condition, with
+  a name already bound around it, or with a source that is pinned or no relationship, on a bound
+  row compared whole, and on anything else.
   """
   @spec predicates(Macro.t(), Macro.Env.t()) :: Macro.t()
   def predicates({:^, _meta, [expr]}, _env), do: expr
@@ -269,6 +287,16 @@ defmodule Hologram.Query.Expression do
     end
   end
 
+  # The hint binds the row under the name already written, or under row.
+  @spec all_condition_error!(Macro.t(), String.t(), Macro.t(), Macro.Env.t()) :: no_return
+  defp all_condition_error!(ast, row, source, env) do
+    compile_error!(
+      "all takes a condition - all over no condition says nothing, got: #{Macro.to_string(ast)} - write all(#{row} <- #{Macro.to_string(source)}, #{row}.<attribute> == ...)",
+      ast,
+      env
+    )
+  end
+
   # A chain of ors is one disjunction, grouped or not - Elixir reads a or b or c as (a or b) or c,
   # and a or (b or c) says the same thing - so an or on either side contributes its alternatives
   # rather than a disjunction of its own.
@@ -281,7 +309,7 @@ defmodule Hologram.Query.Expression do
   # A path names an attribute of the row its relationships lead to, so it stands where an attribute
   # does, as the list of its names. __MODULE__ and the other special forms are values, never names.
   defp attribute!(ast, names, env) do
-    case hops(ast) do
+    case reference!(ast, names, env) do
       nil ->
         compile_error!(
           "the left side of a comparison names an attribute of #{names.row} or a path to one, got: #{Macro.to_string(ast)}",
@@ -289,11 +317,8 @@ defmodule Hologram.Query.Expression do
           env
         )
 
-      [name] ->
-        name
-
-      path ->
-        path
+      reference ->
+        reference
     end
   end
 
@@ -318,6 +343,35 @@ defmodule Hologram.Query.Expression do
 
   defp bare_name?(_ast), do: false
 
+  # A quantifier binds its related row to a bare name nothing around it bound already - a name bound
+  # twice would leave the outer row unreachable inside. A binding written as a literal carries no
+  # line, so its refusal is located at the quantifier.
+  defp binding_name!(binding, names, env, quantifier_ast) do
+    cond do
+      not bare_name?(binding) ->
+        compile_error!(
+          "a quantifier binds its related row to a bare name, got: #{Macro.to_string(binding)}",
+          located(binding, quantifier_ast),
+          env
+        )
+
+      elem(binding, 0) in names.bindings ->
+        compile_error!(
+          "#{elem(binding, 0)} is already bound by an enclosing quantifier - name this row differently",
+          binding,
+          env
+        )
+
+      true ->
+        elem(binding, 0)
+    end
+  end
+
+  @spec bound_row_error!(atom, String.t(), Macro.t(), Macro.Env.t()) :: no_return
+  defp bound_row_error!(name, fix, ast, env) do
+    compile_error!("#{name} is a bound row - #{fix}", ast, env)
+  end
+
   # The acting user is a value only a policy condition can name - a filter has no acting user to
   # scope by. A paren-less user_id can only be the call missing its parens there, since a policy
   # has no variables in scope, so it is refused as that rather than as a forgotten pin.
@@ -334,10 +388,9 @@ defmodule Hologram.Query.Expression do
   # relationships lead to. Whether the entity declares them, and whether the two sides compare, is
   # the stage's to judge.
   defp comparison_operand!(ast, names, env) do
-    case hops(ast) do
+    case reference!(ast, names, env) do
       nil -> value!(ast, "a comparison operand is #{names.operand}", names, env)
-      [name] -> {:attribute, name}
-      path -> {:attribute, path}
+      reference -> {:attribute, reference}
     end
   end
 
@@ -568,6 +621,16 @@ defmodule Hologram.Query.Expression do
 
   defp literal?(_value), do: false
 
+  # One name stands bare, several are a path.
+  defp local_name([name]), do: name
+
+  defp local_name(names), do: names
+
+  # A node carrying its own line locates a refusal at itself, any other at the given fallback.
+  defp located({_name, meta, _args} = ast, _fallback) when is_list(meta), do: ast
+
+  defp located(_ast, fallback), do: fallback
+
   defp membership!({:^, _meta, [expr]}, _names, _env), do: expr
 
   defp membership!(list, names, env) when is_list(list) do
@@ -749,7 +812,114 @@ defmodule Hologram.Query.Expression do
     [{attribute!(left, names, env), {operator, comparison_operand!(right, names, env)}}]
   end
 
+  defp predicate_list!({quantifier, _meta, args} = ast, %{kind: :filter} = names, env)
+       when quantifier in @quantifiers and is_list(args) do
+    [{quantifier, quantified!(ast, names, env)}]
+  end
+
   defp predicate_list!(ast, names, env), do: unsupported!(ast, names, env)
+
+  # A quantifier takes a relationship alone, or a row bound to one and a condition reading it. The
+  # binding and the relationship are judged before a missing condition, so a hint never names a
+  # spelling that is refused itself.
+  defp quantified!({quantifier, _meta, args} = ast, names, env) do
+    case args do
+      [{:<-, _arrow_meta, [binding, source]}, condition] ->
+        name = binding_name!(binding, names, env, ast)
+        lowered_source = source!(source, names, env)
+        inner_names = %{names | bindings: [name | names.bindings]}
+
+        {lowered_source, quantifier_condition!(condition, inner_names, env, ast)}
+
+      [{:<-, _arrow_meta, [binding, source]}] ->
+        name = binding_name!(binding, names, env, ast)
+        _lowered_source = source!(source, names, env)
+
+        if quantifier == :all do
+          all_condition_error!(ast, Atom.to_string(name), source, env)
+        end
+
+        compile_error!(
+          "#{Macro.to_string(ast)} binds a row no condition reads - write #{quantifier}(#{Macro.to_string(source)})",
+          ast,
+          env
+        )
+
+      [source] ->
+        lowered_source = source!(source, names, env)
+
+        if quantifier == :all do
+          all_condition_error!(ast, "row", source, env)
+        end
+
+        {lowered_source, []}
+
+      [source, _condition] ->
+        compile_error!(
+          "a quantifier binds the related row its condition reads, got: #{Macro.to_string(ast)} - write #{quantifier}(row <- #{Macro.to_string(source)}, ...) and read the row as row.<attribute>",
+          ast,
+          env
+        )
+
+      _args when quantifier == :all ->
+        compile_error!(
+          "all takes a row bound to a relationship and a condition - all(task <- tasks, task.done == true) - got: #{Macro.to_string(ast)}",
+          ast,
+          env
+        )
+
+      _args ->
+        compile_error!(
+          "#{quantifier} takes a relationship, or a row bound to one and a condition - #{quantifier}(messages), #{quantifier}(message <- messages, message.author_id == ^user_id) - got: #{Macro.to_string(ast)}",
+          ast,
+          env
+        )
+    end
+  end
+
+  # A condition reads the row its quantifier bound, which a list of predicates has no spelling for -
+  # one built at runtime is a whole filter in the data form. A list literal carries no line, so the
+  # refusal is located at the quantifier.
+  defp quantifier_condition!(condition, _names, env, quantifier_ast) when is_list(condition) do
+    quantifier_condition_error!(condition, quantifier_ast, env)
+  end
+
+  defp quantifier_condition!({:^, _meta, [_expr]} = condition, _names, env, _quantifier_ast) do
+    quantifier_condition_error!(condition, condition, env)
+  end
+
+  defp quantifier_condition!(condition, names, env, _quantifier_ast),
+    do: predicate_list!(condition, names, env)
+
+  @spec quantifier_condition_error!(Macro.t(), Macro.t(), Macro.Env.t()) :: no_return
+  defp quantifier_condition_error!(ast, location_ast, env) do
+    compile_error!(
+      "a quantifier's condition is an expression, got: #{Macro.to_string(ast)} - a filter built at runtime goes whole into filter(^predicates)",
+      location_ast,
+      env
+    )
+  end
+
+  # A name as the row it is read on spells it, and how many quantifiers out that row is - nil for
+  # anything that is no name.
+  defp reference!(ast, names, env) do
+    case hops(ast) do
+      nil ->
+        nil
+
+      [root | rest] = hops ->
+        case root_row(root, names) do
+          {:queried, levels} ->
+            scoped_name(local_name(hops), levels)
+
+          {:bound, _levels} when rest == [] ->
+            bound_row_error!(root, "compare one of its attributes: #{root}.<attribute>", ast, env)
+
+          {:bound, levels} ->
+            scoped_name(local_name(rest), levels)
+        end
+    end
+  end
 
   defp reversed_hops({name, _meta, context} = ast) when is_atom(name) and is_atom(context) do
     if bare_name?(ast), do: [name], else: nil
@@ -766,12 +936,31 @@ defmodule Hologram.Query.Expression do
 
   defp reversed_hops(_ast), do: nil
 
+  # The row a dot chain's first name reads on: a row a quantifier around the condition bound, as many
+  # out as its place among the bindings, or else the queried row, as many out as there are bindings.
+  defp root_row(root, names) do
+    case Enum.find_index(names.bindings, &(&1 == root)) do
+      nil -> {:queried, length(names.bindings)}
+      index -> {:bound, index}
+    end
+  end
+
+  # A name of the row the condition is about stands as it is, and one of a row above is wrapped with
+  # how many quantifiers out it lies.
+  defp scoped_name(name, 0), do: name
+
+  defp scoped_name(name, levels), do: Macro.escape({:outer, levels, name})
+
   # A keyword list and a pinned list are each a whole filter, so neither is one side of an and or
   # an or - the stage it would be joined to is a second filter call, and a disjunction holding one
   # is written in the data form whole. A condition takes no keyword list at all, so there one is
-  # refused as the old spelling.
+  # refused as the old spelling. Inside a quantifier's condition either is refused as its condition.
   defp side!(ast, _operator, %{kind: :condition}, env) when is_list(ast),
     do: keyword_list_error!(ast, env)
+
+  defp side!(ast, _operator, %{bindings: [_binding | _bindings]}, env)
+       when is_list(ast) or (is_tuple(ast) and elem(ast, 0) == :^),
+       do: quantifier_condition_error!(ast, ast, env)
 
   defp side!(ast, operator, names, env) when is_list(ast),
     do: whole_side!(ast, operator, names, env)
@@ -780,6 +969,44 @@ defmodule Hologram.Query.Expression do
     do: whole_side!(ast, operator, names, env)
 
   defp side!(ast, _operator, names, env), do: predicate_list!(ast, names, env)
+
+  # A source names the relationships to a set, read on the bound row its dot chain starts at or on
+  # the queried row - always a list, since even one relationship is a list of hops.
+  defp source!({:^, _meta, [_expr]} = ast, _names, env) do
+    compile_error!(
+      "a quantifier's source is a relationship written in place, got: #{Macro.to_string(ast)}",
+      ast,
+      env
+    )
+  end
+
+  defp source!(ast, names, env) do
+    case hops(ast) do
+      nil ->
+        compile_error!(
+          "a quantifier's source is a relationship or a path to one, got: #{Macro.to_string(ast)}",
+          ast,
+          env
+        )
+
+      [root | rest] = hops ->
+        case root_row(root, names) do
+          {:queried, levels} ->
+            scoped_name(hops, levels)
+
+          {:bound, _levels} when rest == [] ->
+            bound_row_error!(
+              root,
+              "a quantifier's source is a relationship: #{root}.<relationship>",
+              ast,
+              env
+            )
+
+          {:bound, levels} ->
+            scoped_name(rest, levels)
+        end
+    end
+  end
 
   defp tails_of([]), do: []
 
