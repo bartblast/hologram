@@ -2622,6 +2622,17 @@ defmodule Hologram.Query.StageTest do
       assert placeholder_names(query) == [:owner]
     end
 
+    test "collects placeholders inside a quantifier's condition" do
+      query =
+        filter(Module26,
+          any:
+            {[:messages],
+             [body: %Placeholder{name: :body}, position: {:>, %Placeholder{name: :min}}]}
+        )
+
+      assert placeholder_names(query) == [:body, :min]
+    end
+
     test "collects placeholders inside a disjunction" do
       query =
         filter(Module2,
@@ -2659,6 +2670,18 @@ defmodule Hologram.Query.StageTest do
       filter = [{:or, [[{:a, :==, true}], [{:b, :>=, {:attribute, :c}}]]}]
 
       assert predicate_references(filter) == [{[], :a}, {[], :b}, {[], :c}]
+    end
+
+    test "returns a quantifier's names with the relationships to the row each is read on" do
+      filter = [
+        {:any,
+         {[:channel, :messages], [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}]}}
+      ]
+
+      assert predicate_references(filter) == [
+               {[:channel, :messages], :created_at},
+               {[], :last_read_at}
+             ]
     end
   end
 
@@ -2838,6 +2861,70 @@ defmodule Hologram.Query.StageTest do
 
     test "fails for an attribute named like a quantifier" do
       refute quantified?([{:any, :==, true}])
+    end
+  end
+
+  describe "relationship_chains/1" do
+    test "returns a quantifier's relationship" do
+      assert relationship_chains([{:any, {[:messages], []}}]) == [[:messages]]
+    end
+
+    test "returns a quantifier's path and what its condition follows behind it" do
+      filter = [
+        {:any, {[:channel, :messages], [{[:author, :name], :==, "ada"}]}}
+      ]
+
+      assert relationship_chains(filter) == [
+               [:channel, :messages],
+               [:channel, :messages, :author]
+             ]
+    end
+
+    test "returns nested quantifiers' relationships behind their parents'" do
+      filter = [{:any, {[:channels], [{:none, {[:messages], []}}]}}]
+
+      assert relationship_chains(filter) == [[:channels], [:channels, :messages]]
+    end
+
+    test "returns a source read on a row above behind that row's relationships" do
+      filter = [{:any, {[:follows], [{:any, {{:outer, 1, [:replies]}, []}}]}}]
+
+      assert relationship_chains(filter) == [[:follows], [:replies]]
+    end
+
+    test "returns the relationships of paths, operands and alternatives, each once" do
+      filter = [
+        {[:trip, :name], :==, "a"},
+        {:or, [[{:a, :==, {:attribute, [:trip, :leg, :b]}}], [{[:trip, :name], :==, "b"}]]}
+      ]
+
+      assert relationship_chains(filter) == [[:trip], [:trip, :leg]]
+    end
+
+    test "returns nothing for attributes of the queried row" do
+      filter = [{:a, :==, {:attribute, :b}}, {{:placeholder, :k}, :==, 1}]
+
+      assert relationship_chains(filter) == []
+    end
+
+    test "returns a source read on a row above behind the relationships to that row" do
+      filter = [
+        {:any,
+         {[:channels],
+          [{:any, {[:messages], [{:any, {{:outer, 1, [:labels]}, [{:name, :==, "x"}]}}]}}]}}
+      ]
+
+      assert relationship_chains(filter) == [
+               [:channels],
+               [:channels, :messages],
+               [:channels, :labels]
+             ]
+    end
+
+    test "returns the relationships of a path a name of a row above follows" do
+      filter = [{:any, {[:messages], [{:body, :==, {:attribute, {:outer, 1, [:org, :name]}}}]}}]
+
+      assert relationship_chains(filter) == [[:messages], [:org]]
     end
   end
 
@@ -3070,6 +3157,74 @@ defmodule Hologram.Query.StageTest do
 
       assert triples(filter) == [{:a, :==, true}, {:b, :>=, 3}, {:c, :==, "x"}, {:d, :==, 1}]
     end
+
+    test "resolves a quantifier's names against the queried row" do
+      filter = [
+        {:any,
+         {[:channel, :messages], [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}]}}
+      ]
+
+      assert triples(filter) == [
+               {[:channel, :messages, :created_at], :>, {:attribute, :last_read_at}}
+             ]
+    end
+
+    test "resolves a path a quantifier's condition reads and a name of the row above on the left" do
+      filter = [
+        {:any,
+         {[:messages],
+          [{[:author, :name], :==, "ada"}, {{:outer, 1, [:org, :name]}, :==, "acme"}]}}
+      ]
+
+      assert triples(filter) == [
+               {[:messages, :author, :name], :==, "ada"},
+               {[:org, :name], :==, "acme"}
+             ]
+    end
+
+    test "resolves the names of nested quantifiers against the rows they reach" do
+      filter = [
+        {:any,
+         {[:channels],
+          [
+            {:any,
+             {[:messages],
+              [
+                {:created_at, :>, {:attribute, {:outer, 1, :archived_at}}},
+                {:body, :==, {:attribute, {:outer, 2, :name}}}
+              ]}}
+          ]}}
+      ]
+
+      assert triples(filter) == [
+               {[:channels, :messages, :created_at], :>, {:attribute, [:channels, :archived_at]}},
+               {[:channels, :messages, :body], :==, {:attribute, :name}}
+             ]
+    end
+
+    test "resolves the names under a source read on a row above" do
+      filter = [
+        {:any, {[:follows], [{:any, {{:outer, 1, [:replies]}, [{:body, :==, "x"}]}}]}}
+      ]
+
+      assert triples(filter) == [{[:replies, :body], :==, "x"}]
+    end
+
+    test "resolves the names under a source read on a row above that lies below the queried row" do
+      filter = [
+        {:any,
+         {[:channels],
+          [{:any, {[:messages], [{:any, {{:outer, 1, [:labels]}, [{:name, :==, "x"}]}}]}}]}}
+      ]
+
+      assert triples(filter) == [{[:channels, :labels, :name], :==, "x"}]
+    end
+
+    test "keeps a placeholder key inside a quantifier's condition" do
+      filter = [{:any, {[:messages], [{{:placeholder, :field}, :==, 1}]}}]
+
+      assert triples(filter) == [{{:placeholder, :field}, :==, 1}]
+    end
   end
 
   describe "trust/1" do
@@ -3178,6 +3333,26 @@ defmodule Hologram.Query.StageTest do
 
     test "passes over a placeholder key" do
       assert written_names([{%Placeholder{name: :field}, 1}]) == []
+    end
+
+    test "returns a quantifier's relationship, not the names of its condition" do
+      assert written_names(any: {[:messages], [body: "x"]}) == [:messages]
+    end
+
+    test "returns a quantifier's path as its list" do
+      assert written_names(none: {[:channel, :messages], []}) == [[:channel, :messages]]
+    end
+
+    test "passes over a quantifier read on a row above" do
+      assert written_names(any: {{:outer, 1, [:messages]}, []}) == []
+    end
+
+    test "passes over a quantifier with no relationship" do
+      assert written_names(any: {[], []}) == []
+    end
+
+    test "returns an attribute named like a quantifier holding an operator tuple" do
+      assert written_names(any: {:in, [1, 2]}) == [:any]
     end
   end
 end

@@ -7,7 +7,11 @@ defmodule Hologram.Query.RegistryTest do
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module31
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Policy
 
@@ -95,6 +99,26 @@ defmodule Hologram.Query.RegistryTest do
 
       assert entity_types(term) == MapSet.new([Module2, Module3, Module5])
     end
+
+    test "returns the type a quantifier's condition is about, with no condition" do
+      term =
+        Module26
+        |> filter(any(messages))
+        |> Stage.normalize()
+
+      assert entity_types(term) == MapSet.new([Module26, Module28])
+    end
+
+    test "returns the types a quantifier's source and a nested quantifier go through" do
+      term =
+        Module28
+        |> filter(
+          any(message <- channel.messages, any(label <- message.labels, label.name == "x"))
+        )
+        |> Stage.normalize()
+
+      assert entity_types(term) == MapSet.new([Module26, Module28, Module29])
+    end
   end
 
   describe "id/1" do
@@ -117,6 +141,15 @@ defmodule Hologram.Query.RegistryTest do
   end
 
   describe "placeholder_shape/1" do
+    test "binds a placeholder inside a quantifier's condition as the related row's attribute" do
+      term = %{
+        Stage.normalize(Module31)
+        | filter: [{:any, {[:items], [{:priority, :==, {:placeholder, :priority}}]}}]
+      }
+
+      assert placeholder_shape(term) == %{priority: :enum}
+    end
+
     test "binds membership element placeholders with the attribute type" do
       term = %{Stage.normalize(Module2) | filter: [{:b, :in, [{:placeholder, :bound}, 1]}]}
 

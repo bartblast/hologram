@@ -4651,14 +4651,14 @@ defmodule Hologram.Compiler do
     Enum.map_join(entity_types, ", ", &inspect/1)
   end
 
-  # The types a term's paths lead through, its includes' included: every type a hop reaches, which
-  # a policied read applies the read policy of.
+  # The types a term's paths and quantifiers lead through, its includes' included: every type a hop
+  # or a quantifier's set reaches, which a policied read applies the read policy of.
   defp path_entity_types(term) do
     hop_types =
       term.filter
-      |> Stage.predicate_references()
-      |> Enum.flat_map(fn {relationship_names, _name} ->
-        Enum.scan(relationship_names, term.entity, &Entity.relationship_target(&2, &1))
+      |> Stage.relationship_chains()
+      |> Enum.flat_map(fn relationship_names ->
+        Enum.scan(relationship_names, term.entity, &Entity.related_type(&2, &1))
       end)
 
     term.include

@@ -1730,6 +1730,33 @@ defmodule Hologram.CompilerTest do
       end
     end
 
+    test "raises for a registered query whose quantifier reads a type declaring no allow lines",
+         %{entity_types: entity_types} do
+      defmodule QuantifiedDeadSourceFixture do
+        use Hologram.Entity
+
+        relationship :items, [Hologram.Test.Fixtures.Entity.Module1]
+
+        allow :read
+      end
+
+      term =
+        QuantifiedDeadSourceFixture
+        |> filter(any(items))
+        |> Stage.normalize()
+
+      component_queries = %{QuantifiedQueries => %{prop_params: [], targets: [], terms: [term]}}
+
+      expected_msg =
+        "the registered query in QuantifiedQueries filters through " <>
+          "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
+          "default deny reads every such row as missing. Add allow lines, or drop the path."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, entity_types, false)
+      end
+    end
+
     test "raises for a registered query filtering on a server-only attribute", %{
       entity_types: entity_types
     } do
@@ -1758,6 +1785,27 @@ defmodule Hologram.CompilerTest do
 
       component_queries =
         extract_component_queries([ComponentModule32], entity_types, PLT.start())
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, entity_types, false)
+      end
+    end
+
+    test "raises for a registered query whose quantifier reads a server-only attribute", %{
+      entity_types: entity_types
+    } do
+      term =
+        Hologram.Test.Fixtures.Entity.Module16
+        |> filter(any(secret <- secrets, secret.token == "x"))
+        |> Stage.normalize()
+
+      component_queries = %{QuantifiedQueries => %{prop_params: [], targets: [], terms: [term]}}
+
+      expected_msg =
+        "the registered query in QuantifiedQueries filters or sorts on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         build_queries(component_queries, entity_types, false)

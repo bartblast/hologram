@@ -23,6 +23,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module23
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module31
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module8
   alias Hologram.Test.Fixtures.Entity.Module9
@@ -925,6 +926,20 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{search: 123})
+      end
+    end
+
+    test "raises on an enum placeholder value inside a quantifier's condition outside the related row's declared set" do
+      term = %{
+        Stage.normalize(Module31)
+        | filter: [{:any, {[:items], [{:priority, :==, {:placeholder, :priority}}]}}]
+      }
+
+      expected_msg =
+        "invalid value :urgent for placeholder :priority - expected one of [:low, :medium, :high]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{priority: :urgent})
       end
     end
 

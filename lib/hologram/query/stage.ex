@@ -290,8 +290,10 @@ defmodule Hologram.Query.Stage do
 
   # Returns every name the given filter clauses read, in order, as {relationships, name} pairs: the
   # compared attribute of every triple, and the one an attribute operand names beside it - the
-  # alternatives of a disjunction included. An attribute of the row comes with no relationships, an
-  # attribute a path reaches with the relationships followed to it. For readers that need what a
+  # alternatives of a disjunction and the conditions of quantifiers included. An attribute of the
+  # row comes with no relationships, an attribute a path reaches with the relationships followed to
+  # it, and an attribute a quantifier's condition reads with the relationships to the row it is
+  # read on - its source's, or those of the row above it reaches. For readers that need what a
   # filter reads rather than how it compares.
   @doc false
   @spec predicate_references(list(Query.clause())) ::
@@ -362,6 +364,18 @@ defmodule Hologram.Query.Stage do
     end)
   end
 
+  # Returns every chain of relationships the given filter clauses follow from the queried row, each
+  # once, in the order first met: the relationships of a path, and the source of a quantifier - its
+  # relationships after those leading to the row it is read on - with what its condition follows
+  # behind them. The relationships along a chain may be to-many where a quantifier's source is.
+  @doc false
+  @spec relationship_chains(list(Query.clause())) :: list(list(atom))
+  def relationship_chains(clauses) do
+    clauses
+    |> chains([[]])
+    |> Enum.uniq()
+  end
+
   @doc false
   @spec skip(module | Query.t(), non_neg_integer) :: Query.t()
   def skip(query, value) do
@@ -385,15 +399,13 @@ defmodule Hologram.Query.Stage do
   end
 
   # Returns every predicate triple of the given filter clauses, in order, the ones inside a
-  # disjunction's alternatives included.
+  # disjunction's alternatives and a quantifier's condition included. Every name is resolved against
+  # the queried row: a name a quantifier's condition reads gains the relationships to the row it is
+  # read on in front, so it reads as a path - one through the to-many a source ends at. It names
+  # the attribute and the type it is declared on, never which of the related rows.
   @doc false
   @spec triples(list(Query.clause())) :: list(Query.predicate())
-  def triples(clauses) do
-    Enum.flat_map(clauses, fn
-      {:or, alternatives} -> Enum.flat_map(alternatives, &triples/1)
-      triple -> [triple]
-    end)
-  end
+  def triples(clauses), do: resolved_triples(clauses, [[]])
 
   @doc false
   @spec trust(Entity.t() | module | Query.t()) :: Entity.t() | Query.t()
@@ -410,9 +422,10 @@ defmodule Hologram.Query.Stage do
   end
 
   # Returns every name the given data-form predicates spell, in order, without judging any of them:
-  # each key, the name an {:attribute, name} operand carries bare or under an operator, and what the
-  # lists of an or: entry spell - a path as its list. For readers of predicates no entity type was
-  # asked about yet, such as the hint a build gives for a filter no entity type admits.
+  # each key, the name an {:attribute, name} operand carries bare or under an operator, what the
+  # lists of an or: entry spell - a path as its list - and a quantifier's source, a single
+  # relationship as its name. For readers of predicates no entity type was asked about yet, such as
+  # the hint a build gives for a filter no entity type admits.
   @doc false
   @spec written_names(list) :: list(atom | Query.path())
   def written_names(predicates) do
@@ -423,6 +436,13 @@ defmodule Hologram.Query.Stage do
         else
           [:or]
         end
+
+      # A quantifier's condition names another type's attributes, so only its source is the
+      # queried type's - a source read on a row above has nothing of the queried type to name.
+      {quantifier, {source, predicates}}
+      when quantifier in @quantifiers and is_list(predicates) and
+             (is_list(source) or (is_tuple(source) and elem(source, 0) == :outer)) ->
+        if is_list(source) and source != [], do: [written_source(source)], else: []
 
       {name, value} when is_atom(name) ->
         [name | written_operand_names(value)]
@@ -485,6 +505,25 @@ defmodule Hologram.Query.Stage do
       {_name, type, _opts} -> type
       nil -> :uuid
     end
+  end
+
+  # The relationship chains the given clauses follow, resolved against the queried row - a
+  # quantifier's source before what its condition follows.
+  defp chains(clauses, prefixes) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} ->
+        Enum.flat_map(alternatives, &chains(&1, prefixes))
+
+      {quantifier, {source, inner}} when quantifier in @quantifiers ->
+        chain = source_chain(source, prefixes)
+
+        [chain | chains(inner, [chain | prefixes])]
+
+      {name, _operator, operand} ->
+        [name, operand_name(operand)]
+        |> Enum.map(&resolved_name(&1, prefixes))
+        |> Enum.flat_map(&name_relationships/1)
+    end)
   end
 
   # Two attributes of one row as a message names them, the row's type said once - or of two rows,
@@ -621,6 +660,10 @@ defmodule Hologram.Query.Stage do
     end
   end
 
+  defp joined_name([], name), do: name
+
+  defp joined_name(prefix, name), do: prefix ++ List.wrap(name)
+
   # A name as the row it lives on declares it - an attribute or a path - whichever row that is.
   defp local_name({:outer, _levels, name}), do: name
 
@@ -656,6 +699,14 @@ defmodule Hologram.Query.Stage do
             "#{inspect(name)} in #{inspect(entity_type)} holds nil - a counter always holds a number, so there is nothing for #{stage} to move - read the row first, or give the attribute a default"
     end
   end
+
+  # The relationships a resolved name follows - none for an attribute of the queried row, a
+  # placeholder or no name at all.
+  defp name_relationships([_hop, _name | _rest] = path) do
+    [Enum.drop(path, -1)]
+  end
+
+  defp name_relationships(_name), do: []
 
   # The type a name is declared on: the row the clauses are about, or for {:outer, levels, name} the
   # row that many quantifiers out, which the scope holds after it.
@@ -727,6 +778,10 @@ defmodule Hologram.Query.Stage do
         sort: normalized_order(term)
     }
   end
+
+  defp operand_name({:attribute, name}), do: name
+
+  defp operand_name(_operand), do: nil
 
   defp order_direction!(%Placeholder{name: placeholder_name}, _key),
     do: {:placeholder, placeholder_name}
@@ -1109,6 +1164,39 @@ defmodule Hologram.Query.Stage do
     Enum.map(entity_type.__relationships__(), fn {name, _type, _opts} -> name end)
   end
 
+  # A name joined to the relationships leading from the queried row to the row it is read on - the
+  # current row's, or those of the row above an outer name reaches. The prefixes hold them per row,
+  # the current row's first.
+  defp resolved_name({:placeholder, _name} = placeholder, _prefixes), do: placeholder
+
+  defp resolved_name(nil, _prefixes), do: nil
+
+  defp resolved_name({:outer, levels, name}, prefixes) do
+    prefixes
+    |> Enum.at(levels)
+    |> joined_name(name)
+  end
+
+  defp resolved_name(name, [prefix | _rows_above]), do: joined_name(prefix, name)
+
+  defp resolved_operand({:attribute, name}, prefixes),
+    do: {:attribute, resolved_name(name, prefixes)}
+
+  defp resolved_operand(operand, _prefixes), do: operand
+
+  defp resolved_triples(clauses, prefixes) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} ->
+        Enum.flat_map(alternatives, &resolved_triples(&1, prefixes))
+
+      {quantifier, {source, inner}} when quantifier in @quantifiers ->
+        resolved_triples(inner, [source_chain(source, prefixes) | prefixes])
+
+      {name, operator, operand} ->
+        [{resolved_name(name, prefixes), operator, resolved_operand(operand, prefixes)}]
+    end)
+  end
+
   defp rows_spelled(0), do: "no row"
 
   defp rows_spelled(1), do: "1 row"
@@ -1168,6 +1256,12 @@ defmodule Hologram.Query.Stage do
 
     Enum.sort(declared_names ++ reference_field_names(entity_type))
   end
+
+  # The relationships from the queried row to a quantifier's set: those to the row its source is read
+  # on, then its own.
+  defp source_chain({:outer, levels, hops}, prefixes), do: Enum.at(prefixes, levels) ++ hops
+
+  defp source_chain(hops, [prefix | _rows_above]), do: prefix ++ hops
 
   # Where a source starts: the row the quantifier is about, or for {:outer, levels, hops} the row
   # that many quantifiers out.
@@ -1780,4 +1874,8 @@ defmodule Hologram.Query.Stage do
   defp written_operand_names({_operator, {:attribute, name}}), do: written_operand_name(name)
 
   defp written_operand_names(_value), do: []
+
+  defp written_source([relationship]), do: relationship
+
+  defp written_source(hops), do: hops
 end
