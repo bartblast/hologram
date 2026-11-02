@@ -24,6 +24,7 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Queries.Page6
   alias HologramFeatureTests.Queries.Page7
   alias HologramFeatureTests.Queries.Page8
+  alias HologramFeatureTests.Queries.Page9
 
   # The client's local database is filled by evaluators that outlive a test, and a TRUNCATE never
   # reaches the operations log they read, so they drain before the tables empty. The tables
@@ -402,6 +403,63 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_same_page_load()
   end
 
+  # Chatty is general (there at 3), quiet is the empty channel, and early is later (bye at 2, hi
+  # at 1) but not urgent (there at 3). The lists are read once the browser's rows have landed -
+  # urgent and the other channels' messages arrive only with the fill - on the same page load, and
+  # the page the server sent is read as well.
+  feature "renders filters over related rows", %{session: session} do
+    seed_channels_and_an_empty_one()
+
+    session
+    |> visit(Page9)
+    |> mark_this_page_load()
+    |> await_local_fill()
+    |> assert_text(css("#chatty_channels"), ~r/^general$/)
+    |> assert_text(css("#quiet_channels"), ~r/^empty$/)
+    |> assert_text(css("#early_labels"), ~r/^later$/)
+    |> assert_same_page_load()
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/9")
+
+    assert html =~ ~r{<strong id="chatty_channels"><code>general</code></strong>}
+    assert html =~ ~r{<strong id="quiet_channels"><code>empty</code></strong>}
+    assert html =~ ~r{<strong id="early_labels"><code>later</code></strong>}
+  end
+
+  # No rendered list holds random, so the page never carries it - it arrives with the quiet
+  # channels' download, which none leaves unnarrowed.
+  feature "runs a filter over related rows over local data", %{session: session} do
+    seed_channels_and_an_empty_one()
+
+    session
+    |> visit(Page9)
+    |> await_local_fill()
+    |> click(button("Read channels with a bye locally"))
+    |> assert_text(css("#local_bye_channels"), ~r/^random$/)
+  end
+
+  # A message lands in the empty channel, so the channel joins the chatty ones and leaves the quiet
+  # ones, though the channel itself never changed.
+  feature "re-evaluates a filter when a related row is created", %{session: session} do
+    %{empty: empty} = seed_channels_and_an_empty_one()
+
+    session =
+      session
+      |> visit(Page9)
+      |> await_local_fill()
+      |> assert_text(css("#chatty_channels"), ~r/^general$/)
+      |> mark_this_page_load()
+
+    %{body: "ping", channel_id: empty.id, position: 5}
+    |> Message.new()
+    |> DB.create!()
+
+    session
+    |> assert_text(css("#chatty_channels"), ~r/^empty,general$/)
+    |> assert_text(css("#quiet_channels"), ~r/^\(none\)$/)
+    |> assert_same_page_load()
+  end
+
   # Two products so the parent's ordering picks a definite one to pass down, and reviews split
   # across both so a query filtering by the passed product reads fewer rows than one that does not.
   defp seed_products_and_reviews do
@@ -484,6 +542,16 @@ defmodule HologramFeatureTests.QueriesTest do
     end)
 
     %{bye: bye, general: general, hi: hi, random: random, there: there, urgent: urgent}
+  end
+
+  # The channels, messages and labels the inverse features seed, and a channel with no messages.
+  defp seed_channels_and_an_empty_one do
+    empty =
+      %{name: "empty"}
+      |> Channel.new()
+      |> DB.create!()
+
+    Map.put(seed_channels(), :empty, empty)
   end
 
   # Distinct titles, so no ordering leans on the id tiebreaker.
