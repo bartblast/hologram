@@ -1046,10 +1046,16 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> filter(none(message <- messages, message.body == "hidden"))
         |> Stage.normalize()
 
-      policied_rows = run_policied(term, @quantifier_mapping, nil)
+      # Two channels created in one millisecond come back in no order a test can name.
+      policied_names =
+        term
+        |> run_policied(@quantifier_mapping, nil)
+        |> Enum.map(& &1.name)
+        |> Enum.sort()
+
       raw_rows = run(term, @quantifier_mapping)
 
-      assert Enum.map(policied_rows, & &1.name) == ["general", "quiet"]
+      assert policied_names == ["general", "quiet"]
       assert Enum.map(raw_rows, & &1.name) == ["quiet"]
     end
   end
