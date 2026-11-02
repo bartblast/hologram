@@ -1158,7 +1158,7 @@ defmodule Hologram.Policy.ValidatorTest do
 
         attribute :path, :string
 
-        allow :read, when: starts_with(path, "public/", match: :exact)
+        allow :read, when: starts_with(path, "public/", mode: :exact)
       end
 
       assert validate_model!([InlinePolicyFixture84], []) == :ok

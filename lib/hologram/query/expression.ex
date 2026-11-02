@@ -104,13 +104,13 @@ defmodule Hologram.Query.Expression do
   relationships to an attribute of the row at its end, `project.archived` - lowers to the list of
   its names, `[:project, :archived]`, as a predicate's key on the left side and inside an attribute
   operand on the right. A search - `starts_with(name, term)` or `contains(name, term)`, its term
-  an operand like a comparison's, optionally with `match: :exact` - lowers to a
+  an operand like a comparison's, optionally with `mode: :exact` - lowers to a
   `{name, {operator, term}}` entry, the operator `:starts_with` or `:contains` for the default
   loose match and `:starts_with_exact` or `:contains_exact` for an exact one.
 
   Raises Hologram.CompileError, located at the offending node, on a keyword list (naming the
   expression to write when it holds equalities only), on a pinned list as one side of `and` or
-  `or`, on a search with an option other than `match: :loose` or `match: :exact` or with a pinned
+  `or`, on a search with an option other than `mode: :loose` or `mode: :exact` or with a pinned
   option, on `String.starts_with?/2` and `String.contains?/2` (naming the search operator), and on
   anything else.
   """
@@ -466,7 +466,7 @@ defmodule Hologram.Query.Expression do
        when is_map_key(@search_operators_by_exact, operator) do
     written_as(
       {Map.fetch!(@search_operators_by_exact, operator), [],
-       [{key, [], nil}, operand, [match: :exact]]}
+       [{key, [], nil}, operand, [mode: :exact]]}
     )
   end
 
@@ -666,34 +666,6 @@ defmodule Hologram.Query.Expression do
   defp located({_name, meta, _args} = ast, _fallback) when is_list(meta), do: ast
 
   defp located(_ast, fallback), do: fallback
-
-  # The mode decides which value a search reads - the stored one or its folded form - so it is part
-  # of the query's shape, and is written in place rather than pinned.
-  defp match_mode!([match: mode], _operator, _env, _ast) when mode in [:exact, :loose], do: mode
-
-  defp match_mode!([match: {:^, _meta, [_expr]} = mode], operator, env, _ast) do
-    compile_error!(
-      "#{operator} takes its match option written in place, got: match: #{Macro.to_string(mode)} - the mode decides what the query reads, so write match: :loose or match: :exact",
-      mode,
-      env
-    )
-  end
-
-  defp match_mode!({:^, _meta, [_expr]} = opts, operator, env, _ast) do
-    compile_error!(
-      "#{operator} takes its match option written in place, got: #{Macro.to_string(opts)} - the mode decides what the query reads, so write match: :loose or match: :exact",
-      opts,
-      env
-    )
-  end
-
-  defp match_mode!(opts, operator, env, ast) do
-    compile_error!(
-      "#{operator} takes one option, match: :loose (the default) or match: :exact, got: #{Macro.to_string(opts)}",
-      located(opts, ast),
-      env
-    )
-  end
 
   defp membership!({:^, _meta, [expr]}, _names, _env), do: expr
 
@@ -1030,13 +1002,13 @@ defmodule Hologram.Query.Expression do
   defp scoped_name(name, levels), do: Macro.escape({:outer, levels, name})
 
   # A search names the attribute it reads, the term it looks for, and optionally how the two are
-  # matched - loosely, with case and accents folded, unless match: :exact asks for the bytes. Each
+  # matched - loosely, with case and accents folded, unless mode: :exact asks for the bytes. Each
   # operator and mode is its own operator in the data form, so every executor switches on one atom.
   defp search!({operator, _meta, args} = ast, names, env) do
     {left, right, mode} =
       case args do
         [left, right] -> {left, right, :loose}
-        [left, right, opts] -> {left, right, match_mode!(opts, operator, env, ast)}
+        [left, right, opts] -> {left, right, search_mode!(opts, operator, env, ast)}
         _args -> search_arity_error!(ast, operator, env)
       end
 
@@ -1049,8 +1021,36 @@ defmodule Hologram.Query.Expression do
   @spec search_arity_error!(Macro.t(), atom, Macro.Env.t()) :: no_return
   defp search_arity_error!(ast, operator, env) do
     compile_error!(
-      "#{operator} takes an attribute, a search term and, optionally, match: :exact - #{operator}(name, ^term) or #{operator}(name, ^term, match: :exact) - got: #{Macro.to_string(ast)}",
+      "#{operator} takes an attribute, a search term and, optionally, mode: :exact - #{operator}(name, ^term) or #{operator}(name, ^term, mode: :exact) - got: #{Macro.to_string(ast)}",
       ast,
+      env
+    )
+  end
+
+  # The mode decides which value a search reads - the stored one or its folded form - so it is part
+  # of the query's shape, and is written in place rather than pinned.
+  defp search_mode!([mode: mode], _operator, _env, _ast) when mode in [:exact, :loose], do: mode
+
+  defp search_mode!([mode: {:^, _meta, [_expr]} = mode], operator, env, _ast) do
+    compile_error!(
+      "#{operator} takes its mode option written in place, got: mode: #{Macro.to_string(mode)} - the mode decides what the query reads, so write mode: :loose or mode: :exact",
+      mode,
+      env
+    )
+  end
+
+  defp search_mode!({:^, _meta, [_expr]} = opts, operator, env, _ast) do
+    compile_error!(
+      "#{operator} takes its mode option written in place, got: #{Macro.to_string(opts)} - the mode decides what the query reads, so write mode: :loose or mode: :exact",
+      opts,
+      env
+    )
+  end
+
+  defp search_mode!(opts, operator, env, ast) do
+    compile_error!(
+      "#{operator} takes one option, mode: :loose (the default) or mode: :exact, got: #{Macro.to_string(opts)}",
+      located(opts, ast),
       env
     )
   end
@@ -1119,7 +1119,7 @@ defmodule Hologram.Query.Expression do
     written_args = Enum.map_join(args, ", ", &Macro.to_string/1)
 
     compile_error!(
-      "String.#{operator}?/2 isn't available in #{names.subject} - write #{operator}(#{written_args}), which ignores case and accents, or #{operator}(#{written_args}, match: :exact) to match byte for byte",
+      "String.#{operator}?/2 isn't available in #{names.subject} - write #{operator}(#{written_args}), which ignores case and accents, or #{operator}(#{written_args}, mode: :exact) to match byte for byte",
       ast,
       env
     )

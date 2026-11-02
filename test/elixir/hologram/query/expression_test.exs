@@ -130,7 +130,7 @@ defmodule Hologram.Query.ExpressionTest do
     end
 
     test "lowers a search" do
-      assert lower_condition(~s|starts_with(path, "public/", match: :exact)|) ==
+      assert lower_condition(~s|starts_with(path, "public/", mode: :exact)|) ==
                [path: {:starts_with_exact, "public/"}]
     end
 
@@ -158,7 +158,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on String.starts_with?/2" do
       assert_error Hologram.CompileError,
-                   ~s|lib/my_app/queries.ex:12: String.starts_with?/2 isn't available in a condition - write starts_with(path, "public/"), which ignores case and accents, or starts_with(path, "public/", match: :exact) to match byte for byte|,
+                   ~s|lib/my_app/queries.ex:12: String.starts_with?/2 isn't available in a condition - write starts_with(path, "public/"), which ignores case and accents, or starts_with(path, "public/", mode: :exact) to match byte for byte|,
                    fn -> lower_condition(~s|String.starts_with?(path, "public/")|) end
     end
 
@@ -792,16 +792,16 @@ defmodule Hologram.Query.ExpressionTest do
                [{[:author, :username], {:starts_with, "jo"}}]
     end
 
-    test "lowers a search with match: :exact" do
-      assert lower_predicates(~s|starts_with(code, "AB-", match: :exact)|) ==
+    test "lowers a search with mode: :exact" do
+      assert lower_predicates(~s|starts_with(code, "AB-", mode: :exact)|) ==
                [code: {:starts_with_exact, "AB-"}]
 
-      assert lower_predicates(~s|contains(code, "-1", match: :exact)|) ==
+      assert lower_predicates(~s|contains(code, "-1", mode: :exact)|) ==
                [code: {:contains_exact, "-1"}]
     end
 
-    test "lowers a search with match: :loose" do
-      assert lower_predicates(~s|starts_with(username, "jo", match: :loose)|) ==
+    test "lowers a search with mode: :loose" do
+      assert lower_predicates(~s|starts_with(username, "jo", mode: :loose)|) ==
                [username: {:starts_with, "jo"}]
     end
 
@@ -851,13 +851,13 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on String.contains?/2" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: String.contains?/2 isn't available in a filter - write contains(body, ^query), which ignores case and accents, or contains(body, ^query, match: :exact) to match byte for byte",
+                   "lib/my_app/queries.ex:12: String.contains?/2 isn't available in a filter - write contains(body, ^query), which ignores case and accents, or contains(body, ^query, mode: :exact) to match byte for byte",
                    fn -> lower_predicates("String.contains?(body, ^query)", query: "hi") end
     end
 
     test "raises on String.starts_with?/2" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: String.starts_with?/2 isn't available in a filter - write starts_with(username, ^query), which ignores case and accents, or starts_with(username, ^query, match: :exact) to match byte for byte",
+                   "lib/my_app/queries.ex:12: String.starts_with?/2 isn't available in a filter - write starts_with(username, ^query), which ignores case and accents, or starts_with(username, ^query, mode: :exact) to match byte for byte",
                    fn ->
                      lower_predicates("String.starts_with?(username, ^query)", query: "jo")
                    end
@@ -1190,35 +1190,35 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates(~s|[username: {:starts_with, "jo"}]|) end
     end
 
-    test "raises on a search with a match value other than :loose or :exact" do
+    test "raises on a search with a mode other than :loose or :exact" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: starts_with takes one option, match: :loose (the default) or match: :exact, got: [match: :strict]",
-                   fn -> lower_predicates(~s|starts_with(code, "AB", match: :strict)|) end
+                   "lib/my_app/queries.ex:12: starts_with takes one option, mode: :loose (the default) or mode: :exact, got: [mode: :strict]",
+                   fn -> lower_predicates(~s|starts_with(code, "AB", mode: :strict)|) end
     end
 
-    test "raises on a search with a pinned match value" do
+    test "raises on a search with a pinned mode" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: starts_with takes its match option written in place, got: match: ^mode - the mode decides what the query reads, so write match: :loose or match: :exact",
+                   "lib/my_app/queries.ex:12: starts_with takes its mode option written in place, got: mode: ^mode - the mode decides what the query reads, so write mode: :loose or mode: :exact",
                    fn ->
-                     lower_predicates(~s|starts_with(code, "AB", match: ^mode)|, mode: :exact)
+                     lower_predicates(~s|starts_with(code, "AB", mode: ^mode)|, mode: :exact)
                    end
     end
 
     test "raises on a search with a pinned option" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: starts_with takes its match option written in place, got: ^opts - the mode decides what the query reads, so write match: :loose or match: :exact",
+                   "lib/my_app/queries.ex:12: starts_with takes its mode option written in place, got: ^opts - the mode decides what the query reads, so write mode: :loose or mode: :exact",
                    fn -> lower_predicates(~s|starts_with(code, "AB", ^opts)|, opts: []) end
     end
 
-    test "raises on a search with an option other than match" do
+    test "raises on a search with an option other than mode" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: contains takes one option, match: :loose (the default) or match: :exact, got: [case: :exact]",
+                   "lib/my_app/queries.ex:12: contains takes one option, mode: :loose (the default) or mode: :exact, got: [case: :exact]",
                    fn -> lower_predicates(~s|contains(code, "AB", case: :exact)|) end
     end
 
     test "raises on a search without a term" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: starts_with takes an attribute, a search term and, optionally, match: :exact - starts_with(name, ^term) or starts_with(name, ^term, match: :exact) - got: starts_with(code)",
+                   "lib/my_app/queries.ex:12: starts_with takes an attribute, a search term and, optionally, mode: :exact - starts_with(name, ^term) or starts_with(name, ^term, mode: :exact) - got: starts_with(code)",
                    fn -> lower_predicates("starts_with(code)") end
     end
 
@@ -1260,7 +1260,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on an exact search operator tuple as a keyword value" do
       assert_error Hologram.CompileError,
-                   ~s|lib/my_app/queries.ex:7: a keyword predicate is an equality, got: [code: {:contains_exact, "-1"}] - write it as an expression: contains(code, "-1", match: :exact)|,
+                   ~s|lib/my_app/queries.ex:7: a keyword predicate is an equality, got: [code: {:contains_exact, "-1"}] - write it as an expression: contains(code, "-1", mode: :exact)|,
                    fn -> lower_predicates(~s|[code: {:contains_exact, "-1"}]|) end
     end
 

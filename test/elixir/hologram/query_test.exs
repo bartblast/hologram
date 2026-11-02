@@ -82,7 +82,7 @@ defmodule Hologram.QueryTest do
 
       assert filter(Module2, starts_with(c, ^query)).filter == [{:c, :starts_with, "ab"}]
 
-      assert filter(Module2, contains(c, "ab", match: :exact)).filter == [
+      assert filter(Module2, contains(c, "ab", mode: :exact)).filter == [
                {:c, :contains_exact, "ab"}
              ]
     end

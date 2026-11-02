@@ -729,7 +729,7 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "matches an exact prefix byte for byte" do
-      assert matched_titles(agreed(filter(Module2, starts_with(c, "JO", match: :exact)))) == [
+      assert matched_titles(agreed(filter(Module2, starts_with(c, "JO", mode: :exact)))) == [
                "JOSEPH"
              ]
     end
@@ -739,11 +739,11 @@ defmodule Hologram.Query.InterpreterTest do
     end
 
     test "matches an exact substring byte for byte" do
-      assert matched_titles(agreed(filter(Module2, contains(c, "ß", match: :exact)))) == [
+      assert matched_titles(agreed(filter(Module2, contains(c, "ß", mode: :exact)))) == [
                "Straße"
              ]
 
-      assert matched_titles(agreed(filter(Module2, contains(c, "SS", match: :exact)))) == []
+      assert matched_titles(agreed(filter(Module2, contains(c, "SS", mode: :exact)))) == []
     end
 
     test "reads % and _ in the term as plain characters" do
@@ -756,7 +756,7 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert matched_titles(agreed(filter(Module2, contains(c, "\\")))) == ["a\\b"]
 
-      assert matched_titles(agreed(filter(Module2, contains(c, "a\\b", match: :exact)))) == [
+      assert matched_titles(agreed(filter(Module2, contains(c, "a\\b", mode: :exact)))) == [
                "a\\b"
              ]
     end

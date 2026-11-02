@@ -272,8 +272,8 @@ defmodule Hologram.Query do
 
   A search asks whether a string attribute starts with a term or contains it. By default it
   ignores case and accents the way `sort` does, so `starts_with(name, "jose")` finds "José" and
-  "JOSEPH", and `contains(body, "strasse")` finds "Straße". `match: :exact` matches the stored
-  value byte for byte instead, for codes and ids: `starts_with(code, ^prefix, match: :exact)`.
+  "JOSEPH", and `contains(body, "strasse")` finds "Straße". `mode: :exact` matches the stored
+  value byte for byte instead, for codes and ids: `starts_with(code, ^prefix, mode: :exact)`.
   `%` and `_` are plain characters, an empty term matches every row with a value, and a row with
   no value never matches. The term is a literal, a pinned value, or another string attribute or
   path, as for a comparison. A pinned term doesn't narrow what the client downloads: it receives
@@ -282,7 +282,7 @@ defmodule Hologram.Query do
 
       User |> filter(starts_with(username, ^query)) |> sort(username) |> take(5)
       Message |> filter(contains(body, ^query))
-      Order |> filter(starts_with(code, ^prefix, match: :exact))
+      Order |> filter(starts_with(code, ^prefix, mode: :exact))
 
   Two attributes compare when they have the same type, or when one widens to the other - an
   integer to a float, compared as floats. Two enums compare when they declare the same values in
