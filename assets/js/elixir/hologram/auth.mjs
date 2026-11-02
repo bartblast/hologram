@@ -114,12 +114,27 @@ function holds(fieldValue, operator, value, ranks, foldsKey = false) {
   }
 
   // An ordering comparison never matches a missing value, on either side - the same rule the
-  // database applies, where a comparison with NULL is unknown rather than true.
+  // database applies, where a comparison with NULL is unknown rather than true. Neither does a
+  // search.
   if (fieldValue === null || value === null) {
     return false;
   }
 
   switch (operator) {
+    // A rule and the filter mirroring it have to admit the same rows, so a search matches the way
+    // a query does, by bytes or by folded forms.
+    case "contains":
+      return SortKey.fold(fieldValue).includes(SortKey.fold(value));
+
+    case "contains_exact":
+      return fieldValue.includes(value);
+
+    case "starts_with":
+      return SortKey.fold(fieldValue).startsWith(SortKey.fold(value));
+
+    case "starts_with_exact":
+      return fieldValue.startsWith(value);
+
     case "<":
       return compare(fieldValue, value, ranks, foldsKey) === "lt";
 

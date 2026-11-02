@@ -629,6 +629,88 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // A rule and the filter mirroring it have to admit the same rows, so a search matches here
+    // the way a query matches it.
+    it("matches a loose search ignoring case and accents", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "starts_with", "jose"]]})],
+          document({title: "José"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "contains", "STRASSE"]]})],
+          document({title: "Straße"}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("matches an exact search byte for byte", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "starts_with_exact", "Jo"]]})],
+          document({title: "José"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "contains_exact", "jose"]]})],
+          document({title: "José"}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("matches a search for another attribute's value", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["summary", "contains", {attribute: "title"}]]})],
+          document({summary: "Hi, I'm ADA", title: "ada"}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("never matches a search for another attribute when either is missing", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["summary", "contains", {attribute: "title"}]]})],
+          document({summary: "Hi, I'm Ada", title: null}),
+        ),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [
+            rule({
+              predicates: [
+                ["summary", "starts_with_exact", {attribute: "title"}],
+              ],
+            }),
+          ],
+          document({summary: null, title: "ada"}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("passes over a missing value in a search", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "contains", ""]]})],
+          document({title: null}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
     // The key folds case and diacritics, and `==` must not: what a bound reaches and what a
     // value equals are two different questions.
     it("keeps string equality exact", () => {

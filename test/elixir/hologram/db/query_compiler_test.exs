@@ -2157,6 +2157,17 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(sql, ~s| WHERE "c" LIKE $1|)
     end
 
+    test "compiles a search in a policy rule the way it compiles one in a filter" do
+      mapping = Mapper.derive!([Module2], [])
+      term = Stage.normalize(Module2)
+      rules = [%{predicates: [{:c, :starts_with_exact, "public/"}], to: nil, via: nil}]
+
+      assert %{params: [{:value, "public/%"}], sql: sql} =
+               compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE "c" LIKE $1|)
+    end
+
     test "escapes % and _ in a term" do
       mapping = Mapper.derive!([Module2], [])
       term = %{Stage.normalize(Module2) | filter: [{:c, :contains_exact, "50%_"}]}

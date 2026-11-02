@@ -352,6 +352,74 @@ defmodule Hologram.Policy.EvaluatorTest do
              )
     end
 
+    # A rule and the filter mirroring it have to admit the same rows, so a search matches here the
+    # way a query matches it.
+    test "matches a loose search ignoring case and accents" do
+      assert rule_matches?(
+               rule(predicates: [{:username, :starts_with, "jose"}]),
+               %Module10{count: 1, username: "José"},
+               nil,
+               &deny/3
+             )
+
+      assert rule_matches?(
+               rule(predicates: [{:username, :contains, "STRASSE"}]),
+               %Module10{count: 1, username: "Straße"},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "matches an exact search byte for byte" do
+      assert rule_matches?(
+               rule(predicates: [{:username, :starts_with_exact, "Jo"}]),
+               %Module10{count: 1, username: "José"},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:username, :contains_exact, "jose"}]),
+               %Module10{count: 1, username: "José"},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "matches a search for another attribute's value" do
+      assert rule_matches?(
+               rule(predicates: [{:bio, :contains, {:attribute, :username}}]),
+               %Module10{bio: "Hi, I'm ADA", count: 1, username: "ada"},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "never matches a search for another attribute when either is missing" do
+      refute rule_matches?(
+               rule(predicates: [{:bio, :contains, {:attribute, :username}}]),
+               %Module10{bio: "Hi, I'm Ada", count: 1},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:bio, :starts_with_exact, {:attribute, :username}}]),
+               %Module10{count: 1, username: "ada"},
+               nil,
+               &deny/3
+             )
+    end
+
+    test "passes over a missing value in a search" do
+      refute rule_matches?(
+               rule(predicates: [{:username, :contains, ""}]),
+               %Module10{count: 1, username: nil},
+               nil,
+               &deny/3
+             )
+    end
+
     # The key folds case and diacritics, and `==` must not: what a bound reaches and what a value
     # equals are two different questions.
     test "keeps string equality exact" do

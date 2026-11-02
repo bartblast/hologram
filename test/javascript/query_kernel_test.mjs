@@ -1752,6 +1752,225 @@ describe("QueryKernel", () => {
     });
   });
 
+  describe("matches() - searches", () => {
+    const CHANNEL = "MyApp.Channel";
+    const MESSAGE = "MyApp.Message";
+
+    const titles = ["José", "JOSEPH", "jo_x", "50% off", "Straße"];
+
+    const titlesMatching = (filter, extraTitles = [], context = {}) =>
+      [...titles, ...extraTitles]
+        .map((title, index) => ({id: `t${index}`, title}))
+        .filter((row) => matches(row, filter, context))
+        .map((row) => row.title)
+        .sort();
+
+    const matchingIds = (entityType, filter) =>
+      Object.values(LocalDatabase.getTable(entityType))
+        .filter((row) => matches(row, filter, {}, entityType))
+        .map((row) => row.id)
+        .sort();
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [CHANNEL]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            inverses: {
+              messages: {
+                forward: "channel",
+                reference: true,
+                sort: [["position", "asc"]],
+                toMany: true,
+                type: MESSAGE,
+              },
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+          [MESSAGE]: {
+            attributes: {body: "string", id: "uuid", position: "integer"},
+            enumValues: {},
+            relationships: {
+              channel: {optional: true, toMany: false, type: CHANNEL},
+            },
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+      LocalDatabase.reset();
+    });
+
+    it("matches a loose prefix, ignoring case and accents", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "starts_with", "jose"]]),
+        ["JOSEPH", "José"],
+      );
+    });
+
+    it("matches an exact prefix byte for byte", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "starts_with_exact", "JO"]]),
+        ["JOSEPH"],
+      );
+    });
+
+    it("matches a loose substring, folding letters a sort key spells out", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains", "STRASSE"]]),
+        ["Straße"],
+      );
+    });
+
+    it("matches an exact substring byte for byte", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains_exact", "ß"]]),
+        ["Straße"],
+      );
+
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains_exact", "SS"]]),
+        [],
+      );
+    });
+
+    it("reads % and _ in the term as plain characters", () => {
+      assert.deepStrictEqual(titlesMatching([["title", "contains", "%"]]), [
+        "50% off",
+      ]);
+
+      assert.deepStrictEqual(
+        titlesMatching([["title", "starts_with", "jo_"]]),
+        ["jo_x"],
+      );
+    });
+
+    it("reads a backslash in the term as a plain character", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains", "\\"]], ["a\\b"]),
+        ["a\\b"],
+      );
+
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains_exact", "a\\b"]], ["a\\b"]),
+        ["a\\b"],
+      );
+    });
+
+    it("matches every row with a value for an empty term", () => {
+      assert.deepStrictEqual(titlesMatching([["title", "contains", ""]]), [
+        "50% off",
+        "JOSEPH",
+        "José",
+        "Straße",
+        "jo_x",
+      ]);
+    });
+
+    // A row filed without the field holds no value for it either.
+    it("passes over an unset string, for an empty term too", () => {
+      const rows = [
+        {id: "t7", title: null},
+        {id: "t8"},
+        {id: "t9", title: "ada"},
+      ];
+
+      const ids = rows
+        .filter((row) => matches(row, [["title", "contains", ""]]))
+        .map((row) => row.id);
+
+      assert.deepStrictEqual(ids, ["t9"]);
+    });
+
+    it("matches a substring past the sort key's 64 bytes", () => {
+      const longTitle = "x".repeat(70) + " Zürich";
+
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains", "zurich"]], [longTitle]),
+        [longTitle],
+      );
+    });
+
+    // The two values share their first 64 folded bytes, which is all the sort key holds.
+    it("matches a prefix longer than the sort key's 64 bytes by the whole value", () => {
+      const matching = "Ab".repeat(40);
+      const filter = [["title", "starts_with", "ab".repeat(34)]];
+
+      assert.deepStrictEqual(
+        titlesMatching(filter, [matching, "Ab".repeat(33) + "Zz"]),
+        [matching],
+      );
+    });
+
+    it("matches a term bound to a placeholder, escaped like a written one", () => {
+      const filter = [["title", "starts_with", {placeholder: "query"}]];
+
+      assert.deepStrictEqual(
+        titlesMatching(filter, [], {bindings: {query: "jose"}}),
+        ["JOSEPH", "José"],
+      );
+
+      assert.deepStrictEqual(
+        titlesMatching(filter, [], {bindings: {query: "jo_"}}),
+        ["jo_x"],
+      );
+    });
+
+    it("matches a search for another attribute's value", () => {
+      LocalDatabase.putRow(CHANNEL, {id: "c1", name: "general"});
+
+      LocalDatabase.putRow(MESSAGE, {
+        body: "A General update",
+        channel_id: "c1",
+        id: "m1",
+        position: 1,
+      });
+
+      LocalDatabase.putRow(MESSAGE, {
+        body: "random",
+        channel_id: "c1",
+        id: "m2",
+        position: 2,
+      });
+
+      const filter = [["body", "contains", {attribute: ["channel", "name"]}]];
+
+      assert.deepStrictEqual(matchingIds(MESSAGE, filter), ["m1"]);
+    });
+
+    it("matches a search inside a quantifier", () => {
+      LocalDatabase.putRow(CHANNEL, {id: "c1", name: "general"});
+      LocalDatabase.putRow(CHANNEL, {id: "c2", name: "random"});
+
+      LocalDatabase.putRow(MESSAGE, {
+        body: "weekly update",
+        channel_id: "c1",
+        id: "m1",
+        position: 1,
+      });
+
+      LocalDatabase.putRow(MESSAGE, {
+        body: "hello",
+        channel_id: "c2",
+        id: "m2",
+        position: 1,
+      });
+
+      const filter = [
+        {
+          filter: [["body", "contains", "UPDATE"]],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ];
+
+      assert.deepStrictEqual(matchingIds(CHANNEL, filter), ["c1"]);
+    });
+  });
+
   // Mirrors the interpreter's "run/3 - quantifiers" describes case for case and in the same order.
   // Its read-policy case reads here as a row the client does not hold, which is how a row the
   // session may not read looks to the browser.

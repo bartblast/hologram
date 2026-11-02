@@ -715,6 +715,22 @@ export default class QueryKernel {
       return false;
     }
 
+    // An exact search compares the characters, a loose one the folded forms - case, accents and the
+    // letters a sort key spells out folded on both sides.
+    switch (operator) {
+      case "contains":
+        return SortKey.fold(value).includes(SortKey.fold(operand));
+
+      case "contains_exact":
+        return value.includes(operand);
+
+      case "starts_with":
+        return SortKey.fold(value).startsWith(SortKey.fold(operand));
+
+      case "starts_with_exact":
+        return value.startsWith(operand);
+    }
+
     const result = QueryKernel.#compareOrderingValues(
       value,
       operand,
