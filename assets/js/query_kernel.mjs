@@ -10,12 +10,18 @@ import SortKey from "./sort_key.mjs";
 // uuids as strings.
 //
 // A filter is a list of clauses that all hold. A clause is a triple array - [name, operator,
-// operand] - or a disjunction, {or: alternatives}, holding when one of its alternatives does, each
-// alternative a clause list of its own. An operand is a value, the acting user ({actor: true}), a
-// placeholder ({placeholder: name}) or another attribute of the same row ({attribute: name}). A
-// name - in a triple or an attribute operand - is an attribute, or a path: an array of the to-one
+// operand] - a disjunction, {or: alternatives}, holding when one of its alternatives does, each
+// alternative a clause list of its own, or a quantifier, {quantifier, source, filter}, holding when
+// any, none or all of the rows of a related set match its filter. An operand is a value, the acting
+// user ({actor: true}), a placeholder ({placeholder: name}) or another attribute
+// ({attribute: name}).
+// A name - in a triple or an attribute operand - is an attribute, or a path: an array of the to-one
 // relationships followed from the row and the attribute of the row they lead to, read out of the
-// related type's table and missing when a reference is empty or names a row not held.
+// related type's table and missing when a reference is empty or names a row not held. Inside a
+// quantifier's filter the row is the related one, and {outer: levels, name} names an attribute or a
+// path of the row that many quantifiers out. A source is the array of relationships to the set -
+// to-one ones, then a to-many or an inverse set - read on the row the quantifier is about, or
+// {outer: levels, name} read on a row above.
 //
 // Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
@@ -71,10 +77,10 @@ export default class QueryKernel {
   static matches(row, filter, context = {}, entityType = null) {
     if (
       (entityType === null || entityType === undefined) &&
-      QueryKernel.#namesPath(filter)
+      QueryKernel.#needsEntityType(filter)
     ) {
       throw new HologramRuntimeError(
-        "a filter with a path needs the entity type of the rows it matches",
+        "a filter with a path or a quantifier needs the entity type of the rows it matches",
       );
     }
 
@@ -84,11 +90,17 @@ export default class QueryKernel {
   }
 
   // Every predicate triple of the filter, in order, the ones inside a disjunction's alternatives
-  // included - Hologram.Query.Stage.triples/1 is its twin.
+  // and a quantifier's filter included, each name as its own level writes it.
   static triples(filter) {
-    return filter.flatMap((clause) =>
-      Array.isArray(clause) ? [clause] : clause.or.flatMap(QueryKernel.triples),
-    );
+    return filter.flatMap((clause) => {
+      if (Array.isArray(clause)) {
+        return [clause];
+      }
+
+      return "or" in clause
+        ? clause.or.flatMap(QueryKernel.triples)
+        : QueryKernel.triples(clause.filter);
+    });
   }
 
   static #arrange(rows, term) {
@@ -184,8 +196,15 @@ export default class QueryKernel {
 
   // The row a name is read off and the attribute read there: the row itself for an attribute, and
   // for a path the row its relationships lead to - none when a reference is empty or names a row
-  // the database does not hold, since a fill arrives in pieces.
-  static #endOf(row, name, entityType) {
+  // the database does not hold, since a fill arrives in pieces. A name of a row above is read on
+  // that row, the rows above held nearest first.
+  static #endOf(row, name, entityType, outer = []) {
+    if (QueryKernel.#isOuter(name)) {
+      const above = outer[name.outer - 1];
+
+      return QueryKernel.#endOf(above.row, name.name, above.entityType);
+    }
+
     if (!Array.isArray(name)) {
       return {name, row};
     }
@@ -257,16 +276,16 @@ export default class QueryKernel {
     }
 
     const {toMany} = Model.relationships(entityType)[name];
-    const table = LocalDatabase.getTable(subTerm.entity);
 
     if (!toMany) {
+      const table = LocalDatabase.getTable(subTerm.entity);
       const target = table[row[`${name}_id`]] ?? null;
 
       return target ? QueryKernel.#node(target, subTerm, context) : null;
     }
 
     return QueryKernel.#includedSet(
-      QueryKernel.#heldTargets(entityType, name, row, table),
+      QueryKernel.#relatedRows(row, entityType, name),
       subTerm,
       context,
     );
@@ -282,21 +301,7 @@ export default class QueryKernel {
   // The reference kinds scan the related type's table once per parent row - a cost that grows
   // with rows times parents, acceptable at the sizes a client holds.
   static #includedInverse(row, entityType, name, inverse, subTerm, context) {
-    const table = LocalDatabase.getTable(subTerm.entity);
-
-    if (!inverse.reference) {
-      return QueryKernel.#includedSet(
-        QueryKernel.#heldTargets(entityType, name, row, table),
-        subTerm,
-        context,
-      );
-    }
-
-    const referenceField = `${inverse.forward}_id`;
-
-    const related = Object.values(table).filter(
-      (candidate) => candidate[referenceField] === row.id,
-    );
+    const related = QueryKernel.#relatedRows(row, entityType, name);
 
     if (inverse.toMany) {
       return QueryKernel.#includedSet(related, subTerm, context);
@@ -336,6 +341,15 @@ export default class QueryKernel {
     return label[0] >= "A" && label[0] <= "Z" ? label : `:${label}`;
   }
 
+  static #isOuter(name) {
+    return (
+      name !== null &&
+      typeof name === "object" &&
+      !Array.isArray(name) &&
+      "outer" in name
+    );
+  }
+
   static #isAttribute(operand) {
     return (
       operand !== null &&
@@ -347,15 +361,95 @@ export default class QueryKernel {
 
   // A visitor has no acting user, and each triple naming one answers false on its own - so a
   // disjunction needs no case for it: the alternative asking about nobody fails, and the others
-  // still answer.
-  static #matches(row, filter, context, ranks, entityType) {
-    return filter.every((clause) =>
-      Array.isArray(clause)
-        ? QueryKernel.#matchesTriple(row, clause, context, ranks, entityType)
-        : clause.or.some((alternative) =>
-            QueryKernel.#matches(row, alternative, context, ranks, entityType),
+  // still answer. The rows above are those a quantifier's filter can name, nearest first.
+  static #matches(row, filter, context, ranks, entityType, outer = []) {
+    return filter.every((clause) => {
+      if (Array.isArray(clause)) {
+        return QueryKernel.#matchesTriple(
+          row,
+          clause,
+          context,
+          ranks,
+          entityType,
+          outer,
+        );
+      }
+
+      if ("or" in clause) {
+        return clause.or.some((alternative) =>
+          QueryKernel.#matches(
+            row,
+            alternative,
+            context,
+            ranks,
+            entityType,
+            outer,
           ),
-    );
+        );
+      }
+
+      return QueryKernel.#matchesQuantifier(
+        row,
+        clause,
+        context,
+        entityType,
+        outer,
+      );
+    });
+  }
+
+  // The related rows the source leads to - none when one of its to-one relationships reads no row -
+  // matched against the quantifier's filter, with the row it is about as the first row above them.
+  static #matchesQuantifier(row, clause, context, entityType, outer) {
+    const start = Array.isArray(clause.source)
+      ? {entityType, hops: clause.source, row}
+      : {...outer[clause.source.outer - 1], hops: clause.source.name};
+
+    let owner = start.row;
+    let ownerType = start.entityType;
+
+    for (const hop of start.hops.slice(0, -1)) {
+      const targetId = owner[`${hop}_id`] ?? null;
+      const targetType = Model.relationships(ownerType)[hop].type;
+
+      owner =
+        targetId === null ? null : LocalDatabase.getRow(targetType, targetId);
+
+      // No row to hold the set, so the set has no rows: any fails, none and all hold.
+      if (owner === null) {
+        return clause.quantifier !== "any";
+      }
+
+      ownerType = targetType;
+    }
+
+    const setName = start.hops[start.hops.length - 1];
+    const related = QueryKernel.#relatedRows(owner, ownerType, setName);
+
+    const relatedType = Model.pathTarget(ownerType, [setName]);
+    const innerOuter = [{entityType, row}, ...outer];
+    const ranks = QueryKernel.#ranksFor(relatedType, clause.filter, innerOuter);
+
+    const holds = (relatedRow) =>
+      QueryKernel.#matches(
+        relatedRow,
+        clause.filter,
+        context,
+        ranks,
+        relatedType,
+        innerOuter,
+      );
+
+    switch (clause.quantifier) {
+      case "all":
+        return related.every(holds);
+
+      case "any":
+        return related.some(holds);
+
+      case "none":
+        return !related.some(holds);
+    }
   }
 
   // Another attribute of the same row, or one a path reaches, is read the way the predicate's own
@@ -367,14 +461,15 @@ export default class QueryKernel {
     context,
     ranks,
     entityType,
+    outer,
   ) {
     const ranksForKey = ranks[QueryKernel.#nameKey(name)];
 
     const value = QueryKernel.#isAttribute(operand)
-      ? QueryKernel.#read(row, operand.attribute, entityType)
+      ? QueryKernel.#read(row, operand.attribute, entityType, outer)
       : QueryKernel.#resolve(operand, context, ranksForKey);
 
-    const end = QueryKernel.#endOf(row, name, entityType);
+    const end = QueryKernel.#endOf(row, name, entityType, outer);
     const sortName = `${end.name}_sort`;
 
     // A row filed by ingest carries the key beside every string attribute, so the presence of
@@ -395,20 +490,48 @@ export default class QueryKernel {
         );
   }
 
-  // Whether a filter reads a path anywhere - on either side of a comparison, in any alternative -
-  // which only a caller naming the rows' type can follow.
-  static #namesPath(filter) {
-    return QueryKernel.triples(filter).some(
-      ([name, _operator, operand]) =>
-        Array.isArray(name) ||
-        (QueryKernel.#isAttribute(operand) && Array.isArray(operand.attribute)),
-    );
+  // The key a name's ranks are kept under - a path's names joined, which no attribute name can
+  // spell, and a name of a row above marked with how far out it is.
+  static #nameKey(name) {
+    if (QueryKernel.#isOuter(name)) {
+      return `^${name.outer}:${QueryKernel.#nameKey(name.name)}`;
+    }
+
+    return Array.isArray(name) ? name.join(".") : name;
   }
 
-  // The key a name's ranks are kept under - a path's names joined, which no attribute name can
-  // spell.
-  static #nameKey(name) {
-    return Array.isArray(name) ? name.join(".") : name;
+  // Whether a filter reads a path - on either side of a comparison, in any alternative - or holds a
+  // quantifier, which only a caller naming the rows' type can follow.
+  static #needsEntityType(filter) {
+    return filter.some((clause) => {
+      if (Array.isArray(clause)) {
+        const [name, _operator, operand] = clause;
+
+        return (
+          Array.isArray(name) ||
+          (QueryKernel.#isAttribute(operand) &&
+            Array.isArray(operand.attribute))
+        );
+      }
+
+      return "or" in clause
+        ? clause.or.some((alternative) =>
+            QueryKernel.#needsEntityType(alternative),
+          )
+        : true;
+    });
+  }
+
+  // The left names of a filter's own predicates, a disjunction's alternatives included - a
+  // quantifier's filter is about another row.
+  static #levelNames(filter) {
+    return filter.flatMap((clause) => {
+      if (Array.isArray(clause)) {
+        return [clause[0]];
+      }
+
+      return "or" in clause ? clause.or.flatMap(QueryKernel.#levelNames) : [];
+    });
   }
 
   static #node(row, term, context) {
@@ -428,22 +551,29 @@ export default class QueryKernel {
   }
 
   // The ranks a filter's own predicates compare by, keyed by the name each predicate is written
-  // with - an attribute or a path, whose ranks are those of the attribute it ends at - the ones
-  // inside a disjunction's alternatives included. A caller that names no type ranks nothing, which
-  // is what the raw comparison already was.
-  static #ranksFor(entityType, filter) {
+  // with - an attribute or a path, whose ranks are those of the attribute it ends at, on the row
+  // the name is read on - the ones inside a disjunction's alternatives included. A quantifier's
+  // filter is matched with ranks of its own. A caller that names no type ranks nothing, which is
+  // what the raw comparison already was.
+  static #ranksFor(entityType, filter, outer = []) {
     if (entityType === null || entityType === undefined) {
       return {};
     }
 
     const ranks = {};
 
-    for (const [name] of QueryKernel.triples(filter)) {
-      const declaringType = Array.isArray(name)
-        ? Model.pathTarget(entityType, name.slice(0, -1))
-        : entityType;
+    for (const name of QueryKernel.#levelNames(filter)) {
+      const above = QueryKernel.#isOuter(name) ? outer[name.outer - 1] : null;
+      const rowType = above ? above.entityType : entityType;
+      const localName = above ? name.name : name;
 
-      const declaredName = Array.isArray(name) ? name[name.length - 1] : name;
+      const declaringType = Array.isArray(localName)
+        ? Model.pathTarget(rowType, localName.slice(0, -1))
+        : rowType;
+
+      const declaredName = Array.isArray(localName)
+        ? localName[localName.length - 1]
+        : localName;
 
       const declared = QueryKernel.#enumRanks(declaringType, [declaredName]);
 
@@ -455,10 +585,41 @@ export default class QueryKernel {
     return ranks;
   }
 
-  static #read(row, name, entityType) {
-    const end = QueryKernel.#endOf(row, name, entityType);
+  static #read(row, name, entityType, outer = []) {
+    const end = QueryKernel.#endOf(row, name, entityType, outer);
 
     return end.row === null ? null : (end.row[end.name] ?? null);
+  }
+
+  // The rows of a set - an inverse of a to-one read off the related table by the reference field,
+  // so a pending move is already folded in, an inverse of a to-many and a stored to-many read off
+  // the ids filed for the row.
+  static #relatedRows(row, entityType, name) {
+    const inverses = Model.inverses(entityType);
+
+    if (Object.hasOwn(inverses, name)) {
+      const inverse = inverses[name];
+      const table = LocalDatabase.getTable(inverse.type);
+
+      if (!inverse.reference) {
+        return QueryKernel.#heldTargets(entityType, name, row, table);
+      }
+
+      const referenceField = `${inverse.forward}_id`;
+
+      return Object.values(table).filter(
+        (candidate) => candidate[referenceField] === row.id,
+      );
+    }
+
+    const {type} = Model.relationships(entityType)[name];
+
+    return QueryKernel.#heldTargets(
+      entityType,
+      name,
+      row,
+      LocalDatabase.getTable(type),
+    );
   }
 
   static #resolve(operand, context, ranksForKey) {

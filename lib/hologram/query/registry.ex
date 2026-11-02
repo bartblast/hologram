@@ -55,7 +55,8 @@ defmodule Hologram.Query.Registry do
 
   @doc """
   Returns the set of entity types the given normalized query term reads - its own, every one it
-  includes and every one a path in its filter goes through, walked recursively.
+  includes, every one a path in its filter goes through and every one a quantifier's source goes
+  through, walked recursively.
   """
   @spec entity_types(Query.t()) :: MapSet.t(module)
   def entity_types(term) do
@@ -67,8 +68,9 @@ defmodule Hologram.Query.Registry do
   to the logical type the placeholder binds as.
 
   The term's filter predicates are walked recursively through its includes, the ones inside a
-  disjunction's alternatives included, and a predicate on a path binds as the attribute the path
-  ends at. A placeholder bound as a whole membership operand binds as a list of the attribute's
+  disjunction's alternatives and a quantifier's condition included, and a predicate on a path binds
+  as the attribute the path ends at - inside a quantifier's condition, the attribute of the row it
+  is read on. A placeholder bound as a whole membership operand binds as a list of the attribute's
   logical type - `{:list, type}` - a placeholder as a membership list element or under any other
   operator binds the attribute's type directly. A placeholder met
   several times with one type appears once.
@@ -103,9 +105,9 @@ defmodule Hologram.Query.Registry do
   defp collect_entity_types(term, acc) do
     path_types =
       term.filter
-      |> Stage.predicate_references()
-      |> Enum.flat_map(fn {relationship_names, _name} ->
-        Enum.scan(relationship_names, term.entity, &Entity.relationship_target(&2, &1))
+      |> Stage.relationship_chains()
+      |> Enum.flat_map(fn relationship_names ->
+        Enum.scan(relationship_names, term.entity, &Entity.related_type(&2, &1))
       end)
 
     own_types =

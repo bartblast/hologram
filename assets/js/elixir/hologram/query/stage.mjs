@@ -29,6 +29,7 @@ const ORDERABLE_TYPES = [
   "time",
 ];
 const ORDERING_OPERATORS = ["<", "<=", ">", ">="];
+const QUANTIFIERS = ["all", "any", "none"];
 
 // The type pairs whose attributes compare though their types differ, compared on the wider type -
 // Hologram.Query.Stage's @widenings, and the two must agree.
@@ -44,16 +45,18 @@ function attributeNames(entityType) {
   return Object.keys(Model.entry(entityType).attributes);
 }
 
-// Another attribute of the same row as a predicate's operand, checked the way the server checks it -
-// an ordering comparison needs an orderable attribute, the other one has to be filterable, and the
-// two have to compare.
-function attributeTriple(name, operator, other, entityType) {
+// Another attribute as a predicate's operand, checked the way the server checks it - an ordering
+// comparison needs an orderable attribute, the other one has to be filterable, and the two have to
+// compare. Inside a quantifier the two can live on two rows, so each is looked up where it lives.
+function attributeTriple(name, operator, other, entityType, scope) {
   if (ORDERING_OPERATORS.includes(operator)) {
     validateOrderableAttribute(name, entityType, operator);
   }
 
-  validateOperandName(other, entityType);
-  validateComparableAttributes(name, other, operator, entityType);
+  const otherType = nameTypeOf(scope, other);
+
+  validateOperandName(other, otherType);
+  validateComparableAttributes(name, other, operator, entityType, otherType);
 
   return [nameValue(name), operator, {attribute: nameValue(other)}];
 }
@@ -73,9 +76,16 @@ function byKey(keyOf) {
 }
 
 function clauseKey(clause) {
+  if ("quantifier" in clause) {
+    return [
+      clause.quantifier,
+      JSON.stringify([clause.source, clause.filter]),
+    ].join("\u0000");
+  }
+
   if (Array.isArray(clause)) {
     const [name, operator, operand] = clause;
-    const spelledName = Array.isArray(name) ? JSON.stringify(name) : name;
+    const spelledName = typeof name === "string" ? name : JSON.stringify(name);
 
     return [spelledName, operator, JSON.stringify(operand ?? null)].join(
       "\u0000",
@@ -97,7 +107,7 @@ function counterAttributeNames(entityType) {
 
 // One alternative says what its predicates say alone, and an empty one says nothing at all - it
 // would make the disjunction hold for every row - so neither is a disjunction, as on the server.
-function disjunctionClause(alternatives, entityType) {
+function disjunctionClause(alternatives, scope) {
   if (alternatives.data.length < 2) {
     Interpreter.raiseArgumentError(
       `a disjunction takes a list of at least two predicate lists, got: ${Interpreter.inspect(alternatives)}`,
@@ -114,7 +124,7 @@ function disjunctionClause(alternatives, entityType) {
 
   return {
     or: alternatives.data.map((alternative) =>
-      alternative.data.flatMap((pair) => entryClauses(pair, entityType)),
+      alternative.data.flatMap((pair) => entryClauses(pair, scope)),
     ),
   };
 }
@@ -134,8 +144,12 @@ function entityTypeOf(entity, stage) {
 }
 
 // The shape decides rather than the name, so or is no reserved attribute name: a list of lists is
-// no value any attribute takes, and an attribute named or keeps every other spelling.
-function entryClauses(pair, entityType) {
+// no value any attribute takes, and an attribute named or keeps every other spelling. The same goes
+// for the quantifiers: a pair whose first element is a list or an outer tuple is no operator tuple.
+//
+// The scope is the type of the row the predicates are about, then the type of each row above it,
+// nearest first - the queried type last.
+function entryClauses(pair, scope) {
   const [name, value] = pair.data;
 
   if (
@@ -144,16 +158,27 @@ function entryClauses(pair, entityType) {
     Type.isList(value) &&
     value.data.every(Type.isList)
   ) {
-    return [disjunctionClause(value, entityType)];
+    return [disjunctionClause(value, scope)];
   }
 
-  if (isPath(name)) {
-    validatePath(name, entityType);
+  if (
+    Type.isAtom(name) &&
+    QUANTIFIERS.includes(name.value) &&
+    isQuantifierValue(value)
+  ) {
+    return [quantifierClause(scope, name.value, value)];
+  }
+
+  const entityType = nameTypeOf(scope, name);
+  const declaredName = localName(name);
+
+  if (isPath(declaredName)) {
+    validatePath(declaredName, entityType);
   } else {
-    validateFilteredName(name, entityType);
+    validateFilteredName(declaredName, entityType);
   }
 
-  return predicateTriples(name, value, entityType);
+  return predicateTriples(name, value, entityType, scope);
 }
 
 function integerNames(entityType) {
@@ -298,6 +323,10 @@ function inspectEnumValues(values) {
 // A name as a refusal spells it: an attribute as the interpreter inspects it, a path as it is
 // written.
 function inspectName(name) {
+  if (isOuterName(name)) {
+    return inspectName(name.data[2]);
+  }
+
   return isPath(name)
     ? name.data.map((atom) => atom.value).join(".")
     : Interpreter.inspect(name);
@@ -313,14 +342,17 @@ function isActorLeaf(value) {
   );
 }
 
-// The {:attribute, name} tuple a bare name or a path on the right side of a comparison lowers to.
+// The {:attribute, name} tuple a bare name or a path on the right side of a comparison lowers to -
+// the name, inside a quantifier, possibly one of a row above.
 function isAttributeOperand(value) {
   return (
     Type.isTuple(value) &&
     value.data.length === 2 &&
     Type.isAtom(value.data[0]) &&
     value.data[0].value === "attribute" &&
-    (Type.isAtom(value.data[1]) || Type.isList(value.data[1]))
+    (Type.isAtom(value.data[1]) ||
+      Type.isList(value.data[1]) ||
+      isOuterTuple(value.data[1]))
   );
 }
 
@@ -329,6 +361,26 @@ function isAttributeOperand(value) {
 function isConstraintTuple(value) {
   return (
     Type.isTuple(value) && value.data.length === 2 && Type.isAtom(value.data[0])
+  );
+}
+
+// {:outer, levels, name} with an integer number of levels and an attribute or a path as the name -
+// a name of the row that many quantifiers out.
+function isOuterName(value) {
+  return (
+    isOuterTuple(value) &&
+    Type.isInteger(value.data[1]) &&
+    (Type.isAtom(value.data[2]) || isPath(value.data[2]))
+  );
+}
+
+// A three-element tuple led by :outer, whatever it holds after.
+function isOuterTuple(value) {
+  return (
+    Type.isTuple(value) &&
+    value.data.length === 3 &&
+    Type.isAtom(value.data[0]) &&
+    value.data[0].value === "outer"
   );
 }
 
@@ -346,7 +398,8 @@ function isPlainValue(value) {
   );
 }
 
-// A list pairing names - attributes or paths - with predicate values, the data form a filter takes.
+// A list pairing names - attributes, paths, or names of a row above - with predicate values, the
+// data form a filter takes.
 function isPredicateList(value) {
   return (
     Type.isList(value) &&
@@ -354,8 +407,20 @@ function isPredicateList(value) {
       (entry) =>
         Type.isTuple(entry) &&
         entry.data.length === 2 &&
-        (Type.isAtom(entry.data[0]) || isPath(entry.data[0])),
+        (Type.isAtom(entry.data[0]) ||
+          isPath(entry.data[0]) ||
+          isOuterName(entry.data[0])),
     )
+  );
+}
+
+// A quantifier's {source, predicates} pair - the source a list or an outer tuple.
+function isQuantifierValue(value) {
+  return (
+    Type.isTuple(value) &&
+    value.data.length === 2 &&
+    Type.isList(value.data[1]) &&
+    (Type.isList(value.data[0]) || isOuterTuple(value.data[0]))
   );
 }
 
@@ -377,7 +442,7 @@ function isStruct(value, name) {
 
 // A list is either a membership shorthand or a conjunction of operator tuples - never a mix,
 // since the two read the same at a glance and mean opposite things.
-function listTriples(name, list, entityType) {
+function listTriples(name, list, entityType, scope) {
   const values = list.data;
 
   if (values.length === 0) {
@@ -387,7 +452,9 @@ function listTriples(name, list, entityType) {
   }
 
   if (values.every(isConstraintTuple)) {
-    return values.flatMap((value) => predicateTriples(name, value, entityType));
+    return values.flatMap((value) =>
+      predicateTriples(name, value, entityType, scope),
+    );
   }
 
   if (values.every(isPlainValue)) {
@@ -401,6 +468,11 @@ function listTriples(name, list, entityType) {
   Interpreter.raiseArgumentError(
     `invalid filter list ${Interpreter.inspect(list)} for attribute ${inspectName(name)} - use either a membership list of plain values or a list of operator tuples`,
   );
+}
+
+// A name as the row it lives on declares it - an attribute or a path - whichever row that is.
+function localName(name) {
+  return isOuterTuple(name) ? name.data[2] : name;
 }
 
 function membershipValues(values, name, entityType) {
@@ -437,8 +509,34 @@ function nameType(entityType, name) {
   return attributeType(declared.entityType, declared.name);
 }
 
-// A name as a triple spells it: an attribute's name, or a path's names in order.
+// The type a name is declared on: the row the clauses are about, or for {:outer, levels, name} the
+// row that many quantifiers out, which the scope holds after it.
+function nameTypeOf(scope, name) {
+  if (!isOuterTuple(name)) {
+    return scope[0];
+  }
+
+  const levelsTerm = name.data[1];
+  const rowsAbove = scope.length - 1;
+
+  const levels = Type.isInteger(levelsTerm) ? Number(levelsTerm.value) : null;
+
+  if (levels === null || levels < 1 || levels > rowsAbove) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} names no row above the condition it stands in, which has ${rowsSpelled(rowsAbove)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row`,
+    );
+  }
+
+  return scope[levels];
+}
+
+// A name as a triple spells it: an attribute's name, a path's names in order, or a name of a row
+// above with how many quantifiers out it lies.
 function nameValue(name) {
+  if (isOuterTuple(name)) {
+    return {outer: Number(name.data[1].value), name: nameValue(name.data[2])};
+  }
+
   return isPath(name) ? name.data.map((atom) => atom.value) : name.value;
 }
 
@@ -490,7 +588,7 @@ function normalizedTerm(term) {
   };
 }
 
-function operatorTriples(name, tuple, entityType) {
+function operatorTriples(name, tuple, entityType, scope) {
   const [operatorAtom, operand] = tuple.data;
   const operator = operatorAtom.value;
 
@@ -516,7 +614,9 @@ function operatorTriples(name, tuple, entityType) {
     (EQUALITY_OPERATORS.includes(operator) ||
       ORDERING_OPERATORS.includes(operator))
   ) {
-    return [attributeTriple(name, operator, operand.data[1], entityType)];
+    return [
+      attributeTriple(name, operator, operand.data[1], entityType, scope),
+    ];
   }
 
   if (EQUALITY_OPERATORS.includes(operator) && isActorLeaf(operand)) {
@@ -573,7 +673,7 @@ function placeholderLeaf(placeholder) {
 // Every shape a predicate value can take, dispatched in the order the Elixir clauses are written
 // in - the shapes that are structures (a range, a placeholder, the actor) before the general tuple, and
 // the general tuple before the plain value a bare term falls through to.
-function predicateTriples(name, value, entityType) {
+function predicateTriples(name, value, entityType, scope) {
   if (isStruct(value, "Range")) {
     return rangeTriples(name, value, entityType);
   }
@@ -589,11 +689,11 @@ function predicateTriples(name, value, entityType) {
   }
 
   if (isAttributeOperand(value)) {
-    return [attributeTriple(name, "==", value.data[1], entityType)];
+    return [attributeTriple(name, "==", value.data[1], entityType, scope)];
   }
 
   if (isConstraintTuple(value)) {
-    return operatorTriples(name, value, entityType);
+    return operatorTriples(name, value, entityType, scope);
   }
 
   if (Type.isTuple(value)) {
@@ -603,7 +703,7 @@ function predicateTriples(name, value, entityType) {
   }
 
   if (Type.isList(value)) {
-    return listTriples(name, value, entityType);
+    return listTriples(name, value, entityType, scope);
   }
 
   return [
@@ -611,9 +711,53 @@ function predicateTriples(name, value, entityType) {
   ];
 }
 
+// The source decides the related type the predicates are about, and the rows above them stay in
+// the scope, nearest first.
+function quantifierClause(scope, quantifier, value) {
+  const [source, predicates] = value.data;
+  const {entityType: sourceType, hops} = sourceStart(scope, source);
+  const relatedType = validateSource(hops, sourceType);
+
+  if (!isPredicateList(predicates)) {
+    Interpreter.raiseArgumentError(
+      `a quantifier's condition is a list of name and value pairs, got: ${Interpreter.inspect(predicates)}`,
+    );
+  }
+
+  if (quantifier === "all" && predicates.data.length === 0) {
+    Interpreter.raiseArgumentError(
+      `all takes a condition - all over no condition says nothing, got: ${Interpreter.inspect(value)}`,
+    );
+  }
+
+  const innerScope = [relatedType, ...scope];
+
+  return {
+    filter: predicates.data.flatMap((pair) => entryClauses(pair, innerScope)),
+    quantifier,
+    source: sourceValue(source),
+  };
+}
+
 function raiseUnknownOperator(operator, name) {
   Interpreter.raiseArgumentError(
     `unknown operator :${operator} in the filter predicate for attribute ${inspectName(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in`,
+  );
+}
+
+// The known relationships are the ones the position takes: to-one ones before the set, every
+// relationship at the set.
+function raiseUnknownSourceName(name, entityType, knownNames) {
+  if (attributeNames(entityType).includes(name.value)) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is an attribute in ${entityType} - a quantifier's source names relationships`,
+    );
+  }
+
+  const known = knownNames.map((knownName) => `:${knownName}`).join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships: ${known}`,
   );
 }
 
@@ -626,6 +770,14 @@ function rangeTriples(name, range, entityType) {
     [nameValue(name), ">=", Number(field(range, "first").value)],
     [nameValue(name), "<=", Number(field(range, "last").value)],
   ];
+}
+
+function rowsSpelled(count) {
+  if (count === 0) {
+    return "no row";
+  }
+
+  return count === 1 ? "1 row" : `${count} rows`;
 }
 
 // The names a put may set: the DECLARED attributes and every to-one relationship's reference
@@ -701,6 +853,10 @@ function sortedClause(clause) {
     return clause;
   }
 
+  if ("quantifier" in clause) {
+    return {...clause, filter: sortedFilter(clause.filter)};
+  }
+
   return {
     or: clause.or
       .map(sortedFilter)
@@ -724,9 +880,44 @@ function sortedFilter(filter) {
   return filter.map(sortedClause).sort(byKey(clauseKey));
 }
 
+// Where a source starts: the row the quantifier is about, or for {:outer, levels, hops} the row
+// that many quantifiers out.
+function sourceStart(scope, source) {
+  const hops = isOuterTuple(source) ? source.data[2] : source;
+
+  if (
+    !Type.isList(hops) ||
+    hops.data.length === 0 ||
+    !hops.data.every(Type.isAtom)
+  ) {
+    Interpreter.raiseArgumentError(
+      `a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: ${Interpreter.inspect(source)}`,
+    );
+  }
+
+  return {entityType: nameTypeOf(scope, source), hops: hops.data};
+}
+
+// A source as the term spells it: its relationships in order, or those of a row above with how
+// many quantifiers out it lies.
+function sourceValue(source) {
+  if (isOuterTuple(source)) {
+    return {
+      outer: Number(source.data[1].value),
+      name: source.data[2].data.map((atom) => atom.value),
+    };
+  }
+
+  return source.data.map((atom) => atom.value);
+}
+
 // Where a name is declared: an attribute on the queried type, a path's last name on the type its
 // relationships lead to. The path is validated before anything asks.
 function subject(entityType, name) {
+  if (isOuterTuple(name)) {
+    return subject(entityType, name.data[2]);
+  }
+
   if (!isPath(name)) {
     return {entityType, name: name.value};
   }
@@ -982,7 +1173,16 @@ function validateAttributeName(name, entityType, usage) {
 // Two attributes compare on one order and one notion of equality, so their types have to agree -
 // the same type, or a widening - and two enums have to declare the same values in the same order,
 // since a comparison reads positions. An attribute compared with itself says nothing anyone means.
-function validateComparableAttributes(name, other, operator, entityType) {
+//
+// The two names may live on two rows - inside a quantifier, the related row and one above it - so
+// each is typed on its own row, and the same name on two rows is two attributes.
+function validateComparableAttributes(
+  name,
+  other,
+  operator,
+  entityType,
+  otherEntityType,
+) {
   if (JSON.stringify(nameValue(name)) === JSON.stringify(nameValue(other))) {
     Interpreter.raiseArgumentError(
       `operator :${operator} compares attribute ${inspectName(name)} in ${entityType} with itself`,
@@ -990,7 +1190,12 @@ function validateComparableAttributes(name, other, operator, entityType) {
   }
 
   const type = nameType(entityType, name);
-  const otherType = nameType(entityType, other);
+  const otherType = nameType(otherEntityType, other);
+
+  const compared =
+    entityType === otherEntityType
+      ? `attribute ${inspectName(name)} with attribute ${inspectName(other)} in ${entityType}`
+      : `attribute ${inspectName(name)} in ${entityType} with attribute ${inspectName(other)} in ${otherEntityType}`;
 
   const widens = WIDENINGS.some(
     ([from, to]) => from === type && to === otherType,
@@ -998,7 +1203,7 @@ function validateComparableAttributes(name, other, operator, entityType) {
 
   if (type !== otherType && !widens) {
     Interpreter.raiseArgumentError(
-      `operator :${operator} compares attribute ${inspectName(name)} with attribute ${inspectName(other)} in ${entityType}, which have different types (:${type} and :${otherType}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)`,
+      `operator :${operator} compares ${compared}, which have different types (:${type} and :${otherType}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)`,
     );
   }
 
@@ -1007,7 +1212,7 @@ function validateComparableAttributes(name, other, operator, entityType) {
   }
 
   const declared = subject(entityType, name);
-  const otherDeclared = subject(entityType, other);
+  const otherDeclared = subject(otherEntityType, other);
   const values = Model.entry(declared.entityType).enumValues[declared.name];
 
   const otherValues = Model.entry(otherDeclared.entityType).enumValues[
@@ -1020,7 +1225,7 @@ function validateComparableAttributes(name, other, operator, entityType) {
 
   if (!sameValues) {
     Interpreter.raiseArgumentError(
-      `operator :${operator} compares attribute ${inspectName(name)} with attribute ${inspectName(other)} in ${entityType}, which declare different values (${inspectEnumValues(values)} and ${inspectEnumValues(otherValues)}) - two enum attributes compare only when they declare the same values in the same order`,
+      `operator :${operator} compares ${compared}, which declare different values (${inspectEnumValues(values)} and ${inspectEnumValues(otherValues)}) - two enum attributes compare only when they declare the same values in the same order`,
     );
   }
 }
@@ -1116,8 +1321,10 @@ function validateMembershipRange(range, name, entityType) {
 }
 
 // What an attribute operand names - another attribute of the row, or a path to one - refused in the
-// words a predicate's own name is.
-function validateOperandName(name, entityType) {
+// words a predicate's own name is, quoted as written, a row above's wrapper included.
+function validateOperandName(operandName, entityType) {
+  const name = localName(operandName);
+
   if (Type.isAtom(name)) {
     validateFilteredName(name, entityType);
 
@@ -1126,7 +1333,7 @@ function validateOperandName(name, entityType) {
 
   if (!isPath(name)) {
     Interpreter.raiseArgumentError(
-      `invalid attribute operand ${Interpreter.inspect(Type.tuple([Type.atom("attribute"), name]))} - an attribute is named by an atom, and a path by a list of two or more atoms`,
+      `invalid attribute operand ${Interpreter.inspect(Type.tuple([Type.atom("attribute"), operandName]))} - an attribute is named by an atom, and a path by a list of two or more atoms`,
     );
   }
 
@@ -1240,6 +1447,70 @@ function validateScalarOperand(name, operator, operand, refuseNil = false) {
       `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)}`,
     );
   }
+}
+
+// A source follows to-one relationships that hold their reference, and ends at a set - a to-many
+// or an inverse of either kind of relationship - whose type its predicates are about.
+function validateSource(hops, entityType) {
+  const ownerType = hops
+    .slice(0, -1)
+    .reduce((type, hop) => validateSourceHop(hop, type), entityType);
+
+  return validateSourceSet(hops[hops.length - 1], ownerType);
+}
+
+function validateSourceHop(hop, entityType) {
+  if (Object.hasOwn(Model.inverses(entityType), hop.value)) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(hop)} is an inverse relationship in ${entityType} - a quantifier's source goes through to-one relationships that hold their reference to a set`,
+    );
+  }
+
+  const relationship = Model.relationships(entityType)[hop.value];
+
+  if (relationship && relationship.toMany) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(hop)} is a to-many relationship in ${entityType} - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own`,
+    );
+  }
+
+  if (relationship) {
+    return relationship.type;
+  }
+
+  raiseUnknownSourceName(hop, entityType, toOneRelationshipNames(entityType));
+}
+
+function validateSourceSet(name, entityType) {
+  const inverses = Model.inverses(entityType);
+
+  if (Object.hasOwn(inverses, name.value)) {
+    if (inverses[name.value].toMany) {
+      return inverses[name.value].type;
+    }
+
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is an inverse relationship holding one row in ${entityType} - any, none and all ask about the rows of a to-many relationship`,
+    );
+  }
+
+  const relationship = Model.relationships(entityType)[name.value];
+
+  if (relationship && relationship.toMany) {
+    return relationship.type;
+  }
+
+  if (relationship) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is a to-one relationship in ${entityType} - any, none and all ask about the rows of a to-many relationship - compare the related row through a path: ${name.value}.<attribute>`,
+    );
+  }
+
+  const includable = relationshipNames(entityType)
+    .concat(Object.keys(inverses))
+    .sort();
+
+  raiseUnknownSourceName(name, entityType, includable);
 }
 
 // A to-one embeds one entity, so there is nothing for a filter, an order or a bound to do to it -
@@ -1467,7 +1738,7 @@ const Elixir_Hologram_Query_Stage = {
     }
 
     const clauses = predicates.data.flatMap((pair) =>
-      entryClauses(pair, term.entity),
+      entryClauses(pair, [term.entity]),
     );
 
     return {...term, filter: [...term.filter, ...clauses]};

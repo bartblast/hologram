@@ -53,6 +53,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module49
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module50
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module51
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module52
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
@@ -68,6 +69,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module18, as: Entity18
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module26, as: Entity26
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module5, as: Entity5
@@ -205,6 +207,22 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Stage.normalize()
 
       assert extract_module_queries(Module10, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "extracts a placeholder inside a quantifier's condition", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity26
+        |> filter(any(message <- messages, message.body == ^%Placeholder{name: :body}))
+        |> Stage.normalize()
+
+      assert expected_term.filter == [
+               {:any, {[:messages], [{:body, :==, {:placeholder, :body}}]}}
+             ]
+
+      assert extract_module_queries(Module52, entity_types, ir_plt) == [expected_term]
     end
 
     test "extracts a placeholder as a membership list element", %{

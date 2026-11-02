@@ -551,10 +551,29 @@ defmodule Hologram.Entity do
     end
   end
 
+  # The type a chain of relationships leads to - each followed to the type its rows are, so a chain
+  # may pass through a to-many or an inverse as well as a to-one.
   @doc false
   @spec path_target(module, list(atom)) :: module
   def path_target(entity_type, relationship_names) do
-    Enum.reduce(relationship_names, entity_type, &relationship_target(&2, &1))
+    Enum.reduce(relationship_names, entity_type, &related_type(&2, &1))
+  end
+
+  # The type the rows of a relationship are: a stored to-one's target, a stored to-many's element
+  # type, or an inverse's target, single or set.
+  @doc false
+  @spec related_type(module, atom) :: module
+  def related_type(entity_type, name) do
+    case inverse_relationship(entity_type, name) do
+      %{target: target} ->
+        target
+
+      nil ->
+        entity_type
+        |> relationship_target(name)
+        |> List.wrap()
+        |> hd()
+    end
   end
 
   @doc false

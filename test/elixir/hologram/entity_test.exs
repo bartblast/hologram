@@ -735,6 +735,14 @@ defmodule Hologram.EntityTest do
     test "follows several relationships" do
       assert path_target(Module5, [:a, :b]) == Module2
     end
+
+    test "follows a to-one and then an inverse set" do
+      assert path_target(Module28, [:channel, :messages]) == Module28
+    end
+
+    test "follows a to-many" do
+      assert path_target(Module28, [:labels, :messages]) == Module28
+    end
   end
 
   # The taken policy is the shared fixture rather than an inline module: this file imports
@@ -781,6 +789,28 @@ defmodule Hologram.EntityTest do
       end
 
       assert ExtendsEntityFixture.__roles__() == [{:owner, [extends: :viewer]}, {:viewer, []}]
+    end
+  end
+
+  describe "related_type/2" do
+    test "a to-one's target" do
+      assert related_type(Module28, :channel) == Module26
+    end
+
+    test "a to-many's element type" do
+      assert related_type(Module28, :labels) == Module29
+    end
+
+    test "an inverse set's target" do
+      assert related_type(Module26, :messages) == Module28
+    end
+
+    test "an inverse set of a to-many's target" do
+      assert related_type(Module29, :messages) == Module28
+    end
+
+    test "a single inverse's target" do
+      assert related_type(Module26, :topic) == Module27
     end
   end
 

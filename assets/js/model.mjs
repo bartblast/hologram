@@ -229,11 +229,14 @@ export default class Model {
     ]);
   }
 
-  // The type a chain of to-one relationships leads to from the given type - what a path's last
-  // name is an attribute of.
+  // The type a chain of relationships leads to from the given type - what a path's last name is an
+  // attribute of. A relationship leads to the type its rows are, so the chain may pass through a
+  // to-many or an inverse as well as a to-one.
   static pathTarget(type, relationshipNames) {
     return relationshipNames.reduce(
-      (current, name) => Model.relationships(current)[name].type,
+      (current, name) =>
+        (Model.relationships(current)[name] ?? Model.inverses(current)[name])
+          .type,
       type,
     );
   }

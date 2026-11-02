@@ -1014,6 +1014,42 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a quantifier in a pinned condition" do
+      defmodule InlinePolicyFixture82 do
+        use Hologram.Entity
+
+        relationship :items, [Module2]
+
+        allow :read, when: ^[any: {[:items], []}]
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture82 - a policy condition takes no quantifier (any, none, all)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture82], [])
+      end
+    end
+
+    test "rejects a quantifier inside an alternative of a pinned condition" do
+      defmodule InlinePolicyFixture83 do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        relationship :items, [Module2]
+
+        allow :read, when: ^[or: [[title: "a"], [any: {[:items], []}]]]
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture83 - a policy condition takes no quantifier (any, none, all)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture83], [])
+      end
+    end
+
     test "rejects a disjunction with one alternative in a pinned condition" do
       defmodule InlinePolicyFixture35 do
         use Hologram.Entity

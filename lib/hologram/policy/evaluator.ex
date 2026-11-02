@@ -73,6 +73,8 @@ defmodule Hologram.Policy.Evaluator do
 
   defp compare(%DateTime{} = left, %DateTime{} = right), do: DateTime.compare(left, right)
 
+  defp compare(%Time{} = left, %Time{} = right), do: Time.compare(left, right)
+
   # A policy compares a string the way a query does - by the key derived from it, then by the
   # value behind it - so a rule and the filter mirroring it admit the same rows. The key is a
   # bounded prefix, which is what leaves the value something to settle.
