@@ -336,6 +336,22 @@ defmodule Hologram.Policy.EvaluatorTest do
              )
     end
 
+    test "compares a character above U+FFFF after one from U+E000 to U+FFFF" do
+      assert rule_matches?(
+               rule(predicates: [{:username, :>, "\uFFFD"}]),
+               %Module10{count: 1, username: "😀"},
+               nil,
+               &deny/3
+             )
+
+      refute rule_matches?(
+               rule(predicates: [{:username, :>, "\uFFFD"}]),
+               %Module10{count: 1, username: "\uFFFD"},
+               nil,
+               &deny/3
+             )
+    end
+
     # The key folds case and diacritics, and `==` must not: what a bound reaches and what a value
     # equals are two different questions.
     test "keeps string equality exact" do

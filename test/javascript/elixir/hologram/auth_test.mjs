@@ -614,6 +614,21 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // JavaScript's < puts a character above U+FFFF before U+E000 to U+FFFF, the server after.
+    it("compares a character above U+FFFF after one from U+E000 to U+FFFF", () => {
+      const rules = [rule({predicates: [["title", ">", "\uFFFD"]]})];
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "😀"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "\uFFFD"})),
+        Type.boolean(false),
+      );
+    });
+
     // The key folds case and diacritics, and `==` must not: what a bound reaches and what a
     // value equals are two different questions.
     it("keeps string equality exact", () => {
@@ -2284,6 +2299,26 @@ describe("unqualifiedRoleMessage()", () => {
       `the acting user holds :editor and :viewer on MyApp.Document "${DOC}", ` +
         "which may grant no role there, :owner included. " +
         "Declare `allow {:grant_role, :owner}, to: [:editor, :viewer]` on MyApp.Document if that is intended.",
+    );
+  });
+
+  // The server sorts the names by their characters, so a digit comes before an underscore - an
+  // order a locale-aware comparison doesn't keep.
+  it("lists held roles in the order the server lists them", () => {
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor_a"}),
+    );
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor2"}),
+    );
+
+    assert.equal(
+      unqualifiedRoleMessage(DOCUMENT, DOC, ALICE, "owner", "grant_role"),
+      `the acting user holds :editor2 and :editor_a on MyApp.Document "${DOC}", ` +
+        "which may grant no role there, :owner included. " +
+        "Declare `allow {:grant_role, :owner}, to: [:editor2, :editor_a]` on MyApp.Document if that is intended.",
     );
   });
 

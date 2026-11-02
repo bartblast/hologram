@@ -4,6 +4,7 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
 import SortKey from "./sort_key.mjs";
+import StringOrder from "./string_order.mjs";
 
 // The kernel the client answers its own queries with: the locked operator set evaluated over
 // the rows as the wire spells them - plain values, dates and datetimes and times and enums and
@@ -119,6 +120,10 @@ export default class QueryKernel {
   }
 
   static #compare(left, right) {
+    if (typeof left === "string" && typeof right === "string") {
+      return StringOrder.compare(left, right);
+    }
+
     if (left < right) {
       return -1;
     }

@@ -537,6 +537,28 @@ describe("QueryKernel", () => {
 
         assert.deepEqual(titles(QueryKernel.run(ordered)), ["Zoe", "zoe"]);
       });
+
+      // JavaScript's < puts a character above U+FFFF before U+E000 to U+FFFF, the server after.
+      it("orders a character above U+FFFF after one from U+E000 to U+FFFF", () => {
+        LocalDatabase.reset();
+
+        LocalDatabase.putRow(TASK, {id: "t1", title: "😀", title$sort: "😀"});
+
+        LocalDatabase.putRow(TASK, {
+          id: "t2",
+          title: "\uFFFD",
+          title$sort: "\uFFFD",
+        });
+
+        const ordered = term({
+          sort: [
+            ["title", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), ["\uFFFD", "😀"]);
+      });
     });
 
     describe("ordering enums", () => {
@@ -1710,6 +1732,14 @@ describe("QueryKernel", () => {
       const row = {id: "t7", title: null, title$sort: null};
 
       assert.isFalse(matches(row, [["title", ">=", "a"]]));
+    });
+
+    // JavaScript's < puts a character above U+FFFF before U+E000 to U+FFFF, the server after.
+    it("matches a character above U+FFFF after a bound from U+E000 to U+FFFF", () => {
+      const row = {id: "t9", title: "😀", title$sort: "😀"};
+
+      assert.isTrue(matches(row, [["title", ">", "\uFFFD"]]));
+      assert.isFalse(matches(row, [["title", "<", "\uFFFD"]]));
     });
 
     // No key beside the value means the attribute is not a string, so the comparison is the

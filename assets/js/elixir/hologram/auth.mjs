@@ -8,6 +8,7 @@ import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
 import Sha1 from "../../sha1.mjs";
 import SortKey from "../../sort_key.mjs";
+import StringOrder from "../../string_order.mjs";
 import Type from "../../type.mjs";
 
 // Whether the acting user may do something, answered here rather than asked of the server.
@@ -58,6 +59,10 @@ function compare(left, right, ranks = null, foldsKey = false) {
 function plainCompare(left, right) {
   if (left === right) {
     return "eq";
+  }
+
+  if (typeof left === "string" && typeof right === "string") {
+    return StringOrder.compare(left, right) < 0 ? "lt" : "gt";
   }
 
   return left < right ? "lt" : left > right ? "gt" : "eq";
@@ -925,7 +930,7 @@ function heldRoleNames(actorUserId, entityType, entityId) {
     .sort(
       (left, right) =>
         Number(isRoleModule(left)) - Number(isRoleModule(right)) ||
-        left.localeCompare(right),
+        StringOrder.compare(left, right),
     );
 }
 

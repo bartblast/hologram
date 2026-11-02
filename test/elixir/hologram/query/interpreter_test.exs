@@ -475,6 +475,13 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert names(agreed(sort(Module10, username))) == ["ada", "bob", "Ödön", "Zoe"]
     end
+
+    test "orders a character above U+FFFF after one from U+E000 to U+FFFF" do
+      module_10(count: 1, username: "😀ab")
+      module_10(count: 2, username: "\uFFFDab")
+
+      assert names(agreed(sort(Module10, username))) == ["\uFFFDab", "😀ab"]
+    end
   end
 
   describe "run/3 - ordering enums" do
@@ -701,6 +708,12 @@ defmodule Hologram.Query.InterpreterTest do
       module_10(count: 1)
 
       assert names(agreed(filter(Module10, username >= "a"))) == []
+    end
+
+    test "matches a character above U+FFFF after a bound from U+E000 to U+FFFF" do
+      module_2("😀")
+
+      assert matched_titles(agreed(filter(Module2, c > "\uFFFD"))) == ["😀"]
     end
   end
 
