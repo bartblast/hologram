@@ -1186,6 +1186,26 @@ describe("Model", () => {
     it("follows several relationships", () => {
       assert.equal(Model.pathTarget(TASK, ["project", "owner"]), "MyApp.User");
     });
+
+    it("follows a to-many to the type its rows are", () => {
+      assert.equal(Model.pathTarget(TASK, ["tags"]), "MyApp.Tag");
+    });
+
+    it("follows an inverse to the type its rows are", () => {
+      globalThis.Hologram.sync.model[PROJECT].inverses = {
+        tasks: {
+          forward: "project",
+          reference: true,
+          sort: [],
+          toMany: true,
+          type: TASK,
+        },
+      };
+
+      Model.reset();
+
+      assert.equal(Model.pathTarget(TASK, ["project", "tasks"]), TASK);
+    });
   });
 
   describe("relationships()", () => {

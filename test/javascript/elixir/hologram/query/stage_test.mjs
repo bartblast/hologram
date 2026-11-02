@@ -25,7 +25,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const LABEL = "MyApp.Label";
   const MESSAGE = "MyApp.Message";
   const TOPIC = "MyApp.Topic";
+  const GADGET = "MyApp.Gadget";
   const PROJECT = "MyApp.Project";
+  const SHELF = "MyApp.Shelf";
   const TASK = "MyApp.Task";
   const USER = "MyApp.User";
   const VAULT = "MyApp.Vault";
@@ -221,6 +223,25 @@ describe("Elixir_Hologram_Query_Stage", () => {
           attributes: {id: "uuid", title: "string"},
           enumValues: {},
           relationships: {channel: {toMany: false, type: CHANNEL}},
+          serverOnly: [],
+        },
+        // A set of an enum-carrying type, for comparisons across a quantifier's rows: floor declares
+        // the items' priority values, tier others. any is an attribute named like a quantifier.
+        [SHELF]: {
+          attributes: {
+            any: "boolean",
+            floor: "enum",
+            id: "uuid",
+            tier: "enum",
+          },
+          enumValues: {floor: ["low", "medium", "high"], tier: ["low", "high"]},
+          relationships: {items: {toMany: true, type: GADGET}},
+          serverOnly: [],
+        },
+        [GADGET]: {
+          attributes: {id: "uuid", priority: "enum"},
+          enumValues: {priority: ["low", "medium", "high"]},
+          relationships: {},
           serverOnly: [],
         },
         [PROJECT]: {
@@ -2205,6 +2226,529 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
+  describe("filter/2 - quantifiers", () => {
+    const channel = Type.alias(CHANNEL);
+    const label = Type.alias(LABEL);
+    const message = Type.alias(MESSAGE);
+    const shelf = Type.alias(SHELF);
+
+    const atoms = (...names) => Type.list(names.map(Type.atom));
+
+    const nameTerm = (name) =>
+      typeof name === "string" ? Type.atom(name) : name;
+
+    const outer = (levels, name) =>
+      Type.tuple([
+        Type.atom("outer"),
+        Type.integer(levels),
+        Array.isArray(name) ? atoms(...name) : nameTerm(name),
+      ]);
+
+    const pairs = (entries) =>
+      Type.list(
+        entries.map(([name, value]) => Type.tuple([nameTerm(name), value])),
+      );
+
+    const quantified = (kind, source, entries) =>
+      Type.tuple([Type.atom(kind), Type.tuple([source, pairs(entries)])]);
+
+    const entry = (kind, source, entries) =>
+      Type.list([quantified(kind, source, entries)]);
+
+    const attribute = (name) =>
+      Type.tuple([Type.atom("attribute"), nameTerm(name)]);
+
+    const op = (operator, value) => Type.tuple([Type.atom(operator), value]);
+
+    const hi = Type.bitstring("hi");
+
+    it("quantifies over an inverse of a to-one", () => {
+      const query = filter(
+        channel,
+        entry("any", atoms("messages"), [["body", hi]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("quantifies over a stored to-many", () => {
+      const query = filter(
+        project,
+        entry("any", atoms("tasks"), [["done", Type.boolean(true)]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {filter: [["done", "==", true]], quantifier: "any", source: ["tasks"]},
+      ]);
+    });
+
+    it("quantifies over an inverse of a to-many", () => {
+      const query = filter(
+        label,
+        entry("any", atoms("messages"), [["body", hi]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("quantifies with no condition, with none and with all", () => {
+      const query = filter(
+        channel,
+        Type.list([
+          quantified("any", atoms("messages"), []),
+          quantified("none", atoms("messages"), [["body", hi]]),
+          quantified("all", atoms("messages"), [
+            ["position", op(">", Type.integer(1))],
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {filter: [], quantifier: "any", source: ["messages"]},
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "none",
+          source: ["messages"],
+        },
+        {
+          filter: [["position", ">", 1]],
+          quantifier: "all",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("quantifies over a set reached through a to-one", () => {
+      const query = filter(
+        message,
+        entry("any", atoms("channel", "messages"), [["body", hi]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "any",
+          source: ["channel", "messages"],
+        },
+      ]);
+    });
+
+    it("quantifies inside a quantifier's condition, over the related row's set", () => {
+      const query = filter(
+        user,
+        entry("any", atoms("projects"), [
+          [
+            "any",
+            Type.tuple([atoms("tasks"), pairs([["done", Type.boolean(true)]])]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter[0].filter, [
+        {filter: [["done", "==", true]], quantifier: "any", source: ["tasks"]},
+      ]);
+    });
+
+    it("reads a path of the related row", () => {
+      const query = filter(
+        channel,
+        entry("any", atoms("messages"), [
+          [atoms("channel", "name"), Type.bitstring("general")],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter[0].filter, [
+        [["channel", "name"], "==", "general"],
+      ]);
+    });
+
+    it("reads an attribute of the row above on the left", () => {
+      const query = filter(
+        channel,
+        entry("any", atoms("messages"), [
+          [outer(1, "name"), Type.bitstring("general")],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter[0].filter, [
+        [{name: "name", outer: 1}, "==", "general"],
+      ]);
+    });
+
+    it("reads a path of the row above", () => {
+      const query = filter(
+        message,
+        entry("any", atoms("channel", "messages"), [
+          [outer(1, ["channel", "name"]), Type.bitstring("general")],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter[0].filter, [
+        [{name: ["channel", "name"], outer: 1}, "==", "general"],
+      ]);
+    });
+
+    it("compares an attribute with the same attribute of the row above", () => {
+      const query = filter(
+        message,
+        entry("any", atoms("channel", "messages"), [
+          ["position", op(">", attribute(outer(1, "position")))],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter[0].filter, [
+        ["position", ">", {attribute: {name: "position", outer: 1}}],
+      ]);
+    });
+
+    it("compares two enums of two rows declaring the same values", () => {
+      const query = filter(
+        shelf,
+        entry("any", atoms("items"), [
+          ["priority", op(">=", attribute(outer(1, "floor")))],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter[0].filter, [
+        ["priority", ">=", {attribute: {name: "floor", outer: 1}}],
+      ]);
+    });
+
+    it("reads a set of the row above, counting levels by nesting inside it", () => {
+      const query = filter(
+        user,
+        entry("any", atoms("projects"), [
+          [
+            "any",
+            Type.tuple([
+              outer(1, ["projects"]),
+              pairs([[outer(2, "email"), Type.bitstring("x")]]),
+            ]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter[0].filter, [
+        {
+          filter: [[{name: "email", outer: 2}, "==", "x"]],
+          quantifier: "any",
+          source: {name: ["projects"], outer: 1},
+        },
+      ]);
+    });
+
+    it("reads the queried row two quantifiers out", () => {
+      const query = filter(
+        user,
+        entry("any", atoms("projects"), [
+          [
+            "any",
+            Type.tuple([
+              atoms("tasks"),
+              pairs([["title", attribute(outer(2, "email"))]]),
+            ]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter[0].filter[0].filter, [
+        ["title", "==", {attribute: {name: "email", outer: 2}}],
+      ]);
+    });
+
+    it("takes a quantifier as an alternative of a disjunction", () => {
+      const query = filter(
+        channel,
+        predicates([
+          [
+            "or",
+            Type.list([
+              pairs([["name", Type.bitstring("general")]]),
+              Type.list([quantified("any", atoms("messages"), [])]),
+            ]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          or: [
+            [["name", "==", "general"]],
+            [{filter: [], quantifier: "any", source: ["messages"]}],
+          ],
+        },
+      ]);
+    });
+
+    it("keeps an attribute named like a quantifier an attribute", () => {
+      const query = filter(
+        shelf,
+        predicates([
+          ["any", Type.boolean(true)],
+          ["any", op("!=", Type.boolean(false))],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["any", "==", true],
+        ["any", "!=", false],
+      ]);
+    });
+
+    const refusals = [
+      [
+        "raises on a source ending at a to-one relationship",
+        () => filter(message, entry("any", atoms("channel"), [])),
+        ":channel is a to-one relationship in MyApp.Message - any, none and all ask about the rows of a to-many relationship - compare the related row through a path: channel.<attribute>",
+      ],
+      [
+        "raises on a source ending at a single inverse",
+        () => filter(channel, entry("any", atoms("topic"), [])),
+        ":topic is an inverse relationship holding one row in MyApp.Channel - any, none and all ask about the rows of a to-many relationship",
+      ],
+      [
+        "raises on a source going through a to-many relationship",
+        () => filter(user, entry("any", atoms("projects", "tasks"), [])),
+        ":projects is a to-many relationship in MyApp.User - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own",
+      ],
+      [
+        "raises on a source going through an inverse relationship",
+        () => filter(channel, entry("any", atoms("messages", "channel"), [])),
+        ":messages is an inverse relationship in MyApp.Channel - a quantifier's source goes through to-one relationships that hold their reference to a set",
+      ],
+      [
+        "raises on a source going through an attribute",
+        () => filter(message, entry("any", atoms("body", "messages"), [])),
+        ":body is an attribute in MyApp.Message - a quantifier's source names relationships",
+      ],
+      [
+        "raises on a source going through an unknown relationship",
+        () => filter(message, entry("any", atoms("thread", "messages"), [])),
+        "unknown relationship :thread in MyApp.Message - known relationships: :channel",
+      ],
+      [
+        "raises on a source naming an attribute",
+        () => filter(channel, entry("any", atoms("name"), [])),
+        ":name is an attribute in MyApp.Channel - a quantifier's source names relationships",
+      ],
+      [
+        "raises on a source naming an unknown relationship",
+        () => filter(channel, entry("any", atoms("posts"), [])),
+        "unknown relationship :posts in MyApp.Channel - known relationships: :messages, :owner, :topic",
+      ],
+      [
+        "raises on an empty source",
+        () => filter(channel, entry("any", Type.list([]), [])),
+        "a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: []",
+      ],
+      [
+        "raises on a source holding something other than relationship names",
+        () =>
+          filter(
+            channel,
+            entry("any", Type.list([Type.bitstring("messages")]), []),
+          ),
+        'a quantifier\'s source is a list of relationship names, or {:outer, levels, list}, got: ["messages"]',
+      ],
+      [
+        "raises on a source the related row does not declare, naming the related type",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [
+              ["any", Type.tuple([atoms("topic"), Type.list([])])],
+            ]),
+          ),
+        "unknown relationship :topic in MyApp.Message - known relationships: :channel",
+      ],
+      [
+        "raises on all with no condition",
+        () => filter(channel, entry("all", atoms("messages"), [])),
+        "all takes a condition - all over no condition says nothing, got: {[:messages], []}",
+      ],
+      [
+        "raises on a condition that is not a list of name and value pairs",
+        () =>
+          filter(
+            channel,
+            Type.list([
+              Type.tuple([
+                Type.atom("any"),
+                Type.tuple([atoms("messages"), atoms("body")]),
+              ]),
+            ]),
+          ),
+        "a quantifier's condition is a list of name and value pairs, got: [:body]",
+      ],
+      [
+        "raises on an unknown attribute of the related row",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [["title", Type.bitstring("x")]]),
+          ),
+        "unknown attribute :title in MyApp.Message - known attributes: :body, :channel_id, :id, :position",
+      ],
+      [
+        "raises on an attribute of the related row compared with itself",
+        () =>
+          filter(
+            message,
+            entry("any", atoms("channel", "messages"), [
+              ["body", attribute("body")],
+            ]),
+          ),
+        "operator :== compares attribute :body in MyApp.Message with itself",
+      ],
+      [
+        "raises on an attribute of the row above compared with itself",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [
+              [outer(1, "name"), attribute(outer(1, "name"))],
+            ]),
+          ),
+        "operator :== compares attribute :name in MyApp.Channel with itself",
+      ],
+      [
+        "raises on attributes of two rows having different types",
+        () =>
+          filter(
+            shelf,
+            entry("any", atoms("items"), [
+              ["priority", attribute(outer(1, "any"))],
+            ]),
+          ),
+        "operator :== compares attribute :priority in MyApp.Gadget with attribute :any in MyApp.Shelf, which have different types (:enum and :boolean) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
+      ],
+      [
+        "raises on enums of two rows declaring different values",
+        () =>
+          filter(
+            shelf,
+            entry("any", atoms("items"), [
+              ["priority", op(">=", attribute(outer(1, "tier")))],
+            ]),
+          ),
+        "operator :>= compares attribute :priority in MyApp.Gadget with attribute :tier in MyApp.Shelf, which declare different values ([:low, :medium, :high] and [:low, :high]) - two enum attributes compare only when they declare the same values in the same order",
+      ],
+      [
+        "raises on an unknown attribute of the row above",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [
+              [outer(1, "title"), Type.bitstring("x")],
+            ]),
+          ),
+        "unknown attribute :title in MyApp.Channel - known attributes: :id, :name, :owner_id",
+      ],
+      [
+        "raises on a name of a row above outside any quantifier",
+        () =>
+          filter(
+            channel,
+            Type.list([Type.tuple([outer(1, "name"), Type.bitstring("x")])]),
+          ),
+        "{:outer, 1, :name} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+      ],
+      [
+        "raises on a name of a row above reaching past the queried row",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [
+              [outer(2, "name"), Type.bitstring("x")],
+            ]),
+          ),
+        "{:outer, 2, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+      ],
+      [
+        "raises on a key naming a row zero levels out",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [
+              [outer(0, "name"), Type.bitstring("x")],
+            ]),
+          ),
+        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+      ],
+      [
+        "raises on a name of a row zero levels out",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [
+              ["body", attribute(outer(0, "name"))],
+            ]),
+          ),
+        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+      ],
+      [
+        "raises on a malformed attribute operand of a row above, quoting it as written",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [
+              [
+                "body",
+                attribute(
+                  Type.tuple([
+                    Type.atom("outer"),
+                    Type.integer(1),
+                    Type.bitstring("name"),
+                  ]),
+                ),
+              ],
+            ]),
+          ),
+        'invalid attribute operand {:attribute, {:outer, 1, "name"}} - an attribute is named by an atom, and a path by a list of two or more atoms',
+      ],
+      [
+        "raises on a source of a row above reaching past the queried row",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [
+              ["any", Type.tuple([outer(2, ["messages"]), Type.list([])])],
+            ]),
+          ),
+        "{:outer, 2, [:messages]} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+      ],
+      [
+        "raises on a source of a row above naming no relationship",
+        () =>
+          filter(
+            channel,
+            entry("any", atoms("messages"), [
+              ["any", Type.tuple([outer(1, []), Type.list([])])],
+            ]),
+          ),
+        "a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: {:outer, 1, []}",
+      ],
+    ];
+
+    for (const [name, call, message] of refusals) {
+      it(name, () => {
+        assertBoxedError(call, "ArgumentError", message);
+      });
+    }
+  });
+
   describe("include/3", () => {
     it("includes an inverse set", () => {
       const query = include(
@@ -2750,6 +3294,76 @@ describe("Elixir_Hologram_Query_Stage", () => {
   });
 
   describe("normalize/1", () => {
+    it("sorts a nested quantifier's predicates and keys naming a row above", () => {
+      const outerKey = (name) =>
+        Type.tuple([Type.atom("outer"), Type.integer(1), Type.atom(name)]);
+
+      const nested = (keys) =>
+        Type.list([
+          Type.tuple([
+            Type.atom("any"),
+            Type.tuple([
+              Type.list([Type.atom("messages")]),
+              Type.list(
+                keys.map((key) =>
+                  Type.tuple([outerKey(key), Type.bitstring("x")]),
+                ),
+              ),
+            ]),
+          ]),
+        ]);
+
+      const first = normalize(
+        filter(Type.alias(CHANNEL), nested(["owner_id", "name"])),
+      );
+      const second = normalize(
+        filter(Type.alias(CHANNEL), nested(["name", "owner_id"])),
+      );
+
+      assert.deepStrictEqual(first, second);
+
+      assert.deepStrictEqual(first.filter[0].filter, [
+        [{name: "name", outer: 1}, "==", "x"],
+        [{name: "owner_id", outer: 1}, "==", "x"],
+      ]);
+    });
+
+    it("sorts a quantifier's predicates and the quantifiers among the clauses", () => {
+      const quantifier = (kind, entries) =>
+        Type.tuple([
+          Type.atom(kind),
+          Type.tuple([Type.list([Type.atom("messages")]), predicates(entries)]),
+        ]);
+
+      const query = normalize(
+        filter(
+          Type.alias(CHANNEL),
+          Type.list([
+            Type.tuple([Type.atom("name"), Type.bitstring("general")]),
+            quantifier("none", [
+              ["position", Type.integer(2)],
+              ["body", Type.bitstring("b")],
+            ]),
+            quantifier("any", []),
+          ]),
+        ),
+      );
+
+      // This tier's order is its own: a quantifier sorts by its kind among the triples' names.
+      assert.deepStrictEqual(query.filter, [
+        {filter: [], quantifier: "any", source: ["messages"]},
+        ["name", "==", "general"],
+        {
+          filter: [
+            ["body", "==", "b"],
+            ["position", "==", 2],
+          ],
+          quantifier: "none",
+          source: ["messages"],
+        },
+      ]);
+    });
+
     it("orders an included inverse set by its declared order, then by id", () => {
       const query = normalize(
         include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
