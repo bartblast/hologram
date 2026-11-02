@@ -6,6 +6,8 @@ defmodule Hologram.Query.Window do
   alias Hologram.Query
   alias Hologram.Query.Stage
 
+  @quantifiers [:all, :any, :none]
+
   # What a query downloads, as opposed to what it answers. A client holds the rows its queries
   # could need rather than the ones they select right now, so changing a value re-runs the query
   # over what is already there instead of asking for more.
@@ -53,6 +55,24 @@ defmodule Hologram.Query.Window do
   can move an alternative among the others, so the filter is put back in canonical order - two
   queries differing only in a pinned alternative must name one window.
 
+  A QUANTIFIER reads the rows of a related set, and the client answers it over the ones it holds,
+  so every set a quantifier reads - nested ones and the to-one rows along its source included - is
+  embedded in the window as an include, the rows its condition's paths read with it, and a change
+  to one of them reaches the window the way a change to an included row does. A set read off its
+  rows' own reference field is narrowed by the quantifier's condition, as the queried rows are by
+  theirs: `any` and `none` are decided by the related rows the condition matches, so only those are
+  downloaded, the parts of the condition that bound nothing - a placeholder, a row above the set -
+  left out. `all` is decided by the rows the condition does NOT match, so its set is downloaded
+  whole, and so is a set the client reads through ids, for the reason above. Two narrowings of one
+  set are joined with `or`, and a whole one wins.
+
+  The window runs over every row, and a client is handed the rows it may read - so a predicate may
+  only bound the download when a client reading fewer related rows can never answer it true where
+  the window answers false. An `any` passes: fewer related rows make it false more often, never
+  true, so it stays, narrowed by these same rules - one losing every predicate still asks that the
+  set holds a row. `none` and `all` fail it - a channel whose only flagged message a reader may not
+  read has none of that reader's flagged messages - so they are dropped, widening the download.
+
   A client that checks permissions answers each rule over what it holds too, and a rule can read
   rows other than the one it decides about - the row a `via:` leads to, the rows before the last
   relationship of a `to:` reference, the rows along a `when:` path. So when the build has a page
@@ -71,7 +91,10 @@ defmodule Hologram.Query.Window do
   KNOWN CONSEQUENCE, recorded rather than worked around: a filtered include of a to-many or of an
   inverse of one downloads the whole set, until narrowed includes give way to derived fields. A
   render answers the authored term (see `embed/2`), so a first paint can carry a narrowed set for a
-  row the client does not hold yet, until the window's fill replaces it with the whole one.
+  row the client does not hold yet, until the window's fill replaces it with the whole one. The
+  same holds for a quantifier over a set the authored term also includes narrowed: the render
+  carries the authored set, so the browser's first answer of the quantifier can differ from the
+  server's until the fill lands.
 
   KNOWN CONSEQUENCE, recorded rather than worked around: a query whose only bound is a placeholder
   downloads everything the policy admits. A thirty-day message window written as
@@ -92,7 +115,7 @@ defmodule Hologram.Query.Window do
       |> Map.new(fn {name, sub_term} ->
         {name, downloaded(derive(sub_term, permission_checking?), term.entity, name)}
       end)
-      |> put_embedded_includes(term, permission_checking?)
+      |> put_embedded_includes(term, permission_checking?, :window)
 
     %Query{entity: term.entity, filter: filter, include: include}
   end
@@ -105,7 +128,9 @@ defmodule Hologram.Query.Window do
   read are embedded beside them, the way `derive/2` embeds them into the window.
 
   The term's own clauses stay as written, a narrowed include's filter included - it answers the
-  query as authored, where the window downloads such a set whole.
+  query as authored, where the window downloads such a set whole. The sets its quantifiers read are
+  embedded the way the window embeds them, narrowed alike, beside the authored includes - an
+  authored include of the same set is left as authored.
 
   A term with nothing to embed comes back unchanged.
   """
@@ -114,10 +139,15 @@ defmodule Hologram.Query.Window do
     include =
       term.include
       |> Map.new(fn {name, sub_term} -> {name, embed(sub_term, permission_checking?)} end)
-      |> put_embedded_includes(term, permission_checking?)
+      |> put_embedded_includes(term, permission_checking?, :render)
 
     %{term | include: include}
   end
+
+  # A narrowing's clause lists as alternatives - the ones of the disjunction it already is, or itself.
+  defp alternatives([{:or, alternatives}]), do: alternatives
+
+  defp alternatives(clauses), do: [clauses]
 
   # A set the client reads through the ids filed for its row - a to-many, or an inverse of one - is
   # downloaded whole: a row states the whole set it names, so a narrowed one would stand for the
@@ -132,6 +162,30 @@ defmodule Hologram.Query.Window do
     end
   end
 
+  # Narrowings of one set download what any of them needs: one disjunction of their clause lists,
+  # each list once, flattened from a disjunction they already form. A whole set - nil, or an empty
+  # filter such as an authored include's with no clauses - needs everything.
+  defp joined_narrowing(narrowings) do
+    if Enum.any?(narrowings, &(&1 in [nil, []])) do
+      nil
+    else
+      joined_alternatives =
+        narrowings
+        |> Enum.flat_map(&alternatives/1)
+        |> Enum.map(&Stage.normalized_filter/1)
+        |> Enum.uniq()
+
+      case joined_alternatives do
+        [clauses] -> clauses
+        several -> Stage.normalized_filter([{:or, several}])
+      end
+    end
+  end
+
+  defp operand_name({:attribute, name}), do: name
+
+  defp operand_name(_operand), do: nil
+
   defp placeholder?({:placeholder, _name}), do: true
 
   defp placeholder?(values) when is_list(values), do: Enum.any?(values, &placeholder?/1)
@@ -143,20 +197,22 @@ defmodule Hologram.Query.Window do
 
   defp placeholder_bound?({name, _operator, value}), do: placeholder?(name) or placeholder?(value)
 
-  # What a term reads beside the rows it returns: the rows along its filter's paths, and the rows
-  # its type's rules read when a client checks them.
-  defp put_embedded_includes(include, term, permission_checking?) do
+  # What a term reads beside the rows it returns: the sets its quantifiers read, the rows along its
+  # filter's paths, and the rows its type's rules read when a client checks them. The sets go first,
+  # so a path's relationship joining one keeps its narrowing.
+  defp put_embedded_includes(include, term, permission_checking?, mode) do
     include
+    |> put_quantified_sets(term, mode)
     |> put_path_includes(term)
     |> put_policy_includes(term.entity, permission_checking?)
   end
 
   # A to-one include carries no clauses, so a path's relationship joins one the window already
-  # has by adding what it includes.
+  # has by adding what it includes - and a set a quantifier embedded keeps its narrowing.
   defp put_path_include(include, _entity_type, []), do: include
 
   defp put_path_include(include, entity_type, [relationship_name | later_names]) do
-    target_type = Entity.relationship_target(entity_type, relationship_name)
+    target_type = Entity.related_type(entity_type, relationship_name)
     included = Map.get(include, relationship_name, %Query{entity: target_type})
     nested = put_path_include(included.include, target_type, later_names)
 
@@ -165,10 +221,8 @@ defmodule Hologram.Query.Window do
 
   defp put_path_includes(include, term) do
     term.filter
-    |> Stage.predicate_references()
-    |> Enum.reduce(include, fn {relationship_names, _name}, acc ->
-      put_path_include(acc, term.entity, relationship_names)
-    end)
+    |> Stage.relationship_chains()
+    |> Enum.reduce(include, &put_path_include(&2, term.entity, &1))
   end
 
   defp put_policy_includes(include, _entity_type, false), do: include
@@ -177,6 +231,67 @@ defmodule Hologram.Query.Window do
     entity_type
     |> Policy.related_chains()
     |> Enum.reduce(include, &put_path_include(&2, entity_type, &1))
+  end
+
+  # The set at the end of a chain, embedded with the given narrowing - nil for the whole set - and
+  # the to-one rows before it with no clauses. In the window two narrowings of one set join with or
+  # and a whole one wins, an authored narrowing included. A render leaves a set it already includes
+  # as authored, since the template reads it.
+  defp put_quantified_set(include, entity_type, [name], narrowing, mode) do
+    target_type = Entity.related_type(entity_type, name)
+
+    case {Map.fetch(include, name), mode} do
+      {:error, _mode} ->
+        Map.put(include, name, %Query{entity: target_type, filter: narrowing || []})
+
+      {{:ok, _included}, :render} ->
+        include
+
+      {{:ok, included}, :window} ->
+        joined = joined_narrowing([included.filter, narrowing])
+
+        Map.put(include, name, %{included | filter: joined || []})
+    end
+  end
+
+  defp put_quantified_set(include, entity_type, [name | later_names], narrowing, mode) do
+    target_type = Entity.related_type(entity_type, name)
+    included = Map.get(include, name, %Query{entity: target_type})
+    nested = put_quantified_set(included.include, target_type, later_names, narrowing, mode)
+
+    Map.put(include, name, %{included | include: nested})
+  end
+
+  # Every set the term's quantifiers read, the narrowings of one set joined before any is embedded,
+  # so the order quantifiers are written in decides nothing.
+  defp put_quantified_sets(include, term, mode) do
+    term.filter
+    |> quantified_sets(term.entity, [[]])
+    |> Enum.group_by(fn {chain, _narrowing} -> chain end, fn {_chain, narrowing} -> narrowing end)
+    |> Enum.sort()
+    |> Enum.reduce(include, fn {chain, narrowings}, acc ->
+      narrowing = joined_narrowing(narrowings)
+
+      put_quantified_set(acc, term.entity, chain, narrowing, mode)
+    end)
+  end
+
+  # Each quantifier's set as the chain of relationships to it from the queried row, paired with what
+  # narrows it - nil for the whole set.
+  defp quantified_sets(clauses, entity_type, prefixes) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} ->
+        Enum.flat_map(alternatives, &quantified_sets(&1, entity_type, prefixes))
+
+      {quantifier, {source, inner}} when quantifier in @quantifiers ->
+        chain = source_chain(source, prefixes)
+        narrowing = set_narrowing(quantifier, inner, entity_type, chain)
+
+        [{chain, narrowing} | quantified_sets(inner, entity_type, [chain | prefixes])]
+
+      _triple ->
+        []
+    end)
   end
 
   defp read_through_ids?(entity_type, name) do
@@ -189,6 +304,47 @@ defmodule Hologram.Query.Window do
     end
   end
 
+  # A condition part that reads nothing outside the set's row - the row a nested quantifier binds
+  # inside it is its own, so a name reaching a row above counts from the depth it is written at.
+  defp self_contained?({:or, alternatives}, depth) do
+    Enum.all?(alternatives, fn alternative ->
+      Enum.all?(alternative, &self_contained?(&1, depth))
+    end)
+  end
+
+  defp self_contained?({quantifier, {source, inner}}, depth) when quantifier in @quantifiers do
+    within?(source, depth) and Enum.all?(inner, &self_contained?(&1, depth + 1))
+  end
+
+  defp self_contained?({name, _operator, operand}, depth) do
+    within?(name, depth) and within?(operand_name(operand), depth)
+  end
+
+  # Only a set read off its rows' own reference field can be narrowed - a set the client reads
+  # through ids is downloaded whole - and only by what decides any and none: the related rows the
+  # condition matches. all is decided by the rows it does not match.
+  defp set_narrowing(quantifier, inner, entity_type, chain) do
+    {owner_chain, [set_name]} = Enum.split(chain, -1)
+
+    owner_type = Entity.path_target(entity_type, owner_chain)
+
+    with true <- quantifier in [:any, :none],
+         %{reference?: true} <- Entity.inverse_relationship(owner_type, set_name),
+         [_clause | _clauses] = narrowing <-
+           inner
+           |> window_clauses()
+           |> Enum.filter(&self_contained?(&1, 0))
+           |> Stage.normalized_filter() do
+      narrowing
+    else
+      _whole -> nil
+    end
+  end
+
+  defp source_chain({:outer, levels, hops}, prefixes), do: Enum.at(prefixes, levels) ++ hops
+
+  defp source_chain(hops, [prefix | _rows_above]), do: prefix ++ hops
+
   defp window_clause({:or, alternatives}) do
     narrowed = Enum.map(alternatives, &window_clauses/1)
 
@@ -199,9 +355,20 @@ defmodule Hologram.Query.Window do
     end
   end
 
+  # An any narrows the download whatever a reader may not see, by its condition narrowed the same
+  # way. none and all do not - a reader seeing fewer related rows can answer either true where the
+  # window, reading every row, answers false.
+  defp window_clause({:any, {source, clauses}}), do: [{:any, {source, window_clauses(clauses)}}]
+
+  defp window_clause({quantifier, {_source, _clauses}}) when quantifier in [:all, :none], do: []
+
   defp window_clause(triple) do
     if placeholder_bound?(triple), do: [], else: [triple]
   end
 
   defp window_clauses(clauses), do: Enum.flat_map(clauses, &window_clause/1)
+
+  defp within?({:outer, levels, _name}, depth), do: levels <= depth
+
+  defp within?(_name, _depth), do: true
 end
