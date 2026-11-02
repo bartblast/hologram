@@ -3,7 +3,8 @@ defmodule Hologram.Query.Interpreter do
 
   # The reference implementation of the query kernel: the locked operator set evaluated over
   # plain Elixir data rather than compiled to SQL - comparisons and memberships, joined by `and`
-  # (every clause holds) and by `or` (a disjunction holds when one of its alternatives does).
+  # (every clause holds) and by `or` (a disjunction holds when one of its alternatives does), and
+  # quantifiers (`any`, `none` and `all` of a related set's rows matching a condition).
   #
   # It exists to be proven identical to the database executor in ExUnit, over the same rows -
   # which is what lets the client's hand-written JavaScript kernel be proven identical in turn,
@@ -16,7 +17,8 @@ defmodule Hologram.Query.Interpreter do
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Query
-  alias Hologram.Query.Stage
+
+  @quantifiers [:all, :any, :none]
 
   @doc """
   Runs the given normalized query term over the given rows and returns what the database would
@@ -31,6 +33,11 @@ defmodule Hologram.Query.Interpreter do
   field names the row, looked up in the related type's table - and reads as nil when a reference
   is empty or names a row the database does not hold, the meaning a missing value has everywhere
   else.
+
+  A quantifier reads the rows of a related set out of the same rows - the ones the pairs name, or
+  the ones whose reference names the row - reached through its source's to-one relationships
+  first, a set with no rows when one of them reads nothing. Its condition is matched against each
+  related row, a name of a row above read on that row.
 
   `:actor_user_id` in the options is who is asking, for the predicates that name the acting user.
   An anonymous one matches nothing, the way an actor-referencing statement matches nothing when
@@ -180,12 +187,8 @@ defmodule Hologram.Query.Interpreter do
   # not hold is passed over: a fill arrives in pieces, and a parent can be told about a child
   # that has not landed yet.
   defp embedded_value(row, name, :to_many, sub_term, database, opts) do
-    target_ids = Map.get(database.facts, {row.__struct__, name, row.id}, [])
-    targets = table(database, sub_term.entity)
-
-    target_ids
-    |> Enum.map(fn target_id -> Enum.find(targets, &(&1.id == target_id)) end)
-    |> Enum.reject(&is_nil/1)
+    row
+    |> paired_rows(name, sub_term.entity, database)
     |> embedded_set(sub_term, database, opts)
   end
 
@@ -215,7 +218,7 @@ defmodule Hologram.Query.Interpreter do
   end
 
   # What an enum compares by: each declared value against its position in the list the entity
-  # declares, built once per run and only for the names that need it - the ordering keys and the
+  # declares, built per clause list and only for the names that need it - the ordering keys and the
   # filtered attributes alike. A name of any other type is absent, and its comparison is the
   # ordinary one.
   defp enum_ranks(entity_type, names) do
@@ -269,11 +272,30 @@ defmodule Hologram.Query.Interpreter do
     |> Enum.reject(&is_nil/1)
   end
 
+  # The left names of a clause list's own predicates, a disjunction's alternatives included - a
+  # quantifier's condition is about another row.
+  defp level_names(clauses) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} -> Enum.flat_map(alternatives, &level_names/1)
+      {quantifier, {_source, _clauses}} when quantifier in @quantifiers -> []
+      {name, _operator, _operand} -> [name]
+    end)
+  end
+
   # What matching a term's filter reads besides the row: the rest of the database, which a path
-  # follows into, the options a predicate resolves its operands by, and the ranks its enums compare
-  # by.
+  # follows into, the options a predicate resolves its operands by, the ranks its enums compare
+  # by - and inside a quantifier's condition the rows above the related row with their types,
+  # nearest first, for the names that reach them.
   defp match_scope(term, database, opts) do
-    %{database: database, opts: opts, ranks: predicate_ranks(term)}
+    types = [term.entity]
+
+    %{
+      database: database,
+      opts: opts,
+      outer: [],
+      ranks: predicate_ranks(types, term.filter),
+      types: types
+    }
   end
 
   defp matches?(row, filter, scope) do
@@ -287,6 +309,37 @@ defmodule Hologram.Query.Interpreter do
     Enum.any?(alternatives, &matches?(row, &1, scope))
   end
 
+  # The condition is matched against each related row, with the row the quantifier is about as the
+  # first row above it.
+  defp matches_clause?(row, {quantifier, {source, clauses}}, scope)
+       when quantifier in @quantifiers do
+    {source_row, hops} = source_row(row, source, scope)
+    {owner_hops, [set_name]} = Enum.split(hops, -1)
+
+    related_rows =
+      case related_row(source_row, owner_hops, scope.database) do
+        nil -> []
+        owner -> set_rows(owner, set_name, scope.database)
+      end
+
+    types = [Entity.path_target(source_row.__struct__, hops) | scope.types]
+
+    inner_scope = %{
+      scope
+      | outer: [row | scope.outer],
+        ranks: predicate_ranks(types, clauses),
+        types: types
+    }
+
+    holds? = &matches?(&1, clauses, inner_scope)
+
+    case quantifier do
+      :all -> Enum.all?(related_rows, holds?)
+      :any -> Enum.any?(related_rows, holds?)
+      :none -> not Enum.any?(related_rows, holds?)
+    end
+  end
+
   defp matches_clause?(row, triple, scope), do: matches_predicate?(row, triple, scope)
 
   # Another attribute of the same row, or one a path reaches, is read the way the predicate's own
@@ -295,8 +348,8 @@ defmodule Hologram.Query.Interpreter do
   defp matches_predicate?(row, {name, operator, {:attribute, other}}, scope) do
     satisfies?(
       operator,
-      read(row, name, scope.database),
-      read(row, other, scope.database),
+      read(row, name, scope),
+      read(row, other, scope),
       Map.get(scope.ranks, name)
     )
   end
@@ -309,20 +362,32 @@ defmodule Hologram.Query.Interpreter do
       # which no row answers, the way an actor-referencing statement is elided for a visitor
       # rather than run against a null.
       :no_actor -> false
-      value -> satisfies?(operator, read(row, name, scope.database), value, ranks_for_key)
+      value -> satisfies?(operator, read(row, name, scope), value, ranks_for_key)
     end
   end
 
-  # The ranks a term's own predicates compare by, keyed by the name each predicate is written with -
-  # an attribute or a path, whose ranks are those of the attribute it ends at - the ones inside a
-  # disjunction's alternatives included.
-  defp predicate_ranks(term) do
-    term.filter
-    |> Stage.triples()
-    |> Enum.map(fn {name, _operator, _operand} -> name end)
+  # The rows a to-many's pairs name, of the given type. A pair naming a row the database does not
+  # hold is passed over: a fill arrives in pieces, and a parent can be told about a child that has
+  # not landed yet.
+  defp paired_rows(row, name, target_type, database) do
+    targets = table(database, target_type)
+
+    database.facts
+    |> Map.get({row.__struct__, name, row.id}, [])
+    |> Enum.map(fn target_id -> Enum.find(targets, &(&1.id == target_id)) end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  # The ranks a clause list's own predicates compare by, keyed by the name each predicate is written
+  # with - an attribute or a path, whose ranks are those of the attribute it ends at, on the row the
+  # name is read on - the ones inside a disjunction's alternatives included. A quantifier's
+  # condition is matched with ranks of its own.
+  defp predicate_ranks(types, clauses) do
+    clauses
+    |> level_names()
     |> Enum.uniq()
     |> Enum.flat_map(fn name ->
-      {subject_type, subject_name} = subject(term.entity, name)
+      {subject_type, subject_name} = subject(types, name)
 
       subject_type
       |> enum_ranks([subject_name])
@@ -333,17 +398,23 @@ defmodule Hologram.Query.Interpreter do
 
   # A path reads the attribute of the row its relationships lead to, and nil at the first reference
   # that is empty or names a row the database does not hold - a fill arrives in pieces, so a row a
-  # reference names may not have landed yet.
-  defp read(row, path, database) when is_list(path) do
+  # reference names may not have landed yet. A name of a row above is read on that row.
+  defp read(_row, {:outer, levels, name}, scope) do
+    scope.outer
+    |> Enum.at(levels - 1)
+    |> read(name, scope)
+  end
+
+  defp read(row, path, scope) when is_list(path) do
     {relationship_names, [name]} = Enum.split(path, -1)
 
-    case related_row(row, relationship_names, database) do
+    case related_row(row, relationship_names, scope.database) do
       nil -> nil
       related -> Map.fetch!(related, name)
     end
   end
 
-  defp read(row, name, _database), do: Map.fetch!(row, name)
+  defp read(row, name, _scope), do: Map.fetch!(row, name)
 
   defp resolve({:actor}, opts, _ranks_for_key) do
     Keyword.get(opts, :actor_user_id) || :no_actor
@@ -404,6 +475,14 @@ defmodule Hologram.Query.Interpreter do
     compare_ordering_values(value, operand, ranks) in [:eq, :gt]
   end
 
+  # The rows of a set - a to-many's pairs, or an inverse set's related rows.
+  defp set_rows(row, name, database) do
+    case relationship_kind(row.__struct__, name) do
+      {:inverse, inverse} -> inverse_rows(row, inverse, database)
+      :to_many -> paired_rows(row, name, Entity.related_type(row.__struct__, name), database)
+    end
+  end
+
   defp sort(rows, keys, entity_type) do
     names = Enum.map(keys, fn {name, _direction} -> name end)
     ranks = enum_ranks(entity_type, names)
@@ -455,15 +534,23 @@ defmodule Hologram.Query.Interpreter do
     end
   end
 
-  # Where a name is declared: an attribute on the queried type, a path's last name on the type its
-  # relationships lead to.
-  defp subject(entity_type, path) when is_list(path) do
+  # The row a quantifier's source is read on - the row the quantifier is about, or one above it.
+  defp source_row(_row, {:outer, levels, hops}, scope),
+    do: {Enum.at(scope.outer, levels - 1), hops}
+
+  defp source_row(row, hops, _scope), do: {row, hops}
+
+  # Where a name is declared: an attribute on the type of the row it is read on, a path's last name
+  # on the type its relationships lead to from there.
+  defp subject(types, {:outer, levels, name}), do: subject([Enum.at(types, levels)], name)
+
+  defp subject([entity_type | _types_above], path) when is_list(path) do
     {relationship_names, [name]} = Enum.split(path, -1)
 
     {Entity.path_target(entity_type, relationship_names), name}
   end
 
-  defp subject(entity_type, name), do: {entity_type, name}
+  defp subject([entity_type | _types_above], name), do: {entity_type, name}
 
   defp table(database, entity_type) do
     database.rows

@@ -28,6 +28,7 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module30
+  alias Hologram.Test.Fixtures.Entity.Module31
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
 
@@ -47,6 +48,7 @@ defmodule Hologram.Query.InterpreterTest do
     Module29,
     Module3,
     Module30,
+    Module31,
     Module4,
     Module5
   ]
@@ -75,6 +77,12 @@ defmodule Hologram.Query.InterpreterTest do
   end
 
   defp bodies(rows), do: Enum.map(rows, & &1.body)
+
+  defp channel_names(rows) do
+    rows
+    |> Enum.map(& &1.name)
+    |> Enum.sort()
+  end
 
   defp created(entity_type, attributes) do
     {:ok, entity} =
@@ -728,6 +736,257 @@ defmodule Hologram.Query.InterpreterTest do
       bound = ~T[10:00:00]
 
       assert matched_ids(agreed(filter(Module22, opens_at == ^bound))) == [round.id]
+    end
+  end
+
+  describe "run/3 - quantifiers" do
+    setup do
+      general = created(Module26, name: "general")
+      random = created(Module26, name: "random")
+      quiet = created(Module26, name: "quiet")
+
+      hi = message(general, "hi", 1)
+      there = message(general, "there", 3)
+      bye = message(random, "bye", 2)
+
+      urgent = created(Module29, name: "urgent")
+      later = created(Module29, name: "later")
+
+      :ok = add_relationship(Module28, hi.id, :labels, urgent.id)
+      :ok = add_relationship(Module28, hi.id, :labels, later.id)
+      :ok = add_relationship(Module28, bye.id, :labels, later.id)
+
+      %{bye: bye, general: general, hi: hi, quiet: quiet, random: random, there: there}
+    end
+
+    test "answers any over an inverse of a to-one" do
+      assert channel_names(
+               agreed(filter(Module26, any(message <- messages, message.position > 2)))
+             ) ==
+               ["general"]
+    end
+
+    test "answers none over an inverse of a to-one" do
+      assert channel_names(
+               agreed(filter(Module26, none(message <- messages, message.position > 2)))
+             ) ==
+               ["quiet", "random"]
+    end
+
+    test "answers all over an inverse of a to-one, an empty set holding" do
+      assert channel_names(
+               agreed(filter(Module26, all(message <- messages, message.position > 1)))
+             ) ==
+               ["quiet", "random"]
+    end
+
+    test "answers a quantifier with no condition" do
+      assert channel_names(agreed(filter(Module26, any(messages)))) == ["general", "random"]
+      assert channel_names(agreed(filter(Module26, none(messages)))) == ["quiet"]
+    end
+
+    test "answers any over a stored to-many", %{hi: hi} do
+      assert matched_ids(agreed(filter(Module28, any(label <- labels, label.name == "urgent")))) ==
+               [hi.id]
+    end
+
+    test "answers any and all over an inverse of a to-many" do
+      assert channel_names(
+               agreed(filter(Module29, any(message <- messages, message.position > 1)))
+             ) ==
+               ["later"]
+
+      assert channel_names(
+               agreed(filter(Module29, all(message <- messages, message.position < 2)))
+             ) ==
+               ["urgent"]
+    end
+
+    # One any is one related row: no message of general is both hi and at position 3, while one is
+    # hi and another is at 3.
+    test "reads one related row per any" do
+      one_row =
+        filter(Module26, any(message <- messages, message.body == "hi" and message.position == 3))
+
+      two_rows =
+        filter(
+          Module26,
+          any(message <- messages, message.body == "hi") and
+            any(message <- messages, message.position == 3)
+        )
+
+      assert agreed(one_row) == []
+      assert channel_names(agreed(two_rows)) == ["general"]
+    end
+
+    test "compares a related row reached through a to-one with the row above", %{hi: hi} do
+      message(nil, "loose", 1)
+
+      query = filter(Module28, any(message <- channel.messages, message.position > position))
+
+      assert matched_ids(agreed(query)) == [hi.id]
+    end
+
+    test "matches a condition reading a row bound around it", %{bye: bye, random: random} do
+      bye_label = created(Module29, name: "bye")
+      :ok = add_relationship(Module28, bye.id, :labels, bye_label.id)
+
+      query =
+        filter(
+          Module26,
+          any(message <- messages, any(label <- message.labels, label.name == message.body))
+        )
+
+      assert matched_ids(agreed(query)) == [random.id]
+    end
+
+    test "matches a condition reading the queried row two quantifiers out", %{
+      general: general,
+      hi: hi
+    } do
+      general_label = created(Module29, name: "general")
+      :ok = add_relationship(Module28, hi.id, :labels, general_label.id)
+
+      query =
+        filter(
+          Module26,
+          any(message <- messages, any(label <- message.labels, label.name == name))
+        )
+
+      assert matched_ids(agreed(query)) == [general.id]
+    end
+
+    test "reads a set of the row above from inside a quantifier", %{general: general} do
+      query =
+        filter(
+          Module26,
+          any(message <- messages, any(other <- messages, other.position > message.position))
+        )
+
+      assert matched_ids(agreed(query)) == [general.id]
+    end
+
+    test "reads an attribute of the row above on the left" do
+      query = filter(Module26, any(message <- messages, name == "general"))
+
+      assert channel_names(agreed(query)) == ["general"]
+    end
+
+    test "takes a quantifier as an alternative" do
+      query = filter(Module26, name == "quiet" or any(message <- messages, message.position > 2))
+
+      assert channel_names(agreed(query)) == ["general", "quiet"]
+    end
+
+    test "binds a placeholder inside a quantifier's condition" do
+      query =
+        filter(Module26, any(message <- messages, message.position > ^%Placeholder{name: :min}))
+
+      assert channel_names(agreed(query, bindings: %{min: 1})) == ["general", "random"]
+    end
+  end
+
+  describe "run/3 - quantifiers over other kinds of rows" do
+    test "answers over a self-referencing inverse, comparing a reply with its parent" do
+      parent = created(Module30, body: "echo")
+      created(Module30, body: "echo", parent_id: parent.id)
+      other = created(Module30, body: "other")
+      created(Module30, body: "reply", parent_id: other.id)
+
+      assert matched_ids(agreed(filter(Module30, any(reply <- replies, reply.body == body)))) ==
+               [parent.id]
+    end
+
+    # An ordering comparison passes over nil and an inequality matches it, so a related row with no
+    # value fails all of an ordering condition.
+    test "reads a missing value of a related row the way it reads one of the row" do
+      required = DB.create!(Module1.new())
+
+      {:ok, source} =
+        %{c_id: required.id}
+        |> Module3.new()
+        |> create()
+
+      unset = created(Module2, a: true, c: "unset")
+      seven = created(Module2, a: true, b: 7, c: "seven")
+      :ok = add_relationship(Module3, source.id, :a, unset.id)
+      :ok = add_relationship(Module3, source.id, :a, seven.id)
+
+      assert matched_ids(agreed(filter(Module3, any(item <- a, item.b != 7)))) == [source.id]
+      assert matched_ids(agreed(filter(Module3, all(item <- a, item.b > 1)))) == []
+      assert matched_ids(agreed(filter(Module3, any(item <- a, item.b > 1)))) == [source.id]
+    end
+
+    # :high sorts before :medium as a term, after it in the declared list.
+    test "compares an enum of the related row with one of the row above by declared position" do
+      medium_floor = created(Module31, floor: :medium)
+      high_floor = created(Module31, floor: :high)
+      high = created(Module17, label: "high", priority: :high)
+      medium = created(Module17, label: "medium", priority: :medium)
+      :ok = add_relationship(Module31, medium_floor.id, :items, high.id)
+      :ok = add_relationship(Module31, high_floor.id, :items, medium.id)
+
+      query = filter(Module31, any(item <- items, item.priority > floor))
+      flipped = filter(Module31, any(item <- items, floor < item.priority))
+
+      assert matched_ids(agreed(query)) == [medium_floor.id]
+      assert matched_ids(agreed(flipped)) == [medium_floor.id]
+    end
+
+    # "apple" sorts before "Mango" by its sort key and after it byte by byte.
+    test "compares a string of the related row with one of the row above by sort key" do
+      mango = created(Module26, name: "Mango")
+      message(mango, "apple", 1)
+
+      query = filter(Module26, any(message <- messages, message.body < name))
+
+      assert matched_ids(agreed(query)) == [mango.id]
+    end
+  end
+
+  describe "run/3 - quantifiers under a read policy" do
+    setup do
+      general = created(Module26, name: "general")
+      quiet = created(Module26, name: "quiet")
+      message(general, "hidden", 1)
+
+      %{general: general, quiet: quiet}
+    end
+
+    # A row the session may not read is not in what it holds, so it is not among a set's rows on
+    # either tier.
+    test "leaves a related row the session may not read out of the set", %{
+      general: general,
+      quiet: quiet
+    } do
+      none_hidden =
+        Module26
+        |> filter(none(message <- messages, message.body == "hidden"))
+        |> Stage.normalize()
+
+      any_hidden =
+        Module26
+        |> filter(any(message <- messages, message.body == "hidden"))
+        |> Stage.normalize()
+
+      all_shown =
+        Module26
+        |> filter(all(message <- messages, message.body != "hidden"))
+        |> Stage.normalize()
+
+      for term <- [none_hidden, any_hidden, all_shown] do
+        assert run(term, readable_database(nil)) == QueryRunner.run_policied(term, @mapping, nil)
+      end
+
+      assert matched_ids(QueryRunner.run_policied(none_hidden, @mapping, nil)) ==
+               Enum.sort([general.id, quiet.id])
+
+      assert QueryRunner.run_policied(any_hidden, @mapping, nil) == []
+
+      assert matched_ids(QueryRunner.run_policied(all_shown, @mapping, nil)) ==
+               Enum.sort([general.id, quiet.id])
+
+      assert matched_ids(QueryRunner.run(none_hidden, @mapping)) == [quiet.id]
     end
   end
 
