@@ -401,7 +401,7 @@ defmodule Hologram.Migrator do
     # A companion this file adds is filled AFTER every op has applied, not at its own add:
     # the diff applies add_column before alter_column, so a source column being cast to
     # text in the same file still holds its old type when its companion lands.
-    SchemaReconciler.backfill_sort_keys!(render.transactional, mapping)
+    SchemaReconciler.backfill_companions!(render.transactional, mapping)
 
     # The tail's checks run here, against the schema the statements above just produced and
     # before anything commits: a file whose index cannot be built does not apply at all,

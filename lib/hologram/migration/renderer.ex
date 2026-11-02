@@ -103,11 +103,12 @@ defmodule Hologram.Migration.Renderer do
   # A companion follows its attribute through a rename as a RENAME COLUMN - a key does not
   # depend on the attribute's name, so the rows keep theirs.
   defp corresponding_source(
-         {:sort_key, name},
+         {kind, name},
          entity_type,
          %{op: :rename_attribute, entity: entity_type, from: name} = op
-       ) do
-    {:sort_key, op.to}
+       )
+       when kind in [:search_key, :sort_key] do
+    {kind, op.to}
   end
 
   defp corresponding_source(source, _entity_type, _op), do: source
@@ -211,7 +212,7 @@ defmodule Hologram.Migration.Renderer do
     table_ops ++ pk_ops ++ column_ops ++ join_table_ops ++ index_ops
   end
 
-  # Declared columns and their sort-key companions pair by source: the system ones share the
+  # Declared columns and their derived companions pair by source: the system ones share the
   # :system source and carry fixed names, so they never take part in a rename.
   defp column_pairs(entity_type, pre_entity, post_entity, op) do
     pre_entity.columns
@@ -246,8 +247,9 @@ defmodule Hologram.Migration.Renderer do
     end)
   end
 
-  defp paired?(%{source: {kind, _name}}) when kind in [:attribute, :relationship, :sort_key],
-    do: true
+  defp paired?(%{source: {kind, _name}})
+       when kind in [:attribute, :relationship, :search_key, :sort_key],
+       do: true
 
   defp paired?(_column), do: false
 

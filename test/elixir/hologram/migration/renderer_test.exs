@@ -49,6 +49,7 @@ defmodule Hologram.Migration.RendererTest do
                "created_at",
                "id",
                "title",
+               "title_$search",
                "title_$sort",
                "updated_at"
              ]
@@ -103,7 +104,7 @@ defmodule Hologram.Migration.RendererTest do
                model(%{MyApp.Task => %{attributes: [{:priority, :integer, []}]}})
     end
 
-    test "renders a deleted attribute as its column drop, the sort-key companion following" do
+    test "renders a deleted attribute as its column drop, the derived companions following" do
       pre =
         model(%{
           MyApp.Task => %{attributes: [{:legacy, :string, []}, {:title, :string, []}]}
@@ -116,6 +117,7 @@ defmodule Hologram.Migration.RendererTest do
       assert result.transactional == [
                %{op: :drop_index, index: "my_app_task_legacy_$sort_$idx"},
                %{op: :drop_column, table: "my_app_task", column: "legacy"},
+               %{op: :drop_column, table: "my_app_task", column: "legacy_$search"},
                %{op: :drop_column, table: "my_app_task", column: "legacy_$sort"}
              ]
     end
@@ -410,7 +412,7 @@ defmodule Hologram.Migration.RendererTest do
              ]
     end
 
-    test "renames the sort-key companion with its string attribute" do
+    test "renames the derived companions with their string attribute" do
       pre = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
       ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :title, to: :name, line: 3}]
@@ -424,6 +426,12 @@ defmodule Hologram.Migration.RendererTest do
                  op: :rename_index,
                  from: "my_app_task_title_$sort_$idx",
                  to: "my_app_task_name_$sort_$idx"
+               },
+               %{
+                 op: :rename_column,
+                 table: "my_app_task",
+                 from: "title_$search",
+                 to: "name_$search"
                }
              ]
     end
@@ -568,6 +576,12 @@ defmodule Hologram.Migration.RendererTest do
                  op: :rename_index,
                  from: "my_app_task_slug_$sort_$idx",
                  to: "my_app_task_handle_$sort_$idx"
+               },
+               %{
+                 op: :rename_column,
+                 table: "my_app_task",
+                 from: "slug_$search",
+                 to: "handle_$search"
                }
              ]
     end
@@ -867,6 +881,7 @@ defmodule Hologram.Migration.RendererTest do
 
       assert Enum.map(add_columns, &{&1.table, &1.column}) == [
                {"my_app_sketch", "summary"},
+               {"my_app_sketch", "summary_$search"},
                {"my_app_sketch", "summary_$sort"}
              ]
     end

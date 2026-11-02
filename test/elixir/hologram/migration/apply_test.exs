@@ -109,6 +109,7 @@ defmodule Hologram.Migration.ApplyTest do
                  "id",
                  "priority",
                  "title",
+                 "title_$search",
                  "title_$sort",
                  "updated_at"
                ]

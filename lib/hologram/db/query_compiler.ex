@@ -24,7 +24,8 @@ defmodule Hologram.DB.QueryCompiler do
   membership list holding placeholder elements binds one slot per element inside a cast
   ARRAY constructor instead - each element placeholder is a scalar slot. Nil
   equality compiles to `IS NULL` and nil inequality to `IS NOT NULL`, with no bind
-  slot. Column selection follows the mapping's physical column order.
+  slot. Column selection follows the mapping's physical column order, leaving out the derived
+  sort-key and search-key companions, which a reader never reads back.
 
   Cardinality shapes the statement: `:set` selects the mapped columns with ordering
   and view bounds, `:one` selects with `LIMIT 1` under the query's total order (a
@@ -35,8 +36,8 @@ defmodule Hologram.DB.QueryCompiler do
   Includes compile into correlated jsonb subselects - one per included relationship,
   in sorted name order, each aliased distinctly (self-referencing relationships stay
   unambiguous - the root table is addressed by name). The jsonb keys are the target's
-  physical column names in mapping order. A to-one subselect is NULL when the
-  reference is. A to-many subselect aggregates the related set through its join table
+  physical column names in mapping order, derived companions left out. A to-one subselect is
+  NULL when the reference is. A to-many subselect aggregates the related set through its join table
   into a jsonb array (empty set = empty array), applying the sub-term's filter,
   ordering, and view bounds inside the aggregation - include param slots follow the
   root's in parameter order. An inverse is read from where the relationship it reverses is
@@ -291,8 +292,12 @@ defmodule Hologram.DB.QueryCompiler do
     {target_id_sql, new_params}
   end
 
+  # A derived companion is never read back - a reader recomputes it from the value beside it - so
+  # neither a row's column list nor an embedded row's object carries one.
   defp column_list(entity_mapping) do
-    Enum.map_join(entity_mapping.columns, ", ", &Mapper.quote_identifier(&1.name))
+    entity_mapping.columns
+    |> Enum.reject(&Mapper.derived?/1)
+    |> Enum.map_join(", ", &Mapper.quote_identifier(&1.name))
   end
 
   # A quantifier is a correlated subquery over the related rows its source leads to - see the
@@ -1195,7 +1200,9 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp jsonb_pairs(target_mapping, quoted_alias) do
-    Enum.map_join(target_mapping.columns, ", ", fn column ->
+    target_mapping.columns
+    |> Enum.reject(&Mapper.derived?/1)
+    |> Enum.map_join(", ", fn column ->
       "'#{column.name}', #{quoted_alias}.#{Mapper.quote_identifier(column.name)}"
     end)
   end

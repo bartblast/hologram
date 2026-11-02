@@ -244,7 +244,7 @@ defmodule Hologram.DB.MapperTest do
       companion =
         Module2
         |> columns()
-        |> List.last()
+        |> Enum.find(&(&1.source == {:sort_key, :c}))
 
       assert companion == %{
                name: "c_$sort",
@@ -261,14 +261,42 @@ defmodule Hologram.DB.MapperTest do
              }
     end
 
+    test "derives a search-key companion column for every string attribute" do
+      companion =
+        Module2
+        |> columns()
+        |> List.last()
+
+      assert companion == %{
+               name: "c_$search",
+               type: :string,
+               sql_type: "text",
+               collation: "C",
+               enum_values: nil,
+               default: nil,
+               null: true,
+               references: nil,
+               fk_constraint: nil,
+               index: nil,
+               source: {:search_key, :c}
+             }
+    end
+
     test "derives the companions in attribute-name order, server-only attributes included" do
       sources =
         Module15
         |> columns()
-        |> Enum.take(-3)
+        |> Enum.take(-6)
         |> Enum.map(& &1.source)
 
-      assert sources == [{:sort_key, :label}, {:sort_key, :secret_note}, {:sort_key, :token}]
+      assert sources == [
+               {:sort_key, :label},
+               {:sort_key, :secret_note},
+               {:sort_key, :token},
+               {:search_key, :label},
+               {:search_key, :secret_note},
+               {:search_key, :token}
+             ]
     end
 
     test "derives to-one relationship reference columns and excludes to-many relationships" do
@@ -464,17 +492,23 @@ defmodule Hologram.DB.MapperTest do
                :system,
                :system,
                :revisions,
-               {:sort_key, :name}
+               {:sort_key, :name},
+               {:search_key, :name}
              ]
 
       assert mapping[Module26].join_tables == []
       assert mapping[Module29].join_tables == []
     end
 
-    test "carries a sort-key companion for every string attribute" do
+    test "carries the derived companions for every string attribute" do
       mapping = derive!([Module2], [])
 
-      assert List.last(mapping[Module2].columns).source == {:sort_key, :c}
+      sources =
+        mapping[Module2].columns
+        |> Enum.take(-2)
+        |> Enum.map(& &1.source)
+
+      assert sources == [{:sort_key, :c}, {:search_key, :c}]
     end
 
     test "derives the role grant store alongside the app's user entity type" do
@@ -810,6 +844,20 @@ defmodule Hologram.DB.MapperTest do
       assert entity_type_column.enum_values == [
                "Nonexistent.Entities.NameFillingTheEnumLabelToItsVeryLastByteAb"
              ]
+    end
+  end
+
+  describe "derived?/1" do
+    test "is true for a sort-key companion" do
+      assert derived?(%{source: {:sort_key, :c}}) == true
+    end
+
+    test "is true for a search-key companion" do
+      assert derived?(%{source: {:search_key, :c}}) == true
+    end
+
+    test "is false for an attribute's own column" do
+      assert derived?(%{source: {:attribute, :c}}) == false
     end
   end
 

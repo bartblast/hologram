@@ -88,6 +88,7 @@ defmodule Hologram.DB.IntrospectionTest do
                "b" => %{type: "int8", collation: nil, null: true},
                "c" => %{type: "text", collation: "C", null: false},
                "c_$sort" => %{type: "text", collation: "C", null: true},
+               "c_$search" => %{type: "text", collation: "C", null: true},
                "created_at" => %{type: "timestamptz", collation: nil, null: false},
                "updated_at" => %{type: "timestamptz", collation: nil, null: false},
                "$revisions" => %{type: "jsonb", collation: nil, null: false}

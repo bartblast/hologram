@@ -1,5 +1,6 @@
 defmodule Hologram.Migration.SortKeyFillTest do
-  # The fill of a sort-key companion a migration adds to a table that already holds rows.
+  # The fill of the derived companions - a sort key and a search key - a migration adds to a table
+  # that already holds rows.
   #
   # The scratch tier is what makes the question askable. Under the sandbox every row a test
   # writes lives in the same never-committed transaction as the apply that is supposed to
@@ -88,6 +89,51 @@ defmodule Hologram.Migration.SortKeyFillTest do
         assert run([create, add_title], full_model, @context) == :ok
 
         assert task_rows(~s("title", "title_$sort")) == [["Zoe", "zoe"], ["Zoe", "zoe"]]
+      end)
+    end
+
+    test "fills the search key a migration adds to a table holding rows", %{
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        create =
+          migration("20260813091522", [
+            %{op: :create_entity, entity: MyApp.Task, line: 3},
+            %{
+              op: :add_attribute,
+              entity: MyApp.Task,
+              name: :priority,
+              type: :integer,
+              opts: [],
+              line: 4
+            }
+          ])
+
+        first_model = Model.fold(Model.empty(), create.ops)
+
+        assert run([create], first_model, @context) == :ok
+
+        insert_tasks("priority", [1])
+
+        long_title = String.duplicate("Zurich ", 10)
+
+        add_title =
+          migration("20260813142237", [
+            %{
+              op: :add_attribute,
+              entity: MyApp.Task,
+              name: :title,
+              type: :string,
+              opts: [backfill: long_title],
+              line: 3
+            }
+          ])
+
+        full_model = Model.fold(first_model, add_title.ops)
+
+        assert run([create, add_title], full_model, @context) == :ok
+
+        assert task_rows(~s("title_$search")) == [[String.downcase(long_title)]]
       end)
     end
 

@@ -71,7 +71,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [{:value, true}, {:value, 123}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s(WHERE "a" = $1 AND "b" = $2 ORDER BY "id" ASC)
              }
@@ -195,7 +195,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}, {:value, "text_1"}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s(WHERE "a" = $1 AND "c" = $2 ORDER BY "id" ASC)
              }
@@ -866,7 +866,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [{:value, true}, {:value, 3}, {:value, "x"}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s|WHERE (("a" = $1) OR ("b" >= $2 AND "c" = $3)) ORDER BY "id" ASC|
              }
@@ -1080,8 +1080,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       expected_fragment =
         ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
           ~s|'id', "$i1"."id", 'a', "$i1"."a", 'b', "$i1"."b", 'c', "$i1"."c", | <>
-          ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
-          ~s|'c_$sort', "$i1"."c_$sort"| <>
+          ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions"| <>
           ~s|) ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
           ~s|FROM (SELECT "$t1".* | <>
           ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "$t1" | <>
@@ -1410,8 +1409,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       expected_fragment =
         ~s|, 'b', (SELECT jsonb_build_object(| <>
           ~s|'id', "$i2"."id", 'a', "$i2"."a", 'b', "$i2"."b", 'c', "$i2"."c", | <>
-          ~s|'created_at', "$i2"."created_at", 'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions", | <>
-          ~s|'c_$sort', "$i2"."c_$sort"| <>
+          ~s|'created_at', "$i2"."created_at", 'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions"| <>
           ~s|) FROM "hologram_data"."test_fixtures_entity_module2" AS "$i2" | <>
           ~s|WHERE "$i2"."id" = "$i1"."b_id")|
 
@@ -1452,11 +1450,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", "name_$sort", | <>
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
                    ~s|'id', "$i1"."id", 'body', "$i1"."body", 'position', "$i1"."position", 'channel_id', "$i1"."channel_id", | <>
-                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
-                   ~s|'body_$sort', "$i1"."body_$sort") | <>
+                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|ORDER BY "$i1"."position" ASC, "$i1"."id" ASC), '[]'::jsonb) | <>
                    ~s|FROM (SELECT "$t1".* FROM "hologram_data"."test_fixtures_entity_module28" AS "$t1" | <>
                    ~s|WHERE "$t1"."channel_id" = "test_fixtures_entity_module26"."id" | <>
@@ -1476,11 +1473,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", "name_$sort", | <>
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT jsonb_build_object(| <>
                    ~s|'id', "$i1"."id", 'code', "$i1"."code", 'summary', "$i1"."summary", 'channel_id', "$i1"."channel_id", | <>
-                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
-                   ~s|'code_$sort', "$i1"."code_$sort", 'summary_$sort', "$i1"."summary_$sort") | <>
+                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module27" AS "$i1" | <>
                    ~s|WHERE "$i1"."channel_id" = "test_fixtures_entity_module26"."id") AS "topic" | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module26" ORDER BY "id" ASC|
@@ -1498,11 +1494,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", "name_$sort", | <>
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
                    ~s|'id', "$i1"."id", 'body', "$i1"."body", 'position', "$i1"."position", 'channel_id', "$i1"."channel_id", | <>
-                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
-                   ~s|'body_$sort', "$i1"."body_$sort") | <>
+                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
                    ~s|FROM (SELECT "$t1".* FROM "hologram_data"."test_fixtures_entity_module28" AS "$t1" | <>
                    ~s|WHERE "$t1"."id" IN (SELECT "$j1"."source_id" | <>
@@ -1542,14 +1537,14 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "selects the mapped columns in physical order" do
+    test "selects the mapped columns in physical order, leaving out the derived companions" do
       mapping = Mapper.derive!([Module2], [])
       term = Stage.normalize(Module2)
 
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id" ASC)
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id" ASC)
              }
     end
 

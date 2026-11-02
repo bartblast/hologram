@@ -20,7 +20,7 @@ defmodule Hologram.DB.Mapper do
   @doc """
   Returns the column definitions derived from the given entity type module, in physical order:
   id, declared attributes sorted by name, to-one relationship references sorted by name,
-  system timestamps, the framework's revisions column, sort-key companions.
+  system timestamps, the framework's revisions column, sort-key companions, search-key companions.
 
   Each definition is a map with :name (column name string), :type (the logical attribute type,
   as consumed by the codec), :sql_type (the SQL type name - a derived per-attribute enum type
@@ -42,6 +42,11 @@ defmodule Hologram.DB.Mapper do
   `{:sort_key, name}`) holding the attribute's derived sort key - the order both executors
   sort and compare the attribute by. It is a column like any other the mapping derives:
   migrations create, rename and drop it with its attribute.
+
+  Each :string attribute also derives a nullable, unindexed `<attribute>_$search` companion
+  (source `{:search_key, name}`) holding the attribute's search key: the whole folded value when
+  it is longer than the sort key keeps, nil otherwise. A loose search reads it, or the sort key
+  when it is nil, so a short string's folded value is stored once.
 
   Every table also carries a framework-owned `$revisions` column (source :revisions, type
   :map, a jsonb object): for each settable column - the attributes and the to-one references -
@@ -128,6 +133,15 @@ defmodule Hologram.DB.Mapper do
 
     mapping
   end
+
+  @doc """
+  Returns whether the given column definition is a companion derived from another column's
+  value - a sort key or a search key - rather than a field an entity holds.
+  """
+  @spec derived?(%{atom => any}) :: boolean
+  def derived?(%{source: {kind, _name}}) when kind in [:search_key, :sort_key], do: true
+
+  def derived?(_column), do: false
 
   @doc """
   Returns the given identifier unchanged when it fits the PostgreSQL identifier limit,
@@ -350,10 +364,12 @@ defmodule Hologram.DB.Mapper do
       end)
 
     sort_columns = sort_key_columns(table_name, entry.attributes)
+    search_columns = search_key_columns(table_name, entry.attributes)
 
     columns =
       [id_column() | attribute_columns] ++
-        to_one_columns ++ timestamp_columns() ++ [revisions_column()] ++ sort_columns
+        to_one_columns ++
+        timestamp_columns() ++ [revisions_column()] ++ sort_columns ++ search_columns
 
     validate_column_names!(entity_type, columns)
 
@@ -617,6 +633,27 @@ defmodule Hologram.DB.Mapper do
       index: nil,
       source: :revisions
     }
+  end
+
+  defp search_key_columns(table_name, attributes) do
+    attributes
+    |> Enum.filter(fn {_name, type, _opts} -> type == :string end)
+    |> Enum.sort()
+    |> Enum.map(fn {name, _type, _opts} ->
+      %{
+        name: fit_identifier("#{name}_$search"),
+        type: :string,
+        sql_type: sql_type(:string, table_name, name),
+        collation: collation(:string),
+        enum_values: nil,
+        default: nil,
+        null: true,
+        references: nil,
+        fk_constraint: nil,
+        index: nil,
+        source: {:search_key, name}
+      }
+    end)
   end
 
   defp sort_key_columns(table_name, attributes) do

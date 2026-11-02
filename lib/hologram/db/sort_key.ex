@@ -7,6 +7,8 @@ defmodule Hologram.DB.SortKey do
   # test/javascript/sort_key_test.mjs). Always update all four together: a rule
   # that holds on one tier and not the other sorts a client's own rows differently
   # from the server's, silently, and only for the values the rule touches.
+  # search_key/1 is the one function with no twin: only the server stores a search
+  # key, and the browser folds the value with fold when it searches.
   #
   # Computes practical-order sort keys for string attribute values - the derived
   # values that the `sort` stage's companion columns store and both tiers
@@ -77,11 +79,37 @@ defmodule Hologram.DB.SortKey do
   @spec compute(String.t()) :: String.t()
   def compute(value) do
     value
+    |> fold()
+    |> cap()
+  end
+
+  @doc """
+  Folds the given string value the way its sort key is folded - downcased, canonically
+  decomposed, with ignorable combining marks stripped and non-decomposable letters folded - and
+  keeps all of it. A loose search compares two strings by this.
+  """
+  @spec fold(String.t()) :: String.t()
+  def fold(value) do
+    value
     |> String.downcase()
     |> :unicode.characters_to_nfd_binary()
     |> strip_combining_marks()
     |> fold_letters()
-    |> cap()
+  end
+
+  @doc """
+  Returns the search key of the given string value - its whole folded form when that is longer
+  than the sort key keeps, nil otherwise. A search reads the search key, or the sort key when there
+  is none, so the pair always yields the whole folded value while a short string stores it once.
+
+  The length that counts is the folded one, not the value's: folding can grow a string (a Hangul
+  syllable decomposes into two or three jamo), so a value within the cap can fold past it.
+  """
+  @spec search_key(String.t()) :: String.t() | nil
+  def search_key(value) do
+    folded = fold(value)
+
+    if byte_size(folded) > @max_key_bytes, do: folded, else: nil
   end
 
   @doc """

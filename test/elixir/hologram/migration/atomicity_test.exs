@@ -162,10 +162,12 @@ defmodule Hologram.Migration.AtomicityTest do
         assert task_columns() == [
                  "$revisions",
                  "amount",
+                 "amount_$search",
                  "amount_$sort",
                  "created_at",
                  "id",
                  "title",
+                 "title_$search",
                  "title_$sort",
                  "updated_at"
                ]
@@ -216,10 +218,12 @@ defmodule Hologram.Migration.AtomicityTest do
         assert task_columns() == [
                  "$revisions",
                  "amount",
+                 "amount_$search",
                  "amount_$sort",
                  "created_at",
                  "id",
                  "title",
+                 "title_$search",
                  "title_$sort",
                  "updated_at"
                ]
@@ -267,12 +271,15 @@ defmodule Hologram.Migration.AtomicityTest do
         assert task_columns() == [
                  "$revisions",
                  "amount",
+                 "amount_$search",
                  "amount_$sort",
                  "created_at",
                  "id",
                  "note",
+                 "note_$search",
                  "note_$sort",
                  "title",
+                 "title_$search",
                  "title_$sort",
                  "updated_at"
                ]
