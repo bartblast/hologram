@@ -74,7 +74,9 @@ defmodule Hologram.Query.WindowTest do
             {[:b, :c], :in, ["x", "y"]},
             {[:b, :c], :not_in, [nil, "x"]},
             {[:b, :b], :>, 3},
-            {[:b, :b], :<, {:attribute, [:c, :id]}}
+            {[:b, :b], :<, {:attribute, [:c, :id]}},
+            {[:b, :c], :contains, "x"},
+            {[:b, :c], :starts_with_exact, "x"}
           ] do
         assert derive(term(Module3, [predicate]), false).filter == [predicate]
       end
@@ -155,7 +157,8 @@ defmodule Hologram.Query.WindowTest do
         {:b, :<, {:placeholder, :upper}},
         {:b, :>, {:placeholder, :lower}},
         {:b, :in, {:placeholder, :allowed}},
-        {:b, :not_in, {:placeholder, :denied}}
+        {:b, :not_in, {:placeholder, :denied}},
+        {:c, :starts_with, {:placeholder, :query}}
       ]
 
       window = derive(term(Module2, filter), false)

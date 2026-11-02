@@ -41,7 +41,19 @@ defmodule Hologram.Query do
   # quantifier the related row - or one of the row the given number of quantifiers out.
   @type name :: atom | path | {:outer, pos_integer, atom | path}
 
-  @type operator :: :!= | :< | :<= | :== | :> | :>= | :in | :not_in
+  @type operator ::
+          :!=
+          | :<
+          | :<=
+          | :==
+          | :>
+          | :>=
+          | :contains
+          | :contains_exact
+          | :in
+          | :not_in
+          | :starts_with
+          | :starts_with_exact
 
   @type ordering :: {atom | placeholder, :asc | :desc | placeholder}
 
@@ -185,6 +197,7 @@ defmodule Hologram.Query do
       `due_on <= project.ends_on`
     * a membership - `status in [:todo, :doing]`, `priority in 3..5`, `status in ^statuses`,
       `status not in [:done]`
+    * a search - `starts_with(username, ^query)`, `contains(body, "invoice")` - see below
     * comparisons and memberships joined with `and`
     * alternatives joined with `or` - `owner_id == ^owner_id or shared == true` - where `and`
       binds tighter than `or` and parentheses group, as Elixir reads them: `a and b or c` is
@@ -198,7 +211,9 @@ defmodule Hologram.Query do
       `{:attribute, name}` tuples naming another attribute of the row, bare or as the operand of
       a comparison operator (`[due_on: {:<, {:attribute, :starts_on}}]`), where a path is the
       list of its names, as a key or inside an attribute tuple (`[{[:project, :archived], false}]`),
-      and where an `or:` entry holding two or more predicate lists is a disjunction, any one of
+      and where a search is an operator tuple of `:starts_with`, `:contains`, `:starts_with_exact`
+      or `:contains_exact` (`[username: {:starts_with, query}]`), and where an `or:` entry
+      holding two or more predicate lists is a disjunction, any one of
       which has to hold (`[status: :todo, or: [[owner_id: id], [shared: true]]]`), and where an
       `any:`, `none:` or `all:` entry pairing a list of relationships with a predicate list about
       one related row is a quantifier (`[any: {[:messages], [author_id: id]}]`), inside which
@@ -255,6 +270,20 @@ defmodule Hologram.Query do
   is not among the rows, and the rows a quantifier reads are downloaded and kept current with the
   query, so a change to one re-evaluates it.
 
+  A search asks whether a string attribute starts with a term or contains it. By default it
+  ignores case and accents the way `sort` does, so `starts_with(name, "jose")` finds "José" and
+  "JOSEPH", and `contains(body, "strasse")` finds "Straße". `match: :exact` matches the stored
+  value byte for byte instead, for codes and ids: `starts_with(code, ^prefix, match: :exact)`.
+  `%` and `_` are plain characters, an empty term matches every row with a value, and a row with
+  no value never matches. The term is a literal, a pinned value, or another string attribute or
+  path, as for a comparison. A pinned term doesn't narrow what the client downloads: it receives
+  every row the rest of the filter matches and searches those, so data that stays on the server is
+  searched from a command.
+
+      User |> filter(starts_with(username, ^query)) |> sort(username) |> take(5)
+      Message |> filter(contains(body, ^query))
+      Order |> filter(starts_with(code, ^prefix, match: :exact))
+
   Two attributes compare when they have the same type, or when one widens to the other - an
   integer to a float, compared as floats. Two enums compare when they declare the same values in
   the same order, and an attribute never compares with itself. Nil keeps its meaning: `owner_id ==
@@ -296,7 +325,8 @@ defmodule Hologram.Query do
   a to-many relationship or an inverse set, when `{:outer, levels, name}` reaches past the queried
   row, when a disjunction holds fewer than two predicate lists or one of them is empty or not such
   a list, when a comparison names an attribute with itself or
-  two attributes that do not compare, or when a value is invalid for its attribute or its operator
+  two attributes that do not compare, when a search names an attribute that isn't a string or its
+  term isn't a string, or when a value is invalid for its attribute or its operator
   - a pinned keyword value holding a list, a tuple or a range is refused as an equality operand,
   since membership and comparisons are written as expressions.
   """

@@ -21,6 +21,7 @@ defmodule Hologram.Query.Stage do
   @orderable_types [:date, :datetime, :enum, :float, :integer, :string, :time]
   @ordering_operators [:<, :<=, :>, :>=]
   @quantifiers [:all, :any, :none]
+  @search_operators [:contains, :contains_exact, :starts_with, :starts_with_exact]
 
   # The type pairs whose attributes compare though their types differ, compared on the wider type -
   # a widening keeps the value's meaning. An integer is the same number as a float. A date is not a
@@ -482,6 +483,10 @@ defmodule Hologram.Query.Stage do
       validate_orderable_attribute!(name, entity_type, operator)
     end
 
+    if operator in @search_operators do
+      validate_searchable_attribute!(name, entity_type, operator)
+    end
+
     other_type = name_type!(scope, other)
 
     validate_operand_name!(other, other_type)
@@ -933,6 +938,10 @@ defmodule Hologram.Query.Stage do
         validate_orderable_attribute!(name, entity_type, operator)
         [{name, operator, {:placeholder, placeholder_name}}]
 
+      operator in @search_operators ->
+        validate_searchable_attribute!(name, entity_type, operator)
+        [{name, operator, {:placeholder, placeholder_name}}]
+
       true ->
         raise_unknown_operator!(operator, name)
     end
@@ -945,7 +954,8 @@ defmodule Hologram.Query.Stage do
   end
 
   defp predicate_triples!(name, {operator, {:attribute, other}}, entity_type, scope)
-       when (operator in @equality_operators or operator in @ordering_operators) and
+       when (operator in @equality_operators or operator in @ordering_operators or
+               operator in @search_operators) and
               (is_atom(other) or is_list(other) or
                  (is_tuple(other) and tuple_size(other) == 3 and elem(other, 0) == :outer)) do
     [attribute_triple!(name, operator, other, entity_type, scope)]
@@ -976,6 +986,9 @@ defmodule Hologram.Query.Stage do
 
       operator in @ordering_operators ->
         [ordering_triple!(name, operator, operand, entity_type)]
+
+      operator in @search_operators ->
+        [search_triple!(name, operator, operand, entity_type)]
 
       true ->
         raise_unknown_operator!(operator, name)
@@ -1116,7 +1129,7 @@ defmodule Hologram.Query.Stage do
   defp raise_unknown_operator!(operator, name) do
     raise ArgumentError,
       message:
-        "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect_name(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
+        "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect_name(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact"
   end
 
   # The known relationships are the ones the position takes: to-one ones before the set, every
@@ -1232,6 +1245,20 @@ defmodule Hologram.Query.Stage do
       entry ->
         attribute_triples!(scope, entry)
     end)
+  end
+
+  # A search term is matched as text, so it is a string - a nil term has no text to look for, and a
+  # list, a range or a tuple is another operator's operand.
+  defp search_triple!(name, operator, operand, entity_type) do
+    validate_searchable_attribute!(name, entity_type, operator)
+
+    if not is_binary(operand) do
+      raise ArgumentError,
+        message:
+          "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)} - a search term is a string"
+    end
+
+    {name, operator, operand}
   end
 
   defp set_view_bound!(query, field, %Placeholder{name: placeholder_name}) do
@@ -1738,6 +1765,18 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError,
           message:
             "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships: #{known}"
+    end
+  end
+
+  # A search matches text, so it reads a string attribute - its value, or its folded form for a
+  # loose match.
+  defp validate_searchable_attribute!(name, entity_type, operator) do
+    type = attribute_type(entity_type, name)
+
+    if type != :string do
+      raise ArgumentError,
+        message:
+          "operator #{inspect(operator)} requires a string attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
     end
   end
 

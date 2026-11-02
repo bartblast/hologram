@@ -1295,7 +1295,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an unknown operator" do
       expected_msg =
-        "unknown operator :like in the filter predicate for attribute :b - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
+        "unknown operator :like in the filter predicate for attribute :b - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: {:like, "x"})
@@ -1304,7 +1304,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an unknown operator with a placeholder operand" do
       expected_msg =
-        "unknown operator :like in the filter predicate for attribute :b - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
+        "unknown operator :like in the filter predicate for attribute :b - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module2, b: {:like, %Placeholder{name: :x}})
@@ -1688,6 +1688,129 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [any: {{:outer, 2, [:messages]}, []}]})
+      end
+    end
+  end
+
+  describe "filter/2 - searches" do
+    test "builds a search triple" do
+      query = filter(Module2, c: {:starts_with, "ab"})
+
+      assert query.filter == [{:c, :starts_with, "ab"}]
+    end
+
+    test "builds a search triple for a path" do
+      query = filter(Module3, [{[:b, :c], {:contains, "ab"}}])
+
+      assert query.filter == [{[:b, :c], :contains, "ab"}]
+    end
+
+    test "builds a search triple inside a quantifier, searching for a row above's attribute" do
+      query =
+        filter(Module26,
+          any: {[:messages], [body: {:contains, {:attribute, {:outer, 1, :name}}}]}
+        )
+
+      assert query.filter == [
+               {:any, {[:messages], [{:body, :contains, {:attribute, {:outer, 1, :name}}}]}}
+             ]
+    end
+
+    test "builds a search triple searching for another string attribute" do
+      query = filter(Module28, body: {:contains, {:attribute, [:channel, :name]}})
+
+      assert query.filter == [{:body, :contains, {:attribute, [:channel, :name]}}]
+    end
+
+    test "builds a search triple under each search operator" do
+      for operator <- [:contains, :contains_exact, :starts_with, :starts_with_exact] do
+        query = filter(Module2, c: {operator, "ab"})
+
+        assert query.filter == [{:c, operator, "ab"}]
+      end
+    end
+
+    test "builds a search triple with a placeholder term" do
+      query = filter(Module2, c: {:starts_with, %Placeholder{name: :query}})
+
+      assert query.filter == [{:c, :starts_with, {:placeholder, :query}}]
+    end
+
+    test "builds a search triple with an empty term" do
+      query = filter(Module2, c: {:contains, ""})
+
+      assert query.filter == [{:c, :contains, ""}]
+    end
+
+    test "raises on a list as a search term" do
+      expected_msg =
+        ~s(invalid operand ["ab"] for operator :contains on attribute :c - a search term is a string)
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, c: {:contains, ["ab"]})
+      end
+    end
+
+    test "raises on a nil search term" do
+      expected_msg =
+        "invalid operand nil for operator :starts_with on attribute :c - a search term is a string"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, c: {:starts_with, nil})
+      end
+    end
+
+    test "raises on a range as a search term" do
+      expected_msg =
+        "invalid operand 1..2 for operator :contains on attribute :c - a search term is a string"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, c: {:contains, 1..2})
+      end
+    end
+
+    test "raises on a search for an attribute of another type" do
+      expected_msg =
+        "operator :contains compares attribute :c with attribute :b in Hologram.Test.Fixtures.Entity.Module2, which have different types (:string and :integer) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, c: {:contains, {:attribute, :b}})
+      end
+    end
+
+    test "raises on a search for the attribute itself" do
+      expected_msg =
+        "operator :starts_with compares attribute :c in Hologram.Test.Fixtures.Entity.Module2 with itself"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, c: {:starts_with, {:attribute, :c}})
+      end
+    end
+
+    test "raises on a search on an attribute that is not a string" do
+      expected_msg =
+        "operator :starts_with requires a string attribute - attribute :b in Hologram.Test.Fixtures.Entity.Module2 has type :integer"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: {:starts_with, "1"})
+      end
+    end
+
+    test "raises on a search with a placeholder term on an attribute that is not a string" do
+      expected_msg =
+        "operator :contains requires a string attribute - attribute :b in Hologram.Test.Fixtures.Entity.Module2 has type :integer"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, b: {:contains, %Placeholder{name: :query}})
+      end
+    end
+
+    test "raises on a tuple as a search term" do
+      expected_msg =
+        "invalid operand {:a, :b} for operator :starts_with on attribute :c - a search term is a string"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module2, c: {:starts_with, {:a, :b}})
       end
     end
   end

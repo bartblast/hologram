@@ -1978,7 +1978,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.throw(
         () => filter(task, predicates([["title", value]])),
         HologramBoxedError,
-        "unknown operator :like in the filter predicate for attribute :title - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in",
+        "unknown operator :like in the filter predicate for attribute :title - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact",
       );
     });
 
@@ -2747,6 +2747,208 @@ describe("Elixir_Hologram_Query_Stage", () => {
         assertBoxedError(call, "ArgumentError", message);
       });
     }
+  });
+
+  describe("filter/2 - searches", () => {
+    const path = (...names) => Type.list(names.map(Type.atom));
+
+    const placeholder = (name) =>
+      Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Query.Placeholder")],
+        [Type.atom("name"), Type.atom(name)],
+      ]);
+
+    const attribute = (name) => Type.tuple([Type.atom("attribute"), name]);
+
+    const search = (operator, operand) =>
+      Type.tuple([Type.atom(operator), operand]);
+
+    it("builds a search triple", () => {
+      const query = filter(
+        task,
+        predicates([["title", search("starts_with", Type.bitstring("ab"))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["title", "starts_with", "ab"]]);
+    });
+
+    it("builds a search triple for a path", () => {
+      const query = filter(
+        project,
+        Type.list([
+          Type.tuple([
+            path("owner", "email"),
+            search("contains", Type.bitstring("ab")),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        [["owner", "email"], "contains", "ab"],
+      ]);
+    });
+
+    it("builds a search triple inside a quantifier, searching for a row above's attribute", () => {
+      const outerName = Type.tuple([
+        Type.atom("outer"),
+        Type.integer(1),
+        Type.atom("name"),
+      ]);
+
+      const condition = predicates([
+        ["body", search("contains", attribute(outerName))],
+      ]);
+
+      const value = Type.tuple([Type.list([Type.atom("messages")]), condition]);
+
+      const query = filter(
+        Type.alias(CHANNEL),
+        Type.list([Type.tuple([Type.atom("any"), value])]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "contains", {attribute: {name: "name", outer: 1}}]],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("builds a search triple searching for another string attribute", () => {
+      const query = filter(
+        project,
+        predicates([
+          ["name", search("contains", attribute(path("owner", "email")))],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["name", "contains", {attribute: ["owner", "email"]}],
+      ]);
+    });
+
+    it("builds a search triple under each search operator", () => {
+      for (const operator of [
+        "contains",
+        "contains_exact",
+        "starts_with",
+        "starts_with_exact",
+      ]) {
+        const query = filter(
+          task,
+          predicates([["title", search(operator, Type.bitstring("ab"))]]),
+        );
+
+        assert.deepStrictEqual(query.filter, [["title", operator, "ab"]]);
+      }
+    });
+
+    it("builds a search triple with a placeholder term", () => {
+      const query = filter(
+        task,
+        predicates([["title", search("starts_with", placeholder("query"))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["title", "starts_with", {placeholder: "query"}],
+      ]);
+    });
+
+    it("builds a search triple with an empty term", () => {
+      const query = filter(
+        task,
+        predicates([["title", search("contains", Type.bitstring(""))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["title", "contains", ""]]);
+    });
+
+    it("raises on a list as a search term", () => {
+      const value = search("contains", Type.list([Type.bitstring("ab")]));
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        'invalid operand ["ab"] for operator :contains on attribute :title - a search term is a string',
+      );
+    });
+
+    it("raises on a nil search term", () => {
+      const value = search("starts_with", Type.nil());
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        "invalid operand nil for operator :starts_with on attribute :title - a search term is a string",
+      );
+    });
+
+    it("raises on a range as a search term", () => {
+      const range = Type.map([
+        [Type.atom("__struct__"), Type.alias("Range")],
+        [Type.atom("first"), Type.integer(1)],
+        [Type.atom("last"), Type.integer(2)],
+        [Type.atom("step"), Type.integer(1)],
+      ]);
+
+      assert.throw(
+        () => filter(task, predicates([["title", search("contains", range)]])),
+        HologramBoxedError,
+        "invalid operand 1..2 for operator :contains on attribute :title - a search term is a string",
+      );
+    });
+
+    it("raises on a search for an attribute of another type", () => {
+      const value = search("contains", attribute(Type.atom("position")));
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        "operator :contains compares attribute :title with attribute :position in MyApp.Task, which have different types (:string and :integer) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
+      );
+    });
+
+    it("raises on a search for the attribute itself", () => {
+      const value = search("starts_with", attribute(Type.atom("title")));
+
+      assert.throw(
+        () => filter(task, predicates([["title", value]])),
+        HologramBoxedError,
+        "operator :starts_with compares attribute :title in MyApp.Task with itself",
+      );
+    });
+
+    it("raises on a search on an attribute that is not a string", () => {
+      const value = search("starts_with", Type.bitstring("1"));
+
+      assert.throw(
+        () => filter(task, predicates([["position", value]])),
+        HologramBoxedError,
+        "operator :starts_with requires a string attribute - attribute :position in MyApp.Task has type :integer",
+      );
+    });
+
+    it("raises on a search with a placeholder term on an attribute that is not a string", () => {
+      const value = search("contains", placeholder("query"));
+
+      assert.throw(
+        () => filter(task, predicates([["position", value]])),
+        HologramBoxedError,
+        "operator :contains requires a string attribute - attribute :position in MyApp.Task has type :integer",
+      );
+    });
+
+    it("raises on a tuple as a search term", () => {
+      const tuple = Type.tuple([Type.atom("a"), Type.atom("b")]);
+
+      assert.throw(
+        () =>
+          filter(task, predicates([["title", search("starts_with", tuple)]])),
+        HologramBoxedError,
+        "invalid operand {:a, :b} for operator :starts_with on attribute :title - a search term is a string",
+      );
+    });
   });
 
   describe("include/3", () => {

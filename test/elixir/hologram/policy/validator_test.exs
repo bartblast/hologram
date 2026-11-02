@@ -1007,7 +1007,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture5 - unknown operator :like in the filter predicate for attribute :title - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture5 - unknown operator :like in the filter predicate for attribute :title - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture5], [])
@@ -1150,6 +1150,35 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       assert validate_model!([InlinePolicyFixture34], []) == :ok
+    end
+
+    test "accepts a search in a condition" do
+      defmodule InlinePolicyFixture84 do
+        use Hologram.Entity
+
+        attribute :path, :string
+
+        allow :read, when: starts_with(path, "public/", match: :exact)
+      end
+
+      assert validate_model!([InlinePolicyFixture84], []) == :ok
+    end
+
+    test "rejects a search on an attribute that is not a string" do
+      defmodule InlinePolicyFixture85 do
+        use Hologram.Entity
+
+        attribute :priority, :integer
+
+        allow :read, when: ^[priority: {:starts_with, "1"}]
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture85 - operator :starts_with requires a string attribute - attribute :priority in Hologram.Policy.ValidatorTest.InlinePolicyFixture85 has type :integer"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture85], [])
+      end
     end
 
     test "rejects a non-read predicate over a server-only attribute" do

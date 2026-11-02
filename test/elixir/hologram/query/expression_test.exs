@@ -129,6 +129,11 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_condition("priority < ^max", max: 3) == [priority: {:<, 3}]
     end
 
+    test "lowers a search" do
+      assert lower_condition(~s|starts_with(path, "public/", match: :exact)|) ==
+               [path: {:starts_with_exact, "public/"}]
+    end
+
     test "lowers an inequality with user_id()" do
       assert lower_condition("owner_id != user_id()") == [owner_id: {:!=, {:actor}}]
     end
@@ -151,9 +156,15 @@ defmodule Hologram.Query.ExpressionTest do
                [priority: {:>=, 3}]
     end
 
+    test "raises on String.starts_with?/2" do
+      assert_error Hologram.CompileError,
+                   ~s|lib/my_app/queries.ex:12: String.starts_with?/2 isn't available in a condition - write starts_with(path, "public/"), which ignores case and accents, or starts_with(path, "public/", match: :exact) to match byte for byte|,
+                   fn -> lower_condition(~s|String.starts_with?(path, "public/")|) end
+    end
+
     test "raises on a bare name alone" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a condition: done - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a condition: done - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
                    fn -> lower_condition("done") end
     end
 
@@ -219,7 +230,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a quantifier" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a condition: any(member <- members, member.user_id == user_id()) - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a condition: any(member <- members, member.user_id == user_id()) - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
                    fn ->
                      lower_condition("any(member <- members, member.user_id == user_id())")
                    end
@@ -227,7 +238,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on nil" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: unsupported expression in a condition: nil - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:7: unsupported expression in a condition: nil - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
                    fn -> lower_condition("nil") end
     end
 
@@ -239,7 +250,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on true" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: unsupported expression in a condition: true - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:7: unsupported expression in a condition: true - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
                    fn -> lower_condition("true") end
     end
 
@@ -751,6 +762,49 @@ defmodule Hologram.Query.ExpressionTest do
                ]
     end
 
+    test "lowers a search" do
+      assert lower_predicates("starts_with(username, ^query)", query: "jo") ==
+               [username: {:starts_with, "jo"}]
+    end
+
+    test "lowers a search for a substring" do
+      assert lower_predicates(~s|contains(body, "invoice")|) == [body: {:contains, "invoice"}]
+    end
+
+    test "lowers a search for another attribute" do
+      assert lower_predicates("starts_with(email, username)") ==
+               [email: {:starts_with, {:attribute, :username}}]
+    end
+
+    test "lowers a search inside a quantifier's condition" do
+      assert lower_predicates("any(message <- messages, contains(message.body, ^query))",
+               query: "hi"
+             ) == [any: {[:messages], [body: {:contains, "hi"}]}]
+    end
+
+    test "lowers a search joined with a comparison" do
+      assert lower_predicates(~s|starts_with(username, "jo") and active == true|) ==
+               [username: {:starts_with, "jo"}, active: {:==, true}]
+    end
+
+    test "lowers a search on a path" do
+      assert lower_predicates(~s|starts_with(author.username, "jo")|) ==
+               [{[:author, :username], {:starts_with, "jo"}}]
+    end
+
+    test "lowers a search with match: :exact" do
+      assert lower_predicates(~s|starts_with(code, "AB-", match: :exact)|) ==
+               [code: {:starts_with_exact, "AB-"}]
+
+      assert lower_predicates(~s|contains(code, "-1", match: :exact)|) ==
+               [code: {:contains_exact, "-1"}]
+    end
+
+    test "lowers a search with match: :loose" do
+      assert lower_predicates(~s|starts_with(username, "jo", match: :loose)|) ==
+               [username: {:starts_with, "jo"}]
+    end
+
     test "lowers a two-hop path" do
       assert lower_predicates("channel.org.name == ^org_name", org_name: "acme") ==
                [{[:channel, :org, :name], {:==, "acme"}}]
@@ -795,6 +849,20 @@ defmodule Hologram.Query.ExpressionTest do
                [priority: {:>=, 3}]
     end
 
+    test "raises on String.contains?/2" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: String.contains?/2 isn't available in a filter - write contains(body, ^query), which ignores case and accents, or contains(body, ^query, match: :exact) to match byte for byte",
+                   fn -> lower_predicates("String.contains?(body, ^query)", query: "hi") end
+    end
+
+    test "raises on String.starts_with?/2" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: String.starts_with?/2 isn't available in a filter - write starts_with(username, ^query), which ignores case and accents, or starts_with(username, ^query, match: :exact) to match byte for byte",
+                   fn ->
+                     lower_predicates("String.starts_with?(username, ^query)", query: "jo")
+                   end
+    end
+
     test "raises on __DIR__ as a comparison operand" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute, a path or a pinned expression, got: __DIR__ - a value from the surrounding code is pinned: ^__DIR__",
@@ -815,7 +883,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a bare name alone" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a filter: done - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a filter: done - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
                    fn -> lower_predicates("done") end
     end
 
@@ -913,7 +981,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a call as the whole argument" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a filter: open_predicates() - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a filter: open_predicates() - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
                    fn -> lower_predicates("open_predicates()") end
     end
 
@@ -984,7 +1052,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a negated disjunction" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a filter: not (a == 1 or b == 2) - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a filter: not (a == 1 or b == 2) - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
                    fn -> lower_predicates("not (a == 1 or b == 2)") end
     end
 
@@ -996,7 +1064,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a negation that is not a membership" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a filter: not done - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a filter: not done - a filter is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
                    fn -> lower_predicates("not done") end
     end
 
@@ -1110,6 +1178,50 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("priority not in 3..5") end
     end
 
+    test "raises on a search as a list entry" do
+      assert_error Hologram.CompileError,
+                   ~s|lib/my_app/queries.ex:12: a keyword predicate is attribute: value, got: starts_with(username, "jo") - join comparisons with and|,
+                   fn -> lower_predicates(~s|[starts_with(username, "jo"), active == true]|) end
+    end
+
+    test "raises on a search operator tuple as a keyword value" do
+      assert_error Hologram.CompileError,
+                   ~s|lib/my_app/queries.ex:7: a keyword predicate is an equality, got: [username: {:starts_with, "jo"}] - write it as an expression: starts_with(username, "jo")|,
+                   fn -> lower_predicates(~s|[username: {:starts_with, "jo"}]|) end
+    end
+
+    test "raises on a search with a match value other than :loose or :exact" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: starts_with takes one option, match: :loose (the default) or match: :exact, got: [match: :strict]",
+                   fn -> lower_predicates(~s|starts_with(code, "AB", match: :strict)|) end
+    end
+
+    test "raises on a search with a pinned match value" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: starts_with takes its match option written in place, got: match: ^mode - the mode decides what the query reads, so write match: :loose or match: :exact",
+                   fn ->
+                     lower_predicates(~s|starts_with(code, "AB", match: ^mode)|, mode: :exact)
+                   end
+    end
+
+    test "raises on a search with a pinned option" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: starts_with takes its match option written in place, got: ^opts - the mode decides what the query reads, so write match: :loose or match: :exact",
+                   fn -> lower_predicates(~s|starts_with(code, "AB", ^opts)|, opts: []) end
+    end
+
+    test "raises on a search with an option other than match" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: contains takes one option, match: :loose (the default) or match: :exact, got: [case: :exact]",
+                   fn -> lower_predicates(~s|contains(code, "AB", case: :exact)|) end
+    end
+
+    test "raises on a search without a term" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: starts_with takes an attribute, a search term and, optionally, match: :exact - starts_with(name, ^term) or starts_with(name, ^term, match: :exact) - got: starts_with(code)",
+                   fn -> lower_predicates("starts_with(code)") end
+    end
+
     test "raises on a sigil as a comparison operand" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute, a path or a pinned expression, got: ~D[2026-01-01] - a value from the surrounding code is pinned: ^~D[2026-01-01]",
@@ -1144,6 +1256,12 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: all takes a condition - all over no condition says nothing, got: all(tasks) - write all(row <- tasks, row.<attribute> == ...)",
                    fn -> lower_predicates("all(tasks)") end
+    end
+
+    test "raises on an exact search operator tuple as a keyword value" do
+      assert_error Hologram.CompileError,
+                   ~s|lib/my_app/queries.ex:7: a keyword predicate is an equality, got: [code: {:contains_exact, "-1"}] - write it as an expression: contains(code, "-1", match: :exact)|,
+                   fn -> lower_predicates(~s|[code: {:contains_exact, "-1"}]|) end
     end
 
     test "raises on an operator expression as a comparison operand" do
