@@ -2137,4 +2137,115 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
   end
+
+  describe "compile/2 - searches" do
+    test "compiles a loose search to a LIKE over the search key, or the sort key without one" do
+      mapping = Mapper.derive!([Module2], [])
+      term = %{Stage.normalize(Module2) | filter: [{:c, :starts_with, "José"}]}
+
+      assert %{params: [{:value, "jose%"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s| WHERE COALESCE("c_$search", "c_$sort") LIKE $1|)
+    end
+
+    test "compiles an exact search to a LIKE over the value" do
+      mapping = Mapper.derive!([Module2], [])
+      term = %{Stage.normalize(Module2) | filter: [{:c, :contains_exact, "Jo"}]}
+
+      assert %{params: [{:value, "%Jo%"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s| WHERE "c" LIKE $1|)
+    end
+
+    test "escapes % and _ in a term" do
+      mapping = Mapper.derive!([Module2], [])
+      term = %{Stage.normalize(Module2) | filter: [{:c, :contains_exact, "50%_"}]}
+
+      assert %{params: [{:value, "%50\\%\\_%"}]} = compile(term, mapping)
+    end
+
+    test "binds a placeholder term as a pattern slot" do
+      mapping = Mapper.derive!([Module2], [])
+      term = %{Stage.normalize(Module2) | filter: [{:c, :starts_with, {:placeholder, :query}}]}
+
+      assert %{params: [{:placeholder, :query, {:pattern, :prefix, :loose}}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(sql, ~s| WHERE COALESCE("c_$search", "c_$sort") LIKE $1|)
+    end
+
+    test "reads a loose search on a path through the related row's keys" do
+      mapping = path_mapping([Module1, Module2, Module3])
+      term = path_term(Module3, [{[:b, :c], {:contains, "x"}}])
+
+      assert %{params: [{:value, "%x%"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE (SELECT COALESCE("$p1"."c_$search", "$p1"."c_$sort") FROM #{table(Module2)} AS "$p1" | <>
+                 ~s|WHERE "$p1"."id" = "test_fixtures_entity_module3"."b_id") LIKE $1|
+             )
+    end
+
+    test "compiles a search for another attribute to where its value first occurs" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module28, body: {:contains, {:attribute, [:channel, :name]}})
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE strpos(COALESCE("body_$search", "body_$sort"), | <>
+                 ~s|(SELECT COALESCE("$p1"."name_$search", "$p1"."name_$sort") FROM #{table(Module26)} AS "$p1" | <>
+                 ~s|WHERE "$p1"."id" = "test_fixtures_entity_module28"."channel_id")) > 0|
+             )
+    end
+
+    test "compiles an exact prefix search for a row above's attribute inside a quantifier" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module26,
+          any: {[:messages], [body: {:starts_with_exact, {:attribute, {:outer, 1, :name}}}]}
+        )
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND strpos("body", "test_fixtures_entity_module26"."name") = 1)|
+             )
+    end
+
+    test "reads a loose search for a row above's attribute through that row's keys" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module26,
+          any: {[:messages], [body: {:contains, {:attribute, {:outer, 1, :name}}}]}
+        )
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND strpos(COALESCE("body_$search", "body_$sort"), | <>
+                 ~s|COALESCE("test_fixtures_entity_module26"."name_$search", "test_fixtures_entity_module26"."name_$sort")) > 0)|
+             )
+    end
+  end
+
+  describe "search_pattern/3" do
+    test "folds the term of a loose search" do
+      assert search_pattern("José", :prefix, :loose) == "jose%"
+    end
+
+    test "keeps the term of an exact search" do
+      assert search_pattern("José", :infix, :exact) == "%José%"
+    end
+
+    test "escapes a backslash, % and _" do
+      assert search_pattern("a\\b%c_d", :prefix, :exact) == "a\\\\b\\%c\\_d%"
+    end
+  end
 end

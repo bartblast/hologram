@@ -285,6 +285,11 @@ defmodule Hologram.DB.QueryRunner do
   # column's own pair is.
   defp encode_param!(value, _name, :sort_key), do: SortKey.compute(value)
 
+  # A search term binds as the pattern its LIKE matches, escaped and folded the way a written-out
+  # term is at compilation.
+  defp encode_param!(value, _name, {:pattern, shape, mode}),
+    do: QueryCompiler.search_pattern(value, shape, mode)
+
   defp encode_param!(value, _name, type), do: Codec.encode(value, type)
 
   defp expected_description(:enum, opts) do

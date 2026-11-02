@@ -11,6 +11,14 @@ defmodule Hologram.DB.QueryCompiler do
 
   @quantifiers [:all, :any, :none]
 
+  # Each search operator as the shape of the pattern it matches and how it matches the bytes.
+  @search_operators %{
+    contains: {:infix, :loose},
+    contains_exact: {:infix, :exact},
+    starts_with: {:prefix, :loose},
+    starts_with_exact: {:prefix, :exact}
+  }
+
   @doc """
   Compiles the given normalized query term into a SQL statement using the given
   physical name mapping.
@@ -82,6 +90,15 @@ defmodule Hologram.DB.QueryCompiler do
   ("b_$sort", "b")`, and an enum operand is cast to the compared attribute's enum type by
   label.
 
+  A search compiles to a LIKE: an exact one over the column, a loose one over
+  `COALESCE("a_$search", "a_$sort")` - the whole folded value, which the search key holds when the
+  sort key's prefix can't. The term binds as a pattern, folded for a loose match and with `\\`, `%`
+  and `_` escaped, so they are plain characters - a placeholder term binds a
+  `{:pattern, :prefix | :infix, :exact | :loose}` slot the runner builds the pattern for. A search
+  for another attribute's value can't be a pattern, so it compiles to `strpos`: `= 1` for a
+  prefix, `> 0` for a substring. NULL on either side matches no row, and an empty term or value
+  matches every row with a value.
+
   A path - on either side of a comparison - compiles to nested scalar subqueries, one per
   relationship it follows, each aliased `"$p<n>"` and correlated on the row before it, the
   innermost selecting the column the path ends at. A subquery finding no row yields NULL, so a
@@ -128,6 +145,24 @@ defmodule Hologram.DB.QueryCompiler do
     sql = statement(term, entity_mapping, where_sql, order_sql, include_sql)
 
     %{params: Enum.reverse(all_reversed_params), sql: sql}
+  end
+
+  @doc """
+  Returns the LIKE pattern a search binds for the given term: the term - folded first for a loose
+  match - with `\\`, `%` and `_` escaped, followed by `%` for a prefix and surrounded by `%` for a
+  substring.
+  """
+  @spec search_pattern(String.t(), :infix | :prefix, :exact | :loose) :: String.t()
+  def search_pattern(term, shape, mode) do
+    escaped =
+      term
+      |> fold_term(mode)
+      |> String.replace(["\\", "%", "_"], &("\\" <> &1))
+
+    case shape do
+      :infix -> "%#{escaped}%"
+      :prefix -> "#{escaped}%"
+    end
   end
 
   defp aggregate_order([], _target_mapping, _quoted_alias), do: ""
@@ -292,6 +327,19 @@ defmodule Hologram.DB.QueryCompiler do
     {target_id_sql, new_params}
   end
 
+  # The first of the given columns holding a value, qualified with the given row's name when one is
+  # given - a loose search reads the search key, or the sort key when there is none.
+  defp coalesced_sql(quoted_prefix, columns) do
+    qualified_columns =
+      Enum.map_join(columns, ", ", fn column ->
+        quoted_column = Mapper.quote_identifier(column.name)
+
+        if quoted_prefix, do: "#{quoted_prefix}.#{quoted_column}", else: quoted_column
+      end)
+
+    "COALESCE(#{qualified_columns})"
+  end
+
   # A derived companion is never read back - a reader recomputes it from the value beside it - so
   # neither a row's column list nor an embedded row's object carries one.
   defp column_list(entity_mapping) do
@@ -366,6 +414,48 @@ defmodule Hologram.DB.QueryCompiler do
       end)
 
     {group_condition(rendered), new_params}
+  end
+
+  # A search for another attribute's value can't put that value in a pattern - its % and _ would
+  # read as wildcards - so it asks where the value first occurs: at the start for a prefix,
+  # anywhere for a substring. NULL on either side is unknown, so a row with no value never matches,
+  # and an empty value occurs at the start of every string, as an empty term matches every row.
+  defp condition({name, operator, {:attribute, other}}, scope, reversed_params)
+       when is_map_key(@search_operators, operator) do
+    {shape, mode} = Map.fetch!(@search_operators, operator)
+    {subject_sql, params_after_subject} = search_subject_sql(scope, name, mode, reversed_params)
+    {operand_sql, new_params} = search_subject_sql(scope, other, mode, params_after_subject)
+    position_sql = "strpos(#{subject_sql}, #{operand_sql})"
+
+    condition_sql =
+      case shape do
+        :infix -> "#{position_sql} > 0"
+        :prefix -> "#{position_sql} = 1"
+      end
+
+    {condition_sql, new_params}
+  end
+
+  # A search is a LIKE over the value - or over its whole folded form for a loose match - with the
+  # term escaped into a pattern, so its % and _ are plain characters. A pinned term is escaped
+  # when it binds.
+  defp condition({name, operator, term}, scope, reversed_params)
+       when is_map_key(@search_operators, operator) do
+    {shape, mode} = Map.fetch!(@search_operators, operator)
+    {subject_sql, params_after_subject} = search_subject_sql(scope, name, mode, reversed_params)
+
+    {pattern_slot, new_params} =
+      case term do
+        {:placeholder, placeholder_name} ->
+          bind_placeholder_slot(placeholder_name, {:pattern, shape, mode}, params_after_subject)
+
+        literal ->
+          literal
+          |> search_pattern(shape, mode)
+          |> bind_slot_value(params_after_subject)
+      end
+
+    {"#{subject_sql} LIKE #{pattern_slot}", new_params}
   end
 
   # Two columns of one row. SQL's = and != are unknown when either side is NULL, so the equality
@@ -633,9 +723,14 @@ defmodule Hologram.DB.QueryCompiler do
       case later_hops do
         [] ->
           {name, select_column} = leaf
-          column = select_column.(target_mapping, name)
 
-          {"#{quoted_alias}.#{Mapper.quote_identifier(column.name)}", column, reversed_params}
+          case select_column.(target_mapping, name) do
+            columns when is_list(columns) ->
+              {coalesced_sql(quoted_alias, columns), List.last(columns), reversed_params}
+
+            column ->
+              {"#{quoted_alias}.#{Mapper.quote_identifier(column.name)}", column, reversed_params}
+          end
 
         _later_hops ->
           path_hop_sql(
@@ -945,6 +1040,44 @@ defmodule Hologram.DB.QueryCompiler do
     end)
   end
 
+  # The search key and the sort key of a string attribute, in the order a loose search reads them:
+  # the search key holds the whole folded value when the sort key's prefix can't.
+  defp search_columns(entity_mapping, name) do
+    Enum.map([:search_key, :sort_key], fn kind ->
+      Enum.find(entity_mapping.columns, &(&1.source == {kind, name}))
+    end)
+  end
+
+  # What a search reads: the value for an exact match, its whole folded form for a loose one - on
+  # the row, on a row above, or at the end of a path.
+  defp search_subject_sql(scope, name, :exact, reversed_params) do
+    {subject_sql, _column, new_params} = subject_sql(scope, name, reversed_params)
+
+    {subject_sql, new_params}
+  end
+
+  defp search_subject_sql(scope, name, :loose, reversed_params) when is_atom(name) do
+    {coalesced_sql(nil, search_columns(scope.entity_mapping, name)), reversed_params}
+  end
+
+  defp search_subject_sql(scope, {:outer, levels, name}, :loose, reversed_params) do
+    outer_scope = Enum.at(scope.outer, levels - 1)
+
+    if is_atom(name) do
+      columns = search_columns(outer_scope.entity_mapping, name)
+
+      {coalesced_sql(outer_scope.row_prefix, columns), reversed_params}
+    else
+      search_subject_sql(outer_scope, name, :loose, reversed_params)
+    end
+  end
+
+  defp search_subject_sql(scope, path, :loose, reversed_params) do
+    {path_sql, _column, new_params} = path_sql(scope, path, &search_columns/2, reversed_params)
+
+    {path_sql, new_params}
+  end
+
   # A quantifier's set and the condition its rows are matched to the owner row by - a stored to-many
   # through its join table, an inverse set through the reference or the join table it reverses.
   defp set_membership(owner_type, set_name, mapping, owner_id_sql) do
@@ -997,6 +1130,10 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp direction_sql(:asc), do: "ASC"
   defp direction_sql(:desc), do: "DESC"
+
+  defp fold_term(term, :exact), do: term
+
+  defp fold_term(term, :loose), do: SortKey.fold(term)
 
   defp fetch_column!(%{columns: columns}, name) do
     column_name = Atom.to_string(name)

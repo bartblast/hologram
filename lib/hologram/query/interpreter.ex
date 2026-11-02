@@ -459,6 +459,24 @@ defmodule Hologram.Query.Interpreter do
   # the query is built, and a placeholder never binds nil.
   defp satisfies?(_operator, _value, nil, _ranks), do: false
 
+  # An exact search compares the bytes, a loose one the folded forms - case, accents and the letters
+  # a sort key spells out folded on both sides.
+  defp satisfies?(:contains, value, term, _ranks) do
+    value
+    |> SortKey.fold()
+    |> String.contains?(SortKey.fold(term))
+  end
+
+  defp satisfies?(:contains_exact, value, term, _ranks), do: String.contains?(value, term)
+
+  defp satisfies?(:starts_with, value, term, _ranks) do
+    value
+    |> SortKey.fold()
+    |> String.starts_with?(SortKey.fold(term))
+  end
+
+  defp satisfies?(:starts_with_exact, value, term, _ranks), do: String.starts_with?(value, term)
+
   defp satisfies?(:<, value, operand, ranks) do
     compare_ordering_values(value, operand, ranks) == :lt
   end
