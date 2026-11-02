@@ -51,6 +51,80 @@ defmodule Hologram.Query.WindowTest do
       assert window.filter == [{[:b, :a], :==, true}]
     end
 
+    # A reader who may not read the row a path leads to reads it as missing, while the window reads
+    # it as stored - so a path predicate a missing value satisfies would leave out a row that
+    # reader's answer keeps.
+    test "drops a path predicate a missing related row satisfies" do
+      for predicate <- [
+            {[:b, :c], :!=, "x"},
+            {[:b, :c], :==, nil},
+            {[:b, :c], :in, [nil, "x"]},
+            {[:b, :c], :not_in, ["x"]},
+            {[:b, :c], :==, {:attribute, [:c, :id]}},
+            {:c_id, :!=, {:attribute, [:b, :id]}}
+          ] do
+        assert derive(term(Module3, [predicate]), false).filter == []
+      end
+    end
+
+    test "keeps a path predicate a missing related row never satisfies" do
+      for predicate <- [
+            {[:b, :c], :==, "x"},
+            {[:b, :c], :!=, nil},
+            {[:b, :c], :in, ["x", "y"]},
+            {[:b, :c], :not_in, [nil, "x"]},
+            {[:b, :b], :>, 3},
+            {[:b, :b], :<, {:attribute, [:c, :id]}}
+          ] do
+        assert derive(term(Module3, [predicate]), false).filter == [predicate]
+      end
+    end
+
+    test "embeds a dropped path predicate's relationships all the same" do
+      window = derive(term(Module3, [{[:b, :c], :!=, "x"}]), false)
+
+      assert window.include == %{b: %Query{entity: Module2}}
+    end
+
+    test "drops a disjunction whose alternative held only a path predicate a missing row satisfies" do
+      filter = [{:or, [[{:c_id, :==, nil}], [{[:b, :c], :==, nil}]]}]
+
+      assert derive(term(Module3, filter), false).filter == []
+    end
+
+    test "drops a path predicate a missing related row satisfies inside an any and its set's narrowing" do
+      window =
+        Module26
+        |> filter(any(message <- messages, message.channel.name != "x" and message.position > 1))
+        |> Stage.normalize()
+        |> derive(false)
+
+      assert window.filter == [{:any, {[:messages], [{:position, :>, 1}]}}]
+      assert window.include.messages.filter == [{:position, :>, 1}]
+    end
+
+    test "drops a path of the row above that a missing related row satisfies, on either side" do
+      filter = [
+        {:any,
+         {[:labels],
+          [
+            {:name, :==, "u"},
+            {{:outer, 1, [:channel, :name]}, :!=, "x"},
+            {:name, :!=, {:attribute, {:outer, 1, [:channel, :name]}}}
+          ]}}
+      ]
+
+      window = derive(term(Module28, filter), false)
+
+      assert window.filter == [{:any, {[:labels], [{:name, :==, "u"}]}}]
+    end
+
+    test "keeps a path of the row above that a missing related row never satisfies" do
+      filter = [{:any, {[:labels], [{{:outer, 1, [:channel, :name]}, :==, "x"}]}}]
+
+      assert derive(term(Module28, filter), false).filter == filter
+    end
+
     test "drops a predicate comparing to a placeholder" do
       window = derive(term(Module2, [{:c, :==, {:placeholder, :search}}]), false)
 

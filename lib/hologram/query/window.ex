@@ -27,8 +27,8 @@ defmodule Hologram.Query.Window do
   A predicate comparing to a LITERAL stays: an app whose only query asks for todo projects is
   saying the others are never needed. So does one comparing two ATTRIBUTES of the row
   (`end_date < start_date`) - it says something about the row whatever value anything takes - and
-  one reading a PATH, by the same rule: `channel.archived == false` keeps the messages of
-  unarchived channels.
+  one reading a PATH, by the same rule, unless a missing related row satisfies it (see below):
+  `channel.archived == false` keeps the messages of unarchived channels.
 
   An included set the client reads through the ids filed for its row - a to-many, or an inverse of
   one - keeps none of its predicates: it is downloaded whole, every related row the read rules
@@ -44,6 +44,14 @@ defmodule Hologram.Query.Window do
   alternatives - has its relationships embedded in the window as to-one includes, merged with the
   query's own. The related rows arrive with the window and are kept current with it, and a change
   to one reaches the window the way a change to an included row does.
+
+  A path to a row a reader may not read reads as missing for that reader, while the window reads
+  the row as stored. So a path predicate that matches a missing value - `channel.archived != true`,
+  `channel.name == nil`, `channel.kind in [nil, :dm]`, `channel.kind not in [:dm]`, or an equality
+  or inequality with another attribute, `x == channel.y` - bounds nothing: the window would leave
+  out a row the reader's own answer keeps. It is dropped. One that never matches a missing value -
+  an equality with a value, `!= nil`, a membership without nil, a negated one with nil, an ordering
+  comparison - stays.
 
   A DISJUNCTION cannot drop a predicate the same way. Dropping a conjunct widens what arrives,
   which is safe - dropping an alternative narrows it, and `status == :todo or owner_id == ^user_id`
@@ -182,9 +190,34 @@ defmodule Hologram.Query.Window do
     end
   end
 
+  # A predicate reading a path that a reader's missing related row - nil - can satisfy.
+  defp missing_path_match?({name, operator, operand}) do
+    reads_path? = path_name?(name) or path_name?(operand_name(operand))
+
+    reads_path? and nil_matching?(operator, operand)
+  end
+
+  defp nil_matching?(operator, {:attribute, _name}) when operator in [:==, :!=], do: true
+
+  defp nil_matching?(:==, operand), do: is_nil(operand)
+
+  defp nil_matching?(:!=, operand), do: not is_nil(operand)
+
+  defp nil_matching?(:in, values) when is_list(values), do: nil in values
+
+  defp nil_matching?(:not_in, values) when is_list(values), do: nil not in values
+
+  defp nil_matching?(_operator, _operand), do: false
+
   defp operand_name({:attribute, name}), do: name
 
   defp operand_name(_operand), do: nil
+
+  defp path_name?({:outer, _levels, name}), do: path_name?(name)
+
+  defp path_name?([_hop, _name | _rest]), do: true
+
+  defp path_name?(_name), do: false
 
   defp placeholder?({:placeholder, _name}), do: true
 
@@ -363,7 +396,7 @@ defmodule Hologram.Query.Window do
   defp window_clause({quantifier, {_source, _clauses}}) when quantifier in [:all, :none], do: []
 
   defp window_clause(triple) do
-    if placeholder_bound?(triple), do: [], else: [triple]
+    if placeholder_bound?(triple) or missing_path_match?(triple), do: [], else: [triple]
   end
 
   defp window_clauses(clauses), do: Enum.flat_map(clauses, &window_clause/1)
