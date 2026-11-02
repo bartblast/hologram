@@ -673,13 +673,13 @@ describe("Model", () => {
         title: "Łódź",
       });
 
-      assert.isNull(attributes.internal_notes_sort);
+      assert.isNull(attributes.internal_notes$sort);
     });
 
     it("computes a null sort key for an unset value", () => {
       const attributes = Model.computeSortKeys(TASK, {id: "t1", title: null});
 
-      assert.isNull(attributes.title_sort);
+      assert.isNull(attributes.title$sort);
     });
 
     it("computes a sort key for every string attribute", () => {
@@ -689,15 +689,15 @@ describe("Model", () => {
         title: "Łódź",
       });
 
-      assert.equal(attributes.internal_notes_sort, "odon");
-      assert.equal(attributes.title_sort, "lodz");
+      assert.equal(attributes.internal_notes$sort, "odon");
+      assert.equal(attributes.title$sort, "lodz");
     });
 
     it("computes no sort key for an attribute of another type", () => {
       const attributes = Model.computeSortKeys(TASK, {done: false, id: "t1"});
 
-      assert.isUndefined(attributes.done_sort);
-      assert.isUndefined(attributes.id_sort);
+      assert.isUndefined(attributes.done$sort);
+      assert.isUndefined(attributes.id$sort);
     });
 
     it("computes the sort key of a string attribute", () => {
@@ -706,7 +706,24 @@ describe("Model", () => {
         title: "Łódź",
       });
 
-      assert.equal(attributes.title_sort, "lodz");
+      assert.equal(attributes.title$sort, "lodz");
+    });
+
+    it("keeps the value of a declared attribute named like another attribute's sort key", () => {
+      globalThis.Hologram.sync.model["MyApp.Book"] = {
+        attributes: {id: "uuid", title: "string", title_sort: "string"},
+        relationships: {},
+        serverOnly: [],
+      };
+
+      const attributes = Model.computeSortKeys("MyApp.Book", {
+        id: "b1",
+        title: "Zebra",
+        title_sort: "1",
+      });
+
+      assert.equal(attributes.title_sort, "1");
+      assert.equal(attributes.title$sort, "zebra");
     });
 
     // Both callers file the object they passed in, so handing back a copy would file a row with
@@ -715,7 +732,7 @@ describe("Model", () => {
       const attributes = {id: "t1", title: "Łódź"};
 
       assert.strictEqual(Model.computeSortKeys(TASK, attributes), attributes);
-      assert.equal(attributes.title_sort, "lodz");
+      assert.equal(attributes.title$sort, "lodz");
     });
   });
 
@@ -1080,6 +1097,12 @@ describe("Model", () => {
 
     it("leaves out the attributes a job's framework fills", () => {
       assert.deepStrictEqual(Model.settableFields(NOTIFY), ["reason"]);
+    });
+  });
+
+  describe("sortKeyField()", () => {
+    it("names the field a string attribute's sort key is filed under", () => {
+      assert.equal(Model.sortKeyField("title"), "title$sort");
     });
   });
 

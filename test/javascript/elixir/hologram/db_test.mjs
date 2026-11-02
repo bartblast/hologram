@@ -448,7 +448,7 @@ describe("Elixir_Hologram_DB", () => {
         done: false,
         id: ID_1,
         title: "Łódź",
-        title_sort: "lodz",
+        title$sort: "lodz",
         updated_at: TIMESTAMP,
         $revisions: {done: STAMP, title: STAMP},
       });
@@ -686,7 +686,7 @@ describe("Elixir_Hologram_DB", () => {
       const row = LocalDatabase.getRow(TASK, ID_1);
 
       assert.equal(row.title, "Ship it");
-      assert.equal(row.title_sort, "ship it");
+      assert.equal(row.title$sort, "ship it");
       assert.deepStrictEqual(row.$revisions, {done: 10, title: STAMP});
     });
 

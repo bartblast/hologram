@@ -181,7 +181,7 @@ export default class QueryKernel {
       );
     }
 
-    const sortName = `${name}_sort`;
+    const sortName = Model.sortKeyField(name);
 
     if (sortName in left) {
       const result = QueryKernel.#compare(left[sortName], right[sortName]);
@@ -470,7 +470,7 @@ export default class QueryKernel {
       : QueryKernel.#resolve(operand, context, ranksForKey);
 
     const end = QueryKernel.#endOf(row, name, entityType, outer);
-    const sortName = `${end.name}_sort`;
+    const sortName = Model.sortKeyField(end.name);
 
     // A row filed by ingest carries the key beside every string attribute, so the presence of
     // the field is what says "this is a string" - no model lookup.

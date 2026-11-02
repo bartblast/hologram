@@ -62,7 +62,7 @@ describe("Overlay", () => {
         id: "t1",
         project_id: "p1",
         title: "Draft copy",
-        title_sort: "draft copy",
+        title$sort: "draft copy",
         updated_at: "2026-01-01T00:00:00.000000Z",
         votes: 3,
         $revisions: {done: 10, project_id: 10, title: 10, votes: 10},
@@ -125,7 +125,7 @@ describe("Overlay", () => {
         id: "t1",
         project_id: "p1",
         title: "Łódź",
-        title_sort: "lodz",
+        title$sort: "lodz",
         updated_at: timestamp,
         votes: 0,
         $revisions: {
@@ -165,7 +165,7 @@ describe("Overlay", () => {
       const row = Overlay.foldRow(TODO, "t1", base());
 
       assert.equal(row.title, "Ship it");
-      assert.equal(row.title_sort, "ship it");
+      assert.equal(row.title$sort, "ship it");
       assert.isFalse(row.done);
     });
 
@@ -220,7 +220,7 @@ describe("Overlay", () => {
 
       const row = base({
         title: "Ship it",
-        title_sort: "ship it",
+        title$sort: "ship it",
         $revisions: {done: 10, project_id: 10, title: stamp, votes: 10},
       });
 
@@ -842,7 +842,7 @@ describe("Overlay", () => {
       const row = LocalDatabase.baseRow(TODO, "t1");
 
       assert.equal(row.title, "Theirs");
-      assert.equal(row.title_sort, "theirs");
+      assert.equal(row.title$sort, "theirs");
       assert.equal(row.votes, 9);
       assert.equal(row.created_at, "2026-02-02T00:00:00.000000Z");
       assert.deepStrictEqual(row.$revisions, {
@@ -899,7 +899,7 @@ describe("Overlay", () => {
 
       assert.equal(row.title, "Theirs");
       assert.equal(row.$revisions.title, stamp + 1);
-      assert.equal(row.title_sort, "theirs");
+      assert.equal(row.title$sort, "theirs");
     });
 
     // A resend of a batch already applied is answered from the record, so an answer can be older

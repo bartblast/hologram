@@ -227,6 +227,21 @@ describe("QueryKernel", () => {
       assert.deepEqual(matchingDated([["rating", ">", 0]]), ["ada", "bob"]);
       assert.deepEqual(matchingDated([["rating", "<", 100]]), ["ada", "bob"]);
     });
+
+    // A declared attribute can be named like another attribute plus _sort, so a field of that
+    // name says nothing about the other attribute's type.
+    it("compares a number by itself beside an attribute named like a sort key", () => {
+      const rows = [
+        {rating: 1.5, rating_sort: "z", username: "ada"},
+        {rating: 4.5, rating_sort: "a", username: "bob"},
+      ];
+
+      const usernames = rows
+        .filter((row) => matches(row, [["rating", ">", 2]]))
+        .map((row) => row.username);
+
+      assert.deepEqual(usernames, ["bob"]);
+    });
   });
 
   describe("matches() - placeholders", () => {
@@ -450,16 +465,16 @@ describe("QueryKernel", () => {
       it("orders a string by the key derived from it", () => {
         LocalDatabase.reset();
 
-        LocalDatabase.putRow(TASK, {id: "t1", title: "Zoe", title_sort: "zoe"});
-        LocalDatabase.putRow(TASK, {id: "t2", title: "ada", title_sort: "ada"});
+        LocalDatabase.putRow(TASK, {id: "t1", title: "Zoe", title$sort: "zoe"});
+        LocalDatabase.putRow(TASK, {id: "t2", title: "ada", title$sort: "ada"});
 
         LocalDatabase.putRow(TASK, {
           id: "t3",
           title: "Ödön",
-          title_sort: "odon",
+          title$sort: "odon",
         });
 
-        LocalDatabase.putRow(TASK, {id: "t4", title: "bob", title_sort: "bob"});
+        LocalDatabase.putRow(TASK, {id: "t4", title: "bob", title$sort: "bob"});
 
         const ordered = term({
           sort: [
@@ -476,13 +491,42 @@ describe("QueryKernel", () => {
         ]);
       });
 
+      // A declared attribute can be named like another attribute plus _sort, so a field of that
+      // name is never read as the other attribute's key.
+      it("orders a number by itself beside an attribute named like a sort key", () => {
+        LocalDatabase.reset();
+
+        LocalDatabase.putRow(TASK, {
+          id: "t1",
+          position: 2,
+          position_sort: "a",
+          title: "bob",
+        });
+
+        LocalDatabase.putRow(TASK, {
+          id: "t2",
+          position: 1,
+          position_sort: "b",
+          title: "ada",
+        });
+
+        const ordered = term({
+          sort: [
+            ["position", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), ["ada", "bob"]);
+      });
+
       // Two values sharing a key are settled by themselves, the way the database settles them
       // with the column behind the companion.
       it("settles a tie on the derived key by the value itself", () => {
         LocalDatabase.reset();
 
-        LocalDatabase.putRow(TASK, {id: "t1", title: "zoe", title_sort: "zoe"});
-        LocalDatabase.putRow(TASK, {id: "t2", title: "Zoe", title_sort: "zoe"});
+        LocalDatabase.putRow(TASK, {id: "t1", title: "zoe", title$sort: "zoe"});
+        LocalDatabase.putRow(TASK, {id: "t2", title: "Zoe", title$sort: "zoe"});
 
         const ordered = term({
           sort: [
@@ -1482,24 +1526,24 @@ describe("QueryKernel", () => {
       const rows = [
         {
           bio: "mango",
-          bio_sort: "mango",
+          bio$sort: "mango",
           id: "Mango",
           username: "Mango",
-          username_sort: "mango",
+          username$sort: "mango",
         },
         {
           bio: "apple",
-          bio_sort: "apple",
+          bio$sort: "apple",
           id: "Zebra",
           username: "Zebra",
-          username_sort: "zebra",
+          username$sort: "zebra",
         },
         {
           bio: "m",
-          bio_sort: "m",
+          bio$sort: "m",
           id: "Łódź",
           username: "Łódź",
-          username_sort: "lodz",
+          username$sort: "lodz",
         },
       ];
 
@@ -1625,12 +1669,12 @@ describe("QueryKernel", () => {
   // the list `sort` renders, and the key beside the value is what puts it there.
   describe("matches() - comparing strings", () => {
     const rows = [
-      {id: "t1", title: "Zürich", title_sort: "zurich"},
-      {id: "t2", title: "Łódź", title_sort: "lodz"},
-      {id: "t3", title: "apple", title_sort: "apple"},
-      {id: "t4", title: "Mango", title_sort: "mango"},
-      {id: "t5", title: "Zebra", title_sort: "zebra"},
-      {id: "t6", title: "zebra", title_sort: "zebra"},
+      {id: "t1", title: "Zürich", title$sort: "zurich"},
+      {id: "t2", title: "Łódź", title$sort: "lodz"},
+      {id: "t3", title: "apple", title$sort: "apple"},
+      {id: "t4", title: "Mango", title$sort: "mango"},
+      {id: "t5", title: "Zebra", title$sort: "zebra"},
+      {id: "t6", title: "zebra", title$sort: "zebra"},
     ];
 
     const titlesMatching = (filter) =>
@@ -1663,7 +1707,7 @@ describe("QueryKernel", () => {
     });
 
     it("passes over an unset string", () => {
-      const row = {id: "t7", title: null, title_sort: null};
+      const row = {id: "t7", title: null, title$sort: null};
 
       assert.isFalse(matches(row, [["title", ">=", "a"]]));
     });
@@ -1708,7 +1752,7 @@ describe("QueryKernel", () => {
     const message = (id, channelId, body, position) =>
       LocalDatabase.putRow(MESSAGE, {
         body,
-        body_sort: body,
+        body$sort: body,
         channel_id: channelId,
         id,
         position,
@@ -1807,17 +1851,17 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(CHANNEL, {
         id: "general",
         name: "general",
-        name_sort: "general",
+        name$sort: "general",
       });
       LocalDatabase.putRow(CHANNEL, {
         id: "random",
         name: "random",
-        name_sort: "random",
+        name$sort: "random",
       });
       LocalDatabase.putRow(CHANNEL, {
         id: "quiet",
         name: "quiet",
-        name_sort: "quiet",
+        name$sort: "quiet",
       });
 
       message("hi", "general", "hi", 1);
@@ -1827,12 +1871,12 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(LABEL, {
         id: "urgent",
         name: "urgent",
-        name_sort: "urgent",
+        name$sort: "urgent",
       });
       LocalDatabase.putRow(LABEL, {
         id: "later",
         name: "later",
-        name_sort: "later",
+        name$sort: "later",
       });
 
       LocalDatabase.replaceFacts(MESSAGE, "labels", "hi", ["urgent", "later"]);
@@ -1959,7 +2003,7 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(LABEL, {
         id: "general_label",
         name: "general",
-        name_sort: "general",
+        name$sort: "general",
       });
 
       LocalDatabase.replaceFacts(MESSAGE, "labels", "there", ["general_label"]);
@@ -1979,7 +2023,7 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(LABEL, {
         id: "bye_label",
         name: "bye",
-        name_sort: "bye",
+        name$sort: "bye",
       });
       LocalDatabase.replaceFacts(MESSAGE, "labels", "bye", [
         "later",
@@ -2007,7 +2051,7 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(LABEL, {
         id: "general_label",
         name: "general",
-        name_sort: "general",
+        name$sort: "general",
       });
 
       LocalDatabase.replaceFacts(MESSAGE, "labels", "hi", [
@@ -2169,7 +2213,7 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(CHANNEL, {
         id: "mango",
         name: "Mango",
-        name_sort: "mango",
+        name$sort: "mango",
       });
       message("apple", "mango", "apple", 1);
 
@@ -2290,7 +2334,7 @@ describe("QueryKernel", () => {
         id: "c1",
         kind: "group",
         name: "Mango",
-        name_sort: "mango",
+        name$sort: "mango",
         opened_on: "2026-01-01",
         org_id: "o1",
         rank: 5,
@@ -2302,14 +2346,14 @@ describe("QueryKernel", () => {
         id: "c2",
         kind: "dm",
         name: "apple",
-        name_sort: "apple",
+        name$sort: "apple",
         opened_on: null,
         org_id: null,
         rank: 1,
         weight: 0,
       });
 
-      LocalDatabase.putRow(ORG, {id: "o1", name: "acme", name_sort: "acme"});
+      LocalDatabase.putRow(ORG, {id: "o1", name: "acme", name$sort: "acme"});
     });
 
     afterEach(() => {

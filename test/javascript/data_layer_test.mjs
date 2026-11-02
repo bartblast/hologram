@@ -93,7 +93,7 @@ describe("DataLayer", () => {
       done: done,
       id: id,
       title: title,
-      title_sort: title.toLowerCase(),
+      title$sort: title.toLowerCase(),
     });
 
     beforeEach(() => {
