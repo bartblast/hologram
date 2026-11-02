@@ -1678,6 +1678,558 @@ describe("QueryKernel", () => {
     });
   });
 
+  // Mirrors the interpreter's "run/3 - quantifiers" describes case for case and in the same order.
+  // Its read-policy case reads here as a row the client does not hold, which is how a row the
+  // session may not read looks to the browser.
+  describe("matches() - quantifiers", () => {
+    const BOX = "MyApp.Box";
+    const CHANNEL = "MyApp.Channel";
+    const GADGET = "MyApp.Gadget";
+    const ITEM = "MyApp.Item";
+    const LABEL = "MyApp.Label";
+    const MESSAGE = "MyApp.Message";
+    const POST = "MyApp.Post";
+    const SHELF = "MyApp.Shelf";
+
+    const matchingIds = (entityType, filter, context = {}) =>
+      Object.values(LocalDatabase.getTable(entityType))
+        .filter((row) => matches(row, filter, context, entityType))
+        .map((row) => row.id)
+        .sort();
+
+    const quantifier = (kind, source, filter = []) => ({
+      filter,
+      quantifier: kind,
+      source,
+    });
+
+    const outer = (levels, name) => ({name, outer: levels});
+
+    const message = (id, channelId, body, position) =>
+      LocalDatabase.putRow(MESSAGE, {
+        body,
+        body_sort: body,
+        channel_id: channelId,
+        id,
+        position,
+      });
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [BOX]: {
+            attributes: {id: "uuid"},
+            enumValues: {},
+            relationships: {items: {toMany: true, type: ITEM}},
+            serverOnly: [],
+          },
+          [CHANNEL]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            inverses: {
+              messages: {
+                forward: "channel",
+                reference: true,
+                sort: [["position", "asc"]],
+                toMany: true,
+                type: MESSAGE,
+              },
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+          [GADGET]: {
+            attributes: {id: "uuid", priority: "enum"},
+            enumValues: {priority: ["low", "medium", "high"]},
+            relationships: {},
+            serverOnly: [],
+          },
+          [ITEM]: {
+            attributes: {b: "integer", id: "uuid"},
+            enumValues: {},
+            relationships: {},
+            serverOnly: [],
+          },
+          [LABEL]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            inverses: {
+              messages: {
+                forward: "labels",
+                reference: false,
+                sort: [],
+                toMany: true,
+                type: MESSAGE,
+              },
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+          [MESSAGE]: {
+            attributes: {body: "string", id: "uuid", position: "integer"},
+            enumValues: {},
+            relationships: {
+              channel: {optional: true, toMany: false, type: CHANNEL},
+              labels: {toMany: true, type: LABEL},
+            },
+            serverOnly: [],
+          },
+          [POST]: {
+            attributes: {body: "string", id: "uuid"},
+            enumValues: {},
+            inverses: {
+              replies: {
+                forward: "parent",
+                reference: true,
+                sort: [],
+                toMany: true,
+                type: POST,
+              },
+            },
+            relationships: {
+              parent: {optional: true, toMany: false, type: POST},
+            },
+            serverOnly: [],
+          },
+          [SHELF]: {
+            attributes: {floor: "enum", id: "uuid"},
+            enumValues: {floor: ["low", "medium", "high"]},
+            relationships: {items: {toMany: true, type: GADGET}},
+            serverOnly: [],
+          },
+        },
+      };
+
+      LocalDatabase.reset();
+      Model.reset();
+      Overlay.reset();
+
+      LocalDatabase.putRow(CHANNEL, {
+        id: "general",
+        name: "general",
+        name_sort: "general",
+      });
+      LocalDatabase.putRow(CHANNEL, {
+        id: "random",
+        name: "random",
+        name_sort: "random",
+      });
+      LocalDatabase.putRow(CHANNEL, {
+        id: "quiet",
+        name: "quiet",
+        name_sort: "quiet",
+      });
+
+      message("hi", "general", "hi", 1);
+      message("there", "general", "there", 3);
+      message("bye", "random", "bye", 2);
+
+      LocalDatabase.putRow(LABEL, {
+        id: "urgent",
+        name: "urgent",
+        name_sort: "urgent",
+      });
+      LocalDatabase.putRow(LABEL, {
+        id: "later",
+        name: "later",
+        name_sort: "later",
+      });
+
+      LocalDatabase.replaceFacts(MESSAGE, "labels", "hi", ["urgent", "later"]);
+      LocalDatabase.replaceFacts(MESSAGE, "labels", "bye", ["later"]);
+      LocalDatabase.replaceFacts(LABEL, "messages", "urgent", ["hi"]);
+      LocalDatabase.replaceFacts(LABEL, "messages", "later", ["bye", "hi"]);
+    });
+
+    afterEach(() => {
+      Overlay.reset();
+    });
+
+    it("answers any over an inverse of a to-one", () => {
+      const filter = [quantifier("any", ["messages"], [["position", ">", 2]])];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter), ["general"]);
+    });
+
+    it("answers none over an inverse of a to-one", () => {
+      const filter = [quantifier("none", ["messages"], [["position", ">", 2]])];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter), ["quiet", "random"]);
+    });
+
+    it("answers all over an inverse of a to-one, an empty set holding", () => {
+      const filter = [quantifier("all", ["messages"], [["position", ">", 1]])];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter), ["quiet", "random"]);
+    });
+
+    it("answers a quantifier with no condition", () => {
+      assert.deepEqual(
+        matchingIds(CHANNEL, [quantifier("any", ["messages"])]),
+        ["general", "random"],
+      );
+
+      assert.deepEqual(
+        matchingIds(CHANNEL, [quantifier("none", ["messages"])]),
+        ["quiet"],
+      );
+    });
+
+    it("answers any over a stored to-many", () => {
+      const filter = [
+        quantifier("any", ["labels"], [["name", "==", "urgent"]]),
+      ];
+
+      assert.deepEqual(matchingIds(MESSAGE, filter), ["hi"]);
+    });
+
+    it("answers any and all over an inverse of a to-many", () => {
+      assert.deepEqual(
+        matchingIds(LABEL, [
+          quantifier("any", ["messages"], [["position", ">", 1]]),
+        ]),
+        ["later"],
+      );
+
+      assert.deepEqual(
+        matchingIds(LABEL, [
+          quantifier("all", ["messages"], [["position", "<", 2]]),
+        ]),
+        ["urgent"],
+      );
+    });
+
+    // One any is one related row: no message of general is both hi and at position 3, while one is
+    // hi and another is at 3.
+    it("reads one related row per any", () => {
+      const oneRow = [
+        quantifier(
+          "any",
+          ["messages"],
+          [
+            ["body", "==", "hi"],
+            ["position", "==", 3],
+          ],
+        ),
+      ];
+
+      const twoRows = [
+        quantifier("any", ["messages"], [["body", "==", "hi"]]),
+        quantifier("any", ["messages"], [["position", "==", 3]]),
+      ];
+
+      assert.deepEqual(matchingIds(CHANNEL, oneRow), []);
+      assert.deepEqual(matchingIds(CHANNEL, twoRows), ["general"]);
+    });
+
+    it("compares a related row reached through a to-one with the row above", () => {
+      message("loose", null, "loose", 1);
+
+      const filter = [
+        quantifier(
+          "any",
+          ["channel", "messages"],
+          [["position", ">", {attribute: outer(1, "position")}]],
+        ),
+      ];
+
+      assert.deepEqual(matchingIds(MESSAGE, filter), ["hi"]);
+    });
+
+    it("answers a set behind a to-one that reads no row as empty", () => {
+      message("loose", null, "loose", 1);
+      message("stray", "gone", "stray", 1);
+
+      const source = ["channel", "messages"];
+
+      assert.deepEqual(matchingIds(MESSAGE, [quantifier("none", source)]), [
+        "loose",
+        "stray",
+      ]);
+
+      assert.deepEqual(
+        matchingIds(MESSAGE, [
+          quantifier("all", source, [["position", ">", 9]]),
+        ]),
+        ["loose", "stray"],
+      );
+    });
+
+    it("compares a related row with a path of the row above", () => {
+      LocalDatabase.putRow(LABEL, {
+        id: "general_label",
+        name: "general",
+        name_sort: "general",
+      });
+
+      LocalDatabase.replaceFacts(MESSAGE, "labels", "there", ["general_label"]);
+
+      const filter = [
+        quantifier(
+          "any",
+          ["labels"],
+          [["name", "==", {attribute: outer(1, ["channel", "name"])}]],
+        ),
+      ];
+
+      assert.deepEqual(matchingIds(MESSAGE, filter), ["there"]);
+    });
+
+    it("matches a condition reading a row bound around it", () => {
+      LocalDatabase.putRow(LABEL, {
+        id: "bye_label",
+        name: "bye",
+        name_sort: "bye",
+      });
+      LocalDatabase.replaceFacts(MESSAGE, "labels", "bye", [
+        "later",
+        "bye_label",
+      ]);
+
+      const filter = [
+        quantifier(
+          "any",
+          ["messages"],
+          [
+            quantifier(
+              "any",
+              ["labels"],
+              [["name", "==", {attribute: outer(1, "body")}]],
+            ),
+          ],
+        ),
+      ];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter), ["random"]);
+    });
+
+    it("matches a condition reading the queried row two quantifiers out", () => {
+      LocalDatabase.putRow(LABEL, {
+        id: "general_label",
+        name: "general",
+        name_sort: "general",
+      });
+
+      LocalDatabase.replaceFacts(MESSAGE, "labels", "hi", [
+        "urgent",
+        "later",
+        "general_label",
+      ]);
+
+      const filter = [
+        quantifier(
+          "any",
+          ["messages"],
+          [
+            quantifier(
+              "any",
+              ["labels"],
+              [["name", "==", {attribute: outer(2, "name")}]],
+            ),
+          ],
+        ),
+      ];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter), ["general"]);
+    });
+
+    it("reads a set of the row above from inside a quantifier", () => {
+      const filter = [
+        quantifier(
+          "any",
+          ["messages"],
+          [
+            quantifier("any", outer(1, ["messages"]), [
+              ["position", ">", {attribute: outer(1, "position")}],
+            ]),
+          ],
+        ),
+      ];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter), ["general"]);
+    });
+
+    it("reads an attribute of the row above on the left", () => {
+      const filter = [
+        quantifier("any", ["messages"], [[outer(1, "name"), "==", "general"]]),
+      ];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter), ["general"]);
+    });
+
+    it("takes a quantifier as an alternative", () => {
+      const filter = [
+        {
+          or: [
+            [["name", "==", "quiet"]],
+            [quantifier("any", ["messages"], [["position", ">", 2]])],
+          ],
+        },
+      ];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter), ["general", "quiet"]);
+    });
+
+    it("binds a placeholder inside a quantifier's condition", () => {
+      const filter = [
+        quantifier(
+          "any",
+          ["messages"],
+          [["position", ">", {placeholder: "min"}]],
+        ),
+      ];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter, {bindings: {min: 1}}), [
+        "general",
+        "random",
+      ]);
+    });
+
+    it("answers over a self-referencing inverse, comparing a reply with its parent", () => {
+      LocalDatabase.putRow(POST, {body: "echo", id: "parent", parent_id: null});
+      LocalDatabase.putRow(POST, {
+        body: "echo",
+        id: "echo_reply",
+        parent_id: "parent",
+      });
+      LocalDatabase.putRow(POST, {body: "other", id: "other", parent_id: null});
+      LocalDatabase.putRow(POST, {
+        body: "reply",
+        id: "other_reply",
+        parent_id: "other",
+      });
+
+      const filter = [
+        quantifier(
+          "any",
+          ["replies"],
+          [["body", "==", {attribute: outer(1, "body")}]],
+        ),
+      ];
+
+      assert.deepEqual(matchingIds(POST, filter), ["parent"]);
+    });
+
+    // An ordering comparison passes over null and an inequality matches it, so a related row with
+    // no value fails all of an ordering condition.
+    it("reads a missing value of a related row the way it reads one of the row", () => {
+      LocalDatabase.putRow(BOX, {id: "box"});
+      LocalDatabase.putRow(ITEM, {b: null, id: "unset"});
+      LocalDatabase.putRow(ITEM, {b: 7, id: "seven"});
+      LocalDatabase.replaceFacts(BOX, "items", "box", ["unset", "seven"]);
+
+      assert.deepEqual(
+        matchingIds(BOX, [quantifier("any", ["items"], [["b", "!=", 7]])]),
+        ["box"],
+      );
+
+      assert.deepEqual(
+        matchingIds(BOX, [quantifier("all", ["items"], [["b", ">", 1]])]),
+        [],
+      );
+
+      assert.deepEqual(
+        matchingIds(BOX, [quantifier("any", ["items"], [["b", ">", 1]])]),
+        ["box"],
+      );
+    });
+
+    // "high" sorts before "medium" as it is spelled, after it in the declared list.
+    it("compares an enum of the related row with one of the row above by declared position", () => {
+      LocalDatabase.putRow(SHELF, {floor: "medium", id: "medium_floor"});
+      LocalDatabase.putRow(SHELF, {floor: "high", id: "high_floor"});
+      LocalDatabase.putRow(GADGET, {id: "high", priority: "high"});
+      LocalDatabase.putRow(GADGET, {id: "medium", priority: "medium"});
+      LocalDatabase.replaceFacts(SHELF, "items", "medium_floor", ["high"]);
+      LocalDatabase.replaceFacts(SHELF, "items", "high_floor", ["medium"]);
+
+      const query = [
+        quantifier(
+          "any",
+          ["items"],
+          [["priority", ">", {attribute: outer(1, "floor")}]],
+        ),
+      ];
+
+      const flipped = [
+        quantifier(
+          "any",
+          ["items"],
+          [[outer(1, "floor"), "<", {attribute: "priority"}]],
+        ),
+      ];
+
+      assert.deepEqual(matchingIds(SHELF, query), ["medium_floor"]);
+      assert.deepEqual(matchingIds(SHELF, flipped), ["medium_floor"]);
+    });
+
+    // "apple" sorts before "Mango" by its sort key and after it character by character - random's
+    // bye sorts before random either way.
+    it("compares a string of the related row with one of the row above by sort key", () => {
+      LocalDatabase.putRow(CHANNEL, {
+        id: "mango",
+        name: "Mango",
+        name_sort: "mango",
+      });
+      message("apple", "mango", "apple", 1);
+
+      const filter = [
+        quantifier(
+          "any",
+          ["messages"],
+          [["body", "<", {attribute: outer(1, "name")}]],
+        ),
+      ];
+
+      assert.deepEqual(matchingIds(CHANNEL, filter), ["mango", "random"]);
+    });
+
+    it("leaves a pair naming a row the client does not hold out of the set", () => {
+      LocalDatabase.putRow(BOX, {id: "box"});
+      LocalDatabase.putRow(ITEM, {b: 7, id: "seven"});
+      LocalDatabase.replaceFacts(BOX, "items", "box", ["seven", "absent"]);
+
+      assert.deepEqual(
+        matchingIds(BOX, [quantifier("all", ["items"], [["b", ">", 1]])]),
+        ["box"],
+      );
+    });
+
+    it("answers at once over a pending write moving a related row into the set", () => {
+      const batch = new Batch("messages");
+
+      batch.append({
+        data: {channel_id: "quiet"},
+        id: "bye",
+        op: "update",
+        stamp: 1_756_100_000_123 * 1024,
+        type: MESSAGE,
+      });
+
+      Overlay.push(batch);
+
+      assert.deepEqual(
+        matchingIds(CHANNEL, [quantifier("none", ["messages"])]),
+        ["random"],
+      );
+
+      assert.deepEqual(
+        matchingIds(CHANNEL, [
+          quantifier("any", ["messages"], [["body", "==", "bye"]]),
+        ]),
+        ["quiet"],
+      );
+    });
+
+    it("throws on a quantifier when no entity type is given", () => {
+      assert.throws(
+        () => matches({id: "general"}, [quantifier("any", ["messages"])]),
+        HologramRuntimeError,
+        "a filter with a path or a quantifier needs the entity type of the rows it matches",
+      );
+    });
+  });
+
   // A row the session may not read never reaches its database, so a row the database lacks covers
   // both a row that is not there and one the session may not see.
   describe("matches() - paths", () => {
@@ -1917,7 +2469,7 @@ describe("QueryKernel", () => {
       assert.throws(
         () => matches(messages[0], [[["channel", "archived"], "==", false]]),
         HologramRuntimeError,
-        "a filter with a path needs the entity type of the rows it matches",
+        "a filter with a path or a quantifier needs the entity type of the rows it matches",
       );
     });
   });
@@ -1984,7 +2536,9 @@ describe("QueryKernel", () => {
     });
   });
 
-  // Mirrors "triples/1" in test/elixir/hologram/query/stage_test.exs.
+  // Mirrors the flat and disjunction cases of "triples/1" in
+  // test/elixir/hologram/query/stage_test.exs. A quantifier's names stay as their own level writes
+  // them here, where the server resolves them against the queried row.
   describe("triples()", () => {
     it("returns the predicates of a flat filter unchanged", () => {
       const filter = [
@@ -2032,6 +2586,22 @@ describe("QueryKernel", () => {
         ["b", ">=", 3],
         ["c", "==", "x"],
         ["d", "==", 1],
+      ]);
+    });
+
+    it("walks a quantifier's filter, each name as its level writes it", () => {
+      const filter = [
+        {
+          filter: [["body", "==", {attribute: {name: "name", outer: 1}}]],
+          quantifier: "any",
+          source: ["messages"],
+        },
+        ["name", "==", "general"],
+      ];
+
+      assert.deepStrictEqual(QueryKernel.triples(filter), [
+        ["body", "==", {attribute: {name: "name", outer: 1}}],
+        ["name", "==", "general"],
       ]);
     });
   });
