@@ -94,6 +94,7 @@ defmodule Hologram.Entity do
 
   defmacro __before_compile__(env) do
     Validator.validate_roles!(env.module)
+    Validator.validate_derived_heads!(env.module)
 
     system_attributes =
       @system_attributes
@@ -392,6 +393,8 @@ defmodule Hologram.Entity do
         ) ::
           :ok
   def __put_derived__(module, name, type, opts, args, body, location) do
+    Validator.validate_derived!(module, name, type, opts)
+
     Module.put_attribute(module, :__derived__, {name, type, opts})
     Module.put_attribute(module, :__derived_bodies__, {name, args, body})
     Module.put_attribute(module, :__derived_locations__, {name, location})
@@ -895,6 +898,8 @@ defmodule Hologram.Entity do
   end
 
   defp derived_declaration(name, type, opts, definition, env) do
+    Validator.validate_derived_function!(name, definition, env)
+
     {args, body} = DerivedExpression.function(definition, env)
     location = {env.file, env.line}
 

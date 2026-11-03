@@ -285,6 +285,100 @@ defmodule Hologram.Entity.Validator do
   end
 
   @doc """
+  Validates the given derived field declaration at compile time, once its type and options are
+  evaluated.
+
+  Returns :ok, or raises Hologram.CompileError on the first violated rule: the name, the type (an
+  attribute type, an entity type module for one row, or a one-element list wrapping one for a set),
+  the options (`values:` alone, required for an enum and refused otherwise), and a field the
+  declaration derives colliding with another declaration's. The type is checked for shape only - an
+  entity type module may not be compiled yet while the declaring module's body is executing.
+  """
+  @spec validate_derived!(module, atom, any, T.opts()) :: :ok
+  def validate_derived!(module, name, type, opts) do
+    validate_declaration_name!(module, "derived field", name)
+
+    if not derived_type_valid?(type) do
+      valid_types = Enum.map_join(@valid_attribute_types, ", ", &inspect/1)
+
+      raise Hologram.CompileError,
+        message:
+          "invalid type #{inspect(type)} for derived field #{inspect(name)} in #{inspect(module)} - the type of a derived field is an attribute type (#{valid_types}), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+    end
+
+    validate_opts_shape!(module, "derived field", name, opts)
+    validate_known_opts!(module, "derived field", name, opts, [:values])
+    validate_derived_values!(module, name, type, opts)
+    validate_field_collision!(module, "derived field", name, [Atom.to_string(name)])
+
+    :ok
+  end
+
+  @doc """
+  Validates the function a derived field is declared with, as written, before its body is lowered:
+  a function of one clause whose arguments are distinct bare names, with no pattern, default or
+  guard - each one names a field.
+
+  Returns :ok, or raises Hologram.CompileError located at the declaration.
+  """
+  @spec validate_derived_function!(Macro.t(), Macro.t(), Macro.Env.t()) :: :ok
+  def validate_derived_function!(name, definition, env) do
+    field = "derived field #{Macro.to_string(name)} in #{inspect(env.module)}"
+
+    case definition do
+      {:fn, _meta, [{:->, _arrow_meta, [[{:when, _when_meta, when_args}], _body]}]} ->
+        guard = List.last(when_args)
+
+        derived_function_error!(
+          "the function of #{field} takes no guard, got: when #{Macro.to_string(guard)} - its arguments name the fields it reads",
+          env
+        )
+
+      {:fn, _meta, [{:->, _arrow_meta, [args, _body]}]} ->
+        validate_derived_args!(field, args, env)
+
+      {:fn, _meta, clauses} ->
+        derived_function_error!(
+          "the function of #{field} has #{length(clauses)} clauses - a derived field's function has one clause, since its head names the fields it reads",
+          env
+        )
+
+      _definition ->
+        derived_function_error!(
+          "#{field} is defined by a function whose arguments name the fields it reads, got: #{Macro.to_string(definition)} - write it as fn fields -> ... end, calling a shared query builder from the body if one computes it",
+          env
+        )
+    end
+  end
+
+  @doc """
+  Validates that the arguments of every derived field's function in the given module name its
+  fields - attributes, system attributes, reference fields, relationships, inverses and other derived
+  fields - and that none names its own field. Run once the module body is evaluated, since a field a
+  function reads may be declared below it.
+
+  Returns :ok, or raises Hologram.CompileError located at the derived field's declaration.
+  """
+  @spec validate_derived_heads!(module) :: :ok
+  def validate_derived_heads!(module) do
+    field_names = field_names(module)
+
+    locations =
+      module
+      |> Module.get_attribute(:__derived_locations__)
+      |> Map.new()
+
+    module
+    |> Module.get_attribute(:__derived_bodies__)
+    |> Enum.reverse()
+    |> Enum.each(fn {name, args, _body} ->
+      location = Map.fetch!(locations, name)
+
+      Enum.each(args, &validate_derived_head_arg!(module, name, &1, field_names, location))
+    end)
+  end
+
+  @doc """
   Validates the given data model as a whole, taking the list of all compiled entity type modules.
 
   Returns :ok, or raises Hologram.CompileError listing every relationship whose target is not an entity type module, and every inverse that does not reverse a stored relationship of its related type pointing back - one naming a relationship the related type does not declare, one naming an inverse the related type declares, one naming a relationship pointing at another type, a single inverse of a to-many, a single inverse of a to-one that is not unique - or whose order names what the related type cannot be sorted by. Each line starts with the file and line the relationship is declared on, for every entity type declared with the entity macro.
@@ -545,6 +639,13 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp declared_fields(module) do
+    derived_fields =
+      module
+      |> Module.get_attribute(:__derived__)
+      |> Enum.map(fn {name, _type, _opts} ->
+        {Atom.to_string(name), "derived field #{inspect(name)}"}
+      end)
+
     attribute_fields =
       module
       |> Module.get_attribute(:__attributes__)
@@ -561,7 +662,7 @@ defmodule Hologram.Entity.Validator do
         |> Enum.map(&{&1, "relationship #{inspect(name)}"})
       end)
 
-    attribute_fields ++ relationship_fields
+    attribute_fields ++ relationship_fields ++ derived_fields
   end
 
   # Stored and inverse relationships alike - every one is a field and a name of the entity.
@@ -580,6 +681,14 @@ defmodule Hologram.Entity.Validator do
       :error -> ""
     end
   end
+
+  @spec derived_function_error!(String.t(), Macro.Env.t()) :: no_return
+  defp derived_function_error!(message, env) do
+    raise Hologram.CompileError, message: message, file: env.file, line: env.line
+  end
+
+  defp derived_type_valid?(type),
+    do: type in @valid_attribute_types or relationship_type_valid?(type)
 
   defp describe_role_cycle([first_name | _later_hops] = cycle, declarations, module) do
     # Each hop is paired with the hop it extends: the cycle rotated by one, so the last hop's
@@ -635,6 +744,18 @@ defmodule Hologram.Entity.Validator do
 
       {cycles, MapSet.put(visited, name)}
     end
+  end
+
+  # Every field a derived field's function may name - the fields the module's declarations derive,
+  # read while its body is still being evaluated, and the system attributes every entity type
+  # carries.
+  defp field_names(module) do
+    declared_names =
+      module
+      |> declared_fields()
+      |> Enum.map(fn {field_name, _declaration} -> field_name end)
+
+    Enum.sort(["created_at", "id", "updated_at"] ++ declared_names)
   end
 
   # The first target that appears earlier in the list, nil when every target appears once.
@@ -997,7 +1118,7 @@ defmodule Hologram.Entity.Validator do
   defp validate_attribute_values!(module, name, :enum, opts) do
     case Keyword.fetch(opts, :values) do
       {:ok, values} ->
-        validate_enum_values!(module, name, values)
+        validate_enum_values!(module, "attribute", name, values)
 
       :error ->
         raise Hologram.CompileError,
@@ -1116,6 +1237,79 @@ defmodule Hologram.Entity.Validator do
     validate_default_constraints!(module, name, type, opts, value)
   end
 
+  # Each argument names a field, so it is a bare name, written once - a pattern, a default or a
+  # guard would make the head say something other than which fields the body reads.
+  defp validate_derived_args!(field, args, env) do
+    Enum.each(args, fn
+      {arg_name, _meta, context}
+      when is_atom(arg_name) and is_atom(context) and
+             arg_name not in [:_, :__MODULE__, :__ENV__, :__CALLER__, :__DIR__, :__STACKTRACE__] ->
+        :ok
+
+      arg ->
+        derived_function_error!(
+          "the arguments of #{field}'s function name fields, each a bare name, got: #{Macro.to_string(arg)} - a pattern, a default or the underscore has no field to name",
+          env
+        )
+    end)
+
+    arg_names = Enum.map(args, fn {arg_name, _meta, _context} -> arg_name end)
+
+    case arg_names -- Enum.uniq(arg_names) do
+      [] ->
+        :ok
+
+      [repeated_name | _repeated_names] ->
+        derived_function_error!(
+          "#{repeated_name} is named twice in the head of #{field}'s function - each argument names a field once",
+          env
+        )
+    end
+  end
+
+  defp validate_derived_head_arg!(module, name, name, _field_names, {file, line}) do
+    raise Hologram.CompileError,
+      file: file,
+      line: line,
+      message:
+        "derived field #{inspect(name)} in #{inspect(module)} reads itself - a derived field is computed from other fields"
+  end
+
+  defp validate_derived_head_arg!(module, name, arg, field_names, {file, line}) do
+    if Atom.to_string(arg) not in field_names do
+      listed =
+        field_names
+        |> List.delete(Atom.to_string(name))
+        |> Enum.join(", ")
+
+      raise Hologram.CompileError,
+        file: file,
+        line: line,
+        message:
+          "#{arg} is not a field of #{inspect(module)} - the arguments of derived field #{inspect(name)}'s function name the fields it reads: #{listed}"
+    end
+  end
+
+  defp validate_derived_values!(module, name, :enum, opts) do
+    case Keyword.fetch(opts, :values) do
+      {:ok, values} ->
+        validate_enum_values!(module, "derived field", name, values)
+
+      :error ->
+        raise Hologram.CompileError,
+          message:
+            "missing values option for enum derived field #{inspect(name)} in #{inspect(module)} - an enum derived field names its values, bracketed before the function: derived #{inspect(name)}, :enum, [values: [...]], fn ... end"
+    end
+  end
+
+  defp validate_derived_values!(module, name, _type, opts) do
+    if Keyword.has_key?(opts, :values) do
+      raise Hologram.CompileError,
+        message:
+          "values option not allowed for derived field #{inspect(name)} in #{inspect(module)} - the values option applies only to enum derived fields"
+    end
+  end
+
   # Postgres caps enum labels at 63 bytes and silently truncates longer ones - a truncated
   # label would no longer decode back to the value it was stored for.
   defp validate_enum_label_length!(module, kind, value) do
@@ -1141,7 +1335,7 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp validate_enum_values!(module, name, values) do
+  defp validate_enum_values!(module, kind, name, values) do
     valid =
       is_list(values) and values != [] and
         Enum.all?(values, &(is_atom(&1) and not is_nil(&1))) and
@@ -1150,7 +1344,7 @@ defmodule Hologram.Entity.Validator do
     if not valid do
       raise Hologram.CompileError,
         message:
-          "invalid values option #{inspect(values)} for enum attribute #{inspect(name)} in #{inspect(module)} - the values option must be a non-empty list of unique non-nil atoms"
+          "invalid values option #{inspect(values)} for enum #{kind} #{inspect(name)} in #{inspect(module)} - the values option must be a non-empty list of unique non-nil atoms"
     end
 
     Enum.each(values, fn value ->
@@ -1369,14 +1563,16 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_name_uniqueness!(module, kind, name) do
-    declarations = Module.get_attribute(module, :__attributes__) ++ declared_relationships(module)
+    declarations =
+      Module.get_attribute(module, :__attributes__) ++
+        declared_relationships(module) ++ Module.get_attribute(module, :__derived__)
 
     declared_names = Enum.map(declarations, fn {declared_name, _type, _opts} -> declared_name end)
 
     if name in declared_names do
       raise Hologram.CompileError,
         message:
-          "duplicate name #{inspect(name)} used for #{kind} in #{inspect(module)} - attribute and relationship names share one namespace and must be unique"
+          "duplicate name #{inspect(name)} used for #{kind} in #{inspect(module)} - attribute, relationship and derived field names share one namespace and must be unique"
     end
   end
 
