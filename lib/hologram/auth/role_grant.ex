@@ -198,6 +198,7 @@ defmodule Hologram.Auth.RoleGrant do
   # gives up the insert locality UUIDv7 buys every other table. Recorded in `02a-database.md`
   # beside the id-format lock - it is confined to the least-inserted table in an app, on the one
   # index of its four that the framework only ever point-looks-up.
+  # sobelow_skip ["Crypto.WeakHash"]
   def derive_id(user_id, entity_type, entity_id, role) do
     name =
       Enum.join(
