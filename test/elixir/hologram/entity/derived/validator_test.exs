@@ -49,10 +49,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :recent, [Module33], fn messages -> count(messages) end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :recent in Hologram.Entity.Derived.ValidatorTest.Fixture2 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is a count (:integer)\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :recent in Hologram.Entity.Derived.ValidatorTest.Fixture2 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is a count (:integer)\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture2]) end
     end
@@ -68,10 +69,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :label, :integer, fn name -> name <> "!" end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :label in Hologram.Entity.Derived.ValidatorTest.Fixture3 is declared :integer, but its definition is a string (<>)\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :label in Hologram.Entity.Derived.ValidatorTest.Fixture3 is declared :integer, but its definition is a string (<>)\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture3]) end
     end
@@ -89,10 +91,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :level, :enum, [values: [:low, :mid, :high]], fn message -> message.tier end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :level in Hologram.Entity.Derived.ValidatorTest.Fixture4 is declared :enum with values [:low, :mid, :high], but its definition is message.tier, a :enum with values [:low, :high]\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :level in Hologram.Entity.Derived.ValidatorTest.Fixture4 is declared :enum with values [:low, :mid, :high], but its definition is message.tier, a :enum with values [:low, :high]\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture4]) end
     end
@@ -108,10 +111,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :rank, :integer, fn position -> if position > 1, do: 1, else: "many" end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :rank in Hologram.Entity.Derived.ValidatorTest.Fixture5 is declared :integer, but a branch of its definition is the value "many"\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :rank in Hologram.Entity.Derived.ValidatorTest.Fixture5 is declared :integer, but a branch of its definition is the value "many"\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture5]) end
     end
@@ -128,10 +132,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :label, :string, fn name, position -> name <> position end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :label in Hologram.Entity.Derived.ValidatorTest.Fixture6 is declared :string, but an operand of its <> is position, a :integer\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :label in Hologram.Entity.Derived.ValidatorTest.Fixture6 is declared :string, but an operand of its <> is position, a :integer\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture6]) end
     end
@@ -145,11 +150,12 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :item, Hologram.Query, fn -> nil end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :item in Hologram.Entity.Derived.ValidatorTest.Fixture7 is declared Hologram.Query, but Hologram.Query is not an entity type
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :item in Hologram.Entity.Derived.ValidatorTest.Fixture7 is declared Hologram.Query, but its definition is the value nil - a field holding rows is defined by a query over the row's sets\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :item in Hologram.Entity.Derived.ValidatorTest.Fixture7 is declared Hologram.Query, but Hologram.Query is not an entity type
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :item in Hologram.Entity.Derived.ValidatorTest.Fixture7 is declared Hologram.Query, but its definition is the value nil - a field holding rows is defined by a query over the row's sets\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture7]) end
     end
@@ -165,10 +171,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :shout, :string, fn secret -> secret <> "!" end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :shout in Hologram.Entity.Derived.ValidatorTest.Fixture8 reads Hologram.Entity.Derived.ValidatorTest.Fixture8.secret, which is server_only - a client computes derived fields over the rows it holds, and it never holds that value\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :shout in Hologram.Entity.Derived.ValidatorTest.Fixture8 reads Hologram.Entity.Derived.ValidatorTest.Fixture8.secret, which is server_only - a client computes derived fields over the rows it holds, and it never holds that value\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture8]) end
     end
@@ -186,10 +193,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :second, :integer, fn first -> first end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived fields read each other in a cycle: Hologram.Entity.Derived.ValidatorTest.Fixture9.first, Hologram.Entity.Derived.ValidatorTest.Fixture9.second\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived fields read each other in a cycle: Hologram.Entity.Derived.ValidatorTest.Fixture9.first, Hologram.Entity.Derived.ValidatorTest.Fixture9.second\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture9]) end
     end
@@ -217,10 +225,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :busy, :boolean, fn parent -> parent.busy_count > 0 end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived fields read each other in a cycle: Hologram.Entity.Derived.ValidatorTest.Fixture10.busy_count, Hologram.Entity.Derived.ValidatorTest.Fixture11.busy\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived fields read each other in a cycle: Hologram.Entity.Derived.ValidatorTest.Fixture10.busy_count, Hologram.Entity.Derived.ValidatorTest.Fixture11.busy\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture10, Fixture11]) end
     end
@@ -236,10 +245,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :depth, :integer, fn parent -> parent.depth end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :depth in Hologram.Entity.Derived.ValidatorTest.Fixture12 reads itself through a related row\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :depth in Hologram.Entity.Derived.ValidatorTest.Fixture12 reads itself through a related row\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture12]) end
     end
@@ -259,10 +269,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :c, :integer, fn a -> a end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived fields read each other in a cycle: Hologram.Entity.Derived.ValidatorTest.Fixture13.a, Hologram.Entity.Derived.ValidatorTest.Fixture13.b, Hologram.Entity.Derived.ValidatorTest.Fixture13.c\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived fields read each other in a cycle: Hologram.Entity.Derived.ValidatorTest.Fixture13.a, Hologram.Entity.Derived.ValidatorTest.Fixture13.b, Hologram.Entity.Derived.ValidatorTest.Fixture13.c\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture13]) end
     end
@@ -284,10 +295,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :leak, :string, fn owner -> owner.secret end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :leak in Hologram.Entity.Derived.ValidatorTest.Fixture14 reads Hologram.Entity.Derived.ValidatorTest.Fixture14Owner.secret, which is server_only - a client computes derived fields over the rows it holds, and it never holds that value\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :leak in Hologram.Entity.Derived.ValidatorTest.Fixture14 reads Hologram.Entity.Derived.ValidatorTest.Fixture14Owner.secret, which is server_only - a client computes derived fields over the rows it holds, and it never holds that value\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate([Fixture14Owner, Fixture14])
@@ -313,10 +325,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :matching in Hologram.Entity.Derived.ValidatorTest.Fixture15 reads Hologram.Entity.Derived.ValidatorTest.Fixture15.secret, which is server_only - a client computes derived fields over the rows it holds, and it never holds that value\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :matching in Hologram.Entity.Derived.ValidatorTest.Fixture15 reads Hologram.Entity.Derived.ValidatorTest.Fixture15.secret, which is server_only - a client computes derived fields over the rows it holds, and it never holds that value\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture15]) end
     end
@@ -340,10 +353,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :sorted, [Fixture16Message], fn messages -> sort(messages, secret) end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :sorted in Hologram.Entity.Derived.ValidatorTest.Fixture16 reads Hologram.Entity.Derived.ValidatorTest.Fixture16Message.secret, which is server_only - a client computes derived fields over the rows it holds, and it never holds that value\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :sorted in Hologram.Entity.Derived.ValidatorTest.Fixture16 reads Hologram.Entity.Derived.ValidatorTest.Fixture16Message.secret, which is server_only - a client computes derived fields over the rows it holds, and it never holds that value\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate([Fixture16Message, Fixture16])
@@ -371,10 +385,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived fields read each other in a cycle: Hologram.Entity.Derived.ValidatorTest.Fixture17.with_counts, Hologram.Entity.Derived.ValidatorTest.Fixture17Child.sibling_count\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived fields read each other in a cycle: Hologram.Entity.Derived.ValidatorTest.Fixture17.with_counts, Hologram.Entity.Derived.ValidatorTest.Fixture17Child.sibling_count\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate([Fixture17Child, Fixture17])
@@ -394,11 +409,12 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :a, :integer, fn name -> name <> "!" end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line + 2}: derived field :a in Hologram.Entity.Derived.ValidatorTest.Fixture18 is declared :integer, but its definition is a string (<>)
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :b in Hologram.Entity.Derived.ValidatorTest.Fixture18 is declared :integer, but its definition is name, a :string\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line + 2}: derived field :a in Hologram.Entity.Derived.ValidatorTest.Fixture18 is declared :integer, but its definition is a string (<>)
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :b in Hologram.Entity.Derived.ValidatorTest.Fixture18 is declared :integer, but its definition is name, a :string\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture18]) end
     end
@@ -412,10 +428,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :tier, :enum, [values: [:low, :high]], fn -> :mid end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :tier in Hologram.Entity.Derived.ValidatorTest.Fixture19 is declared :enum with values [:low, :high], but its definition is the value :mid\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :tier in Hologram.Entity.Derived.ValidatorTest.Fixture19 is declared :enum with values [:low, :high], but its definition is the value :mid\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture19]) end
     end
@@ -433,10 +450,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :first, [Module33], fn messages -> one(messages) end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :first in Hologram.Entity.Derived.ValidatorTest.Fixture20 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is one Hologram.Test.Fixtures.Entity.Module33 row\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :first in Hologram.Entity.Derived.ValidatorTest.Fixture20 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is one Hologram.Test.Fixtures.Entity.Module33 row\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture20]) end
     end
@@ -452,10 +470,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :none, [Module33], fn -> nil end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :none in Hologram.Entity.Derived.ValidatorTest.Fixture21 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is the value nil - a field holding rows is defined by a query over the row's sets\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :none in Hologram.Entity.Derived.ValidatorTest.Fixture21 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is the value nil - a field holding rows is defined by a query over the row's sets\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture21]) end
     end
@@ -477,10 +496,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :picked in Hologram.Entity.Derived.ValidatorTest.Fixture23 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is a choice between values (if) - a field holding rows is defined by a query over the row's sets\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :picked in Hologram.Entity.Derived.ValidatorTest.Fixture23 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is a choice between values (if) - a field holding rows is defined by a query over the row's sets\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture23]) end
     end
@@ -499,10 +519,11 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         end
       end
 
-      expected_msg = """
-      invalid data model:
-        * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :label in Hologram.Entity.Derived.ValidatorTest.Fixture22 is declared :string, but an operand of its <> is the value 5\
-      """
+      expected_msg =
+        normalize_newlines("""
+        invalid data model:
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :label in Hologram.Entity.Derived.ValidatorTest.Fixture22 is declared :string, but an operand of its <> is the value 5\
+        """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture22]) end
     end

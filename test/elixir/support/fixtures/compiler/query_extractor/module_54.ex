@@ -9,6 +9,10 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 do
   alias Hologram.Test.Fixtures.Entity.Module34
   alias Hologram.Test.Fixtures.Entity.Module36
 
+  # The definitions hand fields of the row to builders that cannot take them, which is what the
+  # walk refuses - so their calls fail on purpose.
+  @dialyzer {:nowarn_function, __derived_definition__: 1}
+
   def __derived_definition__(:branched) do
     last_read_at = Derived.field(Module36, [:last_read_at])
 
