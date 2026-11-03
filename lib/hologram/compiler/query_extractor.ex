@@ -53,12 +53,13 @@ defmodule Hologram.Compiler.QueryExtractor do
   them - a query over a set, a row field, a related row - and goes where a query goes: query stages
   and `Hologram.Entity.Derived` run natively over them, a call into another module of the project is
   followed into its IR with them, and a dot on a related row reads the longer path. The result is
-  normalized as `Hologram.Entity.Derived.resolve/2` normalizes it.
+  normalized as `Hologram.Entity.Derived.resolve/2` normalizes it. A branch on a value the build
+  knows takes the clause that value takes, as an extraction's does.
 
-  Raises Hologram.CompileError, located where the walk stood, when a branch reads a field of the
-  row, when a field of the row reaches anything but a query stage, `Hologram.Entity.Derived` or a
-  query builder, when a builder the body calls returns no query term, when the builders branch so
-  that the body builds no one definition, and on what an extraction refuses.
+  Raises Hologram.CompileError, located where the walk stood, when a branch depends on a field of
+  the row, when a field of the row reaches anything but a query stage, `Hologram.Entity.Derived` or
+  a query builder, when a builder the body calls returns no query term, when a known value matches
+  no clause, and on what an extraction refuses.
   """
   @spec derived_definition(module, atom, PLT.t()) :: Derived.definition()
   def derived_definition(entity_type, name, ir_plt) do
@@ -76,22 +77,10 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     clause = derived_clause!(entity_type, name, ir_plt)
 
-    definitions =
-      clause.body
-      |> evaluate_variants!(%{}, context, [])
-      |> Enum.map(&Derived.normalize/1)
-      |> Enum.uniq()
+    # Every branch of a derived field's walk is decided or refused, so the walk builds one definition.
+    [definition] = evaluate_variants!(clause.body, %{}, context, [], false)
 
-    case definitions do
-      [definition] ->
-        definition
-
-      variants ->
-        compile_error!(
-          "#{context.subject} builds #{length(variants)} definitions, one per branch its query builders take - a derived field's definition is one query, built before any row is read",
-          context
-        )
-    end
+    Derived.normalize(definition)
   end
 
   @doc """
@@ -102,19 +91,21 @@ defmodule Hologram.Compiler.QueryExtractor do
   constructors) and its result normalized. A capture with arguments is evaluated
   symbolically over its IR - each argument becomes a placeholder flowing into
   the term as a `{:placeholder, name}` leaf named after the argument, resolving through
-  the generated from_query shim when the capture points at one. Branching forks
-  the evaluation: every case/cond clause, every capture head clause, and every
-  clause of a multi-clause helper yields its own variant term, all variants are
-  extracted (deduplicated per capture), and clause guards are never evaluated -
-  a variant that cannot occur at runtime is over-approximation, costing a
-  registry entry, never correctness. A literal head pattern fixes its argument
-  concretely in that variant.
+  the generated from_query shim when the capture points at one. A branch on a
+  value the build knows - a case, a cond, a call to a multi-clause helper - takes
+  the clause that value takes, its patterns and guards read in order as Elixir
+  reads them, and a known value no clause matches is refused where the code would
+  raise. A branch on an argument forks the evaluation: every clause the value could
+  take yields its own variant term, as does every capture head clause, and all
+  variants are extracted (deduplicated per capture) - a variant that cannot occur
+  at runtime is over-approximation, costing a registry entry, never correctness. A
+  literal head pattern fixes its argument concretely in that variant.
 
   Calls interpret transitively: local helpers and placeholder-receiving functions
   compiled into the project build evaluate over their own IR (recursion is
   rejected), placeholder-free remote calls and query stage calls run natively, and
   single-clause anonymous functions evaluate on invocation with their captured
-  scope (branch-free bodies only).
+  scope (a branch inside one only on a value the build knows).
 
   ANYTHING THE BUILD CAN EVALUATE IS PART OF THE QUERY, ANYTHING IT CANNOT IS A
   PLACEHOLDER. That is the whole rule, and what it serves is the sync window - which
@@ -140,8 +131,9 @@ defmodule Hologram.Compiler.QueryExtractor do
   Raises Hologram.CompileError when a from_query value is not a function capture,
   when a capture argument is destructured instead of a plain name, when a capture
   argument is named vars (reserved), when a case clause or function head uses a
-  composite pattern, when a helper recurses, when an anonymous function has
-  multiple clauses, arity above 3, or branches, when a body uses a construct
+  composite pattern, when a known value matches no clause, when a helper recurses,
+  when an anonymous function has multiple clauses, arity above 3, or a branch on
+  an argument, when a body uses a construct
   symbolic evaluation does not cover, when a placeholder stands somewhere the build
   can neither drop nor enumerate (a whole predicates list, a paginate option map, a
   sub-builder), or when no candidate survives - a prop with no window would read
@@ -241,7 +233,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   # A closure evaluates with choices :none - a fork inside would restart the
-  # whole body with a stale choice list, so branching inside raises instead.
+  # whole body with a stale choice list, so a branch inside it on an argument raises instead.
   defp anonymous_closure!(1, clause, closure_env, context) do
     fn arg_1 -> interpret_anonymous!(clause, [arg_1], closure_env, context) end
   end
@@ -340,6 +332,25 @@ defmodule Hologram.Compiler.QueryExtractor do
               __STACKTRACE__
   end
 
+  defp bound_again(bound, value, outcome, bindings) do
+    cond do
+      unknown_value?(bound) or unknown_value?(value) -> {:cont, {:unknown, bindings}}
+      bound === value -> {:cont, {outcome, bindings}}
+      true -> {:halt, :no_match}
+    end
+  end
+
+  # A variable a head names twice binds one value, so the second binding has to equal the first, as
+  # Elixir matches it - unknown when either value is.
+  defp bound_together(bindings, new_bindings) do
+    Enum.reduce_while(new_bindings, {:match, bindings}, fn {key, value}, {outcome, acc} ->
+      case Map.fetch(acc, key) do
+        :error -> {:cont, {outcome, Map.put(acc, key, value)}}
+        {:ok, bound} -> bound_again(bound, value, outcome, acc)
+      end
+    end)
+  end
+
   # A call the field's own clause makes into another module is a query builder: followed into its
   # IR, whatever it is given, since it builds the query the definition is - so it returns a query
   # term.
@@ -365,7 +376,8 @@ defmodule Hologram.Compiler.QueryExtractor do
     {value, state_after_call}
   end
 
-  defp call_binding!(%IR.Variable{name: name}, value, _context), do: {name, value}
+  defp call_binding!(%IR.Variable{name: name, version: version}, value, _context),
+    do: {{name, version}, value}
 
   defp call_binding!(%IR.AtomType{}, _value, _context), do: nil
 
@@ -395,8 +407,13 @@ defmodule Hologram.Compiler.QueryExtractor do
     end)
   end
 
-  defp case_clause_env!(%IR.Variable{name: name}, condition_value, env, _context) do
-    Map.put(env, name, condition_value)
+  defp case_clause_env!(
+         %IR.Variable{name: name, version: version},
+         condition_value,
+         env,
+         _context
+       ) do
+    Map.put(env, {name, version}, condition_value)
   end
 
   defp case_clause_env!(%IR.AtomType{}, _condition_value, env, _context), do: env
@@ -414,6 +431,65 @@ defmodule Hologram.Compiler.QueryExtractor do
       "#{context.subject} uses a composite case pattern - only variables, literals, and _ are extractable yet",
       context
     )
+  end
+
+  # The clause a branch takes: the one candidate, or - when the build cannot tell which - a fork over
+  # the candidates, which a derived field refuses. With none, the code raises where the branch is -
+  # unless a fork made the values up, combining choices no run makes, so the variant is pruned.
+  defp choose_clause!([], %{forked?: true}, _no_match, _context), do: throw(@prune_signal)
+
+  defp choose_clause!([], _state, no_match, context), do: compile_error!(no_match, context)
+
+  defp choose_clause!([index], state, _no_match, _context), do: {index, state}
+
+  defp choose_clause!(candidates, state, _no_match, context) do
+    refuse_undecided_branch!(context)
+
+    {choice, state_after_choice} = take_choice!(state, length(candidates), context)
+
+    {Enum.at(candidates, choice), state_after_choice}
+  end
+
+  # The clauses a branch may take, in order: every clause not ruled out up to the first one known to
+  # match - the ones after it are never reached - or to the last clause.
+  defp clause_candidates(clauses, outcome) do
+    clauses
+    |> Enum.with_index()
+    |> Enum.reduce_while([], fn {clause, index}, candidates ->
+      case outcome.(clause) do
+        :match -> {:halt, [index | candidates]}
+        :no_match -> {:cont, candidates}
+        :unknown -> {:cont, [index | candidates]}
+      end
+    end)
+    |> Enum.reverse()
+  end
+
+  # Whether a clause matches the given values, as Elixir decides it: every pattern matches its
+  # value and a guard holds. A pattern on a value the build does not know, or a guard reading one,
+  # leaves it unknown. A pattern the walk takes no bindings from is refused by the given binder.
+  defp clause_outcome(patterns, guards, values, env, binder, context) do
+    patterns_outcome =
+      patterns
+      |> Enum.zip(values)
+      |> Enum.reduce_while({:match, %{}}, fn {pattern, value}, {outcome, bindings} ->
+        with {pattern_outcome, new_bindings} <- pattern_outcome(pattern, value, binder),
+             {bound_outcome, merged_bindings} <- bound_together(bindings, new_bindings) do
+          combined_outcome =
+            outcome
+            |> weaker(pattern_outcome)
+            |> weaker(bound_outcome)
+
+          {:cont, {combined_outcome, merged_bindings}}
+        else
+          :no_match -> {:halt, :no_match}
+        end
+      end)
+
+    case patterns_outcome do
+      :no_match -> :no_match
+      {outcome, bindings} -> guards_outcome(guards, Map.merge(env, bindings), outcome, context)
+    end
   end
 
   # Every refusal here is raised while sweeping modules that are ALREADY COMPILED, so the BEAM
@@ -434,12 +510,6 @@ defmodule Hologram.Compiler.QueryExtractor do
       file: source_file(module),
       line: line
   end
-
-  # The file a refusal is located in: the module being walked - or, in a derived field's own clause,
-  # the file the field is declared in, which the clause is generated into.
-  defp context_file(%{derived: %{at_field?: true, file: file}}), do: file
-
-  defp context_file(context), do: source_file(context.current_module)
 
   # A read the build performs for real, so a bad one is a bad builder - reported like every other
   # build refusal here, naming the prop the ArgumentError-free raisers of Map cannot know about.
@@ -491,6 +561,12 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp contains_placeholder?(_other), do: false
+
+  # The file a refusal is located in: the module being walked - or, in a derived field's own clause,
+  # the file the field is declared in, which the clause is generated into.
+  defp context_file(%{derived: %{at_field?: true, file: file}}), do: file
+
+  defp context_file(context), do: source_file(context.current_module)
 
   # The set a builder argument may bind - the component's declared reactive slots, which today
   # means the props it is GIVEN and nothing else. Declared state and derived values extend this
@@ -546,17 +622,28 @@ defmodule Hologram.Compiler.QueryExtractor do
     end)
   end
 
-  # Clause guards are deliberately never evaluated at a fork - every clause
-  # forks a variant regardless of satisfiability (over-approximation).
   defp evaluate!(%IR.Case{condition: condition, clauses: clauses, line: line}, state, context) do
     context = with_line(context, line)
 
     {condition_value, state_after_condition} = evaluate!(condition, state, context)
 
-    validate_unbranched!(condition_value, context)
+    candidates =
+      clause_candidates(clauses, fn clause ->
+        clause_outcome(
+          [clause.match],
+          clause.guards,
+          [condition_value],
+          state_after_condition.env,
+          &case_clause_env!(&1, condition_value, %{}, context),
+          context
+        )
+      end)
+
+    no_match =
+      "#{context.subject} reaches a case on #{inspect(condition_value)}, which no clause matches - the code raises CaseClauseError there"
 
     {choice, state_after_choice} =
-      take_choice!(state_after_condition, length(clauses), context)
+      choose_clause!(candidates, state_after_condition, no_match, context)
 
     clause = Enum.at(clauses, choice)
     clause_env = case_clause_env!(clause.match, condition_value, state_after_choice.env, context)
@@ -648,7 +735,11 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp evaluate!(
-         %IR.MatchOperator{left: %IR.Variable{name: name}, right: right, line: line},
+         %IR.MatchOperator{
+           left: %IR.Variable{name: name, version: version},
+           right: right,
+           line: line
+         },
          state,
          context
        ) do
@@ -656,7 +747,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     {value, new_state} = evaluate!(right, state, context)
 
-    {value, %{new_state | env: Map.put(new_state.env, name, value)}}
+    {value, %{new_state | env: Map.put(new_state.env, {name, version}, value)}}
   end
 
   defp evaluate!(%IR.MatchOperator{}, _state, context) do
@@ -708,8 +799,10 @@ defmodule Hologram.Compiler.QueryExtractor do
     {List.to_tuple(values), new_state}
   end
 
-  defp evaluate!(%IR.Variable{name: name}, state, _context) do
-    {Map.fetch!(state.env, name), state}
+  # A variable is read by its name and version: the walk keeps every binding apart, so one the
+  # compiler introduced - the x an if expands into - never hides the developer's own x.
+  defp evaluate!(%IR.Variable{name: name, version: version}, state, _context) do
+    {Map.fetch!(state.env, {name, version}), state}
   end
 
   defp evaluate!(ir, _state, context) do
@@ -719,24 +812,45 @@ defmodule Hologram.Compiler.QueryExtractor do
     )
   end
 
-  defp evaluate_cond!([], _state, _context) do
-    throw(@prune_signal)
+  # A known condition decides its clause, as the cond does at runtime. An unknown one forks: one
+  # variant takes the clause, the other goes on to the next. Past every clause the code raises -
+  # unless a fork made the values up, so the variant is pruned.
+  defp evaluate_cond!([], %{forked?: true}, _context), do: throw(@prune_signal)
+
+  defp evaluate_cond!([], _state, context) do
+    compile_error!(
+      "#{context.subject} reaches a cond none of whose conditions holds - the code raises CondClauseError there",
+      context
+    )
   end
 
   defp evaluate_cond!([clause | rest], state, context) do
     {condition_value, state_after_condition} = evaluate!(clause.condition, state, context)
 
-    validate_unbranched!(condition_value, context)
+    cond do
+      unknown_value?(condition_value) ->
+        refuse_undecided_branch!(context)
 
-    {choice, state_after_choice} = take_choice!(state_after_condition, 2, context)
+        {choice, state_after_choice} = take_choice!(state_after_condition, 2, context)
 
-    if choice == 0 do
-      {value, state_after_body} = evaluate!(clause.body, state_after_choice, context)
+        if choice == 0 do
+          evaluate_cond_body!(clause, state_after_choice, context)
+        else
+          evaluate_cond!(rest, state_after_choice, context)
+        end
 
-      {value, %{state_after_body | env: state_after_choice.env}}
-    else
-      evaluate_cond!(rest, state_after_choice, context)
+      condition_value in [nil, false] ->
+        evaluate_cond!(rest, state_after_condition, context)
+
+      true ->
+        evaluate_cond_body!(clause, state_after_condition, context)
     end
+  end
+
+  defp evaluate_cond_body!(clause, state, context) do
+    {value, state_after_body} = evaluate!(clause.body, state, context)
+
+    {value, %{state_after_body | env: state.env}}
   end
 
   defp evaluate_enum!(irs, state, context) do
@@ -750,11 +864,15 @@ defmodule Hologram.Compiler.QueryExtractor do
     {Enum.reverse(reversed_values), new_state}
   end
 
-  defp evaluate_variants!(body, env, context, choices) do
+  defp evaluate_variants!(body, env, context, choices, forked?) do
     result =
       try do
         {term, _state} =
-          evaluate!(body, %{choices: choices, env: env, funs_cache: %{}}, context)
+          evaluate!(
+            body,
+            %{choices: choices, env: env, forked?: forked?, funs_cache: %{}},
+            context
+          )
 
         {:term, term}
       catch
@@ -771,7 +889,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
       {:fork, clause_count} ->
         Enum.flat_map(0..(clause_count - 1), fn choice ->
-          evaluate_variants!(body, env, context, List.insert_at(choices, -1, choice))
+          evaluate_variants!(body, env, context, List.insert_at(choices, -1, choice), forked?)
         end)
     end
   end
@@ -824,6 +942,123 @@ defmodule Hologram.Compiler.QueryExtractor do
     {module, function, arity, [file: source_file(module), line: line]}
   end
 
+  defp guard_call(module, function, args) do
+    {:known, apply(module, function, args)}
+  rescue
+    _error -> :failed
+  end
+
+  # A guard's value over the bound values: {:known, value}, :unknown when it reads a value the build
+  # does not know, or :failed when it raises. andalso and orelse are operators rather than functions,
+  # so they are short-circuited here, and every other call in a guard is an Erlang one, run natively.
+  defp guard_value(%IR.RemoteFunctionCall{function: operator, args: [left, right]}, env, context)
+       when operator in [:andalso, :orelse] do
+    case {operator, guard_value(left, env, context)} do
+      {:andalso, {:known, false}} -> {:known, false}
+      {:andalso, {:known, true}} -> guard_value(right, env, context)
+      {:orelse, {:known, true}} -> {:known, true}
+      {:orelse, {:known, false}} -> guard_value(right, env, context)
+      {_operator, :unknown} -> :unknown
+      {_operator, _failed_or_not_boolean} -> :failed
+    end
+  end
+
+  defp guard_value(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: module},
+           function: function,
+           args: args
+         },
+         env,
+         context
+       ) do
+    case guard_values(args, env, & &1, context) do
+      {:known, arg_values} -> guard_call(module, function, arg_values)
+      unknown_or_failed -> unknown_or_failed
+    end
+  end
+
+  defp guard_value(%IR.DotOperator{left: left, right: right}, env, context) do
+    case guard_values([left, right], env, & &1, context) do
+      {:known, [map, key]} when is_map(map) ->
+        if Map.has_key?(map, key), do: {:known, Map.fetch!(map, key)}, else: :failed
+
+      {:known, _not_a_map} ->
+        :failed
+
+      unknown_or_failed ->
+        unknown_or_failed
+    end
+  end
+
+  defp guard_value(%IR.Variable{name: name, version: version}, env, _context) do
+    case Map.fetch(env, {name, version}) do
+      {:ok, value} -> if unknown_value?(value), do: :unknown, else: {:known, value}
+      :error -> :unknown
+    end
+  end
+
+  defp guard_value(%IR.ListType{data: data}, env, context),
+    do: guard_values(data, env, & &1, context)
+
+  defp guard_value(%IR.MapType{data: data}, env, context) do
+    data
+    |> Enum.flat_map(fn {key, value} -> [key, value] end)
+    |> guard_values(env, &map_of_pairs/1, context)
+  end
+
+  defp guard_value(%IR.TupleType{data: data}, env, context),
+    do: guard_values(data, env, &List.to_tuple/1, context)
+
+  defp guard_value(%{__struct__: struct, value: value}, _env, _context)
+       when struct in [IR.AtomType, IR.FloatType, IR.IntegerType, IR.StringType],
+       do: {:known, value}
+
+  # A guard construct the walk does not evaluate leaves a capture's clause undecided, forked as any
+  # other. A derived field's walk has to decide it, so there it is refused for what it is.
+  defp guard_value(_ir, _env, %{derived: nil}), do: :unknown
+
+  defp guard_value(ir, _env, context) do
+    compile_error!(
+      "#{context.subject} uses #{inspect(ir.__struct__)} in a guard - the construct is not extractable yet",
+      context
+    )
+  end
+
+  defp guard_values(irs, env, build, context) do
+    values = Enum.map(irs, &guard_value(&1, env, context))
+
+    cond do
+      :failed in values ->
+        :failed
+
+      :unknown in values ->
+        :unknown
+
+      true ->
+        built =
+          values
+          |> known_values()
+          |> build.()
+
+        {:known, built}
+    end
+  end
+
+  # Whether any of a clause's guards holds - none means the clause is not guarded. A guard that
+  # raises does not hold, as in Elixir.
+  defp guards_outcome([], _env, outcome, _context), do: outcome
+
+  defp guards_outcome(guards, env, outcome, context) do
+    values = Enum.map(guards, &guard_value(&1, env, context))
+
+    cond do
+      {:known, true} in values -> outcome
+      :unknown in values -> :unknown
+      true -> :no_match
+    end
+  end
+
   # TODO: an argument named vars will bind the full assigns bag once that
   # convention lands - until then the name is reserved.
   defp head_binding!(module, prop_name, %IR.Variable{name: :vars}, line) do
@@ -834,8 +1069,8 @@ defmodule Hologram.Compiler.QueryExtractor do
     )
   end
 
-  defp head_binding!(_module, _prop_name, %IR.Variable{name: name}, _line) do
-    {name, %Placeholder{name: name}}
+  defp head_binding!(_module, _prop_name, %IR.Variable{name: name, version: version}, _line) do
+    {{name, version}, %Placeholder{name: name}}
   end
 
   defp head_binding!(_module, _prop_name, %IR.AtomType{}, _line), do: nil
@@ -868,7 +1103,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp interpret_anonymous!(clause, arg_values, closure_env, context) do
     call_env = call_env!(clause.params, arg_values, closure_env, context)
 
-    state = %{choices: :none, env: call_env, funs_cache: %{}}
+    state = %{choices: :none, env: call_env, forked?: false, funs_cache: %{}}
 
     {value, _state} = evaluate!(clause.body, state, context)
 
@@ -894,15 +1129,22 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     clauses = fetch_function_clauses!(funs, module, function, arity, context)
 
-    {choice, state_after_choice} =
-      case clauses do
-        [_single_clause] ->
-          {0, state_after_funs}
+    candidates =
+      clause_candidates(clauses, fn clause ->
+        clause_outcome(
+          clause.params,
+          clause.guards,
+          arg_values,
+          %{},
+          &call_binding!(&1, nil, context),
+          context
+        )
+      end)
 
-        _multiple_clauses ->
-          validate_undispatched!(clauses, arg_values, context)
-          take_choice!(state_after_funs, length(clauses), context)
-      end
+    no_match =
+      "#{context.subject} calls #{inspect(module)}.#{function}/#{arity} with #{Enum.map_join(arg_values, ", ", &spelled_argument/1)}, which no clause matches - the code raises FunctionClauseError there"
+
+    {choice, state_after_choice} = choose_clause!(candidates, state_after_funs, no_match, context)
 
     clause = Enum.at(clauses, choice)
     call_env = call_env!(clause.params, arg_values, %{}, context)
@@ -1009,6 +1251,8 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp entity_type(entity_type) when is_atom(entity_type), do: entity_type
 
+  defp known_values(values), do: Enum.map(values, fn {:known, value} -> value end)
+
   # A position named by some clauses and left a literal by others merges to the one name - that is
   # what this is for, and it is how a `def q(nil)` clause sits beside a `def q(min_b)` one. Two
   # clauses naming it DIFFERENTLY is the shape that cannot merge, since the caller must pick a
@@ -1017,6 +1261,12 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp leave_field(nil), do: nil
 
   defp leave_field(derived), do: %{derived | at_field?: false}
+
+  defp map_of_pairs(flat_pairs) do
+    flat_pairs
+    |> Enum.chunk_every(2)
+    |> Map.new(fn [key, value] -> {key, value} end)
+  end
 
   defp merged_placeholder_names(module, prop_name, clauses, arity) do
     Enum.map(0..(arity - 1), fn index ->
@@ -1066,6 +1316,24 @@ defmodule Hologram.Compiler.QueryExtractor do
       _pattern -> nil
     end
   end
+
+  # Whether a clause head's pattern matches a value: always for a name or _, by the literal's equality
+  # for a literal - unknown when the build does not know the value - with the bindings it makes.
+  defp pattern_outcome(%IR.Variable{name: name, version: version}, value, _binder),
+    do: {:match, %{{name, version} => value}}
+
+  defp pattern_outcome(%IR.MatchPlaceholder{}, _value, _binder), do: {:match, %{}}
+
+  defp pattern_outcome(%{__struct__: struct, value: literal}, value, _binder)
+       when struct in [IR.AtomType, IR.FloatType, IR.IntegerType, IR.StringType] do
+    cond do
+      unknown_value?(value) -> {:unknown, %{}}
+      value === literal -> {:match, %{}}
+      true -> :no_match
+    end
+  end
+
+  defp pattern_outcome(pattern, _value, binder), do: binder.(pattern)
 
   defp prop_params(module, {name, _type, opts}, ir_plt) do
     with {:ok, capture} <- Keyword.fetch(opts, :from_query),
@@ -1126,7 +1394,7 @@ defmodule Hologram.Compiler.QueryExtractor do
       Enum.flat_map(clauses, fn clause ->
         env = head_env!(module, prop_name, clause)
 
-        evaluate_variants!(clause.body, env, context, [])
+        evaluate_variants!(clause.body, env, context, [], length(clauses) > 1)
       end)
 
     terms =
@@ -1149,6 +1417,17 @@ defmodule Hologram.Compiler.QueryExtractor do
       "from_query for prop #{inspect(prop_name)} in #{inspect(module)} must be a function capture, got: #{inspect(value)}",
       module,
       nil
+    )
+  end
+
+  # A derived field's definition is built once, before any row is read, so a branch the build cannot
+  # decide is one on a field of the row - the one value a derived field's walk does not know.
+  defp refuse_undecided_branch!(%{derived: nil}), do: :ok
+
+  defp refuse_undecided_branch!(context) do
+    compile_error!(
+      "#{context.subject} branches on a field of the row - a derived field's definition is one query, built before any row is read",
+      context
     )
   end
 
@@ -1246,6 +1525,12 @@ defmodule Hologram.Compiler.QueryExtractor do
     apply_derived!(:field, [owner, List.insert_at(chain, -1, field)], context)
   end
 
+  # An argument as a message spells it: a value the build knows as inspect/1 does, one it does not
+  # by the name of the argument it stands for.
+  defp spelled_argument(%Placeholder{name: name}), do: Atom.to_string(name)
+
+  defp spelled_argument(value), do: inspect(value)
+
   defp stage_error_message(function, arg_values, error, context) do
     prefix = context.subject
 
@@ -1312,7 +1597,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp take_choice!(%{choices: [choice | rest]} = state, _clause_count, _context) do
-    {choice, %{state | choices: rest}}
+    {choice, %{state | choices: rest, forked?: true}}
   end
 
   defp take_choice!(%{choices: []}, clause_count, _context) do
@@ -1325,6 +1610,8 @@ defmodule Hologram.Compiler.QueryExtractor do
       context
     )
   end
+
+  defp unknown_value?(value), do: contains_placeholder?(value) or stand_in?(value)
 
   defp validate_slot_binding!(module, prop_name, nil, _slot_names) do
     compile_error!(
@@ -1355,31 +1642,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  # A function choosing its clause by an argument that stands for a field of the row branches on
-  # it, which a clause head matching a pattern there does.
-  defp validate_undispatched!(clauses, arg_values, context) do
-    arg_values
-    |> Enum.with_index()
-    |> Enum.each(fn {arg_value, index} ->
-      dispatched? =
-        Enum.any?(clauses, fn clause ->
-          param = Enum.at(clause.params, index)
+  defp weaker(:match, outcome), do: outcome
 
-          not is_struct(param, IR.Variable) and not is_struct(param, IR.MatchPlaceholder)
-        end)
-
-      if dispatched?, do: validate_unbranched!(arg_value, context)
-    end)
-  end
-
-  # A derived field's definition is built once, before any row is read, so no branch reads a field
-  # of the row.
-  defp validate_unbranched!(condition_value, context) do
-    if stand_in?(condition_value) do
-      compile_error!(
-        "#{context.subject} branches on a field of the row - a derived field's definition is one query, built before any row is read",
-        context
-      )
-    end
-  end
+  defp weaker(:unknown, _outcome), do: :unknown
 end
