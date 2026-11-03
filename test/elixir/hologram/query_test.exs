@@ -4,6 +4,7 @@ defmodule Hologram.QueryTest do
   import Hologram.Query
 
   alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module24
   alias Hologram.Test.Fixtures.Entity.Module26
@@ -269,6 +270,13 @@ defmodule Hologram.QueryTest do
 
       assert inspect(term) ==
                "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module2, skip: 40, sort: [c: :asc], take: 20}"
+    end
+
+    test "shows a derived field's query with its source" do
+      term = Stage.sourced(Module26, [:messages])
+
+      assert inspect(term) ==
+               "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module28, source: {Hologram.Test.Fixtures.Entity.Module26, [:messages]}}"
     end
 
     test "shows the trust mark" do

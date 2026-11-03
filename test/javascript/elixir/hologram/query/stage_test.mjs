@@ -2663,7 +2663,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             channel,
             Type.list([Type.tuple([outer(1, "name"), Type.bitstring("x")])]),
           ),
-        "{:outer, 1, :name} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 1, :name} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a name of a row above reaching past the queried row",
@@ -2674,7 +2674,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               [outer(2, "name"), Type.bitstring("x")],
             ]),
           ),
-        "{:outer, 2, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 2, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a key naming a row zero levels out",
@@ -2685,7 +2685,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               [outer(0, "name"), Type.bitstring("x")],
             ]),
           ),
-        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a name of a row zero levels out",
@@ -2696,7 +2696,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               ["body", attribute(outer(0, "name"))],
             ]),
           ),
-        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a malformed attribute operand of a row above, quoting it as written",
@@ -2727,7 +2727,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               ["any", Type.tuple([outer(2, ["messages"]), Type.list([])])],
             ]),
           ),
-        "{:outer, 2, [:messages]} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 2, [:messages]} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a source of a row above naming no relationship",

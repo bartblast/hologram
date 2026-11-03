@@ -12,6 +12,10 @@ defmodule Hologram.Query do
   # sort replaces, include adds a key or merges into one - so two pipes reaching the same
   # fields are one query, which is what Hologram.Query.Registry.id/1 relies on. A term is always
   # about one entity type, so a struct written without one is refused at the literal.
+  #
+  # A term with a source is a derived field's query: it reads a set reached from a row of the owning
+  # entity type through the relationships its chain names, rather than a table, and its conditions
+  # may read that row as the row one level out. It exists only inside a derived field's definition.
   @enforce_keys [:entity]
 
   defstruct cardinality: :set,
@@ -20,6 +24,7 @@ defmodule Hologram.Query do
             include: %{},
             skip: nil,
             sort: [],
+            source: nil,
             take: nil,
             trust: false
 
@@ -78,6 +83,10 @@ defmodule Hologram.Query do
 
   @type source :: list(atom) | {:outer, pos_integer, list(atom)}
 
+  # The owning entity type and the relationships followed from its row to the set a derived field's
+  # query reads - any relationships, the last one a set, a set before it flattening into one.
+  @type term_source :: {module, list(atom)}
+
   @type t :: %__MODULE__{
           cardinality: cardinality,
           entity: module,
@@ -85,6 +94,7 @@ defmodule Hologram.Query do
           include: %{atom => t},
           skip: bound,
           sort: list(ordering),
+          source: term_source | nil,
           take: bound,
           trust: boolean
         }
@@ -640,8 +650,8 @@ defmodule Hologram.Query do
   # entity type alone, and an include shows as the nested struct it holds. Still the literal that
   # rebuilds the term exactly (an omitted field takes its default, and entity is never omitted),
   # and the spelling the tests assert with, so what inspect prints is what a reader writes. Bare,
-  # five of the eight fields are at their default on every term and every sub-term, and the
-  # signal drowns.
+  # six of the nine fields are at their default on every term and every sub-term, and the signal
+  # drowns.
   defimpl Inspect do
     import Inspect.Algebra
 
@@ -661,6 +671,7 @@ defmodule Hologram.Query do
             include: term.include,
             skip: term.skip,
             sort: term.sort,
+            source: term.source,
             take: term.take,
             trust: term.trust
           ],

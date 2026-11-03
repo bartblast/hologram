@@ -533,7 +533,7 @@ function nameTypeOf(scope, name) {
 
   if (levels === null || levels < 1 || levels > rowsAbove) {
     Interpreter.raiseArgumentError(
-      `${Interpreter.inspect(name)} names no row above the condition it stands in, which has ${rowsSpelled(rowsAbove)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row`,
+      `${Interpreter.inspect(name)} names no row above the condition it stands in, which has ${rowsSpelled(rowsAbove)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row`,
     );
   }
 

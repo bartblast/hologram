@@ -8,8 +8,10 @@ defmodule Hologram.DBReadTest do
   alias Hologram.DB
   alias Hologram.Entity
   alias Hologram.Query.Placeholder
+  alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
+  alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
@@ -217,6 +219,17 @@ defmodule Hologram.DBReadTest do
       assert_error ArgumentError, expected_msg, fn ->
         Module2
         |> sort(^%Placeholder{name: :sort})
+        |> DB.read()
+      end
+    end
+
+    test "raises on a derived field's query" do
+      expected_msg =
+        "cannot read a derived field's query on its own - it reads channel.messages of a Hologram.Test.Fixtures.Entity.Module28 row, so it is read through the derived field"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module28
+        |> Stage.sourced([:channel, :messages])
         |> DB.read()
       end
     end

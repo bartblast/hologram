@@ -13,6 +13,7 @@ defmodule Hologram.Query.Stage do
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Placeholder
+  alias Hologram.Query.RowField
   alias Hologram.Reflection
 
   @directions [:asc, :desc]
@@ -115,6 +116,12 @@ defmodule Hologram.Query.Stage do
   # name of the argument it derives from, so b: ^(n * 2) stores {:placeholder, :n}. Nothing binds a
   # leaf back to a value - both execution tiers call the builder with real values and normalize
   # THAT - so the name serves reading a term, never evaluating one.
+  #
+  # A Hologram.Query.RowField struct in a value position - bare or as the operand of a comparison or
+  # a search - stands for a field of the row a derived field is computed for, and is taken only by a
+  # term with a source, whose owning type it names. The triple stores it as an attribute of the row
+  # one level out of the term - {:attribute, {:outer, levels, name}}, as many levels as the clause
+  # is nested under quantifiers, plus one - and it is judged as any attribute of another row is.
   @doc false
   @spec filter(module | Query.t(), Query.predicates()) :: Query.t()
   def filter(query, predicates) do
@@ -126,7 +133,13 @@ defmodule Hologram.Query.Stage do
           "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: #{inspect(predicates)}"
     end
 
-    triples = predicate_triples!(term.entity, predicates)
+    if term.source == nil and row_field?(predicates) do
+      raise ArgumentError,
+        message:
+          "a row field stands for a field of the row a derived field is computed for, so only a derived field's query compares with one, got: #{inspect(predicates)}"
+    end
+
+    triples = scoped_triples!(term_scope(term), predicates)
 
     %{term | filter: term.filter ++ triples}
   end
@@ -393,6 +406,34 @@ defmodule Hologram.Query.Stage do
     %{term | sort: entries}
   end
 
+  # Returns the query term a derived field's definition reads a set with: the set the given
+  # relationships lead to from a row of the given owning entity type. Any relationship may be
+  # followed - a to-one, a to-many or an inverse of either kind - and the last one is a set, a
+  # to-many or an inverse set. A set before the last relationship makes the rows every path reaches
+  # one set, each row once.
+  @doc false
+  @spec sourced(module, list(atom)) :: Query.t()
+  def sourced(owner, chain) do
+    if not Reflection.entity?(owner) do
+      raise ArgumentError,
+        message:
+          "#{inspect(owner)} is not an entity type module - a derived field's query starts from a row of the entity type declaring it"
+    end
+
+    if not is_list(chain) or chain == [] or not Enum.all?(chain, &is_atom/1) do
+      raise ArgumentError,
+        message:
+          "a derived field's query is sourced by a list of relationship names, got: #{inspect(chain)}"
+    end
+
+    {hops, [set_name]} = Enum.split(chain, -1)
+
+    set_owner_type = Enum.reduce(hops, owner, &validate_sourced_hop!/2)
+    target = validate_sourced_set!(set_name, set_owner_type)
+
+    %Query{entity: target, source: {owner, chain}}
+  end
+
   @doc false
   @spec take(module | Query.t(), non_neg_integer) :: Query.t()
   def take(query, value) do
@@ -642,6 +683,10 @@ defmodule Hologram.Query.Stage do
         "invalid include spec entry #{inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair"
   end
 
+  defp includable_definitions(entity_type) do
+    Enum.concat(entity_type.__relationships__(), entity_type.__inverse_relationships__())
+  end
+
   defp integer_names(definitions) do
     definitions
     |> Enum.filter(fn {_name, type, _opts} -> type == :integer end)
@@ -723,7 +768,7 @@ defmodule Hologram.Query.Stage do
     else
       raise ArgumentError,
         message:
-          "#{inspect(name)} names no row above the condition it stands in, which has #{rows_spelled(rows_above)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row"
+          "#{inspect(name)} names no row above the condition it stands in, which has #{rows_spelled(rows_above)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row"
     end
   end
 
@@ -947,6 +992,16 @@ defmodule Hologram.Query.Stage do
     end
   end
 
+  defp predicate_triples!(name, %RowField{} = row_field, entity_type, scope) do
+    [row_field_triple!(name, :==, row_field, entity_type, scope)]
+  end
+
+  defp predicate_triples!(name, {operator, %RowField{} = row_field}, entity_type, scope)
+       when operator in @equality_operators or operator in @ordering_operators or
+              operator in @search_operators do
+    [row_field_triple!(name, operator, row_field, entity_type, scope)]
+  end
+
   defp predicate_triples!(name, {:attribute, other}, entity_type, scope)
        when is_atom(other) or is_list(other) or
               (is_tuple(other) and tuple_size(other) == 3 and elem(other, 0) == :outer) do
@@ -1132,14 +1187,20 @@ defmodule Hologram.Query.Stage do
         "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect_name(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact"
   end
 
-  # The known relationships are the ones the position takes: to-one ones before the set, every
-  # relationship at the set.
-  @spec raise_unknown_source_name!(atom, module, list(atom)) :: no_return
-  defp raise_unknown_source_name!(name, entity_type, known_names) do
+  # The known relationships are the ones the position takes: a quantifier's source takes to-one
+  # ones before the set and every relationship at the set, a derived field's query every
+  # relationship at every step.
+  @spec raise_unknown_source_name!(atom, module, list(atom), String.t()) :: no_return
+  defp raise_unknown_source_name!(
+         name,
+         entity_type,
+         known_names,
+         source
+       ) do
     if name in attribute_names(entity_type) do
       raise ArgumentError,
         message:
-          "#{inspect(name)} is an attribute in #{inspect(entity_type)} - a quantifier's source names relationships"
+          "#{inspect(name)} is an attribute in #{inspect(entity_type)} - #{source} names relationships"
     end
 
     known = Enum.map_join(known_names, ", ", &inspect/1)
@@ -1210,6 +1271,74 @@ defmodule Hologram.Query.Stage do
     end)
   end
 
+  # Whether data-form predicates hold a row field anywhere - as a value, an operand, a membership
+  # element, inside a disjunction or a quantifier's condition.
+  defp row_field?(%RowField{}), do: true
+
+  defp row_field?(list) when is_list(list), do: Enum.any?(list, &row_field?/1)
+
+  defp row_field?(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> row_field?()
+  end
+
+  defp row_field?(_value), do: false
+
+  # A row field names a field of the row the derived field belongs to, which is the last row of a
+  # sourced term's scope - so it is that row's name, as many rows out as the scope holds above the
+  # condition. It names an attribute, a reference field or a path to an attribute: a relationship
+  # names a row, which a condition compares through one of its attributes.
+  defp row_field_name!(%RowField{name: name} = row_field, scope) do
+    owner = List.last(scope)
+
+    if row_field.owner != owner do
+      raise ArgumentError,
+        message:
+          "#{inspect(row_field)} reads a field of a #{inspect(row_field.owner)} row, but this query belongs to a derived field of #{inspect(owner)}"
+    end
+
+    if not (is_atom(name) or path?(name)) do
+      raise ArgumentError,
+        message:
+          "#{inspect(row_field)} names no field - a row field names an attribute by an atom, and a path by a list of two or more atoms"
+    end
+
+    {hops, [end_name]} =
+      name
+      |> List.wrap()
+      |> Enum.split(-1)
+
+    end_type = Enum.reduce(hops, owner, &validate_path_hop!/2)
+
+    if end_name in Entity.includable_names(end_type) do
+      spelled =
+        name
+        |> List.wrap()
+        |> Enum.join(".")
+
+      raise ArgumentError,
+        message:
+          "#{inspect(row_field)} names the #{inspect(end_name)} relationship of #{inspect(end_type)} - a row field names an attribute: #{spelled}.<attribute>"
+    end
+
+    {:outer, length(scope) - 1, name}
+  end
+
+  # A row field where a placeholder keys the predicate is converted the same way, so no executor
+  # meets the struct.
+  defp row_field_operand(%RowField{} = row_field, scope),
+    do: {:attribute, row_field_name!(row_field, scope)}
+
+  defp row_field_operand({operator, %RowField{} = row_field}, scope),
+    do: {operator, {:attribute, row_field_name!(row_field, scope)}}
+
+  defp row_field_operand(value, _scope), do: value
+
+  defp row_field_triple!(name, operator, %RowField{} = row_field, entity_type, scope) do
+    attribute_triple!(name, operator, row_field_name!(row_field, scope), entity_type, scope)
+  end
+
   defp rows_spelled(0), do: "no row"
 
   defp rows_spelled(1), do: "1 row"
@@ -1221,7 +1350,7 @@ defmodule Hologram.Query.Stage do
   defp scoped_triples!(scope, predicates) do
     Enum.flat_map(predicates, fn
       {%Placeholder{name: placeholder_name}, value} ->
-        [placeholder_key_triple(placeholder_name, value)]
+        [placeholder_key_triple(placeholder_name, row_field_operand(value, scope))]
 
       # The shape decides rather than the name, so or is no reserved attribute name: a list of lists
       # is no value any attribute takes - a membership list holds plain values and a list of
@@ -1259,6 +1388,12 @@ defmodule Hologram.Query.Stage do
     end
 
     {name, operator, operand}
+  end
+
+  defp set_view_bound!(_query, field, %RowField{} = row_field) do
+    raise ArgumentError,
+      message:
+        "#{field} must be a non-negative integer, got: #{inspect(row_field)} - a bound is known when the query is built, and a row field has no value then"
   end
 
   defp set_view_bound!(query, field, %Placeholder{name: placeholder_name}) do
@@ -1324,6 +1459,12 @@ defmodule Hologram.Query.Stage do
   defp system_attribute_names(entity_type) do
     Enum.map(entity_type.__system_attributes__(), fn {name, _type, _opts} -> name end)
   end
+
+  # The types of the rows a term's conditions can read, nearest first: the queried type, then for a
+  # derived field's query the owning type, its row one level out.
+  defp term_scope(%Query{entity: entity_type, source: {owner, _chain}}), do: [entity_type, owner]
+
+  defp term_scope(%Query{entity: entity_type}), do: [entity_type]
 
   defp to_many_relationship_names(entity_type) do
     entity_type.__relationships__()
@@ -1561,7 +1702,7 @@ defmodule Hologram.Query.Stage do
           message:
             "invalid membership list element #{inspect(value)} for attribute #{inspect_name(name)} - membership lists hold plain values"
 
-      %Range{} = value ->
+      value when is_struct(value, Range) or is_struct(value, RowField) ->
         raise ArgumentError,
           message:
             "invalid membership list element #{inspect(value)} for attribute #{inspect_name(name)} - membership lists hold plain values"
@@ -1740,8 +1881,7 @@ defmodule Hologram.Query.Stage do
   # A stored relationship or an inverse - a set of either is included as a to-many, a single
   # inverse as a to-one.
   defp validate_relationship_name!(name, entity_type) do
-    definitions =
-      Enum.concat(entity_type.__relationships__(), entity_type.__inverse_relationships__())
+    definitions = includable_definitions(entity_type)
 
     case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
       {_name, [target], _opts} ->
@@ -1807,7 +1947,12 @@ defmodule Hologram.Query.Stage do
         target
 
       nil ->
-        raise_unknown_source_name!(hop, entity_type, to_one_relationship_names(entity_type))
+        raise_unknown_source_name!(
+          hop,
+          entity_type,
+          to_one_relationship_names(entity_type),
+          "a quantifier's source"
+        )
     end
   end
 
@@ -1832,7 +1977,12 @@ defmodule Hologram.Query.Stage do
                 "#{inspect(name)} is a to-one relationship in #{inspect(entity_type)} - any, none and all ask about the rows of a to-many relationship - compare the related row through a path: #{name}.<attribute>"
 
           nil ->
-            raise_unknown_source_name!(name, entity_type, Entity.includable_names(entity_type))
+            raise_unknown_source_name!(
+              name,
+              entity_type,
+              Entity.includable_names(entity_type),
+              "a quantifier's source"
+            )
         end
     end
   end
@@ -1842,6 +1992,54 @@ defmodule Hologram.Query.Stage do
       raise ArgumentError,
         message:
           "a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: #{inspect(source)}"
+    end
+  end
+
+  # A derived field's query follows any relationship to its set - a to-one, a to-many or an inverse
+  # of either kind.
+  defp validate_sourced_hop!(hop, entity_type) do
+    definitions = includable_definitions(entity_type)
+
+    case List.keyfind(definitions, hop, 0) do
+      {_name, type, _opts} ->
+        type
+        |> List.wrap()
+        |> hd()
+
+      nil ->
+        raise_unknown_source_name!(
+          hop,
+          entity_type,
+          Entity.includable_names(entity_type),
+          "a derived field's query"
+        )
+    end
+  end
+
+  defp validate_sourced_set!(name, entity_type) do
+    definitions = includable_definitions(entity_type)
+
+    case List.keyfind(definitions, name, 0) do
+      {_name, [target], _opts} ->
+        target
+
+      {_name, _target, opts} ->
+        kind =
+          if Keyword.has_key?(opts, :inverse),
+            do: "an inverse relationship holding one row",
+            else: "a to-one relationship"
+
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is #{kind} in #{inspect(entity_type)} - a derived field's query reads a set - read the related row's attributes through a path: #{name}.<attribute>"
+
+      nil ->
+        raise_unknown_source_name!(
+          name,
+          entity_type,
+          Entity.includable_names(entity_type),
+          "a derived field's query"
+        )
     end
   end
 
