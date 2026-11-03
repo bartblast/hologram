@@ -50,10 +50,10 @@ defmodule Hologram.Template do
   browser moves the HTML out of place when it loads the page, because it isn't valid there, like a
   `<div>` inside a `<p>`, the client raises.
 
-  The HTML isn't sanitized, so it must come from a source you trust. Sanitize user content before
-  marking it, for example with MDEx's sanitize option. Script elements are removed, so they never
-  run, but that isn't sanitizing: event handler attributes and `javascript:` URLs stay, and only
-  Hologram's default content security policy keeps them from running.
+  `trust_html/1` doesn't sanitize the HTML you give it. If users wrote any of it, sanitize it before
+  you mark it. Script elements are removed, so they never run, but that isn't sanitizing. Event
+  handler attributes and `javascript:` URLs stay, and only Hologram's default Content Security
+  Policy keeps them from running.
 
   ## Examples
 

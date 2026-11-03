@@ -25,8 +25,7 @@ export const TRUSTED_HTML_RANGE_START = "hologram-html";
 export const TRUSTED_HTML_RANGE_END = "/hologram-html";
 
 // Where the docs explain where trusted HTML can go, for the errors and warnings about it.
-const TRUSTED_HTML_DOCS_URL =
-  "https://hologram.page/docs/template-syntax#trusted-html";
+const TRUSTED_HTML_DOCS_URL = "https://hologram.page/docs/template-syntax";
 
 // The elements removed from trusted HTML, as the server removes them: a script runs when the
 // browser parses a page but never through innerHTML, a plaintext turns the rest of a page into

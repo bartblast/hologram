@@ -641,7 +641,7 @@ describe("Vdom", () => {
 
         sinon.assert.calledOnceWithExactly(
           warnStub,
-          "Hologram: the page's nodes for trusted HTML rendered in MyModule differ from what its HTML parses to, so they're kept as they are until the HTML changes. The browser's HTML parser may have changed them because the HTML isn't valid where it's placed, or something like a browser extension changed the page - see https://hologram.page/docs/template-syntax#trusted-html",
+          "Hologram: the page's nodes for trusted HTML rendered in MyModule differ from what its HTML parses to, so they're kept as they are until the HTML changes. The browser's HTML parser may have changed them because the HTML isn't valid where it's placed, or something like a browser extension changed the page - see https://hologram.page/docs/template-syntax",
         );
       });
 
@@ -671,7 +671,7 @@ describe("Vdom", () => {
         assert.throws(
           () => Vdom.mirror(rendered, container),
           HologramRuntimeError,
-          "trusted HTML rendered in MyModule was moved by the browser's HTML parser, because it isn't valid HTML where it's placed, like a <div> inside a <p> - see https://hologram.page/docs/template-syntax#trusted-html",
+          "trusted HTML rendered in MyModule was moved by the browser's HTML parser, because it isn't valid HTML where it's placed, like a <div> inside a <p> - see https://hologram.page/docs/template-syntax",
         );
       });
 
@@ -690,7 +690,7 @@ describe("Vdom", () => {
         assert.throws(
           () => Vdom.mirror(rendered, container),
           HologramRuntimeError,
-          "trusted HTML rendered in MyModule was moved by the browser's HTML parser, because it isn't valid HTML where it's placed, like a <div> inside a <p> - see https://hologram.page/docs/template-syntax#trusted-html",
+          "trusted HTML rendered in MyModule was moved by the browser's HTML parser, because it isn't valid HTML where it's placed, like a <div> inside a <p> - see https://hologram.page/docs/template-syntax",
         );
       });
 
