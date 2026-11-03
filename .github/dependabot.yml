@@ -1,91 +1,71 @@
 version: 2
 
-updates:
-  - package-ecosystem: "mix"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    groups:
-      lib-elixir:
-        patterns:
-          - "*"
-
-  - package-ecosystem: "npm"
-    directory: "/assets"
-    schedule:
-      interval: "weekly"
-    ignore:
-      - dependency-name: "eslint"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "jsdom"
-    groups:
-      lib-javascript:
-        patterns:
-          - "*"
-
-  - package-ecosystem: "mix"
-    directory: "/test/cluster"
-    schedule:
-      interval: "weekly"
-    ignore:
-      - dependency-name: "hologram"
-    groups:
-      cluster-tests:
-        patterns:
-          - "*"
-
-  - package-ecosystem: "mix"
-    directory: "/test/cowboy"
-    schedule:
-      interval: "weekly"
-    ignore:
-      - dependency-name: "hologram"
-    groups:
-      cowboy-tests:
-        patterns:
-          - "*"
-
-  - package-ecosystem: "mix"
-    directory: "/test/ecosystem"
-    schedule:
-      interval: "weekly"
-    ignore:
-      - dependency-name: "hologram"
-    groups:
-      ecosystem-tests:
-        patterns:
-          - "*"
-
-  - package-ecosystem: "mix"
-    directory: "/test/features"
-    schedule:
-      interval: "weekly"
-    ignore:
-      - dependency-name: "hologram"
-    groups:
-      feature-tests:
-        patterns:
-          - "*"
-
-  - package-ecosystem: "mix"
-    directory: "/test/umbrella"
-    schedule:
-      interval: "weekly"
-    ignore:
-      - dependency-name: "hologram"
-    groups:
-      umbrella-tests:
-        patterns:
-          - "*"
-
-  - package-ecosystem: "github-actions"
-    directory: "/"
+multi-ecosystem-groups:
+  dependencies:
     schedule:
       interval: "weekly"
     labels:
       - "dependencies"
-      - "github-actions"
-    groups:
-      github-actions:
-        patterns:
-          - "*"
+
+updates:
+  - package-ecosystem: "mix"
+    directory: "/"
+    multi-ecosystem-group: "dependencies"
+    patterns:
+      - "*"
+
+  - package-ecosystem: "npm"
+    directory: "/assets"
+    multi-ecosystem-group: "dependencies"
+    patterns:
+      - "*"
+    ignore:
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "jsdom"
+
+  - package-ecosystem: "mix"
+    directory: "/test/cluster"
+    multi-ecosystem-group: "dependencies"
+    patterns:
+      - "*"
+    ignore:
+      - dependency-name: "hologram"
+
+  - package-ecosystem: "mix"
+    directory: "/test/cowboy"
+    multi-ecosystem-group: "dependencies"
+    patterns:
+      - "*"
+    ignore:
+      - dependency-name: "hologram"
+
+  - package-ecosystem: "mix"
+    directory: "/test/ecosystem"
+    multi-ecosystem-group: "dependencies"
+    patterns:
+      - "*"
+    ignore:
+      - dependency-name: "hologram"
+
+  - package-ecosystem: "mix"
+    directory: "/test/features"
+    multi-ecosystem-group: "dependencies"
+    patterns:
+      - "*"
+    ignore:
+      - dependency-name: "hologram"
+
+  - package-ecosystem: "mix"
+    directory: "/test/umbrella"
+    multi-ecosystem-group: "dependencies"
+    patterns:
+      - "*"
+    ignore:
+      - dependency-name: "hologram"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    multi-ecosystem-group: "dependencies"
+    patterns:
+      - "*"
