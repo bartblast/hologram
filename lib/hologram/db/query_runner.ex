@@ -6,7 +6,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SortKey
-  alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
   alias Hologram.Policy
@@ -69,18 +69,22 @@ defmodule Hologram.DB.QueryRunner do
   end
 
   # A path binds as the attribute it ends at, on the type its relationships lead to.
+  # The relationships can run through a set a derived field holds - inside a quantifier over one.
   defp attribute_definition(entity_type, path) when is_list(path) do
     {relationship_names, [attribute_name]} = Enum.split(path, -1)
 
     entity_type
-    |> Entity.path_target(relationship_names)
+    |> Derived.path_target(relationship_names)
     |> attribute_definition(attribute_name)
   end
 
   # A name matching no attribute definition is a to-one reference field - every reference
-  # column carries the entity id type, and a bound value is never nil (nil placeholders raise).
+  # column carries the entity id type, and a bound value is never nil (nil placeholders raise). A
+  # derived field holding a value binds as the type it declares.
   defp attribute_definition(entity_type, attribute_name) do
-    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+    definitions =
+      entity_type.__attributes__() ++
+        entity_type.__system_attributes__() ++ entity_type.__derived__()
 
     case Enum.find(definitions, fn {name, _type, _opts} -> name == attribute_name end) do
       {_name, type, opts} -> {type, opts}
@@ -137,8 +141,10 @@ defmodule Hologram.DB.QueryRunner do
           inner_acc
       end)
 
+    # A derived field holding a value is included with nothing under it.
     term.include
     |> Map.values()
+    |> Enum.reject(&is_nil/1)
     |> Enum.reduce(acc_with_filters, fn sub_term, inner_acc ->
       collect_param_definitions(sub_term, inner_acc)
     end)

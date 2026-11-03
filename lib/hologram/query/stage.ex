@@ -305,9 +305,18 @@ defmodule Hologram.Query.Stage do
   @doc false
   @spec predicate_references(list(Query.clause())) ::
           list({list(atom), atom | Query.placeholder()})
-  def predicate_references(clauses) do
+  def predicate_references(clauses), do: predicate_references(clauses, [[]])
+
+  # Returns the names the given filter clauses read as predicate_references/1 does, resolved through
+  # the given prefixes: the relationships to the row the clauses are about, then to each row above
+  # it, nearest first - a derived field's query reads its owning row one level out, so its clauses
+  # are resolved with the relationships to the set's rows first and those to the owning row next.
+  @doc false
+  @spec predicate_references(list(Query.clause()), list(list(atom))) ::
+          list({list(atom), atom | Query.placeholder()})
+  def predicate_references(clauses, prefixes) do
     clauses
-    |> triples()
+    |> resolved_triples(prefixes)
     |> Enum.flat_map(fn
       {name, _operator, {:attribute, other}} -> [reference(name), reference(other)]
       {name, _operator, _value} -> [reference(name)]
@@ -377,9 +386,15 @@ defmodule Hologram.Query.Stage do
   # behind them. The relationships along a chain may be to-many where a quantifier's source is.
   @doc false
   @spec relationship_chains(list(Query.clause())) :: list(list(atom))
-  def relationship_chains(clauses) do
+  def relationship_chains(clauses), do: relationship_chains(clauses, [[]])
+
+  # Returns the chains the given filter clauses follow as relationship_chains/1 does, resolved
+  # through the given prefixes, as predicate_references/2 resolves names.
+  @doc false
+  @spec relationship_chains(list(Query.clause()), list(list(atom))) :: list(list(atom))
+  def relationship_chains(clauses, prefixes) do
     clauses
-    |> chains([[]])
+    |> chains(prefixes)
     |> Enum.uniq()
   end
 

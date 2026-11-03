@@ -7,6 +7,7 @@ defmodule Hologram.Entity.Derived do
   # further through - and what comes back is a plain description every executor evaluates for each
   # row the way it evaluates a filter.
 
+  alias Hologram.Entity
   alias Hologram.Query
   alias Hologram.Query.RowField
   alias Hologram.Query.Stage
@@ -189,6 +190,13 @@ defmodule Hologram.Entity.Derived do
   def normalize(definition), do: definition
 
   @doc """
+  Returns the type a path of relationships and derived fields holding rows leads to from a row of
+  the given entity type - the type of the rows at its end. See related_type/2.
+  """
+  @spec path_target(module, list(atom)) :: module
+  def path_target(entity_type, names), do: Enum.reduce(names, entity_type, &related_type(&2, &1))
+
+  @doc """
   Puts the given definitions, keyed by entity type and field name, where definition/2 reads them.
   """
   @spec put_definitions(%{{module, atom} => definition}) :: :ok
@@ -196,6 +204,19 @@ defmodule Hologram.Entity.Derived do
     Enum.each(definitions, fn {{entity_type, name}, definition} ->
       :persistent_term.put(table_key(entity_type, name), definition)
     end)
+  end
+
+  @doc """
+  Returns the type of the rows the given relationship or derived field holding rows leads to from a
+  row of the given entity type - a relationship's target, a derived field's declared row type.
+  """
+  @spec related_type(module, atom) :: module
+  def related_type(entity_type, name) do
+    case List.keyfind(entity_type.__derived__(), name, 0) do
+      {_name, [target], _opts} -> target
+      {_name, target, _opts} -> target
+      nil -> Entity.related_type(entity_type, name)
+    end
   end
 
   @doc """

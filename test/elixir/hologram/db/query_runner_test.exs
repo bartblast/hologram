@@ -15,6 +15,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Entity.NotIncluded
   alias Hologram.Policy
   alias Hologram.Query
+  alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -28,6 +29,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module31
+  alias Hologram.Test.Fixtures.Entity.Module37
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module8
   alias Hologram.Test.Fixtures.Entity.Module9
@@ -844,6 +846,34 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{ids: 5})
+      end
+    end
+
+    test "validates a placeholder binding beside an included derived value" do
+      term =
+        Module37
+        |> filter(name == ^%Placeholder{name: :name})
+        |> include(pinned_count)
+        |> Stage.normalize()
+
+      expected_msg = "invalid value 5 for placeholder :name - expected a :string value"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{name: 5})
+      end
+    end
+
+    test "raises on a placeholder binding a derived field does not take" do
+      term =
+        Module37
+        |> filter(pinned_count > ^%Placeholder{name: :threshold})
+        |> Stage.normalize()
+
+      expected_msg =
+        ~s(invalid value "many" for placeholder :threshold - expected a :integer value)
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, @mapping, %{threshold: "many"})
       end
     end
 
