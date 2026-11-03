@@ -17,6 +17,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.Compiler.Tracer
   alias Hologram.Entity
+  alias Hologram.Entity.Derived.Validator, as: DerivedValidator
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Model
   alias Hologram.Entity.NotIncluded
@@ -1430,6 +1431,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fake_edit(Entity2)
 
       assert count_resolutions(fn -> run(opts) end) == 1
+    end
+
+    test "a run resolving the derived definitions validates them", %{opts: opts} do
+      run(opts)
+      fake_edit(Entity2)
+
+      assert count_calls({DerivedValidator, :validate_model!, 2}, fn -> run(opts) end) == 1
     end
 
     test "an edit of a query builder a derived field calls resolves the derived definitions again",

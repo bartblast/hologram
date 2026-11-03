@@ -97,6 +97,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.Tracer
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Derived
+  alias Hologram.Entity.Derived.Validator, as: DerivedValidator
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
   alias Hologram.Policy
@@ -1802,8 +1803,14 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp derived_definitions(%{derived_stale?: false, kept_data_layer: %{derived: derived}}),
     do: derived
 
+  # Resolved definitions are checked against the declarations of every type they reach, which only a
+  # resolved definition names - kept ones passed that check when they were resolved.
   defp derived_definitions(context) do
-    Compiler.resolve_derived_definitions(context.entity_types, context.ir_plt)
+    derived = Compiler.resolve_derived_definitions(context.entity_types, context.ir_plt)
+
+    DerivedValidator.validate_model!(context.entity_types, derived.definitions)
+
+    derived
   end
 
   # Whether the kept derived definitions can be out of date: none kept, a data model change - the
