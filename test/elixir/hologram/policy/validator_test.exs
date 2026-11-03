@@ -599,6 +599,88 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a via option naming a derived field" do
+      defmodule InlinePolicyFixture86 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :channel, Module32
+
+        derived :first_message, Module33, fn channel -> one(channel.messages) end
+
+        allow :read, via: first_message
+      end
+
+      expected_msg =
+        "invalid via option :first_message for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture86 - :first_message is a derived field, but delegation requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture86], [])
+      end
+    end
+
+    test "rejects a via option through a path reaching a derived field on a later hop" do
+      defmodule InlinePolicyFixture87 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        relationship :channel, Module32
+
+        allow :read, via: channel.first_message
+      end
+
+      expected_msg =
+        "invalid via option channel.first_message for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture87 - :first_message in Hologram.Test.Fixtures.Entity.Module32 is a derived field, but delegation requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture87], [])
+      end
+    end
+
+    test "rejects a to option referencing a role on a derived field" do
+      defmodule InlinePolicyFixture88 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :channel, Module32
+
+        derived :first_message, Module33, fn channel -> one(channel.messages) end
+
+        allow :update, to: {:editor, first_message}
+      end
+
+      expected_msg =
+        "invalid to option {:editor, :first_message} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture88 - :first_message is a derived field, but a role reference requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, InlinePolicyFixture88], [])
+      end
+    end
+
+    test "rejects a to option through a path reaching a derived field on a later hop" do
+      defmodule InlinePolicyFixture89 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        relationship :channel, Module32
+
+        allow :update, to: {:editor, channel.first_message}
+      end
+
+      expected_msg =
+        "invalid to option {:editor, channel.first_message} for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture89 - :first_message in Hologram.Test.Fixtures.Entity.Module32 is a derived field, but a role reference requires a to-one relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([Module14, InlinePolicyFixture89], [])
+      end
+    end
+
     test "rejects a via option through a path starting with a to-many relationship" do
       defmodule InlinePolicyFixture65 do
         use Hologram.Entity
@@ -1047,6 +1129,158 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture83], [])
+      end
+    end
+
+    test "rejects a condition comparing a derived field" do
+      defmodule InlinePolicyFixture90 do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        derived :heading, :string, fn title -> title end
+
+        allow :read, when: heading == "x"
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture90 - :heading is a derived field of Hologram.Policy.ValidatorTest.InlinePolicyFixture90 - a policy condition reads no derived field"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture90], [])
+      end
+    end
+
+    test "rejects a condition comparing with a derived field" do
+      defmodule InlinePolicyFixture91 do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        derived :heading, :string, fn title -> title end
+
+        allow :read, when: title == heading
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture91 - :heading is a derived field of Hologram.Policy.ValidatorTest.InlinePolicyFixture91 - a policy condition reads no derived field"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture91], [])
+      end
+    end
+
+    test "rejects a condition through a path ending at a derived field" do
+      defmodule InlinePolicyFixture92 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        relationship :channel, Module32
+
+        allow :read, when: channel.message_count > 3
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture92 - :message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - a policy condition reads no derived field"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture92], [])
+      end
+    end
+
+    test "rejects a condition through a path reaching a derived field on a later hop" do
+      defmodule InlinePolicyFixture93 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        relationship :channel, Module32
+
+        allow :read, when: channel.first_message.body == "x"
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture93 - :first_message is a derived field of Hologram.Test.Fixtures.Entity.Module32 - a policy condition reads no derived field"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture93], [])
+      end
+    end
+
+    test "rejects a derived field inside an alternative of a condition" do
+      defmodule InlinePolicyFixture94 do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        derived :heading, :string, fn title -> title end
+
+        allow :read, when: title == "x" or heading == "y"
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture94 - :heading is a derived field of Hologram.Policy.ValidatorTest.InlinePolicyFixture94 - a policy condition reads no derived field"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture94], [])
+      end
+    end
+
+    test "rejects a derived field compared with in an operator list of a pinned condition" do
+      defmodule InlinePolicyFixture96 do
+        use Hologram.Entity
+
+        attribute :title, :string
+
+        derived :heading, :string, fn title -> title end
+
+        allow :read, when: ^[title: [{:>, {:attribute, :heading}}, {:<, "z"}]]
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture96 - :heading is a derived field of Hologram.Policy.ValidatorTest.InlinePolicyFixture96 - a policy condition reads no derived field"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture96], [])
+      end
+    end
+
+    test "rejects a condition through a to-many relationship before the derived field it reaches" do
+      defmodule InlinePolicyFixture97 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :notes, [Module33]
+
+        allow :read, when: notes.channel_name == "x"
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture97 - :notes is a to-many relationship in Hologram.Policy.ValidatorTest.InlinePolicyFixture97 - a path in a condition goes through to-one relationships only"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture97], [])
+      end
+    end
+
+    test "rejects a quantifier over a derived field in a pinned condition" do
+      defmodule InlinePolicyFixture95 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        relationship :channel, Module32
+
+        allow :read, when: ^[any: {[:channel, :recent_messages], []}]
+      end
+
+      expected_msg =
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture95 - :recent_messages is a derived field of Hologram.Test.Fixtures.Entity.Module32 - a policy condition reads no derived field"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture95], [])
       end
     end
 

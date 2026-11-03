@@ -464,10 +464,10 @@ defmodule Hologram.Query.Stage do
   end
 
   # Returns every name the given data-form predicates spell, in order, without judging any of them:
-  # each key, the name an {:attribute, name} operand carries bare or under an operator, what the
-  # lists of an or: entry spell - a path as its list - and a quantifier's source, a single
-  # relationship as its name. For readers of predicates no entity type was asked about yet, such as
-  # the hint a build gives for a filter no entity type admits.
+  # each key, the name an {:attribute, name} operand carries bare, under an operator or in a list of
+  # operator tuples, what the lists of an or: entry spell - a path as its list - and a quantifier's
+  # source, a single relationship as its name. For readers of predicates no entity type was asked
+  # about yet, such as the hint a build gives for a filter no entity type admits.
   @doc false
   @spec written_names(list) :: list(atom | Query.path())
   def written_names(predicates) do
@@ -2121,6 +2121,9 @@ defmodule Hologram.Query.Stage do
   defp written_operand_names({:attribute, name}), do: written_operand_name(name)
 
   defp written_operand_names({_operator, {:attribute, name}}), do: written_operand_name(name)
+
+  defp written_operand_names(values) when is_list(values),
+    do: Enum.flat_map(values, &written_operand_names/1)
 
   defp written_operand_names(_value), do: []
 

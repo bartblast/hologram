@@ -3775,6 +3775,11 @@ defmodule Hologram.Query.StageTest do
       assert written_names(a: {:attribute, :b}, c: {:<, {:attribute, :d}}) == [:a, :b, :c, :d]
     end
 
+    test "adds the names the operands of an operator list carry" do
+      assert written_names(a: [{:>, {:attribute, :b}}, {:<, 3}, {:!=, {:attribute, :c}}]) ==
+               [:a, :b, :c]
+    end
+
     test "walks the lists of an or entry" do
       assert written_names(a: 1, or: [[b: 2], [c: {:attribute, :d}]]) == [:a, :b, :c, :d]
     end

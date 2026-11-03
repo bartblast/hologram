@@ -96,6 +96,8 @@ defmodule Hologram.Policy.Validator do
       end)
   end
 
+  defp derived_field?(entity_type, name), do: List.keymember?(entity_type.__derived__(), name, 0)
+
   # An option as a message quotes it: written as it was, a relationship as inspect/1 spells it and
   # a path dotted - {:update, stop.trip}, {:owner, trip.user}.
   defp describe_reference({role, relationship}),
@@ -283,6 +285,12 @@ defmodule Hologram.Policy.Validator do
 
   defp server_only_spelling(path), do: Stage.inspect_name(path)
 
+  defp stored_to_one?(entity_type, name) do
+    Enum.any?(entity_type.__relationships__(), fn {relationship_name, target, _opts} ->
+      relationship_name == name and is_atom(target)
+    end)
+  end
+
   # Follows a relationship, or each relationship of a path, from the given type and returns the type
   # it leads to. Every hop is a to-one relationship of the type the hops before it lead to, and a
   # refusal past the first hop names that type, so the message says where along the path it broke.
@@ -298,6 +306,12 @@ defmodule Hologram.Policy.Validator do
   defp validate_chain_hop!(entity_type, relationship_name, index, context) do
     definitions = entity_type.__relationships__()
     in_type = if index == 0, do: "", else: " in #{inspect(entity_type)}"
+
+    if derived_field?(entity_type, relationship_name) do
+      raise Hologram.CompileError,
+        message:
+          "invalid #{context.option} option #{context.written} for allow #{inspect(context.operation)} in #{context.location} - #{inspect(relationship_name)}#{in_type} is a derived field, but #{context.requirement}"
+    end
 
     if Entity.inverse_relationship(entity_type, relationship_name) do
       raise Hologram.CompileError,
@@ -442,6 +456,33 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
+  # TODO: admit the derived fields that read no set once policy conditions read derived fields.
+  # Checked on the names as written, before the condition is read as a filter. A path is followed
+  # through the to-one relationships holding their reference, the ones a condition's path takes, so
+  # a path breaking earlier is left to the filter's refusal of that hop.
+  defp validate_no_derived_name!(entity_type, [name | later_names]) when is_atom(name) do
+    cond do
+      derived_field?(entity_type, name) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a derived field of #{inspect(entity_type)} - a policy condition reads no derived field"
+
+      later_names != [] and stored_to_one?(entity_type, name) ->
+        entity_type
+        |> Entity.related_type(name)
+        |> validate_no_derived_name!(later_names)
+
+      true ->
+        :ok
+    end
+  end
+
+  defp validate_no_derived_name!(entity_type, name) when is_atom(name) do
+    validate_no_derived_name!(entity_type, [name])
+  end
+
+  defp validate_no_derived_name!(_entity_type, _name), do: :ok
+
   defp validate_own_reference!(entity_type, operation, role_name, location) do
     declared_names = declared_role_names(entity_type)
 
@@ -464,6 +505,10 @@ defmodule Hologram.Policy.Validator do
   end
 
   defp validate_predicates!(entity_type, operation, predicates, location) do
+    predicates
+    |> Stage.written_names()
+    |> Enum.each(&validate_no_derived_name!(entity_type, &1))
+
     clauses = Stage.predicate_triples!(entity_type, predicates)
 
     # TODO: lift once policy conditions take quantifiers.
