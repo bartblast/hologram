@@ -55,7 +55,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module50
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module51
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module52
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module57
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module58
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module59
@@ -74,6 +76,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module71
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module72
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module73
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module74
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module75
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module76
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
   alias Hologram.Test.Fixtures.Component.Module10, as: Component10
@@ -106,7 +111,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
   describe "derived_definition/3" do
     test "follows a query builder called as the whole body", %{ir_plt: ir_plt} do
-      assert derived_definition(Entity36, :unread_count, ir_plt) ==
+      {definition, read_modules} = derived_definition(Entity36, :unread_count, ir_plt)
+
+      assert definition ==
                {:query,
                 %Query{
                   cardinality: :count,
@@ -114,10 +121,14 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                   filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
                   source: {Entity36, [:channel, :messages]}
                 }}
+
+      assert read_modules == [Module53]
     end
 
     test "follows a query builder piped into a stage", %{ir_plt: ir_plt} do
-      assert derived_definition(Entity36, :recent_unread, ir_plt) ==
+      {definition, read_modules} = derived_definition(Entity36, :recent_unread, ir_plt)
+
+      assert definition ==
                {:query,
                 %Query{
                   entity: Entity33,
@@ -126,10 +137,14 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                   source: {Entity36, [:channel, :messages]},
                   take: 5
                 }}
+
+      assert read_modules == [Module53]
     end
 
     test "follows the query builders a query builder calls", %{ir_plt: ir_plt} do
-      assert derived_definition(Entity36, :unread_through_helper, ir_plt) ==
+      {definition, read_modules} = derived_definition(Entity36, :unread_through_helper, ir_plt)
+
+      assert definition ==
                {:query,
                 %Query{
                   entity: Entity33,
@@ -137,20 +152,14 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                   sort: [position: :asc, id: :asc],
                   source: {Entity36, [:channel, :messages]}
                 }}
+
+      assert read_modules == [Module53, Module55]
     end
 
-    test "reads a chain of related rows two hops deep inside a query builder", %{ir_plt: ir_plt} do
-      assert derived_definition(Entity36, :member_messages, ir_plt) ==
-               {:query,
-                %Query{
-                  entity: Entity33,
-                  sort: [position: :asc, id: :asc],
-                  source: {Entity36, [:member, :channel, :messages]}
-                }}
-    end
+    test "reports a module whose function a query builder runs", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Module76, :capped, ir_plt)
 
-    test "takes the clause of a query builder a known argument matches", %{ir_plt: ir_plt} do
-      assert derived_definition(Module54, :forked, ir_plt) ==
+      assert definition ==
                {:query,
                 %Query{
                   entity: Entity33,
@@ -158,6 +167,45 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                   source: {Entity36, [:channel, :messages]},
                   take: 2
                 }}
+
+      assert read_modules == [Module74, Module75]
+    end
+
+    test "reports a module whose function a closure inside a query builder runs", %{
+      ir_plt: ir_plt
+    } do
+      {_definition, read_modules} = derived_definition(Module76, :capped_in_closure, ir_plt)
+
+      assert read_modules == [Module74, Module75]
+    end
+
+    test "reads a chain of related rows two hops deep inside a query builder", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Entity36, :member_messages, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:member, :channel, :messages]}
+                }}
+
+      assert read_modules == [Module53]
+    end
+
+    test "takes the clause of a query builder a known argument matches", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Module54, :forked, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:channel, :messages]},
+                  take: 2
+                }}
+
+      assert read_modules == [Module53]
     end
 
     test "raises on a query builder guard reading a field of the row", %{ir_plt: ir_plt} do

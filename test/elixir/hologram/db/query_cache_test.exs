@@ -10,13 +10,16 @@ defmodule Hologram.DB.QueryCacheTest do
   import Mox
 
   alias Hologram.Auth
+  alias Hologram.Commons.PLT
   alias Hologram.DB.Connection
+  alias Hologram.Entity.Derived
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
   alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Component.Module11
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module33
 
   use_module_stub :query_cache
 
@@ -30,6 +33,7 @@ defmodule Hologram.DB.QueryCacheTest do
     entries = expected_entries()
 
     %{
+      derived: %{},
       entries: entries,
       permission_checking?: false,
       prop_params: %{{Module11, :entities} => [:min_b]},
@@ -97,6 +101,17 @@ defmodule Hologram.DB.QueryCacheTest do
     assert init(nil) == {:ok, nil}
 
     assert :persistent_term.get(QueryCacheStub.persistent_term_key()) == expected_data()
+  end
+
+  # Keyed by a name no fixture declares, so no other test can have put it.
+  test "init/1 puts the derived definitions the build resolved where the runtime reads them" do
+    PLT.start()
+    |> PLT.put(derived: %{{Module33, :from_the_dump} => {:value, :dumped}})
+    |> PLT.dump(QueryCacheStub.dump_path())
+
+    init(nil)
+
+    assert Derived.definition(Module33, :from_the_dump) == {:value, :dumped}
   end
 
   describe "permission_checking?/0" do

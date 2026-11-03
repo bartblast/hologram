@@ -41,6 +41,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module32, as: ComponentModule32
   alias Hologram.Test.Fixtures.Component.Module33, as: ComponentModule33
   alias Hologram.Test.Fixtures.Component.Module34, as: ComponentModule34
+  alias Hologram.Test.Fixtures.Entity.Derived.Module2, as: DerivedModule2
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
@@ -51,6 +52,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module26, as: Entity26
   alias Hologram.Test.Fixtures.Entity.Module29, as: Entity29
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
+  alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
+  alias Hologram.Test.Fixtures.Entity.Module35, as: Entity35
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
@@ -8268,6 +8271,50 @@ defmodule Hologram.CompilerTest do
 
     test "returns no module when every module is kept", %{ir_plt: ir_plt} do
       assert prune_ir_plt(ir_plt, [Module1, Module2, Module3]) == []
+    end
+  end
+
+  describe "resolve_derived_definitions/2" do
+    test "resolves definitions natively and by walking the query builders they call" do
+      assert resolve_derived_definitions([Entity35, Entity33], PLT.start()) == %{
+               definitions: %{
+                 {Entity33, :channel_name} => {:name, [:channel, :name]},
+                 {Entity33, :later_count} =>
+                   {:query,
+                    %Query{
+                      cardinality: :count,
+                      entity: Entity33,
+                      filter: [{:position, :>, {:attribute, {:outer, 1, :position}}}],
+                      source: {Entity33, [:channel, :messages]}
+                    }},
+                 {Entity33, :tier} => {:value, :low},
+                 {Entity35, :channel_name} => {:name, [:channel, :name]},
+                 {Entity35, :latest} =>
+                   {:query,
+                    %Query{
+                      entity: Entity33,
+                      sort: [position: :desc, id: :asc],
+                      source: {Entity35, [:channel, :messages]},
+                      take: 1
+                    }},
+                 {Entity35, :recent} =>
+                   {:query,
+                    %Query{
+                      entity: Entity33,
+                      sort: [position: :desc, id: :asc],
+                      source: {Entity35, [:channel, :messages]},
+                      take: 2
+                    }}
+               },
+               read_modules: [DerivedModule2]
+             }
+    end
+
+    test "resolves nothing for entity types declaring no derived field" do
+      assert resolve_derived_definitions([Entity1, Entity2], PLT.start()) == %{
+               definitions: %{},
+               read_modules: []
+             }
     end
   end
 

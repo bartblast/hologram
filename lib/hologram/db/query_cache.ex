@@ -5,6 +5,7 @@ defmodule Hologram.DB.QueryCache do
 
   alias Hologram.Commons.SerializationUtils
   alias Hologram.DB
+  alias Hologram.Entity.Derived
   alias Hologram.Query
   alias Hologram.Reflection
 
@@ -126,6 +127,11 @@ defmodule Hologram.DB.QueryCache do
       impl().dump_path()
       |> File.read!()
       |> SerializationUtils.deserialize(true)
+
+    # The build resolved every derived field's definition, so the runtime reads them from the dump
+    # rather than resolving them again - a definition calling a query builder is resolved by walking
+    # the builder's IR, which a release does not ship.
+    Derived.put_definitions(data.derived)
 
     :persistent_term.put(impl().persistent_term_key(), data)
   end

@@ -19,6 +19,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.DB.Codec
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
   alias Hologram.Job
   alias Hologram.Policy
@@ -119,6 +120,16 @@ defmodule Hologram.Compiler do
       ]
     }
   ]
+
+  @typedoc """
+  The definition of every derived field of a build, keyed by entity type and field name, and the
+  modules a walk followed calls into resolving them - besides the entity types, the modules whose
+  edits can change a definition (see `resolve_derived_definitions/2`).
+  """
+  @type derived_definitions :: %{
+          definitions: %{{module, atom} => Derived.definition()},
+          read_modules: [module]
+        }
 
   @typedoc """
   The registered queries of one component: the normalized terms its from_query props declare (see
@@ -908,8 +919,9 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds the registered queries PLT, whose items are the entries, prop params and windows a
-  running app reads, and returns it with the path to dump it at.
+  Builds the registered queries PLT, whose items are what a running app reads of them - the
+  entries, prop params and windows, and the derived definitions the compile task puts beside them -
+  and returns it with the path to dump it at.
   """
   @spec build_queries_plt(%{atom => any}, T.opts()) :: {PLT.t(), T.file_path()}
   def build_queries_plt(queries, opts) do
@@ -2452,6 +2464,36 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Resolves the definition of every derived field of the given entity types: natively when the
+  field's function calls no query builder of another module (see
+  `Hologram.Entity.Derived.resolve/2`), and by walking its IR, from the given IR PLT, when it does
+  (see `Hologram.Compiler.QueryExtractor.derived_definition/3`).
+
+  Raises Hologram.CompileError, located at the field's declaration or where the walk stood, when a
+  definition cannot be built.
+  """
+  @spec resolve_derived_definitions([module], PLT.t()) :: derived_definitions
+  def resolve_derived_definitions(entity_types, ir_plt) do
+    resolved =
+      for entity_type <- Enum.sort(entity_types),
+          {name, _type, _opts} <- entity_type.__derived__() do
+        resolve_derived_definition(entity_type, name, ir_plt)
+      end
+
+    read_modules =
+      resolved
+      |> Enum.flat_map(fn {_key, _definition, field_read_modules} -> field_read_modules end)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    %{
+      definitions:
+        Map.new(resolved, fn {key, definition, _read_modules} -> {key, definition} end),
+      read_modules: read_modules
+    }
+  end
+
+  @doc """
   Puts back the entries a `patch_module_info_plt!/5` call replaced or removed in the given module
   info PLT, and deletes the ones it added: the PLT is as it was before that call.
   """
@@ -2701,6 +2743,16 @@ defmodule Hologram.Compiler do
     |> Enum.uniq()
     |> Enum.filter(&PLT.member?(module_info_plt, &1))
     |> then(&build_missing_ir!(ir_plt, &1))
+  end
+
+  defp resolve_derived_definition(entity_type, name, ir_plt) do
+    if name in entity_type.__derived_builder_calls__() do
+      {definition, read_modules} = QueryExtractor.derived_definition(entity_type, name, ir_plt)
+
+      {{entity_type, name}, definition, read_modules}
+    else
+      {{entity_type, name}, Derived.resolve(entity_type, name), []}
+    end
   end
 
   # The callers among the given modules, or every caller when no modules are given.

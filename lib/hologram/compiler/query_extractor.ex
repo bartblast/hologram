@@ -18,6 +18,10 @@ defmodule Hologram.Compiler.QueryExtractor do
   # call the developer wrote instead of its internals.
   @elixir_apps [:eex, :elixir, :ex_unit, :iex, :logger, :mix]
 
+  # The modules a derived field's walk followed calls into or ran functions of, gathered across the
+  # closures it runs, which start from states of their own.
+  @derived_reads_key {__MODULE__, :derived_reads}
+
   # Fork enumeration uses throw for non-local exit: on an undecided branch the
   # evaluation aborts, and the driver restarts it from the body with one more
   # branch choice appended (depth-first over the choice tree).
@@ -53,15 +57,16 @@ defmodule Hologram.Compiler.QueryExtractor do
   them - a query over a set, a row field, a related row - and goes where a query goes: query stages
   and `Hologram.Entity.Derived` run natively over them, a call into another module of the project is
   followed into its IR with them, and a dot on a related row reads the longer path. The result is
-  normalized as `Hologram.Entity.Derived.resolve/2` normalizes it. A branch on a value the build
-  knows takes the clause that value takes, as an extraction's does.
+  normalized as `Hologram.Entity.Derived.resolve/2` normalizes it, and returned with the modules
+  whose functions the walk followed - the ones whose edits can change it besides the entity types'.
+  A branch on a value the build knows takes the clause that value takes, as an extraction's does.
 
   Raises Hologram.CompileError, located where the walk stood, when a branch depends on a field of
   the row, when a field of the row reaches anything but a query stage, `Hologram.Entity.Derived` or
   a query builder, when a builder the body calls returns no query term, when a known value matches
   no clause, and on what an extraction refuses.
   """
-  @spec derived_definition(module, atom, PLT.t()) :: Derived.definition()
+  @spec derived_definition(module, atom, PLT.t()) :: {Derived.definition(), list(module)}
   def derived_definition(entity_type, name, ir_plt) do
     {file, line} = Map.fetch!(entity_type.__derived_locations__(), name)
 
@@ -77,10 +82,22 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     clause = derived_clause!(entity_type, name, ir_plt)
 
-    # Every branch of a derived field's walk is decided or refused, so the walk builds one definition.
-    [definition] = evaluate_variants!(clause.body, %{}, context, [], false)
+    Process.put(@derived_reads_key, MapSet.new())
 
-    Derived.normalize(definition)
+    try do
+      # Every branch of a derived field's walk is decided or refused, so the walk builds one
+      # definition.
+      [definition] = evaluate_variants!(clause.body, %{}, context, [], false)
+
+      read_modules =
+        @derived_reads_key
+        |> Process.get()
+        |> Enum.sort()
+
+      {Derived.normalize(definition), read_modules}
+    after
+      Process.delete(@derived_reads_key)
+    end
   end
 
   @doc """
@@ -781,6 +798,8 @@ defmodule Hologram.Compiler.QueryExtractor do
         stand_in_call!(target_module, function, arg_values, state_after_args, context)
 
       not contains_placeholder?(arg_values) ->
+        record_derived_read(target_module, context)
+
         {apply(target_module, function, arg_values), state_after_args}
 
       interpretable_module?(target_module) ->
@@ -1125,6 +1144,8 @@ defmodule Hologram.Compiler.QueryExtractor do
       )
     end
 
+    record_derived_read(module, context)
+
     {funs, state_after_funs} = module_funs_cached(module, state, context.ir_plt)
 
     clauses = fetch_function_clauses!(funs, module, function, arity, context)
@@ -1418,6 +1439,18 @@ defmodule Hologram.Compiler.QueryExtractor do
       module,
       nil
     )
+  end
+
+  # A project module whose function a derived field's walk follows or runs is one whose edit can
+  # change the definition - Elixir's own modules never change between compiles of an app.
+  defp record_derived_read(_module, %{derived: nil}), do: :ok
+
+  defp record_derived_read(module, _context) do
+    if interpretable_module?(module) do
+      Process.put(@derived_reads_key, MapSet.put(Process.get(@derived_reads_key), module))
+    end
+
+    :ok
   end
 
   # A derived field's definition is built once, before any row is read, so a branch the build cannot
