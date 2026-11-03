@@ -4,6 +4,7 @@ import {
   assert,
   defineRuntimeGlobals,
   registerWebApis,
+  sinon,
   vnode,
 } from "./support/helpers.mjs";
 
@@ -507,6 +508,277 @@ describe("Vdom", () => {
       patched();
 
       assert.equal(container.querySelector("style").nonce, "my_nonce");
+    });
+
+    describe("trusted HTML range", () => {
+      let warnStub;
+
+      beforeEach(() => {
+        warnStub = sinon.stub(console, "warn");
+      });
+
+      afterEach(() => {
+        warnStub.restore();
+      });
+
+      it("adopts the server's nodes and keeps them through the boot patch", () => {
+        const {container, patched} = adopt(
+          [
+            vnode("p", {attrs: {}}, ["a"]),
+            Vdom.trustedHtmlVnode("<b>b</b>", null),
+            vnode("p", {attrs: {}}, ["c"]),
+          ],
+          "<p>a</p><!--hologram-html--><b>b</b><!--/hologram-html--><p>c</p>",
+        );
+
+        const bold = container.querySelector("b");
+        const lastParagraph = container.lastChild;
+
+        patched();
+
+        assert.equal(
+          container.innerHTML,
+          "<p>a</p><!--hologram-html--><b>b</b><!--/hologram-html--><p>c</p>",
+        );
+
+        assert.strictEqual(container.querySelector("b"), bold);
+        assert.strictEqual(container.lastChild, lastParagraph);
+        sinon.assert.notCalled(warnStub);
+      });
+
+      it("rewrites an adopted range when its HTML changes later", () => {
+        const {container, patched} = adopt(
+          [Vdom.trustedHtmlVnode("<b>b</b>", null)],
+          "<!--hologram-html--><b>b</b><!--/hologram-html-->",
+        );
+
+        const booted = patched();
+
+        patch(
+          booted,
+          vnode("div", {attrs: {}}, [Vdom.trustedHtmlVnode("<i>c</i>", null)]),
+        );
+
+        sinon.assert.notCalled(warnStub);
+
+        assert.equal(
+          container.innerHTML,
+          "<!--hologram-html--><i>c</i><!--/hologram-html-->",
+        );
+      });
+
+      it("adopts the range after nodes the render omits", () => {
+        const {container, patched} = adopt(
+          [Vdom.trustedHtmlVnode("<b>b</b>", null)],
+          "<span>x</span><!--hologram-html--><b>b</b><!--/hologram-html-->",
+        );
+
+        const bold = container.querySelector("b");
+
+        patched();
+
+        assert.equal(
+          container.innerHTML,
+          "<!--hologram-html--><b>b</b><!--/hologram-html-->",
+        );
+
+        assert.strictEqual(container.querySelector("b"), bold);
+      });
+
+      it("adopts two ranges side by side", () => {
+        const {container, patched} = adopt(
+          [
+            Vdom.trustedHtmlVnode("<b>a</b>", null),
+            Vdom.trustedHtmlVnode("<i>b</i>", null),
+          ],
+          "<!--hologram-html--><b>a</b><!--/hologram-html--><!--hologram-html--><i>b</i><!--/hologram-html-->",
+        );
+
+        const bold = container.querySelector("b");
+        const italic = container.querySelector("i");
+
+        patched();
+
+        assert.strictEqual(container.querySelector("b"), bold);
+        assert.strictEqual(container.querySelector("i"), italic);
+        sinon.assert.notCalled(warnStub);
+
+        assert.equal(
+          container.innerHTML,
+          "<!--hologram-html--><b>a</b><!--/hologram-html--><!--hologram-html--><i>b</i><!--/hologram-html-->",
+        );
+      });
+
+      it("creates a range the page doesn't hold", () => {
+        const {container, patched} = adopt(
+          [
+            vnode("p", {attrs: {}}, ["a"]),
+            Vdom.trustedHtmlVnode("<b>b</b>", null),
+          ],
+          "<p>a</p>",
+        );
+
+        patched();
+
+        assert.equal(
+          container.innerHTML,
+          "<p>a</p><!--hologram-html--><b>b</b><!--/hologram-html-->",
+        );
+      });
+
+      it("keeps content that differs from what the HTML parses to, and warns", () => {
+        const {container, patched} = adopt(
+          [Vdom.trustedHtmlVnode("<b>b</b>", "MyModule")],
+          "<!--hologram-html--><font>b</font><!--/hologram-html-->",
+        );
+
+        patched();
+
+        assert.equal(
+          container.innerHTML,
+          "<!--hologram-html--><font>b</font><!--/hologram-html-->",
+        );
+
+        sinon.assert.calledOnceWithExactly(
+          warnStub,
+          "Hologram: the page's nodes for trusted HTML rendered in MyModule differ from what its HTML parses to, so they're kept as they are until the HTML changes. The browser's HTML parser may have changed them because the HTML isn't valid where it's placed, or something like a browser extension changed the page - see https://hologram.page/docs/template-syntax#trusted-html",
+        );
+      });
+
+      it("warns when the page holds fewer nodes than the HTML parses to", () => {
+        const {patched} = adopt(
+          [Vdom.trustedHtmlVnode("<b>a</b><b>b</b>", null)],
+          "<!--hologram-html--><b>a</b><!--/hologram-html-->",
+        );
+
+        patched();
+
+        sinon.assert.calledOnce(warnStub);
+      });
+
+      it("raises when the browser's parser split the range", () => {
+        // A <div> closes the <p>, so the range's end lands after it, outside the <p>.
+        const container = mount(
+          "<p><!--hologram-html--><div>b</div><!--/hologram-html--></p>",
+        );
+
+        const rendered = vnode("div", {attrs: {}}, [
+          vnode("p", {attrs: {}}, [
+            Vdom.trustedHtmlVnode("<div>b</div>", "MyModule"),
+          ]),
+        ]);
+
+        assert.throws(
+          () => Vdom.mirror(rendered, container),
+          HologramRuntimeError,
+          "trusted HTML rendered in MyModule was moved by the browser's HTML parser, because it isn't valid HTML where it's placed, like a <div> inside a <p> - see https://hologram.page/docs/template-syntax#trusted-html",
+        );
+      });
+
+      it("raises when the browser's parser moved all of the content out of the range", () => {
+        // A table can't hold a <div>, so the parser moves it before the table.
+        const container = mount(
+          "<table><!--hologram-html--><div>x</div><!--/hologram-html--></table>",
+        );
+
+        const rendered = vnode("div", {attrs: {}}, [
+          vnode("table", {attrs: {}}, [
+            Vdom.trustedHtmlVnode("<div>x</div>", "MyModule"),
+          ]),
+        ]);
+
+        assert.throws(
+          () => Vdom.mirror(rendered, container),
+          HologramRuntimeError,
+          "trusted HTML rendered in MyModule was moved by the browser's HTML parser, because it isn't valid HTML where it's placed, like a <div> inside a <p> - see https://hologram.page/docs/template-syntax#trusted-html",
+        );
+      });
+
+      it("adopts an empty range for empty HTML", () => {
+        const {container, patched} = adopt(
+          [Vdom.trustedHtmlVnode("", null)],
+          "<!--hologram-html--><!--/hologram-html-->",
+        );
+
+        patched();
+
+        assert.equal(
+          container.innerHTML,
+          "<!--hologram-html--><!--/hologram-html-->",
+        );
+        sinon.assert.notCalled(warnStub);
+      });
+
+      it("raises when the next range starts before the range ends", () => {
+        const container = mount(
+          "<!--hologram-html--><b>a</b><!--hologram-html--><i>b</i><!--/hologram-html-->",
+        );
+
+        const rendered = vnode("div", {attrs: {}}, [
+          Vdom.trustedHtmlVnode("<b>a</b>", null),
+          Vdom.trustedHtmlVnode("<i>b</i>", null),
+        ]);
+
+        assert.throws(
+          () => Vdom.mirror(rendered, container),
+          HologramRuntimeError,
+          "trusted HTML was moved by the browser's HTML parser",
+        );
+      });
+
+      it("adopts table rows under a tbody parent without a warning", () => {
+        const container = mount(
+          "<table><tbody><!--hologram-html--><tr><td>1</td></tr><!--/hologram-html--></tbody></table>",
+        );
+
+        const rendered = vnode("div", {attrs: {}}, [
+          vnode("table", {attrs: {}}, [
+            vnode("tbody", {attrs: {}}, [
+              Vdom.trustedHtmlVnode("<tr><td>1</td></tr>", null),
+            ]),
+          ]),
+        ]);
+
+        const cell = container.querySelector("td");
+
+        patch(Vdom.mirror(rendered, container), rendered);
+
+        assert.strictEqual(container.querySelector("td"), cell);
+        sinon.assert.notCalled(warnStub);
+      });
+
+      it("adopts SVG content under an SVG parent without a warning", () => {
+        const container = mount(
+          '<svg><!--hologram-html--><path d="a"/><path d="b"/><!--/hologram-html--></svg>',
+        );
+
+        const rendered = vnode("div", {attrs: {}}, [
+          vnode("svg", {attrs: {}}, [
+            Vdom.trustedHtmlVnode('<path d="a"/><path d="b"/>', null),
+          ]),
+        ]);
+
+        const path = container.querySelector("path");
+
+        patch(Vdom.mirror(rendered, container), rendered);
+
+        assert.strictEqual(container.querySelector("path"), path);
+        sinon.assert.notCalled(warnStub);
+      });
+
+      it("creates a range whose start comment is gone, removing what's left of the old one", () => {
+        const {container, patched} = adopt(
+          [Vdom.trustedHtmlVnode("<b>b</b>", null)],
+          "<b>b</b><!--/hologram-html-->",
+        );
+
+        patched();
+
+        assert.equal(
+          container.innerHTML,
+          "<!--hologram-html--><b>b</b><!--/hologram-html-->",
+        );
+      });
     });
   });
 

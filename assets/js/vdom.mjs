@@ -24,6 +24,10 @@ export const TRUSTED_HTML_SEL = " trusted-html";
 export const TRUSTED_HTML_RANGE_START = "hologram-html";
 export const TRUSTED_HTML_RANGE_END = "/hologram-html";
 
+// Where the docs explain where trusted HTML can go, for the errors and warnings about it.
+const TRUSTED_HTML_DOCS_URL =
+  "https://hologram.page/docs/template-syntax#trusted-html";
+
 // The elements removed from trusted HTML, as the server removes them: a script runs when the
 // browser parses a page but never through innerHTML, a plaintext turns the rest of a page into
 // text, and a noscript's content is markup to the server's parser and text to the browser's.
@@ -492,6 +496,26 @@ export default class Vdom {
         cursor.index += 1;
       }
 
+      if (renderedChild.sel === TRUSTED_HTML_SEL) {
+        const endIndex = $.#trustedHtmlRangeEndIndex(
+          renderedChild,
+          domNodes,
+          domIndex,
+        );
+
+        mirroredChildren.push(
+          $.#mirrorTrustedHtmlRange(
+            renderedChild,
+            domNodes,
+            domIndex,
+            endIndex,
+          ),
+        );
+
+        cursor.index = endIndex + 1;
+        continue;
+      }
+
       mirroredChildren.push($.#mirrorNode(renderedChild, domNodes[domIndex]));
       cursor.index = domIndex + 1;
     }
@@ -557,6 +581,52 @@ export default class Vdom {
     );
   }
 
+  // The old-side vnode of a server-rendered trusted HTML range, adopted with the nodes the page holds
+  // between its comments, so the patch, seeing the same HTML on both sides, leaves them alone.
+  //
+  // A range the browser's parser emptied raises, as a split one does. Content that doesn't match
+  // what the client parses from the same HTML is kept as it is, with a warning: the browser's parser may have changed it, since it isn't valid where it's placed, but
+  // so may a browser extension, which Hologram leaves alone. The range is rewritten the next time
+  // its HTML changes.
+  static #mirrorTrustedHtmlRange(
+    renderedVnode,
+    domNodes,
+    startIndex,
+    endIndex,
+  ) {
+    const start = domNodes[startIndex];
+    const end = domNodes[endIndex];
+    const content = Array.from(domNodes).slice(startIndex + 1, endIndex);
+    const {html, module} = renderedVnode.data.hologramHtml;
+    const parsedNodes = $.parseTrustedHtml(html, start.parentNode);
+
+    // An empty range for HTML that isn't empty is the browser's parser moving all of it out, as it
+    // moves what a table can't hold before the table. Nothing else empties a range: an extension
+    // or a translation changes content, but doesn't take all of it away.
+    if (content.length === 0 && parsedNodes.length > 0) {
+      throw $.#trustedHtmlMovedError(module);
+    }
+
+    if (
+      parsedNodes.length !== content.length ||
+      parsedNodes.some((node, index) => !node.isEqualNode(content[index]))
+    ) {
+      console.warn(
+        `Hologram: the page's nodes for trusted HTML${$.#renderedIn(module)} differ from what its HTML parses to, so they're kept as they are until the HTML changes. The browser's HTML parser may have changed them because the HTML isn't valid where it's placed, or something like a browser extension changed the page - see ${TRUSTED_HTML_DOCS_URL}`,
+      );
+    }
+
+    start.hologramRangeEnd = end;
+
+    return rawVnode(
+      TRUSTED_HTML_SEL,
+      {hologramHtml: renderedVnode.data.hologramHtml},
+      undefined,
+      undefined,
+      start,
+    );
+  }
+
   // Whether a rendered vnode can stand for a DOM node, which is what makes adopting it safe.
   //
   // A resource key names what the element loads, and is the one thing a tag match is not enough
@@ -570,6 +640,17 @@ export default class Vdom {
   // the parser corrects the markup's spelling to that. So the two sides can disagree on case
   // alone, and case is the only thing being ignored: no two elements differ by it.
   static #correspondsTo(renderedVnode, domNode) {
+    // A range is found by the comment it starts with. Content can't carry one, since both sides
+    // remove comments with a range marker's text from it, so the comment is always a range's start,
+    // and an element-like look ahead for it is safe - though not always this range's start, when
+    // something outside Hologram removed the comment this one starts with.
+    if (renderedVnode.sel === TRUSTED_HTML_SEL) {
+      return (
+        domNode.nodeType === Node.COMMENT_NODE &&
+        domNode.data === TRUSTED_HTML_RANGE_START
+      );
+    }
+
     if (renderedVnode.sel === undefined) {
       return (
         !Array.isArray(renderedVnode.children) &&
@@ -629,6 +710,11 @@ export default class Vdom {
     );
   }
 
+  // The part of a trusted HTML error or warning naming the module whose template rendered it.
+  static #renderedIn(module) {
+    return module === null ? "" : ` rendered in ${module}`;
+  }
+
   // The key a link or script element carries by what it loads, or null for anything else. Mirrors
   // what the renderer derives for the same element, so the two sides compare equal.
   static #resourceKey(domNode, attrs) {
@@ -664,6 +750,37 @@ export default class Vdom {
     };
 
     return rawVnode(sel, data, [], undefined, domNode);
+  }
+
+  // The index of the comment the range starting at the given index ends with, among the same
+  // siblings. The browser's parser puts it elsewhere when the content isn't valid where it's placed
+  // - a <div> inside a <p> closes the <p>, taking the rest of the range after it - and then the
+  // range can't be told apart from the page around it, so this raises.
+  static #trustedHtmlRangeEndIndex(renderedVnode, domNodes, startIndex) {
+    for (let index = startIndex + 1; index < domNodes.length; index += 1) {
+      const node = domNodes[index];
+
+      if (node.nodeType !== Node.COMMENT_NODE) {
+        continue;
+      }
+
+      if (node.data === TRUSTED_HTML_RANGE_END) {
+        return index;
+      }
+
+      // The next range starting first means this one's end is elsewhere.
+      if (node.data === TRUSTED_HTML_RANGE_START) {
+        break;
+      }
+    }
+
+    throw $.#trustedHtmlMovedError(renderedVnode.data.hologramHtml.module);
+  }
+
+  static #trustedHtmlMovedError(module) {
+    return new HologramRuntimeError(
+      `trusted HTML${$.#renderedIn(module)} was moved by the browser's HTML parser, because it isn't valid HTML where it's placed, like a <div> inside a <p> - see ${TRUSTED_HTML_DOCS_URL}`,
+    );
   }
 
   // A vnode standing for a DOM node on its own terms: its own tag, attributes, children and
