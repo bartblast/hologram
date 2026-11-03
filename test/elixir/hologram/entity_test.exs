@@ -805,6 +805,15 @@ defmodule Hologram.EntityTest do
         new(JobModule1, %{actor_id: "018f4c11-1111-7111-8111-111111111111"})
       end
     end
+
+    test "raises on a derived field" do
+      expected_msg =
+        ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        new(Module32, message_count: 3)
+      end
+    end
   end
 
   describe "path_target/2" do

@@ -169,6 +169,15 @@ defmodule Hologram.Query.StageTest do
         add_relationship(entity, :a, wrap_term(123))
       end
     end
+
+    test "raises on a derived field" do
+      expected_msg =
+        ":recent_messages is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        add_relationship(Module32.new(), :recent_messages, Entity.generate_id())
+      end
+    end
   end
 
   describe "authorize/2" do
@@ -333,6 +342,15 @@ defmodule Hologram.Query.StageTest do
         decrement(entity, :bio, 1)
       end
     end
+
+    test "raises on a derived field" do
+      expected_msg =
+        ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        decrement(Module32.new(), :message_count, 1)
+      end
+    end
   end
 
   describe "delete_relationship/3" do
@@ -403,6 +421,15 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         delete_relationship(entity, :a, wrap_term(123))
+      end
+    end
+
+    test "raises on a derived field" do
+      expected_msg =
+        ":recent_messages is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        delete_relationship(Module32.new(), :recent_messages, Entity.generate_id())
       end
     end
   end
@@ -2767,6 +2794,15 @@ defmodule Hologram.Query.StageTest do
         |> increment(:count, 1)
       end
     end
+
+    test "raises on a derived field" do
+      expected_msg =
+        ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        increment(Module32.new(), :message_count, 1)
+      end
+    end
   end
 
   describe "inspect_name/1" do
@@ -3425,6 +3461,15 @@ defmodule Hologram.Query.StageTest do
                    ~s(put_attribute takes a keyword list or a map of attribute values, got: "a"),
                    fn -> put_attribute(entity, wrap_term("a")) end
     end
+
+    test "raises on a derived field" do
+      expected_msg =
+        ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(Module32.new(), message_count: 3)
+      end
+    end
   end
 
   describe "put_attribute/3" do
@@ -3445,6 +3490,15 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         put_attribute(entity, :nope, 1)
+      end
+    end
+
+    test "raises on a derived field" do
+      expected_msg =
+        ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        put_attribute(Module32.new(), :message_count, 3)
       end
     end
   end

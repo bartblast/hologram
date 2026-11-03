@@ -9,6 +9,7 @@ defmodule Hologram.Query.Stage do
   # on this module directly.
 
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
   alias Hologram.Policy
   alias Hologram.Query
@@ -1751,6 +1752,9 @@ defmodule Hologram.Query.Stage do
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - #{stage} moves integer attributes only"
 
+      Derived.declared?(entity_type, name) ->
+        raise ArgumentError, message: Derived.read_only_message(entity_type, name)
+
       true ->
         known = Enum.map_join(counter_names, ", ", &inspect/1)
 
@@ -1784,6 +1788,9 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError,
           message:
             "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only to-many relationships hold edges - put it via put_attribute"
+
+      Derived.declared?(entity_type, name) ->
+        raise ArgumentError, message: Derived.read_only_message(entity_type, name)
 
       true ->
         known = Enum.map_join(to_many_names, ", ", &inspect/1)
@@ -1915,7 +1922,7 @@ defmodule Hologram.Query.Stage do
   # A derived field holds no reference, so no relationship goes through it - a related row it holds
   # is read through the relationships its definition reads.
   defp validate_not_derived_hop!(hop, entity_type, reason) do
-    if List.keymember?(entity_type.__derived__(), hop, 0) do
+    if Derived.declared?(entity_type, hop) do
       raise ArgumentError,
         message: "#{inspect(hop)} is a derived field in #{inspect(entity_type)} - #{reason}"
     end
@@ -2061,6 +2068,9 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError,
           message:
             "#{inspect(name)} is a system attribute of #{inspect(entity_type)} - it is managed automatically and can't be put"
+
+      Derived.declared?(entity_type, name) ->
+        raise ArgumentError, message: Derived.read_only_message(entity_type, name)
 
       true ->
         known = Enum.map_join(settable_names, ", ", &inspect/1)

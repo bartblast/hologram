@@ -1138,6 +1138,16 @@ defmodule Hologram.Entity do
   end
 
   defp validate_construction_values!(entity_type, values_map) do
+    assigned_derived_name =
+      entity_type.__derived__()
+      |> Enum.map(fn {name, _type, _opts} -> name end)
+      |> Enum.find(&Map.has_key?(values_map, &1))
+
+    if assigned_derived_name do
+      raise ArgumentError,
+        message: Derived.read_only_message(entity_type, assigned_derived_name)
+    end
+
     assigned_inverse_name =
       entity_type.__inverse_relationships__()
       |> Enum.map(fn {name, _type, _opts} -> name end)

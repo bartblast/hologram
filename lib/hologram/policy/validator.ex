@@ -2,6 +2,7 @@ defmodule Hologram.Policy.Validator do
   @moduledoc false
 
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Policy
   alias Hologram.Query.Stage
   alias Hologram.Reflection
@@ -95,8 +96,6 @@ defmodule Hologram.Policy.Validator do
         to != nil
       end)
   end
-
-  defp derived_field?(entity_type, name), do: List.keymember?(entity_type.__derived__(), name, 0)
 
   # An option as a message quotes it: written as it was, a relationship as inspect/1 spells it and
   # a path dotted - {:update, stop.trip}, {:owner, trip.user}.
@@ -307,7 +306,7 @@ defmodule Hologram.Policy.Validator do
     definitions = entity_type.__relationships__()
     in_type = if index == 0, do: "", else: " in #{inspect(entity_type)}"
 
-    if derived_field?(entity_type, relationship_name) do
+    if Derived.declared?(entity_type, relationship_name) do
       raise Hologram.CompileError,
         message:
           "invalid #{context.option} option #{context.written} for allow #{inspect(context.operation)} in #{context.location} - #{inspect(relationship_name)}#{in_type} is a derived field, but #{context.requirement}"
@@ -462,7 +461,7 @@ defmodule Hologram.Policy.Validator do
   # a path breaking earlier is left to the filter's refusal of that hop.
   defp validate_no_derived_name!(entity_type, [name | later_names]) when is_atom(name) do
     cond do
-      derived_field?(entity_type, name) ->
+      Derived.declared?(entity_type, name) ->
         raise ArgumentError,
           message:
             "#{inspect(name)} is a derived field of #{inspect(entity_type)} - a policy condition reads no derived field"

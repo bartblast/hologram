@@ -32,6 +32,12 @@ defmodule Hologram.Entity.Derived do
   @type definition :: {:value, any} | {:name, Query.name()} | {:query, Query.t()}
 
   @doc """
+  Returns whether the given name is a derived field of the given entity type.
+  """
+  @spec declared?(module, atom) :: boolean
+  def declared?(entity_type, name), do: List.keymember?(entity_type.__derived__(), name, 0)
+
+  @doc """
   Returns the definition of the given derived field of the given entity type, as the build resolved
   it - the one source of definitions at runtime, put by the build in its own VM and by the query
   cache at boot.
@@ -138,6 +144,15 @@ defmodule Hologram.Entity.Derived do
     Enum.each(definitions, fn {{entity_type, name}, definition} ->
       :persistent_term.put(table_key(entity_type, name), definition)
     end)
+  end
+
+  @doc """
+  Returns the message refusing a write to the given derived field of the given entity type - every
+  write path refuses one in these words.
+  """
+  @spec read_only_message(module, atom) :: String.t()
+  def read_only_message(entity_type, name) do
+    "#{inspect(name)} is a derived field of #{inspect(entity_type)} - it's computed from its definition, so it's read-only"
   end
 
   @doc """

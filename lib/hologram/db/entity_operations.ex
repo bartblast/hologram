@@ -18,6 +18,7 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.DB.Oplog
   alias Hologram.DB.SortKey
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
 
@@ -922,6 +923,12 @@ defmodule Hologram.DB.EntityOperations do
             "invalid changes for #{inspect(entity_type)} - at least one declared attribute or to-one relationship must be changed"
     end
 
+    # A derived field has no column - it's computed from its definition - so a change or a move of
+    # one is refused in the words the stages refuse it, before the guards below would call it
+    # unknown or unmovable.
+    validate_not_derived!(entity_type, sorted_changes, "changes")
+    validate_not_derived!(entity_type, sorted_deltas, "deltas")
+
     # The mapper's own guard, for a caller that never met the stage's: a counter is a required
     # integer attribute, so its column is NOT NULL and the statement never meets a null to add to.
     unmovable_names =
@@ -981,6 +988,18 @@ defmodule Hologram.DB.EntityOperations do
 
       {:error, errors} ->
         raise ArgumentError, Validator.error_message(entity_type, data, errors)
+    end
+  end
+
+  defp validate_not_derived!(entity_type, sorted_entries, kind) do
+    derived_name =
+      sorted_entries
+      |> Enum.map(fn {name, _value} -> name end)
+      |> Enum.find(&Derived.declared?(entity_type, &1))
+
+    if derived_name do
+      raise ArgumentError,
+            "invalid #{kind} for #{inspect(entity_type)} - #{Derived.read_only_message(entity_type, derived_name)}"
     end
   end
 
