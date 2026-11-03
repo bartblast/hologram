@@ -153,8 +153,7 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
       expected_msg =
         normalize_newlines("""
         invalid data model:
-          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :item in Hologram.Entity.Derived.ValidatorTest.Fixture7 is declared Hologram.Query, but Hologram.Query is not an entity type
-          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :item in Hologram.Entity.Derived.ValidatorTest.Fixture7 is declared Hologram.Query, but its definition is the value nil - a field holding rows is defined by a query over the row's sets\
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :item in Hologram.Entity.Derived.ValidatorTest.Fixture7 is declared Hologram.Query, but Hologram.Query is not an entity type\
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture7]) end
@@ -459,9 +458,7 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
       assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture20]) end
     end
 
-    test "raises on a set defined by what is no query" do
-      line = __ENV__.line + 7
-
+    test "returns :ok for nil for a set" do
       defmodule Fixture21 do
         use Hologram.Entity
 
@@ -470,18 +467,10 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :none, [Module33], fn -> nil end
       end
 
-      expected_msg =
-        normalize_newlines("""
-        invalid data model:
-          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :none in Hologram.Entity.Derived.ValidatorTest.Fixture21 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is the value nil - a field holding rows is defined by a query over the row's sets\
-        """)
-
-      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture21]) end
+      assert validate([Fixture21]) == :ok
     end
 
-    test "raises on a set defined by a choice between queries" do
-      line = __ENV__.line + 11
-
+    test "returns :ok for a set chosen with if between queries and nil" do
       defmodule Fixture23 do
         use Hologram.Entity
 
@@ -494,15 +483,39 @@ defmodule Hologram.Entity.Derived.ValidatorTest do
         derived :picked, [Module33], fn messages, name ->
           if name == "x", do: take(messages, 1), else: messages
         end
+
+        derived :pinned, [Module33], fn messages, name ->
+          if name == "x", do: take(messages, 2)
+        end
+      end
+
+      assert validate([Fixture23]) == :ok
+    end
+
+    test "raises on a branch of a set's if computing another type" do
+      line = __ENV__.line + 11
+
+      defmodule Fixture24 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        attribute :name, :string
+
+        relationship :messages, [Module33]
+
+        derived :picked, [Module33], fn messages, name ->
+          if name == "x", do: take(messages, 1), else: count(messages)
+        end
       end
 
       expected_msg =
         normalize_newlines("""
         invalid data model:
-          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :picked in Hologram.Entity.Derived.ValidatorTest.Fixture23 is declared [Hologram.Test.Fixtures.Entity.Module33], but its definition is a choice between values (if) - a field holding rows is defined by a query over the row's sets\
+          * test/elixir/hologram/entity/derived/validator_test.exs:#{line}: derived field :picked in Hologram.Entity.Derived.ValidatorTest.Fixture24 is declared [Hologram.Test.Fixtures.Entity.Module33], but a branch of its definition is a count (:integer)\
         """)
 
-      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture23]) end
+      assert_error Hologram.CompileError, expected_msg, fn -> validate([Fixture24]) end
     end
 
     test "raises on a branch of an if joined by <> computing another type" do

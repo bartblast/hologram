@@ -9,8 +9,6 @@ defmodule Hologram.Entity.Derived.Validator do
   alias Hologram.Query
   alias Hologram.Reflection
 
-  @attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid]
-
   @quantifiers [:all, :any, :none]
 
   @doc """
@@ -86,8 +84,6 @@ defmodule Hologram.Entity.Derived.Validator do
 
   defp computed({:concat, _operands}), do: "a string (<>)"
 
-  defp computed({:if, _clauses, _then_value, _else_value}), do: "a choice between values (if)"
-
   defp computed({:condition, _clauses}), do: "a condition (:boolean)"
 
   defp computed({:query, %Query{cardinality: :count}}), do: "a count (:integer)"
@@ -98,8 +94,8 @@ defmodule Hologram.Entity.Derived.Validator do
   defp computed({:query, %Query{entity: entity_type}}),
     do: "a set of #{inspect(entity_type)} rows"
 
-  # Whether a definition computes what the given declared type and options hold - a value of an
-  # attribute type, nil included.
+  # Whether a definition computes what the given declared type and options hold. Nil is no value,
+  # no row or no rows, whatever the field holds.
   defp computes?(_declared, {:value, nil}), do: true
 
   defp computes?(declared, {:value, value}), do: value_of_type?(value, declared)
@@ -329,16 +325,6 @@ defmodule Hologram.Entity.Derived.Validator do
 
   # The refusals of a definition's type, worded for where in it they are: the definition itself, a
   # branch of an if or an operand of <>.
-  # A field holding rows is defined by a query over the row's sets - its rows are the query's, which
-  # is what an include of it and a quantifier over it read through.
-  defp type_violations(definition, {type, _opts} = declared, where)
-       when (is_list(type) or (is_atom(type) and type not in @attribute_types)) and
-              elem(definition, 0) != :query do
-    [
-      "is declared #{spelled_type(declared)}, but #{where} #{computed(definition)} - a field holding rows is defined by a query over the row's sets"
-    ]
-  end
-
   defp type_violations({:if, _clauses, then_value, else_value}, declared, where) do
     branch_where =
       if where == "its definition is", do: "a branch of its definition is", else: where

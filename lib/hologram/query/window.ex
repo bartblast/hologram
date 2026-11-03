@@ -271,22 +271,27 @@ defmodule Hologram.Query.Window do
     end
   end
 
-  # A chain read through the sets derived fields hold, as the chain to the rows those sets are
-  # computed from - the chain the window embeds.
-  defp mapped_chain(_entity_type, []), do: []
+  # A chain read through the rows derived fields hold, as the chains to the rows they are computed
+  # from - the chains the window embeds. A field choosing its rows with if holds the rows of every
+  # query its branches name, so a chain through it maps onto each, and onto none for a field
+  # holding none.
+  defp mapped_chains(_entity_type, []), do: [[]]
 
-  defp mapped_chain(entity_type, [name | later_names]) do
+  defp mapped_chains(entity_type, [name | later_names]) do
     if Derived.declared?(entity_type, name) do
-      {:query, %Query{entity: target_type, source: {^entity_type, source_chain}}} =
-        Derived.definition(entity_type, name)
+      target_type = Derived.related_type(entity_type, name)
 
-      mapped_chain(entity_type, source_chain) ++ mapped_chain(target_type, later_names)
+      for source_chain <- row_sources(Derived.definition(entity_type, name)),
+          mapped_source <- mapped_chains(entity_type, source_chain),
+          mapped_later <- mapped_chains(target_type, later_names),
+          uniq: true,
+          do: mapped_source ++ mapped_later
     else
-      [name | mapped_chain(Entity.related_type(entity_type, name), later_names)]
+      for mapped_later <- mapped_chains(Entity.related_type(entity_type, name), later_names),
+          do: [name | mapped_later]
     end
   end
 
-  # A predicate reading a path that a reader's missing related row - nil - can satisfy.
   # A render's authored includes as written, beside what it embeds - an authored include of an
   # embedded relationship keeps its own clauses and gains what the embedded one includes.
   defp merged_includes(authored_include, embedded_include) do
@@ -301,6 +306,7 @@ defmodule Hologram.Query.Window do
     end)
   end
 
+  # A predicate reading a path that a reader's missing related row - nil - can satisfy.
   defp missing_path_match?({name, operator, operand}) do
     reads_path? = path_name?(name) or path_name?(operand_name(operand))
 
@@ -348,7 +354,7 @@ defmodule Hologram.Query.Window do
     chains =
       clauses
       |> Stage.relationship_chains(prefixes)
-      |> Enum.map(&mapped_chain(root, &1))
+      |> Enum.flat_map(&mapped_chains(root, &1))
 
     include
     |> put_derived_reads(
@@ -364,11 +370,14 @@ defmodule Hologram.Query.Window do
   # computed from, embedded under that row - recursively for the derived fields its definition
   # reads. The field itself is never downloaded: a client computes it.
   defp put_definition(include, root, chain, name, permission_checking?) do
-    mapped = mapped_chain(root, chain)
-    owner_type = Entity.path_target(root, mapped)
-    definition = Derived.definition(owner_type, name)
+    root
+    |> mapped_chains(chain)
+    |> Enum.reduce(include, fn mapped, acc ->
+      owner_type = Entity.path_target(root, mapped)
+      definition = Derived.definition(owner_type, name)
 
-    put_definition_sources(include, root, mapped, owner_type, definition, permission_checking?)
+      put_definition_sources(acc, root, mapped, owner_type, definition, permission_checking?)
+    end)
   end
 
   defp put_definition_sources(
@@ -454,27 +463,29 @@ defmodule Hologram.Query.Window do
     set_owner_chain = chain ++ hops
     set_owner_type = Entity.path_target(root, set_owner_chain)
 
-    {with_set, set_chain} =
+    {with_set, set_chains} =
       if Derived.declared?(set_owner_type, set_name) do
         {put_definition(include, root, set_owner_chain, set_name, permission_checking?),
-         mapped_chain(root, List.insert_at(set_owner_chain, -1, set_name))}
+         mapped_chains(root, List.insert_at(set_owner_chain, -1, set_name))}
       else
         set_chain = List.insert_at(set_owner_chain, -1, set_name)
         narrowing = definition_narrowing(term, root, set_chain, chain)
 
-        {put_source_set(include, root, set_chain, narrowing), set_chain}
+        {put_source_set(include, root, set_chain, narrowing), [set_chain]}
       end
 
-    sort_reads =
-      for {key, _direction} <- term.sort,
-          is_atom(key),
-          Derived.declared?(term.entity, key),
-          do: {set_chain, key}
+    Enum.reduce(set_chains, with_set, fn set_chain, acc ->
+      sort_reads =
+        for {key, _direction} <- term.sort,
+            is_atom(key),
+            Derived.declared?(term.entity, key),
+            do: {set_chain, key}
 
-    with_set
-    |> put_clause_reads(root, [set_chain, chain], term.filter, permission_checking?)
-    |> put_derived_reads(root, sort_reads, permission_checking?)
-    |> put_included_terms(root, set_chain, term.include, permission_checking?)
+      acc
+      |> put_clause_reads(root, [set_chain, chain], term.filter, permission_checking?)
+      |> put_derived_reads(root, sort_reads, permission_checking?)
+      |> put_included_terms(root, set_chain, term.include, permission_checking?)
+    end)
   end
 
   defp put_derived_reads(include, root, reads, permission_checking?) do
@@ -492,6 +503,16 @@ defmodule Hologram.Query.Window do
     |> put_quantified_sets(term, permission_checking?)
     |> put_path_includes(term)
     |> put_policy_includes(term.entity, [], permission_checking?)
+  end
+
+  # What a template reads off the rows a derived field holds: the rows their rules read when a client
+  # checks permissions, and what an include of the field includes, off every source of those rows.
+  defp put_included_rows(include, root, rows_chains, included, permission_checking?) do
+    Enum.reduce(rows_chains, include, fn rows_chain, acc ->
+      acc
+      |> put_policy_includes(root, rows_chain, permission_checking?)
+      |> put_included_terms(root, rows_chain, included, permission_checking?)
+    end)
   end
 
   # Includes read from the row a chain leads to: a relationship embedded with what it includes, and
@@ -515,12 +536,11 @@ defmodule Hologram.Query.Window do
           put_definition(acc, root, chain, name, permission_checking?)
 
         true ->
-          rows_chain = mapped_chain(root, List.insert_at(chain, -1, name))
+          rows_chains = mapped_chains(root, List.insert_at(chain, -1, name))
 
           acc
           |> put_definition(root, chain, name, permission_checking?)
-          |> put_policy_includes(root, rows_chain, permission_checking?)
-          |> put_included_terms(root, rows_chain, sub_term.include, permission_checking?)
+          |> put_included_rows(root, rows_chains, sub_term.include, permission_checking?)
       end
     end)
   end
@@ -540,7 +560,7 @@ defmodule Hologram.Query.Window do
   defp put_path_includes(include, term) do
     term.filter
     |> Stage.relationship_chains()
-    |> Enum.map(&mapped_chain(term.entity, &1))
+    |> Enum.flat_map(&mapped_chains(term.entity, &1))
     |> Enum.reduce(include, &put_path_include(&2, term.entity, &1))
   end
 
@@ -641,29 +661,33 @@ defmodule Hologram.Query.Window do
   #
   # A set a derived field holds is no set of its own: its rows are its definition's, whose sources
   # are embedded for it (see put_definition/5), so a quantifier over one embeds nothing here beyond
-  # what its condition's nested quantifiers read. A chain through one is read as the chain to its
-  # source.
+  # what its condition's nested quantifiers read. A chain through one is read as the chains to the
+  # sets its rows come from (see mapped_chains/2).
   defp quantified_sets(clauses, entity_type, prefixes) do
     Enum.flat_map(clauses, fn
       {:or, alternatives} ->
         Enum.flat_map(alternatives, &quantified_sets(&1, entity_type, prefixes))
 
       {quantifier, {source, inner}} when quantifier in @quantifiers ->
-        chain = source_chain(source, prefixes)
-        nested_sets = quantified_sets(inner, entity_type, [chain | prefixes])
-
-        if derived_end?(entity_type, chain) do
-          nested_sets
-        else
-          mapped = mapped_chain(entity_type, chain)
-          narrowing = set_narrowing(quantifier, inner, entity_type, mapped, prefixes)
-
-          [{mapped, narrowing} | nested_sets]
-        end
+        quantifier_sets(quantifier, source_chain(source, prefixes), inner, entity_type, prefixes)
 
       _triple ->
         []
     end)
+  end
+
+  defp quantifier_sets(quantifier, chain, inner, entity_type, prefixes) do
+    nested_sets = quantified_sets(inner, entity_type, [chain | prefixes])
+
+    if derived_end?(entity_type, chain) do
+      nested_sets
+    else
+      sets =
+        for mapped <- mapped_chains(entity_type, chain),
+            do: {mapped, set_narrowing(quantifier, inner, entity_type, mapped, prefixes)}
+
+      sets ++ nested_sets
+    end
   end
 
   defp read_through_ids?(entity_type, name) do
@@ -679,6 +703,15 @@ defmodule Hologram.Query.Window do
   defp reads_derived?({name, _operator, operand}, scope) do
     derived_name?(name, scope) or derived_name?(operand_name(operand), scope)
   end
+
+  # The chains to the sets a definition of a field holding rows reads its rows off: its query's, or
+  # every branch's, nil holding none.
+  defp row_sources({:query, %Query{source: {_owner_type, source_chain}}}), do: [source_chain]
+
+  defp row_sources({:if, _clauses, then_value, else_value}),
+    do: row_sources(then_value) ++ row_sources(else_value)
+
+  defp row_sources({:value, nil}), do: []
 
   # A condition part that reads nothing outside the set's row - the row a nested quantifier binds
   # inside it is its own, so a name reaching a row above counts from the depth it is written at.

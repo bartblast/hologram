@@ -20,6 +20,7 @@ defmodule Hologram.Query.WindowTest do
   alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module33
+  alias Hologram.Test.Fixtures.Entity.Module34
   alias Hologram.Test.Fixtures.Entity.Module37
   alias Hologram.Test.Fixtures.Entity.Module38
   alias Hologram.Test.Fixtures.Entity.Module5
@@ -1022,6 +1023,92 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
+    test "downloads what an include of a set chosen with if includes off every source it reads" do
+      term =
+        Module37
+        |> include(picked.author)
+        |> Stage.normalize()
+
+      author = %Query{entity: Module1}
+
+      assert derive(term, false).include == %{
+               messages: %Query{
+                 entity: Module38,
+                 include: %{
+                   author: author,
+                   channel: %Query{
+                     entity: Module37,
+                     include: %{messages: %Query{entity: Module38, include: %{author: author}}}
+                   }
+                 }
+               }
+             }
+    end
+
+    test "downloads every source a set chosen with if reads, for a derived field counting it" do
+      term =
+        Module37
+        |> filter(picked_count > 0)
+        |> Stage.normalize()
+
+      assert derive(term, false).include == %{
+               messages: %Query{
+                 entity: Module38,
+                 include: %{
+                   channel: %Query{
+                     entity: Module37,
+                     include: %{messages: %Query{entity: Module38}}
+                   }
+                 }
+               }
+             }
+    end
+
+    test "downloads every source a set chosen with if reads, for a quantifier over it" do
+      term =
+        Module37
+        |> filter(any(message <- picked, message.pinned == true))
+        |> Stage.normalize()
+
+      window = derive(term, false)
+
+      assert window.filter == []
+
+      assert window.include == %{
+               messages: %Query{
+                 entity: Module38,
+                 include: %{
+                   channel: %Query{
+                     entity: Module37,
+                     include: %{messages: %Query{entity: Module38}}
+                   }
+                 }
+               }
+             }
+    end
+
+    test "downloads nothing for an include through a set holding no rows" do
+      term =
+        Module37
+        |> include(nothing.author)
+        |> Stage.normalize()
+
+      assert derive(term, false).include == %{}
+    end
+
+    test "downloads the rows a derived field a condition of if reads is computed from" do
+      put_derived_definitions([Module34])
+
+      term =
+        Module34
+        |> filter(level == :busy)
+        |> Stage.normalize()
+
+      assert derive(term, false).include == %{
+               channel: %Query{entity: Module32, include: %{messages: %Query{entity: Module33}}}
+             }
+    end
+
     test "downloads the rows a derived field sorted by is computed from" do
       term =
         Module37
@@ -1219,6 +1306,28 @@ defmodule Hologram.Query.WindowTest do
       assert embed(term, false).include == %{
                messages: %Query{entity: Module38, filter: [{:pinned, :==, true}]},
                pinned_count: nil
+             }
+    end
+
+    test "embeds every source a set chosen with if reads beside the authored include" do
+      put_derived_definitions([Module37, Module38])
+
+      term =
+        Module37
+        |> include(picked)
+        |> Stage.normalize()
+
+      assert embed(term, false).include == %{
+               messages: %Query{
+                 entity: Module38,
+                 include: %{
+                   channel: %Query{
+                     entity: Module37,
+                     include: %{messages: %Query{entity: Module38}}
+                   }
+                 }
+               },
+               picked: term.include.picked
              }
     end
 

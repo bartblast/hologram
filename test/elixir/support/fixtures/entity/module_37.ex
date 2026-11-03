@@ -25,6 +25,14 @@ defmodule Hologram.Test.Fixtures.Entity.Module37 do
     |> count()
   end
 
+  derived :nothing, [Module38], fn -> nil end
+
+  derived :picked, [Module38], fn messages, name ->
+    if name == "general", do: take(messages, 1), else: messages.channel.messages
+  end
+
+  derived :picked_count, :integer, fn picked -> count(picked) end
+
   derived :recent_messages, [Module38], fn messages ->
     messages
     |> sort(created_at: :desc)
