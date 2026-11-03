@@ -23,10 +23,22 @@ defmodule Hologram.Template.HTMLNormalizer do
   @range_end_marker "/hologram-html"
 
   # The parents whose content the browser's parser reads in an insertion mode of its own - a table
-  # one, the column group one, or the template one. Plain fragment parsing reads in body mode,
-  # which drops <tr>, <td>, <col> and the like as misplaced, so content for these is parsed inside
-  # a <template>, whose content takes whatever mode its first tag needs.
-  @template_wrapped_parents ~w(colgroup table tbody template tfoot thead tr)
+  # one, the column group one, or the template one - with the elements that put the parser in that
+  # mode. Plain parsing reads in body mode, which drops <tr>, <td>, <col> and the like as misplaced.
+  # Inside the real table structure the parser also adds the elements a table implies, as the
+  # browser does - a <tbody> around rows put straight into a <table>, a <tr> around cells put
+  # straight into a <tbody> - and the client's innerHTML adds the same ones.
+  @mode_wrappers %{
+    "colgroup" => ["table", "colgroup"],
+    "table" => ["table"],
+    "tbody" => ["table", "tbody"],
+    "template" => ["template"],
+    "tfoot" => ["table", "tfoot"],
+    "thead" => ["table", "thead"],
+    "tr" => ["table", "tbody", "tr"]
+  }
+
+  @mode_wrapped_parents Map.keys(@mode_wrappers)
 
   # The elements dropped from the content, wherever they are, because they would behave differently
   # on a first page than after a client update, which inserts content through innerHTML:
@@ -144,6 +156,9 @@ defmodule Hologram.Template.HTMLNormalizer do
       iex> normalize("<tr><td>cell</td></tr>", "tbody", :html)
       "<tr><td>cell</td></tr>"
 
+      iex> normalize("<tr><td>cell</td></tr>", "table", :html)
+      "<tbody><tr><td>cell</td></tr></tbody>"
+
       iex> normalize("<p>text</p><script>alert(1)</script>", "div", :html)
       "<p>text</p>"
   """
@@ -151,8 +166,9 @@ defmodule Hologram.Template.HTMLNormalizer do
   def normalize(html, parent_tag_name, context)
 
   def normalize(html, parent_tag_name, context)
-      when context in [:html, :mathml_text] and parent_tag_name in @template_wrapped_parents do
-    normalize_in_wrappers(html, [{"template", context}])
+      when context in [:html, :mathml_text] and parent_tag_name in @mode_wrapped_parents do
+    wrappers = Enum.map(@mode_wrappers[parent_tag_name], &{&1, context})
+    normalize_in_wrappers(html, wrappers)
   end
 
   def normalize(html, _parent_tag_name, context) when context in [:html, :mathml_text] do
@@ -204,10 +220,11 @@ defmodule Hologram.Template.HTMLNormalizer do
   end
 
   # Content for a parent the browser reads in a mode of its own is parsed inside wrappers that put
-  # the parser in that mode, each given with the context its content sits in. A stray end tag for a
-  # wrapper ends it early, and what follows is parsed as its siblings, in the context around the
-  # wrapper, so the siblings are content too - an HTML start tag such as <div> breaks out of an <svg>
-  # or a <math> wrapper this way.
+  # the parser in that mode, each given with the context its content sits in. The parser can put
+  # content outside a wrapper, and what it puts there is content too, printed in the context around
+  # the wrapper: a stray end tag for a wrapper ends it early, so what follows becomes its siblings,
+  # an HTML start tag such as <div> breaks out of an <svg> or a <math> wrapper the same way, and
+  # what a table can't hold is moved before it.
   defp normalize_in_wrappers(html, wrappers) do
     {wrapper_tag_names, _contexts} = Enum.unzip(wrappers)
 
@@ -302,12 +319,15 @@ defmodule Hologram.Template.HTMLNormalizer do
 
   defp print_unwrapped(nodes, [], context), do: print_nodes(nodes, context, nil)
 
-  defp print_unwrapped(
-         [{tag_name, _attrs, children} | following_nodes],
-         [{tag_name, inner_context} | inner_wrappers],
-         context
-       ) do
+  # A wrapper is the first element with its tag name at its level: what the parser moves before a
+  # table is never a table - a <table> the content opens in a table mode closes the open table
+  # instead - and nothing is moved before any other wrapper.
+  defp print_unwrapped(nodes, [{tag_name, inner_context} | inner_wrappers], context) do
+    {preceding_nodes, [{^tag_name, _attrs, children} | following_nodes]} =
+      Enum.split_while(nodes, &(not match?({^tag_name, _attrs, _children}, &1)))
+
     [
+      print_nodes(preceding_nodes, context, nil),
       print_unwrapped(children, inner_wrappers, inner_context),
       print_nodes(following_nodes, context, nil)
     ]

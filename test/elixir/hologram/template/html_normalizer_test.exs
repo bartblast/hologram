@@ -174,9 +174,71 @@ defmodule Hologram.Template.HTMLNormalizerTest do
       assert normalize("<col span=2>", "colgroup", :html) == ~s(<col span="2">)
     end
 
-    test "a stray end tag for the table wrapper keeps the content after it" do
-      assert normalize("<tr><td>a</td></tr></template>b", "tbody", :html) ==
-               "<tr><td>a</td></tr>b"
+    test "table rows under a table parent get the tbody the browser adds" do
+      assert normalize("<tr><td>a</td></tr>", "table", :html) ==
+               "<tbody><tr><td>a</td></tr></tbody>"
+    end
+
+    test "a caption and table rows under a table parent" do
+      assert normalize("<caption>c</caption><tr><td>a</td></tr>", "table", :html) ==
+               "<caption>c</caption><tbody><tr><td>a</td></tr></tbody>"
+    end
+
+    test "table cells under a tbody parent get the tr the browser adds" do
+      assert normalize("<td>a</td><td>b</td>", "tbody", :html) ==
+               "<tr><td>a</td><td>b</td></tr>"
+    end
+
+    test "text a table can't hold is moved before the table" do
+      assert normalize("<tr><td>a</td></tr>b", "tbody", :html) == "b<tr><td>a</td></tr>"
+    end
+
+    test "a stray end tag for a table wrapper keeps the content after it" do
+      assert normalize("<tr><td>a</td></tr></tbody><tr><td>b</td></tr>", "tbody", :html) ==
+               "<tr><td>a</td></tr><tbody><tr><td>b</td></tr></tbody>"
+    end
+
+    test "a nested table under a table parent" do
+      html = "<tr><td><table><tr><td>a</td></tr></table></td></tr>"
+
+      assert normalize(html, "tbody", :html) ==
+               "<tr><td><table><tbody><tr><td>a</td></tr></tbody></table></td></tr>"
+    end
+
+    test "an element a table can't hold is moved before the table" do
+      assert normalize("<div>x</div><tr><td>a</td></tr>", "tbody", :html) ==
+               "<div>x</div><tr><td>a</td></tr>"
+    end
+
+    test "table cells under a table parent get the tbody and the tr the browser adds" do
+      assert normalize("<td>a</td>", "table", :html) == "<tbody><tr><td>a</td></tr></tbody>"
+    end
+
+    test "table cells under a thead parent get the tr the browser adds" do
+      assert normalize("<th>a</th>", "thead", :html) == "<tr><th>a</th></tr>"
+    end
+
+    test "table cells under a tfoot parent get the tr the browser adds" do
+      assert normalize("<td>a</td>", "tfoot", :html) == "<tr><td>a</td></tr>"
+    end
+
+    test "a column under a table parent gets the colgroup the browser adds" do
+      assert normalize("<col span=2>", "table", :html) == ~s(<colgroup><col span="2"></colgroup>)
+    end
+
+    test "a stray end tag for the tr wrapper keeps the content after it" do
+      assert normalize("<td>a</td></tr><td>b</td>", "tr", :html) ==
+               "<td>a</td><tr><td>b</td></tr>"
+    end
+
+    test "a stray end tag for the template wrapper keeps the content after it" do
+      assert normalize("<tr><td>a</td></tr></template><p>b</p>", "template", :html) ==
+               "<tr><td>a</td></tr><p>b</p>"
+    end
+
+    test "a table the content opens under a table parent isn't taken for the wrapper" do
+      assert normalize("<tr><td><table><tr><td>a</td></tr></table></td></tr>", "table", :html) ==
+               "<tbody><tr><td><table><tbody><tr><td>a</td></tr></tbody></table></td></tr></tbody>"
     end
 
     test "SVG content keeps self-closed elements as siblings" do
