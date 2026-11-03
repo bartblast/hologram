@@ -1189,6 +1189,8 @@ export default class Hologram {
     return {
       actorUserId: bootData.actorUserId,
       componentRegistry: Deserializer.deserialize(bootData.componentRegistry),
+      // A loaded document's state was rendered for the identity the document was loaded for.
+      identityPeriod: IdentityTracker.documentPeriod,
       pageDigest: bootData.pageDigest,
       pageModule: Deserializer.deserialize(bootData.pageModule),
       pageParams: Deserializer.deserialize(bootData.pageParams),
@@ -2212,11 +2214,7 @@ export default class Hologram {
 
   // A loaded document has no payload, so it carries the same values in its boot data block.
   static #loadMountData() {
-    // A loaded document's state was rendered for the identity the document was loaded for.
-    const mountData = $.#mountData ?? {
-      ...$.#bootMountData(),
-      identityPeriod: IdentityTracker.documentPeriod,
-    };
+    const mountData = $.#mountData ?? $.#bootMountData();
 
     $.#mountData = null;
 
