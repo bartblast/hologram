@@ -1277,6 +1277,7 @@ defmodule Hologram.Compiler do
   gives the same digest in every compile.
   """
   @spec chunk_signature_digest(MapSet.t(module)) :: String.t()
+  # sobelow_skip ["Crypto.WeakHash"]
   def chunk_signature_digest(signature) do
     type_names =
       signature

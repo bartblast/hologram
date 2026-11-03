@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.ResponseHeadersTest do
   alias HologramFeatureTests.ResponseHeaders.Page3
   alias HologramFeatureTests.ResponseHeaders.Page4
   alias HologramFeatureTests.ResponseHeaders.Page5
+  alias HologramFeatureTests.SessionRestore.LoginPage
   alias HologramFeatureTestsWeb.Endpoint
 
   # The path a navigation to one of these pages posts to.
@@ -23,6 +24,31 @@ defmodule HologramFeatureTests.ResponseHeadersTest do
 
       assert conn.status == 200
       assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    # The browser's back/forward cache could otherwise keep a logged-in page past a logout.
+    test "tells the browser to store nothing of a page for a logged-in user" do
+      conn =
+        :get
+        |> Plug.Test.conn(LoginPage.__route__())
+        |> Plug.Test.init_test_session(%{hologram_user_id: "alice"})
+        |> Endpoint.call([])
+
+      assert conn.status == 200
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == ["no-store"]
+    end
+
+    test "leaves the caching of a page for no logged-in user as it is" do
+      conn =
+        :get
+        |> Plug.Test.conn(LoginPage.__route__())
+        |> Endpoint.call([])
+
+      assert conn.status == 200
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+               "max-age=0, private, must-revalidate"
+             ]
     end
 
     test "carries a header the page's init/3 set" do

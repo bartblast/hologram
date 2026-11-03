@@ -1011,6 +1011,7 @@ defmodule Hologram.ReflectionTest do
 
       expected_modules = [
         WebSockAdapter,
+        WebSockAdapter.Plug,
         WebSockAdapter.UpgradeError,
         WebSockAdapter.UpgradeValidation
       ]

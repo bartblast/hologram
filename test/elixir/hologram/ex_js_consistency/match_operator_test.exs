@@ -688,7 +688,6 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
     test "[1 = 2] = [1 = 1]" do
       assert_error MatchError, build_match_error_msg([1]), fn ->
         x = wrap_term(2)
@@ -696,7 +695,6 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
     test "[2 = 1] = [1 = 1]" do
       assert_error MatchError, build_match_error_msg([1]), fn ->
         x = wrap_term(2)
@@ -718,7 +716,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  describe "nested match pattern (with uresolved variables)" do
+  describe "nested match pattern (with unresolved variables)" do
     test "[[a | b] = [c | d]] = [[1, 2, 3]]" do
       result = [[a | b] = [c | d]] = [[1, 2, 3]]
 

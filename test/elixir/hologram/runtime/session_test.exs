@@ -18,6 +18,12 @@ defmodule Hologram.Runtime.SessionTest do
     |> Plug.Test.init_test_session(session)
   end
 
+  defp identity_tag_of(session) do
+    session
+    |> conn_with_session()
+    |> identity_tag()
+  end
+
   describe "get_session/1" do
     test "strips the session_id key while preserving app entries" do
       conn = conn_with_session(%{@session_id_key => "abc", "role" => "admin"})
@@ -55,6 +61,57 @@ defmodule Hologram.Runtime.SessionTest do
 
     test "returns nil when no user ID is present" do
       assert get_user_id(conn_with_empty_session()) == nil
+    end
+  end
+
+  describe "identity_tag/1" do
+    test "is the same for the same session ID and user ID" do
+      session = %{@session_id_key => "session-1", @user_id_key => 42}
+
+      assert identity_tag_of(session) == identity_tag_of(session)
+    end
+
+    test "differs when the session ID differs" do
+      refute identity_tag_of(%{@session_id_key => "session-1"}) ==
+               identity_tag_of(%{@session_id_key => "session-2"})
+    end
+
+    test "differs when the user ID differs, given as a string" do
+      refute identity_tag_of(%{@session_id_key => "session-1", @user_id_key => "alice"}) ==
+               identity_tag_of(%{@session_id_key => "session-1", @user_id_key => "bob"})
+    end
+
+    test "differs when the user ID differs, given as an integer" do
+      refute identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 1}) ==
+               identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 2})
+    end
+
+    test "differs when the user ID differs, given as an atom" do
+      refute identity_tag_of(%{@session_id_key => "session-1", @user_id_key => :alice}) ==
+               identity_tag_of(%{@session_id_key => "session-1", @user_id_key => :bob})
+    end
+
+    test "differs between a logged-in user and no user" do
+      refute identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 42}) ==
+               identity_tag_of(%{@session_id_key => "session-1"})
+    end
+
+    test "tells an integer user ID from the same digits as a string" do
+      refute identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 42}) ==
+               identity_tag_of(%{@session_id_key => "session-1", @user_id_key => "42"})
+    end
+
+    test "ignores the session's other entries" do
+      identity = %{@session_id_key => "session-1", @user_id_key => 42}
+
+      assert identity_tag_of(identity) ==
+               identity_tag_of(Map.merge(identity, %{"cart" => ["book"], "locale" => "en"}))
+    end
+
+    test "is 43 URL-safe characters" do
+      tag = identity_tag_of(%{@session_id_key => "session-1", @user_id_key => 42})
+
+      assert tag =~ ~r/\A[A-Za-z0-9_-]{43}\z/
     end
   end
 

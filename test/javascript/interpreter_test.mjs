@@ -3584,15 +3584,10 @@ describe("Interpreter", () => {
       // def my_fun_d(x = 1 = y), do: x + y
       Interpreter.defineElixirFunction("Aaa.Bbb", "my_fun_d", 1, "public", [
         {
-          params: (context) => [
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.variablePattern("y"),
-                Type.integer(1),
-                context,
-              ),
+          params: (_context) => [
+            Type.matchPattern(
               Type.variablePattern("x"),
-              context,
+              Type.matchPattern(Type.integer(1), Type.variablePattern("y")),
             ),
           ],
           guards: [],
@@ -8228,12 +8223,8 @@ describe("Interpreter", () => {
           1,
           [
             {
-              params: (context) => [
-                Interpreter.matchOperator(
-                  Type.matchPlaceholder(),
-                  Type.integer(2),
-                  context,
-                ),
+              params: (_context) => [
+                Type.matchPattern(Type.integer(2), Type.matchPlaceholder()),
               ],
               guards: [],
               body: (context) => {
@@ -8510,13 +8501,7 @@ describe("Interpreter", () => {
               context,
             ),
           ]),
-          Type.list([
-            Interpreter.matchOperator(
-              Type.integer(1),
-              Type.integer(1),
-              context,
-            ),
-          ]),
+          Type.list([Type.matchPattern(Type.integer(1), Type.integer(1))]),
           context,
         );
 
@@ -8535,13 +8520,7 @@ describe("Interpreter", () => {
                   context,
                 ),
               ]),
-              Type.list([
-                Interpreter.matchOperator(
-                  Type.integer(1),
-                  Type.integer(1),
-                  context,
-                ),
-              ]),
+              Type.list([Type.matchPattern(Type.integer(1), Type.integer(1))]),
               context,
             ),
           "MatchError",
@@ -8560,13 +8539,7 @@ describe("Interpreter", () => {
                   context,
                 ),
               ]),
-              Type.list([
-                Interpreter.matchOperator(
-                  Type.integer(1),
-                  Type.integer(1),
-                  context,
-                ),
-              ]),
+              Type.list([Type.matchPattern(Type.integer(1), Type.integer(1))]),
               context,
             ),
           "MatchError",
@@ -8574,7 +8547,6 @@ describe("Interpreter", () => {
         );
       });
 
-      // TODO: client error message for this case is inconsistent with server error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
       it("[1 = 2] = [1 = 1]", () => {
         assertBoxedError(
           () =>
@@ -8586,21 +8558,14 @@ describe("Interpreter", () => {
                   context,
                 ),
               ]),
-              Type.list([
-                Interpreter.matchOperator(
-                  Type.integer(2),
-                  Type.integer(1),
-                  context,
-                ),
-              ]),
+              Type.list([Type.matchPattern(Type.integer(1), Type.integer(2))]),
               context,
             ),
           "MatchError",
-          buildMatchErrorMsg(Type.integer(2)),
+          buildMatchErrorMsg(Type.list([Type.integer(1)])),
         );
       });
 
-      // TODO: client error message for this case is inconsistent with server error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
       it("[2 = 1] = [1 = 1]", () => {
         assertBoxedError(
           () =>
@@ -8612,17 +8577,11 @@ describe("Interpreter", () => {
                   context,
                 ),
               ]),
-              Type.list([
-                Interpreter.matchOperator(
-                  Type.integer(1),
-                  Type.integer(2),
-                  context,
-                ),
-              ]),
+              Type.list([Type.matchPattern(Type.integer(2), Type.integer(1))]),
               context,
             ),
           "MatchError",
-          buildMatchErrorMsg(Type.integer(1)),
+          buildMatchErrorMsg(Type.list([Type.integer(1)])),
         );
       });
 
@@ -8647,20 +8606,18 @@ describe("Interpreter", () => {
             ]),
             Type.tuple([
               Type.integer(1),
-              Interpreter.matchOperator(
-                Type.variablePattern("d"),
+              Type.matchPattern(
                 Type.variablePattern("c"),
-                context,
+                Type.variablePattern("d"),
               ),
               Type.integer(3),
             ]),
             context,
           ),
           Type.tuple([
-            Interpreter.matchOperator(
-              Type.variablePattern("b"),
+            Type.matchPattern(
               Type.variablePattern("a"),
-              context,
+              Type.variablePattern("b"),
             ),
             Type.integer(2),
             Type.integer(3),
@@ -8687,23 +8644,22 @@ describe("Interpreter", () => {
       });
     });
 
-    describe("nested match pattern (with uresolved variables)", () => {
+    describe("nested match pattern (with unresolved variables)", () => {
       it("[[a | b] = [c | d]] = [[1, 2, 3]]", () => {
         const result = Interpreter.matchOperator(
           Type.list([
             Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
           ]),
           Type.list([
-            Interpreter.matchOperator(
-              Type.consPattern(
-                Type.variablePattern("c"),
-                Type.variablePattern("d"),
-              ),
+            Type.matchPattern(
               Type.consPattern(
                 Type.variablePattern("a"),
                 Type.variablePattern("b"),
               ),
-              context,
+              Type.consPattern(
+                Type.variablePattern("c"),
+                Type.variablePattern("d"),
+              ),
             ),
           ]),
           context,
@@ -8735,27 +8691,25 @@ describe("Interpreter", () => {
             ]),
           ]),
           Type.list([
-            Interpreter.matchOperator(
+            Type.matchPattern(
+              Type.list([
+                Type.matchPattern(
+                  Type.consPattern(
+                    Type.variablePattern("a"),
+                    Type.variablePattern("b"),
+                  ),
+                  Type.consPattern(
+                    Type.variablePattern("c"),
+                    Type.variablePattern("d"),
+                  ),
+                ),
+              ]),
               Type.list([
                 Type.consPattern(
                   Type.variablePattern("e"),
                   Type.variablePattern("f"),
                 ),
               ]),
-              Type.list([
-                Interpreter.matchOperator(
-                  Type.consPattern(
-                    Type.variablePattern("c"),
-                    Type.variablePattern("d"),
-                  ),
-                  Type.consPattern(
-                    Type.variablePattern("a"),
-                    Type.variablePattern("b"),
-                  ),
-                  context,
-                ),
-              ]),
-              context,
             ),
           ]),
           context,
@@ -8787,10 +8741,9 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.list([Type.integer(1), Type.integer(2)])]),
           Type.list([
-            Interpreter.matchOperator(
-              Type.list([Type.variablePattern("c"), Type.variablePattern("d")]),
+            Type.matchPattern(
               Type.list([Type.variablePattern("a"), Type.variablePattern("b")]),
-              context,
+              Type.list([Type.variablePattern("c"), Type.variablePattern("d")]),
             ),
           ]),
           context,
@@ -8818,27 +8771,25 @@ describe("Interpreter", () => {
             Type.list([Type.list([Type.integer(1), Type.integer(2)])]),
           ]),
           Type.list([
-            Interpreter.matchOperator(
+            Type.matchPattern(
+              Type.list([
+                Type.matchPattern(
+                  Type.list([
+                    Type.variablePattern("a"),
+                    Type.variablePattern("b"),
+                  ]),
+                  Type.list([
+                    Type.variablePattern("c"),
+                    Type.variablePattern("d"),
+                  ]),
+                ),
+              ]),
               Type.list([
                 Type.list([
                   Type.variablePattern("e"),
                   Type.variablePattern("f"),
                 ]),
               ]),
-              Type.list([
-                Interpreter.matchOperator(
-                  Type.list([
-                    Type.variablePattern("c"),
-                    Type.variablePattern("d"),
-                  ]),
-                  Type.list([
-                    Type.variablePattern("a"),
-                    Type.variablePattern("b"),
-                  ]),
-                  context,
-                ),
-              ]),
-              context,
             ),
           ]),
           context,
@@ -8868,10 +8819,9 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Type.variablePattern("y"),
+            Type.matchPattern(
               Type.variablePattern("x"),
-              context,
+              Type.variablePattern("y"),
             ),
           ]),
           context,
@@ -8892,11 +8842,7 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Type.variablePattern("x"),
-              Type.integer(1),
-              context,
-            ),
+            Type.matchPattern(Type.integer(1), Type.variablePattern("x")),
           ]),
           context,
         );
@@ -8915,11 +8861,7 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Type.integer(1),
-              Type.variablePattern("x"),
-              context,
-            ),
+            Type.matchPattern(Type.variablePattern("x"), Type.integer(1)),
           ]),
           context,
         );
@@ -8938,14 +8880,12 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.variablePattern("z"),
-                Type.variablePattern("y"),
-                context,
-              ),
+            Type.matchPattern(
               Type.variablePattern("x"),
-              context,
+              Type.matchPattern(
+                Type.variablePattern("y"),
+                Type.variablePattern("z"),
+              ),
             ),
           ]),
           context,
@@ -8967,14 +8907,12 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.variablePattern("y"),
-                Type.variablePattern("x"),
-                context,
-              ),
+            Type.matchPattern(
               Type.integer(1),
-              context,
+              Type.matchPattern(
+                Type.variablePattern("x"),
+                Type.variablePattern("y"),
+              ),
             ),
           ]),
           context,
@@ -8995,14 +8933,9 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.variablePattern("y"),
-                Type.integer(1),
-                context,
-              ),
+            Type.matchPattern(
               Type.variablePattern("x"),
-              context,
+              Type.matchPattern(Type.integer(1), Type.variablePattern("y")),
             ),
           ]),
           context,
@@ -9023,14 +8956,9 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.integer(1),
-                Type.variablePattern("y"),
-                context,
-              ),
+            Type.matchPattern(
               Type.variablePattern("x"),
-              context,
+              Type.matchPattern(Type.variablePattern("y"), Type.integer(1)),
             ),
           ]),
           context,
@@ -9051,18 +8979,15 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Interpreter.matchOperator(
-                  Type.variablePattern("z"),
-                  Type.variablePattern("y"),
-                  context,
-                ),
-                Type.variablePattern("x"),
-                context,
-              ),
+            Type.matchPattern(
               Type.variablePattern("v"),
-              context,
+              Type.matchPattern(
+                Type.variablePattern("x"),
+                Type.matchPattern(
+                  Type.variablePattern("y"),
+                  Type.variablePattern("z"),
+                ),
+              ),
             ),
           ]),
           context,
@@ -9085,18 +9010,15 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Interpreter.matchOperator(
-                  Type.variablePattern("z"),
-                  Type.variablePattern("y"),
-                  context,
-                ),
-                Type.variablePattern("x"),
-                context,
-              ),
+            Type.matchPattern(
               Type.integer(1),
-              context,
+              Type.matchPattern(
+                Type.variablePattern("x"),
+                Type.matchPattern(
+                  Type.variablePattern("y"),
+                  Type.variablePattern("z"),
+                ),
+              ),
             ),
           ]),
           context,
@@ -9118,18 +9040,15 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Interpreter.matchOperator(
-                  Type.variablePattern("z"),
-                  Type.variablePattern("y"),
-                  context,
-                ),
-                Type.integer(1),
-                context,
-              ),
+            Type.matchPattern(
               Type.variablePattern("x"),
-              context,
+              Type.matchPattern(
+                Type.integer(1),
+                Type.matchPattern(
+                  Type.variablePattern("y"),
+                  Type.variablePattern("z"),
+                ),
+              ),
             ),
           ]),
           context,
@@ -9151,18 +9070,12 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Interpreter.matchOperator(
-                  Type.variablePattern("z"),
-                  Type.integer(1),
-                  context,
-                ),
-                Type.variablePattern("y"),
-                context,
-              ),
+            Type.matchPattern(
               Type.variablePattern("x"),
-              context,
+              Type.matchPattern(
+                Type.variablePattern("y"),
+                Type.matchPattern(Type.integer(1), Type.variablePattern("z")),
+              ),
             ),
           ]),
           context,
@@ -9184,18 +9097,12 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.list([Type.integer(1)]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Interpreter.matchOperator(
-                  Type.integer(1),
-                  Type.variablePattern("z"),
-                  context,
-                ),
-                Type.variablePattern("y"),
-                context,
-              ),
+            Type.matchPattern(
               Type.variablePattern("x"),
-              context,
+              Type.matchPattern(
+                Type.variablePattern("y"),
+                Type.matchPattern(Type.variablePattern("z"), Type.integer(1)),
+              ),
             ),
           ]),
           context,
@@ -9230,14 +9137,12 @@ describe("Interpreter", () => {
             ),
           ]),
           Type.list([
-            Interpreter.matchOperator(
-              Interpreter.matchOperator(
-                Type.variablePattern("z"),
-                Type.variablePattern("y"),
-                context,
-              ),
+            Type.matchPattern(
               Type.variablePattern("x"),
-              context,
+              Type.matchPattern(
+                Type.variablePattern("y"),
+                Type.variablePattern("z"),
+              ),
             ),
           ]),
           context,
@@ -9272,16 +9177,15 @@ describe("Interpreter", () => {
           Type.map([
             [
               Type.atom("x"),
-              Interpreter.matchOperator(
-                Type.map([
-                  [Type.atom("a"), Type.variablePattern("c")],
-                  [Type.atom("b"), Type.variablePattern("d")],
-                ]),
+              Type.matchPattern(
                 Type.map([
                   [Type.atom("a"), Type.variablePattern("a")],
                   [Type.atom("b"), Type.variablePattern("b")],
                 ]),
-                context,
+                Type.map([
+                  [Type.atom("a"), Type.variablePattern("c")],
+                  [Type.atom("b"), Type.variablePattern("d")],
+                ]),
               ),
             ],
           ]),
@@ -9331,7 +9235,22 @@ describe("Interpreter", () => {
           Type.map([
             [
               Type.atom("y"),
-              Interpreter.matchOperator(
+              Type.matchPattern(
+                Type.map([
+                  [
+                    Type.atom("x"),
+                    Type.matchPattern(
+                      Type.map([
+                        [Type.atom("a"), Type.variablePattern("a")],
+                        [Type.atom("b"), Type.variablePattern("b")],
+                      ]),
+                      Type.map([
+                        [Type.atom("a"), Type.variablePattern("c")],
+                        [Type.atom("b"), Type.variablePattern("d")],
+                      ]),
+                    ),
+                  ],
+                ]),
                 Type.map([
                   [
                     Type.atom("x"),
@@ -9341,23 +9260,6 @@ describe("Interpreter", () => {
                     ]),
                   ],
                 ]),
-                Type.map([
-                  [
-                    Type.atom("x"),
-                    Interpreter.matchOperator(
-                      Type.map([
-                        [Type.atom("a"), Type.variablePattern("c")],
-                        [Type.atom("b"), Type.variablePattern("d")],
-                      ]),
-                      Type.map([
-                        [Type.atom("a"), Type.variablePattern("a")],
-                        [Type.atom("b"), Type.variablePattern("b")],
-                      ]),
-                      context,
-                    ),
-                  ],
-                ]),
-                context,
               ),
             ],
           ]),
@@ -9399,16 +9301,15 @@ describe("Interpreter", () => {
         const result = Interpreter.matchOperator(
           Type.tuple([Type.tuple([Type.integer(1), Type.integer(2)])]),
           Type.tuple([
-            Interpreter.matchOperator(
-              Type.tuple([
-                Type.variablePattern("c"),
-                Type.variablePattern("d"),
-              ]),
+            Type.matchPattern(
               Type.tuple([
                 Type.variablePattern("a"),
                 Type.variablePattern("b"),
               ]),
-              context,
+              Type.tuple([
+                Type.variablePattern("c"),
+                Type.variablePattern("d"),
+              ]),
             ),
           ]),
           context,
@@ -9436,27 +9337,25 @@ describe("Interpreter", () => {
             Type.tuple([Type.tuple([Type.integer(1), Type.integer(2)])]),
           ]),
           Type.tuple([
-            Interpreter.matchOperator(
+            Type.matchPattern(
+              Type.tuple([
+                Type.matchPattern(
+                  Type.tuple([
+                    Type.variablePattern("a"),
+                    Type.variablePattern("b"),
+                  ]),
+                  Type.tuple([
+                    Type.variablePattern("c"),
+                    Type.variablePattern("d"),
+                  ]),
+                ),
+              ]),
               Type.tuple([
                 Type.tuple([
                   Type.variablePattern("e"),
                   Type.variablePattern("f"),
                 ]),
               ]),
-              Type.tuple([
-                Interpreter.matchOperator(
-                  Type.tuple([
-                    Type.variablePattern("c"),
-                    Type.variablePattern("d"),
-                  ]),
-                  Type.tuple([
-                    Type.variablePattern("a"),
-                    Type.variablePattern("b"),
-                  ]),
-                  context,
-                ),
-              ]),
-              context,
             ),
           ]),
           context,

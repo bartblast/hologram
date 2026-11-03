@@ -31,6 +31,10 @@ defmodule Hologram.Router do
     Controller.handle_command_request(conn)
   end
 
+  get "/hologram/identity-tag" do
+    Controller.handle_identity_tag_request(conn)
+  end
+
   post "/hologram/mutation" do
     Controller.handle_mutation_request(conn)
   end
