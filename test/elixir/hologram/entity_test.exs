@@ -23,6 +23,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module33
+  alias Hologram.Test.Fixtures.Entity.Module35
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
@@ -64,6 +65,16 @@ defmodule Hologram.EntityTest do
                {:later_count, :integer, []},
                {:tier, :enum, [values: [:low, :high]]}
              ]
+    end
+  end
+
+  describe "__derived_builder_calls__/0" do
+    test "returns empty list for entity type whose derived fields call no query builder" do
+      assert Module33.__derived_builder_calls__() == []
+    end
+
+    test "returns the derived fields calling a query builder, sorted by name" do
+      assert Module35.__derived_builder_calls__() == [:latest, :recent]
     end
   end
 

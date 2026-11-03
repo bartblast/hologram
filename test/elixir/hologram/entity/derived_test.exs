@@ -12,6 +12,29 @@ defmodule Hologram.Entity.DerivedTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module33
+  alias Hologram.Test.Fixtures.Entity.Module34
+
+  describe "concat/1" do
+    test "lowers each operand" do
+      operands = [%RowField{owner: Module34, name: :nickname}, " (", "x", ")"]
+
+      assert concat(operands) ==
+               {:concat, [{:name, :nickname}, {:value, " ("}, {:value, "x"}, {:value, ")"}]}
+    end
+  end
+
+  describe "condition/2" do
+    test "returns the clauses the predicates hold for a row of the owning type" do
+      assert condition(Module34, score: {:>, 0}) == {:condition, [{:score, :>, 0}]}
+    end
+
+    test "raises on a name the owning type does not declare" do
+      expected_msg =
+        "unknown attribute :nothing in Hologram.Test.Fixtures.Entity.Module34 - known attributes: :active, :badge, :channel_id, :channel_load, :created_at, :display_name, :featured, :id, :level, :named_after_channel, :nickname, :ranked, :recent_count, :score, :score_label, :top_score, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn -> condition(Module34, nothing: 1) end
+    end
+  end
 
   describe "definition/2" do
     test "returns the definition put for the field" do
@@ -128,6 +151,15 @@ defmodule Hologram.Entity.DerivedTest do
     end
   end
 
+  describe "if_value/3" do
+    test "picks between the lowered expressions by the condition's clauses" do
+      condition = {:condition, [{:score, :>, 0}]}
+
+      assert if_value(condition, %RowField{owner: Module34, name: :nickname}, nil) ==
+               {:if, [{:score, :>, 0}], {:name, :nickname}, {:value, nil}}
+    end
+  end
+
   describe "lower/1" do
     test "lowers a query over the row's set" do
       term = field(Module26, [:messages])
@@ -233,6 +265,72 @@ defmodule Hologram.Entity.DerivedTest do
 
     test "resolves an attribute of a related row" do
       assert resolve(Module33, :channel_name) == {:name, [:channel, :name]}
+    end
+
+    test "resolves strings joined with fields of the row" do
+      assert resolve(Module34, :display_name) ==
+               {:concat,
+                [{:name, :nickname}, {:value, " ("}, {:name, [:channel, :name]}, {:value, ")"}]}
+    end
+
+    test "resolves a value picked by a condition on a derived field" do
+      assert resolve(Module34, :level) ==
+               {:if, [{:channel_load, :>, 3}], {:value, :busy}, {:value, :quiet}}
+    end
+
+    test "resolves if without else to nil when the condition does not hold" do
+      assert resolve(Module34, :badge) ==
+               {:if, [{:score, :>=, 3}], {:value, "top"}, {:value, nil}}
+    end
+
+    test "resolves a boolean field to its condition" do
+      assert resolve(Module34, :active) == {:condition, [{:score, :>, 0}, {:score, :<, 3}]}
+    end
+
+    test "resolves a condition joined by or with a membership" do
+      assert resolve(Module34, :featured) ==
+               {:condition, [{:or, [[{:score, :not_in, [0]}], [{:nickname, :==, "lead"}]]}]}
+    end
+
+    test "resolves a derived field of a related row" do
+      assert resolve(Module34, :channel_load) == {:name, [:channel, :message_count]}
+    end
+
+    test "resolves a field compared with a field of a related row" do
+      assert resolve(Module34, :named_after_channel) ==
+               {:condition, [{:nickname, :==, {:attribute, [:channel, :name]}}]}
+    end
+
+    test "resolves memberships in a module attribute and a list, with and inside or" do
+      assert resolve(Module34, :ranked) ==
+               {:condition,
+                [
+                  {:or,
+                   [
+                     [{:score, :in, [1, 2]}],
+                     [{[:channel, :name], :in, ["general"]}, {:score, :>, -1}]
+                   ]}
+                ]}
+    end
+
+    test "resolves a pipe of stages over a set of a related row" do
+      assert resolve(Module34, :recent_count) ==
+               {:query,
+                %Query{
+                  cardinality: :count,
+                  entity: Module33,
+                  filter: [{:position, :>, 1}],
+                  source: {Module34, [:channel, :messages]}
+                }}
+    end
+
+    test "resolves if written with a do-block" do
+      assert resolve(Module34, :score_label) ==
+               {:if, [{:score, :>, 5}], {:value, "high"}, {:value, "low"}}
+    end
+
+    test "resolves a module attribute to its value at the declaration's line" do
+      assert resolve(Module34, :top_score) == {:value, 10}
     end
 
     test "resolves a module attribute to its value" do

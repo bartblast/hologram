@@ -389,15 +389,20 @@ defmodule Hologram.Entity do
           T.opts(),
           list(atom),
           Macro.t(),
+          boolean,
           {String.t(), pos_integer}
         ) ::
           :ok
-  def __put_derived__(module, name, type, opts, args, body, location) do
+  def __put_derived__(module, name, type, opts, args, body, builder_call?, location) do
     Validator.validate_derived!(module, name, type, opts)
 
     Module.put_attribute(module, :__derived__, {name, type, opts})
     Module.put_attribute(module, :__derived_bodies__, {name, args, body})
     Module.put_attribute(module, :__derived_locations__, {name, location})
+
+    if builder_call? do
+      Module.put_attribute(module, :__derived_builder_calls__, name)
+    end
 
     :ok
   end
@@ -581,6 +586,7 @@ defmodule Hologram.Entity do
     quote do
       Module.register_attribute(__MODULE__, :__derived__, accumulate: true)
       Module.register_attribute(__MODULE__, :__derived_bodies__, accumulate: true)
+      Module.register_attribute(__MODULE__, :__derived_builder_calls__, accumulate: true)
       Module.register_attribute(__MODULE__, :__derived_locations__, accumulate: true)
     end
   end
@@ -900,7 +906,7 @@ defmodule Hologram.Entity do
   defp derived_declaration(name, type, opts, definition, env) do
     Validator.validate_derived_function!(name, definition, env)
 
-    {args, body} = DerivedExpression.function(definition, env)
+    {args, body, builder_call?} = DerivedExpression.function(name, definition, env)
     location = {env.file, env.line}
 
     quote do
@@ -911,6 +917,7 @@ defmodule Hologram.Entity do
         unquote(opts),
         unquote(args),
         unquote(Macro.escape(body, unquote: true)),
+        unquote(builder_call?),
         unquote(location)
       )
     end
@@ -958,6 +965,12 @@ defmodule Hologram.Entity do
       """
       @spec __derived__() :: list({atom, atom | module | list(module), keyword})
       def __derived__, do: Enum.sort(@__derived__)
+
+      # The derived fields whose function calls a query builder of another module - the build
+      # resolves those by following the builder.
+      @doc false
+      @spec __derived_builder_calls__() :: list(atom)
+      def __derived_builder_calls__, do: Enum.sort(@__derived_builder_calls__)
 
       @doc false
       @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}

@@ -26,10 +26,32 @@ defmodule Hologram.Entity.Derived do
 
   @typedoc """
   What a derived field computes for a row: a value, a name of the row - an attribute, a reference
-  field, a path to an attribute of a related row - or a query over the row's sets, a count, one row
-  or a set.
+  field, a path to an attribute of a related row - strings joined, one of two expressions picked by
+  a condition, whether a condition holds, or a query over the row's sets, a count, one row or a set.
   """
-  @type definition :: {:value, any} | {:name, Query.name()} | {:query, Query.t()}
+  @type definition ::
+          {:value, any}
+          | {:name, Query.name()}
+          | {:concat, list(definition)}
+          | {:if, list(Query.clause()), definition, definition}
+          | {:condition, list(Query.clause())}
+          | {:query, Query.t()}
+
+  @doc """
+  Returns the definition joining the given operands as strings, each lowered as a body's result is.
+  """
+  @spec concat(list(any)) :: definition
+  def concat(operands), do: {:concat, Enum.map(operands, &lower/1)}
+
+  @doc """
+  Returns the definition of whether the given predicates, in the filter data form, hold for a row of
+  the given owning entity type - checked as a filter of that type is.
+
+  Raises ArgumentError when the predicates name what the type does not declare or compare what does
+  not compare.
+  """
+  @spec condition(module, Query.predicates()) :: definition
+  def condition(owner, predicates), do: {:condition, Stage.predicate_triples!(owner, predicates)}
 
   @doc """
   Returns whether the given name is a derived field of the given entity type.
@@ -102,8 +124,17 @@ defmodule Hologram.Entity.Derived do
   end
 
   @doc """
+  Returns the definition picking the first of the given expressions when the given condition holds
+  for the row and the second when it does not, each lowered as a body's result is.
+  """
+  @spec if_value(definition, any, any) :: definition
+  def if_value({:condition, clauses}, then_value, else_value),
+    do: {:if, clauses, lower(then_value), lower(else_value)}
+
+  @doc """
   Returns the given result of a derived field's function as a definition: a query over the row's
-  sets as is, a row field as the name it stands for, and a plain value as a value.
+  sets as is, a row field as the name it stands for, an expression concat/1, if_value/3 or
+  condition/2 built as is, and a plain value as a value.
 
   Raises ArgumentError on a query that starts from an entity type rather than from the row, and on
   a related row, which is the relationship itself rather than anything computed from it.
@@ -118,6 +149,13 @@ defmodule Hologram.Entity.Derived do
   end
 
   def lower(%RowField{name: name}), do: {:name, name}
+
+  def lower({:concat, operands} = expression) when is_list(operands), do: expression
+
+  def lower({:if, clauses, _then_value, _else_value} = expression) when is_list(clauses),
+    do: expression
+
+  def lower({:condition, clauses} = expression) when is_list(clauses), do: expression
 
   def lower(%RowRef{path: path}) do
     raise ArgumentError,
@@ -221,6 +259,11 @@ defmodule Hologram.Entity.Derived do
   defp name_of(path), do: path
 
   defp normalized({:query, term}), do: {:query, Stage.normalize(term)}
+
+  defp normalized({:concat, operands}), do: {:concat, Enum.map(operands, &normalized/1)}
+
+  defp normalized({:if, clauses, then_value, else_value}),
+    do: {:if, clauses, normalized(then_value), normalized(else_value)}
 
   defp normalized(definition), do: definition
 

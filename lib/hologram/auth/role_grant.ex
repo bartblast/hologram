@@ -127,6 +127,10 @@ defmodule Hologram.Auth.RoleGrant do
   def __derived__, do: []
 
   @doc false
+  @spec __derived_builder_calls__() :: list(atom)
+  def __derived_builder_calls__, do: []
+
+  @doc false
   @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
   def __derived_locations__, do: %{}
 

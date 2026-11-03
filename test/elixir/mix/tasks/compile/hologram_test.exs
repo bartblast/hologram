@@ -99,6 +99,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     @spec __derived__() :: list({atom, atom | module | list(module), keyword})
     def __derived__, do: []
 
+    @spec __derived_builder_calls__() :: list(atom)
+    def __derived_builder_calls__, do: []
+
     @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
     def __derived_locations__, do: %{}
 
