@@ -1,14 +1,163 @@
 "use strict";
 
 import App from "./app.mjs";
+import HologramRuntimeError from "./errors/runtime_error.mjs";
 import TrustedTypes from "./trusted_types.mjs";
 
 import {
   attributesModule,
   eventListenersModule,
+  h,
+  htmlDomApi,
   init,
   vnode as rawVnode,
 } from "./vendor/snabbdom/build/index.js";
+
+// The selector of the vnode trusted HTML renders to. The leading space keeps it from ever being a
+// tag name a template or a dynamic tag produces, and from starting with the letters the document
+// patch tells the head and the body apart by.
+export const TRUSTED_HTML_SEL = " trusted-html";
+
+// The text of the comments a trusted HTML range is put between.
+//
+// WARNING: must match Hologram.Template.HTMLNormalizer.range_start_marker/0 and range_end_marker/0.
+export const TRUSTED_HTML_RANGE_START = "hologram-html";
+export const TRUSTED_HTML_RANGE_END = "/hologram-html";
+
+// The elements removed from trusted HTML, as the server removes them: a script runs when the
+// browser parses a page but never through innerHTML, a plaintext turns the rest of a page into
+// text, and a noscript's content is markup to the server's parser and text to the browser's.
+//
+// WARNING: must match @dropped_elements in Hologram.Template.HTMLNormalizer.
+const TRUSTED_HTML_DROPPED_ELEMENTS = "noscript, plaintext, script";
+
+// A trusted HTML vnode stands for a range of nodes rather than one: its elm is the comment the
+// range starts with, which knows the comment it ends with, and the content sits between the two.
+// The diff makes every change to the DOM through this API, so moving, inserting and removing the
+// start comment do the same to the whole range, and the next sibling of a range is the node after
+// its end. Snabbdom's own fragments can't stand in for this: a DocumentFragment is empty once it
+// has been inserted, so moving one moves nothing.
+const isTrustedHtmlRangeStart = (node) => node?.hologramRangeEnd !== undefined;
+
+// The node after the given one in a range, which the range's end must follow.
+const nextTrustedHtmlRangeNode = (node) => {
+  if (node.nextSibling === null) {
+    throw new HologramRuntimeError(
+      "a trusted HTML range lost the comment it ends with, so something outside Hologram changed the page",
+    );
+  }
+
+  return node.nextSibling;
+};
+
+const trustedHtmlRangeNodes = (start) => {
+  const nodes = [start];
+  let node = start;
+
+  while (node !== start.hologramRangeEnd) {
+    node = nextTrustedHtmlRangeNode(node);
+    nodes.push(node);
+  }
+
+  return nodes;
+};
+
+const createTrustedHtmlRange = () => {
+  const start = document.createComment(TRUSTED_HTML_RANGE_START);
+  const end = document.createComment(TRUSTED_HTML_RANGE_END);
+
+  start.hologramRangeEnd = end;
+  document.createDocumentFragment().append(start, end);
+
+  return start;
+};
+
+const domApi = {
+  ...htmlDomApi,
+
+  appendChild: (parentNode, child) => {
+    if (isTrustedHtmlRangeStart(child)) {
+      parentNode.append(...trustedHtmlRangeNodes(child));
+    } else {
+      htmlDomApi.appendChild(parentNode, child);
+    }
+  },
+
+  createElement: (tagName, options) =>
+    tagName === TRUSTED_HTML_SEL
+      ? createTrustedHtmlRange()
+      : htmlDomApi.createElement(tagName, options),
+
+  createElementNS: (namespaceURI, qualifiedName, options) =>
+    qualifiedName === TRUSTED_HTML_SEL
+      ? createTrustedHtmlRange()
+      : htmlDomApi.createElementNS(namespaceURI, qualifiedName, options),
+
+  insertBefore: (parentNode, newNode, referenceNode) => {
+    if (isTrustedHtmlRangeStart(newNode)) {
+      for (const node of trustedHtmlRangeNodes(newNode)) {
+        parentNode.insertBefore(node, referenceNode);
+      }
+    } else {
+      htmlDomApi.insertBefore(parentNode, newNode, referenceNode);
+    }
+  },
+
+  nextSibling: (node) =>
+    isTrustedHtmlRangeStart(node)
+      ? node.hologramRangeEnd.nextSibling
+      : htmlDomApi.nextSibling(node),
+
+  removeChild: (node, child) => {
+    if (isTrustedHtmlRangeStart(child)) {
+      for (const rangeNode of trustedHtmlRangeNodes(child)) {
+        node.removeChild(rangeNode);
+      }
+    } else {
+      htmlDomApi.removeChild(node, child);
+    }
+  },
+};
+
+const removeTrustedHtmlRangeContent = (start) => {
+  const end = start.hologramRangeEnd;
+
+  while (start.nextSibling !== end) {
+    nextTrustedHtmlRangeNode(start).remove();
+  }
+};
+
+// The document trusted HTML is parsed in. It has no browsing context, so its parser runs with
+// scripting off, as the server's does - a noscript's content is markup rather than text - no
+// custom element constructor runs for the context element, and nothing in the content loads or
+// fires until it's inserted into the page.
+let trustedHtmlParsingDocument = null;
+
+// Puts the nodes of the vnode's trusted HTML between its range comments, parsed in the context of
+// the element the range sits in.
+const fillTrustedHtmlRange = (vnode) => {
+  const start = vnode.elm;
+  const end = start.hologramRangeEnd;
+
+  end.before(
+    ...Vdom.parseTrustedHtml(vnode.data.hologramHtml.html, start.parentNode),
+  );
+};
+
+// Rewrites a range whose HTML changed. A range is filled on creation by its vnode's insert hook,
+// which runs once the range is in the DOM, since parsing it needs the parent the range sits in.
+const trustedHtmlModule = {
+  update: (oldVnode, vnode) => {
+    const html = vnode.data.hologramHtml?.html;
+
+    if (html === undefined || html === oldVnode.data.hologramHtml?.html) {
+      return;
+    }
+
+    removeTrustedHtmlRangeContent(vnode.elm);
+    fillTrustedHtmlRange(vnode);
+  },
+};
 
 // The elements HTML gives a nonce attribute to.
 const NONCED_ELEMENTS = new Set(["link", "script", "style"]);
@@ -56,14 +205,62 @@ const patchModules = [
   cspNonceModule,
   eventListenersModule,
   scriptModule,
+  trustedHtmlModule,
 ];
 
-const patch = init(patchModules);
+const patch = init(patchModules, domApi);
 
 export default class Vdom {
+  // The DOM API the diff runs with: snabbdom's own, with trusted HTML ranges handled as units.
+  static domApi = domApi;
+
   // The modules the diff runs with: attributes, the nonce on created elements, event listeners, a
-  // created script's URL and code.
+  // created script's URL and code, and a trusted HTML range's content.
   static patchModules = patchModules;
+
+  // Parses the given trusted HTML the way innerHTML parses it on the given parent, with what the
+  // server removes removed, and returns its nodes.
+  //
+  // The context is a fresh element of the parent's name and namespace in a document of its own (see
+  // trustedHtmlParsingDocument). Of the parent's attributes only annotation-xml's encoding changes
+  // how its content is parsed.
+  //
+  // WARNING: must match what Hologram.Template.HTMLNormalizer drops, or a range the server printed
+  // wouldn't be the range the client builds from the same HTML.
+  static parseTrustedHtml(html, parent) {
+    trustedHtmlParsingDocument ??=
+      document.implementation.createHTMLDocument("");
+
+    const context =
+      parent?.nodeType === Node.ELEMENT_NODE
+        ? trustedHtmlParsingDocument.createElementNS(
+            parent.namespaceURI,
+            parent.localName,
+          )
+        : trustedHtmlParsingDocument.createElement("div");
+
+    const encoding = parent?.getAttribute?.("encoding");
+
+    if (context.localName === "annotation-xml" && encoding !== null) {
+      context.setAttribute("encoding", encoding);
+    }
+
+    context.innerHTML = TrustedTypes.html(html);
+
+    const root = $.#isHtmlTemplate(context) ? context.content : context;
+    $.#dropFromTrustedHtml(root);
+
+    return Array.from(root.childNodes);
+  }
+
+  // Returns the vnode trusted HTML renders to: a range whose content is parsed from the HTML once
+  // the range is in the DOM.
+  static trustedHtmlVnode(html, module) {
+    return h(TRUSTED_HTML_SEL, {
+      hologramHtml: {html, module},
+      hook: {insert: fillTrustedHtmlRange},
+    });
+  }
 
   // A script's URL as data.hologramScript carries it, from its src attribute in the vdom convention:
   // a valueless src is an empty URL, and a script without one has none.
@@ -187,6 +384,50 @@ export default class Vdom {
     return patchedVirtualDocument;
   }
 
+  // Removes from parsed trusted HTML what the server removes, inside template contents too, then
+  // merges the text a removed node separated, as the server's serialized output does. A template's
+  // shadowroot* attributes go too: the browser's parser would attach a shadow root to the parent
+  // of one it reads on a page, which innerHTML never does.
+  static #dropFromTrustedHtml(root) {
+    for (const element of root.querySelectorAll(
+      TRUSTED_HTML_DROPPED_ELEMENTS,
+    )) {
+      element.remove();
+    }
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+    const markers = [];
+
+    while (walker.nextNode()) {
+      const data = walker.currentNode.data;
+
+      if (
+        data === TRUSTED_HTML_RANGE_START ||
+        data === TRUSTED_HTML_RANGE_END
+      ) {
+        markers.push(walker.currentNode);
+      }
+    }
+
+    for (const marker of markers) {
+      marker.remove();
+    }
+
+    for (const template of root.querySelectorAll("template")) {
+      if ($.#isHtmlTemplate(template)) {
+        for (const name of template.getAttributeNames()) {
+          if (name.startsWith("shadowroot")) {
+            template.removeAttribute(name);
+          }
+        }
+
+        $.#dropFromTrustedHtml(template.content);
+      }
+    }
+
+    root.normalize();
+  }
+
   // An element's attributes in the vdom convention: a valueless attribute reads as true.
   static #domNodeAttrs(domNode) {
     const attrs = {};
@@ -203,6 +444,15 @@ export default class Vdom {
     }
 
     return attrs;
+  }
+
+  // Whether the element is an HTML template element, whose content is a fragment of its own rather
+  // than its children. An SVG or MathML element named template is an ordinary element.
+  static #isHtmlTemplate(element) {
+    return (
+      element.localName === "template" &&
+      element.namespaceURI === "http://www.w3.org/1999/xhtml"
+    );
   }
 
   // We're checking html element children,

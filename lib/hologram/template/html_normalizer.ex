@@ -19,6 +19,8 @@ defmodule Hologram.Template.HTMLNormalizer do
   # The text of the comments a trusted HTML range is printed between. The client finds the range in
   # a server-rendered page by them, so content carrying a comment with the same text could end the
   # range early - such comments are dropped from the content.
+  #
+  # WARNING: must match TRUSTED_HTML_RANGE_START and TRUSTED_HTML_RANGE_END in the client (vdom.mjs).
   @range_start_marker "hologram-html"
   @range_end_marker "/hologram-html"
 
@@ -49,6 +51,10 @@ defmodule Hologram.Template.HTMLNormalizer do
   #               the browser reads it as raw text up to the first </noscript, so printed markup
   #               could end it early and let what follows out - a script included. It shows
   #               nothing to a browser running JavaScript anyway.
+  #
+  # WARNING: must match TRUSTED_HTML_DROPPED_ELEMENTS in the client (vdom.mjs), as must the
+  # shadowroot* attributes removed in print_element/4, or a range the server printed wouldn't be the
+  # range the client builds from the same HTML.
   @dropped_elements ~w(noscript plaintext script)
 
   # The HTML elements serialized without an end tag or content.

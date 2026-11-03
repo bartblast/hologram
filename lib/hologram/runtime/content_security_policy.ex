@@ -108,7 +108,8 @@ defmodule Hologram.Runtime.ContentSecurityPolicy do
   works from `config/runtime.exs`.
 
   A `trusted_types` directive the config gives has Hologram's own Trusted Types policy,
-  `"hologram"`, added to the names it allows, since the runtime creates it to run its scripts.
+  `"hologram"`, added to the names it allows, since the runtime creates it to run its scripts and
+  to insert HTML the app marked with `Hologram.Template.trust_html/1`.
 
   ## Examples
 

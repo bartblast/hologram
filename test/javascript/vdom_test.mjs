@@ -8,6 +8,7 @@ import {
 } from "./support/helpers.mjs";
 
 import App from "../../assets/js/app.mjs";
+import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import TrustedTypes from "../../assets/js/trusted_types.mjs";
 import Vdom from "../../assets/js/vdom.mjs";
 
@@ -191,7 +192,7 @@ describe("Vdom", () => {
   describe("mirror()", () => {
     // The same patch production builds, so these stand for the boot patch rather than a
     // differently configured one.
-    const patch = init(Vdom.patchModules);
+    const patch = init(Vdom.patchModules, Vdom.domApi);
 
     const mount = (html) => {
       const container = document.createElement("div");
@@ -510,7 +511,7 @@ describe("Vdom", () => {
   });
 
   describe("patchModules", () => {
-    const patch = init(Vdom.patchModules);
+    const patch = init(Vdom.patchModules, Vdom.domApi);
 
     const create = (sel) => {
       const container = document.createElement("div");
@@ -640,6 +641,397 @@ describe("Vdom", () => {
           ["script", "go();"],
         ]);
       });
+    });
+  });
+
+  describe("trusted HTML ranges", () => {
+    const patch = init(Vdom.patchModules, Vdom.domApi);
+
+    // Patches the given children into a fresh div in the document and returns the div, with a
+    // function patching the next children in.
+    const mount = (children, sel = "div") => {
+      const container = document.createElement("div");
+      document.body.appendChild(container);
+
+      let current = patch(container, vnode(sel, {}, children));
+
+      const update = (nextChildren) => {
+        current = patch(current, vnode(sel, {}, nextChildren));
+      };
+
+      return {element: current.elm, update};
+    };
+
+    it("puts the HTML's nodes between the range comments", () => {
+      const {element} = mount([
+        vnode("p", {}, ["a"]),
+        Vdom.trustedHtmlVnode("<b>b</b>"),
+        vnode("p", {}, ["c"]),
+      ]);
+
+      assert.equal(
+        element.innerHTML,
+        "<p>a</p><!--hologram-html--><b>b</b><!--/hologram-html--><p>c</p>",
+      );
+    });
+
+    it("rewrites the content when the HTML changes", () => {
+      const {element, update} = mount([Vdom.trustedHtmlVnode("<b>a</b>")]);
+
+      update([Vdom.trustedHtmlVnode("<i>b</i>")]);
+
+      assert.equal(
+        element.innerHTML,
+        "<!--hologram-html--><i>b</i><!--/hologram-html-->",
+      );
+    });
+
+    it("keeps the content's nodes when the HTML is the same", () => {
+      const {element, update} = mount([Vdom.trustedHtmlVnode("<b>a</b>")]);
+      const bold = element.querySelector("b");
+
+      update([Vdom.trustedHtmlVnode("<b>a</b>")]);
+
+      assert.strictEqual(element.querySelector("b"), bold);
+    });
+
+    it("moves the whole range when its place among keyed siblings changes", () => {
+      const {element, update} = mount([
+        Vdom.trustedHtmlVnode("<b>a</b><i>b</i>"),
+        vnode("p", {key: "k"}, ["c"]),
+      ]);
+
+      update([
+        vnode("p", {key: "k"}, ["c"]),
+        Vdom.trustedHtmlVnode("<b>a</b><i>b</i>"),
+      ]);
+
+      assert.equal(
+        element.innerHTML,
+        "<p>c</p><!--hologram-html--><b>a</b><i>b</i><!--/hologram-html-->",
+      );
+    });
+
+    it("moves a node to right after a range that ends the old children", () => {
+      const {element, update} = mount([
+        vnode("p", {key: "k"}, ["a"]),
+        Vdom.trustedHtmlVnode("<b>b</b><i>c</i>"),
+      ]);
+
+      update([
+        Vdom.trustedHtmlVnode("<b>b</b><i>c</i>"),
+        vnode("p", {key: "k"}, ["a"]),
+      ]);
+
+      assert.equal(
+        element.innerHTML,
+        "<!--hologram-html--><b>b</b><i>c</i><!--/hologram-html--><p>a</p>",
+      );
+    });
+
+    it("creates a keyed node right after a range", () => {
+      const {element, update} = mount([
+        vnode("p", {key: "a"}, ["a"]),
+        Vdom.trustedHtmlVnode("<b>b</b><i>c</i>"),
+        vnode("p", {key: "x"}, ["x"]),
+      ]);
+
+      update([
+        vnode("p", {key: "x"}, ["x"]),
+        Vdom.trustedHtmlVnode("<b>b</b><i>c</i>"),
+        vnode("p", {key: "c"}, ["c"]),
+      ]);
+
+      assert.equal(
+        element.innerHTML,
+        "<p>x</p><!--hologram-html--><b>b</b><i>c</i><!--/hologram-html--><p>c</p>",
+      );
+    });
+
+    it("moves the whole range left past a keyed sibling", () => {
+      const {element, update} = mount([
+        vnode("p", {key: "a"}, ["a"]),
+        vnode("p", {key: "b"}, ["b"]),
+        Vdom.trustedHtmlVnode("<b>c</b><i>d</i>"),
+      ]);
+
+      update([
+        Vdom.trustedHtmlVnode("<b>c</b><i>d</i>"),
+        vnode("p", {key: "b"}, ["b"]),
+        vnode("p", {key: "a"}, ["a"]),
+      ]);
+
+      assert.equal(
+        element.innerHTML,
+        "<!--hologram-html--><b>c</b><i>d</i><!--/hologram-html--><p>b</p><p>a</p>",
+      );
+    });
+
+    it("rewrites only the range when the HTML changes between siblings", () => {
+      const {element, update} = mount([
+        vnode("p", {}, ["a"]),
+        Vdom.trustedHtmlVnode("<b>b</b>"),
+        vnode("p", {}, ["c"]),
+      ]);
+
+      const [first, last] = element.querySelectorAll("p");
+
+      update([
+        vnode("p", {}, ["a"]),
+        Vdom.trustedHtmlVnode("<i>x</i><i>y</i>"),
+        vnode("p", {}, ["c"]),
+      ]);
+
+      assert.equal(
+        element.innerHTML,
+        "<p>a</p><!--hologram-html--><i>x</i><i>y</i><!--/hologram-html--><p>c</p>",
+      );
+
+      assert.strictEqual(element.querySelectorAll("p")[0], first);
+      assert.strictEqual(element.querySelectorAll("p")[1], last);
+    });
+
+    it("rewrites table rows in the tbody context", () => {
+      const {element, update} = mount(
+        [vnode("tbody", {}, [Vdom.trustedHtmlVnode("<tr><td>a</td></tr>")])],
+        "table",
+      );
+
+      update([
+        vnode("tbody", {}, [Vdom.trustedHtmlVnode("<tr><td>b</td></tr>")]),
+      ]);
+
+      assert.equal(
+        element.innerHTML,
+        "<tbody><!--hologram-html--><tr><td>b</td></tr><!--/hologram-html--></tbody>",
+      );
+    });
+
+    it("raises when a range lost its end comment", () => {
+      const {element, update} = mount([Vdom.trustedHtmlVnode("<b>a</b>")]);
+
+      element.lastChild.remove();
+
+      assert.throws(
+        () => update([]),
+        HologramRuntimeError,
+        "a trusted HTML range lost the comment it ends with, so something outside Hologram changed the page",
+      );
+    });
+
+    it("removes the whole range", () => {
+      const {element, update} = mount([
+        vnode("p", {}, ["a"]),
+        Vdom.trustedHtmlVnode("<b>b</b><i>c</i>"),
+      ]);
+
+      update([vnode("p", {}, ["a"])]);
+
+      assert.equal(element.innerHTML, "<p>a</p>");
+    });
+
+    it("inserts a node before a range", () => {
+      const {element, update} = mount([Vdom.trustedHtmlVnode("<b>b</b>")]);
+
+      update([vnode("p", {}, ["a"]), Vdom.trustedHtmlVnode("<b>b</b>")]);
+
+      assert.equal(
+        element.innerHTML,
+        "<p>a</p><!--hologram-html--><b>b</b><!--/hologram-html-->",
+      );
+    });
+
+    it("inserts a node after a range", () => {
+      const {element, update} = mount([Vdom.trustedHtmlVnode("<b>b</b>")]);
+
+      update([Vdom.trustedHtmlVnode("<b>b</b>"), vnode("p", {}, ["c"])]);
+
+      assert.equal(
+        element.innerHTML,
+        "<!--hologram-html--><b>b</b><!--/hologram-html--><p>c</p>",
+      );
+    });
+
+    it("parses SVG content under an SVG parent", () => {
+      const {element} = mount(
+        [Vdom.trustedHtmlVnode('<path d="a"/><path d="b"/>')],
+        "svg",
+      );
+
+      const paths = element.querySelectorAll("path");
+
+      assert.equal(paths.length, 2);
+      assert.strictEqual(paths[0].parentNode, element);
+      assert.equal(paths[1].namespaceURI, "http://www.w3.org/2000/svg");
+    });
+
+    it("parses table rows under a tbody parent", () => {
+      const {element} = mount(
+        [vnode("tbody", {}, [Vdom.trustedHtmlVnode("<tr><td>a</td></tr>")])],
+        "table",
+      );
+
+      assert.equal(
+        element.innerHTML,
+        "<tbody><!--hologram-html--><tr><td>a</td></tr><!--/hologram-html--></tbody>",
+      );
+    });
+
+    it("adds the tbody the browser adds to rows under a table parent", () => {
+      const {element} = mount(
+        [Vdom.trustedHtmlVnode("<tr><td>a</td></tr>")],
+        "table",
+      );
+
+      assert.equal(
+        element.innerHTML,
+        "<!--hologram-html--><tbody><tr><td>a</td></tr></tbody><!--/hologram-html-->",
+      );
+    });
+  });
+
+  describe("parseTrustedHtml()", () => {
+    const parse = (html, parent = document.createElement("div")) =>
+      Vdom.parseTrustedHtml(html, parent);
+
+    const serialize = (nodes) => {
+      const container = document.createElement("div");
+      container.append(...nodes);
+
+      return container.innerHTML;
+    };
+
+    it("closes unclosed elements", () => {
+      assert.equal(serialize(parse("<div><b>bold")), "<div><b>bold</b></div>");
+    });
+
+    it("removes script, plaintext and noscript elements at any depth", () => {
+      const html =
+        "<p>a<script>1</script></p><noscript>b</noscript><div><plaintext>c</div>";
+
+      assert.equal(serialize(parse(html)), "<p>a</p><div></div>");
+    });
+
+    it("removes SVG script elements", () => {
+      assert.equal(
+        serialize(parse("<svg><script>1</script><circle></circle></svg>")),
+        "<svg><circle></circle></svg>",
+      );
+    });
+
+    it("removes comments carrying a range marker and keeps other comments", () => {
+      const html =
+        "a<!--hologram-html-->b<!--/hologram-html-->c<!-- keep --><p><!--hologram-html--></p>";
+
+      assert.equal(serialize(parse(html)), "abc<!-- keep --><p></p>");
+    });
+
+    it("merges the text a removed node separated", () => {
+      const nodes = parse("a<script>1</script>b");
+
+      assert.equal(nodes.length, 1);
+      assert.equal(nodes[0].data, "ab");
+    });
+
+    it("removes the shadowroot attributes of template elements", () => {
+      const html =
+        '<template id="t" shadowrootmode="open" shadowrootdelegatesfocus><p>a</p></template>';
+
+      const [template] = parse(html);
+
+      assert.deepStrictEqual(template.getAttributeNames(), ["id"]);
+    });
+
+    it("removes what the server removes in a template nested in template contents", () => {
+      const [outer] = parse(
+        '<template><template shadowrootmode="open"><script>1</script>a</template></template>',
+      );
+
+      const inner = outer.content.firstChild;
+
+      assert.deepStrictEqual(inner.getAttributeNames(), []);
+      assert.equal(inner.content.textContent, "a");
+      assert.equal(inner.content.childNodes.length, 1);
+    });
+
+    it("parses through the Trusted Types policy", () => {
+      const created = [];
+
+      globalThis.trustedTypes = {
+        createPolicy: (_name, rules) => ({
+          createHTML: (html) => {
+            created.push(html);
+            return rules.createHTML(html);
+          },
+          createScript: rules.createScript,
+          createScriptURL: rules.createScriptURL,
+        }),
+      };
+
+      TrustedTypes.cachedPolicy = undefined;
+
+      try {
+        parse("<b>a</b>");
+      } finally {
+        delete globalThis.trustedTypes;
+        TrustedTypes.cachedPolicy = undefined;
+      }
+
+      assert.deepStrictEqual(created, ["<b>a</b>"]);
+    });
+
+    it("removes what the server removes inside template contents", () => {
+      const nodes = parse(
+        "<template><script>1</script>a<!--hologram-html-->b</template>",
+      );
+      const content = nodes[0].content;
+
+      assert.equal(content.childNodes.length, 1);
+      assert.equal(content.textContent, "ab");
+    });
+
+    it("leaves an SVG element named template alone", () => {
+      assert.equal(
+        serialize(parse("<svg><template><circle></circle></template></svg>")),
+        "<svg><template><circle></circle></template></svg>",
+      );
+    });
+
+    it("parses in the context of a template parent", () => {
+      const nodes = parse(
+        "<tr><td>a</td></tr>",
+        document.createElement("template"),
+      );
+
+      assert.equal(serialize(nodes), "<tr><td>a</td></tr>");
+    });
+
+    it("parses in the context of a parent with no element", () => {
+      assert.equal(serialize(parse("<p>a</p>", null)), "<p>a</p>");
+    });
+
+    it("keeps the encoding of an annotation-xml parent", () => {
+      const parent = document.createElementNS(
+        "http://www.w3.org/1998/Math/MathML",
+        "annotation-xml",
+      );
+
+      parent.setAttribute("encoding", "text/html");
+
+      const [style] = parse("<style>a>b</style>", parent);
+
+      assert.equal(style.namespaceURI, "http://www.w3.org/1999/xhtml");
+    });
+
+    it("parses in MathML context under an annotation-xml parent without an HTML encoding", () => {
+      const parent = document.createElementNS(
+        "http://www.w3.org/1998/Math/MathML",
+        "annotation-xml",
+      );
+
+      const [mi] = parse("<mi>x</mi>", parent);
+
+      assert.equal(mi.namespaceURI, "http://www.w3.org/1998/Math/MathML");
     });
   });
 });
