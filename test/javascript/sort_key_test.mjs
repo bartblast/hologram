@@ -71,6 +71,25 @@ describe("SortKey", () => {
     });
   });
 
+  describe("fold()", () => {
+    const fold = SortKey.fold;
+
+    it("folds the value the way its sort key is folded", () => {
+      assert.equal(fold("Łódź Zürich"), "lodz zurich");
+    });
+
+    it("keeps the whole folded value past the sort key's cap", () => {
+      const value = "A".repeat(70);
+
+      assert.equal(fold(value), "a".repeat(70));
+    });
+
+    // A Hangul syllable decomposes into its two or three jamo, so the folded form is longer.
+    it("decomposes a hangul syllable into its jamo", () => {
+      assert.equal(fold("한"), "\u1112\u1161\u11AB");
+    });
+  });
+
   it("version()", () => {
     assert.equal(SortKey.version(), 1);
   });

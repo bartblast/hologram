@@ -3,6 +3,7 @@ defmodule Hologram.DB.QueryRunner do
 
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SortKey
   alias Hologram.Entity
@@ -158,7 +159,7 @@ defmodule Hologram.DB.QueryRunner do
 
     base_fields =
       target_mapping.columns
-      |> Enum.reject(&(&1.source == :revisions or match?({:sort_key, _name}, &1.source)))
+      |> Enum.reject(&(&1.source == :revisions or Mapper.derived?(&1)))
       |> Map.new(fn column ->
         value = decode_embedded_value(Map.fetch!(object, column.name), column.type)
 
@@ -231,9 +232,10 @@ defmodule Hologram.DB.QueryRunner do
 
   defp decode_row(row, term, mapping) do
     entity_mapping = Map.fetch!(mapping, term.entity)
-    {column_values, include_values} = Enum.split(row, length(entity_mapping.columns))
+    selected_columns = Enum.reject(entity_mapping.columns, &Mapper.derived?/1)
+    {column_values, include_values} = Enum.split(row, length(selected_columns))
 
-    column_pairs = Enum.zip(entity_mapping.columns, column_values)
+    column_pairs = Enum.zip(selected_columns, column_values)
 
     # Exactly one revisions column per table, by construction - it is framework state rather than
     # a value the entity declares, so it lands in the metadata and never as a field.
@@ -241,9 +243,7 @@ defmodule Hologram.DB.QueryRunner do
       Enum.split_with(column_pairs, fn {column, _value} -> column.source == :revisions end)
 
     base_fields =
-      value_pairs
-      |> Enum.reject(fn {column, _value} -> match?({:sort_key, _name}, column.source) end)
-      |> Map.new(fn {column, value} ->
+      Map.new(value_pairs, fn {column, value} ->
         {field_name(column), Codec.decode(value, column.type)}
       end)
 
@@ -284,6 +284,11 @@ defmodule Hologram.DB.QueryRunner do
   # value the raw slot carries - so the pair the statement compares is folded the way the
   # column's own pair is.
   defp encode_param!(value, _name, :sort_key), do: SortKey.compute(value)
+
+  # A search term binds as the pattern its LIKE matches, escaped and folded the way a written-out
+  # term is at compilation.
+  defp encode_param!(value, _name, {:pattern, shape, mode}),
+    do: QueryCompiler.search_pattern(value, shape, mode)
 
   defp encode_param!(value, _name, type), do: Codec.encode(value, type)
 

@@ -30,6 +30,12 @@ const ORDERABLE_TYPES = [
 ];
 const ORDERING_OPERATORS = ["<", "<=", ">", ">="];
 const QUANTIFIERS = ["all", "any", "none"];
+const SEARCH_OPERATORS = [
+  "contains",
+  "contains_exact",
+  "starts_with",
+  "starts_with_exact",
+];
 
 // The type pairs whose attributes compare though their types differ, compared on the wider type -
 // Hologram.Query.Stage's @widenings, and the two must agree.
@@ -51,6 +57,10 @@ function attributeNames(entityType) {
 function attributeTriple(name, operator, other, entityType, scope) {
   if (ORDERING_OPERATORS.includes(operator)) {
     validateOrderableAttribute(name, entityType, operator);
+  }
+
+  if (SEARCH_OPERATORS.includes(operator)) {
+    validateSearchableAttribute(name, entityType, operator);
   }
 
   const otherType = nameTypeOf(scope, other);
@@ -599,6 +609,8 @@ function operatorTriples(name, tuple, entityType, scope) {
   if (isStruct(operand, "Hologram.Query.Placeholder")) {
     if (ORDERING_OPERATORS.includes(operator)) {
       validateOrderableAttribute(name, entityType, operator);
+    } else if (SEARCH_OPERATORS.includes(operator)) {
+      validateSearchableAttribute(name, entityType, operator);
     } else if (
       !EQUALITY_OPERATORS.includes(operator) &&
       !MEMBERSHIP_OPERATORS.includes(operator)
@@ -612,7 +624,8 @@ function operatorTriples(name, tuple, entityType, scope) {
   if (
     isAttributeOperand(operand) &&
     (EQUALITY_OPERATORS.includes(operator) ||
-      ORDERING_OPERATORS.includes(operator))
+      ORDERING_OPERATORS.includes(operator) ||
+      SEARCH_OPERATORS.includes(operator))
   ) {
     return [
       attributeTriple(name, operator, operand.data[1], entityType, scope),
@@ -661,6 +674,10 @@ function operatorTriples(name, tuple, entityType, scope) {
         Model.unbox(operand, nameType(entityType, name)),
       ],
     ];
+  }
+
+  if (SEARCH_OPERATORS.includes(operator)) {
+    return [searchTriple(name, operator, operand, entityType)];
   }
 
   raiseUnknownOperator(operator, name);
@@ -741,7 +758,7 @@ function quantifierClause(scope, quantifier, value) {
 
 function raiseUnknownOperator(operator, name) {
   Interpreter.raiseArgumentError(
-    `unknown operator :${operator} in the filter predicate for attribute ${inspectName(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :in, :not_in`,
+    `unknown operator :${operator} in the filter predicate for attribute ${inspectName(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact`,
   );
 }
 
@@ -821,6 +838,20 @@ function inverseWriteFix(entityType, name, stage) {
 
 function relationshipNames(entityType) {
   return Object.keys(Model.entry(entityType).relationships);
+}
+
+// A search term is matched as text, so it is a string - a nil term has no text to look for, and a
+// list, a range or a tuple is another operator's operand.
+function searchTriple(name, operator, operand, entityType) {
+  validateSearchableAttribute(name, entityType, operator);
+
+  if (!Type.isBinary(operand)) {
+    Interpreter.raiseArgumentError(
+      `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)} - a search term is a string`,
+    );
+  }
+
+  return [nameValue(name), operator, Model.unbox(operand, "string")];
 }
 
 // A cardinality marker is a terminal: a query cannot be two kinds of answer at once.
@@ -1445,6 +1476,18 @@ function validateScalarOperand(name, operator, operand, refuseNil = false) {
   if (invalid) {
     Interpreter.raiseArgumentError(
       `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)}`,
+    );
+  }
+}
+
+// A search matches text, so it reads a string attribute - its value, or its folded form for a
+// loose match.
+function validateSearchableAttribute(name, entityType, operator) {
+  const type = nameType(entityType, name);
+
+  if (type !== "string") {
+    Interpreter.raiseArgumentError(
+      `operator :${operator} requires a string attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}`,
     );
   }
 }

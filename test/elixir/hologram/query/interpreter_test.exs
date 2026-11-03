@@ -475,6 +475,13 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert names(agreed(sort(Module10, username))) == ["ada", "bob", "Ödön", "Zoe"]
     end
+
+    test "orders a character above U+FFFF after one from U+E000 to U+FFFF" do
+      module_10(count: 1, username: "😀ab")
+      module_10(count: 2, username: "\uFFFDab")
+
+      assert names(agreed(sort(Module10, username))) == ["\uFFFDab", "😀ab"]
+    end
   end
 
   describe "run/3 - ordering enums" do
@@ -701,6 +708,120 @@ defmodule Hologram.Query.InterpreterTest do
       module_10(count: 1)
 
       assert names(agreed(filter(Module10, username >= "a"))) == []
+    end
+
+    test "matches a character above U+FFFF after a bound from U+E000 to U+FFFF" do
+      module_2("😀")
+
+      assert matched_titles(agreed(filter(Module2, c > "\uFFFD"))) == ["😀"]
+    end
+  end
+
+  describe "run/3 - searches" do
+    setup do
+      Enum.each(["José", "JOSEPH", "jo_x", "50% off", "Straße"], &module_2/1)
+
+      :ok
+    end
+
+    test "matches a loose prefix, ignoring case and accents" do
+      assert matched_titles(agreed(filter(Module2, starts_with(c, "jose")))) == ["JOSEPH", "José"]
+    end
+
+    test "matches an exact prefix byte for byte" do
+      assert matched_titles(agreed(filter(Module2, starts_with(c, "JO", mode: :exact)))) == [
+               "JOSEPH"
+             ]
+    end
+
+    test "matches a loose substring, folding letters a sort key spells out" do
+      assert matched_titles(agreed(filter(Module2, contains(c, "STRASSE")))) == ["Straße"]
+    end
+
+    test "matches an exact substring byte for byte" do
+      assert matched_titles(agreed(filter(Module2, contains(c, "ß", mode: :exact)))) == [
+               "Straße"
+             ]
+
+      assert matched_titles(agreed(filter(Module2, contains(c, "SS", mode: :exact)))) == []
+    end
+
+    test "reads % and _ in the term as plain characters" do
+      assert matched_titles(agreed(filter(Module2, contains(c, "%")))) == ["50% off"]
+      assert matched_titles(agreed(filter(Module2, starts_with(c, "jo_")))) == ["jo_x"]
+    end
+
+    test "reads a backslash in the term as a plain character" do
+      module_2("a\\b")
+
+      assert matched_titles(agreed(filter(Module2, contains(c, "\\")))) == ["a\\b"]
+
+      assert matched_titles(agreed(filter(Module2, contains(c, "a\\b", mode: :exact)))) == [
+               "a\\b"
+             ]
+    end
+
+    test "matches every row with a value for an empty term" do
+      assert matched_titles(agreed(filter(Module2, contains(c, "")))) == [
+               "50% off",
+               "JOSEPH",
+               "José",
+               "Straße",
+               "jo_x"
+             ]
+    end
+
+    test "passes over an unset string, for an empty term too" do
+      module_10(count: 1)
+      module_10(count: 2, username: "ada")
+
+      assert names(agreed(filter(Module10, contains(username, "")))) == ["ada"]
+    end
+
+    test "matches a substring past the sort key's 64 bytes" do
+      long_title = String.duplicate("x", 70) <> " Zürich"
+      module_2(long_title)
+
+      assert matched_titles(agreed(filter(Module2, contains(c, "zurich")))) == [long_title]
+    end
+
+    # The two values share their first 64 folded bytes, which is all the sort key holds.
+    test "matches a prefix longer than the sort key's 64 bytes by the whole value" do
+      matching = String.duplicate("Ab", 40)
+      module_2(matching)
+      module_2(String.duplicate("Ab", 33) <> "Zz")
+
+      query = filter(Module2, starts_with(c, ^String.duplicate("ab", 34)))
+
+      assert matched_titles(agreed(query)) == [matching]
+    end
+
+    test "matches a term bound to a placeholder, escaped like a written one" do
+      query = filter(Module2, starts_with(c, ^%Placeholder{name: :query}))
+
+      assert matched_titles(agreed(query, bindings: %{query: "jose"})) == ["JOSEPH", "José"]
+      assert matched_titles(agreed(query, bindings: %{query: "jo_"})) == ["jo_x"]
+    end
+
+    test "matches a search for another attribute's value" do
+      general = created(Module26, name: "general")
+      message(general, "A General update", 1)
+      message(general, "random", 2)
+
+      assert matched_bodies(agreed(filter(Module28, contains(body, channel.name)))) == [
+               "A General update"
+             ]
+    end
+
+    test "matches a search inside a quantifier" do
+      general = created(Module26, name: "general")
+      random = created(Module26, name: "random")
+      message(general, "weekly update", 1)
+      message(random, "hello", 1)
+
+      query = filter(Module26, any(message <- messages, contains(message.body, "UPDATE")))
+
+      assert channel_names(agreed(query)) == ["general"]
     end
   end
 

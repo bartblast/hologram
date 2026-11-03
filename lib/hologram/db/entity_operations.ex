@@ -234,15 +234,15 @@ defmodule Hologram.DB.EntityOperations do
   # The :deltas option gives the counters to move by an amount rather than set - `%{name => amount}`
   # over required integer attributes, applied in the statement as `column + amount` and judged
   # against the declarations on the value the statement leaves.
-  # A sort-key companion is derived from the value beside it rather than stored as a field, so it
-  # is not part of a row as an entity holds one - which makes this the column list of every
-  # statement that reads or returns a whole row.
+  # A sort-key or search-key companion is derived from the value beside it rather than stored as a
+  # field, so it is not part of a row as an entity holds one - which makes this the column list of
+  # every statement that reads or returns a whole row.
   @doc false
   @spec persisted_columns(module) :: list(map)
   def persisted_columns(entity_type) do
     %{columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
-    Enum.reject(columns, &match?({:sort_key, _name}, &1.source))
+    Enum.reject(columns, &Mapper.derived?/1)
   end
 
   @doc false
@@ -254,9 +254,7 @@ defmodule Hologram.DB.EntityOperations do
 
     columns_by_field =
       columns
-      |> Enum.reject(
-        &(&1.source in [:revisions, :system] or match?({:sort_key, _name}, &1.source))
-      )
+      |> Enum.reject(&(&1.source in [:revisions, :system] or Mapper.derived?(&1)))
       |> Map.new(&{field_name(&1), &1})
 
     changes_map = Map.new(changes)
@@ -338,7 +336,7 @@ defmodule Hologram.DB.EntityOperations do
           params = changed_values ++ [stamp, encoded_updated_at, encoded_id]
 
           # The stamp travels with the changes: every update moves updated_at, and a client holding
-          # the row holds that too. The sort-key companions do not - they are derived from the values
+          # the row holds that too. The derived companions do not - they are derived from the values
           # beside them, and a reader recomputes them rather than being told.
           data = Map.put(changes_map, :updated_at, updated_at)
 
@@ -502,27 +500,28 @@ defmodule Hologram.DB.EntityOperations do
 
     columns
     |> Enum.filter(fn column ->
-      match?({:sort_key, _name}, column.source) and
-        Map.has_key?(changes_map, elem(column.source, 1))
+      Mapper.derived?(column) and Map.has_key?(changes_map, elem(column.source, 1))
     end)
-    |> Enum.map(fn %{source: {:sort_key, attribute_name}} = column ->
-      encoded_key =
+    |> Enum.map(fn %{source: {_kind, attribute_name}} = column ->
+      encoded_value =
         changes_map
         |> Map.fetch!(attribute_name)
-        |> compute_sort_key()
+        |> derived_value(column.source)
         |> Codec.encode(column.type)
 
-      {column, encoded_key}
+      {column, encoded_value}
     end)
   end
-
-  defp compute_sort_key(nil), do: nil
-
-  defp compute_sort_key(value), do: SortKey.compute(value)
 
   defp counter_column?(%{source: {:attribute, _name}, type: :integer, null: false}), do: true
 
   defp counter_column?(_column), do: false
+
+  defp derived_value(nil, _source), do: nil
+
+  defp derived_value(value, {:search_key, _name}), do: SortKey.search_key(value)
+
+  defp derived_value(value, {:sort_key, _name}), do: SortKey.compute(value)
 
   # Returns how many rows the delete removed - deleting an id nothing holds removes none, and
   # is not something that happened to tell anyone about. A foreign key that refuses it is named
@@ -605,10 +604,11 @@ defmodule Hologram.DB.EntityOperations do
     }
   end
 
-  defp encoded_column_value(entity, %{source: {:sort_key, attribute_name}} = column) do
+  defp encoded_column_value(entity, %{source: {kind, attribute_name}} = column)
+       when kind in [:search_key, :sort_key] do
     entity
     |> Map.fetch!(attribute_name)
-    |> compute_sort_key()
+    |> derived_value(column.source)
     |> Codec.encode(column.type)
   end
 
@@ -723,7 +723,7 @@ defmodule Hologram.DB.EntityOperations do
     }
   end
 
-  # What a row held, as the oplog records it: every column it carries except the sort-key
+  # What a row held, as the oplog records it: every column it carries except the derived
   # companions, which are derived from the values beside them rather than written.
   defp effect_data(entity) do
     entity.__struct__
@@ -873,7 +873,7 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   # The columns a client can write, which is what a revision is kept for - the system ones and
-  # the sort-key companions are nobody's to set.
+  # the derived companions are nobody's to set.
   defp settable?(column) do
     match?({:attribute, _name}, column.source) or match?({:relationship, _name}, column.source)
   end
@@ -970,9 +970,7 @@ defmodule Hologram.DB.EntityOperations do
 
     field_names =
       columns
-      |> Enum.reject(
-        &(&1.source in [:revisions, :system] or match?({:sort_key, _name}, &1.source))
-      )
+      |> Enum.reject(&(&1.source in [:revisions, :system] or Mapper.derived?(&1)))
       |> Enum.map(&field_name/1)
 
     data = Map.take(entity, field_names)

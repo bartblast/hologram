@@ -129,7 +129,7 @@ describe("Deltas", () => {
       assert.deepEqual(LocalDatabase.getRow(PROJECT, "p1"), {
         id: "p1",
         name: "Website",
-        name_sort: "website",
+        name$sort: "website",
       });
     });
 
@@ -157,7 +157,7 @@ describe("Deltas", () => {
         put_entity: {[TASK]: [{done: false, id: "t1", title: "Łódź"}]},
       });
 
-      assert.equal(LocalDatabase.getRow(TASK, "t1").title_sort, "lodz");
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title$sort, "lodz");
     });
 
     it("files every row of every type a frame carries", () => {
@@ -266,7 +266,7 @@ describe("Deltas", () => {
     it("derives sort keys the way the stream's rows get them", () => {
       carry([{done: false, id: "t1", title: "Łódź"}]);
 
-      assert.equal(LocalDatabase.getRow(TASK, "t1").title_sort, "lodz");
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title$sort, "lodz");
     });
   });
 
@@ -292,7 +292,7 @@ describe("Deltas", () => {
     it("computes the sort key again from the value that moved", () => {
       Deltas.apply({patch_entity: {[TASK]: [{id: "t1", title: "Zürich"}]}});
 
-      assert.equal(LocalDatabase.getRow(TASK, "t1").title_sort, "zurich");
+      assert.equal(LocalDatabase.getRow(TASK, "t1").title$sort, "zurich");
     });
 
     // A patch is a bag of attributes, and the row it merges into is the FILED one, whose

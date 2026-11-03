@@ -4,6 +4,7 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
 import SortKey from "./sort_key.mjs";
+import StringOrder from "./string_order.mjs";
 
 // The kernel the client answers its own queries with: the locked operator set evaluated over
 // the rows as the wire spells them - plain values, dates and datetimes and times and enums and
@@ -119,6 +120,10 @@ export default class QueryKernel {
   }
 
   static #compare(left, right) {
+    if (typeof left === "string" && typeof right === "string") {
+      return StringOrder.compare(left, right);
+    }
+
     if (left < right) {
       return -1;
     }
@@ -181,7 +186,7 @@ export default class QueryKernel {
       );
     }
 
-    const sortName = `${name}_sort`;
+    const sortName = Model.sortKeyField(name);
 
     if (sortName in left) {
       const result = QueryKernel.#compare(left[sortName], right[sortName]);
@@ -470,7 +475,7 @@ export default class QueryKernel {
       : QueryKernel.#resolve(operand, context, ranksForKey);
 
     const end = QueryKernel.#endOf(row, name, entityType, outer);
-    const sortName = `${end.name}_sort`;
+    const sortName = Model.sortKeyField(end.name);
 
     // A row filed by ingest carries the key beside every string attribute, so the presence of
     // the field is what says "this is a string" - no model lookup.
@@ -708,6 +713,22 @@ export default class QueryKernel {
     // when the query is built, and a placeholder never binds one.
     if (value === null || operand === null) {
       return false;
+    }
+
+    // An exact search compares the characters, a loose one the folded forms - case, accents and the
+    // letters a sort key spells out folded on both sides.
+    switch (operator) {
+      case "contains":
+        return SortKey.fold(value).includes(SortKey.fold(operand));
+
+      case "contains_exact":
+        return value.includes(operand);
+
+      case "starts_with":
+        return SortKey.fold(value).startsWith(SortKey.fold(operand));
+
+      case "starts_with_exact":
+        return value.startsWith(operand);
     }
 
     const result = QueryKernel.#compareOrderingValues(

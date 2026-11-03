@@ -5,7 +5,8 @@
 // for case (test/javascript/sort_key_test.mjs and test/elixir/hologram/db/sort_key_test.exs).
 // Always update all four together: a rule that holds on one tier and not the other sorts a
 // client's own rows differently from the server's, silently, and only for the values the rule
-// touches.
+// touches. Hologram.DB.SortKey.search_key/1 has no twin here: only the server stores a search
+// key, and the browser folds the value with fold() when it searches.
 //
 // Computes practical-order sort keys for string attribute values - the derived values that
 // the sort stage's companion columns store and both tiers compare. Hologram.DB.SortKey is the
@@ -64,11 +65,17 @@ export default class SortKey {
   // ignorable combining marks stripped and non-decomposable letters folded, capped at a
   // byte-size prefix that never splits a codepoint.
   static compute(value) {
+    return SortKey.#cap(SortKey.fold(value));
+  }
+
+  // Folds the given string value the way its sort key is folded - downcased, canonically
+  // decomposed, with ignorable combining marks stripped and non-decomposable letters folded - and
+  // keeps all of it. A loose search compares two strings by this.
+  static fold(value) {
     const decomposed = value.toLowerCase().normalize("NFD");
     const stripped = SortKey.#stripCombiningMarks(decomposed);
-    const folded = SortKey.#foldLetters(stripped);
 
-    return SortKey.#cap(folded);
+    return SortKey.#foldLetters(stripped);
   }
 
   // Returns the version of the sort-key rule set.

@@ -49,12 +49,12 @@ defmodule Hologram.DB.SchemaReconciler do
   @system_schema_version 1
 
   @doc """
-  Fills every sort-key companion column the given ops add, from the companion's source
-  column, one row at a time in the caller's transaction - the key of a nil value is nil.
-  Ops adding no companion are passed over. Returns :ok.
+  Fills every derived companion column the given ops add - a sort key or a search key - from the
+  companion's source column, one row at a time in the caller's transaction. The companion of a
+  nil value is nil. Ops adding no companion are passed over. Returns :ok.
   """
-  @spec backfill_sort_keys!(list(%{atom => any}), %{module => %{atom => any}}) :: :ok
-  def backfill_sort_keys!(ops, mapping) do
+  @spec backfill_companions!(list(%{atom => any}), %{module => %{atom => any}}) :: :ok
+  def backfill_companions!(ops, mapping) do
     ops
     |> Enum.filter(&match?(%{op: :add_column}, &1))
     |> Enum.each(&backfill_op!(&1, mapping))
@@ -166,7 +166,7 @@ defmodule Hologram.DB.SchemaReconciler do
         # A companion this run adds is filled AFTER every op has applied, not at its own
         # add: the diff applies add_column before alter_column, so a source column being
         # cast to text in the same run still holds its old type when its companion lands.
-        backfill_sort_keys!(ops, context.mapping)
+        backfill_companions!(ops, context.mapping)
 
         update_registry(ops)
         write_marker(marker_from_context(context))
@@ -303,7 +303,7 @@ defmodule Hologram.DB.SchemaReconciler do
   # fill runs while the endpoint serves, and an update slipping between the read and the
   # companion write would get its fresh companion value overwritten from the stale read.
   # sobelow_skip ["SQL.Query"]
-  defp backfill_sort_key!(table, companion_name, source_name) do
+  defp backfill_companion!(table, companion_name, source_name, derive) do
     select_sql =
       ~s(SELECT "id", #{Mapper.quote_identifier(source_name)} FROM #{qualified_table(table)} FOR UPDATE)
 
@@ -317,7 +317,7 @@ defmodule Hologram.DB.SchemaReconciler do
         :ok
 
       [id, value] ->
-        {:ok, _result} = Connection.query(update_sql, [SortKey.compute(value), id])
+        {:ok, _result} = Connection.query(update_sql, [derive.(value), id])
     end)
   end
 
@@ -328,11 +328,13 @@ defmodule Hologram.DB.SchemaReconciler do
     column = Enum.find(entity_mapping.columns, &(&1.name == op.column))
 
     case column do
-      %{source: {:sort_key, attribute_name}} ->
+      %{source: {kind, attribute_name}} when kind in [:search_key, :sort_key] ->
         source_column =
           Enum.find(entity_mapping.columns, &(&1.source == {:attribute, attribute_name}))
 
-        backfill_sort_key!(entity_mapping.table, column.name, source_column.name)
+        derive = if kind == :sort_key, do: &SortKey.compute/1, else: &SortKey.search_key/1
+
+        backfill_companion!(entity_mapping.table, column.name, source_column.name, derive)
 
       _other_column ->
         :ok

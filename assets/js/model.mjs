@@ -137,7 +137,7 @@ export default class Model {
 
       const value = attributes[name];
 
-      attributes[`${name}_sort`] =
+      attributes[Model.sortKeyField(name)] =
         value === null || value === undefined ? null : SortKey.compute(value);
     }
 
@@ -268,6 +268,13 @@ export default class Model {
       .map(([name]) => `${name}_id`);
 
     return attributes.concat(references).sort();
+  }
+
+  // The row field a string attribute's sort key is filed under. A declared name can't contain $, so
+  // the key never lands on a field the entity declares - an attribute named title_sort beside
+  // title keeps its own value.
+  static sortKeyField(name) {
+    return `${name}$sort`;
   }
 
   // The way back over the same boundary: a value written in a query becomes the way the wire

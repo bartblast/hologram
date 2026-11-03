@@ -11,6 +11,8 @@ defmodule Hologram.Policy.Evaluator do
 
   @ordering_operators [:<, :<=, :>, :>=]
 
+  @search_operators [:contains, :contains_exact, :starts_with, :starts_with_exact]
+
   @doc """
   Returns true when the given operation's compiled policy grants it for the given entity struct, or false otherwise.
 
@@ -150,6 +152,30 @@ defmodule Hologram.Policy.Evaluator do
   defp holds?(_field_value, operator, nil, _ranks) when operator in @ordering_operators do
     false
   end
+
+  # A search never matches a missing value either, and a rule and the filter mirroring it have to
+  # admit the same rows - so it matches the way a query does, by bytes or by folded forms.
+  defp holds?(nil, operator, _value, _ranks) when operator in @search_operators, do: false
+
+  defp holds?(_field_value, operator, nil, _ranks) when operator in @search_operators, do: false
+
+  defp holds?(field_value, :contains, value, _ranks) do
+    field_value
+    |> SortKey.fold()
+    |> String.contains?(SortKey.fold(value))
+  end
+
+  defp holds?(field_value, :contains_exact, value, _ranks),
+    do: String.contains?(field_value, value)
+
+  defp holds?(field_value, :starts_with, value, _ranks) do
+    field_value
+    |> SortKey.fold()
+    |> String.starts_with?(SortKey.fold(value))
+  end
+
+  defp holds?(field_value, :starts_with_exact, value, _ranks),
+    do: String.starts_with?(field_value, value)
 
   defp holds?(field_value, :<, value, ranks), do: compare(field_value, value, ranks) == :lt
 

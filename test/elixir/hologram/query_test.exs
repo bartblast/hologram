@@ -77,6 +77,16 @@ defmodule Hologram.QueryTest do
       assert filter(Module2, b in 3..5).filter == [{:b, :>=, 3}, {:b, :<=, 5}]
     end
 
+    test "lowers a search" do
+      query = "ab"
+
+      assert filter(Module2, starts_with(c, ^query)).filter == [{:c, :starts_with, "ab"}]
+
+      assert filter(Module2, contains(c, "ab", mode: :exact)).filter == [
+               {:c, :contains_exact, "ab"}
+             ]
+    end
+
     test "lowers an equality with nil" do
       assert filter(Module2, b == nil).filter == [{:b, :==, nil}]
     end

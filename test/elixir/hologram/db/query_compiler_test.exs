@@ -71,7 +71,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [{:value, true}, {:value, 123}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s(WHERE "a" = $1 AND "b" = $2 ORDER BY "id" ASC)
              }
@@ -195,7 +195,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping, %{rules: rules}) == %{
                params: [{:value, true}, {:value, "text_1"}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s(WHERE "a" = $1 AND "c" = $2 ORDER BY "id" ASC)
              }
@@ -866,7 +866,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [{:value, true}, {:value, 3}, {:value, "x"}],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" ) <>
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" ) <>
                    ~s(FROM "hologram_data"."test_fixtures_entity_module2" ) <>
                    ~s|WHERE (("a" = $1) OR ("b" >= $2 AND "c" = $3)) ORDER BY "id" ASC|
              }
@@ -1080,8 +1080,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       expected_fragment =
         ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
           ~s|'id', "$i1"."id", 'a', "$i1"."a", 'b', "$i1"."b", 'c', "$i1"."c", | <>
-          ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
-          ~s|'c_$sort', "$i1"."c_$sort"| <>
+          ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions"| <>
           ~s|) ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
           ~s|FROM (SELECT "$t1".* | <>
           ~s|FROM "hologram_data"."test_fixtures_entity_module2" AS "$t1" | <>
@@ -1410,8 +1409,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       expected_fragment =
         ~s|, 'b', (SELECT jsonb_build_object(| <>
           ~s|'id', "$i2"."id", 'a', "$i2"."a", 'b', "$i2"."b", 'c', "$i2"."c", | <>
-          ~s|'created_at', "$i2"."created_at", 'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions", | <>
-          ~s|'c_$sort', "$i2"."c_$sort"| <>
+          ~s|'created_at', "$i2"."created_at", 'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions"| <>
           ~s|) FROM "hologram_data"."test_fixtures_entity_module2" AS "$i2" | <>
           ~s|WHERE "$i2"."id" = "$i1"."b_id")|
 
@@ -1452,11 +1450,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", "name_$sort", | <>
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
                    ~s|'id', "$i1"."id", 'body', "$i1"."body", 'position', "$i1"."position", 'channel_id', "$i1"."channel_id", | <>
-                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
-                   ~s|'body_$sort', "$i1"."body_$sort") | <>
+                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|ORDER BY "$i1"."position" ASC, "$i1"."id" ASC), '[]'::jsonb) | <>
                    ~s|FROM (SELECT "$t1".* FROM "hologram_data"."test_fixtures_entity_module28" AS "$t1" | <>
                    ~s|WHERE "$t1"."channel_id" = "test_fixtures_entity_module26"."id" | <>
@@ -1476,11 +1473,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", "name_$sort", | <>
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT jsonb_build_object(| <>
                    ~s|'id', "$i1"."id", 'code', "$i1"."code", 'summary', "$i1"."summary", 'channel_id', "$i1"."channel_id", | <>
-                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
-                   ~s|'code_$sort', "$i1"."code_$sort", 'summary_$sort', "$i1"."summary_$sort") | <>
+                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module27" AS "$i1" | <>
                    ~s|WHERE "$i1"."channel_id" = "test_fixtures_entity_module26"."id") AS "topic" | <>
                    ~s|FROM "hologram_data"."test_fixtures_entity_module26" ORDER BY "id" ASC|
@@ -1498,11 +1494,10 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", "name_$sort", | <>
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
                    ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(| <>
                    ~s|'id', "$i1"."id", 'body', "$i1"."body", 'position', "$i1"."position", 'channel_id', "$i1"."channel_id", | <>
-                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions", | <>
-                   ~s|'body_$sort', "$i1"."body_$sort") | <>
+                   ~s|'created_at', "$i1"."created_at", 'updated_at', "$i1"."updated_at", '$revisions', "$i1"."$revisions") | <>
                    ~s|ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
                    ~s|FROM (SELECT "$t1".* FROM "hologram_data"."test_fixtures_entity_module28" AS "$t1" | <>
                    ~s|WHERE "$t1"."id" IN (SELECT "$j1"."source_id" | <>
@@ -1542,14 +1537,14 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "selects the mapped columns in physical order" do
+    test "selects the mapped columns in physical order, leaving out the derived companions" do
       mapping = Mapper.derive!([Module2], [])
       term = Stage.normalize(Module2)
 
       assert compile(term, mapping) == %{
                params: [],
                sql:
-                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions", "c_$sort" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id" ASC)
+                 ~s(SELECT "id", "a", "b", "c", "created_at", "updated_at", "$revisions" FROM "hologram_data"."test_fixtures_entity_module2" ORDER BY "id" ASC)
              }
     end
 
@@ -2140,6 +2135,128 @@ defmodule Hologram.DB.QueryCompilerTest do
                ~s|WHERE "$q1"."channel_id" = "test_fixtures_entity_module26"."id" | <>
                  ~s|AND "body" != $1 AND "position" = $2)|
              )
+    end
+  end
+
+  describe "compile/2 - searches" do
+    test "compiles a loose search to a LIKE over the search key, or the sort key without one" do
+      mapping = Mapper.derive!([Module2], [])
+      term = %{Stage.normalize(Module2) | filter: [{:c, :starts_with, "José"}]}
+
+      assert %{params: [{:value, "jose%"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s| WHERE COALESCE("c_$search", "c_$sort") LIKE $1|)
+    end
+
+    test "compiles an exact search to a LIKE over the value" do
+      mapping = Mapper.derive!([Module2], [])
+      term = %{Stage.normalize(Module2) | filter: [{:c, :contains_exact, "Jo"}]}
+
+      assert %{params: [{:value, "%Jo%"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s| WHERE "c" LIKE $1|)
+    end
+
+    test "compiles a search in a policy rule the way it compiles one in a filter" do
+      mapping = Mapper.derive!([Module2], [])
+      term = Stage.normalize(Module2)
+      rules = [%{predicates: [{:c, :starts_with_exact, "public/"}], to: nil, via: nil}]
+
+      assert %{params: [{:value, "public/%"}], sql: sql} =
+               compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE "c" LIKE $1|)
+    end
+
+    test "escapes % and _ in a term" do
+      mapping = Mapper.derive!([Module2], [])
+      term = %{Stage.normalize(Module2) | filter: [{:c, :contains_exact, "50%_"}]}
+
+      assert %{params: [{:value, "%50\\%\\_%"}]} = compile(term, mapping)
+    end
+
+    test "binds a placeholder term as a pattern slot" do
+      mapping = Mapper.derive!([Module2], [])
+      term = %{Stage.normalize(Module2) | filter: [{:c, :starts_with, {:placeholder, :query}}]}
+
+      assert %{params: [{:placeholder, :query, {:pattern, :prefix, :loose}}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(sql, ~s| WHERE COALESCE("c_$search", "c_$sort") LIKE $1|)
+    end
+
+    test "reads a loose search on a path through the related row's keys" do
+      mapping = path_mapping([Module1, Module2, Module3])
+      term = path_term(Module3, [{[:b, :c], {:contains, "x"}}])
+
+      assert %{params: [{:value, "%x%"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE (SELECT COALESCE("$p1"."c_$search", "$p1"."c_$sort") FROM #{table(Module2)} AS "$p1" | <>
+                 ~s|WHERE "$p1"."id" = "test_fixtures_entity_module3"."b_id") LIKE $1|
+             )
+    end
+
+    test "compiles a search for another attribute to where its value first occurs" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module28, body: {:contains, {:attribute, [:channel, :name]}})
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE strpos(COALESCE("body_$search", "body_$sort"), | <>
+                 ~s|(SELECT COALESCE("$p1"."name_$search", "$p1"."name_$sort") FROM #{table(Module26)} AS "$p1" | <>
+                 ~s|WHERE "$p1"."id" = "test_fixtures_entity_module28"."channel_id")) > 0|
+             )
+    end
+
+    test "compiles an exact prefix search for a row above's attribute inside a quantifier" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module26,
+          any: {[:messages], [body: {:starts_with_exact, {:attribute, {:outer, 1, :name}}}]}
+        )
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND strpos("body", "test_fixtures_entity_module26"."name") = 1)|
+             )
+    end
+
+    test "reads a loose search for a row above's attribute through that row's keys" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+
+      term =
+        path_term(Module26,
+          any: {[:messages], [body: {:contains, {:attribute, {:outer, 1, :name}}}]}
+        )
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|AND strpos(COALESCE("body_$search", "body_$sort"), | <>
+                 ~s|COALESCE("test_fixtures_entity_module26"."name_$search", "test_fixtures_entity_module26"."name_$sort")) > 0)|
+             )
+    end
+  end
+
+  describe "search_pattern/3" do
+    test "folds the term of a loose search" do
+      assert search_pattern("José", :prefix, :loose) == "jose%"
+    end
+
+    test "keeps the term of an exact search" do
+      assert search_pattern("José", :infix, :exact) == "%José%"
+    end
+
+    test "escapes a backslash, % and _" do
+      assert search_pattern("a\\b%c_d", :prefix, :exact) == "a\\\\b\\%c\\_d%"
     end
   end
 end

@@ -124,7 +124,7 @@ describe("Renderer from_query props", () => {
     id: id,
     project_id: projectId,
     title: title,
-    title_sort: title.toLowerCase(),
+    title$sort: title.toLowerCase(),
   });
 
   beforeEach(() => {

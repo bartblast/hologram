@@ -8,6 +8,7 @@ import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
 import Sha1 from "../../sha1.mjs";
 import SortKey from "../../sort_key.mjs";
+import StringOrder from "../../string_order.mjs";
 import Type from "../../type.mjs";
 
 // Whether the acting user may do something, answered here rather than asked of the server.
@@ -60,6 +61,10 @@ function plainCompare(left, right) {
     return "eq";
   }
 
+  if (typeof left === "string" && typeof right === "string") {
+    return StringOrder.compare(left, right) < 0 ? "lt" : "gt";
+  }
+
   return left < right ? "lt" : left > right ? "gt" : "eq";
 }
 
@@ -109,12 +114,27 @@ function holds(fieldValue, operator, value, ranks, foldsKey = false) {
   }
 
   // An ordering comparison never matches a missing value, on either side - the same rule the
-  // database applies, where a comparison with NULL is unknown rather than true.
+  // database applies, where a comparison with NULL is unknown rather than true. Neither does a
+  // search.
   if (fieldValue === null || value === null) {
     return false;
   }
 
   switch (operator) {
+    // A rule and the filter mirroring it have to admit the same rows, so a search matches the way
+    // a query does, by bytes or by folded forms.
+    case "contains":
+      return SortKey.fold(fieldValue).includes(SortKey.fold(value));
+
+    case "contains_exact":
+      return fieldValue.includes(value);
+
+    case "starts_with":
+      return SortKey.fold(fieldValue).startsWith(SortKey.fold(value));
+
+    case "starts_with_exact":
+      return fieldValue.startsWith(value);
+
     case "<":
       return compare(fieldValue, value, ranks, foldsKey) === "lt";
 
@@ -925,7 +945,7 @@ function heldRoleNames(actorUserId, entityType, entityId) {
     .sort(
       (left, right) =>
         Number(isRoleModule(left)) - Number(isRoleModule(right)) ||
-        left.localeCompare(right),
+        StringOrder.compare(left, right),
     );
 }
 

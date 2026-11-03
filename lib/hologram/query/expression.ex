@@ -21,7 +21,7 @@ defmodule Hologram.Query.Expression do
     operand: "a literal, an attribute, a path, user_id() or a pinned expression",
     row: "the entity",
     shapes:
-      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
+      "a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
     subject: "a condition"
   }
 
@@ -33,7 +33,7 @@ defmodule Hologram.Query.Expression do
     operand: "a literal, an attribute, a path or a pinned expression",
     row: "the queried entity",
     shapes:
-      "a comparison (==, !=, <, <=, >, >=, in, not in), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
+      "a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
     subject: "a filter"
   }
 
@@ -46,6 +46,19 @@ defmodule Hologram.Query.Expression do
   @quantifiers [:all, :any, :none]
 
   @range_operators [:.., :..//]
+
+  @search_operators [:contains, :starts_with]
+
+  # The data form spells an exact search as an operator of its own.
+  @exact_search_operators %{contains: :contains_exact, starts_with: :starts_with_exact}
+
+  @search_operators_by_exact Map.new(@exact_search_operators, fn {loose, exact} ->
+                               {exact, loose}
+                             end)
+
+  # Elixir's own string functions a search is likely written as - refused with the operator that
+  # says it, since they compare bytes and the operator ignores case and accents by default.
+  @string_functions %{contains?: :contains, starts_with?: :starts_with}
 
   @doc """
   Lowers the bound argument of `take/2` or `skip/2`, named by the given stage, to what the
@@ -90,11 +103,16 @@ defmodule Hologram.Query.Expression do
   `{:attribute, name}` - another attribute of the same row. A path - a dot chain through
   relationships to an attribute of the row at its end, `project.archived` - lowers to the list of
   its names, `[:project, :archived]`, as a predicate's key on the left side and inside an attribute
-  operand on the right.
+  operand on the right. A search - `starts_with(name, term)` or `contains(name, term)`, its term
+  an operand like a comparison's, optionally with `mode: :exact` - lowers to a
+  `{name, {operator, term}}` entry, the operator `:starts_with` or `:contains` for the default
+  loose match and `:starts_with_exact` or `:contains_exact` for an exact one.
 
   Raises Hologram.CompileError, located at the offending node, on a keyword list (naming the
   expression to write when it holds equalities only), on a pinned list as one side of `and` or
-  `or`, and on anything else.
+  `or`, on a search with an option other than `mode: :loose` or `mode: :exact` or with a pinned
+  option, on `String.starts_with?/2` and `String.contains?/2` (naming the search operator), and on
+  anything else.
   """
   @spec condition(Macro.t(), Macro.Env.t()) :: Macro.t()
   def condition({:^, _meta, [expr]}, _env), do: expr
@@ -214,7 +232,8 @@ defmodule Hologram.Query.Expression do
   lowers to an attribute operand, `{:attribute, name}` - another attribute of the same row.
   A path - a dot chain through relationships to an attribute of the row at its end,
   `channel.archived` - lowers to the list of its names, `[:channel, :archived]`, as a predicate's
-  key on the left side and inside an attribute operand on the right.
+  key on the left side and inside an attribute operand on the right. A search lowers the way it
+  does in `condition/2`.
 
   A quantifier - `any`, `none` or `all` over a relationship's rows, with a condition binding one of
   them (`any(message <- messages, message.author_id == ^id)`) or with the relationship alone
@@ -229,7 +248,7 @@ defmodule Hologram.Query.Expression do
   one side of `and` or `or` or as a quantifier's condition, on a quantifier written without a
   binding beside its condition, with a binding and no condition, as `all` with no condition, with
   a name already bound around it, or with a source that is pinned or no relationship, on a bound
-  row compared whole, and on anything else.
+  row compared whole, on a search the way `condition/2` refuses one, and on anything else.
   """
   @spec predicates(Macro.t(), Macro.Env.t()) :: Macro.t()
   def predicates({:^, _meta, [expr]}, _env), do: expr
@@ -439,6 +458,18 @@ defmodule Hologram.Query.Expression do
     written_as({:not, [], [{:in, [], [{key, [], nil}, operand]}]})
   end
 
+  defp expression_hint(key, {operator, operand}) when operator in @search_operators do
+    written_as({operator, [], [{key, [], nil}, operand]})
+  end
+
+  defp expression_hint(key, {operator, operand})
+       when is_map_key(@search_operators_by_exact, operator) do
+    written_as(
+      {Map.fetch!(@search_operators_by_exact, operator), [],
+       [{key, [], nil}, operand, [mode: :exact]]}
+    )
+  end
+
   defp expression_hint(key, list) when is_list(list) do
     written_as({:in, [], [{key, [], nil}, list]})
   end
@@ -606,6 +637,11 @@ defmodule Hologram.Query.Expression do
 
   defp listed_comparison_hint({operator, _meta, [_left, _right]})
        when operator in @comparison_operators or operator in [:in, :not] do
+    " - join comparisons with and"
+  end
+
+  defp listed_comparison_hint({operator, _meta, args})
+       when operator in @search_operators and is_list(args) do
     " - join comparisons with and"
   end
 
@@ -817,6 +853,20 @@ defmodule Hologram.Query.Expression do
     [{quantifier, quantified!(ast, names, env)}]
   end
 
+  defp predicate_list!({operator, _meta, args} = ast, names, env)
+       when operator in @search_operators and is_list(args) do
+    [search!(ast, names, env)]
+  end
+
+  defp predicate_list!(
+         {{:., _dot_meta, [{:__aliases__, _alias_meta, [:String]}, function]}, _meta, args} = ast,
+         names,
+         env
+       )
+       when is_map_key(@string_functions, function) and is_list(args) do
+    string_function_error!(ast, Map.fetch!(@string_functions, function), args, names, env)
+  end
+
   defp predicate_list!(ast, names, env), do: unsupported!(ast, names, env)
 
   # A quantifier takes a relationship alone, or a row bound to one and a condition reading it. The
@@ -951,6 +1001,60 @@ defmodule Hologram.Query.Expression do
 
   defp scoped_name(name, levels), do: Macro.escape({:outer, levels, name})
 
+  # A search names the attribute it reads, the term it looks for, and optionally how the two are
+  # matched - loosely, with case and accents folded, unless mode: :exact asks for the bytes. Each
+  # operator and mode is its own operator in the data form, so every executor switches on one atom.
+  defp search!({operator, _meta, args} = ast, names, env) do
+    {left, right, mode} =
+      case args do
+        [left, right] -> {left, right, :loose}
+        [left, right, opts] -> {left, right, search_mode!(opts, operator, env, ast)}
+        _args -> search_arity_error!(ast, operator, env)
+      end
+
+    lowered_operator =
+      if mode == :exact, do: Map.fetch!(@exact_search_operators, operator), else: operator
+
+    {attribute!(left, names, env), {lowered_operator, comparison_operand!(right, names, env)}}
+  end
+
+  @spec search_arity_error!(Macro.t(), atom, Macro.Env.t()) :: no_return
+  defp search_arity_error!(ast, operator, env) do
+    compile_error!(
+      "#{operator} takes an attribute, a search term and, optionally, mode: :exact - #{operator}(name, ^term) or #{operator}(name, ^term, mode: :exact) - got: #{Macro.to_string(ast)}",
+      ast,
+      env
+    )
+  end
+
+  # The mode decides which value a search reads - the stored one or its folded form - so it is part
+  # of the query's shape, and is written in place rather than pinned.
+  defp search_mode!([mode: mode], _operator, _env, _ast) when mode in [:exact, :loose], do: mode
+
+  defp search_mode!([mode: {:^, _meta, [_expr]} = mode], operator, env, _ast) do
+    compile_error!(
+      "#{operator} takes its mode option written in place, got: mode: #{Macro.to_string(mode)} - the mode decides what the query reads, so write mode: :loose or mode: :exact",
+      mode,
+      env
+    )
+  end
+
+  defp search_mode!({:^, _meta, [_expr]} = opts, operator, env, _ast) do
+    compile_error!(
+      "#{operator} takes its mode option written in place, got: #{Macro.to_string(opts)} - the mode decides what the query reads, so write mode: :loose or mode: :exact",
+      opts,
+      env
+    )
+  end
+
+  defp search_mode!(opts, operator, env, ast) do
+    compile_error!(
+      "#{operator} takes one option, mode: :loose (the default) or mode: :exact, got: #{Macro.to_string(opts)}",
+      located(opts, ast),
+      env
+    )
+  end
+
   # A keyword list and a pinned list are each a whole filter, so neither is one side of an and or
   # an or - the stage it would be joined to is a second filter call, and a disjunction holding one
   # is written in the data form whole. A condition takes no keyword list at all, so there one is
@@ -1006,6 +1110,19 @@ defmodule Hologram.Query.Expression do
             scoped_name(rest, levels)
         end
     end
+  end
+
+  # String.starts_with?/2 and String.contains?/2 compare bytes, and the query operators ignore case
+  # and accents unless asked not to, so the refusal names both spellings with what was written.
+  @spec string_function_error!(Macro.t(), atom, list(Macro.t()), map, Macro.Env.t()) :: no_return
+  defp string_function_error!(ast, operator, args, names, env) do
+    written_args = Enum.map_join(args, ", ", &Macro.to_string/1)
+
+    compile_error!(
+      "String.#{operator}?/2 isn't available in #{names.subject} - write #{operator}(#{written_args}), which ignores case and accents, or #{operator}(#{written_args}, mode: :exact) to match byte for byte",
+      ast,
+      env
+    )
   end
 
   defp tails_of([]), do: []

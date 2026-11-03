@@ -227,6 +227,21 @@ describe("QueryKernel", () => {
       assert.deepEqual(matchingDated([["rating", ">", 0]]), ["ada", "bob"]);
       assert.deepEqual(matchingDated([["rating", "<", 100]]), ["ada", "bob"]);
     });
+
+    // A declared attribute can be named like another attribute plus _sort, so a field of that
+    // name says nothing about the other attribute's type.
+    it("compares a number by itself beside an attribute named like a sort key", () => {
+      const rows = [
+        {rating: 1.5, rating_sort: "z", username: "ada"},
+        {rating: 4.5, rating_sort: "a", username: "bob"},
+      ];
+
+      const usernames = rows
+        .filter((row) => matches(row, [["rating", ">", 2]]))
+        .map((row) => row.username);
+
+      assert.deepEqual(usernames, ["bob"]);
+    });
   });
 
   describe("matches() - placeholders", () => {
@@ -450,16 +465,16 @@ describe("QueryKernel", () => {
       it("orders a string by the key derived from it", () => {
         LocalDatabase.reset();
 
-        LocalDatabase.putRow(TASK, {id: "t1", title: "Zoe", title_sort: "zoe"});
-        LocalDatabase.putRow(TASK, {id: "t2", title: "ada", title_sort: "ada"});
+        LocalDatabase.putRow(TASK, {id: "t1", title: "Zoe", title$sort: "zoe"});
+        LocalDatabase.putRow(TASK, {id: "t2", title: "ada", title$sort: "ada"});
 
         LocalDatabase.putRow(TASK, {
           id: "t3",
           title: "Ödön",
-          title_sort: "odon",
+          title$sort: "odon",
         });
 
-        LocalDatabase.putRow(TASK, {id: "t4", title: "bob", title_sort: "bob"});
+        LocalDatabase.putRow(TASK, {id: "t4", title: "bob", title$sort: "bob"});
 
         const ordered = term({
           sort: [
@@ -476,13 +491,42 @@ describe("QueryKernel", () => {
         ]);
       });
 
+      // A declared attribute can be named like another attribute plus _sort, so a field of that
+      // name is never read as the other attribute's key.
+      it("orders a number by itself beside an attribute named like a sort key", () => {
+        LocalDatabase.reset();
+
+        LocalDatabase.putRow(TASK, {
+          id: "t1",
+          position: 2,
+          position_sort: "a",
+          title: "bob",
+        });
+
+        LocalDatabase.putRow(TASK, {
+          id: "t2",
+          position: 1,
+          position_sort: "b",
+          title: "ada",
+        });
+
+        const ordered = term({
+          sort: [
+            ["position", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), ["ada", "bob"]);
+      });
+
       // Two values sharing a key are settled by themselves, the way the database settles them
       // with the column behind the companion.
       it("settles a tie on the derived key by the value itself", () => {
         LocalDatabase.reset();
 
-        LocalDatabase.putRow(TASK, {id: "t1", title: "zoe", title_sort: "zoe"});
-        LocalDatabase.putRow(TASK, {id: "t2", title: "Zoe", title_sort: "zoe"});
+        LocalDatabase.putRow(TASK, {id: "t1", title: "zoe", title$sort: "zoe"});
+        LocalDatabase.putRow(TASK, {id: "t2", title: "Zoe", title$sort: "zoe"});
 
         const ordered = term({
           sort: [
@@ -492,6 +536,28 @@ describe("QueryKernel", () => {
         });
 
         assert.deepEqual(titles(QueryKernel.run(ordered)), ["Zoe", "zoe"]);
+      });
+
+      // JavaScript's < puts a character above U+FFFF before U+E000 to U+FFFF, the server after.
+      it("orders a character above U+FFFF after one from U+E000 to U+FFFF", () => {
+        LocalDatabase.reset();
+
+        LocalDatabase.putRow(TASK, {id: "t1", title: "😀", title$sort: "😀"});
+
+        LocalDatabase.putRow(TASK, {
+          id: "t2",
+          title: "\uFFFD",
+          title$sort: "\uFFFD",
+        });
+
+        const ordered = term({
+          sort: [
+            ["title", "asc"],
+            ["id", "asc"],
+          ],
+        });
+
+        assert.deepEqual(titles(QueryKernel.run(ordered)), ["\uFFFD", "😀"]);
       });
     });
 
@@ -1482,24 +1548,24 @@ describe("QueryKernel", () => {
       const rows = [
         {
           bio: "mango",
-          bio_sort: "mango",
+          bio$sort: "mango",
           id: "Mango",
           username: "Mango",
-          username_sort: "mango",
+          username$sort: "mango",
         },
         {
           bio: "apple",
-          bio_sort: "apple",
+          bio$sort: "apple",
           id: "Zebra",
           username: "Zebra",
-          username_sort: "zebra",
+          username$sort: "zebra",
         },
         {
           bio: "m",
-          bio_sort: "m",
+          bio$sort: "m",
           id: "Łódź",
           username: "Łódź",
-          username_sort: "lodz",
+          username$sort: "lodz",
         },
       ];
 
@@ -1625,12 +1691,12 @@ describe("QueryKernel", () => {
   // the list `sort` renders, and the key beside the value is what puts it there.
   describe("matches() - comparing strings", () => {
     const rows = [
-      {id: "t1", title: "Zürich", title_sort: "zurich"},
-      {id: "t2", title: "Łódź", title_sort: "lodz"},
-      {id: "t3", title: "apple", title_sort: "apple"},
-      {id: "t4", title: "Mango", title_sort: "mango"},
-      {id: "t5", title: "Zebra", title_sort: "zebra"},
-      {id: "t6", title: "zebra", title_sort: "zebra"},
+      {id: "t1", title: "Zürich", title$sort: "zurich"},
+      {id: "t2", title: "Łódź", title$sort: "lodz"},
+      {id: "t3", title: "apple", title$sort: "apple"},
+      {id: "t4", title: "Mango", title$sort: "mango"},
+      {id: "t5", title: "Zebra", title$sort: "zebra"},
+      {id: "t6", title: "zebra", title$sort: "zebra"},
     ];
 
     const titlesMatching = (filter) =>
@@ -1663,9 +1729,17 @@ describe("QueryKernel", () => {
     });
 
     it("passes over an unset string", () => {
-      const row = {id: "t7", title: null, title_sort: null};
+      const row = {id: "t7", title: null, title$sort: null};
 
       assert.isFalse(matches(row, [["title", ">=", "a"]]));
+    });
+
+    // JavaScript's < puts a character above U+FFFF before U+E000 to U+FFFF, the server after.
+    it("matches a character above U+FFFF after a bound from U+E000 to U+FFFF", () => {
+      const row = {id: "t9", title: "😀", title$sort: "😀"};
+
+      assert.isTrue(matches(row, [["title", ">", "\uFFFD"]]));
+      assert.isFalse(matches(row, [["title", "<", "\uFFFD"]]));
     });
 
     // No key beside the value means the attribute is not a string, so the comparison is the
@@ -1675,6 +1749,225 @@ describe("QueryKernel", () => {
 
       assert.isTrue(matches(row, [["position", ">=", 3]]));
       assert.isFalse(matches(row, [["position", ">=", 9]]));
+    });
+  });
+
+  describe("matches() - searches", () => {
+    const CHANNEL = "MyApp.Channel";
+    const MESSAGE = "MyApp.Message";
+
+    const titles = ["José", "JOSEPH", "jo_x", "50% off", "Straße"];
+
+    const titlesMatching = (filter, extraTitles = [], context = {}) =>
+      [...titles, ...extraTitles]
+        .map((title, index) => ({id: `t${index}`, title}))
+        .filter((row) => matches(row, filter, context))
+        .map((row) => row.title)
+        .sort();
+
+    const matchingIds = (entityType, filter) =>
+      Object.values(LocalDatabase.getTable(entityType))
+        .filter((row) => matches(row, filter, {}, entityType))
+        .map((row) => row.id)
+        .sort();
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [CHANNEL]: {
+            attributes: {id: "uuid", name: "string"},
+            enumValues: {},
+            inverses: {
+              messages: {
+                forward: "channel",
+                reference: true,
+                sort: [["position", "asc"]],
+                toMany: true,
+                type: MESSAGE,
+              },
+            },
+            relationships: {},
+            serverOnly: [],
+          },
+          [MESSAGE]: {
+            attributes: {body: "string", id: "uuid", position: "integer"},
+            enumValues: {},
+            relationships: {
+              channel: {optional: true, toMany: false, type: CHANNEL},
+            },
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+      LocalDatabase.reset();
+    });
+
+    it("matches a loose prefix, ignoring case and accents", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "starts_with", "jose"]]),
+        ["JOSEPH", "José"],
+      );
+    });
+
+    it("matches an exact prefix byte for byte", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "starts_with_exact", "JO"]]),
+        ["JOSEPH"],
+      );
+    });
+
+    it("matches a loose substring, folding letters a sort key spells out", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains", "STRASSE"]]),
+        ["Straße"],
+      );
+    });
+
+    it("matches an exact substring byte for byte", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains_exact", "ß"]]),
+        ["Straße"],
+      );
+
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains_exact", "SS"]]),
+        [],
+      );
+    });
+
+    it("reads % and _ in the term as plain characters", () => {
+      assert.deepStrictEqual(titlesMatching([["title", "contains", "%"]]), [
+        "50% off",
+      ]);
+
+      assert.deepStrictEqual(
+        titlesMatching([["title", "starts_with", "jo_"]]),
+        ["jo_x"],
+      );
+    });
+
+    it("reads a backslash in the term as a plain character", () => {
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains", "\\"]], ["a\\b"]),
+        ["a\\b"],
+      );
+
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains_exact", "a\\b"]], ["a\\b"]),
+        ["a\\b"],
+      );
+    });
+
+    it("matches every row with a value for an empty term", () => {
+      assert.deepStrictEqual(titlesMatching([["title", "contains", ""]]), [
+        "50% off",
+        "JOSEPH",
+        "José",
+        "Straße",
+        "jo_x",
+      ]);
+    });
+
+    // A row filed without the field holds no value for it either.
+    it("passes over an unset string, for an empty term too", () => {
+      const rows = [
+        {id: "t7", title: null},
+        {id: "t8"},
+        {id: "t9", title: "ada"},
+      ];
+
+      const ids = rows
+        .filter((row) => matches(row, [["title", "contains", ""]]))
+        .map((row) => row.id);
+
+      assert.deepStrictEqual(ids, ["t9"]);
+    });
+
+    it("matches a substring past the sort key's 64 bytes", () => {
+      const longTitle = "x".repeat(70) + " Zürich";
+
+      assert.deepStrictEqual(
+        titlesMatching([["title", "contains", "zurich"]], [longTitle]),
+        [longTitle],
+      );
+    });
+
+    // The two values share their first 64 folded bytes, which is all the sort key holds.
+    it("matches a prefix longer than the sort key's 64 bytes by the whole value", () => {
+      const matching = "Ab".repeat(40);
+      const filter = [["title", "starts_with", "ab".repeat(34)]];
+
+      assert.deepStrictEqual(
+        titlesMatching(filter, [matching, "Ab".repeat(33) + "Zz"]),
+        [matching],
+      );
+    });
+
+    it("matches a term bound to a placeholder, escaped like a written one", () => {
+      const filter = [["title", "starts_with", {placeholder: "query"}]];
+
+      assert.deepStrictEqual(
+        titlesMatching(filter, [], {bindings: {query: "jose"}}),
+        ["JOSEPH", "José"],
+      );
+
+      assert.deepStrictEqual(
+        titlesMatching(filter, [], {bindings: {query: "jo_"}}),
+        ["jo_x"],
+      );
+    });
+
+    it("matches a search for another attribute's value", () => {
+      LocalDatabase.putRow(CHANNEL, {id: "c1", name: "general"});
+
+      LocalDatabase.putRow(MESSAGE, {
+        body: "A General update",
+        channel_id: "c1",
+        id: "m1",
+        position: 1,
+      });
+
+      LocalDatabase.putRow(MESSAGE, {
+        body: "random",
+        channel_id: "c1",
+        id: "m2",
+        position: 2,
+      });
+
+      const filter = [["body", "contains", {attribute: ["channel", "name"]}]];
+
+      assert.deepStrictEqual(matchingIds(MESSAGE, filter), ["m1"]);
+    });
+
+    it("matches a search inside a quantifier", () => {
+      LocalDatabase.putRow(CHANNEL, {id: "c1", name: "general"});
+      LocalDatabase.putRow(CHANNEL, {id: "c2", name: "random"});
+
+      LocalDatabase.putRow(MESSAGE, {
+        body: "weekly update",
+        channel_id: "c1",
+        id: "m1",
+        position: 1,
+      });
+
+      LocalDatabase.putRow(MESSAGE, {
+        body: "hello",
+        channel_id: "c2",
+        id: "m2",
+        position: 1,
+      });
+
+      const filter = [
+        {
+          filter: [["body", "contains", "UPDATE"]],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ];
+
+      assert.deepStrictEqual(matchingIds(CHANNEL, filter), ["c1"]);
     });
   });
 
@@ -1708,7 +2001,7 @@ describe("QueryKernel", () => {
     const message = (id, channelId, body, position) =>
       LocalDatabase.putRow(MESSAGE, {
         body,
-        body_sort: body,
+        body$sort: body,
         channel_id: channelId,
         id,
         position,
@@ -1807,17 +2100,17 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(CHANNEL, {
         id: "general",
         name: "general",
-        name_sort: "general",
+        name$sort: "general",
       });
       LocalDatabase.putRow(CHANNEL, {
         id: "random",
         name: "random",
-        name_sort: "random",
+        name$sort: "random",
       });
       LocalDatabase.putRow(CHANNEL, {
         id: "quiet",
         name: "quiet",
-        name_sort: "quiet",
+        name$sort: "quiet",
       });
 
       message("hi", "general", "hi", 1);
@@ -1827,12 +2120,12 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(LABEL, {
         id: "urgent",
         name: "urgent",
-        name_sort: "urgent",
+        name$sort: "urgent",
       });
       LocalDatabase.putRow(LABEL, {
         id: "later",
         name: "later",
-        name_sort: "later",
+        name$sort: "later",
       });
 
       LocalDatabase.replaceFacts(MESSAGE, "labels", "hi", ["urgent", "later"]);
@@ -1959,7 +2252,7 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(LABEL, {
         id: "general_label",
         name: "general",
-        name_sort: "general",
+        name$sort: "general",
       });
 
       LocalDatabase.replaceFacts(MESSAGE, "labels", "there", ["general_label"]);
@@ -1979,7 +2272,7 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(LABEL, {
         id: "bye_label",
         name: "bye",
-        name_sort: "bye",
+        name$sort: "bye",
       });
       LocalDatabase.replaceFacts(MESSAGE, "labels", "bye", [
         "later",
@@ -2007,7 +2300,7 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(LABEL, {
         id: "general_label",
         name: "general",
-        name_sort: "general",
+        name$sort: "general",
       });
 
       LocalDatabase.replaceFacts(MESSAGE, "labels", "hi", [
@@ -2169,7 +2462,7 @@ describe("QueryKernel", () => {
       LocalDatabase.putRow(CHANNEL, {
         id: "mango",
         name: "Mango",
-        name_sort: "mango",
+        name$sort: "mango",
       });
       message("apple", "mango", "apple", 1);
 
@@ -2290,7 +2583,7 @@ describe("QueryKernel", () => {
         id: "c1",
         kind: "group",
         name: "Mango",
-        name_sort: "mango",
+        name$sort: "mango",
         opened_on: "2026-01-01",
         org_id: "o1",
         rank: 5,
@@ -2302,14 +2595,14 @@ describe("QueryKernel", () => {
         id: "c2",
         kind: "dm",
         name: "apple",
-        name_sort: "apple",
+        name$sort: "apple",
         opened_on: null,
         org_id: null,
         rank: 1,
         weight: 0,
       });
 
-      LocalDatabase.putRow(ORG, {id: "o1", name: "acme", name_sort: "acme"});
+      LocalDatabase.putRow(ORG, {id: "o1", name: "acme", name$sort: "acme"});
     });
 
     afterEach(() => {

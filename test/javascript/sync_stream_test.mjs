@@ -731,7 +731,7 @@ describe("SyncStream", () => {
       assert.deepStrictEqual(LocalDatabase.getRow(TASK, "t1"), {
         id: "t1",
         title: "as it now stands",
-        title_sort: "as it now stands",
+        title$sort: "as it now stands",
       });
     });
 

@@ -165,7 +165,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end)
   end
 
-  describe "backfill_sort_keys!/2" do
+  describe "backfill_companions!/2" do
     setup do
       drop_hologram_schemas()
       reconcile(reconcile_context([Module2]))
@@ -173,14 +173,29 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       :ok
     end
 
-    test "fills the companion an add-column op names" do
+    test "fills the sort key an add-column op names" do
       insert_module2_rows(["Łódź"])
       {:ok, _result} = Connection.query(~s(UPDATE #{@module2_table} SET "c_$sort" = NULL))
 
       op = %{op: :add_column, table: "test_fixtures_entity_module2", column: "c_$sort"}
 
-      assert backfill_sort_keys!([op], reconcile_context([Module2]).mapping) == :ok
+      assert backfill_companions!([op], reconcile_context([Module2]).mapping) == :ok
       assert module2_sort_pairs() == [["Łódź", "lodz"]]
+    end
+
+    test "fills the search key an add-column op names" do
+      long_value = String.duplicate("Zurich ", 10)
+
+      insert_module2_rows([long_value])
+      {:ok, _result} = Connection.query(~s(UPDATE #{@module2_table} SET "c_$search" = NULL))
+
+      op = %{op: :add_column, table: "test_fixtures_entity_module2", column: "c_$search"}
+
+      assert backfill_companions!([op], reconcile_context([Module2]).mapping) == :ok
+
+      {:ok, %{rows: rows}} = Connection.query(~s(SELECT "c_$search" FROM #{@module2_table}))
+
+      assert rows == [[String.downcase(long_value)]]
     end
 
     test "passes over an op adding a column that is no companion" do
@@ -189,7 +204,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       op = %{op: :add_column, table: "test_fixtures_entity_module2", column: "c"}
 
-      assert backfill_sort_keys!([op], reconcile_context([Module2]).mapping) == :ok
+      assert backfill_companions!([op], reconcile_context([Module2]).mapping) == :ok
       assert module2_sort_pairs() == [["Łódź", nil]]
     end
   end

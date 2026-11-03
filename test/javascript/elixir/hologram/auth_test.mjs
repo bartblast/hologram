@@ -614,6 +614,103 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // JavaScript's < puts a character above U+FFFF before U+E000 to U+FFFF, the server after.
+    it("compares a character above U+FFFF after one from U+E000 to U+FFFF", () => {
+      const rules = [rule({predicates: [["title", ">", "\uFFFD"]]})];
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "😀"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({title: "\uFFFD"})),
+        Type.boolean(false),
+      );
+    });
+
+    // A rule and the filter mirroring it have to admit the same rows, so a search matches here
+    // the way a query matches it.
+    it("matches a loose search ignoring case and accents", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "starts_with", "jose"]]})],
+          document({title: "José"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "contains", "STRASSE"]]})],
+          document({title: "Straße"}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("matches an exact search byte for byte", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "starts_with_exact", "Jo"]]})],
+          document({title: "José"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "contains_exact", "jose"]]})],
+          document({title: "José"}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("matches a search for another attribute's value", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["summary", "contains", {attribute: "title"}]]})],
+          document({summary: "Hi, I'm ADA", title: "ada"}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("never matches a search for another attribute when either is missing", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["summary", "contains", {attribute: "title"}]]})],
+          document({summary: "Hi, I'm Ada", title: null}),
+        ),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [
+            rule({
+              predicates: [
+                ["summary", "starts_with_exact", {attribute: "title"}],
+              ],
+            }),
+          ],
+          document({summary: null, title: "ada"}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("passes over a missing value in a search", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["title", "contains", ""]]})],
+          document({title: null}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
     // The key folds case and diacritics, and `==` must not: what a bound reaches and what a
     // value equals are two different questions.
     it("keeps string equality exact", () => {
@@ -2284,6 +2381,26 @@ describe("unqualifiedRoleMessage()", () => {
       `the acting user holds :editor and :viewer on MyApp.Document "${DOC}", ` +
         "which may grant no role there, :owner included. " +
         "Declare `allow {:grant_role, :owner}, to: [:editor, :viewer]` on MyApp.Document if that is intended.",
+    );
+  });
+
+  // The server sorts the names by their characters, so a digit comes before an underscore - an
+  // order a locale-aware comparison doesn't keep.
+  it("lists held roles in the order the server lists them", () => {
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor_a"}),
+    );
+    LocalDatabase.putRow(
+      GRANT,
+      grantRow({entity_id: DOC, entity_type: DOCUMENT, role: "editor2"}),
+    );
+
+    assert.equal(
+      unqualifiedRoleMessage(DOCUMENT, DOC, ALICE, "owner", "grant_role"),
+      `the acting user holds :editor2 and :editor_a on MyApp.Document "${DOC}", ` +
+        "which may grant no role there, :owner included. " +
+        "Declare `allow {:grant_role, :owner}, to: [:editor2, :editor_a]` on MyApp.Document if that is intended.",
     );
   });
 
