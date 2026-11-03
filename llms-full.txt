@@ -4265,7 +4265,7 @@ Escaping makes a value safe where it stands as text. It can't help when a value 
 - **User input in code you pass to `JS.eval/1` or `JS.exec/1`**, as in `JS.exec("highlight('#{query}')")`. The string runs as code, with the page's nonce. Pass the value as an argument with `JS.call/3` instead. The `~JS` sigil doesn't interpolate, so its code is always yours.
 - **A user-supplied URL in `href` or `src`.** It can be a `javascript:` URL. Check the scheme before you render it.
 - **Attribute names or tag names taken from user input**, through an attribute spread or a dynamic tag. Build them from values you control.
-- **HTML marked with `trust_html/1`.** It goes on the page as markup, unescaped and unsanitized, with only its `<script>` elements removed. Sanitize anything a user wrote before you trust it.
+- **HTML marked with `trust_html/1`.** It goes on the page as markup, unescaped and unsanitized, with its `<script>` elements removed. Sanitize anything a user wrote before you trust it.
 
 #### CSRF Protection
 
