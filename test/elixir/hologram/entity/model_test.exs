@@ -19,6 +19,7 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
+  alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
@@ -1423,6 +1424,14 @@ defmodule Hologram.Entity.ModelTest do
                entities: %{Module1 => %{attributes: [], relationships: [], roles: []}},
                roles: %{},
                user_entity: nil
+             }
+    end
+
+    test "leaves derived fields out" do
+      assert from_modules([Module32]).entities[Module32] == %{
+               attributes: [{:name, :string, []}],
+               relationships: [],
+               roles: []
              }
     end
 

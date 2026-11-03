@@ -21,6 +21,8 @@ defmodule Hologram.EntityTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module30
+  alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
@@ -48,6 +50,32 @@ defmodule Hologram.EntityTest do
                {:b, :integer, [optional: true]},
                {:c, :string, []}
              ]
+    end
+  end
+
+  describe "__derived__/0" do
+    test "returns empty list for entity type with no derived field declarations" do
+      assert Module1.__derived__() == []
+    end
+
+    test "returns derived field definitions sorted by name" do
+      assert Module33.__derived__() == [
+               {:channel_name, :string, []},
+               {:later_count, :integer, []},
+               {:tier, :enum, [values: [:low, :high]]}
+             ]
+    end
+  end
+
+  describe "__derived_locations__/0" do
+    test "returns the file and line of each derived field declaration" do
+      file = fixture_file("module_33.ex")
+
+      assert Module33.__derived_locations__() == %{
+               channel_name: {file, line_of(file, "derived :channel_name")},
+               later_count: {file, line_of(file, "derived :later_count")},
+               tier: {file, line_of(file, "derived :tier")}
+             }
     end
   end
 
@@ -219,6 +247,30 @@ defmodule Hologram.EntityTest do
 
       assert %Module26{}.messages == %NotIncluded{relationship: :messages}
       assert %Module26{}.topic == %NotIncluded{relationship: :topic}
+    end
+
+    test "derives one field per derived field, holding the sentinel" do
+      field_names =
+        %Module32{}
+        |> Map.from_struct()
+        |> Map.keys()
+        |> Enum.sort()
+
+      assert field_names == [
+               :__meta__,
+               :created_at,
+               :first_message,
+               :first_messages,
+               :id,
+               :message_count,
+               :messages,
+               :name,
+               :recent_messages,
+               :updated_at
+             ]
+
+      assert %Module32{}.message_count == %NotIncluded{relationship: :message_count}
+      assert %Module32{}.recent_messages == %NotIncluded{relationship: :recent_messages}
     end
 
     test "includes declared attribute fields" do
@@ -534,7 +586,31 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "loadable_names/1" do
+    test "returns the relationship, inverse and derived field names, sorted" do
+      assert loadable_names(Module32) == [
+               :first_message,
+               :first_messages,
+               :message_count,
+               :messages,
+               :recent_messages
+             ]
+    end
+
+    test "returns the relationship names of an entity type with no derived fields" do
+      assert loadable_names(Module28) == [:channel, :labels]
+    end
+  end
+
   describe "merge_copies/2" do
+    test "takes a derived field the kept copy did not include from the other copy" do
+      channel = Module32.new(name: "general")
+
+      merged = merge_copies(channel, %{channel | message_count: 3})
+
+      assert merged.message_count == 3
+    end
+
     test "takes a relationship the kept copy did not include from the other copy" do
       message = Module28.new(body: "hi", position: 1)
       label = Module29.new(name: "urgent")
@@ -646,6 +722,10 @@ defmodule Hologram.EntityTest do
 
       assert entity.created_at == nil
       assert entity.updated_at == nil
+    end
+
+    test "leaves a derived field at the sentinel" do
+      assert new(Module33, body: "hi").later_count == %NotIncluded{relationship: :later_count}
     end
 
     test "applies declared defaults to absent attributes" do
@@ -1081,6 +1161,37 @@ defmodule Hologram.EntityTest do
                  "Hologram.Test.Fixtures.Entity.Module27.t() | Hologram.Entity.NotIncluded.t() | nil",
                updated_at: "DateTime.t() | nil"
              }
+    end
+
+    test "types a derived field as its declared type or the sentinel" do
+      assert struct_field_types(Module33) == %{
+               __meta__: "Hologram.Entity.Metadata.t()",
+               body: "String.t() | nil",
+               channel:
+                 "Hologram.Test.Fixtures.Entity.Module32.t() | Hologram.Entity.NotIncluded.t() | nil",
+               channel_id: "Hologram.Entity.id() | nil",
+               channel_name: "String.t() | Hologram.Entity.NotIncluded.t() | nil",
+               created_at: "DateTime.t() | nil",
+               id: "Hologram.Entity.id() | nil",
+               later_count: "integer() | Hologram.Entity.NotIncluded.t() | nil",
+               position: "integer() | nil",
+               tier: ":low | :high | Hologram.Entity.NotIncluded.t() | nil",
+               updated_at: "DateTime.t() | nil"
+             }
+    end
+
+    test "types a derived set as a list of rows or the sentinel" do
+      types = struct_field_types(Module32)
+
+      assert types.recent_messages ==
+               "[Hologram.Test.Fixtures.Entity.Module33.t()] | Hologram.Entity.NotIncluded.t()"
+    end
+
+    test "types a derived row as one row, the sentinel or nil" do
+      types = struct_field_types(Module32)
+
+      assert types.first_message ==
+               "Hologram.Test.Fixtures.Entity.Module33.t() | Hologram.Entity.NotIncluded.t() | nil"
     end
 
     test "types a server-only attribute as admitting its sentinel" do

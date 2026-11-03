@@ -96,6 +96,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     @spec __attributes__() :: list({atom, atom, keyword})
     def __attributes__, do: [{:owner_id, :string, []}]
 
+    @spec __derived__() :: list({atom, atom | module | list(module), keyword})
+    def __derived__, do: []
+
+    @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __derived_locations__, do: %{}
+
     @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
     def __inverse_relationships__, do: []
 

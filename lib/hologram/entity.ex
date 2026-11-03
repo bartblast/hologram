@@ -2,6 +2,8 @@ defmodule Hologram.Entity do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
+  alias Hologram.Entity.DerivedExpression
   alias Hologram.Entity.Expression
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
@@ -9,6 +11,8 @@ defmodule Hologram.Entity do
   alias Hologram.Job
   alias Hologram.Policy.Expression, as: PolicyExpression
   alias Hologram.Reflection
+
+  @attribute_types [:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid]
 
   @system_attributes [
     {:created_at, :datetime, []},
@@ -43,6 +47,8 @@ defmodule Hologram.Entity do
             allow: 2,
             attribute: 2,
             attribute: 3,
+            derived: 3,
+            derived: 4,
             relationship: 2,
             relationship: 3,
             role: 1,
@@ -75,6 +81,7 @@ defmodule Hologram.Entity do
         defoverridable new: 0, new: 1
       end,
       register_attributes_accumulator(),
+      register_derived_accumulators(),
       register_policies_accumulator(),
       register_policy_sources_accumulator(),
       register_role_declarations_accumulator(),
@@ -158,7 +165,8 @@ defmodule Hologram.Entity do
         @spec __system_attributes__() :: list({atom, atom, keyword})
         def __system_attributes__, do: unquote(system_attributes)
       end,
-      relationship_reflection()
+      relationship_reflection(),
+      derived_reflection(env.module)
     ]
   end
 
@@ -231,6 +239,41 @@ defmodule Hologram.Entity do
       Validator.validate_attribute!(__MODULE__, name, type, opts)
       Module.put_attribute(__MODULE__, :__attributes__, {name, type, opts})
     end
+  end
+
+  @doc """
+  Declares a derived field: data computed for each row from the row's other fields, read-only, and
+  loaded when a query includes it. See derived/4.
+  """
+  @spec derived(atom, atom | module | list(module), Macro.t()) :: Macro.t()
+  defmacro derived(name, type, definition) do
+    derived_declaration(name, type, [], definition, __CALLER__)
+  end
+
+  @doc """
+  Declares a derived field with the given options: data computed for each row from the row's other
+  fields, read-only, and loaded when a query includes it.
+
+  The type is an attribute type, an entity type for one row, or a list of one for a set. The
+  definition is a function whose arguments name fields of the entity type - attributes, reference
+  fields, relationships and other derived fields - and whose body reads only them:
+
+      derived :message_count, :integer, fn messages -> count(messages) end
+
+      derived :unread_count, :integer, fn channel, last_read_at ->
+        channel.messages
+        |> filter(created_at > ^last_read_at)
+        |> count()
+      end
+
+  The options go between the type and the function, bracketed, since the function comes last:
+  `values:` names an enum's values, in the order sorts and comparisons read them.
+
+      derived :tier, :enum, [values: [:noisy, :quiet]], fn unread_count -> ... end
+  """
+  @spec derived(atom, atom | module | list(module), T.opts(), Macro.t()) :: Macro.t()
+  defmacro derived(name, type, opts, definition) do
+    derived_declaration(name, type, opts, definition, __CALLER__)
   end
 
   @doc """
@@ -333,6 +376,27 @@ defmodule Hologram.Entity do
     fields = Map.put_new(values_map, :id, generate_id())
 
     struct!(entity_type, fields)
+  end
+
+  # The body is kept as the definition function will run it, so the function is built once every
+  # field is declared - fields read in a body may be declared below it.
+  @doc false
+  @spec __put_derived__(
+          module,
+          atom,
+          any,
+          T.opts(),
+          list(atom),
+          Macro.t(),
+          {String.t(), pos_integer}
+        ) ::
+          :ok
+  def __put_derived__(module, name, type, opts, args, body, location) do
+    Module.put_attribute(module, :__derived__, {name, type, opts})
+    Module.put_attribute(module, :__derived_bodies__, {name, args, body})
+    Module.put_attribute(module, :__derived_locations__, {name, location})
+
+    :ok
   end
 
   @doc false
@@ -470,6 +534,19 @@ defmodule Hologram.Entity do
     |> Enum.map(fn {name, _inverse} -> name end)
   end
 
+  # The fields of the entity type a query loads only when it includes them: its relationships, its
+  # inverses and its derived fields.
+  @doc false
+  @spec loadable_names(module) :: list(atom)
+  def loadable_names(entity_type) do
+    derived_names = Enum.map(entity_type.__derived__(), fn {name, _type, _opts} -> name end)
+
+    entity_type
+    |> includable_names()
+    |> Enum.concat(derived_names)
+    |> Enum.sort()
+  end
+
   # One row read twice - at the root and as another row's embed, or by two queries of one render -
   # arrives as two copies whose includes differ. The kept copy keeps its values and takes every
   # relationship it did not include from the other one, so whichever copy is met first, the row
@@ -478,7 +555,7 @@ defmodule Hologram.Entity do
   @spec merge_copies(struct, struct) :: struct
   def merge_copies(%entity_type{} = kept, copy) do
     entity_type
-    |> includable_names()
+    |> loadable_names()
     |> Enum.reduce(kept, fn name, merged ->
       case {Map.fetch!(merged, name), Map.fetch!(copy, name)} do
         {%NotIncluded{}, included} -> Map.put(merged, name, included)
@@ -492,6 +569,16 @@ defmodule Hologram.Entity do
   def register_attributes_accumulator do
     quote do
       Module.register_attribute(__MODULE__, :__attributes__, accumulate: true)
+    end
+  end
+
+  @doc false
+  @spec register_derived_accumulators() :: AST.t()
+  def register_derived_accumulators do
+    quote do
+      Module.register_attribute(__MODULE__, :__derived__, accumulate: true)
+      Module.register_attribute(__MODULE__, :__derived_bodies__, accumulate: true)
+      Module.register_attribute(__MODULE__, :__derived_locations__, accumulate: true)
     end
   end
 
@@ -725,8 +812,15 @@ defmodule Hologram.Entity do
       |> Module.get_attribute(:__inverse_relationships__)
       |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{relationship: name}} end)
 
+    # A derived field holds nothing until a query includes it.
+    derived_fields =
+      module
+      |> Module.get_attribute(:__derived__)
+      |> Enum.map(fn {name, _type, _opts} -> {name, %NotIncluded{relationship: name}} end)
+
     Enum.sort(
-      system_attribute_fields ++ attribute_fields ++ relationship_fields ++ inverse_fields
+      system_attribute_fields ++
+        attribute_fields ++ relationship_fields ++ inverse_fields ++ derived_fields
     )
   end
 
@@ -787,6 +881,87 @@ defmodule Hologram.Entity do
   defp attribute_type_asts(:time, _opts), do: [remote_type_ast(Time)]
   defp attribute_type_asts(:uuid, _opts), do: [remote_type_ast(Entity, :id)]
 
+  # An entity type with no derived field defines no definition function, which nothing asks of it.
+  defp definition_function_clauses([]), do: []
+
+  defp definition_function_clauses(clauses) do
+    [
+      quote do
+        @doc false
+        @spec __derived_definition__(atom) :: Derived.definition()
+      end
+      | clauses
+    ]
+  end
+
+  defp derived_declaration(name, type, opts, definition, env) do
+    {args, body} = DerivedExpression.function(definition, env)
+    location = {env.file, env.line}
+
+    quote do
+      Entity.__put_derived__(
+        __MODULE__,
+        unquote(name),
+        unquote(type),
+        unquote(opts),
+        unquote(args),
+        unquote(Macro.escape(body, unquote: true)),
+        unquote(location)
+      )
+    end
+  end
+
+  # A derived field holds the sentinel until a query includes it, and once included what it
+  # computes: a value of its type or nil, one row or nil, or a list of rows.
+  defp derived_field_type_ast({name, [target], _opts}) do
+    {name,
+     type_union([{:list, [], [remote_type_ast(target)]}, remote_type_ast(Entity.NotIncluded)])}
+  end
+
+  defp derived_field_type_ast({name, type, opts}) when type in @attribute_types do
+    union_types =
+      Enum.concat([attribute_type_asts(type, opts), [remote_type_ast(Entity.NotIncluded), nil]])
+
+    {name, type_union(union_types)}
+  end
+
+  defp derived_field_type_ast({name, target, _opts}) do
+    {name, type_union([remote_type_ast(target), remote_type_ast(Entity.NotIncluded), nil])}
+  end
+
+  # The function each derived field's definition is built by, one clause per field, emitted once
+  # every field is declared. The query stages are imported into each clause rather than into the
+  # module, so they name the stages in a definition and nothing anywhere else - and with warn: false,
+  # since a definition reading no set calls none of them.
+  defp derived_reflection(module) do
+    clauses =
+      module
+      |> Module.get_attribute(:__derived_bodies__)
+      |> Enum.map(fn {name, _args, body} ->
+        quote do
+          def __derived_definition__(unquote(name)) do
+            import Hologram.Query, only: unquote(DerivedExpression.stages()), warn: false
+
+            Derived.lower(unquote(body))
+          end
+        end
+      end)
+
+    quote do
+      @doc """
+      Returns the list of derived field definitions for the compiled entity type, sorted by field name - fields computed for each row from its other fields.
+      """
+      @spec __derived__() :: list({atom, atom | module | list(module), keyword})
+      def __derived__, do: Enum.sort(@__derived__)
+
+      @doc false
+      @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
+      def __derived_locations__, do: Map.new(@__derived_locations__)
+
+      unquote_splicing(definition_function_clauses(clauses))
+    end
+  end
+
   # Reverse-expansion fixpoint - each pass admits the roles extending anything already admitted,
   # so a role reaching the given one through any number of hops ends up in the result.
   defp expand_role_names(names, extends_by_name) do
@@ -822,6 +997,11 @@ defmodule Hologram.Entity do
       |> Module.get_attribute(:__inverse_relationships__)
       |> Enum.map(&inverse_field_type_ast/1)
 
+    derived_field_types =
+      module
+      |> Module.get_attribute(:__derived__)
+      |> Enum.map(&derived_field_type_ast/1)
+
     system_attribute_field_types =
       Enum.map(@system_attributes, fn {name, type, opts} ->
         {name, attribute_field_type_ast(type, opts)}
@@ -833,6 +1013,7 @@ defmodule Hologram.Entity do
           attribute_field_types,
           relationship_field_types,
           inverse_field_types,
+          derived_field_types,
           system_attribute_field_types
         ])
     ]

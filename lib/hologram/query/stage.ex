@@ -821,11 +821,13 @@ defmodule Hologram.Query.Stage do
   end
 
   defp normalized_term(term) do
+    ordered_term = with_source_order(term)
+
     %{
-      term
-      | filter: normalized_filter(term.filter),
-        include: normalized_includes(term),
-        sort: normalized_order(term)
+      ordered_term
+      | filter: normalized_filter(ordered_term.filter),
+        include: normalized_includes(ordered_term),
+        sort: normalized_order(ordered_term)
     }
   end
 
@@ -2101,6 +2103,16 @@ defmodule Hologram.Query.Stage do
   end
 
   defp with_declared_order(sub_term, _entity_type, _name), do: sub_term
+
+  # A derived field's query reads its set in the order the set's declaration names when it states
+  # none, as an include of the set is read.
+  defp with_source_order(%Query{source: {owner, chain}} = term) do
+    {hops, [set_name]} = Enum.split(chain, -1)
+
+    with_declared_order(term, Entity.path_target(owner, hops), set_name)
+  end
+
+  defp with_source_order(term), do: term
 
   defp written_operand_name(name) when is_atom(name), do: [name]
 

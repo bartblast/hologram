@@ -2538,15 +2538,34 @@ defmodule Hologram.Query.StageTest do
   describe "normalize/1" do
     test "keeps a sourced term's source and orders it by id" do
       query =
-        Module26
-        |> sourced([:messages])
+        Module28
+        |> sourced([:labels])
         |> normalize()
 
       assert query == %Query{
-               entity: Module28,
+               entity: Module29,
                sort: [{:id, :asc}],
-               source: {Module26, [:messages]}
+               source: {Module28, [:labels]}
              }
+    end
+
+    test "orders a sourced term stating no order by its set's declared order, then by id" do
+      query =
+        Module28
+        |> sourced([:channel, :messages])
+        |> normalize()
+
+      assert query.sort == [{:position, :asc}, {:id, :asc}]
+    end
+
+    test "orders a sourced term by its own order over its set's declared one" do
+      query =
+        Module26
+        |> sourced([:messages])
+        |> sort(:body)
+        |> normalize()
+
+      assert query.sort == [{:body, :asc}, {:id, :asc}]
     end
 
     test "orders an included inverse set by its declared order, then by id" do

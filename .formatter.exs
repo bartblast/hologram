@@ -8,6 +8,8 @@ exported_locals_without_parens = [
   allow: 2,
   attribute: 2,
   attribute: 3,
+  derived: 3,
+  derived: 4,
   relationship: 2,
   relationship: 3,
   role: 1,

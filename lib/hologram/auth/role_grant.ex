@@ -120,6 +120,17 @@ defmodule Hologram.Auth.RoleGrant do
   end
 
   @doc """
+  Returns the list of derived field definitions for the role grant entity type.
+  Empty - a grant row computes nothing from other rows.
+  """
+  @spec __derived__() :: list({atom, atom | module | list(module), keyword})
+  def __derived__, do: []
+
+  @doc false
+  @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
+  def __derived_locations__, do: %{}
+
+  @doc """
   Returns the list of inverse relationship definitions for the role grant entity type.
   Empty - a grant row reverses no relationship.
   """
