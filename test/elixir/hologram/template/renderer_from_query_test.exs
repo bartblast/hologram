@@ -103,6 +103,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
       Controller.build_boot_data(%{
         chunk_digests: result.chunk_digests,
         csrf_token: @page_opts[:csrf_token],
+        identity_tag: "test-identity-tag",
         instance_id: @page_opts[:instance_id],
         mount_data: result.mount_data,
         page_digest: PageDigestRegistry.lookup(page_module),
