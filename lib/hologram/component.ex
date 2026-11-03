@@ -104,7 +104,7 @@ defmodule Hologram.Component do
         import Hologram.Component, only: unquote([prop: 2, prop: 3] ++ __helper_imports__())
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
-        import Hologram.Template, only: [sigil_HOLO: 2]
+        import Hologram.Template, only: [sigil_HOLO: 2, trust_html: 1]
 
         alias Hologram.Component
         alias Hologram.Component.Action

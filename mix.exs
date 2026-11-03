@@ -148,7 +148,9 @@ defmodule Hologram.MixProject do
             Hologram.Component.Action,
             Hologram.Component.Command,
             Hologram.Page,
-            Hologram.Server
+            Hologram.Server,
+            Hologram.Template,
+            Hologram.Template.TrustedHTML
           ],
           Plug: [Hologram.Router, Hologram.Router.Helpers],
           UI: [Hologram.UI.Link, Hologram.UI.Runtime],

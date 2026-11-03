@@ -45,7 +45,7 @@ defmodule Hologram.Page do
         import Hologram.Page, only: [layout: 1, layout: 2, param: 2, param: 3, route: 1]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
-        import Hologram.Template, only: [sigil_HOLO: 2]
+        import Hologram.Template, only: [sigil_HOLO: 2, trust_html: 1]
 
         alias Hologram.Component
         alias Hologram.Component.Action
