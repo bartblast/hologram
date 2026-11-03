@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.IR
+  alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Reflection
@@ -54,6 +55,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module50
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module51
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module52
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
@@ -71,6 +73,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module26, as: Entity26
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
+  alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
+  alias Hologram.Test.Fixtures.Entity.Module36, as: Entity36
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module5, as: Entity5
 
@@ -82,6 +86,198 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   # and the IR PLT the extractions read, which fills as they ask for modules.
   setup_all do
     [entity_types: Reflection.list_entities(), ir_plt: PLT.start()]
+  end
+
+  describe "derived_definition/3" do
+    test "follows a query builder called as the whole body", %{ir_plt: ir_plt} do
+      assert derived_definition(Entity36, :unread_count, ir_plt) ==
+               {:query,
+                %Query{
+                  cardinality: :count,
+                  entity: Entity33,
+                  filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
+                  source: {Entity36, [:channel, :messages]}
+                }}
+    end
+
+    test "follows a query builder piped into a stage", %{ir_plt: ir_plt} do
+      assert derived_definition(Entity36, :recent_unread, ir_plt) ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:channel, :messages]},
+                  take: 5
+                }}
+    end
+
+    test "follows the query builders a query builder calls", %{ir_plt: ir_plt} do
+      assert derived_definition(Entity36, :unread_through_helper, ir_plt) ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:channel, :messages]}
+                }}
+    end
+
+    test "reads a chain of related rows two hops deep inside a query builder", %{ir_plt: ir_plt} do
+      assert derived_definition(Entity36, :member_messages, ir_plt) ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:member, :channel, :messages]}
+                }}
+    end
+
+    test "takes branches building one definition as that definition", %{ir_plt: ir_plt} do
+      assert derived_definition(Module54, :either_way, ir_plt) ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:channel, :messages]}
+                }}
+    end
+
+    test "raises on a branch on a field of the row", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:10: derived field :branched in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 branches on a field of the row - a derived field's definition is one query, built before any row is read
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.by_flag/2
+            #{@app} lib/my_app/member.ex:7: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :branched, ir_plt)
+      end
+    end
+
+    test "raises on a query builder clause chosen by a field of the row", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:15: derived field :dispatched in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 branches on a field of the row - a derived field's definition is one query, built before any row is read
+
+            #{@app} lib/my_app/member.ex:15: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :dispatched, ir_plt)
+      end
+    end
+
+    test "raises on a field of the row passed to Elixir", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:17: derived field :capitalized in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 passes a field of the row to String.capitalize/1 - a field of the row reaches query stages and query builders only
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:17: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.capitalized/1
+            #{@app} lib/my_app/member.ex:9: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :capitalized, ir_plt)
+      end
+    end
+
+    test "raises on a query builder returning a value", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:13: derived field :counted in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.message_total/1, which returns 3 - a builder builds a query, and a value computed from fields is written in the derived field's own body
+
+            #{@app} lib/my_app/member.ex:13: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :counted, ir_plt)
+      end
+    end
+
+    test "raises on a query builder given no field returning a value", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:11: derived field :constant in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.constant/0, which returns 5 - a builder builds a query, and a value computed from fields is written in the derived field's own body
+
+            #{@app} lib/my_app/member.ex:11: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :constant, ir_plt)
+      end
+    end
+
+    test "raises on a dot on a field of the row holding a value", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:25: derived field :dotted in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 reads length off the :nickname field of the row, which holds a value - a path goes through relationships
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:25: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.length_of/1
+            #{@app} lib/my_app/member.ex:17: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :dotted, ir_plt)
+      end
+    end
+
+    test "raises on a path a related row does not declare", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:33: derived field :missing in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 builds an invalid definition - member.nothing names :nothing, which is not a field of Hologram.Test.Fixtures.Entity.Module34
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:33: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.missing/1
+            #{@app} lib/my_app/member.ex:25: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :missing, ir_plt)
+      end
+    end
+
+    test "raises on a path through a set to one row", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:39: derived field :senders in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 builds an invalid definition - channel.messages.channel reads through a set to one value per row of it - a derived field reads a set's rows with a query, or one value of the row through to-one relationships
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:39: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.senders/1
+            #{@app} lib/my_app/member.ex:27: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :senders, ir_plt)
+      end
+    end
+
+    test "raises on a recursive query builder", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:27: derived field :looping in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 recursively calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.looping/1 - recursive helpers are not extractable
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:27: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.looping/1
+            #{@app} lib/my_app/member.ex:23: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :looping, ir_plt)
+      end
+    end
+
+    test "raises on query builders building one definition per branch", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:21: derived field :forked in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 builds 2 definitions, one per branch its query builders take - a derived field's definition is one query, built before any row is read
+
+            #{@app} lib/my_app/member.ex:21: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :forked, ir_plt)
+      end
+    end
   end
 
   describe "extract_module_queries/3" do

@@ -175,6 +175,20 @@ defmodule Hologram.Entity.Derived do
   end
 
   @doc """
+  Returns the canonical form of the given definition: every query in it normalized, read in its
+  set's declared order when it states none.
+  """
+  @spec normalize(definition) :: definition
+  def normalize({:query, term}), do: {:query, Stage.normalize(term)}
+
+  def normalize({:concat, operands}), do: {:concat, Enum.map(operands, &normalize/1)}
+
+  def normalize({:if, clauses, then_value, else_value}),
+    do: {:if, clauses, normalize(then_value), normalize(else_value)}
+
+  def normalize(definition), do: definition
+
+  @doc """
   Puts the given definitions, keyed by entity type and field name, where definition/2 reads them.
   """
   @spec put_definitions(%{{module, atom} => definition}) :: :ok
@@ -205,7 +219,7 @@ defmodule Hologram.Entity.Derived do
   def resolve(entity_type, name) do
     definition = entity_type.__derived_definition__(name)
 
-    normalized(definition)
+    normalize(definition)
   rescue
     error in ArgumentError ->
       {file, line} = Map.fetch!(entity_type.__derived_locations__(), name)
@@ -257,15 +271,6 @@ defmodule Hologram.Entity.Derived do
   defp name_of([name]), do: name
 
   defp name_of(path), do: path
-
-  defp normalized({:query, term}), do: {:query, Stage.normalize(term)}
-
-  defp normalized({:concat, operands}), do: {:concat, Enum.map(operands, &normalized/1)}
-
-  defp normalized({:if, clauses, then_value, else_value}),
-    do: {:if, clauses, normalized(then_value), normalized(else_value)}
-
-  defp normalized(definition), do: definition
 
   # The type a path's relationships lead to, and whether a set lies along them.
   defp path_end(owner, hops, path) do

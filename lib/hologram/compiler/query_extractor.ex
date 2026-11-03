@@ -5,8 +5,11 @@ defmodule Hologram.Compiler.QueryExtractor do
   alias Hologram.Compiler
   alias Hologram.Compiler.IR
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
+  alias Hologram.Entity.Derived.RowRef
   alias Hologram.Query
   alias Hologram.Query.Placeholder
+  alias Hologram.Query.RowField
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
@@ -38,6 +41,57 @@ defmodule Hologram.Compiler.QueryExtractor do
     defstruct [:base, stages: []]
 
     @type t :: %__MODULE__{base: struct | module | map, stages: list({atom, list, integer | nil})}
+  end
+
+  @doc """
+  Resolves the definition of the given derived field of the given entity type by walking the
+  field's clause of the type's `__derived_definition__/1` over its IR - the way a body calling a
+  query builder of another module is resolved, since the builder is written for the values it will
+  be given, and a field of the row has none while the definition is built.
+
+  What the walk reads stands in for the row's fields as `Hologram.Entity.Derived.field/2` builds
+  them - a query over a set, a row field, a related row - and goes where a query goes: query stages
+  and `Hologram.Entity.Derived` run natively over them, a call into another module of the project is
+  followed into its IR with them, and a dot on a related row reads the longer path. The result is
+  normalized as `Hologram.Entity.Derived.resolve/2` normalizes it.
+
+  Raises Hologram.CompileError, located where the walk stood, when a branch reads a field of the
+  row, when a field of the row reaches anything but a query stage, `Hologram.Entity.Derived` or a
+  query builder, when a builder the body calls returns no query term, when the builders branch so
+  that the body builds no one definition, and on what an extraction refuses.
+  """
+  @spec derived_definition(module, atom, PLT.t()) :: Derived.definition()
+  def derived_definition(entity_type, name, ir_plt) do
+    {file, line} = Map.fetch!(entity_type.__derived_locations__(), name)
+
+    context = %{
+      current_module: entity_type,
+      derived: %{at_field?: true, file: file},
+      entity_types: [],
+      ir_plt: ir_plt,
+      line: line,
+      stack: [{entity_type, :__derived_definition__, 1, [file: file, line: line]}],
+      subject: "derived field #{inspect(name)} in #{inspect(entity_type)}"
+    }
+
+    clause = derived_clause!(entity_type, name, ir_plt)
+
+    definitions =
+      clause.body
+      |> evaluate_variants!(%{}, context, [])
+      |> Enum.map(&Derived.normalize/1)
+      |> Enum.uniq()
+
+    case definitions do
+      [definition] ->
+        definition
+
+      variants ->
+        compile_error!(
+          "#{context.subject} builds #{length(variants)} definitions, one per branch its query builders take - a derived field's definition is one query, built before any row is read",
+          context
+        )
+    end
   end
 
   @doc """
@@ -204,7 +258,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp anonymous_closure!(arity, _clause, _closure_env, context) do
     compile_error!(
-      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses an anonymous function of arity #{arity} - only arities 1-3 are extractable yet",
+      "#{context.subject} uses an anonymous function of arity #{arity} - only arities 1-3 are extractable yet",
       context
     )
   end
@@ -262,11 +316,53 @@ defmodule Hologram.Compiler.QueryExtractor do
       reraise Hologram.CompileError,
               [
                 message: stage_error_message(function, arg_values, error, context),
-                file: source_file(context.current_module),
+                file: context_file(context),
                 line: context.line,
                 stack: context.stack
               ],
               __STACKTRACE__
+  end
+
+  # A Derived call builds a stand-in or a definition from others, so it runs natively - what it
+  # refuses is the definition's to answer for, at the line the walk stood on.
+  defp apply_derived!(function, arg_values, context) do
+    apply(Derived, function, arg_values)
+  rescue
+    error in ArgumentError ->
+      reraise Hologram.CompileError,
+              [
+                message:
+                  "#{context.subject} builds an invalid definition - #{Exception.message(error)}",
+                file: context_file(context),
+                line: context.line,
+                stack: context.stack
+              ],
+              __STACKTRACE__
+  end
+
+  # A call the field's own clause makes into another module is a query builder: followed into its
+  # IR, whatever it is given, since it builds the query the definition is - so it returns a query
+  # term.
+  defp builder_call!(module, function, arg_values, state, context) do
+    spelled = "#{inspect(module)}.#{function}/#{length(arg_values)}"
+
+    if not interpretable_module?(module) do
+      compile_error!(
+        "#{context.subject} calls #{spelled}, which the build cannot follow - a query builder is a module of the project",
+        context
+      )
+    end
+
+    {value, state_after_call} = interpret_call!(module, function, arg_values, state, context)
+
+    if not is_struct(value, Query) do
+      compile_error!(
+        "#{context.subject} calls #{spelled}, which returns #{inspect(value)} - a builder builds a query, and a value computed from fields is written in the derived field's own body",
+        context
+      )
+    end
+
+    {value, state_after_call}
   end
 
   defp call_binding!(%IR.Variable{name: name}, value, _context), do: {name, value}
@@ -283,7 +379,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp call_binding!(_param_ir, _value, context) do
     compile_error!(
-      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} calls a function whose head destructures a parameter - only plain names, literals, and _ are extractable yet",
+      "#{context.subject} calls a function whose head destructures a parameter - only plain names, literals, and _ are extractable yet",
       context
     )
   end
@@ -315,7 +411,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp case_clause_env!(_pattern_ir, _condition_value, _env, context) do
     compile_error!(
-      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses a composite case pattern - only variables, literals, and _ are extractable yet",
+      "#{context.subject} uses a composite case pattern - only variables, literals, and _ are extractable yet",
       context
     )
   end
@@ -327,7 +423,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp compile_error!(message, context) do
     raise Hologram.CompileError,
       message: message,
-      file: source_file(context.current_module),
+      file: context_file(context),
       line: context.line,
       stack: context.stack
   end
@@ -338,6 +434,12 @@ defmodule Hologram.Compiler.QueryExtractor do
       file: source_file(module),
       line: line
   end
+
+  # The file a refusal is located in: the module being walked - or, in a derived field's own clause,
+  # the file the field is declared in, which the clause is generated into.
+  defp context_file(%{derived: %{at_field?: true, file: file}}), do: file
+
+  defp context_file(context), do: source_file(context.current_module)
 
   # A read the build performs for real, so a bad one is a bad builder - reported like every other
   # build refusal here, naming the prop the ArgumentError-free raisers of Map cannot know about.
@@ -354,7 +456,7 @@ defmodule Hologram.Compiler.QueryExtractor do
           |> Enum.map_join(", ", &inspect/1)
 
         compile_error!(
-          "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} reads field #{inspect(field)} off a value that has no such field - known fields: #{known}",
+          "#{context.subject} reads field #{inspect(field)} off a value that has no such field - known fields: #{known}",
           context
         )
     end
@@ -362,7 +464,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp concrete_field!(value, field, context) do
     compile_error!(
-      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} reads field #{inspect(field)} off #{inspect(value)}, which is not a map",
+      "#{context.subject} reads field #{inspect(field)} off #{inspect(value)}, which is not a map",
       context
     )
   end
@@ -404,6 +506,21 @@ defmodule Hologram.Compiler.QueryExtractor do
     |> Enum.map(fn {name, _type, _opts} -> name end)
   end
 
+  # The clause of the entity type's __derived_definition__/1 the field's definition is built by.
+  defp derived_clause!(entity_type, name, ir_plt) do
+    {_fun_key, {_visibility, clauses}} =
+      entity_type
+      |> module_funs(ir_plt)
+      |> List.keyfind({:__derived_definition__, 1}, 0)
+
+    Enum.find(clauses, &match?(%IR.FunctionClause{params: [%IR.AtomType{value: ^name}]}, &1))
+  end
+
+  # Whether the walk stands in the derived field's own clause, where a builder is called from.
+  defp derived_level?(%{derived: %{at_field?: true}}), do: true
+
+  defp derived_level?(_context), do: false
+
   defp query_prop_names(module) do
     module.__props__()
     |> Enum.filter(fn {_name, _type, opts} -> opts[:from_query] end)
@@ -416,7 +533,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp evaluate!(%IR.AnonymousFunctionType{}, _state, context) do
     compile_error!(
-      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses a multi-clause anonymous function - not extractable yet",
+      "#{context.subject} uses a multi-clause anonymous function - not extractable yet",
       context
     )
   end
@@ -435,6 +552,8 @@ defmodule Hologram.Compiler.QueryExtractor do
     context = with_line(context, line)
 
     {condition_value, state_after_condition} = evaluate!(condition, state, context)
+
+    validate_unbranched!(condition_value, context)
 
     {choice, state_after_choice} =
       take_choice!(state_after_condition, length(clauses), context)
@@ -475,6 +594,21 @@ defmodule Hologram.Compiler.QueryExtractor do
       # too - named for the argument it derives from, like every other value the build cannot see.
       %SymbolicQuery{} = query ->
         {%Placeholder{name: first_placeholder_name(query)}, state_after_field}
+
+      # A related row is read further through its relationships, as a derived field's body reads a
+      # chain on an argument.
+      %RowRef{owner: owner, path: path} ->
+        {apply_derived!(:field, [owner, List.insert_at(path, -1, field)], context),
+         state_after_field}
+
+      %Query{source: {owner, chain}} = term ->
+        {sourced_field!(term, owner, chain, field, context), state_after_field}
+
+      %RowField{name: name} ->
+        compile_error!(
+          "#{context.subject} reads #{field} off the #{Stage.inspect_name(name)} field of the row, which holds a value - a path goes through relationships",
+          context
+        )
 
       value ->
         {concrete_field!(value, field, context), state_after_field}
@@ -527,7 +661,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp evaluate!(%IR.MatchOperator{}, _state, context) do
     compile_error!(
-      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} pattern-matches in its body - only plain variable binds are extractable yet",
+      "#{context.subject} pattern-matches in its body - only plain variable binds are extractable yet",
       context
     )
   end
@@ -545,6 +679,15 @@ defmodule Hologram.Compiler.QueryExtractor do
     cond do
       target_module in [Query, Stage] ->
         apply_query_stage!(function, arg_values, state_after_args, context)
+
+      context.derived != nil and target_module == Derived ->
+        {apply_derived!(function, arg_values, context), state_after_args}
+
+      derived_level?(context) ->
+        builder_call!(target_module, function, arg_values, state_after_args, context)
+
+      stand_in?(arg_values) ->
+        stand_in_call!(target_module, function, arg_values, state_after_args, context)
 
       not contains_placeholder?(arg_values) ->
         {apply(target_module, function, arg_values), state_after_args}
@@ -571,7 +714,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp evaluate!(ir, _state, context) do
     compile_error!(
-      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} uses #{inspect(ir.__struct__)} - the construct is not extractable yet",
+      "#{context.subject} uses #{inspect(ir.__struct__)} - the construct is not extractable yet",
       context
     )
   end
@@ -581,7 +724,9 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp evaluate_cond!([clause | rest], state, context) do
-    {_condition_value, state_after_condition} = evaluate!(clause.condition, state, context)
+    {condition_value, state_after_condition} = evaluate!(clause.condition, state, context)
+
+    validate_unbranched!(condition_value, context)
 
     {choice, state_after_choice} = take_choice!(state_after_condition, 2, context)
 
@@ -638,7 +783,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
       nil ->
         compile_error!(
-          "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} calls undefined function #{inspect(module)}.#{function}/#{arity}",
+          "#{context.subject} calls undefined function #{inspect(module)}.#{function}/#{arity}",
           context
         )
     end
@@ -740,7 +885,7 @@ defmodule Hologram.Compiler.QueryExtractor do
          {frame_module, frame_function, frame_arity}
        end) do
       compile_error!(
-        "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} recursively calls #{inspect(module)}.#{function}/#{arity} - recursive helpers are not extractable",
+        "#{context.subject} recursively calls #{inspect(module)}.#{function}/#{arity} - recursive helpers are not extractable",
         context
       )
     end
@@ -751,8 +896,12 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     {choice, state_after_choice} =
       case clauses do
-        [_single_clause] -> {0, state_after_funs}
-        _multiple_clauses -> take_choice!(state_after_funs, length(clauses), context)
+        [_single_clause] ->
+          {0, state_after_funs}
+
+        _multiple_clauses ->
+          validate_undispatched!(clauses, arg_values, context)
+          take_choice!(state_after_funs, length(clauses), context)
       end
 
     clause = Enum.at(clauses, choice)
@@ -762,6 +911,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     new_context = %{
       context
       | current_module: module,
+        derived: leave_field(context.derived),
         line: nil,
         stack: [frame(module, function, arity, nil) | context.stack]
     }
@@ -863,6 +1013,11 @@ defmodule Hologram.Compiler.QueryExtractor do
   # what this is for, and it is how a `def q(nil)` clause sits beside a `def q(min_b)` one. Two
   # clauses naming it DIFFERENTLY is the shape that cannot merge, since the caller must pick a
   # prop's value before any clause is chosen.
+  # A function the walk enters is no derived field's own clause, wherever it is defined.
+  defp leave_field(nil), do: nil
+
+  defp leave_field(derived), do: %{derived | at_field?: false}
+
   defp merged_placeholder_names(module, prop_name, clauses, arity) do
     Enum.map(0..(arity - 1), fn index ->
       clauses
@@ -959,12 +1114,12 @@ defmodule Hologram.Compiler.QueryExtractor do
     # what makes the whole list read as a stacktrace rather than a list of callers.
     context = %{
       current_module: target_module,
+      derived: nil,
       entity_types: entity_types,
       ir_plt: ir_plt,
       line: nil,
-      prop_module: module,
-      prop_name: prop_name,
-      stack: [frame(target_module, fun_name, arity, nil)]
+      stack: [frame(target_module, fun_name, arity, nil)],
+      subject: "query capture for prop #{inspect(prop_name)} in #{inspect(module)}"
     }
 
     variants =
@@ -1078,9 +1233,21 @@ defmodule Hologram.Compiler.QueryExtractor do
     if Path.basename(path) == "nofile", do: nil, else: path
   end
 
+  # A dot on a set reads further through its rows, as a derived field's body reads a chain through a
+  # set - only before a stage narrowed it, since the longer path is a set of its own.
+  defp sourced_field!(term, owner, chain, field, context) do
+    if term != Stage.sourced(owner, chain) do
+      compile_error!(
+        "#{context.subject} reads #{field} off a set its stages narrowed - a path goes through relationships, before any stage reads the set",
+        context
+      )
+    end
+
+    apply_derived!(:field, [owner, List.insert_at(chain, -1, field)], context)
+  end
+
   defp stage_error_message(function, arg_values, error, context) do
-    prefix =
-      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)}"
+    prefix = context.subject
 
     if contains_placeholder?(arg_values) do
       "#{prefix} passes an argument to #{function}/#{length(arg_values)} in a position the build cannot enumerate - the rows to download cannot be worked out without its value"
@@ -1089,9 +1256,49 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  # Whether a value holds a stand-in for a field of the row a derived field is computed for.
+  defp stand_in?(%RowField{}), do: true
+
+  defp stand_in?(%RowRef{}), do: true
+
+  defp stand_in?(%Query{source: source}), do: source != nil
+
+  defp stand_in?(list) when is_list(list), do: Enum.any?(list, &stand_in?/1)
+
+  defp stand_in?(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> stand_in?()
+  end
+
+  defp stand_in?(map) when is_map(map) do
+    map
+    |> Map.values()
+    |> stand_in?()
+  end
+
+  defp stand_in?(_value), do: false
+
+  # Inside a query builder a stand-in goes where a query goes: into another builder of the project,
+  # followed into its IR.
+  defp stand_in_call!(module, function, arg_values, state, context) do
+    if not interpretable_module?(module) do
+      compile_error!(
+        "#{context.subject} passes a field of the row to #{inspect(module)}.#{function}/#{length(arg_values)} - a field of the row reaches query stages and query builders only",
+        context
+      )
+    end
+
+    interpret_call!(module, function, arg_values, state, context)
+  end
+
   # A node carrying no line leaves the last one standing rather than blanking it - metadata is
   # missing here and there, and the nearest enclosing line still locates the refusal.
   defp with_line(context, nil), do: context
+
+  # The field's own clause is generated, so its nodes carry lines of the generating code - the
+  # declaration's line stands for every one of them.
+  defp with_line(%{derived: %{at_field?: true}} = context, _line), do: context
 
   defp with_line(context, line) do
     %{context | line: line, stack: relocated_stack(context.stack, line)}
@@ -1114,7 +1321,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp take_choice!(%{choices: :none}, _clause_count, context) do
     compile_error!(
-      "query capture for prop #{inspect(context.prop_name)} in #{inspect(context.prop_module)} branches inside an anonymous function - not extractable yet",
+      "#{context.subject} branches inside an anonymous function - not extractable yet",
       context
     )
   end
@@ -1145,6 +1352,34 @@ defmodule Hologram.Compiler.QueryExtractor do
           module,
           nil
         )
+    end
+  end
+
+  # A function choosing its clause by an argument that stands for a field of the row branches on
+  # it, which a clause head matching a pattern there does.
+  defp validate_undispatched!(clauses, arg_values, context) do
+    arg_values
+    |> Enum.with_index()
+    |> Enum.each(fn {arg_value, index} ->
+      dispatched? =
+        Enum.any?(clauses, fn clause ->
+          param = Enum.at(clause.params, index)
+
+          not is_struct(param, IR.Variable) and not is_struct(param, IR.MatchPlaceholder)
+        end)
+
+      if dispatched?, do: validate_unbranched!(arg_value, context)
+    end)
+  end
+
+  # A derived field's definition is built once, before any row is read, so no branch reads a field
+  # of the row.
+  defp validate_unbranched!(condition_value, context) do
+    if stand_in?(condition_value) do
+      compile_error!(
+        "#{context.subject} branches on a field of the row - a derived field's definition is one query, built before any row is read",
+        context
+      )
     end
   end
 end
