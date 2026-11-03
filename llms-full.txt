@@ -589,6 +589,36 @@ Without quotes, as in `color: {@value};`, the value lands in code position inste
 
 A bare interpolation is only as safe as the value. Write one for values the application produced itself, and never for anything coming from a user, a request or a database.
 
+##### Trusted HTML
+
+To output HTML as markup instead of escaping it, like Markdown rendered to HTML or content from a CMS, mark it with `trust_html/1` and interpolate it as an element's content:
+
+```elixir
+def init(%{slug: slug}, component, _server) do
+  post = Blog.get_post!(slug)
+  put_state(component, :body, trust_html(post.body_html))
+end
+```
+
+```holo
+<article>{@body}</article>
+```
+
+The HTML goes on the page inline among its siblings, with no wrapper element. The server renders it into the page like the rest of the template. `trust_html/1` takes a string or iodata and is imported into every component and page. Anywhere else, call `Hologram.Template.trust_html/1`. You can keep the value in state, pass it as a prop or put it in context like any other value.
+
+`trust_html/1` doesn't sanitize the HTML you give it. If users wrote any of it, sanitize it before you mark it.
+
+Hologram changes the HTML in two ways:
+
+- It fixes malformed markup, like an unclosed or a stray tag, so the HTML can't break the template's markup around it.
+- It removes `<script>` elements, so they never run. That isn't sanitizing. Event handler attributes and `javascript:` URLs stay, and only the default Content Security Policy keeps them from running. To embed a widget whose markup needs a loader script, put the script in the template and only the markup through `trust_html/1`.
+
+Trusted HTML can only be an element's content. Hologram raises an `ArgumentError` when you interpolate it in an attribute, in a prop value made of several parts, inside an HTML comment, or inside an element whose content the browser reads as text, like `<script>`, `<style>`, `<textarea>` or `<title>`. It raises the same error for the `{:safe, ...}` tuple that `Phoenix.HTML.raw/1` returns, which Hologram doesn't support.
+
+The HTML also has to be valid where it's placed. The browser parses the page before Hologram starts and moves HTML that can't go where it is: a `<div>` closes the `<p>` it sits in, and a table moves what it can't hold out in front of it. Hologram can't keep track of HTML that moved, so the page raises an error when it loads. You can put trusted table rows straight into a `<table>`. Hologram puts them in a `<tbody>`, as the browser does with rows written into a table without one. If you write rows into a `<table>` yourself and add trusted rows after them, write the `<tbody>` too.
+
+Sometimes the HTML stays in its place, but the page holds different nodes than the HTML parses to. Hologram keeps those nodes, logs a warning and replaces them the next time the HTML changes. The browser may have changed HTML that isn't valid there, or something else changed the page, like a translation extension.
+
 #### Attribute and Prop Spread
 
 A bare braced expression prefixed with `...` injects a map's or keyword list's entries as the tag's attributes (on elements) or props (on components). The `...` marker sits outside the braces, so their content is ordinary Elixir - any expression is allowed:
@@ -4223,7 +4253,7 @@ Hologram protects your pages against cross-site scripting and request forgery by
 
 #### What Hologram Does for You
 
-- **Escaping.** Every value interpolated into text or a quoted attribute is HTML-escaped, so user input renders as text and can't become markup. Inside a `<script>` or `<style>` element, a value in quotes is escaped for that language too. See "Security: Automatic HTML Escaping" in the Template Syntax documentation.
+- **Escaping.** Every value interpolated into text or a quoted attribute is HTML-escaped, so user input renders as text and can't become markup. Inside a `<script>` or `<style>` element, a value in quotes is escaped for that language too. See "Security: Automatic HTML Escaping" in the Template Syntax documentation. `trust_html/1` turns it off for HTML you trust. See "Trusted HTML" there.
 - **CSRF protection.** Every command carries a token tied to the user's session, and the server refuses a command without a valid one. See CSRF Protection below.
 - **Content Security Policy.** Hologram sends a strict policy with every page a visit starts on, so a script an attacker gets into the page doesn't run. See Content Security Policy below.
 - **Cookies.** A cookie you set is HTTP-only, secure and `SameSite=Lax` unless you say otherwise. Its value isn't signed, so a user can read and change it. Treat it like any other client-supplied data. See the Cookies documentation.
@@ -4235,6 +4265,7 @@ Escaping makes a value safe where it stands as text. It can't help when a value 
 - **User input in code you pass to `JS.eval/1` or `JS.exec/1`**, as in `JS.exec("highlight('#{query}')")`. The string runs as code, with the page's nonce. Pass the value as an argument with `JS.call/3` instead. The `~JS` sigil doesn't interpolate, so its code is always yours.
 - **A user-supplied URL in `href` or `src`.** It can be a `javascript:` URL. Check the scheme before you render it.
 - **Attribute names or tag names taken from user input**, through an attribute spread or a dynamic tag. Build them from values you control.
+- **HTML marked with `trust_html/1`.** It goes on the page as markup, unescaped and unsanitized, with its `<script>` elements removed. Sanitize anything a user wrote before you trust it.
 
 #### CSRF Protection
 
@@ -4341,7 +4372,7 @@ Trusted Types extends the protection to the browser APIs that turn strings into 
 config :hologram, content_security_policy: [require_trusted_types_for: [:script]]
 ```
 
-Hologram's runtime writes its scripts through a Trusted Types policy named `hologram`, so it keeps working under enforcement. A third-party script that writes raw HTML needs a `default` policy of your own. Without a `trusted_types` directive any policy name is allowed. When you give one to limit the names, Hologram adds `hologram` to it:
+Hologram's runtime writes its scripts, and HTML marked with `trust_html/1`, through a Trusted Types policy named `hologram`, so it keeps working under enforcement. A third-party script that writes raw HTML needs a `default` policy of your own. Without a `trusted_types` directive any policy name is allowed. When you give one to limit the names, Hologram adds `hologram` to it:
 
 ```elixir
 config :hologram, content_security_policy: [

@@ -77,6 +77,7 @@ defmodule Hologram.MixProject do
       {:html_entities, "~> 0.5"},
       {:interceptor, "~> 0.5"},
       {:jason, "~> 1.3"},
+      {:lazy_html, "~> 0.1.14"},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
@@ -147,7 +148,9 @@ defmodule Hologram.MixProject do
             Hologram.Component.Action,
             Hologram.Component.Command,
             Hologram.Page,
-            Hologram.Server
+            Hologram.Server,
+            Hologram.Template,
+            Hologram.Template.TrustedHTML
           ],
           Plug: [Hologram.Router, Hologram.Router.Helpers],
           UI: [Hologram.UI.Link, Hologram.UI.Runtime],

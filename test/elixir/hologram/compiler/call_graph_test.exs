@@ -4628,6 +4628,31 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {Protocol.UndefinedError, :exception, 1} in result
     end
 
+    # trust_html/1 runs on the client too, while the rest of Hologram.Template builds templates at
+    # compile time and has no business in a bundle.
+    test "reaches trust_html/1 without the template parser", %{full_call_graph: full_call_graph} do
+      result =
+        reachable_mfas(
+          get_graph(full_call_graph),
+          [{Hologram.Template, :trust_html, 1}],
+          MapSet.new(),
+          module_info_plt_fixture()
+        )
+
+      assert {Hologram.Template, :trust_html, 1} in result
+      assert {:erlang, :iolist_to_binary, 1} in result
+      refute {Hologram.Template, :dom_ast, 1} in result
+
+      refute Enum.any?(result, fn {module, _fun, _arity} ->
+               module in [
+                 Hologram.Template.DOM,
+                 Hologram.Template.HTMLNormalizer,
+                 Hologram.Template.Parser,
+                 Hologram.Template.Tokenizer
+               ]
+             end)
+    end
+
     test "excludes module vertices from the result", %{full_call_graph: full_call_graph} do
       graph =
         full_call_graph

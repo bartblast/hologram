@@ -1,6 +1,6 @@
 # Navigation Payload Wire Format
 
-A client-side navigation is answered with the page's evaluated tree. The tree is a closed vocabulary of four constructors with no Elixir semantics in it, so it does not need the boxed-term encoder - but it does need a shape. This records the full cross-product of the choices that shape is made of, measured on two real pages, so the one that was picked can be checked rather than taken on trust.
+A client-side navigation is answered with the page's evaluated tree. The tree is a closed vocabulary of five constructors with no Elixir semantics in it, so it does not need the boxed-term encoder - but it does need a shape. This records the full cross-product of the choices that shape is made of, measured on two real pages, so the one that was picked can be checked rather than taken on trust.
 
 The other fields of the payload, the mount data and the realtime bookkeeping, are terms and travel in `Hologram.Runtime.Serializer`'s format, as nested JSON values the client's deserializer walks once the response is parsed.
 
@@ -8,7 +8,7 @@ Related: issue #1068.
 
 ## Chosen format
 
-`untagged` `bare` `flat` `none`. An element is `[tag, attributes, children]` and always has length 3. Attributes are one flat name/value run, with `null` for a boolean. A text node is a bare string. A comment is `["c", children]` and a doctype `["d", content]`. Nothing is interned.
+`untagged` `bare` `flat` `none`. An element is `[tag, attributes, children]` and always has length 3. Attributes are one flat name/value run, with `null` for a boolean. A text node is a bare string. A comment is `["c", children]`, a doctype `["d", content]` and trusted HTML `["h", html]`, the string `trust_html/1` was given. Nothing is interned. Trusted HTML came after the measurements below, which have none.
 
 ```json
 ["div",["class","big","$key","k1:0","hidden",null],["Hologram",["c",[" x "]]]]
@@ -100,6 +100,7 @@ From `lib/hologram/template/renderer.ex`:
         | {:element, String.t(), [{String.t(), [] | [text: String.t()]}], [tree_node]}
         | {:public_comment, [tree_node]}
         | {:text, String.t()}
+        | {:trusted_html, String.t()}
 ```
 
 Every dynamic thing is already resolved. `$key` is present, `$focused` is already applied as the `autofocus` attribute it renders as, and all other `$`-prefixed attributes were dropped by `render_tree_attributes/1`.

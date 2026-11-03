@@ -15,7 +15,7 @@ import Once from "./once.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
-import Vdom from "./vdom.mjs";
+import Vdom, {TRUSTED_HTML_SEL} from "./vdom.mjs";
 
 import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
@@ -137,6 +137,22 @@ const SVG_ADJUSTED_TAG_NAMES = {
   textpath: "textPath",
 };
 
+// The elements trusted HTML can't be interpolated in: the HTML parser reads their content as text.
+//
+// WARNING: must match @trusted_html_refused_parents in Hologram.Template.Renderer.
+const TRUSTED_HTML_REFUSED_PARENTS = new Set([
+  "iframe",
+  "noembed",
+  "noframes",
+  "noscript",
+  "plaintext",
+  "script",
+  "style",
+  "textarea",
+  "title",
+  "xmp",
+]);
+
 export default class Renderer {
   // Event listener bindings collected during the current render, each a {target, key, attach,
   // handler} descriptor (see EventListenerRegistry). A <window> or <document> tag pushes here (with
@@ -175,8 +191,8 @@ export default class Renderer {
   //
   // The payload arrives already parsed out of the response body, so this is not a parse: it is
   // the walk that turns plain JavaScript values into the boxed terms renderDom was built to
-  // consume. A node's shape says what it is - an element is the only node of length 3, a comment
-  // and a doctype are length 2, and text is a bare string.
+  // consume. A node's shape says what it is - an element is the only node of length 3, a comment,
+  // a doctype and trusted HTML are length 2, and text is a bare string.
   //
   // TODO: delete this once the vdom renderer walks plain JavaScript literals instead of boxed
   // terms. It exists only to bridge the wire form to renderDom, and renderDom then walks what it
@@ -244,8 +260,22 @@ export default class Renderer {
         );
 
       case "expression": {
+        const value = dom.data[1].data[0];
+
+        // WARNING: must match render_tree/3's trusted HTML and safe tuple clauses on the server,
+        // which come before the script and style ones, as these checks come before the value is
+        // stringified. Trusted HTML inside an element whose content is text is refused by
+        // #renderElement.
+        if ($.#isTrustedHtml(value)) {
+          return $.#trustedHtmlVnode(value, parentModule);
+        }
+
+        if ($.#isPhoenixSafeTuple(value)) {
+          $.#raisePhoenixSafeTuple();
+        }
+
         // HTML escaping is done by Snabbdom.
-        const text = $.toText(dom.data[1].data[0]);
+        const text = $.toText(value);
 
         // WARNING: must match render_tree/3's script and style clauses on the server: inside a
         // raw text element both sides write the value as the text of a string literal of the
@@ -287,6 +317,13 @@ export default class Renderer {
 
       case "doctype":
         return Type.nil();
+
+      // A node of an evaluated tree the server shipped on navigation, holding the string trust_html/1
+      // was given. The module that rendered it isn't on the wire, and nothing compares it: the diff
+      // compares the HTML, and only a hydration error names the module, which a navigation never
+      // raises.
+      case "trusted_html":
+        return Vdom.trustedHtmlVnode(Bitstring.toText(dom.data[1]), null);
 
       case "public_comment":
         return Renderer.#renderPublicComment(
@@ -333,8 +370,8 @@ export default class Renderer {
   // patch works on.
   //
   // The tree is a render the server already performed, so nothing here evaluates: it holds only
-  // elements, text, comments and the doctype, and the clauses those reach in renderDom read
-  // neither context nor slots. They are passed empty for that reason rather than as a stand-in
+  // elements, text, comments, the doctype and trusted HTML, and the clauses those reach in renderDom
+  // read neither context nor slots. They are passed empty for that reason rather than as a stand-in
   // for a real render's own.
   //
   // WARNING: the vnodes this returns must equal the vnodes renderPage returns for the same page,
@@ -509,7 +546,11 @@ export default class Renderer {
         bitstringChunks[i] = valuePartData[1];
       } else {
         // expression
-        const expressionText = $.toText(valuePartData[1].data[0]);
+        const value = valuePartData[1].data[0];
+
+        $.#refuseMarkupValue(value);
+
+        const expressionText = $.toText(value);
 
         bitstringChunks[i] = Type.bitstring(expressionText);
       }
@@ -934,6 +975,18 @@ export default class Renderer {
     return namePrefix === null ? segment : `${namePrefix}-${segment}`;
   }
 
+  // Whether rendered children hold trusted HTML, at any depth.
+  static #containsTrustedHtml(childrenVdom) {
+    return childrenVdom.some(
+      (child) =>
+        typeof child === "object" &&
+        child !== null &&
+        (child.sel === TRUSTED_HTML_SEL ||
+          (Array.isArray(child.children) &&
+            $.#containsTrustedHtml(child.children))),
+    );
+  }
+
   static #contextKey(opts) {
     return Interpreter.accessKeywordListElement(
       opts,
@@ -999,6 +1052,10 @@ export default class Renderer {
         Type.atom("public_comment"),
         Type.list(node[1].map(Renderer.#decodeNode)),
       ]);
+    }
+
+    if (node[0] === "h") {
+      return Type.tuple([Type.atom("trusted_html"), Type.bitstring(node[1])]);
     }
 
     return Type.tuple([Type.atom("doctype"), Type.bitstring(node[1])]);
@@ -1452,6 +1509,19 @@ export default class Renderer {
     );
   }
 
+  // Whether the value is what Phoenix.HTML.raw/1 returns.
+  static #isPhoenixSafeTuple(value) {
+    return (
+      Type.isTuple(value) &&
+      value.data.length === 2 &&
+      Interpreter.isStrictlyEqual(value.data[0], Type.atom("safe"))
+    );
+  }
+
+  static #isTrustedHtml(value) {
+    return Type.isStruct(value, "Hologram.Template.TrustedHTML");
+  }
+
   static #mapEventName(eventName, tagName, attrsVdom) {
     if (eventName === "change") {
       if (tagName === "input") {
@@ -1696,6 +1766,28 @@ export default class Renderer {
     );
   }
 
+  static #raisePhoenixSafeTuple() {
+    Interpreter.raiseArgumentError(
+      "Phoenix.HTML safe tuples aren't supported in Hologram templates, use trust_html/1 instead",
+    );
+  }
+
+  // Raises for a value that stands for markup where a value becomes text: an attribute value or a
+  // prop value made of several parts.
+  //
+  // WARNING: must match value_dom_to_text/1 on the server.
+  static #refuseMarkupValue(value) {
+    if ($.#isTrustedHtml(value)) {
+      Interpreter.raiseArgumentError(
+        "trusted HTML can't be interpolated in an attribute value or in a prop value made of several parts, only as an element's content",
+      );
+    }
+
+    if ($.#isPhoenixSafeTuple(value)) {
+      $.#raisePhoenixSafeTuple();
+    }
+  }
+
   // Based on render_tree_attribute/1
   //
   // WARNING: must match render_tree_attribute/1: an empty value list is a boolean attribute, a
@@ -1719,6 +1811,10 @@ export default class Renderer {
       valueDom.data[0].data[1].data.length === 1
     ) {
       const expressionValue = valueDom.data[0].data[1].data[0];
+
+      // Refused before a checked attribute reads only the value's truthiness, as the server, which
+      // stringifies every attribute value, refuses it.
+      $.#refuseMarkupValue(expressionValue);
 
       // Checkbox & radio checked attribute: preserve boolean semantics
       if (isControlledCheckedAttr) {
@@ -1997,6 +2093,20 @@ export default class Renderer {
         slotsParentModule,
       ),
     );
+
+    // Checked on the rendered children rather than where the value is interpolated, since the value
+    // can get here through a component, a slot or a nested element, none of which carry this tag
+    // name, and the browser reads all of it as text all the same.
+    //
+    // WARNING: must match render_tree/3's element clause on the server.
+    if (
+      TRUSTED_HTML_REFUSED_PARENTS.has(currentTagName) &&
+      $.#containsTrustedHtml(childrenVdom)
+    ) {
+      Interpreter.raiseArgumentError(
+        `trusted HTML can't be interpolated inside a <${currentTagName}> element, whose content the browser reads as text`,
+      );
+    }
 
     const data = {attrs: attrsVdom, on: eventListenersVdom};
 
@@ -2304,6 +2414,13 @@ export default class Renderer {
       slotsParentModule,
     );
 
+    // WARNING: must match render_tree/3's public comment clause on the server.
+    if ($.#containsTrustedHtml(childrenVdom)) {
+      Interpreter.raiseArgumentError(
+        "trusted HTML can't be interpolated inside an HTML comment, only as an element's content",
+      );
+    }
+
     const commentContent = childrenVdom
       .map((child) =>
         typeof child === "string"
@@ -2473,6 +2590,18 @@ export default class Renderer {
     );
 
     return throttle === null ? null : Number(throttle.value);
+  }
+
+  // Deps: [:maps.get/2]
+  static #trustedHtmlVnode(trustedHtml, parentModule) {
+    const html = Erlang_Maps["get/2"](Type.atom("html"), trustedHtml);
+
+    const module =
+      parentModule === null || typeof parentModule === "undefined"
+        ? null
+        : Interpreter.moduleExName(parentModule);
+
+    return Vdom.trustedHtmlVnode(Bitstring.toText(html), module);
   }
 
   static #updateFormInputChecked(element, newChecked) {

@@ -1,13 +1,14 @@
 "use strict";
 
-// The values the runtime assigns to the script sinks Trusted Types guards: a script's code and a
-// script's URL. A document whose policy enforces Trusted Types refuses a plain string at such a
+// The values the runtime assigns to the sinks Trusted Types guards: a script's code, a script's
+// URL and HTML. A document whose policy enforces Trusted Types refuses a plain string at such a
 // sink, so the runtime assigns them through a policy of its own, named "hologram", which a
 // trusted-types directive the app gives allows (see Hologram.Runtime.ContentSecurityPolicy).
 //
-// The policy passes its input through. Every input is the framework's own: a chunk's URL, built
-// from its digest, the code of a template's script element, and the code of a JS.exec or JS.eval
-// call, which comes from the developer's source.
+// The policy passes its input through. Every input is the framework's own or one the app vouched
+// for: a chunk's URL, built from its digest, the code of a template's script element, the code of a
+// JS.exec or JS.eval call, which comes from the developer's source, and HTML the app marked with
+// trust_html/1, which the runtime inserts with its script elements removed.
 //
 // A browser without Trusted Types takes the plain values.
 export default class TrustedTypes {
@@ -26,6 +27,7 @@ export default class TrustedTypes {
       try {
         $.cachedPolicy =
           globalThis.trustedTypes?.createPolicy("hologram", {
+            createHTML: (html) => html,
             createScript: (code) => code,
             createScriptURL: (url) => url,
           }) ?? null;
@@ -35,6 +37,11 @@ export default class TrustedTypes {
     }
 
     return $.cachedPolicy;
+  }
+
+  static html(html) {
+    const policy = $.policy();
+    return policy === null ? html : policy.createHTML(html);
   }
 
   static script(code) {

@@ -75,6 +75,8 @@ import {defineModule87Fixture} from "./support/fixtures/renderer/module_87.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule89Fixture} from "./support/fixtures/renderer/module_89.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
+import {defineModule94Fixture} from "./support/fixtures/renderer/module_94.mjs";
+import {defineModule95Fixture} from "./support/fixtures/renderer/module_95.mjs";
 import {defineModule91Fixture} from "./support/fixtures/renderer/module_91.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
 import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client_only/module_2.mjs";
@@ -92,6 +94,7 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import Once from "../../assets/js/once.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
+import Vdom, {TRUSTED_HTML_SEL} from "../../assets/js/vdom.mjs";
 
 defineRuntimeGlobals();
 
@@ -157,6 +160,8 @@ defineModule89Fixture();
 defineModule8Fixture();
 defineModule91Fixture();
 defineModule9Fixture();
+defineModule94Fixture();
+defineModule95Fixture();
 defineClientOnlyModule1Fixture();
 defineClientOnlyModule2Fixture();
 defineClientOnlyModule3Fixture();
@@ -10544,6 +10549,404 @@ describe("Renderer", () => {
     });
   });
 
+  describe("trusted HTML", () => {
+    const trustedHtml = (html) =>
+      Type.struct("Hologram.Template.TrustedHTML", [
+        [Type.atom("html"), Type.bitstring(html)],
+      ]);
+
+    const expression = (value) =>
+      Type.tuple([Type.atom("expression"), Type.tuple([value])]);
+
+    const attribute = (name, valueDom) =>
+      Type.tuple([Type.bitstring(name), Type.list(valueDom)]);
+
+    const elementWith = (tagName, attrsDom, childrenDom) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(childrenDom),
+      ]);
+
+    const render = (node, parentModule = null) =>
+      Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+        parentModule,
+      );
+
+    const attributeMessage =
+      "trusted HTML can't be interpolated in an attribute value or in a prop value made of several parts, only as an element's content";
+
+    const commentMessage =
+      "trusted HTML can't be interpolated inside an HTML comment, only as an element's content";
+
+    it("renders to a range holding the string it was given", () => {
+      // {trust_html("<b>bold")}
+      const result = render(expression(trustedHtml("<b>bold")));
+
+      assert.deepStrictEqual(result, Vdom.trustedHtmlVnode("<b>bold", null));
+    });
+
+    it("remembers the module whose template rendered it", () => {
+      // {trust_html("<b>bold</b>")}
+      const result = render(
+        expression(trustedHtml("<b>bold</b>")),
+        Type.alias("MyModule"),
+      );
+
+      assert.equal(result.data.hologramHtml.module, "MyModule");
+    });
+
+    it("renders a trusted HTML node of an evaluated tree to a range", () => {
+      const node = Type.tuple([
+        Type.atom("trusted_html"),
+        Type.bitstring("<b>bold"),
+      ]);
+
+      assert.deepStrictEqual(
+        render(node),
+        Vdom.trustedHtmlVnode("<b>bold", null),
+      );
+    });
+
+    it("sits among its siblings without merging the text around it", () => {
+      // <p>a{trust_html("<b>b</b>")}c</p>
+      const node = element("p", [
+        Type.tuple([Type.atom("text"), Type.bitstring("a")]),
+        expression(trustedHtml("<b>b</b>")),
+        Type.tuple([Type.atom("text"), Type.bitstring("c")]),
+      ]);
+
+      const result = render(node);
+
+      assert.equal(result.children.length, 3);
+      assert.equal(result.children[0].text, "a");
+      assert.equal(result.children[1].sel, TRUSTED_HTML_SEL);
+      assert.equal(result.children[2].text, "c");
+    });
+
+    it("can't be interpolated inside an element whose content is text", () => {
+      for (const tagName of [
+        "iframe",
+        "noembed",
+        "noframes",
+        "noscript",
+        "plaintext",
+        "script",
+        "style",
+        "textarea",
+        "title",
+        "xmp",
+      ]) {
+        assertBoxedError(
+          () => render(element(tagName, [expression(trustedHtml("<b>b</b>"))])),
+          "ArgumentError",
+          `trusted HTML can't be interpolated inside a <${tagName}> element, whose content the browser reads as text`,
+        );
+      }
+    });
+
+    it("can't be interpolated inside an element nested in an element whose content is text", () => {
+      // <noscript><div>{trust_html("<b>b</b>")}</div></noscript>
+      const node = element("noscript", [
+        element("div", [expression(trustedHtml("<b>b</b>"))]),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "trusted HTML can't be interpolated inside a <noscript> element, whose content the browser reads as text",
+      );
+    });
+
+    it("can't be interpolated inside a dynamic tag whose content is text", () => {
+      // <{"title"}>{trust_html("<b>b</b>")}</{"title"}>
+      const node = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([Type.bitstring("title")]),
+        Type.list(),
+        Type.list([expression(trustedHtml("<b>b</b>"))]),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "trusted HTML can't be interpolated inside a <title> element, whose content the browser reads as text",
+      );
+    });
+
+    it("can't be interpolated in an attribute value", () => {
+      // <div class={trust_html("<b>b</b>")}></div>
+      const node = elementWith(
+        "div",
+        [attribute("class", [expression(trustedHtml("<b>b</b>"))])],
+        [],
+      );
+
+      assertBoxedError(() => render(node), "ArgumentError", attributeMessage);
+    });
+
+    it("can't be interpolated in an attribute value made of several parts", () => {
+      // <div class="a {trust_html("<b>b</b>")}"></div>
+      const node = elementWith(
+        "div",
+        [
+          attribute("class", [
+            Type.tuple([Type.atom("text"), Type.bitstring("a ")]),
+            expression(trustedHtml("<b>b</b>")),
+          ]),
+        ],
+        [],
+      );
+
+      assertBoxedError(() => render(node), "ArgumentError", attributeMessage);
+    });
+
+    it("can't be interpolated in an attribute spread", () => {
+      // <div {...%{title: trust_html("<b>b</b>")}}></div>
+      const node = elementWith(
+        "div",
+        [
+          Type.tuple([
+            Type.atom("spread"),
+            Type.tuple([
+              Type.map([[Type.atom("title"), trustedHtml("<b>b</b>")]]),
+            ]),
+          ]),
+        ],
+        [],
+      );
+
+      assertBoxedError(() => render(node), "ArgumentError", attributeMessage);
+    });
+
+    it("can't be interpolated inside an HTML comment", () => {
+      // <!--{trust_html("<b>b</b>")}-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([expression(trustedHtml("<b>b</b>"))]),
+      ]);
+
+      assertBoxedError(() => render(node), "ArgumentError", commentMessage);
+    });
+
+    it("can't be interpolated inside an element inside an HTML comment", () => {
+      // <!--<div>{trust_html("<b>b</b>")}</div>-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([element("div", [expression(trustedHtml("<b>b</b>"))])]),
+      ]);
+
+      assertBoxedError(() => render(node), "ArgumentError", commentMessage);
+    });
+
+    const component = (alias, propsDom, childrenDom = []) =>
+      Type.tuple([
+        Type.atom("component"),
+        Type.alias(`Hologram.Test.Fixtures.Template.Renderer.${alias}`),
+        Type.list(propsDom),
+        Type.list(childrenDom),
+      ]);
+
+    const prop = (name, valueDom) =>
+      Type.tuple([Type.bitstring(name), Type.list(valueDom)]);
+
+    it("is passed to a component as a prop", () => {
+      // <Module94 body={trust_html("<b>bold</b>")} />
+      const node = component("Module94", [
+        prop("body", [expression(trustedHtml("<b>bold</b>"))]),
+      ]);
+
+      const [div] = render(node);
+
+      assert.equal(div.children[0].sel, TRUSTED_HTML_SEL);
+      assert.equal(div.children[0].data.hologramHtml.html, "<b>bold</b>");
+    });
+
+    it("can't reach an element whose content is text through a component", () => {
+      // <textarea><Module94 body={trust_html("<b>b</b>")} /></textarea>
+      const node = element("textarea", [
+        component("Module94", [
+          prop("body", [expression(trustedHtml("<b>b</b>"))]),
+        ]),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "trusted HTML can't be interpolated inside a <textarea> element, whose content the browser reads as text",
+      );
+    });
+
+    it("can't reach an element whose content is text through a slot", () => {
+      // <Module95>{trust_html("<b>b</b>")}</Module95>
+      const node = component(
+        "Module95",
+        [],
+        [expression(trustedHtml("<b>b</b>"))],
+      );
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "trusted HTML can't be interpolated inside a <textarea> element, whose content the browser reads as text",
+      );
+    });
+
+    it("can't be interpolated in a prop value made of several parts", () => {
+      // <Module94 body="a {trust_html("<b>b</b>")}" />
+      const node = component("Module94", [
+        prop("body", [
+          Type.tuple([Type.atom("text"), Type.bitstring("a ")]),
+          expression(trustedHtml("<b>b</b>")),
+        ]),
+      ]);
+
+      assertBoxedError(() => render(node), "ArgumentError", attributeMessage);
+    });
+
+    it("can't be interpolated in a checked attribute", () => {
+      // <input type="checkbox" checked={trust_html("<b>b</b>")} />
+      const node = elementWith(
+        "input",
+        [
+          Type.tuple([
+            Type.bitstring("type"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("checkbox")]]),
+          ]),
+          attribute("checked", [expression(trustedHtml("<b>b</b>"))]),
+        ],
+        [],
+      );
+
+      assertBoxedError(() => render(node), "ArgumentError", attributeMessage);
+    });
+
+    it("can't reach an HTML comment through a component", () => {
+      // <!--<Module94 body={trust_html("<b>b</b>")} />-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          component("Module94", [
+            prop("body", [expression(trustedHtml("<b>b</b>"))]),
+          ]),
+        ]),
+      ]);
+
+      assertBoxedError(() => render(node), "ArgumentError", commentMessage);
+    });
+  });
+
+  describe("Phoenix.HTML safe tuple", () => {
+    const expression = (value) =>
+      Type.tuple([Type.atom("expression"), Type.tuple([value])]);
+
+    const elementWith = (tagName, attrsDom, childrenDom) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(childrenDom),
+      ]);
+
+    const attribute = (name, valueDom) =>
+      Type.tuple([Type.bitstring(name), Type.list(valueDom)]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    const safeTupleMessage =
+      "Phoenix.HTML safe tuples aren't supported in Hologram templates, use trust_html/1 instead";
+
+    it("can't be interpolated as an element's content", () => {
+      // <div>{Phoenix.HTML.raw("<b>b</b>")}</div>
+      const safeTuple = Type.tuple([
+        Type.atom("safe"),
+        Type.bitstring("<b>b</b>"),
+      ]);
+
+      assertBoxedError(
+        () => render(element("div", [expression(safeTuple)])),
+        "ArgumentError",
+        safeTupleMessage,
+      );
+    });
+
+    it("can't be interpolated inside a script element", () => {
+      // <script>{Phoenix.HTML.raw("x")}</script>
+      const safeTuple = Type.tuple([Type.atom("safe"), Type.bitstring("x")]);
+
+      assertBoxedError(
+        () => render(element("script", [expression(safeTuple)])),
+        "ArgumentError",
+        safeTupleMessage,
+      );
+    });
+
+    it("can't be interpolated in an attribute value", () => {
+      // <div class={Phoenix.HTML.raw("x")}></div>
+      const safeTuple = Type.tuple([Type.atom("safe"), Type.bitstring("x")]);
+
+      const node = elementWith(
+        "div",
+        [attribute("class", [expression(safeTuple)])],
+        [],
+      );
+
+      assertBoxedError(() => render(node), "ArgumentError", safeTupleMessage);
+    });
+
+    it("can't be interpolated in a prop value made of several parts", () => {
+      // <Module94 body="a {Phoenix.HTML.raw("x")}" />
+      const safeTuple = Type.tuple([Type.atom("safe"), Type.bitstring("x")]);
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module94"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("body"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("a ")]),
+              expression(safeTuple),
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(() => render(node), "ArgumentError", safeTupleMessage);
+    });
+
+    it("can't be interpolated in a checked attribute", () => {
+      // <input type="checkbox" checked={Phoenix.HTML.raw("x")} />
+      const safeTuple = Type.tuple([Type.atom("safe"), Type.bitstring("x")]);
+
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("input"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("type"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("checkbox")]]),
+          ]),
+          Type.tuple([
+            Type.bitstring("checked"),
+            Type.list([expression(safeTuple)]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(() => render(node), "ArgumentError", safeTupleMessage);
+    });
+  });
+
   describe("decodeTree()", () => {
     const text = (str) => Type.tuple([Type.atom("text"), Type.bitstring(str)]);
 
@@ -10661,6 +11064,15 @@ describe("Renderer", () => {
       );
     });
 
+    it("trusted HTML node", () => {
+      assert.deepStrictEqual(
+        Renderer.decodeTree([["h", "<b>bold"]]),
+        Type.list([
+          Type.tuple([Type.atom("trusted_html"), Type.bitstring("<b>bold")]),
+        ]),
+      );
+    });
+
     it("public comment node, with multiple children", () => {
       const result = Renderer.decodeTree([["c", ["abc", ["div", [], []]]]]);
 
@@ -10772,6 +11184,22 @@ describe("Renderer", () => {
     // A page tree is the document's children, so a single node is wrapped in the list one
     // always is.
     const tree = (...nodes) => Type.list(nodes);
+
+    it("a decoded trusted HTML node renders to a range", () => {
+      const result = Renderer.renderTree(
+        Renderer.decodeTree([["div", [], [["h", "<b>bold"]]]]),
+      );
+
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, [
+          vnode("div", {attrs: {}, on: {}}, [
+            Vdom.trustedHtmlVnode("<b>bold", null),
+          ]),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
 
     it("wraps a tree naming no html element in the elements a document must have", () => {
       const result = Renderer.renderTree(tree(treeElement("div")));

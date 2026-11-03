@@ -19,6 +19,7 @@ describe("TrustedTypes", () => {
         createdPolicies.push(name);
 
         return {
+          createHTML: (html) => ({trustedHTML: rules.createHTML(html)}),
           createScript: (code) => ({trustedScript: rules.createScript(code)}),
           createScriptURL: (url) => ({
             trustedScriptURL: rules.createScriptURL(url),
@@ -62,6 +63,20 @@ describe("TrustedTypes", () => {
 
       assert.isNull(TrustedTypes.policy());
       assert.equal(TrustedTypes.script("go();"), "go();");
+    });
+  });
+
+  describe("html()", () => {
+    it("the policy's value for the HTML, which it passes through", () => {
+      stubTrustedTypes();
+
+      assert.deepStrictEqual(TrustedTypes.html("<p>a</p>"), {
+        trustedHTML: "<p>a</p>",
+      });
+    });
+
+    it("the plain HTML when the browser has no Trusted Types", () => {
+      assert.equal(TrustedTypes.html("<p>a</p>"), "<p>a</p>");
     });
   });
 
