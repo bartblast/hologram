@@ -11,6 +11,8 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Server
   alias Hologram.Template.DOM
   alias Hologram.Template.Helpers
+  alias Hologram.Template.HTMLNormalizer
+  alias Hologram.Template.TrustedHTML
 
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
@@ -21,6 +23,13 @@ defmodule Hologram.Template.Renderer do
   #
   # https://html.spec.whatwg.org/multipage/syntax.html#raw-text-elements
   @raw_text_elems ~w(script style)
+
+  # The elements trusted HTML can't be interpolated in: the HTML parser reads their content as text
+  # - raw text, RCDATA, or, in a browser running JavaScript, noscript's content - so neither the
+  # markup nor the comments its range is printed between would be anything but text there.
+  #
+  # WARNING: must match TRUSTED_HTML_REFUSED_PARENTS in the client renderer (renderer.mjs).
+  @trusted_html_refused_parents ~w(iframe noembed noframes noscript plaintext script style textarea title xmp)
 
   # The elements HTML gives a nonce attribute to. A nonce the template wrote on one is dropped
   # whatever the policy stamps, as the client renderer drops it. See print_dom/2.
@@ -105,6 +114,7 @@ defmodule Hologram.Template.Renderer do
           | {:element, String.t(), [{String.t(), [] | [text: String.t()]}], [tree_node]}
           | {:public_comment, [tree_node]}
           | {:text, String.t()}
+          | {:trusted_html, String.t()}
 
   @typedoc """
   A rendered template as data: expressions evaluated, components flattened into the nodes their
@@ -206,8 +216,9 @@ defmodule Hologram.Template.Renderer do
   A node's shape is what tells the client what it is, so nothing carries a constructor name it
   does not need. An element is `[tag_name, attributes, children]` and is the only node of length
   three. Attributes are one flat run of alternating names and values, with `nil` for an attribute
-  that has no value. Text is a bare string. A comment is `["c", children]` and a doctype
-  `["d", content]`, both of length two.
+  that has no value. Text is a bare string. A comment is `["c", children]`, a doctype
+  `["d", content]` and trusted HTML `["h", html]`, all of length two. Trusted HTML travels as the
+  string it was given, not normalized: the client parses it itself.
 
   Unlike `print_dom/1` this is not a markup projection, so nothing is escaped and nothing is
   dropped: `$key` travels, because it is what carries element identity across a navigation, and a
@@ -237,7 +248,9 @@ defmodule Hologram.Template.Renderer do
 
   An evaluated DOM holds text verbatim and each attribute value as a single string, both
   unescaped, so escaping belongs here: text is entity-encoded everywhere except inside a script
-  element, whose body is code rather than markup.
+  element, whose body is code rather than markup. Trusted HTML is printed the way the browser's
+  parser reads it where it sits (see `Hologram.Template.HTMLNormalizer.normalize/3`), between the
+  comments the client finds it by.
 
   The `$`-prefixed attributes name what the framework reads rather than what the markup carries -
   event bindings and element keys among them - so they are left out. An attribute with an empty
@@ -256,8 +269,9 @@ defmodule Hologram.Template.Renderer do
   children included. This is how values known only once the page has rendered reach it, the boot
   data and the chunk tags among them: written where the marker sits rather than substituted for a
   token afterwards, so no text a user put on the page can be taken for the place a value goes.
-  Interpolated values become text and attribute values, never elements, so only markup a template
-  writes makes a marker, or a dynamic tag a template hands a tag name to, which can make a
+  Interpolated values become text and attribute values, never elements, and trusted HTML is
+  printed from its string without being read as tree nodes, so only markup a template writes makes
+  a marker, or a dynamic tag a template hands a tag name to, which can make a
   `<script>` just the same. The client renderer knows no markers: the Runtime component renders
   them only on a first page, which the client never renders itself.
 
@@ -522,7 +536,30 @@ defmodule Hologram.Template.Renderer do
     {children, component_registry, mutated_server_struct} =
       render_tree(children_dom, children_env, server_struct)
 
+    # Checked on the rendered children rather than where the value is interpolated, since the value
+    # can get here through a component, a slot or a nested element, none of which carry this tag
+    # name, and the browser reads all of it as text all the same.
+    if tag_name in @trusted_html_refused_parents and contains_trusted_html?(children) do
+      raise ArgumentError,
+        message:
+          "trusted HTML can't be interpolated inside a <#{tag_name}> element, whose content the browser reads as text"
+    end
+
     {{:element, tag_name, attributes, children}, component_registry, mutated_server_struct}
+  end
+
+  # Trusted HTML stays a node of its own in the tree, holding the string it was given: normalizing
+  # it is a print concern, like escaping, and the client builds from the same string.
+  #
+  # WARNING: must match the client renderer's expression case (renderer.mjs). These clauses come
+  # before the script and style ones, which stringify the value first. Trusted HTML inside an
+  # element whose content is text is refused by the element clause.
+  def render_tree({:expression, {%TrustedHTML{html: html}}}, _env, server_struct) do
+    {{:trusted_html, html}, %{}, server_struct}
+  end
+
+  def render_tree({:expression, {{:safe, _iodata}}}, _env, _server_struct) do
+    raise_phoenix_safe_tuple()
   end
 
   # An expression evaluated inside a script element is escaped at evaluation, unlike every other
@@ -555,6 +592,14 @@ defmodule Hologram.Template.Renderer do
   def render_tree({:public_comment, children_dom}, %Env{} = env, server_struct) do
     {children, component_registry, mutated_server_struct} =
       render_tree(children_dom, env, server_struct)
+
+    # A comment keeps the tag name of the element it sits in, so the env can't tell trusted HTML
+    # inside one apart from trusted HTML next to it - the rendered children can.
+    if contains_trusted_html?(children) do
+      raise ArgumentError,
+        message:
+          "trusted HTML can't be interpolated inside an HTML comment, only as an element's content"
+    end
 
     {{:public_comment, children}, component_registry, mutated_server_struct}
   end
@@ -657,6 +702,24 @@ defmodule Hologram.Template.Renderer do
     |> Enum.into(%{})
   end
 
+  # The context the children of an element printed in the given context sit in. Attribute values
+  # matter only to annotation-xml, whose encoding decides whether its content is HTML.
+  defp children_context(tag_name, attributes, context) do
+    namespace = HTMLNormalizer.element_namespace(tag_name, context)
+
+    attributes =
+      if tag_name == "annotation-xml" do
+        Enum.map(attributes, fn
+          {name, []} -> {name, ""}
+          {name, [text: value]} -> {name, value}
+        end)
+      else
+        []
+      end
+
+    HTMLNormalizer.children_context(tag_name, attributes, namespace)
+  end
+
   # HTML attribute names are dash-separated, while Elixir identifiers can't contain dashes, so each
   # name segment converts to the convention of the namespace it lands in. Nesting composes the
   # segments with hyphens, e.g. %{data: %{user_id: 1}} becomes "data-user-id".
@@ -682,6 +745,8 @@ defmodule Hologram.Template.Renderer do
 
   defp encode_node({:text, text}), do: text
 
+  defp encode_node({:trusted_html, html}), do: ["h", html]
+
   defp compose_attribute_name(key, name_prefix) do
     segment =
       key
@@ -690,6 +755,15 @@ defmodule Hologram.Template.Renderer do
       |> String.replace("_", "-")
 
     if name_prefix, do: name_prefix <> "-" <> segment, else: segment
+  end
+
+  defp contains_trusted_html?(nodes) do
+    Enum.any?(nodes, fn
+      {:trusted_html, _html} -> true
+      {:element, _tag_name, _attributes, children} -> contains_trusted_html?(children)
+      {:public_comment, children} -> contains_trusted_html?(children)
+      _node -> false
+    end)
   end
 
   # The nonce and the element kinds it goes on, as one value of the options print_node/3 carries,
@@ -729,8 +803,19 @@ defmodule Hologram.Template.Renderer do
   # either one at print time.
   defp value_dom_to_text(value_dom) do
     Enum.map_join(value_dom, fn
-      {:text, text} -> text
-      {:expression, {value}} -> to_string(value)
+      {:text, text} ->
+        text
+
+      {:expression, {%TrustedHTML{}}} ->
+        raise ArgumentError,
+          message:
+            "trusted HTML can't be interpolated in an attribute value or in a prop value made of several parts, only as an element's content"
+
+      {:expression, {{:safe, _iodata}}} ->
+        raise_phoenix_safe_tuple()
+
+      {:expression, {value}} ->
+        to_string(value)
     end)
   end
 
@@ -1054,7 +1139,12 @@ defmodule Hologram.Template.Renderer do
     if tag_name in @void_elems do
       "<#{tag_name}#{attributes_html} />"
     else
-      children_html = print_node(children, tag_name, print_opts)
+      children_print_opts = %{
+        print_opts
+        | context: children_context(tag_name, attributes, print_opts.context)
+      }
+
+      children_html = print_node(children, tag_name, children_print_opts)
 
       "<#{tag_name}#{attributes_html}>#{children_html}</#{tag_name}>"
     end
@@ -1071,9 +1161,21 @@ defmodule Hologram.Template.Renderer do
 
   defp print_node({:text, text}, _parent_tag_name, _print_opts), do: HtmlEntities.encode(text)
 
+  # Printed the way the browser's parser reads it under the parent it sits in, between the comments
+  # the client finds the range by in a server-rendered page.
+  defp print_node({:trusted_html, html}, parent_tag_name, print_opts) do
+    normalized_html = HTMLNormalizer.normalize(html, parent_tag_name, print_opts.context)
+
+    "<!--#{HTMLNormalizer.range_start_marker()}-->" <>
+      normalized_html <> "<!--#{HTMLNormalizer.range_end_marker()}-->"
+  end
+
   # What print_node/3 carries down the tree: the nonce stamp and the values markers are filled with.
+  # The context is where the children of the element being printed sit as the HTML parser sees it
+  # (see Hologram.Template.HTMLNormalizer.t:context/0), which trusted HTML among them is
+  # normalized for.
   defp print_opts(opts) do
-    %{csp_stamp: csp_stamp(opts), fills: opts[:fills] || %{}}
+    %{context: :html, csp_stamp: csp_stamp(opts), fills: opts[:fills] || %{}}
   end
 
   defp put_initial_page_flag_context(page_component_struct, initial_page?) do
@@ -1111,6 +1213,12 @@ defmodule Hologram.Template.Renderer do
   defp raise_invalid_spread_value(value) do
     raise ArgumentError,
       message: "spread value must be a map or a keyword list, got: #{inspect(value)}"
+  end
+
+  defp raise_phoenix_safe_tuple do
+    raise ArgumentError,
+      message:
+        "Phoenix.HTML safe tuples aren't supported in Hologram templates, use trust_html/1 instead"
   end
 
   # Naming the template the component was rendered from is what turns the error into something
