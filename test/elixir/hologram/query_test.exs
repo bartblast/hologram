@@ -10,6 +10,8 @@ defmodule Hologram.QueryTest do
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module5
 
   describe "filter/2" do
@@ -114,6 +116,16 @@ defmodule Hologram.QueryTest do
                    "nofile:2: search reads as an attribute of the queried entity, and a keyword predicate value is a literal or a pinned expression - a value from the surrounding code is pinned: ^search, and a comparison with an attribute is written as an expression: c == search",
                    fn -> Code.eval_string(code) end
     end
+
+    test "compares a derived value" do
+      assert filter(Module32, message_count > 3).filter == [{:message_count, :>, 3}]
+    end
+
+    test "quantifies over a derived set" do
+      query = filter(Module32, any(message <- recent_messages, message.body == "hi"))
+
+      assert query.filter == [{:any, {[:recent_messages], [{:body, :==, "hi"}]}}]
+    end
   end
 
   describe "include/2" do
@@ -175,6 +187,21 @@ defmodule Hologram.QueryTest do
       assert_error Hologram.CompileError,
                    "nofile:2: include names a relationship with a bare name, got: :a - write a",
                    fn -> Code.eval_string(code) end
+    end
+
+    test "lowers a derived value" do
+      assert include(Module32, message_count).include == %{message_count: nil}
+    end
+
+    test "lowers a path through a derived set" do
+      query = include(Module32, recent_messages.channel)
+
+      assert query.include == %{
+               recent_messages: %Query{
+                 entity: Module33,
+                 include: %{channel: %Query{entity: Module32}}
+               }
+             }
     end
   end
 
@@ -367,6 +394,10 @@ defmodule Hologram.QueryTest do
       assert_error Hologram.CompileError,
                    "nofile:2: sort names an attribute with a bare name, got: :c - write c",
                    fn -> Code.eval_string(code) end
+    end
+
+    test "lowers a derived value" do
+      assert sort(Module32, message_count: :desc).sort == [{:message_count, :desc}]
     end
   end
 

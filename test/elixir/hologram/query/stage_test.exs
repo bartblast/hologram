@@ -21,6 +21,8 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module31
+  alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Policy
@@ -1322,6 +1324,167 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "filter/2 - derived fields" do
+    test "compares a derived value" do
+      query = filter(Module32, message_count: {:>, 3})
+
+      assert query.filter == [{:message_count, :>, 3}]
+    end
+
+    test "compares an attribute with a derived value" do
+      query = filter(Module33, position: {:<, {:attribute, :later_count}})
+
+      assert query.filter == [{:position, :<, {:attribute, :later_count}}]
+    end
+
+    test "compares a derived value at the end of a path" do
+      query = filter(Module33, [{[:channel, :message_count], {:>, 3}}])
+
+      assert query.filter == [{[:channel, :message_count], :>, 3}]
+    end
+
+    test "compares a derived enum by its declared values" do
+      query = filter(Module33, tier: {:>, :low})
+
+      assert query.filter == [{:tier, :>, :low}]
+    end
+
+    test "raises on a value a derived enum does not declare" do
+      expected_msg =
+        ":mid is not a value of attribute :tier in Hologram.Test.Fixtures.Entity.Module33 - the values are [:low, :high]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module33, tier: {:>, :mid})
+      end
+    end
+
+    test "compares a derived string for equality" do
+      query = filter(Module33, channel_name: "general")
+
+      assert query.filter == [{:channel_name, :==, "general"}]
+    end
+
+    test "raises on an ordering comparison of a derived string" do
+      expected_msg =
+        "operator :> requires an orderable attribute - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a string compares by the sort key stored with it, which a computed string has none of"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module33, channel_name: {:>, "a"})
+      end
+    end
+
+    test "raises on an ordering comparison with a derived string" do
+      expected_msg =
+        "operator :> requires an orderable attribute - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a string compares by the sort key stored with it, which a computed string has none of"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module33, body: {:>, {:attribute, :channel_name}})
+      end
+    end
+
+    test "raises on a search of a derived string" do
+      expected_msg =
+        "operator :contains requires a stored string - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a search reads the forms stored with a string"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module33, channel_name: {:contains, "gen"})
+      end
+    end
+
+    test "raises on a search for a derived string" do
+      expected_msg =
+        "operator :contains requires a stored string - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a search reads the forms stored with a string"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module33, body: {:contains, {:attribute, :channel_name}})
+      end
+    end
+
+    test "raises on a derived field holding one row" do
+      expected_msg =
+        ":first_message is a derived field holding one row in Hologram.Test.Fixtures.Entity.Module32 - only attributes can be filtered"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module32, first_message: nil)
+      end
+    end
+
+    test "raises on a derived field holding a set" do
+      expected_msg =
+        ":recent_messages is a derived field holding a set of rows in Hologram.Test.Fixtures.Entity.Module32 - only attributes can be filtered"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module32, recent_messages: nil)
+      end
+    end
+
+    test "raises on a path through a derived field" do
+      expected_msg =
+        ":first_message is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a path in a condition goes through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module32, [{[:first_message, :body], "hi"}])
+      end
+    end
+
+    test "compares a derived value inside a quantifier's condition" do
+      query = filter(Module32, any: {[:messages], [later_count: {:>, 2}]})
+
+      assert query.filter == [{:any, {[:messages], [{:later_count, :>, 2}]}}]
+    end
+
+    test "compares with a derived value of the row above inside a quantifier's condition" do
+      query =
+        filter(Module32,
+          any: {[:messages], [later_count: {:<, {:attribute, {:outer, 1, :message_count}}}]}
+        )
+
+      assert query.filter == [
+               {:any,
+                {[:messages], [{:later_count, :<, {:attribute, {:outer, 1, :message_count}}}]}}
+             ]
+    end
+
+    test "quantifies over a derived set" do
+      query = filter(Module32, any: {[:recent_messages], [body: "hi"]})
+
+      assert query.filter == [{:any, {[:recent_messages], [{:body, :==, "hi"}]}}]
+    end
+
+    test "quantifies over a derived set through a to-one" do
+      query = filter(Module33, none: {[:channel, :recent_messages], []})
+
+      assert query.filter == [{:none, {[:channel, :recent_messages], []}}]
+    end
+
+    test "raises on a quantifier over a derived field holding one row" do
+      expected_msg =
+        ":first_message is a derived field holding one row in Hologram.Test.Fixtures.Entity.Module32 - any, none and all ask about the rows of a set"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module32, any: {[:first_message], []})
+      end
+    end
+
+    test "raises on a quantifier over a derived value" do
+      expected_msg =
+        ":message_count is a derived field holding a :integer value in Hologram.Test.Fixtures.Entity.Module32 - any, none and all ask about the rows of a set"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module32, any: {[:message_count], []})
+      end
+    end
+
+    test "raises on a quantifier's source through a derived field" do
+      expected_msg =
+        ":first_message is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a quantifier's source goes through to-one relationships that hold their reference to a set"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        filter(Module32, any: {[:first_message, :channel], []})
+      end
+    end
+  end
+
   describe "filter/2 - quantifiers" do
     test "quantifies over an inverse of a to-one" do
       query = filter(Module26, any: {[:messages], [body: "hi"]})
@@ -1864,6 +2027,26 @@ defmodule Hologram.Query.StageTest do
         |> filter(position: {:in, [1, row_field]})
       end
     end
+
+    test "compares with a row field naming a derived value" do
+      query =
+        Module32
+        |> sourced([:messages])
+        |> filter(position: {:<, %RowField{owner: Module32, name: :message_count}})
+
+      assert query.filter == [{:position, :<, {:attribute, {:outer, 1, :message_count}}}]
+    end
+
+    test "raises on an ordering comparison with a row field naming a derived string" do
+      expected_msg =
+        "operator :> requires an orderable attribute - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a string compares by the sort key stored with it, which a computed string has none of"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        Module33
+        |> sourced([:channel, :messages])
+        |> filter(body: {:>, %RowField{owner: Module33, name: :channel_name}})
+      end
+    end
   end
 
   describe "filter/2 - searches" do
@@ -2261,7 +2444,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an attribute name" do
       expected_msg =
-        ":a is an attribute in Hologram.Test.Fixtures.Entity.Module2 - only relationships can be included"
+        ":a is an attribute in Hologram.Test.Fixtures.Entity.Module2 - only relationships and derived fields can be included"
 
       assert_error ArgumentError, expected_msg, fn ->
         include(Module2, :a)
@@ -2314,7 +2497,7 @@ defmodule Hologram.Query.StageTest do
       end
 
       expected_msg =
-        "unknown relationship :x in Hologram.Query.StageTest.KnownRelationshipsFixture - known relationships: :a, :b, :c"
+        "unknown relationship :x in Hologram.Query.StageTest.KnownRelationshipsFixture - known relationships and derived fields: :a, :b, :c"
 
       assert_error ArgumentError, expected_msg, fn ->
         include(KnownRelationshipsFixture, :x)
@@ -2331,7 +2514,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an unknown relationship" do
       expected_msg =
-        "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c"
+        "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c"
 
       assert_error ArgumentError, expected_msg, fn ->
         include(Module3, :x)
@@ -2344,6 +2527,72 @@ defmodule Hologram.Query.StageTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         include(Module3, :b, &filter(&1, a: true))
+      end
+    end
+  end
+
+  describe "include/3 - derived fields" do
+    test "includes a derived value" do
+      query = include(Module32, :message_count)
+
+      assert query.include == %{message_count: nil}
+    end
+
+    test "merges two includes of one derived value" do
+      query =
+        Module32
+        |> include(:message_count)
+        |> include(:message_count)
+
+      assert query.include == %{message_count: nil}
+    end
+
+    test "merges two includes of one derived set" do
+      query =
+        Module32
+        |> include(recent_messages: :channel)
+        |> include(:recent_messages)
+
+      assert query.include == %{
+               recent_messages: %{base_term(Module33) | include: %{channel: base_term(Module32)}}
+             }
+    end
+
+    test "includes a derived set" do
+      query = include(Module32, :recent_messages)
+
+      assert query.include == %{recent_messages: base_term(Module33)}
+    end
+
+    test "includes a derived field holding one row" do
+      query = include(Module32, :first_message)
+
+      assert query.include == %{first_message: base_term(Module33)}
+    end
+
+    test "nests an include under a derived set" do
+      query = include(Module32, recent_messages: :channel)
+
+      assert query.include == %{
+               recent_messages: %{base_term(Module33) | include: %{channel: base_term(Module32)}}
+             }
+    end
+
+    test "raises on an include under a derived value" do
+      expected_msg =
+        ":message_count is a :integer derived field in Hologram.Test.Fixtures.Entity.Module32 - nothing is included under it"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module32, message_count: :name)
+      end
+    end
+
+    test "raises on clauses on a derived set" do
+      expected_msg =
+        "derived field :recent_messages takes no clauses - its definition states its rows, so only includes nest under it"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module32, :recent_messages, &take(&1, 1))
       end
     end
   end
@@ -2786,6 +3035,25 @@ defmodule Hologram.Query.StageTest do
 
       assert normalize(query) == query
     end
+
+    test "normalizes what a derived set includes without ordering its rows" do
+      query =
+        Module32
+        |> include([:message_count, recent_messages: :channel])
+        |> normalize()
+
+      assert query == %Query{
+               entity: Module32,
+               include: %{
+                 message_count: nil,
+                 recent_messages: %{
+                   base_term(Module33)
+                   | include: %{channel: base_term(Module32)}
+                 }
+               },
+               sort: [{:id, :asc}]
+             }
+    end
   end
 
   describe "normalized_filter/1" do
@@ -2973,6 +3241,12 @@ defmodule Hologram.Query.StageTest do
 
     test "yields an empty list for a concrete term" do
       assert placeholder_names(filter(Module2, a: true)) == []
+    end
+
+    test "passes over an included derived value" do
+      query = include(Module32, :message_count)
+
+      assert placeholder_names(query) == []
     end
   end
 
@@ -3426,6 +3700,56 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "sort/2 - derived fields" do
+    test "sorts by a derived value" do
+      query = sort(Module32, message_count: :desc)
+
+      assert query.sort == [{:message_count, :desc}]
+    end
+
+    test "sorts by a derived enum" do
+      query = sort(Module33, :tier)
+
+      assert query.sort == [{:tier, :asc}]
+    end
+
+    test "raises on a derived string" do
+      expected_msg =
+        ":channel_name is a derived string in Hologram.Test.Fixtures.Entity.Module33 - a string is ordered by the sort key stored with it, which a computed string has none of"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module33, :channel_name)
+      end
+    end
+
+    test "raises on a derived field holding a set" do
+      expected_msg =
+        ":recent_messages is a derived field holding a set of rows in Hologram.Test.Fixtures.Entity.Module32 - only attributes can be ordered"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module32, :recent_messages)
+      end
+    end
+
+    test "raises on a derived field holding one row" do
+      expected_msg =
+        ":first_message is a derived field holding one row in Hologram.Test.Fixtures.Entity.Module32 - only attributes can be ordered"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module32, :first_message)
+      end
+    end
+
+    test "raises on an unknown name, listing the derived values it can sort by" do
+      expected_msg =
+        "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :created_at, :id, :later_count, :position, :tier, :updated_at"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sort(Module33, :nope)
+      end
+    end
+  end
+
   describe "sourced/2" do
     test "reads an inverse set of the owning row" do
       assert sourced(Module26, [:messages]) == %Query{
@@ -3528,6 +3852,38 @@ defmodule Hologram.Query.StageTest do
         "unknown relationship :replies in Hologram.Test.Fixtures.Entity.Module28 - known relationships: :channel, :labels"
 
       assert_error ArgumentError, expected_msg, fn -> sourced(Module28, [:replies, :labels]) end
+    end
+
+    test "reads a derived set of the owning row" do
+      assert sourced(Module32, [:recent_messages]) == %Query{
+               entity: Module33,
+               source: {Module32, [:recent_messages]}
+             }
+    end
+
+    test "reads a derived set through a to-one" do
+      assert sourced(Module33, [:channel, :recent_messages]) == %Query{
+               entity: Module33,
+               source: {Module33, [:channel, :recent_messages]}
+             }
+    end
+
+    test "raises on a derived field holding one row" do
+      expected_msg =
+        ":first_message is a derived field holding one row in Hologram.Test.Fixtures.Entity.Module32 - a derived field's query reads a set"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sourced(Module32, [:first_message])
+      end
+    end
+
+    test "raises on a chain through a derived field" do
+      expected_msg =
+        ":recent_messages is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a derived field's query goes through relationships, with a derived set only at its end"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        sourced(Module32, [:recent_messages, :channel])
+      end
     end
   end
 

@@ -91,7 +91,7 @@ defmodule Hologram.Query do
           cardinality: cardinality,
           entity: module,
           filter: list(clause),
-          include: %{atom => t},
+          include: %{atom => t | nil},
           skip: bound,
           sort: list(ordering),
           source: term_source | nil,
@@ -319,6 +319,14 @@ defmodule Hologram.Query do
   have no reference field, and neither relationship name itself is filterable - a path names the
   related row's attributes instead.
 
+  A derived field holding a value is named like an attribute - as a predicate's name, an operand or
+  a path's last name - and compares by its declared type: `filter(message_count > 10)`,
+  `filter(channel.message_count > 10)`. A derived string takes equality and membership only: it
+  has no stored sort key, so ordering comparisons and searches refuse it. A derived field holding
+  rows is not compared, but a quantifier's set may be one - `any(message <- recent_messages,
+  message.pinned == true)`. A path goes through stored to-one relationships only, never through a
+  derived field.
+
   Raises Hologram.CompileError, naming the location, when a keyword list or a pinned list stands
   as one side of `and` or `or` or as a quantifier's condition, when a quantifier has a condition
   but no bound row, a bound row but no condition, or - for `all` - no condition at all, when a
@@ -376,6 +384,10 @@ defmodule Hologram.Query do
 
   To-one includes take no clauses (a single embedded entity has nothing to filter,
   order, or slice) - nested includes are their only refinement. Includes nest to any depth.
+
+  A derived field is included by its name too. One holding a value is computed into each row, and
+  nothing nests under it. One holding rows embeds the rows its definition states and takes nested
+  includes only - `include(recent_messages.author)`.
 
   Including a relationship that is already included merges the two when neither narrows
   it with clauses: what each includes is included, by the same rule at every level, so
@@ -561,6 +573,9 @@ defmodule Hologram.Query do
 
   An enum attribute sorts by the position of its values in the declared `values:` list -
   `[:low, :medium, :high]` sorts low, medium, high, on both execution tiers.
+
+  A derived field holding a value sorts like an attribute of its type, except a derived string,
+  which has no stored sort key.
 
   Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
   (`sort(:priority)` is refused in favour of `sort(priority)`), when a direction is

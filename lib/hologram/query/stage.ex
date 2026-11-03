@@ -148,19 +148,10 @@ defmodule Hologram.Query.Stage do
   @spec include(module | Query.t(), atom | list, (Query.t() -> Query.t()) | nil) :: Query.t()
   def include(query, spec, sub_builder \\ nil)
 
-  def include(query, name, nil) when is_atom(name) do
-    include(query, name, fn related_term -> related_term end)
-  end
-
-  def include(query, name, sub_builder) when is_atom(name) and is_function(sub_builder, 1) do
+  def include(query, name, sub_builder)
+      when is_atom(name) and (is_nil(sub_builder) or is_function(sub_builder, 1)) do
     term = to_term(query)
-
-    {target, kind} = validate_relationship_name!(name, term.entity)
-
-    related_base_term = to_term(target)
-    sub_term = sub_builder.(related_base_term)
-
-    validate_sub_term!(sub_term, name, target, kind)
+    sub_term = included_sub_term!(term.entity, name, sub_builder)
 
     %{term | include: put_included!(term.include, name, sub_term)}
   end
@@ -297,6 +288,7 @@ defmodule Hologram.Query.Stage do
     include_names =
       term.include
       |> Map.values()
+      |> Enum.reject(&is_nil/1)
       |> Enum.flat_map(&placeholder_names/1)
 
     filter_names ++ bound_names ++ order_names ++ include_names
@@ -501,7 +493,10 @@ defmodule Hologram.Query.Stage do
   # lead to.
   defp attribute_definition(entity_type, name) do
     {subject_type, subject_name} = subject(entity_type, name)
-    definitions = subject_type.__attributes__() ++ subject_type.__system_attributes__()
+
+    definitions =
+      subject_type.__attributes__() ++
+        subject_type.__system_attributes__() ++ derived_value_definitions(subject_type)
 
     Enum.find(definitions, fn {definition_name, _type, _opts} ->
       definition_name == subject_name
@@ -532,6 +527,19 @@ defmodule Hologram.Query.Stage do
 
     validate_operand_name!(other, other_type)
     validate_comparable_attributes!(name, other, operator, entity_type, other_type)
+
+    # Two compared attributes share a type, so the operand is orderable or searchable when the name
+    # is - unless it is a derived string, which has no stored sort key or search forms.
+    cond do
+      operator in @ordering_operators ->
+        validate_orderable_attribute!(other, other_type, operator)
+
+      operator in @search_operators ->
+        validate_searchable_attribute!(other, other_type, operator)
+
+      true ->
+        :ok
+    end
 
     {name, operator, {:attribute, other}}
   end
@@ -594,6 +602,63 @@ defmodule Hologram.Query.Stage do
     |> integer_names()
   end
 
+  # The derived field of the given name holding rows - one or a set - nil for any other name.
+  defp derived_rows_definition(entity_type, name) do
+    case List.keyfind(entity_type.__derived__(), name, 0) do
+      {_name, type, _opts} = definition when is_list(type) -> definition
+      {_name, type, _opts} = definition -> if Reflection.alias?(type), do: definition
+      nil -> nil
+    end
+  end
+
+  # What a derived field holds, as a message names it: one row or a set of them.
+  defp derived_rows_spelled({_name, [_target], _opts}), do: "a set of rows"
+
+  defp derived_rows_spelled({_name, _target, _opts}), do: "one row"
+
+  # The element type of the derived set of the given name, refusing a derived field that holds no
+  # set with the given reason, nil for a name that is no derived field.
+  defp derived_set_target(name, entity_type, reason) do
+    case List.keyfind(entity_type.__derived__(), name, 0) do
+      {_name, [target], _opts} ->
+        target
+
+      {_name, type, _opts} = definition ->
+        held =
+          if Reflection.alias?(type),
+            do: derived_rows_spelled(definition),
+            else: "a #{inspect(type)} value"
+
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a derived field holding #{held} in #{inspect(entity_type)} - #{reason}"
+
+      nil ->
+        nil
+    end
+  end
+
+  # Whether a name is a derived string: a computed string has no stored sort key or folded form, so
+  # it is not ordered or searched.
+  defp derived_string?(entity_type, name) do
+    {subject_type, subject_name} = subject(entity_type, name)
+
+    match?({_name, :string, _opts}, List.keyfind(subject_type.__derived__(), subject_name, 0))
+  end
+
+  # The derived fields holding a value of an attribute type, declared the way an attribute is.
+  defp derived_value_definitions(entity_type) do
+    Enum.reject(entity_type.__derived__(), fn {_name, type, _opts} ->
+      is_list(type) or Reflection.alias?(type)
+    end)
+  end
+
+  defp derived_value_names(entity_type) do
+    entity_type
+    |> derived_value_definitions()
+    |> Enum.map(fn {name, _type, _opts} -> name end)
+  end
+
   # One alternative says what its predicates say alone, and an empty one says nothing at all - it
   # would make the disjunction hold for every row - so neither is a disjunction, and every executor
   # is spared both shapes. The lowering never produces either.
@@ -646,7 +711,10 @@ defmodule Hologram.Query.Stage do
   end
 
   defp filterable_names(entity_type) do
-    Enum.sort(attribute_names(entity_type) ++ reference_field_names(entity_type))
+    Enum.sort(
+      attribute_names(entity_type) ++
+        reference_field_names(entity_type) ++ derived_value_names(entity_type)
+    )
   end
 
   # Keyword.keyword?/1 with placeholder keys, paths and names of a row above admitted - a
@@ -687,6 +755,49 @@ defmodule Hologram.Query.Stage do
     Enum.concat(entity_type.__relationships__(), entity_type.__inverse_relationships__())
   end
 
+  defp included_derived(name, entity_type) do
+    case List.keyfind(entity_type.__derived__(), name, 0) do
+      {_name, [target], _opts} ->
+        {target, :derived_rows}
+
+      {_name, type, _opts} ->
+        {type, if(Reflection.alias?(type), do: :derived_rows, else: :derived_value)}
+
+      nil ->
+        nil
+    end
+  end
+
+  defp included_kind(entity_type, name) do
+    {_target, kind} = validate_included_name!(name, entity_type)
+
+    kind
+  end
+
+  # What an include of the given name holds: nil for a derived value, which has nothing under it,
+  # or the related type's term the sub-builder refines - a derived field's rows take nested includes
+  # only, since its definition states which rows it holds.
+  defp included_sub_term!(entity_type, name, sub_builder) do
+    case validate_included_name!(name, entity_type) do
+      {type, :derived_value} ->
+        if sub_builder do
+          raise ArgumentError,
+            message:
+              "#{inspect(name)} is a #{inspect(type)} derived field in #{inspect(entity_type)} - nothing is included under it"
+        end
+
+        nil
+
+      {target, kind} ->
+        related_base_term = to_term(target)
+        sub_term = if sub_builder, do: sub_builder.(related_base_term), else: related_base_term
+
+        validate_sub_term!(sub_term, name, target, kind)
+
+        sub_term
+    end
+  end
+
   defp integer_names(definitions) do
     definitions
     |> Enum.filter(fn {_name, type, _opts} -> type == :integer end)
@@ -724,6 +835,8 @@ defmodule Hologram.Query.Stage do
   # Two includes of one relationship are one include when neither narrows it: what each includes
   # merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
   # than the other, so a relationship included twice with clauses on either side is refused.
+  defp merged_sub_term!(nil, nil, _name), do: nil
+
   defp merged_sub_term!(included, sub_term, name) do
     if sub_term_has_clauses?(included) or sub_term_has_clauses?(sub_term) do
       raise ArgumentError,
@@ -797,10 +910,14 @@ defmodule Hologram.Query.Stage do
   defp normalized_clause(triple), do: triple
 
   defp normalized_includes(term) do
-    Map.new(term.include, fn {name, sub_term} ->
-      ordered_sub_term = with_declared_order(sub_term, term.entity, name)
+    Map.new(term.include, fn
+      {name, nil} ->
+        {name, nil}
 
-      {name, normalized_sub_term(ordered_sub_term, relationship_kind(term.entity, name))}
+      {name, sub_term} ->
+        ordered_sub_term = with_declared_order(sub_term, term.entity, name)
+
+        {name, normalized_sub_term(ordered_sub_term, included_kind(term.entity, name))}
     end)
   end
 
@@ -816,7 +933,9 @@ defmodule Hologram.Query.Stage do
 
   defp normalized_sub_term(sub_term, :to_many), do: normalized_term(sub_term)
 
-  defp normalized_sub_term(sub_term, :to_one) do
+  # A to-one embeds one row, and a derived field's rows are the ones its definition states, so
+  # neither carries an order of its own - only what it includes is normalized.
+  defp normalized_sub_term(sub_term, kind) when kind in [:derived_rows, :to_one] do
     %{sub_term | include: normalized_includes(sub_term)}
   end
 
@@ -1183,6 +1302,24 @@ defmodule Hologram.Query.Stage do
 
   defp quantifier_value?(_value), do: false
 
+  @spec raise_unknown_included_name!(atom, module) :: no_return
+  defp raise_unknown_included_name!(name, entity_type) do
+    if name in attribute_names(entity_type) do
+      raise ArgumentError,
+        message:
+          "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only relationships and derived fields can be included"
+    end
+
+    known =
+      entity_type
+      |> Entity.loadable_names()
+      |> Enum.map_join(", ", &inspect/1)
+
+    raise ArgumentError,
+      message:
+        "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships and derived fields: #{known}"
+  end
+
   defp raise_unknown_operator!(operator, name) do
     raise ArgumentError,
       message:
@@ -1228,12 +1365,6 @@ defmodule Hologram.Query.Stage do
     entity_type
     |> to_one_relationship_names()
     |> Enum.map(&String.to_existing_atom("#{&1}_id"))
-  end
-
-  defp relationship_kind(entity_type, name) do
-    {_target, kind} = validate_relationship_name!(name, entity_type)
-
-    kind
   end
 
   defp relationship_names(entity_type) do
@@ -1522,9 +1653,20 @@ defmodule Hologram.Query.Stage do
   end
 
   defp validate_attribute_name!(name, entity_type, usage) do
-    attribute_names = attribute_names(entity_type)
+    orderable_derived_names =
+      entity_type
+      |> derived_value_definitions()
+      |> Enum.reject(fn {_name, type, _opts} -> type == :string end)
+      |> Enum.map(fn {name, _type, _opts} -> name end)
+
+    attribute_names = Enum.sort(attribute_names(entity_type) ++ orderable_derived_names)
 
     cond do
+      derived_string?(entity_type, name) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a derived string in #{inspect(entity_type)} - a string is #{usage} by the sort key stored with it, which a computed string has none of"
+
       name in attribute_names ->
         :ok
 
@@ -1532,6 +1674,11 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be #{usage}"
+
+      derived = derived_rows_definition(entity_type, name) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a derived field holding #{derived_rows_spelled(derived)} in #{inspect(entity_type)} - only attributes can be #{usage}"
 
       true ->
         known = Enum.map_join(attribute_names, ", ", &inspect/1)
@@ -1683,12 +1830,35 @@ defmodule Hologram.Query.Stage do
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered"
 
+      derived = derived_rows_definition(entity_type, name) ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a derived field holding #{derived_rows_spelled(derived)} in #{inspect(entity_type)} - only attributes can be filtered"
+
       true ->
         known = Enum.map_join(filterable_names, ", ", &inspect/1)
 
         raise ArgumentError,
           message:
             "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
+    end
+  end
+
+  # A stored relationship or an inverse - a set of either is included as a to-many, a single
+  # inverse as a to-one - or a derived field: one holding rows is included as its rows' type, one
+  # holding a value as its type.
+  defp validate_included_name!(name, entity_type) do
+    definitions = includable_definitions(entity_type)
+
+    case List.keyfind(definitions, name, 0) do
+      {_name, [target], _opts} ->
+        {target, :to_many}
+
+      {_name, target, _opts} ->
+        {target, :to_one}
+
+      nil ->
+        included_derived(name, entity_type) || raise_unknown_included_name!(name, entity_type)
     end
   end
 
@@ -1742,6 +1912,15 @@ defmodule Hologram.Query.Stage do
     end
   end
 
+  # A derived field holds no reference, so no relationship goes through it - a related row it holds
+  # is read through the relationships its definition reads.
+  defp validate_not_derived_hop!(hop, entity_type, reason) do
+    if List.keymember?(entity_type.__derived__(), hop, 0) do
+      raise ArgumentError,
+        message: "#{inspect(hop)} is a derived field in #{inspect(entity_type)} - #{reason}"
+    end
+  end
+
   # What an attribute operand names - another attribute of the row, or a path to one - refused in
   # the words a predicate's own name is.
   # The operand is quoted as it was written, a row above's wrapper included.
@@ -1762,6 +1941,12 @@ defmodule Hologram.Query.Stage do
   end
 
   defp validate_orderable_attribute!(name, entity_type, operator) do
+    if derived_string?(entity_type, name) do
+      raise ArgumentError,
+        message:
+          "operator #{inspect(operator)} requires an orderable attribute - #{inspect_name(name)} in #{inspect(entity_type)} is a derived string, and a string compares by the sort key stored with it, which a computed string has none of"
+    end
+
     type = attribute_type(entity_type, name)
 
     if type not in @orderable_types do
@@ -1824,6 +2009,12 @@ defmodule Hologram.Query.Stage do
               "#{inspect(hop)} is an attribute in #{inspect(entity_type)} - a path goes through relationships, and only its last name is an attribute"
         end
 
+        validate_not_derived_hop!(
+          hop,
+          entity_type,
+          "a path in a condition goes through to-one relationships that hold their reference"
+        )
+
         known =
           entity_type
           |> relationship_names()
@@ -1880,39 +2071,15 @@ defmodule Hologram.Query.Stage do
     end
   end
 
-  # A stored relationship or an inverse - a set of either is included as a to-many, a single
-  # inverse as a to-one.
-  defp validate_relationship_name!(name, entity_type) do
-    definitions = includable_definitions(entity_type)
-
-    case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
-      {_name, [target], _opts} ->
-        {target, :to_many}
-
-      {_name, target, _opts} ->
-        {target, :to_one}
-
-      nil ->
-        if name in attribute_names(entity_type) do
-          raise ArgumentError,
-            message:
-              "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only relationships can be included"
-        end
-
-        known =
-          entity_type
-          |> Entity.includable_names()
-          |> Enum.map_join(", ", &inspect/1)
-
-        raise ArgumentError,
-          message:
-            "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships: #{known}"
-    end
-  end
-
   # A search matches text, so it reads a string attribute - its value, or its folded form for a
   # loose match.
   defp validate_searchable_attribute!(name, entity_type, operator) do
+    if derived_string?(entity_type, name) do
+      raise ArgumentError,
+        message:
+          "operator #{inspect(operator)} requires a stored string - #{inspect_name(name)} in #{inspect(entity_type)} is a derived string, and a search reads the forms stored with a string"
+    end
+
     type = attribute_type(entity_type, name)
 
     if type != :string do
@@ -1949,6 +2116,12 @@ defmodule Hologram.Query.Stage do
         target
 
       nil ->
+        validate_not_derived_hop!(
+          hop,
+          entity_type,
+          "a quantifier's source goes through to-one relationships that hold their reference to a set"
+        )
+
         raise_unknown_source_name!(
           hop,
           entity_type,
@@ -1979,12 +2152,13 @@ defmodule Hologram.Query.Stage do
                 "#{inspect(name)} is a to-one relationship in #{inspect(entity_type)} - any, none and all ask about the rows of a to-many relationship - compare the related row through a path: #{name}.<attribute>"
 
           nil ->
-            raise_unknown_source_name!(
-              name,
-              entity_type,
-              Entity.includable_names(entity_type),
-              "a quantifier's source"
-            )
+            derived_set_target(name, entity_type, "any, none and all ask about the rows of a set") ||
+              raise_unknown_source_name!(
+                name,
+                entity_type,
+                Entity.includable_names(entity_type),
+                "a quantifier's source"
+              )
         end
     end
   end
@@ -2009,6 +2183,12 @@ defmodule Hologram.Query.Stage do
         |> hd()
 
       nil ->
+        validate_not_derived_hop!(
+          hop,
+          entity_type,
+          "a derived field's query goes through relationships, with a derived set only at its end"
+        )
+
         raise_unknown_source_name!(
           hop,
           entity_type,
@@ -2036,12 +2216,13 @@ defmodule Hologram.Query.Stage do
             "#{inspect(name)} is #{kind} in #{inspect(entity_type)} - a derived field's query reads a set - read the related row's attributes through a path: #{name}.<attribute>"
 
       nil ->
-        raise_unknown_source_name!(
-          name,
-          entity_type,
-          Entity.includable_names(entity_type),
-          "a derived field's query"
-        )
+        derived_set_target(name, entity_type, "a derived field's query reads a set") ||
+          raise_unknown_source_name!(
+            name,
+            entity_type,
+            Entity.includable_names(entity_type),
+            "a derived field's query"
+          )
     end
   end
 
@@ -2064,6 +2245,12 @@ defmodule Hologram.Query.Stage do
       raise ArgumentError,
         message:
           "to-one relationship #{inspect(name)} takes no clauses - clauses apply to to-many includes"
+    end
+
+    if kind == :derived_rows and sub_term_has_clauses?(sub_term) do
+      raise ArgumentError,
+        message:
+          "derived field #{inspect(name)} takes no clauses - its definition states its rows, so only includes nest under it"
     end
   end
 

@@ -92,6 +92,13 @@ defmodule Hologram.Entity.DerivedTest do
              }
     end
 
+    test "reads a derived set of a related row" do
+      assert field(Module33, [:channel, :recent_messages]) == %Query{
+               entity: Module33,
+               source: {Module33, [:channel, :recent_messages]}
+             }
+    end
+
     test "raises on a derived field holding one row" do
       expected_msg =
         "first_message is a derived field holding one row - include it, or read the rows it is computed from"
