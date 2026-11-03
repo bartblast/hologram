@@ -68,6 +68,11 @@ defmodule Hologram.Template.HTMLNormalizer do
   # See: https://html.spec.whatwg.org/multipage/parsing.html#serialising-html-fragments
   @raw_text_elements ~w(iframe noembed noframes style xmp)
 
+  # The HTML elements whose content loses a line feed right after the start tag when parsed.
+  #
+  # See: https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inbody
+  @leading_line_feed_elements ~w(listing pre textarea)
+
   # The SVG elements whose content the parser reads as HTML.
   #
   # See: https://html.spec.whatwg.org/multipage/parsing.html#html-integration-point
@@ -208,6 +213,14 @@ defmodule Hologram.Template.HTMLNormalizer do
   @spec range_start_marker() :: String.t()
   def range_start_marker, do: @range_start_marker
 
+  # Whether a node is left out of the printed content: an element in @dropped_elements, or a comment
+  # carrying a range marker.
+  defp dropped_node?({:comment, text}), do: text in [@range_start_marker, @range_end_marker]
+
+  defp dropped_node?({tag_name, _attrs, _children}), do: tag_name in @dropped_elements
+
+  defp dropped_node?(_text), do: false
+
   defp escape_attribute_value(value) do
     value
     |> String.replace("&", "&amp;")
@@ -224,6 +237,14 @@ defmodule Hologram.Template.HTMLNormalizer do
     |> String.replace("<", "&lt;")
     |> String.replace(">", "&gt;")
   end
+
+  # The parser drops a line feed right after a pre, a textarea or a listing start tag, so content
+  # that starts with one is printed with another in front of it, which the browser drops instead.
+  defp leading_line_feed(tag_name, :html, [<<"\n", _rest::binary>> | _nodes])
+       when tag_name in @leading_line_feed_elements,
+       do: "\n"
+
+  defp leading_line_feed(_tag_name, _namespace, _children), do: ""
 
   # Content for a parent the browser reads in a mode of its own is parsed inside wrappers that put
   # the parser in that mode, each given with the context its content sits in. The parser can put
@@ -284,13 +305,24 @@ defmodule Hologram.Template.HTMLNormalizer do
 
     start_tag = ["<", tag_name, print_attributes(attrs), ">"]
 
+    # Dropped before the leading line feed check, which a dropped node in front of the text would
+    # otherwise hide.
+    children = Enum.reject(children, &dropped_node?/1)
+
     if namespace == :html and tag_name in @void_elements do
       start_tag
     else
       raw_text_parent = if namespace == :html, do: tag_name
       children_context = children_context(tag_name, attrs, namespace)
 
-      [start_tag, print_nodes(children, children_context, raw_text_parent), "</", tag_name, ">"]
+      [
+        start_tag,
+        leading_line_feed(tag_name, namespace, children),
+        print_nodes(children, children_context, raw_text_parent),
+        "</",
+        tag_name,
+        ">"
+      ]
     end
   end
 
@@ -302,15 +334,11 @@ defmodule Hologram.Template.HTMLNormalizer do
   #
   # See: https://html.spec.whatwg.org/multipage/parsing.html#serialising-html-fragments
   defp print_nodes(nodes, context, raw_text_parent) do
-    Enum.map(nodes, fn
-      {:comment, text} when text in [@range_start_marker, @range_end_marker] ->
-        []
-
+    nodes
+    |> Enum.reject(&dropped_node?/1)
+    |> Enum.map(fn
       {:comment, text} ->
         ["<!--", text, "-->"]
-
-      {tag_name, _attrs, _children} when tag_name in @dropped_elements ->
-        []
 
       {tag_name, attrs, children} ->
         print_element(tag_name, attrs, children, context)

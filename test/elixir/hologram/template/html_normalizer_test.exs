@@ -131,6 +131,42 @@ defmodule Hologram.Template.HTMLNormalizerTest do
       assert normalize(html, "div", :html) == html
     end
 
+    # The parser drops a line feed right after these start tags, so one the content keeps is printed
+    # with another in front of it.
+    test "keeps a leading line feed in pre, textarea and listing elements" do
+      html = "<pre>\n\nx</pre><textarea>\n\ny</textarea><listing>\n\nz</listing>"
+
+      assert normalize(html, "div", :html) == html
+    end
+
+    test "keeps a leading line feed behind a dropped script element in a pre element" do
+      assert normalize("<pre><script></script>\nx</pre>", "div", :html) == "<pre>\n\nx</pre>"
+    end
+
+    test "keeps a leading line feed behind a dropped range marker in a listing element" do
+      assert normalize("<listing><!--hologram-html-->\nx</listing>", "div", :html) ==
+               "<listing>\n\nx</listing>"
+    end
+
+    test "keeps a leading line feed in a pre element breaking out of SVG" do
+      assert normalize("<pre>\n\nx</pre>", "svg", :svg) == "<pre>\n\nx</pre>"
+    end
+
+    test "keeps a leading line feed in a pre element inside an SVG foreignObject element" do
+      html = "<svg><foreignObject><pre>\n\nx</pre></foreignObject></svg>"
+
+      assert normalize(html, "div", :html) == html
+    end
+
+    test "adds no line feed to pre content that doesn't start with one" do
+      assert normalize("<pre>x\n</pre>", "div", :html) == "<pre>x\n</pre>"
+    end
+
+    # A pre or a listing start tag breaks out of SVG, so a textarea is what stays foreign.
+    test "adds no line feed to an SVG element named like textarea, whose leading one the parser keeps" do
+      assert normalize("<textarea>\n\nx</textarea>", "svg", :svg) == "<textarea>\n\nx</textarea>"
+    end
+
     test "escapes the text of a textarea element" do
       assert normalize("<textarea><b>&amp;</textarea>", "div", :html) ==
                "<textarea>&lt;b&gt;&amp;</textarea>"
