@@ -26,14 +26,18 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const MESSAGE = "MyApp.Message";
   const TOPIC = "MyApp.Topic";
   const GADGET = "MyApp.Gadget";
+  const POST = "MyApp.Post";
   const PROJECT = "MyApp.Project";
+  const ROOM = "MyApp.Room";
   const SHELF = "MyApp.Shelf";
   const TASK = "MyApp.Task";
   const USER = "MyApp.User";
   const VAULT = "MyApp.Vault";
 
   const booking = Type.alias(BOOKING);
+  const post = Type.alias(POST);
   const project = Type.alias(PROJECT);
+  const room = Type.alias(ROOM);
   const task = Type.alias(TASK);
   const user = Type.alias(USER);
 
@@ -216,6 +220,86 @@ describe("Elixir_Hologram_Query_Stage", () => {
           attributes: {body: "string", id: "uuid", position: "integer"},
           enumValues: {},
           relationships: {channel: {toMany: false, type: CHANNEL}},
+          serverOnly: [],
+        },
+        // A channel with a derived field of each kind, and its messages with derived values - the
+        // twins of the Elixir suite's Module32 and Module33. A definition is what the kernel
+        // evaluates, so the stages read none.
+        [ROOM]: {
+          attributes: {
+            created_at: "datetime",
+            id: "uuid",
+            name: "string",
+            updated_at: "datetime",
+          },
+          derived: {
+            first_message: {
+              definition: {value: null},
+              entity: POST,
+              kind: "one",
+            },
+            first_messages: {
+              definition: {value: null},
+              entity: POST,
+              kind: "set",
+            },
+            message_count: {
+              definition: {value: 0},
+              kind: "scalar",
+              type: "integer",
+              values: null,
+            },
+            recent_messages: {
+              definition: {value: null},
+              entity: POST,
+              kind: "set",
+            },
+          },
+          enumValues: {},
+          inverses: {
+            messages: {
+              forward: "channel",
+              reference: true,
+              sort: [["position", "asc"]],
+              toMany: true,
+              type: POST,
+            },
+          },
+          relationships: {},
+          serverOnly: [],
+        },
+        [POST]: {
+          attributes: {
+            body: "string",
+            created_at: "datetime",
+            id: "uuid",
+            position: "integer",
+            updated_at: "datetime",
+          },
+          derived: {
+            channel_name: {
+              definition: {value: null},
+              kind: "scalar",
+              type: "string",
+              values: null,
+            },
+            later_count: {
+              definition: {value: 0},
+              kind: "scalar",
+              type: "integer",
+              values: null,
+            },
+            tier: {
+              definition: {value: "low"},
+              kind: "scalar",
+              type: "enum",
+              values: ["low", "high"],
+            },
+          },
+          enumValues: {},
+          relationships: {
+            channel: {optional: true, toMany: false, type: ROOM},
+          },
           serverOnly: [],
         },
         // The single inverse's side, so including CHANNEL's topic has a type to build a term for.
@@ -513,6 +597,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "add_relationship takes a target id string, got: 123",
       );
     });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(ROOM),
+            Type.atom("recent_messages"),
+            Type.bitstring("t2"),
+          ),
+        HologramBoxedError,
+        ":recent_messages is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
+      );
+    });
   });
 
   describe("delete_relationship/3", () => {
@@ -597,6 +694,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
           ),
         HologramBoxedError,
         "delete_relationship takes a target id string, got: 123",
+      );
+    });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          deleteRelationship(
+            entity(ROOM),
+            Type.atom("recent_messages"),
+            Type.bitstring("t2"),
+          ),
+        HologramBoxedError,
+        ":recent_messages is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
   });
@@ -809,6 +919,15 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ":count in MyApp.Item carries a put value that is not an integer (nil) - increment cannot move it",
       );
     });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          increment(entity(ROOM), Type.atom("message_count"), Type.integer(1)),
+        HologramBoxedError,
+        ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
+      );
+    });
   });
 
   describe("decrement/3", () => {
@@ -873,6 +992,15 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => decrement(item(), Type.atom("bio"), Type.integer(1)),
         HologramBoxedError,
         ":bio is a :string attribute of MyApp.Item - decrement moves integer attributes only",
+      );
+    });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          decrement(entity(ROOM), Type.atom("message_count"), Type.integer(1)),
+        HologramBoxedError,
+        ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
   });
@@ -1090,6 +1218,20 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "put_attribute takes a keyword list or a map of attribute values, got: [1, 2]",
       );
     });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          putAttribute(
+            entity(ROOM),
+            Type.list([
+              Type.tuple([Type.atom("message_count"), Type.integer(3)]),
+            ]),
+          ),
+        HologramBoxedError,
+        ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
+      );
+    });
   });
 
   describe("put_attribute/3", () => {
@@ -1119,6 +1261,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
           putAttributeValue(entity(TASK), Type.atom("nope"), Type.integer(1)),
         HologramBoxedError,
         "unknown attribute :nope in MyApp.Task - known attributes: :done, :due_on, :position, :starts_at, :status, :title",
+      );
+    });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          putAttributeValue(
+            entity(ROOM),
+            Type.atom("message_count"),
+            Type.integer(3),
+          ),
+        HologramBoxedError,
+        ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
   });
@@ -2226,6 +2381,265 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
+  describe("filter/2 - derived fields", () => {
+    const atoms = (...names) => Type.list(names.map(Type.atom));
+
+    const nameTerm = (name) =>
+      Array.isArray(name) ? atoms(...name) : Type.atom(name);
+
+    const outer = (levels, name) =>
+      Type.tuple([Type.atom("outer"), Type.integer(levels), nameTerm(name)]);
+
+    const pairs = (entries) =>
+      Type.list(
+        entries.map(([name, value]) =>
+          Type.tuple([
+            typeof name === "string" || Array.isArray(name)
+              ? nameTerm(name)
+              : name,
+            value,
+          ]),
+        ),
+      );
+
+    const quantified = (kind, source, entries) =>
+      Type.list([
+        Type.tuple([Type.atom(kind), Type.tuple([source, pairs(entries)])]),
+      ]);
+
+    const attribute = (name) =>
+      Type.tuple([
+        Type.atom("attribute"),
+        typeof name === "string" || Array.isArray(name) ? nameTerm(name) : name,
+      ]);
+
+    const op = (operator, value) => Type.tuple([Type.atom(operator), value]);
+
+    it("compares a derived value", () => {
+      const query = filter(
+        room,
+        pairs([["message_count", op(">", Type.integer(3))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["message_count", ">", 3]]);
+    });
+
+    it("compares an attribute with a derived value", () => {
+      const query = filter(
+        post,
+        pairs([["position", op("<", attribute("later_count"))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", "<", {attribute: "later_count"}],
+      ]);
+    });
+
+    it("compares a derived value at the end of a path", () => {
+      const query = filter(
+        post,
+        pairs([[["channel", "message_count"], op(">", Type.integer(3))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        [["channel", "message_count"], ">", 3],
+      ]);
+    });
+
+    it("compares a derived enum by its declared values", () => {
+      const query = filter(post, pairs([["tier", op(">", Type.atom("low"))]]));
+
+      assert.deepStrictEqual(query.filter, [["tier", ">", "low"]]);
+    });
+
+    it("raises on a value a derived enum does not declare", () => {
+      assert.throw(
+        () => filter(post, pairs([["tier", op(">", Type.atom("mid"))]])),
+        HologramBoxedError,
+        ":mid is not a value of attribute :tier in MyApp.Post - the values are [:low, :high]",
+      );
+    });
+
+    it("compares a derived string for equality", () => {
+      const query = filter(
+        post,
+        pairs([["channel_name", Type.bitstring("general")]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["channel_name", "==", "general"]]);
+    });
+
+    it("raises on an ordering comparison of a derived string", () => {
+      assert.throw(
+        () =>
+          filter(post, pairs([["channel_name", op(">", Type.bitstring("a"))]])),
+        HologramBoxedError,
+        "operator :> requires an orderable attribute - :channel_name in MyApp.Post is a derived string, and a string compares by the sort key stored with it, which a computed string has none of",
+      );
+    });
+
+    it("raises on an ordering comparison with a derived string", () => {
+      assert.throw(
+        () =>
+          filter(post, pairs([["body", op(">", attribute("channel_name"))]])),
+        HologramBoxedError,
+        "operator :> requires an orderable attribute - :channel_name in MyApp.Post is a derived string, and a string compares by the sort key stored with it, which a computed string has none of",
+      );
+    });
+
+    it("raises on a search of a derived string", () => {
+      assert.throw(
+        () =>
+          filter(
+            post,
+            pairs([["channel_name", op("contains", Type.bitstring("gen"))]]),
+          ),
+        HologramBoxedError,
+        "operator :contains requires a stored string - :channel_name in MyApp.Post is a derived string, and a search reads the forms stored with a string",
+      );
+    });
+
+    it("raises on a search for a derived string", () => {
+      assert.throw(
+        () =>
+          filter(
+            post,
+            pairs([["body", op("contains", attribute("channel_name"))]]),
+          ),
+        HologramBoxedError,
+        "operator :contains requires a stored string - :channel_name in MyApp.Post is a derived string, and a search reads the forms stored with a string",
+      );
+    });
+
+    it("raises on a derived field holding one row", () => {
+      assert.throw(
+        () => filter(room, pairs([["first_message", Type.nil()]])),
+        HologramBoxedError,
+        ":first_message is a derived field holding one row in MyApp.Room - only attributes can be filtered",
+      );
+    });
+
+    it("raises on a derived field holding a set", () => {
+      assert.throw(
+        () => filter(room, pairs([["recent_messages", Type.nil()]])),
+        HologramBoxedError,
+        ":recent_messages is a derived field holding a set of rows in MyApp.Room - only attributes can be filtered",
+      );
+    });
+
+    it("raises on a path through a derived field", () => {
+      assert.throw(
+        () =>
+          filter(
+            room,
+            pairs([[["first_message", "body"], Type.bitstring("hi")]]),
+          ),
+        HologramBoxedError,
+        ":first_message is a derived field in MyApp.Room - a path in a condition goes through to-one relationships that hold their reference",
+      );
+    });
+
+    it("compares a derived value inside a quantifier's condition", () => {
+      const query = filter(
+        room,
+        quantified("any", atoms("messages"), [
+          ["later_count", op(">", Type.integer(2))],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["later_count", ">", 2]],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("compares with a derived value of the row above inside a quantifier's condition", () => {
+      const query = filter(
+        room,
+        quantified("any", atoms("messages"), [
+          ["later_count", op("<", attribute(outer(1, "message_count")))],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [
+            [
+              "later_count",
+              "<",
+              {attribute: {name: "message_count", outer: 1}},
+            ],
+          ],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("quantifies over a derived set", () => {
+      const query = filter(
+        room,
+        quantified("any", atoms("recent_messages"), [
+          ["body", Type.bitstring("hi")],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "any",
+          source: ["recent_messages"],
+        },
+      ]);
+    });
+
+    it("quantifies over a derived set through a to-one", () => {
+      const query = filter(
+        post,
+        quantified("none", atoms("channel", "recent_messages"), []),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [],
+          quantifier: "none",
+          source: ["channel", "recent_messages"],
+        },
+      ]);
+    });
+
+    it("raises on a quantifier over a derived field holding one row", () => {
+      assert.throw(
+        () => filter(room, quantified("any", atoms("first_message"), [])),
+        HologramBoxedError,
+        ":first_message is a derived field holding one row in MyApp.Room - any, none and all ask about the rows of a set",
+      );
+    });
+
+    it("raises on a quantifier over a derived value", () => {
+      assert.throw(
+        () => filter(room, quantified("any", atoms("message_count"), [])),
+        HologramBoxedError,
+        ":message_count is a derived field holding a :integer value in MyApp.Room - any, none and all ask about the rows of a set",
+      );
+    });
+
+    it("raises on a quantifier's source through a derived field", () => {
+      assert.throw(
+        () =>
+          filter(
+            room,
+            quantified("any", atoms("first_message", "channel"), []),
+          ),
+        HologramBoxedError,
+        ":first_message is a derived field in MyApp.Room - a quantifier's source goes through relationships, with a derived set only at its end",
+      );
+    });
+  });
+
   describe("filter/2 - quantifiers", () => {
     const channel = Type.alias(CHANNEL);
     const label = Type.alias(LABEL);
@@ -2284,7 +2698,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
 
       assert.deepStrictEqual(query.filter, [
-        {filter: [["done", "==", true]], quantifier: "any", source: ["tasks"]},
+        {
+          filter: [["done", "==", true]],
+          quantifier: "any",
+          source: ["tasks"],
+        },
       ]);
     });
 
@@ -2357,7 +2775,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
 
       assert.deepStrictEqual(query.filter[0].filter, [
-        {filter: [["done", "==", true]], quantifier: "any", source: ["tasks"]},
+        {
+          filter: [["done", "==", true]],
+          quantifier: "any",
+          source: ["tasks"],
+        },
       ]);
     });
 
@@ -3065,7 +3487,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
         manager: {
           ...baseTerm(USER),
           include: {
-            manager: {...baseTerm(USER), include: {manager: baseTerm(USER)}},
+            manager: {
+              ...baseTerm(USER),
+              include: {manager: baseTerm(USER)},
+            },
           },
         },
       });
@@ -3405,7 +3830,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.throw(
         () => include(project, Type.atom("name"), Type.nil()),
         HologramBoxedError,
-        ":name is an attribute in MyApp.Project - only relationships can be included",
+        ":name is an attribute in MyApp.Project - only relationships and derived fields can be included",
       );
     });
 
@@ -3452,7 +3877,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.throw(
         () => include(Type.alias(CHANNEL), Type.atom("x"), Type.nil()),
         HologramBoxedError,
-        "unknown relationship :x in MyApp.Channel - known relationships: :messages, :owner, :topic",
+        "unknown relationship :x in MyApp.Channel - known relationships and derived fields: :messages, :owner, :topic",
       );
     });
 
@@ -3475,7 +3900,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.throw(
         () => include(project, Type.atom("x"), Type.nil()),
         HologramBoxedError,
-        "unknown relationship :x in MyApp.Project - known relationships: :owner, :tasks",
+        "unknown relationship :x in MyApp.Project - known relationships and derived fields: :owner, :tasks",
       );
     });
 
@@ -3492,6 +3917,113 @@ describe("Elixir_Hologram_Query_Stage", () => {
         HologramBoxedError,
         "to-one relationship :owner takes no clauses - clauses apply to to-many includes",
       );
+    });
+  });
+
+  describe("include/3 - derived fields", () => {
+    const nested = (name, nestedName) =>
+      Type.list([Type.tuple([Type.atom(name), Type.atom(nestedName)])]);
+
+    it("includes a derived value", () => {
+      const query = include(room, Type.atom("message_count"), Type.nil());
+
+      assert.deepStrictEqual(query.include, {message_count: null});
+    });
+
+    it("merges two includes of one derived value", () => {
+      const query = include(
+        include(room, Type.atom("message_count"), Type.nil()),
+        Type.atom("message_count"),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {message_count: null});
+    });
+
+    it("merges two includes of one derived set", () => {
+      const query = include(
+        include(room, nested("recent_messages", "channel"), Type.nil()),
+        Type.atom("recent_messages"),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        recent_messages: {
+          ...baseTerm(POST),
+          include: {channel: baseTerm(ROOM)},
+        },
+      });
+    });
+
+    it("includes a derived set", () => {
+      const query = include(room, Type.atom("recent_messages"), Type.nil());
+
+      assert.deepStrictEqual(query.include, {
+        recent_messages: baseTerm(POST),
+      });
+    });
+
+    it("includes a derived field holding one row", () => {
+      const query = include(room, Type.atom("first_message"), Type.nil());
+
+      assert.deepStrictEqual(query.include, {first_message: baseTerm(POST)});
+    });
+
+    it("nests an include under a derived set", () => {
+      const query = include(
+        room,
+        nested("recent_messages", "channel"),
+        Type.nil(),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        recent_messages: {
+          ...baseTerm(POST),
+          include: {channel: baseTerm(ROOM)},
+        },
+      });
+    });
+
+    it("raises on an include under a derived value", () => {
+      assert.throw(
+        () => include(room, nested("message_count", "name"), Type.nil()),
+        HologramBoxedError,
+        ":message_count is a :integer derived field in MyApp.Room - nothing is included under it",
+      );
+    });
+
+    it("raises on clauses on a derived set", () => {
+      assert.throw(
+        () =>
+          include(
+            room,
+            Type.atom("recent_messages"),
+            subBuilder((related) => take(related, Type.integer(1))),
+          ),
+        HologramBoxedError,
+        "derived field :recent_messages takes no clauses - its definition states its rows, so only includes nest under it",
+      );
+    });
+
+    it("normalizes what a derived set includes without ordering its rows", () => {
+      const spec = Type.list([
+        Type.atom("message_count"),
+        Type.tuple([Type.atom("recent_messages"), Type.atom("channel")]),
+      ]);
+
+      const query = normalize(include(room, spec, Type.nil()));
+
+      assert.deepStrictEqual(query, {
+        ...baseTerm(ROOM),
+        include: {
+          message_count: null,
+          recent_messages: {
+            ...baseTerm(POST),
+            include: {channel: baseTerm(ROOM)},
+          },
+        },
+        sort: [["id", "asc"]],
+      });
     });
   });
 
@@ -3957,6 +4489,55 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => sort(task, Type.atom("x")),
         HologramBoxedError,
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+  });
+
+  describe("sort/2 - derived fields", () => {
+    const entry = (name, direction) =>
+      Type.list([Type.tuple([Type.atom(name), Type.atom(direction)])]);
+
+    it("sorts by a derived value", () => {
+      const query = sort(room, entry("message_count", "desc"));
+
+      assert.deepStrictEqual(query.sort, [["message_count", "desc"]]);
+    });
+
+    it("sorts by a derived enum", () => {
+      const query = sort(post, Type.atom("tier"));
+
+      assert.deepStrictEqual(query.sort, [["tier", "asc"]]);
+    });
+
+    it("raises on a derived string", () => {
+      assert.throw(
+        () => sort(post, Type.atom("channel_name")),
+        HologramBoxedError,
+        ":channel_name is a derived string in MyApp.Post - a string is ordered by the sort key stored with it, which a computed string has none of",
+      );
+    });
+
+    it("raises on a derived field holding a set", () => {
+      assert.throw(
+        () => sort(room, Type.atom("recent_messages")),
+        HologramBoxedError,
+        ":recent_messages is a derived field holding a set of rows in MyApp.Room - only attributes can be ordered",
+      );
+    });
+
+    it("raises on a derived field holding one row", () => {
+      assert.throw(
+        () => sort(room, Type.atom("first_message")),
+        HologramBoxedError,
+        ":first_message is a derived field holding one row in MyApp.Room - only attributes can be ordered",
+      );
+    });
+
+    it("raises on an unknown name, listing the derived values it can sort by", () => {
+      assert.throw(
+        () => sort(post, Type.atom("nope")),
+        HologramBoxedError,
+        "unknown attribute :nope in MyApp.Post - known attributes: :body, :created_at, :id, :later_count, :position, :tier, :updated_at",
       );
     });
   });

@@ -120,7 +120,10 @@ function placeholderNames(term) {
     ...valuePlaceholderNames(direction),
   ]);
 
-  const fromIncludes = Object.values(term.include).flatMap(placeholderNames);
+  // A derived field holding a value is included with nothing under it.
+  const fromIncludes = Object.values(term.include)
+    .filter((subTerm) => subTerm !== null)
+    .flatMap(placeholderNames);
 
   return [...fromFilter, ...fromBounds, ...fromOrder, ...fromIncludes];
 }
@@ -443,6 +446,18 @@ function validateChangeNames(entityType, names) {
   if (names.length === 0) {
     Interpreter.raiseArgumentError(
       `invalid changes for ${entityType} - at least one declared attribute or to-one relationship must be changed`,
+    );
+  }
+
+  // A derived field has no column - it's computed from its definition - so it is refused in the
+  // words the stages refuse it, before it would be called something that can't be updated.
+  const derivedName = [...names]
+    .sort()
+    .find((name) => Object.hasOwn(Model.derived(entityType), name));
+
+  if (derivedName !== undefined) {
+    Interpreter.raiseArgumentError(
+      `invalid changes for ${entityType} - ${Model.derivedReadOnlyMessage(entityType, derivedName)}`,
     );
   }
 

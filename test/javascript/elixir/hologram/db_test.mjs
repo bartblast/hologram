@@ -52,6 +52,7 @@ describe("Elixir_Hologram_DB", () => {
   const update = Elixir_Hologram_DB["update/1"];
   const updateById = Elixir_Hologram_DB["update/3"];
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
+  const include = Elixir_Hologram_Query_Stage["include/2"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
   const read = Elixir_Hologram_DB["read/1"];
   const readById = Elixir_Hologram_DB["read/2"];
@@ -162,6 +163,15 @@ describe("Elixir_Hologram_DB", () => {
           },
           constraints: {},
           defaults: {},
+          // A derived field, which an update refuses by name - it has no column.
+          derived: {
+            tag_count: {
+              definition: {value: 0},
+              kind: "scalar",
+              type: "integer",
+              values: null,
+            },
+          },
           enumValues: {},
           frameworkAttributes: [],
           operations: [
@@ -918,6 +928,19 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    it("raises on a change to a derived field", () => {
+      assert.throw(
+        () =>
+          updateById(
+            task,
+            Type.bitstring(ID_1),
+            changes([["tag_count", Type.integer(3)]]),
+          ),
+        HologramBoxedError,
+        "invalid changes for MyApp.Task - :tag_count is a derived field of MyApp.Task - it's computed from its definition, so it's read-only",
+      );
+    });
+
     // Every offending name at once, where the struct form refuses the first it meets - and a
     // system attribute is among them, because it is not a settable column.
     it("raises naming every field that cannot be updated", () => {
@@ -1500,6 +1523,23 @@ describe("Elixir_Hologram_DB", () => {
 
       assert.throw(
         () => read(filter(task, predicates([["title", placeholder]]))),
+        HologramBoxedError,
+        "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
+      );
+    });
+
+    it("raises for a query term carrying a placeholder beside an included derived value", () => {
+      const placeholder = Type.struct("Hologram.Query.Placeholder", [
+        [Type.atom("name"), Type.atom("wanted")],
+      ]);
+
+      const term = include(
+        filter(task, predicates([["title", placeholder]])),
+        Type.atom("tag_count"),
+      );
+
+      assert.throw(
+        () => read(term),
         HologramBoxedError,
         "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
       );

@@ -180,6 +180,20 @@ export default class Model {
     return Model.entry(type).derived;
   }
 
+  // The derived field of the given name, or null for a name the type declares no derived field by -
+  // its own key only, so a name like constructor is no derived field.
+  static derivedField(type, name) {
+    const derived = Model.derived(type);
+
+    return Object.hasOwn(derived, name) ? derived[name] : null;
+  }
+
+  // The client's Hologram.Entity.Derived.read_only_message/2: every write path refuses a derived
+  // field in these words.
+  static derivedReadOnlyMessage(type, name) {
+    return `:${name} is a derived field of ${type} - it's computed from its definition, so it's read-only`;
+  }
+
   static inverses(type) {
     return Model.entry(type).inverses;
   }
@@ -262,9 +276,9 @@ export default class Model {
   // nested includes the field is included with. Where both include one relationship, the
   // definition's include is kept and gains what the other includes.
   static rowsTerm(type, name, includedTerm) {
-    const derived = Model.derived(type)[name];
+    const derived = Model.derivedField(type, name);
 
-    if (derived === undefined) {
+    if (derived === null) {
       return includedTerm;
     }
 
@@ -594,13 +608,14 @@ export default class Model {
   // spells it, boxed by its declared type, and one holding rows carries them read with what its
   // definition embeds.
   static #boxNode(term, node) {
-    const derived = Model.derived(term.entity);
     const includes = {};
 
     for (const [name, subTerm] of Object.entries(term.include)) {
+      const derived = Model.derivedField(term.entity, name);
+
       includes[name] =
-        derived[name]?.kind === "scalar"
-          ? Model.boxValue(node.includes[name], derived[name].type)
+        derived?.kind === "scalar"
+          ? Model.boxValue(node.includes[name], derived.type)
           : Model.#boxIncluded(
               Model.rowsTerm(term.entity, name, subTerm),
               node.includes[name],

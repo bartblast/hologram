@@ -113,6 +113,7 @@ function newEntity(entityType, values) {
 
   const entry = Model.entry(type);
 
+  refuseDerivedAssignment(entry, type, pairs);
   refuseRelationshipAssignment(entry, type, pairs);
   refuseFrameworkAttribute(entry, type, pairs);
   refuseUnknownField(entry, pairs);
@@ -122,6 +123,17 @@ function newEntity(entityType, values) {
 
 function referenceFieldName(relationshipName) {
   return `${relationshipName}_id`;
+}
+
+// A derived field is computed from its definition, so nothing assigns one - asked about before the
+// relationships, the order the server's own check runs in.
+function refuseDerivedAssignment(entry, type, pairs) {
+  const given = new Map(pairs);
+  const name = Object.keys(entry.derived).find((each) => given.has(each));
+
+  if (name) {
+    Interpreter.raiseArgumentError(Model.derivedReadOnlyMessage(type, name));
+  }
 }
 
 // A job is enqueued as queued, by whoever is acting, and what happens to it afterwards is the

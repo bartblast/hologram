@@ -381,6 +381,20 @@ describe("Elixir_Hologram_Entity", () => {
       );
     });
 
+    it("raises on a derived field", () => {
+      assertBoxedError(
+        () =>
+          newEntityWithValues(
+            Type.alias(CHANNEL),
+            Type.list([
+              Type.tuple([Type.atom("message_count"), Type.integer(3)]),
+            ]),
+          ),
+        "ArgumentError",
+        ":message_count is a derived field of MyApp.Channel - it's computed from its definition, so it's read-only",
+      );
+    });
+
     it("leaves a derived field unasked-for", () => {
       const entity = newEntity(Type.alias(CHANNEL));
 
