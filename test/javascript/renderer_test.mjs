@@ -4881,6 +4881,22 @@ describe("Renderer", () => {
       );
     });
 
+    it("entries are sorted by code point", () => {
+      const attrsDom = [
+        spread(
+          Type.map([
+            [Type.atom("😀"), Type.bitstring("my_value_1")],
+            [Type.atom("\uFFFD"), Type.bitstring("my_value_2")],
+          ]),
+        ),
+      ];
+
+      assert.deepStrictEqual(
+        Object.keys(renderElement("div", attrsDom).data.attrs),
+        ["\uFFFD", "😀"],
+      );
+    });
+
     it("entries are sorted by the composed name, so nested ones stay next to their siblings", () => {
       const attrsDom = [
         spread(
