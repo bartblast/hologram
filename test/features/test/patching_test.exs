@@ -17,6 +17,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page20
   alias HologramFeatureTests.Patching.Page21
+  alias HologramFeatureTests.Patching.Page22
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
   alias HologramFeatureTests.Patching.Page5
@@ -25,6 +26,8 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page8
   alias HologramFeatureTests.Patching.Page9
 
+  @page20_rows ["row_1", "row_2", "row_3"]
+
   setup do
     current_max_wait_time = Application.fetch_env!(:wallaby, :max_wait_time)
     Application.put_env(:wallaby, :max_wait_time, 3_000)
@@ -32,6 +35,37 @@ defmodule HologramFeatureTests.PatchingTest do
     on_exit(fn ->
       Application.put_env(:wallaby, :max_wait_time, current_max_wait_time)
     end)
+  end
+
+  # Reverses Page22's lists, then removes the first row, checking after each that the rows of the
+  # given kind of list kept their nodes, their order and their typed values. A typed value on the
+  # first and last rows is what a node reused for another item would carry to the wrong row.
+  defp assert_rows_follow_their_items(session, kind) do
+    rows = Enum.map(["alpha", "bravo", "charlie"], &"#{kind}_row_#{&1}")
+
+    session
+    |> visit(Page22)
+    |> assert_text(css("#result"), "alpha, bravo, charlie")
+    |> fill_in(css("##{kind}_input_alpha"), with: "typed alpha")
+    |> fill_in(css("##{kind}_input_charlie"), with: "typed charlie")
+    |> mark_nodes(rows)
+    |> click(css("#reverse"))
+    |> assert_text(css("#result"), ~r/^charlie, bravo, alpha$/)
+    |> assert_script_result(row_ids_script("#{kind}_rows"), Enum.reverse(rows))
+    |> assert_input_value("##{kind}_input_alpha", "typed alpha")
+    |> assert_input_value("##{kind}_input_charlie", "typed charlie")
+    |> assert_script_result(kept_nodes_script(rows), rows)
+    |> click(css("#remove_first"))
+    |> assert_text(css("#result"), ~r/^bravo, alpha$/)
+    |> assert_script_result(row_ids_script("#{kind}_rows"), [
+      "#{kind}_row_bravo",
+      "#{kind}_row_alpha"
+    ])
+    |> assert_input_value("##{kind}_input_alpha", "typed alpha")
+    |> assert_script_result(
+      kept_nodes_script(["#{kind}_row_alpha", "#{kind}_row_bravo"]),
+      ["#{kind}_row_alpha", "#{kind}_row_bravo"]
+    )
   end
 
   # Clicked from a script rather than by the driver, so the button never takes focus itself: any
@@ -44,30 +78,32 @@ defmodule HologramFeatureTests.PatchingTest do
     execute_script(session, ~s|document.getElementById("#{id}").focus();|)
   end
 
-  defp kept_rows_script(ids) do
+  # The given elements whose node is still the one mark_nodes/2 tagged.
+  defp kept_nodes_script(ids) do
     """
-    return #{inspect(ids)}.filter((id) => document.getElementById(`row_${id}`).__probe === id);
+    return #{inspect(ids)}.filter((id) => document.getElementById(id).__probe === id);
     """
   end
 
-  # Each row's node is tagged with a property the diff never reads, so it lives exactly as long as
-  # the DOM node does.
-  defp mark_rows(session, ids) do
+  # Each element's node is tagged with a property the diff never reads, so it lives exactly as long
+  # as the DOM node does.
+  defp mark_nodes(session, ids) do
     execute_script(session, """
     #{inspect(ids)}.forEach((id) => {
-      document.getElementById(`row_${id}`).__probe = id;
+      document.getElementById(id).__probe = id;
     });
     """)
   end
 
-  defp row_ids_script do
-    ~s|return [...document.querySelectorAll("#rows li")].map((li) => li.id);|
+  # The ids of a list's rows, in document order.
+  defp row_ids_script(list_id) do
+    ~s|return [...document.querySelectorAll("##{list_id} > li")].map((li) => li.id);|
   end
 
-  # The rows whose node is still the one its script stamped when it was inserted.
-  defp stamped_rows_script do
+  # The given rows whose node is still the one its script stamped when it was inserted.
+  defp stamped_rows_script(ids) do
     """
-    return [1, 2, 3].filter((id) => document.getElementById(`row_${id}`).__stamped === true);
+    return #{inspect(ids)}.filter((id) => document.getElementById(id).__stamped === true);
     """
   end
 
@@ -1160,14 +1196,14 @@ defmodule HologramFeatureTests.PatchingTest do
       |> fill_in(css("#input_1"), with: "typed 1")
       |> fill_in(css("#input_2"), with: "typed 2")
       |> fill_in(css("#input_3"), with: "typed 3")
-      |> mark_rows([1, 2, 3])
+      |> mark_nodes(@page20_rows)
       |> focus_by_script("input_2")
       |> click_by_script("remove_first")
       |> assert_text(css("#result"), ~r/^Bravo, Charlie$/)
-      |> assert_script_result(row_ids_script(), ["row_2", "row_3"])
+      |> assert_script_result(row_ids_script("rows"), ["row_2", "row_3"])
       |> assert_input_value("#input_2", "typed 2")
       |> assert_input_value("#input_3", "typed 3")
-      |> assert_script_result(kept_rows_script([2, 3]), [2, 3])
+      |> assert_script_result(kept_nodes_script(["row_2", "row_3"]), ["row_2", "row_3"])
       |> assert_script_result(~s|return document.activeElement.id;|, "input_2")
     end
 
@@ -1179,13 +1215,13 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_text(css("#result"), "Alpha, Bravo, Charlie")
       |> fill_in(css("#input_1"), with: "typed 1")
       |> fill_in(css("#input_3"), with: "typed 3")
-      |> mark_rows([1, 2, 3])
+      |> mark_nodes(@page20_rows)
       |> click(css("#reverse"))
       |> assert_text(css("#result"), ~r/^Charlie, Bravo, Alpha$/)
-      |> assert_script_result(row_ids_script(), ["row_3", "row_2", "row_1"])
+      |> assert_script_result(row_ids_script("rows"), ["row_3", "row_2", "row_1"])
       |> assert_input_value("#input_1", "typed 1")
       |> assert_input_value("#input_3", "typed 3")
-      |> assert_script_result(kept_rows_script([1, 2, 3]), [1, 2, 3])
+      |> assert_script_result(kept_nodes_script(@page20_rows), @page20_rows)
     end
 
     feature "rows keep their nodes, typed values and focus when a row is inserted in the middle",
@@ -1194,14 +1230,14 @@ defmodule HologramFeatureTests.PatchingTest do
       |> visit(Page20)
       |> assert_text(css("#result"), "Alpha, Bravo, Charlie")
       |> fill_in(css("#input_2"), with: "typed 2")
-      |> mark_rows([1, 2, 3])
+      |> mark_nodes(@page20_rows)
       |> focus_by_script("input_2")
       |> click_by_script("insert_in_middle")
       |> assert_text(css("#result"), ~r/^Alpha, Delta, Bravo, Charlie$/)
-      |> assert_script_result(row_ids_script(), ["row_1", "row_4", "row_2", "row_3"])
+      |> assert_script_result(row_ids_script("rows"), ["row_1", "row_4", "row_2", "row_3"])
       |> assert_input_value("#input_2", "typed 2")
       |> assert_input_value("#input_4", "")
-      |> assert_script_result(kept_rows_script([1, 2, 3]), [1, 2, 3])
+      |> assert_script_result(kept_nodes_script(@page20_rows), @page20_rows)
       |> assert_script_result(~s|return document.activeElement.id;|, "input_2")
     end
 
@@ -1226,12 +1262,12 @@ defmodule HologramFeatureTests.PatchingTest do
       # one.
       session
       |> visit(Page20)
-      |> mark_rows([1, 2, 3])
+      |> mark_nodes(@page20_rows)
       |> click(css("#claim_1"))
       |> assert_text(css("#claims"), ~r/^Alpha$/)
       |> click(css("#reverse"))
       |> assert_text(css("#result"), ~r/^Charlie, Bravo, Alpha$/)
-      |> assert_script_result(kept_rows_script([1, 2, 3]), [1, 2, 3])
+      |> assert_script_result(kept_nodes_script(@page20_rows), @page20_rows)
       |> click(css("#claim_1"))
       |> click(css("#claim_3"))
       |> assert_text(css("#claims"), ~r/^Alpha, Charlie$/)
@@ -1256,7 +1292,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(css("#reverse"))
       |> assert_text(css("#result"), ~r/^Charlie, Bravo, Alpha$/)
       |> assert_script_result("return window.__rowRuns;", 3)
-      |> assert_script_result(stamped_rows_script(), [1, 2, 3])
+      |> assert_script_result(stamped_rows_script(@page20_rows), @page20_rows)
     end
 
     feature "the first render keeps the rows the server sent", %{session: session} do
@@ -1268,7 +1304,55 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(css("#reverse"))
       |> assert_text(css("#result"), ~r/^Charlie, Bravo, Alpha$/)
       |> assert_script_result("return window.__rowRuns;", 3)
-      |> assert_script_result(stamped_rows_script(), [1, 2, 3])
+      |> assert_script_result(stamped_rows_script(@page20_rows), @page20_rows)
+    end
+  end
+
+  describe "explicitly keyed lists" do
+    feature "rows keyed by a $key on their element keep their nodes and typed values", %{
+      session: session
+    } do
+      assert_rows_follow_their_items(session, "element")
+    end
+
+    feature "rows keyed by a $key on a stateless component keep their nodes and typed values", %{
+      session: session
+    } do
+      assert_rows_follow_their_items(session, "component")
+    end
+
+    feature "stateful component rows keyed by their cid keep their nodes and typed values", %{
+      session: session
+    } do
+      assert_rows_follow_their_items(session, "stateful")
+    end
+
+    feature "a navigation to the page keeps the rows its first patch put on screen", %{
+      session: session
+    } do
+      # The navigation's first patch builds the rows from the tree the server sent, and the render
+      # that follows keys them itself: a list whose keys disagree with the server's rebuilds its
+      # rows, which runs their scripts again. The flag set before the click survives only a
+      # navigation the client made, so it proves the rows came from the tree rather than from a
+      # page load.
+      rows =
+        for kind <- ["element", "component", "stateful"],
+            name <- ["alpha", "bravo", "charlie"],
+            do: "#{kind}_row_#{name}"
+
+      session = visit(session, Page21)
+
+      script_result(session, "window.__fromPage21 = true;")
+
+      session
+      |> click(link("Explicitly keyed lists link"))
+      |> assert_page(Page22)
+      |> assert_script_result("return window.__fromPage21 === true;", true)
+      |> assert_script_result("return window.__rowRuns;", 9)
+      |> click(css("#reverse"))
+      |> assert_text(css("#result"), ~r/^charlie, bravo, alpha$/)
+      |> assert_script_result("return window.__rowRuns;", 9)
+      |> assert_script_result(stamped_rows_script(rows), rows)
     end
   end
 

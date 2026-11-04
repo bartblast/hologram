@@ -5,12 +5,13 @@ defmodule HologramFeatureTests.Patching.Page21 do
   alias Hologram.UI.Runtime
   alias HologramFeatureTests.Components.CommonLayoutStyles
   alias HologramFeatureTests.Patching.Page20
+  alias HologramFeatureTests.Patching.Page22
 
   route "/patching/21"
 
   layout HologramFeatureTests.Components.EmptyLayout
 
-  # The page a navigation to the keyed list starts from.
+  # The page a navigation to the keyed lists starts from.
   def template do
     ~HOLO"""
     <!DOCTYPE html>
@@ -23,6 +24,7 @@ defmodule HologramFeatureTests.Patching.Page21 do
       </head>
       <body>
         <Link to={Page20}>Keyed list link</Link>
+        <Link to={Page22}>Explicitly keyed lists link</Link>
       </body>
     </html>
     """
