@@ -3488,10 +3488,12 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("tasks"), boxedFunction((related) => related)]),
       ]);
 
+      // A function's inspect carries a counter that depends on the functions built before it, so
+      // the entry is matched up to it.
       assert.throw(
         () => include(project, spec),
         HologramBoxedError,
-        "invalid include spec entry {:tasks, #Function<1.1/1 in MyModule>} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end",
+        /invalid include spec entry \{:tasks, #Function<\d+\.\d+\/1 in MyModule>\} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, \[Task\], fn tasks -> filter\(tasks, \.\.\.\) end/,
       );
     });
 
