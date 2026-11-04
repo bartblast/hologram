@@ -296,8 +296,10 @@ defmodule Hologram.Entity do
       condition, `via:` and the relationship of a `to:` reference go through stored to-ones only.
       It takes no `optional:` or `unique:`, since the relationship it reverses carries both.
     * `optional:` - a to-one may reference nothing, its reference holding nil.
-    * `sort:` - the order of an inverse set, named bare and read on the related type:
-      `sort: created_at`, `sort: [created_at: :desc]`.
+    * `sort:` - the order of a to-many, stored or inverse, named bare and read on the related
+      type: `sort: created_at`, `sort: [created_at: :desc]`. An include of the set, and a derived
+      field reading it, take this order when they state none. It orders reads only, so declaring
+      or changing it never moves data.
     * `unique:` - no two rows of the entity type reference the same row, enforced in the
       database and reported by the write verbs as `:unique` on the `<name>_id` field. To-one
       only. An optional unique to-one admits any number of rows referencing nothing.
@@ -464,6 +466,22 @@ defmodule Hologram.Entity do
     Module.put_attribute(module, :__roles__, put_role_declaration(declarations, name, opts))
 
     :ok
+  end
+
+  # The order a set relationship of the entity type declares, stored or inverse, in the sort stage's
+  # data form - an empty list for one that declares none and for a name that is no set.
+  @doc false
+  @spec declared_order(module, atom) :: atom | list
+  def declared_order(entity_type, name) do
+    relationship =
+      entity_type.__relationships__()
+      |> Enum.concat(entity_type.__inverse_relationships__())
+      |> List.keyfind(name, 0)
+
+    case relationship do
+      {_name, [_target], opts} -> Keyword.get(opts, :sort, [])
+      _no_set -> []
+    end
   end
 
   # How a refusal names where the fact behind a declared inverse lives: the reference column of the

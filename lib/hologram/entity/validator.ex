@@ -381,7 +381,7 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the given data model as a whole, taking the list of all compiled entity type modules.
 
-  Returns :ok, or raises Hologram.CompileError listing every relationship whose target is not an entity type module, and every inverse that does not reverse a stored relationship of its related type pointing back - one naming a relationship the related type does not declare, one naming an inverse the related type declares, one naming a relationship pointing at another type, a single inverse of a to-many, a single inverse of a to-one that is not unique - or whose order names what the related type cannot be sorted by. Each line starts with the file and line the relationship is declared on, for every entity type declared with the entity macro.
+  Returns :ok, or raises Hologram.CompileError listing every relationship whose target is not an entity type module, and every inverse that does not reverse a stored relationship of its related type pointing back - one naming a relationship the related type does not declare, one naming an inverse the related type declares, one naming a relationship pointing at another type, a single inverse of a to-many, a single inverse of a to-one that is not unique - and every to-many, stored or inverse, whose order names what the related type cannot be sorted by. Each line starts with the file and line the relationship is declared on, for every entity type declared with the entity macro.
   This check is possible only after all entity type modules are compiled - relationship declarations verify the type shape alone, because the target module may not be compiled yet while the declaring module's body is executing.
   """
   @spec validate_model!(list(module)) :: :ok
@@ -410,14 +410,15 @@ defmodule Hologram.Entity.Validator do
 
   Returns :ok, or raises Hologram.CompileError on the first violated rule (name, type shape, options).
   The type is checked for shape only (an entity type module or a one-element list wrapping one) - whether it names an actual entity type module is not verified here, because the target module may not be compiled yet while the declaring module's body is executing.
-  For the same reason an inverse's inverse and sort options are checked for shape only.
+  For the same reason an inverse's inverse option and a to-many's sort option are checked for shape only.
   """
   @spec validate_relationship!(module, atom, any, T.opts()) :: :ok
   def validate_relationship!(module, name, type, opts) do
     validate_relationship_name!(module, name)
     validate_relationship_type!(module, name, type)
     validate_relationship_opts!(module, name, opts)
-    validate_inverse_opts!(module, name, type, opts)
+    validate_inverse_opts!(module, name, opts)
+    validate_sort_opt!(module, name, type, opts)
     validate_unique_relationship!(module, name, type, opts)
 
     validate_field_collision!(
@@ -847,21 +848,6 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp inverse_sort_violation(entity_type, name, opts, target) do
-    case Keyword.fetch(opts, :sort) do
-      {:ok, sort} ->
-        Stage.sort(target, sort)
-
-        nil
-
-      :error ->
-        nil
-    end
-  rescue
-    error in ArgumentError ->
-      "relationship #{inspect(name)} in #{inspect(entity_type)} has an invalid sort option - #{Exception.message(error)}"
-  end
-
   defp inverse_violations(entity_type) do
     Enum.flat_map(entity_type.__inverse_relationships__(), fn {name, type, opts} ->
       target = relationship_target(type)
@@ -870,7 +856,7 @@ defmodule Hologram.Entity.Validator do
         if Reflection.entity?(target) do
           [
             inverse_forward_violation(entity_type, name, type, opts, target),
-            inverse_sort_violation(entity_type, name, opts, target)
+            sort_violation(entity_type, name, opts, target)
           ]
         else
           [target_violation(entity_type, name, target)]
@@ -904,7 +890,7 @@ defmodule Hologram.Entity.Validator do
   defp raise_sort_misplaced!(module, name) do
     raise Hologram.CompileError,
       message:
-        "invalid sort option for relationship #{inspect(name)} in #{inspect(module)} - sort applies to an inverse to-many"
+        "invalid sort option for relationship #{inspect(name)} in #{inspect(module)} - sort applies to a to-many relationship"
   end
 
   defp reference_change_errors(field, nil, optional?) do
@@ -966,7 +952,8 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp relationship_violations(entity_type) do
-    relationship_target_violations(entity_type) ++ inverse_violations(entity_type)
+    relationship_target_violations(entity_type) ++
+      stored_sort_violations(entity_type) ++ inverse_violations(entity_type)
   end
 
   defp relationship_type_valid?(type) when is_atom(type), do: Reflection.alias?(type)
@@ -1476,18 +1463,16 @@ defmodule Hologram.Entity.Validator do
 
   # An inverse names the relationship it reverses, and takes everything else from it - cardinality
   # aside, which its own type states - so options that would restate the reversed relationship's
-  # semantics are refused. Its order is the one option of its own, and only a set has an order.
-  defp validate_inverse_opts!(module, name, type, opts) do
+  # semantics are refused. Its order is the one option of its own.
+  defp validate_inverse_opts!(module, name, opts) do
     case Keyword.fetch(opts, :inverse) do
       {:ok, inverse} ->
         validate_inverse_value!(module, name, inverse)
 
         Enum.each([:optional, :unique], &validate_inverse_exclusive!(module, name, opts, &1))
 
-        validate_sort_opt!(module, name, type, opts)
-
       :error ->
-        validate_sort_absent!(module, name, opts)
+        :ok
     end
   end
 
@@ -1665,6 +1650,33 @@ defmodule Hologram.Entity.Validator do
 
   defp sort_value_valid?(sort), do: sort_name?(sort)
 
+  defp sort_violation(entity_type, name, opts, target) do
+    case Keyword.fetch(opts, :sort) do
+      {:ok, sort} ->
+        Stage.sort(target, sort)
+
+        nil
+
+      :error ->
+        nil
+    end
+  rescue
+    error in ArgumentError ->
+      "relationship #{inspect(name)} in #{inspect(entity_type)} has an invalid sort option - #{Exception.message(error)}"
+  end
+
+  # A stored to-many's order is read on its target, so it is judged only once the target is known
+  # to be an entity type - a target that is none has its own line.
+  defp stored_sort_violations(entity_type) do
+    for {name, [target], opts} <- entity_type.__relationships__(),
+        Reflection.entity?(target),
+        description <-
+          entity_type
+          |> sort_violation(name, opts, target)
+          |> List.wrap(),
+        do: {entity_type, name, description}
+  end
+
   defp target_violation(entity_type, name, target) do
     "relationship #{inspect(name)} in #{inspect(entity_type)} targets #{inspect(target)}, which is not an entity type module"
   end
@@ -1764,16 +1776,8 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  defp validate_sort_absent!(module, name, opts) do
-    if Keyword.has_key?(opts, :sort) do
-      raise_sort_misplaced!(module, name)
-    end
-
-    :ok
-  end
-
   # The shape alone - whether the names are attributes of the related type is judged once that type
-  # is compiled.
+  # is compiled. Only a set has an order, stored or inverse.
   defp validate_sort_opt!(module, name, type, opts) do
     case Keyword.fetch(opts, :sort) do
       {:ok, _sort} when not is_list(type) ->

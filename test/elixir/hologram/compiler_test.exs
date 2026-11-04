@@ -3949,9 +3949,41 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"relationships":{"a":{"optional":false,"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+               ~s/"relationships":{"a":{"optional":false,"sort":[],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
                  ~s/"b":{"optional":true,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
                  ~s/"c":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
+             )
+    end
+
+    test "injects a to-many's declared order", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      defmodule SortedToManyFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        relationship :messages, [Module28], sort: [position: :desc, body: :asc]
+      end
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([SortedToManyFixture])}
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"relationships":{"messages":{"optional":false,"sort":[["position","desc"],["body","asc"]],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"}}/
              )
     end
 

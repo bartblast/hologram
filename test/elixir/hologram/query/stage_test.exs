@@ -2854,6 +2854,23 @@ defmodule Hologram.Query.StageTest do
       assert query.sort == [{:position, :asc}, {:id, :asc}]
     end
 
+    test "orders a sourced term over a stored to-many by its declared order, then by id" do
+      defmodule DeclaredStoredSourceOrderFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module29
+
+        relationship :labels, [Module29], sort: [name: :desc]
+      end
+
+      query =
+        DeclaredStoredSourceOrderFixture
+        |> sourced([:labels])
+        |> normalize()
+
+      assert query.sort == [{:name, :desc}, {:id, :asc}]
+    end
+
     test "orders a sourced term by its own order over its set's declared one" do
       query =
         Module26
@@ -2897,6 +2914,40 @@ defmodule Hologram.Query.StageTest do
         |> normalize()
 
       assert query.include.messages.sort == [{:position, :desc}, {:body, :asc}, {:id, :asc}]
+    end
+
+    test "orders an included stored to-many by its declared order, then by id" do
+      defmodule DeclaredStoredOrderFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module29
+
+        relationship :labels, [Module29], sort: [name: :desc]
+      end
+
+      query =
+        DeclaredStoredOrderFixture
+        |> include(:labels)
+        |> normalize()
+
+      assert query.include.labels.sort == [{:name, :desc}, {:id, :asc}]
+    end
+
+    test "orders an included stored to-many by the include's own order over the declared one" do
+      defmodule DeclaredStoredOrderOverrideFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module29
+
+        relationship :labels, [Module29], sort: [name: :desc]
+      end
+
+      query =
+        DeclaredStoredOrderOverrideFixture
+        |> include(:labels, &sort(&1, :name))
+        |> normalize()
+
+      assert query.include.labels.sort == [{:name, :asc}, {:id, :asc}]
     end
 
     test "normalizes a term including an inverse the same way twice" do

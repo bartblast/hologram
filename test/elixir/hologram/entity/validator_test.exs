@@ -2194,6 +2194,23 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "judges no order of a stored to-many targeting a non-entity module" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture164 do
+        use Hologram.Entity
+
+        relationship :owners, [Hologram.Reflection], sort: name
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture164 targets Hologram.Reflection, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture164])
+      end
+    end
+
     test "rejects an inverse targeting a non-entity module" do
       line = __ENV__.line + 5
 
@@ -2350,6 +2367,33 @@ defmodule Hologram.Entity.ValidatorTest do
         validate_model!([InlineEntityFixture137, InlineEntityFixture138])
       end
     end
+
+    test "returns :ok for a stored to-many ordered by what its related type can be sorted by" do
+      defmodule InlineEntityFixture162 do
+        use Hologram.Entity
+
+        relationship :items, [Module2], sort: [c, created_at: :desc]
+      end
+
+      assert validate_model!([InlineEntityFixture162]) == :ok
+    end
+
+    test "rejects an invalid sort option on a stored to-many" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture163 do
+        use Hologram.Entity
+
+        relationship :owners, [Module1], sort: posted_at
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture163 has an invalid sort option - unknown attribute :posted_at in Hologram.Test.Fixtures.Entity.Module1 - known attributes: :created_at, :id, :updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture163])
+      end
+    end
   end
 
   describe "validate_relationship!/4" do
@@ -2388,6 +2432,20 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture115.__inverse_relationships__() == [
                {:drafts, [Module1], [inverse: :owner, sort: :title]},
                {:owners, [Module1], [inverse: :owner, sort: [:title, created_at: :desc]]}
+             ]
+    end
+
+    test "accepts the sort option of a stored to-many as a name and as a list" do
+      defmodule InlineEntityFixture161 do
+        use Hologram.Entity
+
+        relationship :drafts, [Module1], sort: title
+        relationship :owners, [Module1], sort: [title, created_at: :desc]
+      end
+
+      assert InlineEntityFixture161.__relationships__() == [
+               {:drafts, [Module1], [sort: :title]},
+               {:owners, [Module1], [sort: [:title, created_at: :desc]]}
              ]
     end
 
@@ -2574,22 +2632,22 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects the sort option on a relationship that is not an inverse" do
+    test "rejects the sort option on a stored to-one" do
       expected_msg =
-        "invalid sort option for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture120 - sort applies to an inverse to-many"
+        "invalid sort option for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture120 - sort applies to a to-many relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture120 do
           use Hologram.Entity
 
-          relationship :owners, [Module1], sort: title
+          relationship :owner, Module1, sort: title
         end
       end
     end
 
     test "rejects the sort option on a single inverse" do
       expected_msg =
-        "invalid sort option for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture121 - sort applies to an inverse to-many"
+        "invalid sort option for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture121 - sort applies to a to-many relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture121 do

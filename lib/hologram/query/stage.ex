@@ -2258,17 +2258,14 @@ defmodule Hologram.Query.Stage do
 
   defp value_placeholder_names(_value), do: []
 
-  # An inverse set is read in the order its declaration names when the include sets none, the way a
-  # later sort replaces an earlier one - so a sub-builder's own order wins. Applied here rather than
-  # where the include is built, so two includes of one inverse still merge: a built order would be
-  # a clause on each.
+  # A set is read in the order its declaration names when the include sets none, the way a later
+  # sort replaces an earlier one - so a sub-builder's own order wins. Applied here rather than where
+  # the include is built, so two includes of one set still merge: a built order would be a clause on
+  # each.
   defp with_declared_order(%{sort: []} = sub_term, entity_type, name) do
-    case Entity.inverse_relationship(entity_type, name) do
-      %{sort: declared} when declared != [] ->
-        %{sub_term | sort: order_entries!(declared, sub_term.entity)}
-
-      _no_declared_order ->
-        sub_term
+    case Entity.declared_order(entity_type, name) do
+      [] -> sub_term
+      declared -> %{sub_term | sort: order_entries!(declared, sub_term.entity)}
     end
   end
 

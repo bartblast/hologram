@@ -128,6 +128,18 @@ function counterAttributeNames(entityType) {
   );
 }
 
+// The order a set relationship declares, stored or inverse - none for a name that is no set.
+function declaredOrder(entityType, name) {
+  const relationships = Model.relationships(entityType);
+  const inverses = Model.inverses(entityType);
+
+  if (Object.hasOwn(relationships, name)) {
+    return relationships[name].sort ?? [];
+  }
+
+  return Object.hasOwn(inverses, name) ? inverses[name].sort : [];
+}
+
 // The derived field of the given name holding rows - one or a set - or null for any other name.
 function derivedRows(entityType, name) {
   const derived = Model.derivedField(entityType, name);
@@ -1909,16 +1921,15 @@ function validatePutName(name, entityType) {
   );
 }
 
-// An inverse set is read in the order its declaration names when the include sets none, as the
-// server normalizes it. The build bakes that order already spelled the way a term spells one.
+// A set, stored or inverse, is read in the order its declaration names when the include sets none,
+// as the server normalizes it. The build bakes that order already spelled the way a term spells
+// one, on every to-many and every inverse.
 function withDeclaredOrder(subTerm, entityType, name) {
-  const inverses = Model.inverses(entityType);
-
-  if (subTerm.sort.length > 0 || !Object.hasOwn(inverses, name)) {
+  if (subTerm.sort.length > 0) {
     return subTerm;
   }
 
-  const declared = inverses[name].sort;
+  const declared = declaredOrder(entityType, name);
 
   return declared.length > 0 ? {...subTerm, sort: declared} : subTerm;
 }

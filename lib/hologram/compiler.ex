@@ -3828,6 +3828,14 @@ defmodule Hologram.Compiler do
 
   defp render_constraint_value(_key, value), do: Jason.encode!(value)
 
+  # A set's declared order, spelled the way a term spells one - each entry a name and a direction.
+  defp render_declared_order(target, sort) do
+    target
+    |> Stage.sort(sort)
+    |> Map.fetch!(:sort)
+    |> Enum.map(fn {key, direction} -> [Atom.to_string(key), Atom.to_string(direction)] end)
+  end
+
   # A default travels as the ENCODED TERM the declared literal becomes in transpiled code, rather
   # than as the way the wire spells the same value: the client applies it to a struct field, and a
   # struct field holds the literal the developer wrote. The two are not interchangeable - a float
@@ -4213,12 +4221,7 @@ defmodule Hologram.Compiler do
     entity_type.__inverse_relationships__()
     |> Enum.map(fn {name, _type, _opts} ->
       inverse = Entity.inverse_relationship(entity_type, name)
-
-      sort =
-        inverse.target
-        |> Stage.sort(inverse.sort)
-        |> Map.fetch!(:sort)
-        |> Enum.map(fn {key, direction} -> [Atom.to_string(key), Atom.to_string(direction)] end)
+      sort = render_declared_order(inverse.target, inverse.sort)
 
       type =
         inverse.target
@@ -4252,33 +4255,37 @@ defmodule Hologram.Compiler do
   # much as the server does.
   defp render_relationships(entity_type) do
     entity_type.__relationships__()
-    |> Enum.map(fn {name, target, opts} ->
-      optional? = Keyword.get(opts, :optional) == true
-
-      {Atom.to_string(name), render_relationship(target, optional?)}
+    |> Enum.map(fn {name, type, opts} ->
+      {Atom.to_string(name), render_relationship(type, opts)}
     end)
     |> render_json_object()
   end
 
-  defp render_relationship(target, optional?) when is_list(target) do
-    render_relationship_entry(hd(target), true, optional?)
+  # A to-many carries the order its declaration names, the way an inverse set does.
+  defp render_relationship([target], opts) do
+    sort = render_declared_order(target, Keyword.get(opts, :sort, []))
+    fields = render_relationship_fields(target, true, opts)
+
+    render_json_object([{"sort", Jason.encode!(sort)} | fields])
   end
 
-  defp render_relationship(target, optional?) do
-    render_relationship_entry(target, false, optional?)
+  defp render_relationship(target, opts) do
+    target
+    |> render_relationship_fields(false, opts)
+    |> render_json_object()
   end
 
-  defp render_relationship_entry(target, to_many?, optional?) do
+  defp render_relationship_fields(target, to_many?, opts) do
     type =
       target
       |> Codec.encode_enum_value()
       |> Jason.encode!()
 
-    render_json_object([
-      {"optional", Jason.encode!(optional?)},
+    [
+      {"optional", Jason.encode!(Keyword.get(opts, :optional) == true)},
       {"toMany", Jason.encode!(to_many?)},
       {"type", type}
-    ])
+    ]
   end
 
   # The rules a client evaluates permissions by, spelled the way the rows it evaluates them

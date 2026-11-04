@@ -1498,6 +1498,20 @@ defmodule Hologram.Entity.ModelTest do
       assert model.entities[Module29].relationships == []
     end
 
+    # An order shapes reads only, so declaring or changing one is no change to the model term - no
+    # migration, and no new hash to reload the clients over.
+    test "leaves out a to-many's sort option" do
+      defmodule InlineSortedToManyFixture do
+        use Hologram.Entity
+
+        relationship :items, [Module2], sort: [c, created_at: :desc]
+      end
+
+      model = from_modules([InlineSortedToManyFixture])
+
+      assert model.entities[InlineSortedToManyFixture].relationships == [{:items, [Module2], []}]
+    end
+
     test "derives global role entries from the given role modules" do
       assert from_modules([], [RoleModule1, RoleModule2]) == %{
                entities: %{},

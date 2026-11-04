@@ -18,6 +18,7 @@ defineRuntimeGlobals();
 // and with the same raise messages. What differs is the term: these stages build the plain term
 // the client's kernel evaluates, where the Elixir ones build a boxed map keyed by atoms.
 describe("Elixir_Hologram_Query_Stage", () => {
+  const BINDER = "MyApp.Binder";
   const BOARD = "MyApp.Board";
   const BOOKING = "MyApp.Booking";
   const CHANNEL = "MyApp.Channel";
@@ -162,6 +163,16 @@ describe("Elixir_Hologram_Query_Stage", () => {
             },
           },
           relationships: {owner: {toMany: false, type: USER}},
+          serverOnly: [],
+        },
+        // A stored to-many declaring its order, the twin of the Elixir suite's
+        // DeclaredStoredOrderFixture.
+        [BINDER]: {
+          attributes: {id: "uuid"},
+          enumValues: {},
+          relationships: {
+            labels: {sort: [["name", "desc"]], toMany: true, type: LABEL},
+          },
           serverOnly: [],
         },
         // An inverse set declaring a list order, a direction in it.
@@ -4203,6 +4214,32 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(query.include.messages.sort, [
         ["position", "desc"],
         ["body", "asc"],
+        ["id", "asc"],
+      ]);
+    });
+
+    it("orders an included stored to-many by its declared order, then by id", () => {
+      const query = normalize(
+        include(Type.alias(BINDER), Type.atom("labels"), Type.nil()),
+      );
+
+      assert.deepStrictEqual(query.include.labels.sort, [
+        ["name", "desc"],
+        ["id", "asc"],
+      ]);
+    });
+
+    it("orders an included stored to-many by the include's own order over the declared one", () => {
+      const query = normalize(
+        include(
+          Type.alias(BINDER),
+          Type.atom("labels"),
+          subBuilder((related) => sort(related, Type.atom("name"))),
+        ),
+      );
+
+      assert.deepStrictEqual(query.include.labels.sort, [
+        ["name", "asc"],
         ["id", "asc"],
       ]);
     });
