@@ -85,6 +85,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module96
   alias Hologram.Test.Fixtures.Template.Renderer.Module97
   alias Hologram.Test.Fixtures.Template.Renderer.Module98
+  alias Hologram.Test.Fixtures.Template.Renderer.Module99
 
   @csp_nonce "test-csp-nonce"
   @csp_nonced_elements ["link", "script", "style"]
@@ -4217,6 +4218,19 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "render_tree/3, explicit keys" do
+    test "a compiled loop keys each item by the $key written on its tag" do
+      node = {:component, Module99, [{"words", [expression: {["a", "b"]}]}], []}
+
+      assert {[{:element, "ul", _ul_attrs, [li_1, li_2]}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert {:element, "li", [{"$key", [text: key_1]}], [text: "a"]} = li_1
+      assert {:element, "li", [{"$key", [text: key_2]}], [text: "b"]} = li_2
+
+      assert [slot_key, "sa"] = String.split(key_1, "#")
+      assert key_2 == slot_key <> "#sb"
+    end
+
     test "an element's $key takes the place of the item's own part" do
       node =
         {:loop_item, {%{id: 1}},
