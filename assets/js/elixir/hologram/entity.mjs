@@ -44,7 +44,7 @@ function attributeValue(entry, given, name) {
 // The struct as Model.box builds one for a row, in the same field order, so a row constructed
 // here and a row that arrived read alike: the type, the framework's own state, every declared
 // and system attribute, per relationship its reference field and the sentinel saying nobody
-// asked for it, and per inverse the sentinel alone.
+// asked for it, and per inverse and derived field the sentinel alone.
 function buildStruct(entityType, entry, pairs) {
   const given = new Map(pairs);
 
@@ -73,7 +73,10 @@ function buildStruct(entityType, entry, pairs) {
     data.push([Type.atom(name), Model.notIncluded(name)]);
   }
 
-  for (const name of Object.keys(entry.inverses)) {
+  for (const name of [
+    ...Object.keys(entry.inverses),
+    ...Object.keys(entry.derived),
+  ]) {
     data.push([Type.atom(name), Model.notIncluded(name)]);
   }
 

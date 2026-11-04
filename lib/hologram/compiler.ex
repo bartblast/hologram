@@ -3850,6 +3850,215 @@ defmodule Hologram.Compiler do
     |> render_json_object()
   end
 
+  # A type's derived fields, each with what it holds - a value of its declared type, an enum's labels
+  # in their declared order, or one row or a set of rows of an entity type - and its definition in
+  # the shapes the query kernel reads: a filter's clauses, and a query as the term stage.mjs builds,
+  # with the owning type and the chain its rows are read from. A value is spelled the way the wire
+  # spells it, by the type of what it stands for.
+  defp render_derived(entity_type) do
+    entity_type.__derived__()
+    |> Enum.map(fn {name, type, opts} ->
+      definition = Derived.definition(entity_type, name)
+
+      {Atom.to_string(name), render_derived_field(entity_type, definition, type, opts)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_derived_clause({:or, alternatives}, types) do
+    alternatives_js =
+      alternatives
+      |> Enum.map_join(",", &render_derived_clauses(&1, types))
+      |> then(&"[#{&1}]")
+
+    render_json_object([{"or", alternatives_js}])
+  end
+
+  defp render_derived_clause({quantifier, {source, clauses}}, types)
+       when quantifier in [:all, :any, :none] do
+    {start_type, hops} =
+      case source do
+        {:outer, levels, hops} -> {Enum.at(types, levels), hops}
+        hops -> {hd(types), hops}
+      end
+
+    related_type = Derived.path_target(start_type, hops)
+
+    quantifier_js =
+      quantifier
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    render_json_object([
+      {"filter", render_derived_clauses(clauses, [related_type | types])},
+      {"quantifier", quantifier_js},
+      {"source", render_derived_name(source)}
+    ])
+  end
+
+  defp render_derived_clause({name, operator, operand}, types) do
+    operator_js =
+      operator
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    operand_js = render_derived_operand(operand, name_type(name, types))
+
+    "[#{render_derived_name(name)},#{operator_js},#{operand_js}]"
+  end
+
+  defp render_derived_clauses(clauses, types) do
+    clauses
+    |> Enum.map_join(",", &render_derived_clause(&1, types))
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_derived_definition({:concat, operands}, entity_type, _type) do
+    operands_js =
+      operands
+      |> Enum.map_join(",", &render_derived_definition(&1, entity_type, :string))
+      |> then(&"[#{&1}]")
+
+    render_json_object([{"concat", operands_js}])
+  end
+
+  defp render_derived_definition({:condition, clauses}, entity_type, _type) do
+    render_json_object([{"condition", render_derived_clauses(clauses, [entity_type])}])
+  end
+
+  defp render_derived_definition({:if, clauses, then_value, else_value}, entity_type, type) do
+    render_json_object([
+      {"else", render_derived_definition(else_value, entity_type, type)},
+      {"if", render_derived_clauses(clauses, [entity_type])},
+      {"then", render_derived_definition(then_value, entity_type, type)}
+    ])
+  end
+
+  defp render_derived_definition({:name, name}, _entity_type, _type) do
+    render_json_object([{"name", render_derived_name(name)}])
+  end
+
+  defp render_derived_definition({:query, term}, entity_type, _type) do
+    render_json_object([{"query", render_derived_term(term, [term.entity, entity_type])}])
+  end
+
+  defp render_derived_definition({:value, value}, _entity_type, type) do
+    value_js =
+      value
+      |> Codec.encode_json(type)
+      |> Jason.encode!()
+
+    render_json_object([{"value", value_js}])
+  end
+
+  defp render_derived_field(entity_type, definition, [row_type], _opts) do
+    render_json_object([
+      {"definition", render_derived_definition(definition, entity_type, nil)},
+      {"entity", render_entity_type_label(row_type)},
+      {"kind", ~s("set")}
+    ])
+  end
+
+  defp render_derived_field(entity_type, definition, type, opts) do
+    if Reflection.alias?(type) do
+      render_json_object([
+        {"definition", render_derived_definition(definition, entity_type, nil)},
+        {"entity", render_entity_type_label(type)},
+        {"kind", ~s("one")}
+      ])
+    else
+      values =
+        if type == :enum do
+          opts
+          |> Keyword.fetch!(:values)
+          |> Enum.map(&Codec.encode(&1, :enum))
+        end
+
+      render_json_object([
+        {"definition", render_derived_definition(definition, entity_type, type)},
+        {"kind", ~s("scalar")},
+        {"type", Jason.encode!(type)},
+        {"values", Jason.encode!(values)}
+      ])
+    end
+  end
+
+  defp render_derived_include(include) do
+    include
+    |> Enum.map(fn
+      {name, nil} -> {Atom.to_string(name), "null"}
+      {name, sub_term} -> {Atom.to_string(name), render_derived_term(sub_term, [sub_term.entity])}
+    end)
+    |> render_json_object()
+  end
+
+  # A name as the kernel spells it: an attribute's name, a path's or a chain's names in order, or a
+  # name of a row above with how many quantifiers out it lies.
+  defp render_derived_name({:outer, levels, name}) do
+    render_json_object([
+      {"name", render_derived_name(name)},
+      {"outer", Integer.to_string(levels)}
+    ])
+  end
+
+  defp render_derived_name(name), do: render_policy_name(name)
+
+  defp render_derived_operand({:attribute, other}, _type) do
+    render_json_object([{"attribute", render_derived_name(other)}])
+  end
+
+  defp render_derived_operand(values, type) when is_list(values) do
+    values
+    |> Enum.map_join(",", &render_derived_operand(&1, type))
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_derived_operand(value, type) do
+    value
+    |> Codec.encode_json(type)
+    |> Jason.encode!()
+  end
+
+  # A term as stage.mjs builds one, with the owning type and the chain from its row when it is a
+  # derived field's query.
+  defp render_derived_term(term, types) do
+    sort =
+      Enum.map(term.sort, fn {key, direction} ->
+        [Atom.to_string(key), Atom.to_string(direction)]
+      end)
+
+    source_members =
+      case term.source do
+        nil ->
+          []
+
+        {owner_type, chain} ->
+          source_js =
+            render_json_object([
+              {"chain", render_policy_name(chain)},
+              {"owner", render_entity_type_label(owner_type)}
+            ])
+
+          [{"source", source_js}]
+      end
+
+    cardinality_js =
+      term.cardinality
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    render_json_object([
+      {"cardinality", cardinality_js},
+      {"entity", render_entity_type_label(term.entity)},
+      {"filter", render_derived_clauses(term.filter, types)},
+      {"include", render_derived_include(term.include)},
+      {"skip", Jason.encode!(term.skip)},
+      {"sort", Jason.encode!(sort)},
+      {"take", Jason.encode!(term.take)}
+      | source_members
+    ])
+  end
+
   # What a client needs to read its own rows, and to build one: a value's type is not recoverable
   # from the value itself - a date, an enum and a uuid all arrive as strings - so reading one back
   # means knowing the attribute it belongs to, which is what this says. Building one means knowing
@@ -3894,6 +4103,7 @@ defmodule Hologram.Compiler do
       {"constraints", render_constraints(entity_type)},
       {"creatorRoles", render_creator_roles(entity_type)},
       {"defaults", render_defaults(entity_type)},
+      {"derived", render_derived(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
       {"expandedRoles", render_expanded_roles(entity_type)},
       {"frameworkAttributes", render_framework_attributes(entity_type)},
@@ -4166,7 +4376,7 @@ defmodule Hologram.Compiler do
 
   defp render_policy_value(entity_type, name, value) do
     value
-    |> Codec.encode_json(policy_attribute_type(entity_type, name))
+    |> Codec.encode_json(name_type(name, [entity_type]))
     |> Jason.encode!()
   end
 
@@ -4277,23 +4487,30 @@ defmodule Hologram.Compiler do
     |> Jason.encode!()
   end
 
-  # A name matching no attribute definition is a to-one reference field, and every one of those
-  # carries an entity id - the fallback the query stages make. A path has the type of the attribute
-  # it ends at.
-  defp policy_attribute_type(entity_type, path) when is_list(path) do
-    {relationship_names, [name]} = Enum.split(path, -1)
-
-    entity_type
-    |> Entity.path_target(relationship_names)
-    |> policy_attribute_type(name)
+  # The type of what a clause's name reads, for spelling the values it is compared with: an
+  # attribute's, a derived field's declared one, or an entity id for a reference field - the
+  # fallback the query stages make. An outer name is read on the row that many levels out, a path on
+  # the row the path leads to.
+  defp name_type({:outer, levels, name}, types) do
+    name_type(name, [Enum.at(types, levels)])
   end
 
-  defp policy_attribute_type(entity_type, name) do
-    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+  defp name_type(path, [entity_type | _types_above]) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
 
-    case List.keyfind(definitions, name, 0) do
-      {_name, type, _opts} -> type
-      nil -> :uuid
+    name_type(name, [Entity.path_target(entity_type, relationship_names)])
+  end
+
+  defp name_type(name, [entity_type | _types_above]) do
+    declaration =
+      entity_type.__attributes__()
+      |> Enum.concat(entity_type.__system_attributes__())
+      |> Enum.concat(entity_type.__derived__())
+      |> List.keyfind(name, 0)
+
+    case declaration do
+      {_name, type, _opts} when is_atom(type) -> type
+      _other -> :uuid
     end
   end
 

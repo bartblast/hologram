@@ -81,8 +81,12 @@ export default class Model {
     }
 
     // An inverse stores nothing on the row, so it has no reference field - only what was included
-    // of it, or the sentinel.
-    for (const name of Object.keys(entry.inverses)) {
+    // of it, or the sentinel. A derived field is computed rather than stored, so it is the same:
+    // what was included of it, or the sentinel.
+    for (const name of [
+      ...Object.keys(entry.inverses),
+      ...Object.keys(entry.derived),
+    ]) {
       data.push([Type.atom(name), includes[name] ?? Model.notIncluded(name)]);
     }
 
@@ -170,6 +174,12 @@ export default class Model {
       : `the ${inverse.forward} relationship of ${inverse.type}`;
   }
 
+  // The type's derived fields by name, each with what it holds - kind "scalar" with its declared
+  // type and an enum's labels, or kind "one" or "set" with its row type - and its definition.
+  static derived(type) {
+    return Model.entry(type).derived;
+  }
+
   static inverses(type) {
     return Model.entry(type).inverses;
   }
@@ -197,16 +207,17 @@ export default class Model {
       );
     }
 
-    // The four every struct is built and written through - the three the write path INDEXES into,
-    // and the inverses each boxed row walks - stand in for themselves when a baked entry does not
-    // carry them, where the ones that are only carried can stay undefined: a reader asking what
-    // an attribute declares has to be told "nothing" rather than meet a crash. A build writes all
-    // of them for every type - what has fewer keys is a hand-built entry, which is how most of
-    // this suite states the little it reads.
+    // The ones every struct is built and written through - the three the write path INDEXES into,
+    // and the inverses and derived fields each boxed row walks - stand in for themselves when a
+    // baked entry does not carry them, where the ones that are only carried can stay undefined: a
+    // reader asking what an attribute declares has to be told "nothing" rather than meet a crash. A
+    // build writes all of them for every type - what has fewer keys is a hand-built entry, which is
+    // how most of this suite states the little it reads.
     entry = {
       attributes: baked.attributes,
       constraints: Model.#boxConstraints(baked.constraints ?? {}),
       defaults: baked.defaults ?? {},
+      derived: baked.derived ?? {},
       enumValues: baked.enumValues,
       frameworkAttributes: baked.frameworkAttributes ?? [],
       inverses: baked.inverses ?? {},
@@ -243,6 +254,26 @@ export default class Model {
 
   static relationships(type) {
     return Model.entry(type).relationships;
+  }
+
+  // The client's Hologram.Entity.Derived.rows_term/3: the term the rows the given field holds are
+  // read with, given the term the field is included with - a relationship's as included, a derived
+  // field's embedding what its definition includes, every query it may choose included, beside the
+  // nested includes the field is included with. Where both include one relationship, the
+  // definition's include is kept and gains what the other includes.
+  static rowsTerm(type, name, includedTerm) {
+    const derived = Model.derived(type)[name];
+
+    if (derived === undefined) {
+      return includedTerm;
+    }
+
+    const include = Model.#definitionQueries(derived.definition).reduce(
+      (acc, query) => Model.#mergedInclude(query.include, acc),
+      includedTerm.include,
+    );
+
+    return {...includedTerm, include};
   }
 
   // The fields a client may write, which is what a create's data carries and what the server's
@@ -559,12 +590,21 @@ export default class Model {
   // Deps: [:maps.from_list/1]
   // A result node becomes the entity struct a template can read, its includes boxed with it.
   // The node carries the row and what was included of it, and the TERM says what each of those
-  // is - a node has no type of its own.
+  // is - a node has no type of its own. A derived field holding a value carries it the way the wire
+  // spells it, boxed by its declared type, and one holding rows carries them read with what its
+  // definition embeds.
   static #boxNode(term, node) {
+    const derived = Model.derived(term.entity);
     const includes = {};
 
     for (const [name, subTerm] of Object.entries(term.include)) {
-      includes[name] = Model.#boxIncluded(subTerm, node.includes[name]);
+      includes[name] =
+        derived[name]?.kind === "scalar"
+          ? Model.boxValue(node.includes[name], derived[name].type)
+          : Model.#boxIncluded(
+              Model.rowsTerm(term.entity, name, subTerm),
+              node.includes[name],
+            );
     }
 
     return Model.box(term.entity, node.row, includes);
@@ -656,6 +696,21 @@ export default class Model {
     ]);
   }
 
+  static #definitionQueries(definition) {
+    if ("query" in definition) {
+      return [definition.query];
+    }
+
+    if ("if" in definition) {
+      return [
+        ...Model.#definitionQueries(definition.then),
+        ...Model.#definitionQueries(definition.else),
+      ];
+    }
+
+    return [];
+  }
+
   static #field(struct, name) {
     return struct.data[Type.encodeMapKey(Type.atom(name))][1];
   }
@@ -672,6 +727,23 @@ export default class Model {
     }
 
     return `${spelled.slice(0, -1).join(", ")} and ${spelled.at(-1)}`;
+  }
+
+  static #mergedInclude(keptInclude, otherInclude) {
+    const merged = {...otherInclude, ...keptInclude};
+
+    for (const [name, otherTerm] of Object.entries(otherInclude)) {
+      const keptTerm = keptInclude[name];
+
+      if (keptTerm && otherTerm) {
+        merged[name] = {
+          ...keptTerm,
+          include: Model.#mergedInclude(keptTerm.include, otherTerm.include),
+        };
+      }
+    }
+
+    return merged;
   }
 
   static #metadata(row) {

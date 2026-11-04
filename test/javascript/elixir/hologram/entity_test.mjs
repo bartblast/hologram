@@ -112,6 +112,14 @@ describe("Elixir_Hologram_Entity", () => {
           attributes: {...systemAttributes, name: "string"},
           constraints: {},
           defaults: {},
+          derived: {
+            message_count: {
+              definition: {value: 0},
+              kind: "scalar",
+              type: "integer",
+              values: null,
+            },
+          },
           enumValues: {},
           frameworkAttributes: [],
           inverses: {
@@ -370,6 +378,15 @@ describe("Elixir_Hologram_Entity", () => {
 
       assert.isFalse(
         Object.values(entity.data).some(([key]) => key.value === "messages_id"),
+      );
+    });
+
+    it("leaves a derived field unasked-for", () => {
+      const entity = newEntity(Type.alias(CHANNEL));
+
+      assert.deepEqual(
+        field(entity, "message_count"),
+        Model.notIncluded("message_count"),
       );
     });
 
