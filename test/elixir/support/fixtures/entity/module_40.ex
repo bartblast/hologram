@@ -20,6 +20,12 @@ defmodule Hologram.Test.Fixtures.Entity.Module40 do
 
   derived :mentor_message_count, :integer, fn mentors -> count(mentors.channel.messages) end
 
+  derived :named_tag_count, :integer, fn notes, name ->
+    notes
+    |> filter(any(tag <- tags, tag.c == ^name))
+    |> count()
+  end
+
   derived :no_note, Module41, fn -> nil end
 
   derived :note_count, :integer, fn notes -> count(notes) end
