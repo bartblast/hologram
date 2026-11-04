@@ -1703,6 +1703,21 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
+    test "widens a count a float field reads", %{mapping: mapping} do
+      term =
+        Module40
+        |> filter(note_weight > 1.5)
+        |> Stage.normalize()
+
+      assert %{params: [{:value, 1.5}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE (SELECT count(*) FROM #{table(Module41)} AS "$s1" | <>
+                 ~s|WHERE "$s1"."team_id" = "test_fixtures_entity_module40"."id")::float8 > $1 ORDER BY|
+             )
+    end
+
     test "matches a quantifier's rows to a derived set's bounded, ordered rows", %{
       mapping: mapping
     } do

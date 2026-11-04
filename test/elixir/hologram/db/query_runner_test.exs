@@ -1134,6 +1134,15 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert derived_query_results(query, :name) == ["full"]
     end
 
+    test "compares a count a float field reads as a float" do
+      create_module_40_entity("full", [true, true])
+      create_module_40_entity("sparse", [true])
+
+      query = filter(Module40, note_weight > 1.5)
+
+      assert derived_query_results(query, :name) == ["full"]
+    end
+
     test "matches a quantifier's rows to a derived set's bounded rows" do
       create_module_32_entity("short", [1, 2])
       create_module_32_entity("long", [1, 2, 3])
@@ -1341,6 +1350,22 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert channel == 3
       assert entity.ratio === 7.0
       assert entity.tier == :silver
+    end
+
+    test "includes a count a float field reads as a float" do
+      {:ok, team} = create(Module40.new(name: "team"))
+
+      {:ok, _note} =
+        %{public: true, team_id: team.id}
+        |> Module41.new()
+        |> create()
+
+      results =
+        Module40
+        |> include(note_weight)
+        |> derived_query_results(:note_weight)
+
+      assert results === [1.0]
     end
 
     test "includes a derived set's rows in its order, its bounds applied" do

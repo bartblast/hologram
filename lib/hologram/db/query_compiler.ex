@@ -327,7 +327,7 @@ defmodule Hologram.DB.QueryCompiler do
     limit_sql <> offset_sql
   end
 
-  # A name read by a derived field as its declared type: an enum attribute as its label, an integer
+  # A value read by a derived field as its declared type: an enum attribute as its label, an integer
   # read by a float field widened.
   defp cast_sql(sql, %{sql_type: sql_type}, %{sql_type: sql_type}), do: sql
 
@@ -1529,8 +1529,8 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # A count is a correlated subquery over the rows the source leads to. Bounds cap the rows counted,
-  # as a counting statement's do.
-  defp expression_sql({:query, %{cardinality: :count} = term}, scope, _column, reversed_params) do
+  # as a counting statement's do. A float field reads it widened.
+  defp expression_sql({:query, %{cardinality: :count} = term}, scope, column, reversed_params) do
     {from_sql, _inner_scope, new_params} = sourced_from_sql(scope, term, reversed_params)
     bounds_sql = bounds_clause(term)
 
@@ -1543,7 +1543,7 @@ defmodule Hologram.DB.QueryCompiler do
         "(SELECT count(*) FROM (SELECT 1 #{from_sql}#{bounds_sql}) AS #{quoted_wrapper})"
       end
 
-    {count_sql, new_params}
+    {cast_sql(count_sql, %{sql_type: "int8"}, column), new_params}
   end
 
   # A slot's type can't be told from a CASE whose branches are all slots, so every literal is cast

@@ -32,6 +32,8 @@ defmodule Hologram.Test.Fixtures.Entity.Module40 do
 
   derived :note_tag_count, :integer, fn notes -> count(notes.tags) end
 
+  derived :note_weight, :float, fn notes -> count(notes) end
+
   derived :picked_notes, [Module41], fn notes, name ->
     if name == "tagged", do: include(notes, tags), else: include(notes, team)
   end
