@@ -9,6 +9,8 @@ import Model from "../../assets/js/model.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
 import QueryKernel from "../../assets/js/query_kernel.mjs";
 
+import derivedModel from "./support/fixtures/derived_model.mjs";
+
 defineRuntimeGlobals();
 
 // Mirrors the predicate cases of test/elixir/hologram/query/interpreter_test.exs, case for case
@@ -1381,6 +1383,569 @@ describe("QueryKernel", () => {
         fan: ["followed"],
         followed: [],
       });
+    });
+  });
+
+  // Mirrors the derived-field describes of the interpreter suite, case for case, over the model the
+  // build bakes for the same fixtures (see support/fixtures/derived_model.mjs).
+  describe("run() - derived fields", () => {
+    const CHANNEL = "MyApp.Channel";
+    const MEMBER = "MyApp.Member";
+    const PLAYER = "MyApp.Player";
+
+    const term = (entity, overrides = {}) =>
+      Object.assign(
+        {
+          cardinality: "set",
+          entity,
+          filter: [],
+          include: {},
+          skip: null,
+          sort: [["id", "asc"]],
+          take: null,
+        },
+        overrides,
+      );
+
+    const nicknames = (filter) =>
+      QueryKernel.run(term(MEMBER, {filter}))
+        .map((node) => node.row.nickname)
+        .sort();
+
+    const scores = (filter, context = {}) =>
+      QueryKernel.run(term(PLAYER, {filter}), context)
+        .map((node) => node.row.score)
+        .sort((left, right) => left - right);
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: derivedModel};
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      LocalDatabase.putRow(CHANNEL, {id: "c1", name: "general"});
+
+      for (const [id, channelId, nickname, score] of [
+        ["m1", "c1", "ann", 1],
+        ["m2", null, "bob", 5],
+        ["m3", "c1", "general", 0],
+      ]) {
+        LocalDatabase.putRow(MEMBER, {
+          channel_id: channelId,
+          id,
+          nickname,
+          score,
+        });
+      }
+
+      for (const [id, kind, memberId, score] of [
+        ["p1", "guest", null, 1],
+        ["p2", "guest", "m1", 7],
+        ["p3", "staff", "m2", 12],
+      ]) {
+        LocalDatabase.putRow(PLAYER, {id, kind, member_id: memberId, score});
+      }
+
+      LocalDatabase.addFact(PLAYER, "mentors", "p1", "m2");
+      LocalDatabase.addFact(PLAYER, "mentors", "p2", "m1");
+      LocalDatabase.addFact(PLAYER, "mentors", "p2", "m2");
+    });
+
+    it("computes a literal, an attribute and an enum attribute's label", () => {
+      assert.deepEqual(nicknames([["top_score", "==", 10]]), [
+        "ann",
+        "bob",
+        "general",
+      ]);
+
+      assert.deepEqual(scores([["ratio", ">", 6.5]]), [7, 12]);
+      assert.deepEqual(scores([["kind_label", "==", "staff"]]), [12]);
+    });
+
+    it("joins strings, missing when an operand is", () => {
+      assert.deepEqual(nicknames([["display_name", "!=", "ann (general)"]]), [
+        "bob",
+        "general",
+      ]);
+
+      assert.deepEqual(nicknames([["display_name", "==", null]]), ["bob"]);
+    });
+
+    it("takes an if's else branch when its condition does not hold", () => {
+      assert.deepEqual(nicknames([["badge", "==", null]]), ["ann", "general"]);
+      assert.deepEqual(nicknames([["badge", "==", "top"]]), ["bob"]);
+    });
+
+    it("answers a condition field false where its condition does not hold", () => {
+      assert.deepEqual(nicknames([["active", "==", true]]), ["ann"]);
+
+      assert.deepEqual(nicknames([["named_after_channel", "==", false]]), [
+        "ann",
+        "bob",
+      ]);
+    });
+
+    it("places a missing derived value last ascending and first descending", () => {
+      const sorted = (direction) =>
+        QueryKernel.run(
+          term(MEMBER, {
+            sort: [
+              ["channel_load", direction],
+              ["id", "asc"],
+            ],
+          }),
+        ).map((node) => node.row.nickname);
+
+      assert.equal(sorted("asc").at(-1), "bob");
+      assert.equal(sorted("desc")[0], "bob");
+    });
+
+    it("reads a count through a missing to-one of a path as missing, not 0", () => {
+      assert.deepEqual(nicknames([["channel_load", "==", 0]]), [
+        "ann",
+        "general",
+      ]);
+
+      assert.deepEqual(nicknames([["channel_load", "!=", 4]]), [
+        "ann",
+        "bob",
+        "general",
+      ]);
+    });
+
+    it("refuses a placeholder binding a label a derived enum does not declare", () => {
+      assert.throw(
+        () =>
+          scores([["tier", "==", {placeholder: "tier"}]], {
+            bindings: {tier: "platinum"},
+          }),
+        HologramRuntimeError,
+        "invalid value :platinum for placeholder :tier - expected one of [:gold, :silver, :bronze]",
+      );
+    });
+
+    it("computes a derived field another definition reads", () => {
+      assert.deepEqual(scores([["gold", "==", true]]), [12]);
+    });
+
+    it("computes a derived field a path ends at on the row the path reaches", () => {
+      assert.deepEqual(
+        scores([[["member", "display_name"], "==", "ann (general)"]]),
+        [7],
+      );
+    });
+
+    it("compares and sorts a derived enum by its declared order", () => {
+      const sortedScores = QueryKernel.run(
+        term(PLAYER, {
+          sort: [
+            ["tier", "asc"],
+            ["id", "asc"],
+          ],
+        }),
+      ).map((node) => node.row.score);
+
+      assert.deepEqual(scores([["tier", "<", "bronze"]]), [7, 12]);
+      assert.deepEqual(sortedScores, [12, 7, 1]);
+    });
+
+    it("keeps null's meaning in a membership on a derived value", () => {
+      assert.deepEqual(nicknames([["badge", "in", ["top", null]]]), [
+        "ann",
+        "bob",
+        "general",
+      ]);
+
+      assert.deepEqual(nicknames([["badge", "not_in", ["top", null]]]), []);
+    });
+
+    it("binds a placeholder on a derived enum", () => {
+      const filter = [["tier", "in", [{placeholder: "tier"}, "gold"]]];
+
+      assert.deepEqual(scores(filter, {bindings: {tier: "silver"}}), [7, 12]);
+    });
+
+    it("compares a derived value with an attribute of the row", () => {
+      assert.deepEqual(scores([["ratio", ">", {attribute: "score"}]]), []);
+
+      assert.deepEqual(
+        scores([["kind_label", "<=", {attribute: "kind"}]]),
+        [1, 7, 12],
+      );
+
+      assert.deepEqual(
+        scores([["kind", "==", {attribute: "kind_label"}]]),
+        [1, 7, 12],
+      );
+    });
+
+    it("computes derived fields inside a quantifier's condition", () => {
+      const quantified = (filter) => [
+        {filter, quantifier: "any", source: ["mentors"]},
+      ];
+
+      assert.deepEqual(scores(quantified([["active", "==", true]])), [7]);
+
+      assert.deepEqual(
+        scores(
+          quantified([["score", ">", {attribute: {name: "ratio", outer: 1}}]]),
+        ),
+        [1],
+      );
+    });
+
+    it("sorts a to-many include by a derived field", () => {
+      const mentors = term(MEMBER, {
+        sort: [
+          ["active", "asc"],
+          ["id", "asc"],
+        ],
+      });
+
+      const [silver] = QueryKernel.run(
+        term(PLAYER, {
+          filter: [["score", "==", 7]],
+          include: {mentors},
+        }),
+      );
+
+      assert.deepEqual(
+        silver.includes.mentors.map((node) => node.row.nickname),
+        ["bob", "ann"],
+      );
+    });
+  });
+
+  describe("run() - derived counts and sets", () => {
+    const CHANNEL = "MyApp.Channel";
+    const MEMBER = "MyApp.Member";
+    const MESSAGE = "MyApp.Message";
+    const NOTE = "MyApp.Note";
+    const POST = "MyApp.Post";
+    const ROOM = "MyApp.Room";
+    const TAG = "MyApp.Tag";
+    const TEAM = "MyApp.Team";
+
+    let nextId = 0;
+
+    const id = (prefix) => `${prefix}${++nextId}`;
+
+    const term = (entity, overrides = {}) =>
+      Object.assign(
+        {
+          cardinality: "set",
+          entity,
+          filter: [],
+          include: {},
+          skip: null,
+          sort: [["id", "asc"]],
+          take: null,
+        },
+        overrides,
+      );
+
+    const names = (entity, filter) =>
+      QueryKernel.run(term(entity, {filter}))
+        .map((node) => node.row.name)
+        .sort();
+
+    const channel = (name, positions) => {
+      const channelId = id("c");
+
+      LocalDatabase.putRow(CHANNEL, {id: channelId, name});
+
+      for (const position of positions) {
+        LocalDatabase.putRow(MESSAGE, {
+          body: "message",
+          channel_id: channelId,
+          id: id("m"),
+          position,
+        });
+      }
+
+      return channelId;
+    };
+
+    const room = (name, postCount) => {
+      const roomId = id("r");
+
+      LocalDatabase.putRow(ROOM, {id: roomId, last_read_at: null, name});
+
+      for (let index = 0; index < postCount; index++) {
+        LocalDatabase.putRow(POST, {
+          author_id: null,
+          channel_id: roomId,
+          id: id("p"),
+          pinned: false,
+        });
+      }
+
+      return roomId;
+    };
+
+    const team = (name, notePublicity) => {
+      const teamId = id("t");
+
+      LocalDatabase.putRow(TEAM, {id: teamId, name});
+
+      const noteIds = notePublicity.map((isPublic) => {
+        const noteId = id("n");
+
+        LocalDatabase.putRow(NOTE, {
+          id: noteId,
+          public: isPublic,
+          team_id: teamId,
+        });
+
+        return noteId;
+      });
+
+      return {noteIds, teamId};
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: derivedModel};
+
+      LocalDatabase.reset();
+      Model.reset();
+    });
+
+    it("filters and sorts by a count", () => {
+      channel("busy", [1, 2, 3]);
+      channel("quiet", [1]);
+      channel("empty", []);
+
+      const result = QueryKernel.run(
+        term(CHANNEL, {
+          filter: [["message_count", ">", 0]],
+          sort: [
+            ["message_count", "desc"],
+            ["id", "asc"],
+          ],
+        }),
+      );
+
+      assert.deepEqual(
+        result.map((node) => node.row.name),
+        ["busy", "quiet"],
+      );
+    });
+
+    it("counts the rows a clause reading the owner row matches, none through a missing to-one", () => {
+      channel("general", [1, 2, 3]);
+
+      LocalDatabase.putRow(MESSAGE, {
+        body: "orphan",
+        channel_id: null,
+        id: id("m"),
+        position: 5,
+      });
+
+      const laterPositions = (count) =>
+        QueryKernel.run(term(MESSAGE, {filter: [["later_count", "==", count]]}))
+          .map((node) => node.row.position)
+          .sort((left, right) => left - right);
+
+      assert.deepEqual(laterPositions(1), [2]);
+      assert.deepEqual(laterPositions(0), [3, 5]);
+    });
+
+    it("counts a row several paths reach once", () => {
+      const general = channel("general", [1, 2]);
+      const {teamId} = team("team", []);
+
+      for (const nickname of ["ann", "gina"]) {
+        const memberId = id("m");
+
+        LocalDatabase.putRow(MEMBER, {
+          channel_id: general,
+          id: memberId,
+          nickname,
+          score: 1,
+        });
+
+        LocalDatabase.addFact(TEAM, "mentors", teamId, memberId);
+      }
+
+      assert.deepEqual(names(TEAM, [["mentor_message_count", "==", 2]]), [
+        "team",
+      ]);
+    });
+
+    it("caps a count by its bounds", () => {
+      team("full", [true, true, true]);
+      team("sparse", [true]);
+
+      assert.deepEqual(names(TEAM, [["capped_note_count", "==", 2]]), ["full"]);
+    });
+
+    it("reads a derived set's bounded rows in a quantifier", () => {
+      channel("short", [1, 2]);
+      const long = channel("long", [1, 2, 3]);
+
+      const channelIds = QueryKernel.run(
+        term(MESSAGE, {
+          filter: [
+            {
+              filter: [["position", "==", 3]],
+              quantifier: "any",
+              source: ["channel", "recent_messages"],
+            },
+          ],
+        }),
+      ).map((node) => node.row.channel_id);
+
+      assert.deepEqual(
+        names(CHANNEL, [
+          {
+            filter: [["position", "==", 1]],
+            quantifier: "any",
+            source: ["recent_messages"],
+          },
+        ]),
+        ["short"],
+      );
+
+      assert.deepEqual(channelIds, [long, long, long]);
+    });
+
+    it("counts the rows of a derived set the branch of an if chooses", () => {
+      room("general", 3);
+      room("random", 2);
+
+      assert.deepEqual(names(ROOM, [["picked_count", "==", 1]]), ["general"]);
+      assert.deepEqual(names(ROOM, [["picked_count", "==", 2]]), ["random"]);
+    });
+
+    it("holds no rows for a null definition", () => {
+      room("general", 1);
+
+      assert.deepEqual(
+        names(ROOM, [{filter: [], quantifier: "any", source: ["nothing"]}]),
+        [],
+      );
+
+      assert.deepEqual(
+        names(ROOM, [
+          {
+            filter: [["pinned", "==", true]],
+            quantifier: "all",
+            source: ["nothing"],
+          },
+        ]),
+        ["general"],
+      );
+
+      assert.deepEqual(
+        names(ROOM, [{filter: [], quantifier: "none", source: ["nothing"]}]),
+        ["general"],
+      );
+    });
+
+    it("answers all and none over a derived set's bounded rows", () => {
+      channel("short", [1, 2]);
+      channel("long", [1, 2, 3]);
+
+      assert.deepEqual(
+        names(CHANNEL, [
+          {
+            filter: [["position", ">", 1]],
+            quantifier: "all",
+            source: ["recent_messages"],
+          },
+        ]),
+        ["long"],
+      );
+
+      assert.deepEqual(
+        names(CHANNEL, [
+          {
+            filter: [["position", "==", 1]],
+            quantifier: "none",
+            source: ["recent_messages"],
+          },
+        ]),
+        ["long"],
+      );
+    });
+
+    it("reads no rows through a missing to-one inside a flattened source", () => {
+      const general = channel("general", [1, 2]);
+      const {teamId} = team("team", []);
+
+      for (const channelId of [general, null]) {
+        const memberId = id("m");
+
+        LocalDatabase.putRow(MEMBER, {
+          channel_id: channelId,
+          id: memberId,
+          nickname: "mentor",
+          score: 1,
+        });
+
+        LocalDatabase.addFact(TEAM, "mentors", teamId, memberId);
+      }
+
+      assert.deepEqual(names(TEAM, [["mentor_message_count", "==", 2]]), [
+        "team",
+      ]);
+    });
+
+    it("reads the owner row from a quantifier inside a definition", () => {
+      const {noteIds} = team("red", [true, true]);
+      team("blue", [true]);
+
+      for (const [noteId, tagName] of [
+        [noteIds[0], "red"],
+        [noteIds[1], "blue"],
+      ]) {
+        const tagId = id("g");
+
+        LocalDatabase.putRow(TAG, {a: false, b: null, c: tagName, id: tagId});
+        LocalDatabase.addFact(NOTE, "tags", noteId, tagId);
+      }
+
+      assert.deepEqual(names(TEAM, [["named_tag_count", "==", 1]]), ["red"]);
+    });
+
+    // The client holds only the rows its session may read, so a row it does not hold is neither
+    // counted nor a link a count's source passes through.
+    it("leaves a row the client does not hold out of a count", () => {
+      const {noteIds} = team("team", [true, false]);
+
+      for (const noteId of noteIds) {
+        const tagId = id("g");
+
+        LocalDatabase.putRow(TAG, {a: false, b: null, c: "tag", id: tagId});
+        LocalDatabase.addFact(NOTE, "tags", noteId, tagId);
+      }
+
+      LocalDatabase.deleteRow(NOTE, noteIds[1]);
+
+      assert.deepEqual(names(TEAM, [["note_count", "==", 1]]), ["team"]);
+      assert.deepEqual(names(TEAM, [["note_tag_count", "==", 1]]), ["team"]);
+    });
+
+    // A fill arrives in pieces, so a pair can name a row the client does not hold yet - it leads
+    // nowhere, inside a chain as anywhere.
+    it("passes over a pair naming a row the client does not hold inside a chain", () => {
+      const general = channel("general", [1, 2]);
+      const {teamId} = team("team", []);
+      const memberId = id("m");
+
+      LocalDatabase.putRow(MEMBER, {
+        channel_id: general,
+        id: memberId,
+        nickname: "mentor",
+        score: 1,
+      });
+
+      LocalDatabase.addFact(TEAM, "mentors", teamId, memberId);
+      LocalDatabase.addFact(TEAM, "mentors", teamId, "not-held");
+
+      assert.deepEqual(names(TEAM, [["mentor_message_count", "==", 2]]), [
+        "team",
+      ]);
     });
   });
 
