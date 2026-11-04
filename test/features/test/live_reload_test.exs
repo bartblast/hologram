@@ -8,11 +8,14 @@ defmodule HologramFeatureTests.LiveReloadTest do
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias HologramFeatureTests.LiveReload.Page1
   alias HologramFeatureTests.LiveReload.Page2
+  alias HologramFeatureTests.LiveReload.Page3
 
   # How long a tab has to not reload before it counts as not reloading.
   @no_reload_wait_ms 1_000
 
   @overlay css("#hologram-live-reload-error-overlay")
+
+  @phoenix_reload_frame css(~s(iframe[src*="/phoenix/live_reload/frame"]))
 
   @reload_timeout_ms 10_000
 
@@ -23,6 +26,10 @@ defmodule HologramFeatureTests.LiveReloadTest do
   defp bundle_static_path(page_module, digest) do
     static_dir = Application.app_dir(:hologram_feature_tests, "priv/static")
     Path.join(static_dir, RouterHelpers.page_bundle_path(page_module, digest))
+  end
+
+  defp computed_color(session) do
+    script_result(session, "return getComputedStyle(document.getElementById('styled')).color;")
   end
 
   # Serves the page under another digest, as the server does once a live reload has rebuilt it:
@@ -63,6 +70,30 @@ defmodule HologramFeatureTests.LiveReloadTest do
     end
   end
 
+  # The stylesheet Page3's layout links, written through the app dir the server serves static files
+  # from. Removed when the test exits.
+  defp stylesheet_path do
+    Application.app_dir(:hologram_feature_tests, "priv/static/assets/live_reload.css")
+  end
+
+  defp wait_for_computed_color(session, color, start_time \\ nil) do
+    start_time = start_time || System.monotonic_time(:millisecond)
+
+    cond do
+      computed_color(session) == color ->
+        session
+
+      System.monotonic_time(:millisecond) - start_time > @reload_timeout_ms ->
+        flunk(
+          "The text did not turn #{color} within #{@reload_timeout_ms} ms, it is #{computed_color(session)}"
+        )
+
+      true ->
+        Process.sleep(100)
+        wait_for_computed_color(session, color, start_time)
+    end
+  end
+
   defp wait_for_new_document(session, old_instance_id, start_time \\ nil) do
     start_time = start_time || System.monotonic_time(:millisecond)
     instance_id = read_instance_id(session)
@@ -78,6 +109,36 @@ defmodule HologramFeatureTests.LiveReloadTest do
         Process.sleep(100)
         wait_for_new_document(session, old_instance_id, start_time)
     end
+  end
+
+  # A swap is done once the copy that kept the page styled is gone and the link the page rendered
+  # holds the fresh URL.
+  defp wait_for_stylesheet_swapped(session, start_time \\ nil) do
+    start_time = start_time || System.monotonic_time(:millisecond)
+
+    swapped? =
+      script_result(session, """
+      const links = document.querySelectorAll('link[href*="live_reload.css"]');
+      const link = globalThis.__stylesheetLink;
+
+      return links.length === 1 && links[0] === link && link.href.includes("_hologram_css");
+      """)
+
+    cond do
+      swapped? ->
+        session
+
+      System.monotonic_time(:millisecond) - start_time > @reload_timeout_ms ->
+        flunk("The stylesheet swap did not finish within #{@reload_timeout_ms} ms")
+
+      true ->
+        Process.sleep(100)
+        wait_for_stylesheet_swapped(session, start_time)
+    end
+  end
+
+  defp write_stylesheet(color) do
+    File.write!(stylesheet_path(), "#styled { color: #{color}; }\n")
   end
 
   describe "reload event" do
@@ -111,6 +172,61 @@ defmodule HologramFeatureTests.LiveReloadTest do
       session
       |> wait_for_new_document(instance_id)
       |> assert_page(Page2)
+    end
+  end
+
+  describe "css changed event" do
+    setup do
+      assets_dir = Path.dirname(stylesheet_path())
+      File.mkdir_p!(assets_dir)
+      write_stylesheet("rgb(255, 0, 0)")
+
+      on_exit(fn ->
+        File.rm(stylesheet_path())
+        # Left alone when it holds anything else.
+        File.rmdir(assets_dir)
+      end)
+    end
+
+    feature "applies the new CSS without reloading the tab", %{session: session} do
+      session =
+        session
+        |> visit(Page3)
+        |> wait_for_computed_color("rgb(255, 0, 0)")
+
+      instance_id = current_instance_id(session)
+
+      # Kept to tell that the swap gives the link element the page rendered the fresh URL rather
+      # than replacing it.
+      execute_script(session, """
+      globalThis.__stylesheetLink = document.querySelector('link[href^="/assets/live_reload.css"]');
+      """)
+
+      write_stylesheet("rgb(0, 0, 255)")
+      broadcast_live_reload(:css_changed)
+
+      session
+      |> wait_for_computed_color("rgb(0, 0, 255)")
+      |> wait_for_stylesheet_swapped()
+
+      assert computed_color(session) == "rgb(0, 0, 255)"
+
+      Process.sleep(@no_reload_wait_ms)
+
+      assert current_instance_id(session) == instance_id
+    end
+  end
+
+  describe "Phoenix's live reload frame" do
+    # The server sends the page with the frame, as Phoenix's live reload plug does in dev. Until
+    # #1380 the first render removes it anyway, along with every other node it did not render.
+    feature "is removed from the page", %{session: session} do
+      session = visit(session, Page3)
+
+      assert script_result(session, "return fetch(location.pathname).then(r => r.text());") =~
+               "/phoenix/live_reload/frame"
+
+      refute_has(session, @phoenix_reload_frame)
     end
   end
 
