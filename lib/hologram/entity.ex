@@ -201,7 +201,10 @@ defmodule Hologram.Entity do
       with no project. A condition that wants the related row there says so,
       `project.id != nil and project.archived != true`. A condition built from data goes in pinned,
       `when: ^predicates`, as a list of predicates pairing names with values, where an `or:` entry
-      holding two or more predicate lists is a disjunction.
+      holding two or more predicate lists is a disjunction. A derived field holding a value compares
+      like an attribute, `when: display_name == "ann"`, and the condition reads what its definition
+      reads, related rows as stored. One reading a related set, through a count or a query builder,
+      fails the build.
 
   The options on one line must all hold at once, and several lines for one operation are
   alternatives.

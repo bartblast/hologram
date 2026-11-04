@@ -8,6 +8,7 @@ defmodule Hologram.Policy.Evaluator do
 
   alias Hologram.DB.SortKey
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
 
   @ordering_operators [:<, :<=, :>, :>=]
 
@@ -42,6 +43,13 @@ defmodule Hologram.Policy.Evaluator do
   attribute, compared the way a literal is. A path, as a predicate's name or an attribute operand,
   reads its last name off the row its relationships lead to, and reads nil when they lead nowhere -
   so `!=` and `not in` hold for a path that ends nowhere, and an ordering comparison does not.
+
+  A derived field is its definition written in place, computed over the row it is read on - the
+  rule's row, or the row a path leads to - its paths read the way the rule's own are: `<>` is nil
+  when an operand is, an `if` takes its else branch when its condition does not hold, a condition
+  is true or false, never nil. A derived enum
+  compares by its value's position among the declared ones. A policy condition reads no derived
+  field reading a related set, which the build refuses.
 
   For an anonymous session a user_id() predicate is false, whichever way it points, and a grant
   reference is held by nobody - the actor is nobody rather than nil, since a nil actor would make
@@ -121,7 +129,9 @@ defmodule Hologram.Policy.Evaluator do
   end
 
   defp enum_ranks(entity_type, name) do
-    case List.keyfind(entity_type.__attributes__(), name, 0) do
+    definitions = entity_type.__attributes__() ++ entity_type.__derived__()
+
+    case List.keyfind(definitions, name, 0) do
       {_name, :enum, opts} ->
         opts
         |> Keyword.fetch!(:values)
@@ -134,6 +144,32 @@ defmodule Hologram.Policy.Evaluator do
   end
 
   defp equal?(left, right), do: compare(left, right) == :eq
+
+  # A derived field's definition on the row - strings joined, nil when one of them is, an if's
+  # branch, whether a condition holds, a name read the way a rule reads it, or a value.
+  defp evaluated({:concat, operands}, entity, actor_user_id, checker) do
+    values = Enum.map(operands, &evaluated(&1, entity, actor_user_id, checker))
+
+    if Enum.any?(values, &is_nil/1), do: nil, else: Enum.join(values)
+  end
+
+  defp evaluated({:condition, clauses}, entity, actor_user_id, checker) do
+    predicates_hold?(clauses, entity, actor_user_id, checker)
+  end
+
+  defp evaluated({:if, clauses, then_value, else_value}, entity, actor_user_id, checker) do
+    if predicates_hold?(clauses, entity, actor_user_id, checker) do
+      evaluated(then_value, entity, actor_user_id, checker)
+    else
+      evaluated(else_value, entity, actor_user_id, checker)
+    end
+  end
+
+  defp evaluated({:name, name}, entity, actor_user_id, checker) do
+    read_value(entity, name, actor_user_id, checker)
+  end
+
+  defp evaluated({:value, value}, _entity, _actor_user_id, _checker), do: value
 
   defp holds?(field_value, :==, value, _ranks), do: equal?(field_value, value)
 
@@ -219,11 +255,23 @@ defmodule Hologram.Policy.Evaluator do
 
     case checker.({:related, relationship_names}, entity, actor_user_id) do
       nil -> nil
-      row -> Map.fetch!(row, name)
+      row -> read_value(row, name, actor_user_id, checker)
     end
   end
 
-  defp read_value(entity, name, _actor_user_id, _checker), do: Map.fetch!(entity, name)
+  # A derived field is computed from its definition, resolved natively - one a condition reads calls
+  # no query builder. An integer a float field reads compares equal to its float, so it stays as is.
+  defp read_value(%entity_type{} = entity, name, actor_user_id, checker) do
+    case List.keyfind(entity_type.__derived__(), name, 0) do
+      {_name, _type, _opts} ->
+        entity_type
+        |> Derived.resolve(name)
+        |> evaluated(entity, actor_user_id, checker)
+
+      nil ->
+        Map.fetch!(entity, name)
+    end
+  end
 
   defp resolve_value({:actor}, actor_user_id), do: actor_user_id
 

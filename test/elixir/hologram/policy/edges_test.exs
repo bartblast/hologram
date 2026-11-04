@@ -9,10 +9,24 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Test.Fixtures.Entity.Module17
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module41
+  alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
   describe "derive/1" do
+    # A derived field has no column - the rows and attributes its definition reads are what a change
+    # to it is a change to.
+    test "derives the data a derived field in a condition reads through its definition" do
+      assert derive([Module42]) == %{
+               {Module42, :read} => [
+                 {:attributes, [:note_id]},
+                 {:relationship_attributes, [:note], Module41, [:public]}
+               ],
+               {Module42, :update} => [{:attributes, [:title]}]
+             }
+    end
+
     test "derives the full edge list per operation for a policy-declaring model" do
       assert derive([Policy.Module1]) == %{
                {Policy.Module1, :archive} => [{:attributes, [:author_id]}],

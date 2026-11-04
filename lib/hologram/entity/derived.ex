@@ -83,6 +83,24 @@ defmodule Hologram.Entity.Derived do
   end
 
   @doc """
+  Returns the references - {relationship names, name} pairs - the given ones read on a row of the
+  given entity type once every derived field holding a value among them is read through its
+  definition, written in place: a derived name is replaced by what its definition reads, on the row
+  it is read on, recursively, and a derived field reached again inside its own reads adds nothing.
+
+  A definition is resolved natively, as resolve/2 resolves it: the fields a policy condition reads
+  call no query builder, and a policy is validated before the build resolves any definition. One
+  reading a related set is refused in a condition before anything expands one, so a count reads
+  nothing here.
+  """
+  @spec expanded_references(module, list({list(atom), atom})) :: list({list(atom), atom})
+  def expanded_references(entity_type, references) do
+    entity_type
+    |> expanded_references(references, [])
+    |> Enum.uniq()
+  end
+
+  @doc """
   Returns the stand-in for the given path of fields of a row of the given owning entity type, read
   by a derived field's function: a query over the set a path ends at - a relationship's or a derived
   field's - a row field for one ending at an attribute, a reference field or a derived field holding
@@ -90,8 +108,9 @@ defmodule Hologram.Entity.Derived do
   the rows every path reaches one set.
 
   Raises ArgumentError when the path names what the type does not declare, reads past an attribute
-  or a derived field, ends at an attribute through a set, or ends at a derived field holding one
-  row.
+  or a derived field, ends at an attribute through a set or through an inverse - a value is read
+  through to-one relationships holding their reference, as a condition's path is - or ends at a
+  derived field holding one row.
   """
   @spec field(module, list(atom)) :: Query.t() | RowField.t() | RowRef.t()
   def field(owner, path) do
@@ -107,6 +126,8 @@ defmodule Hologram.Entity.Derived do
         %RowRef{owner: owner, path: path}
 
       {:value, false} ->
+        validate_stored_hops!(owner, hops)
+
         %RowField{owner: owner, name: name_of(path)}
 
       {:derived_row, _through_set?} ->
@@ -277,6 +298,17 @@ defmodule Hologram.Entity.Derived do
     end
   end
 
+  @doc """
+  Returns whether the given name is a derived field of the given entity type holding a value.
+  """
+  @spec value_field?(module, atom) :: boolean
+  def value_field?(entity_type, name) do
+    case List.keyfind(entity_type.__derived__(), name, 0) do
+      {_name, type, _opts} -> derived_kind({name, type, []}) == :value
+      nil -> false
+    end
+  end
+
   defp definition_queries({:if, _clauses, then_value, else_value}) do
     definition_queries(then_value) ++ definition_queries(else_value)
   end
@@ -285,10 +317,52 @@ defmodule Hologram.Entity.Derived do
 
   defp definition_queries(_definition), do: []
 
+  # The value fields a definition reads directly, on its own row - a count reads none of them.
+  defp definition_references({:concat, operands}),
+    do: Enum.flat_map(operands, &definition_references/1)
+
+  defp definition_references({:condition, clauses}), do: Stage.predicate_references(clauses)
+
+  defp definition_references({:if, clauses, then_value, else_value}) do
+    Stage.predicate_references(clauses) ++
+      definition_references(then_value) ++ definition_references(else_value)
+  end
+
+  defp definition_references({:name, name}), do: [reference(name)]
+
+  defp definition_references({:query, _term}), do: []
+
+  defp definition_references({:value, _value}), do: []
+
   defp derived_kind({_name, [_target], _opts}), do: :set
 
   defp derived_kind({_name, type, _opts}) do
     if Reflection.alias?(type), do: :derived_row, else: :value
+  end
+
+  defp expanded_references(entity_type, references, visited) do
+    Enum.flat_map(references, fn {relationship_names, name} = reference ->
+      read_type = Entity.path_target(entity_type, relationship_names)
+      field = {read_type, name}
+
+      cond do
+        not value_field?(read_type, name) ->
+          [reference]
+
+        field in visited ->
+          []
+
+        true ->
+          read_references =
+            read_type
+            |> resolve(name)
+            |> definition_references()
+
+          read_type
+          |> expanded_references(read_references, [field | visited])
+          |> Enum.map(&prefixed_reference(&1, relationship_names))
+      end
+    end)
   end
 
   # What the last name of a path reads: a set, one related row, a value - an attribute, a reference
@@ -344,12 +418,23 @@ defmodule Hologram.Entity.Derived do
     end)
   end
 
+  defp prefixed_reference({relationship_names, name}, prefix),
+    do: {prefix ++ relationship_names, name}
+
   @spec raise_unknown_field!(module, atom, list(atom), String.t()) :: no_return
   defp raise_unknown_field!(entity_type, name, path, kind) do
     raise ArgumentError,
       message:
         "#{Enum.join(path, ".")} names #{inspect(name)}, which is not #{kind} of #{inspect(entity_type)}"
   end
+
+  defp reference(path) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    {relationship_names, name}
+  end
+
+  defp reference(name), do: {[], name}
 
   # A stored relationship or an inverse, as what reading it gives: the rows of a set, or one row.
   defp relationship_kind(entity_type, name) do
@@ -364,4 +449,18 @@ defmodule Hologram.Entity.Derived do
   end
 
   defp table_key(entity_type, name), do: {__MODULE__, entity_type, name}
+
+  # A value of a related row is read through to-one relationships holding their reference, the hops
+  # every executor follows a path's reference fields through, as a condition's path is.
+  defp validate_stored_hops!(owner, hops) do
+    Enum.reduce(hops, owner, fn hop, entity_type ->
+      if Entity.inverse_relationship(entity_type, hop) do
+        raise ArgumentError,
+          message:
+            "#{inspect(hop)} is an inverse relationship in #{inspect(entity_type)} - a derived field reads a related row's value through to-one relationships that hold their reference"
+      end
+
+      Entity.related_type(entity_type, hop)
+    end)
+  end
 end

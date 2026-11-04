@@ -142,6 +142,13 @@ defmodule Hologram.Entity.DerivedTest do
       assert_error ArgumentError, expected_msg, fn -> field(Module26, [:messages, :body]) end
     end
 
+    test "raises on an attribute read through an inverse relationship" do
+      expected_msg =
+        ":topic is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a derived field reads a related row's value through to-one relationships that hold their reference"
+
+      assert_error ArgumentError, expected_msg, fn -> field(Module26, [:topic, :summary]) end
+    end
+
     test "raises on a name the row does not declare" do
       expected_msg =
         "nothing names :nothing, which is not a field of Hologram.Test.Fixtures.Entity.Module28"

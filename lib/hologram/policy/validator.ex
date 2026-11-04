@@ -284,10 +284,94 @@ defmodule Hologram.Policy.Validator do
 
   defp server_only_spelling(path), do: Stage.inspect_name(path)
 
+  # What makes a derived field holding a value read a related set, spelled for a refusal - a count
+  # its definition computes, a query builder it calls, another field it reads that does - or nil
+  # when it reads none. A field reached again inside its own reads is a cycle, refused at the build,
+  # and adds nothing here.
+  defp set_reading(entity_type, name, visited) do
+    field = {entity_type, name}
+
+    cond do
+      field in visited ->
+        nil
+
+      name in entity_type.__derived_builder_calls__() ->
+        "calls a query builder"
+
+      true ->
+        entity_type
+        |> Derived.resolve(name)
+        |> set_reading_of(entity_type, [field | visited])
+    end
+  end
+
+  defp set_reading_of({:concat, operands}, entity_type, visited) do
+    Enum.find_value(operands, &set_reading_of(&1, entity_type, visited))
+  end
+
+  defp set_reading_of({:condition, clauses}, entity_type, visited) do
+    clauses
+    |> Stage.predicate_references()
+    |> set_reading_through(entity_type, visited)
+  end
+
+  defp set_reading_of({:if, clauses, then_value, else_value}, entity_type, visited) do
+    references = Stage.predicate_references(clauses)
+
+    set_reading_through(references, entity_type, visited) ||
+      set_reading_of(then_value, entity_type, visited) ||
+      set_reading_of(else_value, entity_type, visited)
+  end
+
+  defp set_reading_of({:name, name}, entity_type, visited) do
+    {relationship_names, [read_name]} =
+      name
+      |> List.wrap()
+      |> Enum.split(-1)
+
+    set_reading_through([{relationship_names, read_name}], entity_type, visited)
+  end
+
+  defp set_reading_of({:query, %{source: {_owner, chain}}}, _entity_type, _visited) do
+    "counts #{Enum.join(chain, ".")}"
+  end
+
+  defp set_reading_of({:value, _value}, _entity_type, _visited), do: nil
+
+  # The first of the given references reaching a derived field that reads a related set, spelled.
+  defp set_reading_through(references, entity_type, visited) do
+    Enum.find_value(references, fn {relationship_names, name} ->
+      read_type = Entity.path_target(entity_type, relationship_names)
+
+      if Derived.value_field?(read_type, name) do
+        read_type
+        |> set_reading(name, visited)
+        |> spelled_reading(List.insert_at(relationship_names, -1, name))
+      end
+    end)
+  end
+
+  defp spelled_reading(nil, _path), do: nil
+
+  defp spelled_reading(reading, path), do: "reads #{server_only_spelling(path)}, which #{reading}"
+
   defp stored_to_one?(entity_type, name) do
     Enum.any?(entity_type.__relationships__(), fn {relationship_name, target, _opts} ->
       relationship_name == name and is_atom(target)
     end)
+  end
+
+  # Whether every name of a chain is a to-one relationship holding its reference, each on the type
+  # the names before it lead to.
+  defp to_one_chain?(entity_type, relationship_names) do
+    {all_to_one?, _end_type} =
+      Enum.reduce(relationship_names, {true, entity_type}, fn name, {acc, type} ->
+        if acc and stored_to_one?(type, name),
+          do: {true, Entity.related_type(type, name)},
+          else: {false, type}
+      end)
+
+    all_to_one?
   end
 
   # Follows a relationship, or each relationship of a path, from the given type and returns the type
@@ -455,33 +539,6 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  # TODO: admit the derived fields that read no set once policy conditions read derived fields.
-  # Checked on the names as written, before the condition is read as a filter. A path is followed
-  # through the to-one relationships holding their reference, the ones a condition's path takes, so
-  # a path breaking earlier is left to the filter's refusal of that hop.
-  defp validate_no_derived_name!(entity_type, [name | later_names]) when is_atom(name) do
-    cond do
-      Derived.declared?(entity_type, name) ->
-        raise ArgumentError,
-          message:
-            "#{inspect(name)} is a derived field of #{inspect(entity_type)} - a policy condition reads no derived field"
-
-      later_names != [] and stored_to_one?(entity_type, name) ->
-        entity_type
-        |> Entity.related_type(name)
-        |> validate_no_derived_name!(later_names)
-
-      true ->
-        :ok
-    end
-  end
-
-  defp validate_no_derived_name!(entity_type, name) when is_atom(name) do
-    validate_no_derived_name!(entity_type, [name])
-  end
-
-  defp validate_no_derived_name!(_entity_type, _name), do: :ok
-
   defp validate_own_reference!(entity_type, operation, role_name, location) do
     declared_names = declared_role_names(entity_type)
 
@@ -506,7 +563,7 @@ defmodule Hologram.Policy.Validator do
   defp validate_predicates!(entity_type, operation, predicates, location) do
     predicates
     |> Stage.written_names()
-    |> Enum.each(&validate_no_derived_name!(entity_type, &1))
+    |> Enum.each(&validate_set_free_name!(entity_type, &1))
 
     clauses = Stage.predicate_triples!(entity_type, predicates)
 
@@ -625,26 +682,74 @@ defmodule Hologram.Policy.Validator do
   # reference is rejected.
   defp validate_server_only_predicates!(_entity_type, :read, _clauses, _location), do: :ok
 
-  # A path reads the attribute of the row it leads to, so that row's type says whether the attribute
-  # is server-only.
+  # A derived field reads what its definition reads, written in place, so the refusal names the field
+  # the condition wrote and the attribute it reads.
   defp validate_server_only_predicates!(entity_type, operation, clauses, location) do
     clauses
     |> Stage.predicate_references()
-    |> Enum.each(fn {relationship_names, name} ->
-      subject_type = Entity.path_target(entity_type, relationship_names)
+    |> Enum.each(fn {written_names, written_name} = written ->
+      written_spelled = server_only_spelling(List.insert_at(written_names, -1, written_name))
 
-      if name in Entity.server_only_attribute_names(subject_type) do
-        spelled =
-          relationship_names
-          |> Enum.concat([name])
-          |> server_only_spelling()
-
-        raise Hologram.CompileError,
-          message:
-            "invalid predicate #{spelled} for allow #{inspect(operation)} in #{location} - #{spelled} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
-      end
+      entity_type
+      |> Derived.expanded_references([written])
+      |> Enum.each(
+        &validate_server_only_reference!(entity_type, operation, &1, written_spelled, location)
+      )
     end)
   end
+
+  # A path reads the attribute of the row it leads to, so that row's type says whether the attribute
+  # is server-only.
+  defp validate_server_only_reference!(
+         entity_type,
+         operation,
+         {relationship_names, name},
+         written_spelled,
+         location
+       ) do
+    subject_type = Entity.path_target(entity_type, relationship_names)
+
+    if name in Entity.server_only_attribute_names(subject_type) do
+      spelled = server_only_spelling(List.insert_at(relationship_names, -1, name))
+
+      what =
+        if spelled == written_spelled,
+          do: spelled,
+          else: "#{written_spelled} reads #{spelled}, which"
+
+      raise Hologram.CompileError,
+        message:
+          "invalid predicate #{written_spelled} for allow #{inspect(operation)} in #{location} - #{what} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+    end
+  end
+
+  # A derived field holding a value is read in a condition as its definition, written in place, so
+  # it reads what a condition reads - one reading a related set is refused, naming what it counts.
+  # Checked on the names as written, before the condition is read as a filter. A path is followed
+  # through the to-one relationships holding their reference, the ones a condition's path takes, so
+  # a path breaking earlier, or going through a derived field, is left to the filter's refusal.
+  defp validate_set_free_name!(entity_type, name) when is_atom(name) do
+    validate_set_free_name!(entity_type, [name])
+  end
+
+  defp validate_set_free_name!(entity_type, [_name | _later_names] = path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    if Enum.all?(path, &is_atom/1) and to_one_chain?(entity_type, relationship_names) do
+      read_type = Entity.path_target(entity_type, relationship_names)
+
+      with true <- Derived.value_field?(read_type, name),
+           reading when is_binary(reading) <- set_reading(read_type, name, []) do
+        raise ArgumentError,
+          message:
+            "#{server_only_spelling(path)} #{reading} - a policy condition reads no related set yet"
+      end
+    end
+
+    :ok
+  end
+
+  defp validate_set_free_name!(_entity_type, _name), do: :ok
 
   defp validate_target_role!(operation, target_type, role_name, location) do
     declared_names = declared_role_names(target_type)

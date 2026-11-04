@@ -57,6 +57,7 @@ defmodule Hologram.Policy do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.Types, as: T
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
   alias Hologram.Policy.Expression
@@ -718,9 +719,12 @@ defmodule Hologram.Policy do
   end
 
   # Every path a condition reads, the compared name and an attribute operand alike.
-  defp predicate_chains(predicates) do
-    predicates
-    |> Stage.predicate_references()
+  # A derived field reads what its definition reads, written in place.
+  defp predicate_chains(entity_type, predicates) do
+    references = Stage.predicate_references(predicates)
+
+    entity_type
+    |> Derived.expanded_references(references)
     |> Enum.flat_map(fn
       {[], _name} -> []
       {relationship_names, _name} -> [relationship_names]
@@ -812,7 +816,8 @@ defmodule Hologram.Policy do
   end
 
   defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}) do
-    predicate_chains(predicates) ++ reference_chains(to) ++ delegation_chains(entity_type, via)
+    predicate_chains(entity_type, predicates) ++
+      reference_chains(to) ++ delegation_chains(entity_type, via)
   end
 
   defp unknown_operation_message(entity_type, operation) do

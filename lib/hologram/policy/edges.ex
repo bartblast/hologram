@@ -2,6 +2,7 @@ defmodule Hologram.Policy.Edges do
   @moduledoc false
 
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Policy
   alias Hologram.Query.Stage
 
@@ -132,11 +133,13 @@ defmodule Hologram.Policy.Edges do
   # A disjunction reads the row's own attributes like any other condition, and so does a comparison
   # between two of them, so neither adds an edge kind - their attributes join the rule's. A path
   # reads the attribute of the row its relationships lead to, and the reference fields it is
-  # followed through.
+  # followed through. A derived field reads what its definition reads, written in place.
   defp predicate_edges(entity_type, predicates) do
+    references = Stage.predicate_references(predicates)
+
     {own_references, path_references} =
-      predicates
-      |> Stage.predicate_references()
+      entity_type
+      |> Derived.expanded_references(references)
       |> Enum.split_with(fn {relationship_names, _name} -> relationship_names == [] end)
 
     own_edges =

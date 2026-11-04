@@ -38,6 +38,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module40
   alias Hologram.Test.Fixtures.Entity.Module41
+  alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Entity.Module8
   alias Hologram.Test.Fixtures.Entity.Module9
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -58,7 +59,8 @@ defmodule Hologram.DB.QueryRunnerTest do
                        Module38,
                        Module39,
                        Module40,
-                       Module41
+                       Module41,
+                       Module42
                      ],
                      []
                    )
@@ -1506,6 +1508,35 @@ defmodule Hologram.DB.QueryRunnerTest do
   end
 
   describe "run_policied/4 - derived fields" do
+    # A rule reads the rows its paths reach as stored, whatever the session may read of them - so
+    # a derived field in a condition does too: the note the hidden row names is one an anonymous
+    # session may not read, and the rule still reads it.
+    test "reads the path of a derived field in a rule as stored" do
+      put_derived_definitions([Module42])
+
+      for {title, public} <- [{"hidden", false}, {"shown", true}, {"none", nil}] do
+        note_id =
+          if public != nil do
+            {:ok, note} = create(Module41.new(public: public))
+
+            note.id
+          end
+
+        {:ok, _row} =
+          %{note_id: note_id, score: 1, title: title}
+          |> Module42.new()
+          |> create()
+      end
+
+      titles =
+        Module42
+        |> Stage.normalize()
+        |> run_policied(@derived_mapping, nil)
+        |> Enum.map(& &1.title)
+
+      assert titles == ["hidden"]
+    end
+
     test "leaves a related row the session may not read out of a count" do
       put_derived_definitions([Module40])
 
