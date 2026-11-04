@@ -1362,5 +1362,16 @@ defmodule Hologram.Query.WindowTest do
                recent_messages: term.include.recent_messages
              }
     end
+
+    test "embeds nothing under a derived field's rows" do
+      put_derived_definitions([Module37, Module38])
+
+      term =
+        Module37
+        |> include(recent_messages.sibling_count)
+        |> Stage.normalize()
+
+      assert embed(term, false).include.recent_messages == term.include.recent_messages
+    end
   end
 end

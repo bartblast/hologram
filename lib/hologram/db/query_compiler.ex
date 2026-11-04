@@ -55,6 +55,14 @@ defmodule Hologram.DB.QueryCompiler do
   target, each like a to-many, and a single inverse is the one related row whose reference
   names the row, like a to-one.
 
+  An included derived field holding a value is a select column - a jsonb pair under a related row
+  - computed from its definition on the row it belongs to. One holding rows embeds its
+  definition's rows the way an include embeds a relationship's, aliased alike: a set aggregated in
+  the definition's order with its bounds applied, one row the first in that order, each row
+  embedding what the definition includes beside the include's nested includes. An `if` choosing
+  between definitions is a `CASE WHEN`, and nil is an empty array or NULL. When a policy is given,
+  the related type's `:read` policy applies inside, as it does for any include.
+
   A compiled policy composes into the statement when one is given: its rules render as an
   OR group ANDed after the authored filter, so a row must satisfy the query and at least one
   rule. Rules hold the same clauses the authored filter does, a disjunction among them nesting
@@ -1124,6 +1132,75 @@ defmodule Hologram.DB.QueryCompiler do
     end)
   end
 
+  # The rows a derived field holding rows embeds for the scope's row, the way an include embeds a
+  # relationship's: a set's rows aggregated in the query's order, its bounds applied, or its first
+  # row - the rows of the branch an if takes, and none for nil.
+  defp rows_include_sql({:if, clauses, then_rows, else_rows}, scope, rows_term, cardinality, acc) do
+    {reversed_params, index} = acc
+    {condition_sqls, params_after_conditions} = conditions(clauses, scope, reversed_params)
+
+    {then_sql, then_acc} =
+      rows_include_sql(then_rows, scope, rows_term, cardinality, {params_after_conditions, index})
+
+    {else_sql, new_acc} = rows_include_sql(else_rows, scope, rows_term, cardinality, then_acc)
+
+    case_sql =
+      "CASE WHEN #{Enum.join(condition_sqls, " AND ")} THEN #{then_sql} ELSE #{else_sql} END"
+
+    {case_sql, new_acc}
+  end
+
+  defp rows_include_sql({:query, term}, scope, rows_term, cardinality, acc) do
+    {reversed_params, index} = acc
+    {from_sql, inner_scope, params_after_from} = sourced_from_sql(scope, term, reversed_params)
+    {order_sql, params_after_order} = order_clause(term.sort, inner_scope, params_after_from)
+    target_mapping = Map.fetch!(scope.mapping, term.entity)
+    quoted_wrapper = Mapper.quote_identifier("$i#{index}")
+
+    {nested_pairs, {params_after_nested, next_index}} =
+      include_pairs(
+        rows_term,
+        target_mapping,
+        scope.mapping,
+        scope.policy,
+        quoted_wrapper,
+        {params_after_order, index + 1}
+      )
+
+    object_sql =
+      "jsonb_build_object(#{jsonb_pairs(target_mapping, quoted_wrapper)}#{nested_pairs})"
+
+    rows_sql = "SELECT #{inner_scope.row_prefix}.* #{from_sql}#{order_sql}"
+
+    case cardinality do
+      :one ->
+        limit = if term.take == 0, do: 0, else: 1
+        offset_sql = if term.skip, do: " OFFSET #{term.skip}", else: ""
+
+        row_sql =
+          "(SELECT #{object_sql} " <>
+            "FROM (#{rows_sql} LIMIT #{limit}#{offset_sql}) AS #{quoted_wrapper})"
+
+        {row_sql, {params_after_nested, next_index}}
+
+      :set ->
+        wrapper_scope = %{inner_scope | qualified: true, row_prefix: quoted_wrapper}
+
+        {aggregate_order_sql, new_params} =
+          order_clause(term.sort, wrapper_scope, params_after_nested)
+
+        set_sql =
+          "(SELECT COALESCE(jsonb_agg(#{object_sql}#{aggregate_order_sql}), '[]'::jsonb) " <>
+            "FROM (#{rows_sql}#{bounds_clause(term)}) AS #{quoted_wrapper})"
+
+        {set_sql, {new_params, next_index}}
+    end
+  end
+
+  defp rows_include_sql({:value, nil}, _scope, _rows_term, :one, acc), do: {"NULL", acc}
+
+  defp rows_include_sql({:value, nil}, _scope, _rows_term, :set, acc), do: {"'[]'::jsonb", acc}
+
   # Whether the given row is among a derived set's rows for the scope's row: a query's rows, bounded
   # in its order, the rows of the branch an if takes, or none for nil.
   defp rows_membership_sql(
@@ -1355,6 +1432,29 @@ defmodule Hologram.DB.QueryCompiler do
      [{:placeholder, placeholder_name, type} | reversed_params]}
   end
 
+  # An included derived field holding a value is the value its definition computes for the parent
+  # row. One holding rows embeds its definition's rows, each read with what the definition and the
+  # include ask it to embed.
+  defp derived_include_expression(scope, name, nil, {reversed_params, index}) do
+    {value_sql, _column, new_params} = derived_sql(scope, name, reversed_params)
+
+    {value_sql, {new_params, index}}
+  end
+
+  defp derived_include_expression(scope, name, sub_term, acc) do
+    rows_term = Derived.rows_term(scope.entity_type, name, sub_term)
+
+    cardinality =
+      case List.keyfind(scope.entity_type.__derived__(), name, 0) do
+        {^name, [_row_type], _opts} -> :set
+        {^name, _row_type, _opts} -> :one
+      end
+
+    scope.entity_type
+    |> Derived.definition(name)
+    |> rows_include_sql(scope, rows_term, cardinality, acc)
+  end
+
   # A derived field holding a value is computed where it is read, from its definition. Its column
   # says how a value compared with it binds - by its declared type, an enum by label - and is
   # nullable.
@@ -1484,8 +1584,9 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
-  # Every kind of include is one of two shapes - a set aggregated like a to-many, or one row like a
-  # to-one - and differs only in how a related row is matched to the parent row.
+  # A relationship's include is a set aggregated like a to-many or one row like a to-one, differing
+  # only in how a related row is matched to the parent row. A derived field's is computed from its
+  # definition.
   defp include_expression(
          {name, sub_term},
          parent_type,
@@ -1495,12 +1596,19 @@ defmodule Hologram.DB.QueryCompiler do
          parent_prefix,
          acc
        ) do
-    case relationship_membership(parent_type, parent_mapping, name, mapping, parent_prefix) do
-      {:to_many, membership} ->
-        to_many_include_expression(sub_term, membership, mapping, policy, acc)
+    if Derived.declared?(parent_type, name) do
+      parent_type
+      |> condition_scope(mapping, parent_prefix, policy)
+      |> Map.put(:qualified, true)
+      |> derived_include_expression(name, sub_term, acc)
+    else
+      case relationship_membership(parent_type, parent_mapping, name, mapping, parent_prefix) do
+        {:to_many, membership} ->
+          to_many_include_expression(sub_term, membership, mapping, policy, acc)
 
-      {:to_one, match} ->
-        to_one_include_expression(sub_term, match, mapping, policy, acc)
+        {:to_one, match} ->
+          to_one_include_expression(sub_term, match, mapping, policy, acc)
+      end
     end
   end
 

@@ -7,12 +7,18 @@ defmodule Hologram.Entity.DerivedTest do
   alias Hologram.Query
   alias Hologram.Query.RowField
   alias Hologram.Test.Fixtures.Entity.Derived.Module1, as: DerivedModule1
+  alias Hologram.Test.Fixtures.Entity.Module1
+  alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module37
+  alias Hologram.Test.Fixtures.Entity.Module38
+  alias Hologram.Test.Fixtures.Entity.Module40
+  alias Hologram.Test.Fixtures.Entity.Module41
 
   describe "concat/1" do
     test "lowers each operand" do
@@ -342,6 +348,54 @@ defmodule Hologram.Entity.DerivedTest do
         "lib/my_app/channel.ex:7: invalid derived field :broken in Hologram.Test.Fixtures.Entity.Derived.Module1 - unknown relationship :nothing"
 
       assert_error Hologram.CompileError, expected_msg, fn -> resolve(DerivedModule1, :broken) end
+    end
+  end
+
+  describe "rows_term/3" do
+    test "embeds what the definition includes beside what the field is included with" do
+      put_derived_definitions([Module37])
+
+      included_term = %Query{entity: Module38, include: %{channel: %Query{entity: Module37}}}
+
+      assert rows_term(Module37, :authored_messages, included_term) == %Query{
+               entity: Module38,
+               include: %{
+                 author: %Query{entity: Module1},
+                 channel: %Query{entity: Module37}
+               }
+             }
+    end
+
+    test "embeds what every query an if may choose includes" do
+      put_derived_definitions([Module40])
+
+      assert rows_term(Module40, :picked_notes, %Query{entity: Module41}) == %Query{
+               entity: Module41,
+               include: %{
+                 tags: %Query{entity: Module2, sort: [id: :asc]},
+                 team: %Query{entity: Module40}
+               }
+             }
+    end
+
+    test "keeps the definition's include of a relationship both include, gaining what the other includes" do
+      put_derived_definitions([Module40])
+
+      included_term = %Query{
+        entity: Module41,
+        include: %{team: %Query{entity: Module40, include: %{mentors: %Query{entity: Module34}}}}
+      }
+
+      assert rows_term(Module40, :picked_notes, included_term).include.team == %Query{
+               entity: Module40,
+               include: %{mentors: %Query{entity: Module34}}
+             }
+    end
+
+    test "returns the term a relationship is included with as it is" do
+      included_term = %Query{entity: Module33, include: %{channel: %Query{entity: Module32}}}
+
+      assert rows_term(Module32, :messages, included_term) == included_term
     end
   end
 end

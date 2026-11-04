@@ -15,6 +15,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.DB.QueryCache
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.Validator
   alias Hologram.Query
@@ -977,17 +978,26 @@ defmodule Hologram.Template.Renderer do
   end
 
   # What the template is handed is what the query asked for: a relationship read only for the rows
-  # a path reads keeps the sentinel saying nobody asked for it, as it would had it not been read.
+  # a path reads keeps the sentinel saying nobody asked for it, as it would had it not been read. A
+  # derived field's rows keep what its definition embeds beside what the query asked for.
   defp included_as_asked(rows, term) when is_list(rows),
     do: Enum.map(rows, &included_as_asked(&1, term))
 
   defp included_as_asked(%entity_type{} = row, term) do
     entity_type
-    |> Entity.includable_names()
+    |> Entity.loadable_names()
     |> Enum.reduce(row, fn name, acc ->
       case Map.fetch(term.include, name) do
-        {:ok, sub_term} -> Map.update!(acc, name, &included_as_asked(&1, sub_term))
-        :error -> Map.put(acc, name, %NotIncluded{relationship: name})
+        {:ok, nil} ->
+          acc
+
+        {:ok, sub_term} ->
+          rows_term = Derived.rows_term(entity_type, name, sub_term)
+
+          Map.update!(acc, name, &included_as_asked(&1, rows_term))
+
+        :error ->
+          Map.put(acc, name, %NotIncluded{relationship: name})
       end
     end)
   end

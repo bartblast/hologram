@@ -79,6 +79,7 @@ defmodule Hologram.Sync.WireData do
 
   defp encode_field({name, value}, model) do
     cond do
+      MapSet.member?(model.derived, name) -> []
       MapSet.member?(model.server_only, name) -> []
       MapSet.member?(model.unspelled, name) -> []
       Map.has_key?(model.relationships, name) -> relationship_field(name, value)
@@ -96,6 +97,7 @@ defmodule Hologram.Sync.WireData do
 
     model = %{
       attribute_types: attribute_types(entity_type),
+      derived: MapSet.new(entity_type.__derived__(), fn {name, _type, _opts} -> name end),
       relationships: relationships(entity_type, spelled_inverses),
       server_only: server_only(entity_type),
       unspelled: MapSet.new(unspelled_inverses, fn {name, _type, _opts} -> name end)

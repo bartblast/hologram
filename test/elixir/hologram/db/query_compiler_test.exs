@@ -2259,6 +2259,196 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
   end
 
+  describe "compile/2 - derived includes" do
+    setup do
+      put_derived_definitions([Module32, Module33, Module37, Module38, Module40])
+
+      mapping =
+        Mapper.derive!(
+          [
+            Module1,
+            Module2,
+            Module32,
+            Module33,
+            Module34,
+            Module37,
+            Module38,
+            Module39,
+            Module40,
+            Module41
+          ],
+          []
+        )
+
+      [mapping: mapping]
+    end
+
+    defp message_pairs(quoted_alias) do
+      Enum.map_join(
+        ~w(id body position channel_id created_at updated_at $revisions),
+        ", ",
+        &~s|'#{&1}', "#{quoted_alias}"."#{&1}"|
+      )
+    end
+
+    defp pinned_message_pairs(quoted_alias) do
+      Enum.map_join(
+        ~w(id pinned author_id channel_id created_at updated_at $revisions),
+        ", ",
+        &~s|'#{&1}', "#{quoted_alias}"."#{&1}"|
+      )
+    end
+
+    test "selects a derived value as a column", %{mapping: mapping} do
+      term =
+        Module32
+        |> include(message_count)
+        |> Stage.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [],
+               sql:
+                 ~s|SELECT "id", "name", "created_at", "updated_at", "$revisions", | <>
+                   ~s|(SELECT count(*) FROM #{table(Module33)} AS "$s1" | <>
+                   ~s|WHERE "$s1"."channel_id" = "test_fixtures_entity_module32"."id") AS "message_count" | <>
+                   ~s|FROM #{table(Module32)} ORDER BY "id" ASC|
+             }
+    end
+
+    test "embeds a derived set's rows in its order, its bounds applied", %{mapping: mapping} do
+      term =
+        Module32
+        |> include(recent_messages)
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|, (SELECT COALESCE(jsonb_agg(jsonb_build_object(#{message_pairs("$i1")}) | <>
+                 ~s|ORDER BY "$i1"."position" DESC, "$i1"."id" ASC), '[]'::jsonb) | <>
+                 ~s|FROM (SELECT "$s1".* FROM #{table(Module33)} AS "$s1" | <>
+                 ~s|WHERE "$s1"."channel_id" = "test_fixtures_entity_module32"."id" | <>
+                 ~s|ORDER BY "position" DESC, "id" ASC LIMIT 2) AS "$i1") AS "recent_messages" FROM|
+             )
+    end
+
+    test "embeds a derived field's row, the first in its order", %{mapping: mapping} do
+      term =
+        Module32
+        |> include(first_message)
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|, (SELECT jsonb_build_object(#{message_pairs("$i1")}) | <>
+                 ~s|FROM (SELECT "$s1".* FROM #{table(Module33)} AS "$s1" | <>
+                 ~s|WHERE "$s1"."channel_id" = "test_fixtures_entity_module32"."id" | <>
+                 ~s|ORDER BY "position" ASC, "id" ASC LIMIT 1) AS "$i1") AS "first_message" FROM|
+             )
+    end
+
+    test "embeds what a derived set's definition includes beside what the include asks for", %{
+      mapping: mapping
+    } do
+      term =
+        Module37
+        |> include(authored_messages.channel)
+        |> Stage.normalize()
+
+      author =
+        ~s|(SELECT jsonb_build_object('id', "$i2"."id", 'created_at', "$i2"."created_at", | <>
+          ~s|'updated_at', "$i2"."updated_at", '$revisions', "$i2"."$revisions") | <>
+          ~s|FROM #{table(Module1)} AS "$i2" WHERE "$i2"."id" = "$i1"."author_id")|
+
+      channel =
+        ~s|(SELECT jsonb_build_object('id', "$i3"."id", 'last_read_at', "$i3"."last_read_at", | <>
+          ~s|'name', "$i3"."name", 'created_at', "$i3"."created_at", | <>
+          ~s|'updated_at', "$i3"."updated_at", '$revisions', "$i3"."$revisions") | <>
+          ~s|FROM #{table(Module37)} AS "$i3" WHERE "$i3"."id" = "$i1"."channel_id")|
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|jsonb_build_object(#{pinned_message_pairs("$i1")}, | <>
+                 ~s|'author', #{author}, 'channel', #{channel}) ORDER BY "$i1"."id" ASC|
+             )
+    end
+
+    test "embeds the rows of the branch an if chooses, and none for nil", %{mapping: mapping} do
+      term =
+        Module37
+        |> include([nothing, picked])
+        |> Stage.normalize()
+
+      taken_rows =
+        ~s|(SELECT COALESCE(jsonb_agg(jsonb_build_object(#{pinned_message_pairs("$i1")}) | <>
+          ~s|ORDER BY "$i1"."id" ASC), '[]'::jsonb) | <>
+          ~s|FROM (SELECT "$s1".* FROM #{table(Module38)} AS "$s1" | <>
+          ~s|WHERE "$s1"."channel_id" = "test_fixtures_entity_module37"."id" | <>
+          ~s|ORDER BY "id" ASC LIMIT 1) AS "$i1")|
+
+      assert %{params: [{:value, "general"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s|, '[]'::jsonb AS "nothing", |)
+
+      assert String.contains?(
+               sql,
+               ~s|, CASE WHEN "test_fixtures_entity_module37"."name" = $1 | <>
+                 ~s|THEN #{taken_rows} ELSE (SELECT COALESCE(jsonb_agg(jsonb_build_object(#{pinned_message_pairs("$i2")})|
+             )
+    end
+
+    test "embeds the row a skip leaves first, and no row for nil", %{mapping: mapping} do
+      term =
+        Module40
+        |> include([no_note, second_note])
+        |> Stage.normalize()
+
+      note_pairs =
+        Enum.map_join(
+          ~w(id public team_id created_at updated_at $revisions),
+          ", ",
+          &~s|'#{&1}', "$i1"."#{&1}"|
+        )
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|, NULL AS "no_note", (SELECT jsonb_build_object(#{note_pairs}) | <>
+                 ~s|FROM (SELECT "$s1".* FROM #{table(Module41)} AS "$s1" | <>
+                 ~s|WHERE "$s1"."team_id" = "test_fixtures_entity_module40"."id" | <>
+                 ~s|ORDER BY "id" ASC LIMIT 1 OFFSET 1) AS "$i1") AS "second_note" FROM|
+             )
+    end
+
+    test "computes a derived value included under a related row on that row", %{
+      mapping: mapping
+    } do
+      term =
+        Module32
+        |> include(messages.later_count)
+        |> Stage.normalize()
+
+      later_count =
+        ~s|(SELECT count(*) FROM #{table(Module33)} AS "$s1" | <>
+          ~s|WHERE EXISTS (SELECT 1 FROM #{table(Module32)} AS "$s1_1" | <>
+          ~s|WHERE "$s1_1"."id" = "$i1"."channel_id" AND "$s1"."channel_id" = "$s1_1"."id") | <>
+          ~s|AND "position" > "$i1"."position")|
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|jsonb_build_object(#{message_pairs("$i1")}, 'later_count', #{later_count}) ORDER BY|
+             )
+    end
+  end
+
   describe "compile/2 - paths" do
     # Shared by several tests, so defined once here rather than inside the first test reaching them -
     # tests run in any order.

@@ -146,10 +146,15 @@ defmodule Hologram.Query.Window do
   """
   @spec embed(Query.t(), boolean) :: Query.t()
   def embed(term, permission_checking?) do
+    # A derived field's rows are computed from the sources embedded beside them, so nothing is
+    # embedded under them - no client reads it.
     authored_include =
-      Map.new(term.include, fn
-        {name, nil} -> {name, nil}
-        {name, sub_term} -> {name, embed(sub_term, permission_checking?)}
+      Map.new(term.include, fn {name, sub_term} ->
+        if sub_term == nil or Derived.declared?(term.entity, name) do
+          {name, sub_term}
+        else
+          {name, embed(sub_term, permission_checking?)}
+        end
       end)
 
     embedded_include = put_embedded_includes(%{}, term, permission_checking?)

@@ -1297,6 +1297,154 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
+  describe "run/3 - derived includes" do
+    setup do
+      put_derived_definitions([
+        Module32,
+        Module33,
+        Module34,
+        Module37,
+        Module38,
+        Module39,
+        Module40
+      ])
+    end
+
+    defp create_module_38_entity(channel, author) do
+      {:ok, message} =
+        %{author_id: author && author.id, channel_id: channel.id, pinned: false}
+        |> Module38.new()
+        |> create()
+
+      message
+    end
+
+    test "includes a derived value read by its declared type" do
+      create_module_32_entity("general", [1, 2, 3])
+      create_module_39_entity(7)
+
+      [channel] =
+        Module32
+        |> include(message_count)
+        |> derived_query_results(:message_count)
+
+      [entity] =
+        Module39
+        |> include([ratio, tier])
+        |> Stage.normalize()
+        |> run(@derived_mapping)
+
+      assert channel == 3
+      assert entity.ratio === 7.0
+      assert entity.tier == :silver
+    end
+
+    test "includes a derived set's rows in its order, its bounds applied" do
+      create_module_32_entity("general", [1, 2, 3])
+
+      [recent_messages] =
+        Module32
+        |> include(recent_messages)
+        |> derived_query_results(:recent_messages)
+
+      assert Enum.map(recent_messages, & &1.position) == [3, 2]
+    end
+
+    test "includes a derived row, or nil where there is none" do
+      create_module_32_entity("busy", [2, 1])
+      create_module_32_entity("empty", [])
+
+      first_messages =
+        Module32
+        |> include(first_message)
+        |> sort(name)
+        |> derived_query_results(:first_message)
+
+      assert [%Module33{position: 1}, nil] = first_messages
+    end
+
+    test "includes a related row under a derived set's rows" do
+      {:ok, channel} = create(Module37.new(name: "general"))
+      {:ok, author} = create(Module1.new())
+      create_module_38_entity(channel, author)
+
+      [[message]] =
+        Module37
+        |> include(recent_messages.author)
+        |> derived_query_results(:recent_messages)
+
+      assert message.author.id == author.id
+    end
+
+    test "includes what a derived set's definition includes" do
+      {:ok, channel} = create(Module37.new(name: "general"))
+      {:ok, author} = create(Module1.new())
+      create_module_38_entity(channel, author)
+
+      [[message]] =
+        Module37
+        |> include(authored_messages)
+        |> derived_query_results(:authored_messages)
+
+      assert message.author.id == author.id
+      assert message.channel == %NotIncluded{relationship: :channel}
+    end
+
+    test "includes the rows of the branch an if chooses, and none for nil" do
+      create_module_37_entity("general", 3)
+      create_module_37_entity("random", 2)
+
+      results =
+        Module37
+        |> include([nothing, picked])
+        |> sort(name)
+        |> Stage.normalize()
+        |> run(@derived_mapping)
+
+      assert Enum.map(results, &length(&1.picked)) == [1, 2]
+      assert Enum.map(results, & &1.nothing) == [[], []]
+    end
+
+    test "includes a derived value under a related row, read by its declared type" do
+      create_module_32_entity("general", [1, 2, 3])
+      team = create_module_40_entity("team", [])
+      player = create_module_39_entity(7)
+
+      :ok = add_relationship(Module40, team.id, :players, player.id)
+
+      [messages] =
+        Module32
+        |> include([messages.later_count, messages.tier])
+        |> derived_query_results(:messages)
+
+      [[included_player]] =
+        Module40
+        |> include(players.ratio)
+        |> derived_query_results(:players)
+
+      assert Enum.map(messages, &{&1.later_count, &1.tier}) == [{2, :low}, {1, :low}, {0, :low}]
+      assert included_player.ratio === 7.0
+    end
+
+    test "includes the row a skip leaves first, and nil for a field holding none" do
+      team = create_module_40_entity("team", [true, true, true])
+
+      [_first_id, second_id, _third_id] =
+        Module41
+        |> filter(team_id == ^team.id)
+        |> derived_query_results(:id)
+
+      [included_team] =
+        Module40
+        |> include([no_note, second_note])
+        |> Stage.normalize()
+        |> run(@derived_mapping)
+
+      assert included_team.second_note.id == second_id
+      assert included_team.no_note == nil
+    end
+  end
+
   describe "run/3 - quantifiers" do
     setup do
       {:ok, general} = create(Module26.new(name: "general"))
@@ -1357,7 +1505,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
-  describe "run_policied/4 - derived counts" do
+  describe "run_policied/4 - derived fields" do
     test "leaves a related row the session may not read out of a count" do
       put_derived_definitions([Module40])
 
@@ -1380,6 +1528,28 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       assert Enum.map(policied_rows, & &1.name) == ["team"]
       assert raw_rows == []
+    end
+
+    test "leaves a row the session may not read out of an included derived set" do
+      put_derived_definitions([Module40])
+
+      {:ok, team} = create(Module40.new(name: "tagged"))
+
+      for public <- [true, false] do
+        {:ok, _note} =
+          %{public: public, team_id: team.id}
+          |> Module41.new()
+          |> create()
+      end
+
+      term =
+        Module40
+        |> include(picked_notes)
+        |> Stage.normalize()
+
+      [policied_team] = run_policied(term, @derived_mapping, nil)
+
+      assert [%Module41{public: true, tags: []}] = policied_team.picked_notes
     end
 
     test "leaves a row the session may not read out of the rows a count's source passes through" do

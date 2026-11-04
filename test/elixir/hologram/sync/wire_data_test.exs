@@ -13,6 +13,8 @@ defmodule Hologram.Sync.WireDataTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module4
 
   @created_at ~U[2026-08-16 15:18:13.022508Z]
@@ -246,6 +248,25 @@ defmodule Hologram.Sync.WireDataTest do
 
       refute Map.has_key?(wire, :messages)
       refute Map.has_key?(wire, :topic)
+    end
+
+    test "writes nothing for an included derived field, a value, a set or a row" do
+      message = struct(Module33, %{body: "hi", id: @target_id, position: 1})
+
+      channel =
+        struct(Module32, %{
+          first_message: message,
+          id: @entity_id,
+          message_count: 1,
+          name: "general",
+          recent_messages: [message]
+        })
+
+      wire = row(channel)
+
+      refute Map.has_key?(wire, :first_message)
+      refute Map.has_key?(wire, :message_count)
+      refute Map.has_key?(wire, :recent_messages)
     end
 
     test "writes an included inverse of a to-many as the ids of the rows it holds" do

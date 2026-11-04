@@ -255,6 +255,36 @@ defmodule Hologram.Entity.Derived do
               __STACKTRACE__
   end
 
+  @doc """
+  Returns the term the rows the given field of the given entity type holds are read with, given the
+  term the field is included with: a relationship's rows as included, a derived field's embedding
+  what its definition includes - every query it may choose included - beside the nested includes
+  the field is included with. Where both include one relationship, the definition's include is kept
+  and gains what the other includes.
+  """
+  @spec rows_term(module, atom, Query.t()) :: Query.t()
+  def rows_term(entity_type, name, included_term) do
+    if declared?(entity_type, name) do
+      include =
+        entity_type
+        |> definition(name)
+        |> definition_queries()
+        |> Enum.reduce(included_term.include, &merged_include(&1.include, &2))
+
+      %{included_term | include: include}
+    else
+      included_term
+    end
+  end
+
+  defp definition_queries({:if, _clauses, then_value, else_value}) do
+    definition_queries(then_value) ++ definition_queries(else_value)
+  end
+
+  defp definition_queries({:query, term}), do: [term]
+
+  defp definition_queries(_definition), do: []
+
   defp derived_kind({_name, [_target], _opts}), do: :set
 
   defp derived_kind({_name, type, _opts}) do
@@ -287,6 +317,16 @@ defmodule Hologram.Entity.Derived do
     |> Enum.concat(entity_type.__system_attributes__())
     |> Enum.map(fn {name, _type, _opts} -> name end)
     |> Enum.concat(reference_names)
+  end
+
+  defp merged_include(kept_include, other_include) do
+    Map.merge(kept_include, other_include, fn
+      _name, nil, nil ->
+        nil
+
+      _name, kept_term, other_term ->
+        %{kept_term | include: merged_include(kept_term.include, other_term.include)}
+    end)
   end
 
   defp name_of([name]), do: name

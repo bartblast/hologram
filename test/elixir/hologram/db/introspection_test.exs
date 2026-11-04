@@ -60,6 +60,7 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_entity_module4",
                "test_fixtures_entity_module40",
                "test_fixtures_entity_module40_mentors_$join",
+               "test_fixtures_entity_module40_players_$join",
                "test_fixtures_entity_module41",
                "test_fixtures_entity_module41_tags_$join",
                "test_fixtures_entity_module5",
