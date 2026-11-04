@@ -19,6 +19,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.DB.Codec
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
   alias Hologram.Job
   alias Hologram.Policy
@@ -119,6 +120,16 @@ defmodule Hologram.Compiler do
       ]
     }
   ]
+
+  @typedoc """
+  The definition of every derived field of a build, keyed by entity type and field name, and the
+  modules a walk followed calls into resolving them - besides the entity types, the modules whose
+  edits can change a definition (see `resolve_derived_definitions/2`).
+  """
+  @type derived_definitions :: %{
+          definitions: %{{module, atom} => Derived.definition()},
+          read_modules: [module]
+        }
 
   @typedoc """
   The registered queries of one component: the normalized terms its from_query props declare (see
@@ -908,8 +919,9 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds the registered queries PLT, whose items are the entries, prop params and windows a
-  running app reads, and returns it with the path to dump it at.
+  Builds the registered queries PLT, whose items are what a running app reads of them - the
+  entries, prop params and windows, and the derived definitions the compile task puts beside them -
+  and returns it with the path to dump it at.
   """
   @spec build_queries_plt(%{atom => any}, T.opts()) :: {PLT.t(), T.file_path()}
   def build_queries_plt(queries, opts) do
@@ -2452,6 +2464,36 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Resolves the definition of every derived field of the given entity types: natively when the
+  field's function calls no query builder of another module (see
+  `Hologram.Entity.Derived.resolve/2`), and by walking its IR, from the given IR PLT, when it does
+  (see `Hologram.Compiler.QueryExtractor.derived_definition/3`).
+
+  Raises Hologram.CompileError, located at the field's declaration or where the walk stood, when a
+  definition cannot be built.
+  """
+  @spec resolve_derived_definitions([module], PLT.t()) :: derived_definitions
+  def resolve_derived_definitions(entity_types, ir_plt) do
+    resolved =
+      for entity_type <- Enum.sort(entity_types),
+          {name, _type, _opts} <- entity_type.__derived__() do
+        resolve_derived_definition(entity_type, name, ir_plt)
+      end
+
+    read_modules =
+      resolved
+      |> Enum.flat_map(fn {_key, _definition, field_read_modules} -> field_read_modules end)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    %{
+      definitions:
+        Map.new(resolved, fn {key, definition, _read_modules} -> {key, definition} end),
+      read_modules: read_modules
+    }
+  end
+
+  @doc """
   Puts back the entries a `patch_module_info_plt!/5` call replaced or removed in the given module
   info PLT, and deletes the ones it added: the PLT is as it was before that call.
   """
@@ -2701,6 +2743,16 @@ defmodule Hologram.Compiler do
     |> Enum.uniq()
     |> Enum.filter(&PLT.member?(module_info_plt, &1))
     |> then(&build_missing_ir!(ir_plt, &1))
+  end
+
+  defp resolve_derived_definition(entity_type, name, ir_plt) do
+    if name in entity_type.__derived_builder_calls__() do
+      {definition, read_modules} = QueryExtractor.derived_definition(entity_type, name, ir_plt)
+
+      {{entity_type, name}, definition, read_modules}
+    else
+      {{entity_type, name}, Derived.resolve(entity_type, name), []}
+    end
   end
 
   # The callers among the given modules, or every caller when no modules are given.
@@ -3776,6 +3828,14 @@ defmodule Hologram.Compiler do
 
   defp render_constraint_value(_key, value), do: Jason.encode!(value)
 
+  # A set's declared order, spelled the way a term spells one - each entry a name and a direction.
+  defp render_declared_order(target, sort) do
+    target
+    |> Stage.sort(sort)
+    |> Map.fetch!(:sort)
+    |> Enum.map(fn {key, direction} -> [Atom.to_string(key), Atom.to_string(direction)] end)
+  end
+
   # A default travels as the ENCODED TERM the declared literal becomes in transpiled code, rather
   # than as the way the wire spells the same value: the client applies it to a struct field, and a
   # struct field holds the literal the developer wrote. The two are not interchangeable - a float
@@ -3796,6 +3856,215 @@ defmodule Hologram.Compiler do
       {Atom.to_string(name), default}
     end)
     |> render_json_object()
+  end
+
+  # A type's derived fields, each with what it holds - a value of its declared type, an enum's labels
+  # in their declared order, or one row or a set of rows of an entity type - and its definition in
+  # the shapes the query kernel reads: a filter's clauses, and a query as the term stage.mjs builds,
+  # with the owning type and the chain its rows are read from. A value is spelled the way the wire
+  # spells it, by the type of what it stands for.
+  defp render_derived(entity_type) do
+    entity_type.__derived__()
+    |> Enum.map(fn {name, type, opts} ->
+      definition = Derived.definition(entity_type, name)
+
+      {Atom.to_string(name), render_derived_field(entity_type, definition, type, opts)}
+    end)
+    |> render_json_object()
+  end
+
+  defp render_derived_clause({:or, alternatives}, types) do
+    alternatives_js =
+      alternatives
+      |> Enum.map_join(",", &render_derived_clauses(&1, types))
+      |> then(&"[#{&1}]")
+
+    render_json_object([{"or", alternatives_js}])
+  end
+
+  defp render_derived_clause({quantifier, {source, clauses}}, types)
+       when quantifier in [:all, :any, :none] do
+    {start_type, hops} =
+      case source do
+        {:outer, levels, hops} -> {Enum.at(types, levels), hops}
+        hops -> {hd(types), hops}
+      end
+
+    related_type = Derived.path_target(start_type, hops)
+
+    quantifier_js =
+      quantifier
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    render_json_object([
+      {"filter", render_derived_clauses(clauses, [related_type | types])},
+      {"quantifier", quantifier_js},
+      {"source", render_derived_name(source)}
+    ])
+  end
+
+  defp render_derived_clause({name, operator, operand}, types) do
+    operator_js =
+      operator
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    operand_js = render_derived_operand(operand, name_type(name, types))
+
+    "[#{render_derived_name(name)},#{operator_js},#{operand_js}]"
+  end
+
+  defp render_derived_clauses(clauses, types) do
+    clauses
+    |> Enum.map_join(",", &render_derived_clause(&1, types))
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_derived_definition({:concat, operands}, entity_type, _type) do
+    operands_js =
+      operands
+      |> Enum.map_join(",", &render_derived_definition(&1, entity_type, :string))
+      |> then(&"[#{&1}]")
+
+    render_json_object([{"concat", operands_js}])
+  end
+
+  defp render_derived_definition({:condition, clauses}, entity_type, _type) do
+    render_json_object([{"condition", render_derived_clauses(clauses, [entity_type])}])
+  end
+
+  defp render_derived_definition({:if, clauses, then_value, else_value}, entity_type, type) do
+    render_json_object([
+      {"else", render_derived_definition(else_value, entity_type, type)},
+      {"if", render_derived_clauses(clauses, [entity_type])},
+      {"then", render_derived_definition(then_value, entity_type, type)}
+    ])
+  end
+
+  defp render_derived_definition({:name, name}, _entity_type, _type) do
+    render_json_object([{"name", render_derived_name(name)}])
+  end
+
+  defp render_derived_definition({:query, term}, entity_type, _type) do
+    render_json_object([{"query", render_derived_term(term, [term.entity, entity_type])}])
+  end
+
+  defp render_derived_definition({:value, value}, _entity_type, type) do
+    value_js =
+      value
+      |> Codec.encode_json(type)
+      |> Jason.encode!()
+
+    render_json_object([{"value", value_js}])
+  end
+
+  defp render_derived_field(entity_type, definition, [row_type], _opts) do
+    render_json_object([
+      {"definition", render_derived_definition(definition, entity_type, nil)},
+      {"entity", render_entity_type_label(row_type)},
+      {"kind", ~s("set")}
+    ])
+  end
+
+  defp render_derived_field(entity_type, definition, type, opts) do
+    if Reflection.alias?(type) do
+      render_json_object([
+        {"definition", render_derived_definition(definition, entity_type, nil)},
+        {"entity", render_entity_type_label(type)},
+        {"kind", ~s("one")}
+      ])
+    else
+      values =
+        if type == :enum do
+          opts
+          |> Keyword.fetch!(:values)
+          |> Enum.map(&Codec.encode(&1, :enum))
+        end
+
+      render_json_object([
+        {"definition", render_derived_definition(definition, entity_type, type)},
+        {"kind", ~s("scalar")},
+        {"type", Jason.encode!(type)},
+        {"values", Jason.encode!(values)}
+      ])
+    end
+  end
+
+  defp render_derived_include(include) do
+    include
+    |> Enum.map(fn
+      {name, nil} -> {Atom.to_string(name), "null"}
+      {name, sub_term} -> {Atom.to_string(name), render_derived_term(sub_term, [sub_term.entity])}
+    end)
+    |> render_json_object()
+  end
+
+  # A name as the kernel spells it: an attribute's name, a path's or a chain's names in order, or a
+  # name of a row above with how many quantifiers out it lies.
+  defp render_derived_name({:outer, levels, name}) do
+    render_json_object([
+      {"name", render_derived_name(name)},
+      {"outer", Integer.to_string(levels)}
+    ])
+  end
+
+  defp render_derived_name(name), do: render_policy_name(name)
+
+  defp render_derived_operand({:attribute, other}, _type) do
+    render_json_object([{"attribute", render_derived_name(other)}])
+  end
+
+  defp render_derived_operand(values, type) when is_list(values) do
+    values
+    |> Enum.map_join(",", &render_derived_operand(&1, type))
+    |> then(&"[#{&1}]")
+  end
+
+  defp render_derived_operand(value, type) do
+    value
+    |> Codec.encode_json(type)
+    |> Jason.encode!()
+  end
+
+  # A term as stage.mjs builds one, with the owning type and the chain from its row when it is a
+  # derived field's query.
+  defp render_derived_term(term, types) do
+    sort =
+      Enum.map(term.sort, fn {key, direction} ->
+        [Atom.to_string(key), Atom.to_string(direction)]
+      end)
+
+    source_members =
+      case term.source do
+        nil ->
+          []
+
+        {owner_type, chain} ->
+          source_js =
+            render_json_object([
+              {"chain", render_policy_name(chain)},
+              {"owner", render_entity_type_label(owner_type)}
+            ])
+
+          [{"source", source_js}]
+      end
+
+    cardinality_js =
+      term.cardinality
+      |> Atom.to_string()
+      |> Jason.encode!()
+
+    render_json_object([
+      {"cardinality", cardinality_js},
+      {"entity", render_entity_type_label(term.entity)},
+      {"filter", render_derived_clauses(term.filter, types)},
+      {"include", render_derived_include(term.include)},
+      {"skip", Jason.encode!(term.skip)},
+      {"sort", Jason.encode!(sort)},
+      {"take", Jason.encode!(term.take)}
+      | source_members
+    ])
   end
 
   # What a client needs to read its own rows, and to build one: a value's type is not recoverable
@@ -3842,6 +4111,7 @@ defmodule Hologram.Compiler do
       {"constraints", render_constraints(entity_type)},
       {"creatorRoles", render_creator_roles(entity_type)},
       {"defaults", render_defaults(entity_type)},
+      {"derived", render_derived(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
       {"expandedRoles", render_expanded_roles(entity_type)},
       {"frameworkAttributes", render_framework_attributes(entity_type)},
@@ -3951,12 +4221,7 @@ defmodule Hologram.Compiler do
     entity_type.__inverse_relationships__()
     |> Enum.map(fn {name, _type, _opts} ->
       inverse = Entity.inverse_relationship(entity_type, name)
-
-      sort =
-        inverse.target
-        |> Stage.sort(inverse.sort)
-        |> Map.fetch!(:sort)
-        |> Enum.map(fn {key, direction} -> [Atom.to_string(key), Atom.to_string(direction)] end)
+      sort = render_declared_order(inverse.target, inverse.sort)
 
       type =
         inverse.target
@@ -3990,33 +4255,37 @@ defmodule Hologram.Compiler do
   # much as the server does.
   defp render_relationships(entity_type) do
     entity_type.__relationships__()
-    |> Enum.map(fn {name, target, opts} ->
-      optional? = Keyword.get(opts, :optional) == true
-
-      {Atom.to_string(name), render_relationship(target, optional?)}
+    |> Enum.map(fn {name, type, opts} ->
+      {Atom.to_string(name), render_relationship(type, opts)}
     end)
     |> render_json_object()
   end
 
-  defp render_relationship(target, optional?) when is_list(target) do
-    render_relationship_entry(hd(target), true, optional?)
+  # A to-many carries the order its declaration names, the way an inverse set does.
+  defp render_relationship([target], opts) do
+    sort = render_declared_order(target, Keyword.get(opts, :sort, []))
+    fields = render_relationship_fields(target, true, opts)
+
+    render_json_object([{"sort", Jason.encode!(sort)} | fields])
   end
 
-  defp render_relationship(target, optional?) do
-    render_relationship_entry(target, false, optional?)
+  defp render_relationship(target, opts) do
+    target
+    |> render_relationship_fields(false, opts)
+    |> render_json_object()
   end
 
-  defp render_relationship_entry(target, to_many?, optional?) do
+  defp render_relationship_fields(target, to_many?, opts) do
     type =
       target
       |> Codec.encode_enum_value()
       |> Jason.encode!()
 
-    render_json_object([
-      {"optional", Jason.encode!(optional?)},
+    [
+      {"optional", Jason.encode!(Keyword.get(opts, :optional) == true)},
       {"toMany", Jason.encode!(to_many?)},
       {"type", type}
-    ])
+    ]
   end
 
   # The rules a client evaluates permissions by, spelled the way the rows it evaluates them
@@ -4114,7 +4383,7 @@ defmodule Hologram.Compiler do
 
   defp render_policy_value(entity_type, name, value) do
     value
-    |> Codec.encode_json(policy_attribute_type(entity_type, name))
+    |> Codec.encode_json(name_type(name, [entity_type]))
     |> Jason.encode!()
   end
 
@@ -4225,23 +4494,30 @@ defmodule Hologram.Compiler do
     |> Jason.encode!()
   end
 
-  # A name matching no attribute definition is a to-one reference field, and every one of those
-  # carries an entity id - the fallback the query stages make. A path has the type of the attribute
-  # it ends at.
-  defp policy_attribute_type(entity_type, path) when is_list(path) do
-    {relationship_names, [name]} = Enum.split(path, -1)
-
-    entity_type
-    |> Entity.path_target(relationship_names)
-    |> policy_attribute_type(name)
+  # The type of what a clause's name reads, for spelling the values it is compared with: an
+  # attribute's, a derived field's declared one, or an entity id for a reference field - the
+  # fallback the query stages make. An outer name is read on the row that many levels out, a path on
+  # the row the path leads to.
+  defp name_type({:outer, levels, name}, types) do
+    name_type(name, [Enum.at(types, levels)])
   end
 
-  defp policy_attribute_type(entity_type, name) do
-    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+  defp name_type(path, [entity_type | _types_above]) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
 
-    case List.keyfind(definitions, name, 0) do
-      {_name, type, _opts} -> type
-      nil -> :uuid
+    name_type(name, [Entity.path_target(entity_type, relationship_names)])
+  end
+
+  defp name_type(name, [entity_type | _types_above]) do
+    declaration =
+      entity_type.__attributes__()
+      |> Enum.concat(entity_type.__system_attributes__())
+      |> Enum.concat(entity_type.__derived__())
+      |> List.keyfind(name, 0)
+
+    case declaration do
+      {_name, type, _opts} when is_atom(type) -> type
+      _other -> :uuid
     end
   end
 
@@ -4641,9 +4917,11 @@ defmodule Hologram.Compiler do
 
   defp declare_verb(_entity_types), do: "declare"
 
+  # A derived field holding a value includes no rows, so it names no type.
   defp included_entity_types(term) do
     term.include
     |> Map.values()
+    |> Enum.reject(&is_nil/1)
     |> Enum.flat_map(&queried_entity_types/1)
     |> Enum.uniq()
   end
@@ -4653,17 +4931,19 @@ defmodule Hologram.Compiler do
   end
 
   # The types a term's paths and quantifiers lead through, its includes' included: every type a hop
-  # or a quantifier's set reaches, which a policied read applies the read policy of.
+  # or a quantifier's set reaches - a derived set's rows among them - which a policied read applies
+  # the read policy of.
   defp path_entity_types(term) do
     hop_types =
       term.filter
       |> Stage.relationship_chains()
       |> Enum.flat_map(fn relationship_names ->
-        Enum.scan(relationship_names, term.entity, &Entity.related_type(&2, &1))
+        Enum.scan(relationship_names, term.entity, &Derived.related_type(&2, &1))
       end)
 
     term.include
     |> Map.values()
+    |> Enum.reject(&is_nil/1)
     |> Enum.flat_map(&path_entity_types/1)
     |> Enum.concat(hop_types)
     |> Enum.uniq()
@@ -4691,6 +4971,7 @@ defmodule Hologram.Compiler do
     nested_types =
       term.include
       |> Map.values()
+      |> Enum.reject(&is_nil/1)
       |> Enum.flat_map(&queried_entity_types/1)
 
     Enum.uniq([term.entity | nested_types])
@@ -4722,14 +5003,15 @@ defmodule Hologram.Compiler do
   end
 
   # Pairs each entity type with the server-only attributes a term's filter and sort name on it -
-  # the term's own type first, then the types its paths lead to - walking include sub-terms so a
-  # reference nested under an include is reached too.
+  # the term's own type first, then the types its paths lead to - walking include sub-terms, whose
+  # sets carry the order their relationship declares. A derived field's own reads are checked where
+  # its definition is resolved.
   defp server_only_references(term) do
     filter_references =
       term.filter
       |> Stage.predicate_references()
       |> Enum.map(fn {relationship_names, name} ->
-        {Entity.path_target(term.entity, relationship_names), name}
+        {Derived.path_target(term.entity, relationship_names), name}
       end)
 
     sort_references =
@@ -4747,6 +5029,7 @@ defmodule Hologram.Compiler do
     nested_references =
       term.include
       |> Map.values()
+      |> Enum.reject(&is_nil/1)
       |> Enum.flat_map(&server_only_references/1)
 
     sorted_path_references =

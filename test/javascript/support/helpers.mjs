@@ -8,6 +8,7 @@ import DataLayer from "../../../assets/js/data_layer.mjs";
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
 import Elixir_Exception from "../../../assets/js/elixir/exception.mjs";
 import Elixir_FunctionClauseError from "../../../assets/js/elixir/function_clause_error.mjs";
+import Elixir_Hologram_Query_Stage from "../../../assets/js/elixir/hologram/query/stage.mjs";
 import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
@@ -1163,6 +1164,18 @@ export function inspectEx(term) {
 export function inspectJs(term) {
   console.log(Serializer.serialize(term, "client"));
   return term;
+}
+
+// The given query with the given relationship included, its sub-term narrowed by the given function
+// over the plain term - a sub-term built directly, as an executor may receive one, which an include
+// written in a query never builds.
+export function narrowedInclude(query, name, narrow) {
+  const term = Elixir_Hologram_Query_Stage["include/2"](query, Type.atom(name));
+
+  return {
+    ...term,
+    include: {...term.include, [name]: narrow(term.include[name])},
+  };
 }
 
 export function putAction(component, action) {

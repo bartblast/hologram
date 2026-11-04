@@ -979,6 +979,12 @@ defmodule Hologram.Sync.SessionTest do
       [{evaluator, _value}] = Registry.lookup(Evaluator.registry(), @other_window)
 
       ref = Process.monitor(session)
+
+      # A signal from here reaches the session in order, so once this call answers, the session has
+      # taken up the monitor. The kill's way to it goes through the evaluator and could overtake a
+      # bare monitor request.
+      :sys.get_state(session)
+
       Process.exit(evaluator, :kill)
 
       # The reason is what carries the connection with it: the session is linked to the process

@@ -16,6 +16,7 @@ defmodule Hologram.Query.Interpreter do
 
   alias Hologram.DB.SortKey
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Query
 
   @quantifiers [:all, :any, :none]
@@ -34,10 +35,22 @@ defmodule Hologram.Query.Interpreter do
   is empty or names a row the database does not hold, the meaning a missing value has everywhere
   else.
 
-  A quantifier reads the rows of a related set out of the same rows - the ones the pairs name, or
-  the ones whose reference names the row - reached through its source's to-one relationships
-  first, a set with no rows when one of them reads nothing. Its condition is matched against each
-  related row, a name of a row above read on that row.
+  A quantifier reads the rows of a related set out of the same rows - the ones the pairs name, the
+  ones whose reference names the row, or the ones a derived field holding rows holds - reached
+  through the links of its source before it, the last link's rows of every row they reach, each
+  once, and no rows when they reach none. Its condition is matched against each related row, a
+  name of a row above read on that row.
+
+  A derived field holding a value is computed from its definition wherever its name is read - a
+  predicate's side, a path's end, a sort key - the way the database computes it: `<>` is nil when
+  an operand is, an `if` takes its else branch when its condition does not hold, a condition is
+  true or false, never nil, and an integer a float field reads is widened. A count counts the rows
+  its source leads to from the row - the last link's rows of every row the links before it reach,
+  each once - matched to its clauses with the row as the row above them, its bounds applied. A
+  derived field holding rows holds its query's rows in its order with its bounds applied, the rows
+  of the branch an `if` takes, or none for nil. A derived enum compares and orders by its value's
+  position among the declared ones. An included derived field holds its value, or its rows - a
+  list, or one row or nil - each row embedding what its definition and the include ask for.
 
   `:actor_user_id` in the options is who is asking, for the predicates that name the acting user.
   An anonymous one matches nothing, the way an actor-referencing statement matches nothing when
@@ -67,20 +80,20 @@ defmodule Hologram.Query.Interpreter do
 
       :one ->
         rows
-        |> arrange(term)
+        |> arrange(term, scope)
         |> List.first()
         |> embed(term, database, opts)
 
       :set ->
         rows
-        |> arrange(term)
+        |> arrange(term, scope)
         |> Enum.map(&embed(&1, term, database, opts))
     end
   end
 
-  defp arrange(rows, term) do
+  defp arrange(rows, term, scope) do
     rows
-    |> sort(term.sort, term.entity)
+    |> sort(term.sort, term.entity, scope)
     |> bound(term)
   end
 
@@ -88,6 +101,16 @@ defmodule Hologram.Query.Interpreter do
     rows
     |> Enum.drop(term.skip || 0)
     |> take(term.take)
+  end
+
+  # The rows a source chain leads to from the row: the last link's rows of every row the links
+  # before it reach, each row once however many paths reach it.
+  defp chain_rows(row, chain, scope) do
+    Enum.reduce(chain, [row], fn name, rows ->
+      rows
+      |> Enum.flat_map(&link_rows(&1, name, scope))
+      |> Enum.uniq_by(& &1.id)
+    end)
   end
 
   # Values of one kind, compared the way that kind is ordered rather than the way its
@@ -151,17 +174,89 @@ defmodule Hologram.Query.Interpreter do
     compare_values(Map.fetch!(ranks, left), Map.fetch!(ranks, right))
   end
 
+  # The rows a definition of a derived field holding rows holds for the row: a query's rows in its
+  # order with its bounds applied, only the first for one row, the rows of the branch an if takes,
+  # or none for nil.
+  defp definition_rows({:if, clauses, then_rows, else_rows}, row, scope) do
+    if matches?(row, clauses, row_scope(row, clauses, scope)) do
+      definition_rows(then_rows, row, scope)
+    else
+      definition_rows(else_rows, row, scope)
+    end
+  end
+
+  defp definition_rows({:query, term}, row, scope) do
+    rows =
+      row
+      |> sourced_rows(term, scope)
+      |> arrange(term, scope)
+
+    if term.cardinality == :one, do: Enum.take(rows, 1), else: rows
+  end
+
+  defp definition_rows({:value, nil}, _row, _scope), do: []
+
+  defp derived_rows(row, name, scope) do
+    row.__struct__
+    |> Derived.definition(name)
+    |> definition_rows(row, scope)
+  end
+
+  # A derived field holding a value, computed from its definition on the row - an integer a float
+  # field reads widened, the way the database casts it.
+  defp derived_value(row, name, scope) do
+    entity_type = row.__struct__
+    {^name, type, _opts} = List.keyfind(entity_type.__derived__(), name, 0)
+
+    value =
+      entity_type
+      |> Derived.definition(name)
+      |> evaluated(row, scope)
+
+    if type == :float and is_integer(value), do: value * 1.0, else: value
+  end
+
   # A relationship the query asked for is filled from the rest of the database - a to-one by
-  # following the id its row carries, a to-many by reading the pairs. What it did not ask for
-  # keeps the sentinel saying so, which is a different answer from an empty one.
+  # following the id its row carries, a to-many by reading the pairs. A derived field it asked for is
+  # computed from its definition. What the query did not ask for keeps the sentinel saying so, which
+  # is a different answer from an empty one.
   defp embed(nil, _term, _database, _opts), do: nil
 
   defp embed(row, term, database, opts) do
     Enum.reduce(term.include, row, fn {name, sub_term}, embedded ->
-      kind = relationship_kind(term.entity, name)
+      value =
+        if Derived.declared?(term.entity, name) do
+          embedded_derived_value(row, name, sub_term, database, opts)
+        else
+          kind = relationship_kind(term.entity, name)
 
-      Map.put(embedded, name, embedded_value(row, name, kind, sub_term, database, opts))
+          embedded_value(row, name, kind, sub_term, database, opts)
+        end
+
+      Map.put(embedded, name, value)
     end)
+  end
+
+  # An included derived field holding a value is the value its definition computes for the row. One
+  # holding rows holds its definition's rows - a list, or one row or nil - each row embedding what
+  # the definition and the include ask for.
+  defp embedded_derived_value(row, name, nil, database, opts) do
+    derived_value(row, name, embedding_scope(row, database, opts))
+  end
+
+  defp embedded_derived_value(row, name, sub_term, database, opts) do
+    entity_type = row.__struct__
+    rows_term = Derived.rows_term(entity_type, name, sub_term)
+
+    rows =
+      row
+      |> derived_rows(name, embedding_scope(row, database, opts))
+      |> Enum.map(&embed(&1, rows_term, database, opts))
+
+    case List.keyfind(entity_type.__derived__(), name, 0) do
+      {^name, [_row_type], _opts} -> rows
+      {^name, _row_type, _opts} -> List.first(rows)
+    end
   end
 
   defp embedded_set(rows, sub_term, database, opts) do
@@ -169,7 +264,7 @@ defmodule Hologram.Query.Interpreter do
 
     rows
     |> Enum.filter(&matches?(&1, sub_term.filter, scope))
-    |> arrange(sub_term)
+    |> arrange(sub_term, scope)
     |> Enum.map(&embed(&1, sub_term, database, opts))
   end
 
@@ -217,12 +312,18 @@ defmodule Hologram.Query.Interpreter do
     |> embed(sub_term, database, opts)
   end
 
+  # Where a row's derived field is read while it is embedded: on the row, with no row above it.
+  defp embedding_scope(row, database, opts) do
+    %{database: database, opts: opts, outer: [], ranks: %{}, types: [row.__struct__]}
+  end
+
   # What an enum compares by: each declared value against its position in the list the entity
   # declares, built per clause list and only for the names that need it - the ordering keys and the
-  # filtered attributes alike. A name of any other type is absent, and its comparison is the
-  # ordinary one.
+  # filtered attributes alike, a derived enum's declared values among them. A name of any other type
+  # is absent, and its comparison is the ordinary one.
   defp enum_ranks(entity_type, names) do
     entity_type.__attributes__()
+    |> Enum.concat(entity_type.__derived__())
     |> Enum.filter(fn {name, type, _opts} -> type == :enum and name in names end)
     |> Map.new(fn {name, _type, opts} ->
       ranks =
@@ -244,6 +345,37 @@ defmodule Hologram.Query.Interpreter do
   defp equal?(%Time{} = left, %Time{} = right), do: Time.compare(left, right) == :eq
 
   defp equal?(left, right), do: left == right
+
+  # A definition's expression on the row: strings joined, nil when one of them is, an if's branch,
+  # whether a condition holds, a name of the row, the number of rows a count reads, or a value.
+  defp evaluated({:concat, operands}, row, scope) do
+    values = Enum.map(operands, &evaluated(&1, row, scope))
+
+    if Enum.any?(values, &is_nil/1), do: nil, else: Enum.join(values)
+  end
+
+  defp evaluated({:condition, clauses}, row, scope) do
+    matches?(row, clauses, row_scope(row, clauses, scope))
+  end
+
+  defp evaluated({:if, clauses, then_value, else_value}, row, scope) do
+    if matches?(row, clauses, row_scope(row, clauses, scope)) do
+      evaluated(then_value, row, scope)
+    else
+      evaluated(else_value, row, scope)
+    end
+  end
+
+  defp evaluated({:name, name}, row, scope), do: read(row, name, row_scope(row, [], scope))
+
+  defp evaluated({:query, %{cardinality: :count} = term}, row, scope) do
+    row
+    |> sourced_rows(term, scope)
+    |> bound(term)
+    |> length()
+  end
+
+  defp evaluated({:value, value}, _row, _scope), do: value
 
   defp flip(:eq), do: :eq
 
@@ -282,6 +414,21 @@ defmodule Hologram.Query.Interpreter do
     end)
   end
 
+  # The rows one link of a source leads to from the row: the related row a to-one names, if there is
+  # one, or the rows of a set.
+  defp link_rows(row, name, scope) do
+    entity_type = row.__struct__
+
+    if not Derived.declared?(entity_type, name) and
+         relationship_kind(entity_type, name) == :to_one do
+      row
+      |> related_row([name], scope.database)
+      |> List.wrap()
+    else
+      set_rows(row, name, scope)
+    end
+  end
+
   # What matching a term's filter reads besides the row: the rest of the database, which a path
   # follows into, the options a predicate resolves its operands by, the ranks its enums compare
   # by - and inside a quantifier's condition the rows above the related row with their types,
@@ -314,15 +461,9 @@ defmodule Hologram.Query.Interpreter do
   defp matches_clause?(row, {quantifier, {source, clauses}}, scope)
        when quantifier in @quantifiers do
     {source_row, hops} = source_row(row, source, scope)
-    {owner_hops, [set_name]} = Enum.split(hops, -1)
+    related_rows = chain_rows(source_row, hops, scope)
 
-    related_rows =
-      case related_row(source_row, owner_hops, scope.database) do
-        nil -> []
-        owner -> set_rows(owner, set_name, scope.database)
-      end
-
-    types = [Entity.path_target(source_row.__struct__, hops) | scope.types]
+    types = [Derived.path_target(source_row.__struct__, hops) | scope.types]
 
     inner_scope = %{
       scope
@@ -378,6 +519,23 @@ defmodule Hologram.Query.Interpreter do
     |> Enum.reject(&is_nil/1)
   end
 
+  # Every key of the order is spent before two rows are called equal, and the last of them is
+  # always the id, so no two rows ever are.
+  defp precedes?(_left_values, _right_values, [], _ranks), do: false
+
+  defp precedes?(
+         [left_value | left_rest],
+         [right_value | right_rest],
+         [{name, direction} | rest],
+         ranks
+       ) do
+    case compare_keys(left_value, right_value, direction, Map.get(ranks, name)) do
+      :eq -> precedes?(left_rest, right_rest, rest, ranks)
+      :lt -> true
+      :gt -> false
+    end
+  end
+
   # The ranks a clause list's own predicates compare by, keyed by the name each predicate is written
   # with - an attribute or a path, whose ranks are those of the attribute it ends at, on the row the
   # name is read on - the ones inside a disjunction's alternatives included. A quantifier's
@@ -410,11 +568,17 @@ defmodule Hologram.Query.Interpreter do
 
     case related_row(row, relationship_names, scope.database) do
       nil -> nil
-      related -> Map.fetch!(related, name)
+      related -> read(related, name, scope)
     end
   end
 
-  defp read(row, name, _scope), do: Map.fetch!(row, name)
+  defp read(row, name, scope) do
+    if Derived.declared?(row.__struct__, name) do
+      derived_value(row, name, scope)
+    else
+      Map.fetch!(row, name)
+    end
+  end
 
   defp resolve({:actor}, opts, _ranks_for_key) do
     Keyword.get(opts, :actor_user_id) || :no_actor
@@ -493,34 +657,35 @@ defmodule Hologram.Query.Interpreter do
     compare_ordering_values(value, operand, ranks) in [:eq, :gt]
   end
 
-  # The rows of a set - a to-many's pairs, or an inverse set's related rows.
-  defp set_rows(row, name, database) do
-    case relationship_kind(row.__struct__, name) do
-      {:inverse, inverse} -> inverse_rows(row, inverse, database)
-      :to_many -> paired_rows(row, name, Entity.related_type(row.__struct__, name), database)
+  # The rows of a set - a to-many's pairs, an inverse set's related rows, or the rows a derived field
+  # holds.
+  defp set_rows(row, name, scope) do
+    entity_type = row.__struct__
+
+    if Derived.declared?(entity_type, name) do
+      derived_rows(row, name, scope)
+    else
+      case relationship_kind(entity_type, name) do
+        {:inverse, inverse} ->
+          inverse_rows(row, inverse, scope.database)
+
+        :to_many ->
+          paired_rows(row, name, Entity.related_type(entity_type, name), scope.database)
+      end
     end
   end
 
-  defp sort(rows, keys, entity_type) do
+  # Each row's keys are read once - a derived one is computed - and the rows ordered by them.
+  defp sort(rows, keys, entity_type, scope) do
     names = Enum.map(keys, fn {name, _direction} -> name end)
     ranks = enum_ranks(entity_type, names)
 
-    Enum.sort(rows, &precedes?(&1, &2, keys, ranks))
-  end
-
-  # Every key of the order is spent before two rows are called equal, and the last of them is
-  # always the id, so no two rows ever are.
-  defp precedes?(_left, _right, [], _ranks), do: false
-
-  defp precedes?(left, right, [{name, direction} | rest], ranks) do
-    left_value = Map.fetch!(left, name)
-    right_value = Map.fetch!(right, name)
-
-    case compare_keys(left_value, right_value, direction, Map.get(ranks, name)) do
-      :eq -> precedes?(left, right, rest, ranks)
-      :lt -> true
-      :gt -> false
-    end
+    rows
+    |> Enum.map(fn row -> {row, Enum.map(names, &read(row, &1, scope))} end)
+    |> Enum.sort(fn {_left, left_values}, {_right, right_values} ->
+      precedes?(left_values, right_values, keys, ranks)
+    end)
+    |> Enum.map(fn {row, _values} -> row end)
   end
 
   # The reference field's atom is one the entity's own struct defines, so it is always there to
@@ -552,11 +717,35 @@ defmodule Hologram.Query.Interpreter do
     end
   end
 
+  # Where a definition's own names and clauses are read: on the row, with no row above it.
+  defp row_scope(row, clauses, scope) do
+    types = [row.__struct__]
+
+    %{scope | outer: [], ranks: predicate_ranks(types, clauses), types: types}
+  end
+
   # The row a quantifier's source is read on - the row the quantifier is about, or one above it.
   defp source_row(_row, {:outer, levels, hops}, scope),
     do: {Enum.at(scope.outer, levels - 1), hops}
 
   defp source_row(row, hops, _scope), do: {row, hops}
+
+  # The rows a derived field's query reads off the owner row, matched to its clauses with the owner
+  # as the row above them.
+  defp sourced_rows(owner, %{source: {_owner_type, chain}} = term, scope) do
+    types = [term.entity, owner.__struct__]
+
+    inner_scope = %{
+      scope
+      | outer: [owner],
+        ranks: predicate_ranks(types, term.filter),
+        types: types
+    }
+
+    owner
+    |> chain_rows(chain, scope)
+    |> Enum.filter(&matches?(&1, term.filter, inner_scope))
+  end
 
   # Where a name is declared: an attribute on the type of the row it is read on, a path's last name
   # on the type its relationships lead to from there.

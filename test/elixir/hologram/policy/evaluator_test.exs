@@ -8,6 +8,8 @@ defmodule Hologram.Policy.EvaluatorTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module24
+  alias Hologram.Test.Fixtures.Entity.Module41
+  alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module12
 
@@ -81,6 +83,54 @@ defmodule Hologram.Policy.EvaluatorTest do
   end
 
   describe "rule_matches?/4" do
+    # The row the note relationship leads to, as the checker reads it for a path.
+    defp note_checker(note) do
+      fn {:related, [:note]}, _entity, _actor_user_id -> note end
+    end
+
+    test "computes a derived field from the row a path in its definition reads" do
+      rule = rule(predicates: [{:note_hidden, :==, true}])
+      entity = %Module42{note_id: "n1"}
+
+      assert rule_matches?(rule, entity, nil, note_checker(%Module41{public: false}))
+      refute rule_matches?(rule, entity, nil, note_checker(%Module41{public: true}))
+      refute rule_matches?(rule, %Module42{}, nil, note_checker(nil))
+    end
+
+    test "computes a derived field reading another, nil where a string it joins is" do
+      rule = rule(predicates: [{:shout, :==, "draft!!"}])
+      missing_rule = rule(predicates: [{:shout, :==, nil}])
+
+      assert rule_matches?(rule, %Module42{caption: "draft"}, nil, &deny/3)
+      assert rule_matches?(missing_rule, %Module42{caption: nil}, nil, &deny/3)
+    end
+
+    test "compares a derived enum by its declared order" do
+      rule = rule(predicates: [{:rank, :<, :low}])
+
+      assert rule_matches?(rule, %Module42{score: 9}, nil, &deny/3)
+      refute rule_matches?(rule, %Module42{score: 1}, nil, &deny/3)
+    end
+
+    test "takes a derived if's else branch when its condition reads nil" do
+      rule = rule(predicates: [{:rank, :==, :low}])
+
+      assert rule_matches?(rule, %Module42{score: nil}, nil, &deny/3)
+    end
+
+    test "computes a derived field on the row a path leads to" do
+      rule = rule(predicates: [{[:origin, :shout], :==, "draft!!"}])
+
+      checker = fn {:related, [:origin]}, _entity, _actor_user_id ->
+        %Module42{caption: "draft"}
+      end
+
+      missing_checker = fn {:related, [:origin]}, _entity, _actor_user_id -> nil end
+
+      assert rule_matches?(rule, %Module42{}, nil, checker)
+      refute rule_matches?(rule, %Module42{}, nil, missing_checker)
+    end
+
     test "requires every predicate of the rule to hold" do
       entity = %Module1{public: true, priority: 1}
 

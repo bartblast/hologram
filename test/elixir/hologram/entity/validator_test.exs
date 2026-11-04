@@ -1283,7 +1283,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects duplicate attribute name" do
       expected_msg =
-        "duplicate name :title used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture3 - attribute and relationship names share one namespace and must be unique"
+        "duplicate name :title used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture3 - attribute, relationship and derived field names share one namespace and must be unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture3 do
@@ -1311,7 +1311,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects attribute name already used by relationship" do
       expected_msg =
-        "duplicate name :owner used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture4 - attribute and relationship names share one namespace and must be unique"
+        "duplicate name :owner used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture4 - attribute, relationship and derived field names share one namespace and must be unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture4 do
@@ -1685,6 +1685,393 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "validate_derived!/4" do
+    test "accepts each kind of type" do
+      defmodule InlineEntityFixture142 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        attribute :level, :integer
+
+        derived :copy, :integer, fn level -> level end
+        derived :row, Module28, fn -> nil end
+        derived :rows, [Module28], fn -> nil end
+        derived :tier, :enum, [values: [:low, :high]], fn -> :low end
+      end
+
+      assert InlineEntityFixture142.__derived__() == [
+               {:copy, :integer, []},
+               {:row, Module28, []},
+               {:rows, [Module28], []},
+               {:tier, :enum, [values: [:low, :high]]}
+             ]
+    end
+
+    test "rejects a reserved name" do
+      expected_msg =
+        "reserved name :id used for derived field in Hologram.Entity.ValidatorTest.InlineEntityFixture143 - system attributes :created_at, :id, :updated_at are managed automatically and can't be declared"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture143 do
+          use Hologram.Entity
+
+          derived :id, :integer, fn -> 1 end
+        end
+      end
+    end
+
+    test "rejects a name an attribute declares" do
+      expected_msg =
+        "duplicate name :title used for derived field in Hologram.Entity.ValidatorTest.InlineEntityFixture144 - attribute, relationship and derived field names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture144 do
+          use Hologram.Entity
+
+          attribute :title, :string
+
+          derived :title, :string, fn -> "x" end
+        end
+      end
+    end
+
+    test "rejects an attribute declaring a derived field's name" do
+      expected_msg =
+        "duplicate name :title used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture145 - attribute, relationship and derived field names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture145 do
+          use Hologram.Entity
+
+          derived :title, :string, fn -> "x" end
+
+          attribute :title, :string
+        end
+      end
+    end
+
+    test "rejects a name colliding with a reference field" do
+      expected_msg =
+        "derived field :owner_id in Hologram.Entity.ValidatorTest.InlineEntityFixture146 derives entity field :owner_id, which collides with relationship :owner - every declaration must derive distinct fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture146 do
+          use Hologram.Entity
+
+          relationship :owner, Hologram.Test.Fixtures.Entity.Module1
+
+          derived :owner_id, :uuid, fn -> nil end
+        end
+      end
+    end
+
+    test "rejects a second derived field of the same name" do
+      expected_msg =
+        "duplicate name :title used for derived field in Hologram.Entity.ValidatorTest.InlineEntityFixture156 - attribute, relationship and derived field names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture156 do
+          use Hologram.Entity
+
+          derived :title, :string, fn -> "x" end
+          derived :title, :string, fn -> "y" end
+        end
+      end
+    end
+
+    test "rejects a relationship declaring a derived field's name" do
+      expected_msg =
+        "duplicate name :owner used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture157 - attribute, relationship and derived field names share one namespace and must be unique"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture157 do
+          use Hologram.Entity
+
+          derived :owner, :string, fn -> "x" end
+
+          relationship :owner, Hologram.Test.Fixtures.Entity.Module1
+        end
+      end
+    end
+
+    test "rejects a relationship deriving a derived field's name as its reference field" do
+      expected_msg =
+        "relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture158 derives entity field :owner_id, which collides with derived field :owner_id - every declaration must derive distinct fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture158 do
+          use Hologram.Entity
+
+          derived :owner_id, :uuid, fn -> nil end
+
+          relationship :owner, Hologram.Test.Fixtures.Entity.Module1
+        end
+      end
+    end
+
+    test "rejects options that are no keyword list" do
+      expected_msg =
+        "invalid options [:a, :b] for derived field :title in Hologram.Entity.ValidatorTest.InlineEntityFixture159 - options must be a keyword list"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture159 do
+          use Hologram.Entity
+
+          derived :title, :string, [:a, :b], fn -> "x" end
+        end
+      end
+    end
+
+    test "rejects a list of several entity type modules" do
+      expected_msg =
+        "invalid type [Hologram.Test.Fixtures.Entity.Module1, Hologram.Test.Fixtures.Entity.Module2] for derived field :rows in Hologram.Entity.ValidatorTest.InlineEntityFixture160 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture160 do
+          use Hologram.Entity
+
+          derived :rows, [Module1, Module2], fn -> nil end
+        end
+      end
+    end
+
+    test "rejects an unknown type" do
+      expected_msg =
+        "invalid type :text for derived field :title in Hologram.Entity.ValidatorTest.InlineEntityFixture147 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture147 do
+          use Hologram.Entity
+
+          derived :title, :text, fn -> "x" end
+        end
+      end
+    end
+
+    test "rejects a list of something other than an entity type module" do
+      expected_msg =
+        "invalid type [:integer] for derived field :counts in Hologram.Entity.ValidatorTest.InlineEntityFixture148 - the type of a derived field is an attribute type (:boolean, :date, :datetime, :enum, :float, :integer, :string, :time, :uuid), an entity type module (one row) or a one-element list wrapping an entity type module (a set)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture148 do
+          use Hologram.Entity
+
+          derived :counts, [:integer], fn -> nil end
+        end
+      end
+    end
+
+    test "rejects an option other than values" do
+      expected_msg =
+        "unknown option :optional for derived field :title in Hologram.Entity.ValidatorTest.InlineEntityFixture149 - valid derived field options are: :values"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture149 do
+          use Hologram.Entity
+
+          derived :title, :string, [optional: true], fn -> "x" end
+        end
+      end
+    end
+
+    test "rejects an enum without values" do
+      expected_msg =
+        "missing values option for enum derived field :tier in Hologram.Entity.ValidatorTest.InlineEntityFixture150 - an enum derived field names its values, bracketed before the function: derived :tier, :enum, [values: [...]], fn ... end"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture150 do
+          use Hologram.Entity
+
+          derived :tier, :enum, fn -> :low end
+        end
+      end
+    end
+
+    test "rejects invalid enum values" do
+      expected_msg =
+        "invalid values option [] for enum derived field :tier in Hologram.Entity.ValidatorTest.InlineEntityFixture151 - the values option must be a non-empty list of unique non-nil atoms"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture151 do
+          use Hologram.Entity
+
+          derived :tier, :enum, [values: []], fn -> :low end
+        end
+      end
+    end
+
+    test "rejects values on a type other than an enum" do
+      expected_msg =
+        "values option not allowed for derived field :level in Hologram.Entity.ValidatorTest.InlineEntityFixture152 - the values option applies only to enum derived fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture152 do
+          use Hologram.Entity
+
+          derived :level, :integer, [values: [:low]], fn -> 1 end
+        end
+      end
+    end
+  end
+
+  describe "validate_derived_function!/3" do
+    # The code is parsed at line 12 of a declaration written at line 7, so a refusal located at the
+    # declaration names line 7.
+    defp derived_env do
+      %{__ENV__ | file: Path.join(File.cwd!(), "lib/my_app/channel.ex"), line: 7}
+    end
+
+    defp validate_function(code) do
+      definition = Code.string_to_quoted!(code, line: 12)
+
+      validate_derived_function!(:unread_count, definition, derived_env())
+    end
+
+    test "accepts a function of field names" do
+      assert validate_function("fn channel, last_read_at -> channel end") == :ok
+    end
+
+    test "accepts a function of no fields" do
+      assert validate_function("fn -> 1 end") == :ok
+    end
+
+    test "rejects a definition that is no function" do
+      expected_msg =
+        "lib/my_app/channel.ex:7: derived field :unread_count in Hologram.Entity.ValidatorTest is defined by a function whose arguments name the fields it reads, got: [to: Queries.unread_count(channel)] - write it as fn fields -> ... end, calling a shared query builder from the body if one computes it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_function("[to: Queries.unread_count(channel)]")
+      end
+    end
+
+    test "rejects a function of several clauses" do
+      expected_msg =
+        "lib/my_app/channel.ex:7: the function of derived field :unread_count in Hologram.Entity.ValidatorTest has 2 clauses - a derived field's function has one clause, since its head names the fields it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_function("fn nil -> 0\n channel -> channel end")
+      end
+    end
+
+    test "rejects a pattern in the head" do
+      expected_msg =
+        "lib/my_app/channel.ex:7: the arguments of derived field :unread_count in Hologram.Entity.ValidatorTest's function name fields, each a bare name, got: %{id: id} - a pattern, a default or the underscore has no field to name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_function("fn %{id: id} -> id end")
+      end
+    end
+
+    test "rejects a guard" do
+      expected_msg =
+        "lib/my_app/channel.ex:7: the function of derived field :unread_count in Hologram.Entity.ValidatorTest takes no guard, got: when channel != nil - its arguments name the fields it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_function("fn channel when channel != nil -> channel end")
+      end
+    end
+
+    test "rejects a guard on several arguments" do
+      expected_msg =
+        "lib/my_app/channel.ex:7: the function of derived field :unread_count in Hologram.Entity.ValidatorTest takes no guard, got: when channel != nil - its arguments name the fields it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_function("fn channel, last_read_at when channel != nil -> channel end")
+      end
+    end
+
+    test "rejects a default" do
+      expected_msg =
+        "lib/my_app/channel.ex:7: the arguments of derived field :unread_count in Hologram.Entity.ValidatorTest's function name fields, each a bare name, got: limit \\\\ 5 - a pattern, a default or the underscore has no field to name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_function("fn limit \\\\ 5 -> limit end")
+      end
+    end
+
+    test "rejects a name written twice" do
+      expected_msg =
+        "lib/my_app/channel.ex:7: channel is named twice in the head of derived field :unread_count in Hologram.Entity.ValidatorTest's function - each argument names a field once"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_function("fn channel, channel -> channel end")
+      end
+    end
+
+    test "rejects the underscore" do
+      expected_msg =
+        "lib/my_app/channel.ex:7: the arguments of derived field :unread_count in Hologram.Entity.ValidatorTest's function name fields, each a bare name, got: _ - a pattern, a default or the underscore has no field to name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_function("fn _ -> 1 end")
+      end
+    end
+  end
+
+  describe "validate_derived_heads!/1" do
+    test "accepts every kind of field as an argument" do
+      defmodule InlineEntityFixture153 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module1
+        alias Hologram.Test.Fixtures.Entity.Module27
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        attribute :title, :string
+
+        relationship :owner, Module1
+        relationship :messages, [Module28], inverse: channel
+        relationship :topic, Module27, inverse: channel
+
+        derived :all,
+                :string,
+                fn title, id, created_at, updated_at, owner_id, owner, messages, topic, other ->
+                  title
+                end
+
+        derived :other, :string, fn title -> title end
+      end
+
+      assert InlineEntityFixture153.__derived__() == [
+               {:all, :string, []},
+               {:other, :string, []}
+             ]
+    end
+
+    test "rejects an argument naming no field" do
+      line = __ENV__.line + 11
+
+      expected_msg =
+        "#{location(line)}last_seen_at is not a field of Hologram.Entity.ValidatorTest.InlineEntityFixture154 - the arguments of derived field :unread's function name the fields it reads: created_at, id, last_read_at, updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture154 do
+          use Hologram.Entity
+
+          attribute :last_read_at, :datetime
+
+          derived :unread, :boolean, fn last_seen_at -> last_seen_at end
+        end
+      end
+    end
+
+    test "rejects a derived field reading itself" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        "#{location(line)}derived field :total in Hologram.Entity.ValidatorTest.InlineEntityFixture155 reads itself - a derived field is computed from other fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture155 do
+          use Hologram.Entity
+
+          derived :total, :integer, fn total -> total end
+        end
+      end
+    end
+  end
+
   describe "validate_model!/1" do
     test "returns :ok for empty model" do
       assert validate_model!([]) == :ok
@@ -1804,6 +2191,23 @@ defmodule Hologram.Entity.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlineEntityFixture141])
+      end
+    end
+
+    test "judges no order of a stored to-many targeting a non-entity module" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture164 do
+        use Hologram.Entity
+
+        relationship :owners, [Hologram.Reflection], sort: name
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture164 targets Hologram.Reflection, which is not an entity type module"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture164])
       end
     end
 
@@ -1963,6 +2367,33 @@ defmodule Hologram.Entity.ValidatorTest do
         validate_model!([InlineEntityFixture137, InlineEntityFixture138])
       end
     end
+
+    test "returns :ok for a stored to-many ordered by what its related type can be sorted by" do
+      defmodule InlineEntityFixture162 do
+        use Hologram.Entity
+
+        relationship :items, [Module2], sort: [c, created_at: :desc]
+      end
+
+      assert validate_model!([InlineEntityFixture162]) == :ok
+    end
+
+    test "rejects an invalid sort option on a stored to-many" do
+      line = __ENV__.line + 5
+
+      defmodule InlineEntityFixture163 do
+        use Hologram.Entity
+
+        relationship :owners, [Module1], sort: posted_at
+      end
+
+      expected_msg =
+        "invalid data model:\n  * #{location(line)}relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture163 has an invalid sort option - unknown attribute :posted_at in Hologram.Test.Fixtures.Entity.Module1 - known attributes: :created_at, :id, :updated_at"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlineEntityFixture163])
+      end
+    end
   end
 
   describe "validate_relationship!/4" do
@@ -2001,6 +2432,20 @@ defmodule Hologram.Entity.ValidatorTest do
       assert InlineEntityFixture115.__inverse_relationships__() == [
                {:drafts, [Module1], [inverse: :owner, sort: :title]},
                {:owners, [Module1], [inverse: :owner, sort: [:title, created_at: :desc]]}
+             ]
+    end
+
+    test "accepts the sort option of a stored to-many as a name and as a list" do
+      defmodule InlineEntityFixture161 do
+        use Hologram.Entity
+
+        relationship :drafts, [Module1], sort: title
+        relationship :owners, [Module1], sort: [title, created_at: :desc]
+      end
+
+      assert InlineEntityFixture161.__relationships__() == [
+               {:drafts, [Module1], [sort: :title]},
+               {:owners, [Module1], [sort: [:title, created_at: :desc]]}
              ]
     end
 
@@ -2055,7 +2500,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects duplicate relationship name" do
       expected_msg =
-        "duplicate name :owner used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture5 - attribute and relationship names share one namespace and must be unique"
+        "duplicate name :owner used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture5 - attribute, relationship and derived field names share one namespace and must be unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture5 do
@@ -2069,7 +2514,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects relationship name already used by attribute" do
       expected_msg =
-        "duplicate name :title used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture6 - attribute and relationship names share one namespace and must be unique"
+        "duplicate name :title used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture6 - attribute, relationship and derived field names share one namespace and must be unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture6 do
@@ -2187,22 +2632,22 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
-    test "rejects the sort option on a relationship that is not an inverse" do
+    test "rejects the sort option on a stored to-one" do
       expected_msg =
-        "invalid sort option for relationship :owners in Hologram.Entity.ValidatorTest.InlineEntityFixture120 - sort applies to an inverse to-many"
+        "invalid sort option for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture120 - sort applies to a to-many relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture120 do
           use Hologram.Entity
 
-          relationship :owners, [Module1], sort: title
+          relationship :owner, Module1, sort: title
         end
       end
     end
 
     test "rejects the sort option on a single inverse" do
       expected_msg =
-        "invalid sort option for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture121 - sort applies to an inverse to-many"
+        "invalid sort option for relationship :owner in Hologram.Entity.ValidatorTest.InlineEntityFixture121 - sort applies to a to-many relationship"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture121 do
@@ -2228,7 +2673,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects an inverse named like a declared attribute" do
       expected_msg =
-        "duplicate name :owners used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture123 - attribute and relationship names share one namespace and must be unique"
+        "duplicate name :owners used for relationship in Hologram.Entity.ValidatorTest.InlineEntityFixture123 - attribute, relationship and derived field names share one namespace and must be unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture123 do
@@ -2243,7 +2688,7 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "rejects an attribute named like a declared inverse" do
       expected_msg =
-        "duplicate name :owners used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture124 - attribute and relationship names share one namespace and must be unique"
+        "duplicate name :owners used for attribute in Hologram.Entity.ValidatorTest.InlineEntityFixture124 - attribute, relationship and derived field names share one namespace and must be unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         defmodule InlineEntityFixture124 do

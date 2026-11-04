@@ -23,6 +23,7 @@ defmodule HologramFeatureTests.QueriesTest do
   alias HologramFeatureTests.Queries.Page10
   alias HologramFeatureTests.Queries.Page11
   alias HologramFeatureTests.Queries.Page12
+  alias HologramFeatureTests.Queries.Page13
   alias HologramFeatureTests.Queries.Page3
   alias HologramFeatureTests.Queries.Page4
   alias HologramFeatureTests.Queries.Page5
@@ -585,6 +586,135 @@ defmodule HologramFeatureTests.QueriesTest do
     assert html =~ ~r{<strong id="exact_search"><code>50% off</code></strong>}
   end
 
+  # General holds four messages and random one, so random comes first, and the empty channel holds
+  # none, so it is left out. General's recent list drops the draft at 0 and keeps the two latest of
+  # the rest, so hi falls out of it. The browser renders the lists again from its own rows once
+  # they land, so they are read after the fill, on the same page load, and the page the server sent
+  # is read as well.
+  feature "renders derived fields", %{session: session} do
+    seed_busy_channels()
+
+    session
+    |> visit(Page13)
+    |> mark_this_page_load()
+    |> await_local_fill()
+    |> assert_text(css("#busy_channels"), ~r/^random:1,general:4$/)
+    |> assert_text(
+      css("#recent_messages"),
+      ~r{^random=bye\[later\];general=again\[\]/there\[urgent\]$}
+    )
+    |> assert_text(
+      css("#summaries"),
+      ~r/^draft in general:3,hi in general:2,bye in random:0,there in general:1,again in general:0$/
+    )
+    |> assert_same_page_load()
+
+    %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/queries/13")
+
+    assert html =~ ~r{<strong id="busy_channels"><code>random:1,general:4</code></strong>}
+
+    assert html =~
+             ~r{<strong id="recent_messages"><code>random=bye\[later\];general=again\[\]/there\[urgent\]</code></strong>}
+
+    assert html =~
+             ~r{<strong id="summaries"><code>draft in general:3,hi in general:2,bye in random:0,there in general:1,again in general:0</code></strong>}
+  end
+
+  # The channels with more than one message and the messages with a later one in their channel -
+  # bounds no rendered list uses, so the answer can only have come from the local rows.
+  feature "answers derived fields over local data", %{session: session} do
+    seed_busy_channels()
+
+    session
+    |> visit(Page13)
+    |> await_local_fill()
+    |> click(button("Read derived fields locally"))
+    |> assert_text(
+      css("#local_answer"),
+      ~r{^general=again/there\|draft in general,hi in general,there in general$}
+    )
+  end
+
+  # The empty channel's first message lets it into the busy channels, ahead of random by name, since
+  # both hold one.
+  feature "keeps a filter and an order on a derived field current when a message is created", %{
+    session: session
+  } do
+    rows = seed_busy_channels()
+
+    session =
+      session
+      |> visit(Page13)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    %{body: "first", channel_id: rows.empty.id, position: 6}
+    |> Message.new()
+    |> DB.create!()
+
+    session
+    |> assert_text(css("#busy_channels"), ~r/^empty:1,random:1,general:4$/)
+    |> assert_text(
+      css("#recent_messages"),
+      ~r{^empty=first\[\];random=bye\[later\];general=again\[\]/there\[urgent\]$}
+    )
+    |> assert_same_page_load()
+  end
+
+  # A message created in random gives it two, still fewer than general's four, and leads its recent
+  # list, and bye now has a later message in its channel.
+  feature "keeps derived fields current when a message is created", %{session: session} do
+    rows = seed_busy_channels()
+
+    session =
+      session
+      |> visit(Page13)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    %{body: "latest", channel_id: rows.random.id, position: 5}
+    |> Message.new()
+    |> DB.create!()
+
+    session
+    |> assert_text(css("#busy_channels"), ~r/^random:2,general:4$/)
+    |> assert_text(
+      css("#recent_messages"),
+      ~r{^random=latest\[\]/bye\[later\];general=again\[\]/there\[urgent\]$}
+    )
+    |> assert_text(
+      css("#summaries"),
+      ~r/^draft in general:3,hi in general:2,bye in random:1,there in general:1,again in general:0,latest in random:0$/
+    )
+    |> assert_same_page_load()
+  end
+
+  # Deleting again, general's latest message, leaves it three, brings hi into its recent list and
+  # leaves one fewer later message for each earlier message in general.
+  feature "keeps derived fields current when a message is deleted", %{session: session} do
+    rows = seed_busy_channels()
+
+    session =
+      session
+      |> visit(Page13)
+      |> await_local_fill()
+      |> mark_this_page_load()
+
+    :ok = DB.delete!(Message, rows.again.id)
+
+    session
+    |> assert_text(css("#busy_channels"), ~r/^random:1,general:3$/)
+    |> assert_text(
+      css("#recent_messages"),
+      ~r{^random=bye\[later\];general=there\[urgent\]/hi\[later\+urgent\]$}
+    )
+    |> assert_text(
+      css("#summaries"),
+      ~r/^draft in general:2,hi in general:1,bye in random:0,there in general:0$/
+    )
+    |> assert_same_page_load()
+  end
+
   # Two products so the parent's ordering picks a definite one to pass down, and reviews split
   # across both so a query filtering by the passed product reads fewer rows than one that does not.
   defp seed_products_and_reviews do
@@ -667,6 +797,25 @@ defmodule HologramFeatureTests.QueriesTest do
     end)
 
     %{bye: bye, general: general, hi: hi, random: random, there: there, urgent: urgent}
+  end
+
+  # The channels, messages and labels the inverse features seed, a channel with no messages, and
+  # two more messages in general - a draft at 0 and again at 4, the latest - so general's recent
+  # list has rows to drop at both ends.
+  defp seed_busy_channels do
+    rows = seed_channels_and_an_empty_one()
+
+    draft =
+      %{body: "draft", channel_id: rows.general.id, position: 0}
+      |> Message.new()
+      |> DB.create!()
+
+    again =
+      %{body: "again", channel_id: rows.general.id, position: 4}
+      |> Message.new()
+      |> DB.create!()
+
+    Map.merge(rows, %{again: again, draft: draft})
   end
 
   # The channels, messages and labels the inverse features seed, and a channel with no messages.

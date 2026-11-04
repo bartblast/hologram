@@ -30,6 +30,10 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module33
+  alias Hologram.Test.Fixtures.Entity.Module37
+  alias Hologram.Test.Fixtures.Entity.Module38
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyParent
@@ -49,6 +53,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module112
   alias Hologram.Test.Fixtures.Template.Renderer.Module113
   alias Hologram.Test.Fixtures.Template.Renderer.Module114
+  alias Hologram.Test.Fixtures.Template.Renderer.Module115
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
   alias Hologram.Test.Fixtures.Template.Renderer.Module97
   alias Hologram.Test.Fixtures.Template.Renderer.Module98
@@ -191,6 +196,57 @@ defmodule Hologram.Template.RendererFromQueryTest do
     assert String.contains?(html, "token = %Hologram.Entity.ServerOnly{attribute: :token}")
     refute String.contains?(html, "note_secret_v7")
     refute String.contains?(html, "tok_R4mQ")
+  end
+
+  describe "derived includes" do
+    setup do
+      put_derived_definitions([Module32, Module37, Module38])
+    end
+
+    # The window reads the rows a derived field is computed from beside the rows the query returns,
+    # and the template is handed the derived values without them.
+    test "hands the template the derived fields the query included" do
+      {:ok, channel} = create(Module32.new(name: "general"))
+
+      for position <- [1, 2, 3] do
+        {:ok, _message} =
+          %{body: "message #{position}", channel_id: channel.id, position: position}
+          |> Module33.new()
+          |> create()
+      end
+
+      node = {:component, Module115, [], []}
+
+      {html, _component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      not_included = inspect(%NotIncluded{relationship: :messages})
+
+      assert String.contains?(html, "counts = 3")
+      assert String.contains?(html, "recent = 3-2")
+      assert String.contains?(html, "messages = #{not_included}")
+    end
+
+    # The template is handed a derived set's rows with the author their definition includes - read
+    # under the author type's read policy, which lets nobody read one, so nil rather than the
+    # sentinel - and not the messages the window embeds to compute them.
+    test "hands the template a derived set's rows with what its definition includes" do
+      {:ok, room} = create(Module37.new(name: "general"))
+      {:ok, author} = create(Module1.new())
+
+      {:ok, _message} =
+        %{author_id: author.id, channel_id: room.id, pinned: false}
+        |> Module38.new()
+        |> create()
+
+      node = {:component, Module115, [], []}
+
+      {html, _component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      not_included = inspect(%NotIncluded{relationship: :messages})
+
+      assert String.contains?(html, "authors = nil")
+      assert String.contains?(html, "room messages = #{not_included}")
+    end
   end
 
   describe "policy filtering" do
@@ -423,8 +479,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
       assert carried_titles() == ["shown"]
     end
 
-    # A path inside an included inverse reads its rows' relationships too - and the template is
-    # handed the inverse's rows as the query asked for them, without what the path read.
+    # A path inside a quantifier over an inverse reads its rows' relationships too - and the template
+    # is handed the included inverse's rows as the query asked for them, without what the path read.
     test "hands the template no relationship of an inverse's rows the query did not include" do
       {:ok, channel} =
         %{name: "general"}

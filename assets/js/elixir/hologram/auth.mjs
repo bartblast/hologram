@@ -6,6 +6,7 @@ import {currentBatch} from "./db.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
+import QueryKernel from "../../query_kernel.mjs";
 import Sha1 from "../../sha1.mjs";
 import SortKey from "../../sort_key.mjs";
 import StringOrder from "../../string_order.mjs";
@@ -214,26 +215,51 @@ function chainTargetId(entityType, entity, relationshipNames) {
   return end === null ? null : (end.row[referenceField] ?? null);
 }
 
-// The value a rule compares against, read off the boxed entity in the spelling the rules were
-// baked in - the rules travel wire-spelled, so what they are compared with must be too.
-function entityValue(entityType, entity, name) {
-  const attributeType = Model.entry(entityType).attributes[name] ?? "uuid";
-  const key = Type.encodeMapKey(Type.atom(name));
-  const entry = entity.data[key];
+// The type a name is declared with - an attribute's, or a derived field's holding a value - or
+// null for a reference field, which carries an entity id.
+function declaredType(entityType, name) {
+  const derived = Model.derivedField(entityType, name);
 
-  return entry ? Model.unbox(entry[1], attributeType) : null;
+  return Model.entry(entityType).attributes[name] ?? derived?.type ?? null;
 }
 
-// What an enum predicate compares by, or null for an attribute of any other type - a name
-// matching no attribute definition is a reference field, which carries an entity id.
-function enumRanks(entityType, name) {
-  const entry = Model.entry(entityType);
-
-  if (entry.attributes[name] !== "enum") {
-    return null;
+// The value a rule compares against, read off the boxed entity in the spelling the rules were
+// baked in - the rules travel wire-spelled, so what they are compared with must be too. A derived
+// field is computed from its definition over the row the entity holds, the way the query kernel
+// computes it, whatever the struct carries under its name - the reference computes it too.
+function entityValue(entityType, entity, name) {
+  if (Model.derivedField(entityType, name)) {
+    return QueryKernel.derivedValue(
+      plainRow(entityType, entity),
+      entityType,
+      name,
+    );
   }
 
-  return new Map(entry.enumValues[name].map((label, index) => [label, index]));
+  return storedValue(entityType, entity, name);
+}
+
+// What an enum predicate compares by, or null for a name of any other type - an attribute's or a
+// derived field's declared values.
+function enumRanks(entityType, name) {
+  const entry = Model.entry(entityType);
+  const derived = Model.derivedField(entityType, name);
+
+  const values =
+    entry.attributes[name] === "enum"
+      ? entry.enumValues[name]
+      : derived?.type === "enum"
+        ? derived.values
+        : null;
+
+  return values && new Map(values.map((label, index) => [label, index]));
+}
+
+// A field's value off a held row as the wire spells it - a derived field computed on the row.
+function fieldValue(entityType, row, name) {
+  return Model.derivedField(entityType, name)
+    ? QueryKernel.derivedValue(row, entityType, name)
+    : (row[name] ?? null);
 }
 
 // The type an attribute is declared on and its name - the entity's own for a bare name, and for a
@@ -258,7 +284,7 @@ function nameValue(entityType, entity, name) {
 
   const end = chainRow(entityType, entity, name.slice(0, -1));
 
-  return end === null ? null : (end.row[name.at(-1)] ?? null);
+  return end === null ? null : fieldValue(end.type, end.row, name.at(-1));
 }
 
 // The actor of a visitor is nobody rather than null - null would equal a missing reference and
@@ -281,7 +307,7 @@ function predicateHolds(
     operator,
     operandValue(entityType, entity, value, actorUserId),
     enumRanks(end.type, end.name),
-    Model.entry(end.type).attributes[end.name] === "string",
+    declaredType(end.type, end.name) === "string",
   );
 }
 
@@ -298,6 +324,29 @@ function operandValue(entityType, entity, value, actorUserId) {
   }
 
   return value;
+}
+
+// The boxed entity as a held row of it reads: every attribute the client may hold and every
+// reference field, wire-spelled, with the sort key each string carries - what a derived field's
+// definition is computed over, ordering a string by its key the way the server's compare does.
+function plainRow(entityType, entity) {
+  const entry = Model.entry(entityType);
+
+  const attributes = Object.keys(entry.attributes).filter(
+    (name) => !entry.serverOnly.has(name),
+  );
+
+  const references = Object.entries(entry.relationships)
+    .filter(([_name, relationship]) => !relationship.toMany)
+    .map(([name]) => `${name}_id`);
+
+  const row = Object.fromEntries(
+    attributes
+      .concat(references)
+      .map((name) => [name, storedValue(entityType, entity, name)]),
+  );
+
+  return Model.computeSortKeys(entityType, row);
 }
 
 // A clause is a triple array, or a disjunction object holding alternatives that are clause lists
@@ -384,6 +433,16 @@ function ruleMatches(rule, entityType, entity, actorUserId) {
   }
 
   return rule.via === null || viaHolds(rule, entityType, entity, actorUserId);
+}
+
+// A stored field's value off the boxed entity, as the wire spells it - an attribute by its declared
+// type, a reference field as the uuid it holds.
+function storedValue(entityType, entity, name) {
+  const attributeType = Model.entry(entityType).attributes[name] ?? "uuid";
+  const key = Type.encodeMapKey(Type.atom(name));
+  const entry = entity.data[key];
+
+  return entry ? Model.unbox(entry[1], attributeType) : null;
 }
 
 // The acting user, as a bare id: a check takes the user entity or the id itself, and nobody at

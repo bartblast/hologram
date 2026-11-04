@@ -17,11 +17,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.Compiler.Tracer
   alias Hologram.Entity
+  alias Hologram.Entity.Derived.Validator, as: DerivedValidator
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Model
   alias Hologram.Entity.NotIncluded
   alias Hologram.Policy
+  alias Hologram.Query
   alias Hologram.Reflection
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, as: QueryExtractorModule53
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
   alias Hologram.Test.Fixtures.Component.Module13, as: ComponentModule13
   alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
@@ -30,6 +33,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
+  alias Hologram.Test.Fixtures.Entity.Module36, as: Entity36
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
@@ -95,6 +100,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     @spec __attributes__() :: list({atom, atom, keyword})
     def __attributes__, do: [{:owner_id, :string, []}]
+
+    @spec __derived__() :: list({atom, atom | module | list(module), keyword})
+    def __derived__, do: []
+
+    @spec __derived_builder_calls__() :: list(atom)
+    def __derived_builder_calls__, do: []
+
+    @spec __derived_locations__() :: %{atom => {String.t(), pos_integer}}
+    def __derived_locations__, do: %{}
 
     @spec __inverse_relationships__() :: list({atom, module | list(module), keyword})
     def __inverse_relationships__, do: []
@@ -253,6 +267,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
     after
       Enum.each(mfas, &:erlang.trace_pattern(&1, false, [:local, :call_count]))
     end
+  end
+
+  defp count_resolutions(fun) do
+    count_calls({Compiler, :resolve_derived_definitions, 2}, fun)
   end
 
   # How many times the call graph and the module info PLT are dumped while the given function runs.
@@ -499,6 +517,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     dump_path
     |> File.read!()
     |> SerializationUtils.deserialize(true)
+  end
+
+  defp load_dumped_derived(opts) do
+    dump_path = Path.join(opts[:build_dir], Reflection.queries_plt_dump_file_name())
+    plt = PLT.start()
+
+    PLT.load(plt, dump_path)
+
+    PLT.get!(plt, :derived)
   end
 
   defp load_module_info_items(opts) do
@@ -890,7 +917,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Map.keys()
       |> Enum.sort()
 
-    assert query_cache_keys == [:entries, :permission_checking?, :prop_params, :windows]
+    assert query_cache_keys == [:derived, :entries, :permission_checking?, :prop_params, :windows]
+
+    # Resolved by walking the query builder the derived field calls.
+    assert queries.derived[{Entity36, :unread_count}] ==
+             {:query,
+              %Query{
+                cardinality: :count,
+                entity: Entity33,
+                filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
+                source: {Entity36, [:channel, :messages]}
+              }}
 
     # The fixtures designate a user entity type and hold a page whose template checks permissions.
     assert queries.permission_checking?
@@ -1379,6 +1416,45 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
     end
 
+    test "an edit of a component reuses the derived definitions", %{opts: opts} do
+      run(opts)
+      derived = load_dumped_derived(opts)
+
+      fake_edit(ComponentModule21)
+
+      assert count_resolutions(fn -> run(opts) end) == 0
+      assert load_dumped_derived(opts) == derived
+    end
+
+    test "an edit of an entity type resolves the derived definitions again", %{opts: opts} do
+      run(opts)
+      fake_edit(Entity2)
+
+      assert count_resolutions(fn -> run(opts) end) == 1
+    end
+
+    test "a run resolving the derived definitions validates them", %{opts: opts} do
+      run(opts)
+      fake_edit(Entity2)
+
+      assert count_calls({DerivedValidator, :validate_model!, 2}, fn -> run(opts) end) == 1
+    end
+
+    test "an edit of a query builder a derived field calls resolves the derived definitions again",
+         %{opts: opts} do
+      run(opts)
+      fake_edit(QueryExtractorModule53)
+
+      assert count_resolutions(fn -> run(opts) end) == 1
+    end
+
+    test "an edit of a module no page reaches resolves no derived definition", %{opts: opts} do
+      run(opts)
+      fake_edit(@unreached_module)
+
+      assert count_resolutions(fn -> run(opts) end) == 0
+    end
+
     test "an edit of an entity type derives the data layer again", %{opts: opts} do
       run(opts)
       fake_edit(Entity2)
@@ -1527,6 +1603,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert %{checks_permissions?: false, components: [ComponentModule21, LayoutFixture]} =
                cache_state().data_layer.pages[PageModule8]
+    end
+
+    test "a new VM reuses the derived definitions from the compile state dump", %{opts: opts} do
+      run(opts)
+      fake_edit_in_dump(ComponentModule21, opts)
+      Cache.reset()
+      fake_recompile()
+
+      # The edited component derives the data layer, which reads the definitions kept with it.
+      resolutions =
+        count_resolutions(fn ->
+          assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
+        end)
+
+      assert resolutions == 0
     end
 
     test "a new VM reads the kept data layer from the compile state dump", %{opts: opts} do

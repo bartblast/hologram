@@ -18,6 +18,9 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.Entity
+  alias Hologram.Entity.Derived
+  alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Realtime
   alias Hologram.Reflection
   alias Hologram.Server
@@ -213,6 +216,18 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Returns the given query with the given relationship included, its sub-term narrowed by the given
+  function - a sub-term built directly, as an executor may receive one, which an include written in
+  a query never builds.
+  """
+  @spec narrowed_include(module | Query.t(), atom, (Query.t() -> Query.t())) :: Query.t()
+  def narrowed_include(query, name, narrow) do
+    term = Stage.include(query, name)
+
+    %{term | include: Map.update!(term.include, name, narrow)}
+  end
+
+  @doc """
   Determines whether a persistent term with the given key exists.
   """
   @spec persistent_term_exists?(any) :: boolean
@@ -253,6 +268,23 @@ defmodule Hologram.Test.Helpers do
         :error -> Application.delete_env(:hologram, key)
       end
     end)
+  end
+
+  @doc """
+  Resolves every derived field of the given entity types and puts the definitions where
+  Hologram.Entity.Derived.definition/2 reads them - what the Hologram compile does for an app's
+  entity types, done for test fixtures, which no Hologram compile resolves.
+  """
+  @spec put_derived_definitions(list(module)) :: :ok
+  def put_derived_definitions(entity_types) do
+    entity_types
+    |> Enum.flat_map(fn entity_type ->
+      Enum.map(entity_type.__derived__(), fn {name, _type, _opts} ->
+        {{entity_type, name}, Derived.resolve(entity_type, name)}
+      end)
+    end)
+    |> Map.new()
+    |> Derived.put_definitions()
   end
 
   @doc """

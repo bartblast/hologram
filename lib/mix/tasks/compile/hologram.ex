@@ -96,6 +96,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.QueryExtractor
   alias Hologram.Compiler.Tracer
   alias Hologram.DB.Mapper
+  alias Hologram.Entity.Derived
+  alias Hologram.Entity.Derived.Validator, as: DerivedValidator
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
   alias Hologram.Policy
@@ -368,6 +370,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       # can have moved (see data_model_changed?/2).
       data_model_changed? = data_model_changed?(module_digests_diff, new_module_info_plt)
 
+      # Whether the kept derived definitions can be out of date (see derived_stale?/3).
+      derived_stale? = derived_stale?(cache.data_layer, module_digests_diff, data_model_changed?)
+
       tracked_component_modules =
         list_tracked_component_modules(cache.data_layer, component_modules, new_module_info_plt)
 
@@ -399,6 +404,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           cache.data_layer,
           %{
             data_model_changed?: data_model_changed?,
+            derived_stale?: derived_stale?,
             kept_page_reach: kept_page_reach,
             pages_to_list: pages_to_list,
             stale_components: stale_components,
@@ -440,6 +446,7 @@ defmodule Mix.Tasks.Compile.Hologram do
           call_graph: call_graph,
           call_graph_for_runtime: call_graph_for_runtime,
           component_modules: component_modules,
+          derived_stale?: derived_stale?,
           entity_types: entity_types,
           ir_plt: ir_plt,
           kept_data_layer: cache.data_layer,
@@ -1167,7 +1174,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       |> Enum.all?(&MapSet.member?(tracked_component_set, &1))
 
     parts.pages_to_list == [] and parts.stale_components == [] and
-      not parts.data_model_changed? and
+      not parts.data_model_changed? and not parts.derived_stale? and
       map_size(parts.kept_page_reach) == map_size(kept_data_layer.pages) and
       kept_components_tracked? and data_layer_dumps_exist?(opts)
   end
@@ -1189,7 +1196,25 @@ defmodule Mix.Tasks.Compile.Hologram do
   # other component keeps the entry the last derivation left. A component's slot bindings are the
   # argument names its extraction produced, so they are validated for the components extracted
   # again, once they are.
+  #
+  # The derived definitions are put where the build reads them before anything is derived, since the
+  # windows and the registered queries read what the derived fields they name are defined as. The
+  # table is the running app's in a dev server's VM, so a derivation that raises puts the kept ones
+  # back, which the dumps it leaves in place were derived with.
   defp derive_data_layer!(context) do
+    derived = derived_definitions(context)
+    Derived.put_definitions(derived.definitions)
+
+    try do
+      derive_data_layer_with!(context, derived)
+    catch
+      kind, reason ->
+        restore_derived_definitions(context.kept_data_layer)
+        :erlang.raise(kind, reason, __STACKTRACE__)
+    end
+  end
+
+  defp derive_data_layer_with!(context, derived) do
     %{
       call_graph: call_graph,
       call_graph_for_runtime: call_graph_for_runtime,
@@ -1272,6 +1297,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       component_queries
       |> Map.take(context.component_modules)
       |> Compiler.build_queries(entity_types, permission_checking?)
+      |> Map.put(:derived, derived.definitions)
       |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
     sync_constants =
@@ -1289,6 +1315,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Cache.put_data_layer(%{
       components: component_queries,
+      derived: derived,
       pages: reach_by_page,
       sync_constants_js: sync_constants_js
     })
@@ -1576,6 +1603,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
+  defp restore_derived_definitions(%{derived: derived}),
+    do: Derived.put_definitions(derived.definitions)
+
+  defp restore_derived_definitions(_kept_data_layer), do: :ok
+
   defp runtime_modules_untouched?(runtime_mfas, reaching_modules) do
     runtime_mfas
     |> page_state_modules()
@@ -1764,6 +1796,42 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp data_model_module?(module, module_info_plt) do
     Reflection.entity?(module, module_info_plt) or Reflection.role?(module, module_info_plt) or
       Reflection.policy?(module, module_info_plt)
+  end
+
+  # The derived definitions the data layer reads: the kept ones while nothing they were resolved
+  # from moved, else resolved again.
+  defp derived_definitions(%{derived_stale?: false, kept_data_layer: %{derived: derived}}),
+    do: derived
+
+  # Resolved definitions are checked against the declarations of every type they reach, which only a
+  # resolved definition names - kept ones passed that check when they were resolved.
+  defp derived_definitions(context) do
+    derived = Compiler.resolve_derived_definitions(context.entity_types, context.ir_plt)
+
+    DerivedValidator.validate_model!(context.entity_types, derived.definitions)
+
+    derived
+  end
+
+  # Whether the kept derived definitions can be out of date: none kept, a data model change - the
+  # declarations they read and every derived field's function live in entity types - or an edit or
+  # removal of a module a walk followed calls into when they were resolved.
+  defp derived_stale?(nil, _module_digests_diff, _data_model_changed?), do: true
+
+  defp derived_stale?(_kept_data_layer, _module_digests_diff, true), do: true
+
+  defp derived_stale?(kept_data_layer, module_digests_diff, false) do
+    case kept_data_layer do
+      %{derived: %{read_modules: read_modules}} ->
+        changed_modules =
+          module_digests_diff.edited_modules ++ module_digests_diff.removed_modules
+
+        Enum.any?(read_modules, &(&1 in changed_modules))
+
+      # A data layer state from before derived fields holds none.
+      _kept_without_derived ->
+        true
+    end
   end
 
   # Whether a kept component entry can be out of date. A component the graph holds is linked to

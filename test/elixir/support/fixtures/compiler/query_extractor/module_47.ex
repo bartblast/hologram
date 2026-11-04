@@ -12,7 +12,9 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module47 do
     ~HOLO""
   end
 
-  defp entities_query(min_b) do
-    include(Entity5, a.a, &filter(&1, b >= ^min_b))
+  defp entities_query(since) do
+    Entity5
+    |> include(a.a)
+    |> filter(created_at >= ^since)
   end
 end

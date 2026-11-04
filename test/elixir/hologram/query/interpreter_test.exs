@@ -29,7 +29,15 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module31
+  alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module33
+  alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module37
+  alias Hologram.Test.Fixtures.Entity.Module38
+  alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module40
+  alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module5
 
   @entity_types [
@@ -49,7 +57,15 @@ defmodule Hologram.Query.InterpreterTest do
     Module3,
     Module30,
     Module31,
+    Module32,
+    Module33,
+    Module34,
+    Module37,
+    Module38,
+    Module39,
     Module4,
+    Module40,
+    Module41,
     Module5
   ]
 
@@ -216,8 +232,55 @@ defmodule Hologram.Query.InterpreterTest do
 
   defp names(rows), do: Enum.map(rows, & &1.username)
 
+  defp channel(name, positions) do
+    channel = created(Module32, name: name)
+
+    for position <- positions do
+      created(Module33, body: "message", channel_id: channel.id, position: position)
+    end
+
+    channel
+  end
+
+  defp derived_names(query) do
+    query
+    |> sort(name)
+    |> agreed()
+    |> Enum.map(& &1.name)
+  end
+
+  defp nicknames(query) do
+    query
+    |> sort(nickname)
+    |> agreed()
+    |> Enum.map(& &1.nickname)
+  end
+
+  defp room(name, message_count) do
+    room = created(Module37, name: name)
+
+    for _index <- 1..message_count//1, do: created(Module38, channel_id: room.id, pinned: false)
+
+    room
+  end
+
+  defp scores(query, opts \\ []) do
+    query
+    |> sort(score)
+    |> agreed(opts)
+    |> Enum.map(& &1.score)
+  end
+
+  defp team(name, note_publicity) do
+    team = created(Module40, name: name)
+
+    for public <- note_publicity, do: created(Module41, public: public, team_id: team.id)
+
+    team
+  end
+
   # What a client holds for the given actor: the rows each type's read policy admits, which is what
-  # a policied statement reads a path's hops through.
+  # a policied statement reads a path's hops through, and the pairs of the rows it holds.
   defp readable_database(actor_user_id) do
     rows =
       Map.new(@entity_types, fn entity_type ->
@@ -230,7 +293,14 @@ defmodule Hologram.Query.InterpreterTest do
         {entity_type, table}
       end)
 
-    %{facts: %{}, rows: rows}
+    facts =
+      @entity_types
+      |> Enum.reduce(%{}, &facts/2)
+      |> Map.filter(fn {{entity_type, _relationship, source_id}, _target_ids} ->
+        Map.has_key?(rows[entity_type], source_id)
+      end)
+
+    %{facts: facts, rows: rows}
   end
 
   defp titles(rows), do: Enum.map(rows, & &1.c)
@@ -1007,6 +1077,81 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
+  describe "run/3 - quantifiers through sets" do
+    # general's two messages both carry urgent, so its sources reach urgent twice - quiet's one
+    # message carries later, and empty has no message for a source to go through.
+    setup do
+      general = created(Module26, name: "general")
+      quiet = created(Module26, name: "quiet")
+      created(Module26, name: "empty")
+
+      urgent = created(Module29, name: "urgent")
+      later = created(Module29, name: "later")
+
+      for {channel, body, labels} <- [
+            {general, "first", [urgent, later]},
+            {general, "second", [urgent]},
+            {quiet, "third", [later]}
+          ] do
+        message = message(channel, body, 1)
+
+        for label <- labels, do: :ok = add_relationship(Module28, message.id, :labels, label.id)
+      end
+
+      :ok
+    end
+
+    test "answers any, none and all over the rows every path reaches" do
+      any_query = filter(Module26, any(label <- messages.labels, label.name == "urgent"))
+      none_query = filter(Module26, none(label <- messages.labels, label.name == "urgent"))
+      all_query = filter(Module26, all(label <- messages.labels, label.name == "later"))
+
+      assert channel_names(agreed(any_query)) == ["general"]
+      assert channel_names(agreed(none_query)) == ["empty", "quiet"]
+      assert channel_names(agreed(all_query)) == ["empty", "quiet"]
+    end
+
+    test "reads a source through an inverse holding one row, and none through a missing to-one" do
+      general =
+        Module26
+        |> agreed()
+        |> Enum.find(&(&1.name == "general"))
+
+      created(Module27, channel_id: general.id, summary: "welcome")
+      message(nil, "orphan", 2)
+
+      topic_query =
+        filter(Module26, any(message <- topic.channel.messages, message.body == "first"))
+
+      orphan_bodies =
+        Module28
+        |> filter(any(sibling <- channel.messages, sibling.body == "orphan"))
+        |> agreed()
+
+      assert channel_names(agreed(topic_query)) == ["general"]
+      assert orphan_bodies == []
+    end
+
+    test "binds a placeholder inside a condition through a set" do
+      query =
+        filter(Module26, any(label <- messages.labels, label.name == ^%Placeholder{name: :name}))
+
+      assert channel_names(agreed(query, bindings: %{name: "later"})) == ["general", "quiet"]
+    end
+
+    test "matches a label through the messages it shares with another label" do
+      query = filter(Module29, any(other <- messages.labels, other.name == "later"))
+
+      names =
+        query
+        |> agreed()
+        |> Enum.map(& &1.name)
+        |> Enum.sort()
+
+      assert names == ["later", "urgent"]
+    end
+  end
+
   describe "run/3 - quantifiers over other kinds of rows" do
     test "answers over a self-referencing inverse, comparing a reply with its parent" do
       parent = created(Module30, body: "echo")
@@ -1524,6 +1669,466 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
+  describe "run/3 - derived fields" do
+    setup do
+      put_derived_definitions([Module32, Module34, Module39])
+
+      general = created(Module32, name: "general")
+      ann = created(Module34, channel_id: general.id, nickname: "ann", score: 1)
+      bob = created(Module34, nickname: "bob", score: 5)
+      created(Module34, channel_id: general.id, nickname: "general", score: 0)
+
+      bronze = created(Module39, kind: :guest, score: 1)
+      silver = created(Module39, kind: :guest, member_id: ann.id, score: 7)
+      created(Module39, kind: :staff, member_id: bob.id, score: 12)
+
+      :ok = add_relationship(Module39, bronze.id, :mentors, bob.id)
+      :ok = add_relationship(Module39, silver.id, :mentors, ann.id)
+      :ok = add_relationship(Module39, silver.id, :mentors, bob.id)
+
+      :ok
+    end
+
+    test "computes a literal, an attribute and an enum attribute's label" do
+      assert nicknames(filter(Module34, top_score == 10)) == ["ann", "bob", "general"]
+      assert scores(filter(Module39, ratio > 6.5)) == [7, 12]
+      assert scores(filter(Module39, kind_label == :staff)) == [12]
+    end
+
+    test "joins strings with <>, missing when an operand is" do
+      assert nicknames(filter(Module34, display_name != "ann (general)")) == ["bob", "general"]
+      assert nicknames(filter(Module34, display_name == nil)) == ["bob"]
+    end
+
+    test "takes an if's else branch when its condition does not hold" do
+      assert nicknames(filter(Module34, badge == nil)) == ["ann", "general"]
+      assert nicknames(filter(Module34, badge == "top")) == ["bob"]
+    end
+
+    test "answers a condition field false where its condition does not hold" do
+      assert nicknames(filter(Module34, active == true)) == ["ann"]
+      assert nicknames(filter(Module34, named_after_channel == false)) == ["ann", "bob"]
+    end
+
+    test "places a missing derived value last ascending and first descending" do
+      ascending =
+        Module34
+        |> sort(channel_load: :asc)
+        |> agreed()
+        |> Enum.map(& &1.nickname)
+
+      descending =
+        Module34
+        |> sort(channel_load: :desc)
+        |> agreed()
+        |> Enum.map(& &1.nickname)
+
+      assert List.last(ascending) == "bob"
+      assert List.first(descending) == "bob"
+    end
+
+    test "reads a count through a missing to-one of a path as missing, not 0" do
+      assert nicknames(filter(Module34, channel_load == 0)) == ["ann", "general"]
+      assert nicknames(filter(Module34, channel_load != 4)) == ["ann", "bob", "general"]
+    end
+
+    test "refuses a placeholder binding a label a derived enum does not declare" do
+      term =
+        Module39
+        |> filter(tier == ^%Placeholder{name: :tier})
+        |> Stage.normalize()
+
+      expected_msg =
+        "invalid value :platinum for placeholder :tier - expected one of [:gold, :silver, :bronze]"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        QueryRunner.run(term, @mapping, %{tier: :platinum})
+      end
+
+      assert_error ArgumentError, expected_msg, fn ->
+        run(term, database(), bindings: %{tier: :platinum})
+      end
+    end
+
+    test "computes a derived field another definition reads" do
+      assert scores(filter(Module39, gold == true)) == [12]
+    end
+
+    test "computes a derived field a path ends at on the row the path reaches" do
+      assert scores(filter(Module39, member.display_name == "ann (general)")) == [7]
+    end
+
+    test "compares and sorts a derived enum by its declared order" do
+      sorted_scores =
+        Module39
+        |> sort(tier: :asc)
+        |> agreed()
+        |> Enum.map(& &1.score)
+
+      assert scores(filter(Module39, tier < :bronze)) == [7, 12]
+      assert sorted_scores == [12, 7, 1]
+    end
+
+    test "keeps nil's meaning in a membership on a derived value" do
+      assert nicknames(filter(Module34, badge in ["top", nil])) == ["ann", "bob", "general"]
+      assert nicknames(filter(Module34, badge not in ["top", nil])) == []
+    end
+
+    test "binds a placeholder on a derived enum" do
+      query = filter(Module39, tier in [^%Placeholder{name: :tier}, :gold])
+
+      assert scores(query, bindings: %{tier: :silver}) == [7, 12]
+    end
+
+    test "compares a derived value with an attribute of the row" do
+      assert scores(filter(Module39, ratio > score)) == []
+      assert scores(filter(Module39, kind_label <= kind)) == [1, 7, 12]
+      assert scores(filter(Module39, kind == kind_label)) == [1, 7, 12]
+    end
+
+    test "computes derived fields inside a quantifier's condition" do
+      assert scores(filter(Module39, any(mentor <- mentors, mentor.active == true))) == [7]
+      assert scores(filter(Module39, any(mentor <- mentors, mentor.score > ratio))) == [1]
+    end
+
+    test "sorts a to-many include by a derived field" do
+      [silver] =
+        Module39
+        |> filter(score == 7)
+        |> narrowed_include(:mentors, fn related_query -> sort(related_query, active: :asc) end)
+        |> agreed()
+
+      assert Enum.map(silver.mentors, & &1.nickname) == ["bob", "ann"]
+    end
+  end
+
+  describe "run/3 - derived counts and sets" do
+    setup do
+      put_derived_definitions([Module32, Module33, Module34, Module37, Module38, Module40])
+    end
+
+    test "filters and sorts by a count" do
+      channel("busy", [1, 2, 3])
+      channel("quiet", [1])
+      channel("empty", [])
+
+      names =
+        Module32
+        |> filter(message_count > 0)
+        |> sort(message_count: :desc)
+        |> agreed()
+        |> Enum.map(& &1.name)
+
+      assert names == ["busy", "quiet"]
+    end
+
+    test "counts the rows a clause reading the owner row matches, none through a missing to-one" do
+      channel("general", [1, 2, 3])
+      created(Module33, body: "orphan", position: 5)
+
+      later_positions = fn count ->
+        Module33
+        |> filter(later_count == ^count)
+        |> sort(position)
+        |> agreed()
+        |> Enum.map(& &1.position)
+      end
+
+      assert later_positions.(1) == [2]
+      assert later_positions.(0) == [3, 5]
+    end
+
+    test "counts a row several paths reach once" do
+      general = channel("general", [1, 2])
+      team = team("team", [])
+
+      for nickname <- ["ann", "gina"] do
+        mentor = created(Module34, channel_id: general.id, nickname: nickname, score: 1)
+
+        :ok = add_relationship(Module40, team.id, :mentors, mentor.id)
+      end
+
+      assert derived_names(filter(Module40, mentor_message_count == 2)) == ["team"]
+    end
+
+    test "caps a count by its bounds" do
+      team("full", [true, true, true])
+      team("sparse", [true])
+
+      assert derived_names(filter(Module40, capped_note_count == 2)) == ["full"]
+    end
+
+    test "reads a derived set's bounded rows in a quantifier" do
+      channel("short", [1, 2])
+      long = channel("long", [1, 2, 3])
+
+      channel_ids =
+        Module33
+        |> filter(any(message <- channel.recent_messages, message.position == 3))
+        |> agreed()
+        |> Enum.map(& &1.channel_id)
+
+      assert derived_names(
+               filter(Module32, any(message <- recent_messages, message.position == 1))
+             ) ==
+               ["short"]
+
+      assert channel_ids == [long.id, long.id, long.id]
+    end
+
+    test "counts the rows of a derived set the branch of an if chooses" do
+      room("general", 3)
+      room("random", 2)
+
+      assert derived_names(filter(Module37, picked_count == 1)) == ["general"]
+      assert derived_names(filter(Module37, picked_count == 2)) == ["random"]
+    end
+
+    test "reads a derived set at the end of a source through a set" do
+      room("general", 2)
+      room("empty", 0)
+
+      assert derived_names(filter(Module37, none(messages.channel.recent_messages))) == ["empty"]
+    end
+
+    test "holds no rows for a nil definition" do
+      room("general", 1)
+
+      assert derived_names(filter(Module37, any(nothing))) == []
+
+      assert derived_names(filter(Module37, all(message <- nothing, message.pinned == true))) ==
+               ["general"]
+
+      assert derived_names(filter(Module37, none(nothing))) == ["general"]
+    end
+
+    test "answers all and none over a derived set's bounded rows" do
+      channel("short", [1, 2])
+      channel("long", [1, 2, 3])
+
+      assert derived_names(
+               filter(Module32, all(message <- recent_messages, message.position > 1))
+             ) ==
+               ["long"]
+
+      assert derived_names(
+               filter(Module32, none(message <- recent_messages, message.position == 1))
+             ) ==
+               ["long"]
+    end
+
+    test "reads no rows through a missing to-one inside a flattened source" do
+      general = channel("general", [1, 2])
+      team = team("team", [])
+
+      for channel_id <- [general.id, nil] do
+        mentor = created(Module34, channel_id: channel_id, nickname: "mentor", score: 1)
+
+        :ok = add_relationship(Module40, team.id, :mentors, mentor.id)
+      end
+
+      assert derived_names(filter(Module40, mentor_message_count == 2)) == ["team"]
+    end
+
+    test "reads the owner row from a quantifier inside a definition" do
+      team = team("red", [true, true])
+      team("blue", [true])
+
+      notes =
+        Module41
+        |> filter(team_id == ^team.id)
+        |> Stage.normalize()
+        |> QueryRunner.run(@mapping)
+
+      for {note, tag_name} <- Enum.zip(notes, ["red", "blue"]) do
+        tag = created(Module2, c: tag_name)
+
+        :ok = add_relationship(Module41, note.id, :tags, tag.id)
+      end
+
+      assert derived_names(filter(Module40, named_tag_count == 1)) == ["red"]
+    end
+
+    # A row the session may not read is not in what it holds, so it is neither counted nor a link a
+    # count's source passes through, on either tier.
+    test "leaves a row the session may not read out of a count" do
+      team = team("team", [true, false])
+
+      notes =
+        Module41
+        |> Stage.normalize()
+        |> QueryRunner.run(@mapping)
+
+      for note <- notes do
+        tag = created(Module2, c: "tag")
+
+        :ok = add_relationship(Module41, note.id, :tags, tag.id)
+      end
+
+      note_count =
+        Module40
+        |> filter(note_count == 1)
+        |> Stage.normalize()
+
+      note_tag_count =
+        Module40
+        |> filter(note_tag_count == 1)
+        |> Stage.normalize()
+
+      for term <- [note_count, note_tag_count] do
+        policied_rows = QueryRunner.run_policied(term, @mapping, nil)
+
+        assert run(term, readable_database(nil)) == policied_rows
+        assert Enum.map(policied_rows, & &1.id) == [team.id]
+      end
+    end
+  end
+
+  describe "run/3 - derived includes" do
+    setup do
+      put_derived_definitions([
+        Module32,
+        Module33,
+        Module34,
+        Module37,
+        Module38,
+        Module39,
+        Module40
+      ])
+    end
+
+    test "includes a derived value read by its declared type" do
+      channel("general", [1, 2, 3])
+      created(Module39, kind: :guest, score: 7)
+
+      [general] = agreed(include(Module32, message_count))
+      [entity] = agreed(include(Module39, [ratio, tier]))
+
+      assert general.message_count == 3
+      assert entity.ratio === 7.0
+      assert entity.tier == :silver
+    end
+
+    test "includes a derived set's rows in its order, its bounds applied" do
+      channel("general", [1, 2, 3])
+
+      [general] = agreed(include(Module32, recent_messages))
+
+      assert Enum.map(general.recent_messages, & &1.position) == [3, 2]
+    end
+
+    test "includes a derived row, or nil where there is none" do
+      channel("busy", [2, 1])
+      channel("empty", [])
+
+      first_messages =
+        Module32
+        |> include(first_message)
+        |> sort(name)
+        |> agreed()
+        |> Enum.map(& &1.first_message)
+
+      assert [%Module33{position: 1}, nil] = first_messages
+    end
+
+    test "includes the row a skip leaves first, and nil for a field holding none" do
+      team("team", [true, true, true])
+
+      [second_id] =
+        Module41
+        |> sort(id)
+        |> skip(1)
+        |> take(1)
+        |> agreed()
+        |> Enum.map(& &1.id)
+
+      [team] = agreed(include(Module40, [no_note, second_note]))
+
+      assert team.second_note.id == second_id
+      assert team.no_note == nil
+    end
+
+    test "includes a related row under a derived set's rows" do
+      room = created(Module37, name: "general")
+      author = created(Module1, %{})
+      created(Module38, author_id: author.id, channel_id: room.id, pinned: false)
+
+      [general] = agreed(include(Module37, recent_messages.author))
+      [message] = general.recent_messages
+
+      assert message.author.id == author.id
+    end
+
+    test "includes what a derived set's definition includes" do
+      room = created(Module37, name: "general")
+      author = created(Module1, %{})
+      created(Module38, author_id: author.id, channel_id: room.id, pinned: false)
+
+      [general] = agreed(include(Module37, authored_messages))
+      [message] = general.authored_messages
+
+      assert message.author.id == author.id
+      assert message.channel == %NotIncluded{relationship: :channel}
+    end
+
+    test "includes the rows of the branch an if chooses, and none for nil" do
+      room("general", 3)
+      room("random", 2)
+
+      rooms =
+        Module37
+        |> include([nothing, picked])
+        |> sort(name)
+        |> agreed()
+
+      assert Enum.map(rooms, &length(&1.picked)) == [1, 2]
+      assert Enum.map(rooms, & &1.nothing) == [[], []]
+    end
+
+    test "includes a derived value under a related row" do
+      channel("general", [1, 2, 3])
+      team = team("team", [])
+      player = created(Module39, kind: :guest, score: 7)
+
+      :ok = add_relationship(Module40, team.id, :players, player.id)
+
+      [general] = agreed(include(Module32, [messages.later_count, messages.tier]))
+      [included_team] = agreed(include(Module40, players.ratio))
+
+      assert Enum.map(general.messages, &{&1.later_count, &1.tier}) == [
+               {2, :low},
+               {1, :low},
+               {0, :low}
+             ]
+
+      assert [%Module39{ratio: 7.0}] = included_team.players
+    end
+
+    test "includes a derived value under a derived set's rows" do
+      channel("general", [1, 2, 3])
+
+      [general] = agreed(include(Module32, recent_messages.later_count))
+
+      assert Enum.map(general.recent_messages, &{&1.position, &1.later_count}) == [{3, 0}, {2, 1}]
+    end
+
+    # A row the session may not read is not in what it holds, so it is not among a derived set's
+    # rows on either tier.
+    test "leaves a row the session may not read out of an included derived set" do
+      team("tagged", [true, false])
+
+      term =
+        Module40
+        |> include(picked_notes)
+        |> Stage.normalize()
+
+      policied_rows = QueryRunner.run_policied(term, @mapping, nil)
+
+      assert run(term, readable_database(nil)) == policied_rows
+      assert [%{picked_notes: [%Module41{public: true, tags: []}]}] = policied_rows
+    end
+  end
+
   describe "run/3 - includes" do
     setup do
       {:ok, required} = create(Module1.new())
@@ -1608,7 +2213,7 @@ defmodule Hologram.Query.InterpreterTest do
       :ok = add_relationship(Module3, source.id, :a, kept.id)
       :ok = add_relationship(Module3, source.id, :a, dropped.id)
 
-      query = include(Module3, a, &filter(&1, c: "kept"))
+      query = narrowed_include(Module3, :a, &filter(&1, c: "kept"))
 
       assert [row] = agreed(query)
       assert titles(row.a) == ["kept"]
@@ -1623,7 +2228,7 @@ defmodule Hologram.Query.InterpreterTest do
       :ok = add_relationship(Module3, source.id, :a, banana.id)
       :ok = add_relationship(Module3, source.id, :a, cherry.id)
 
-      query = include(Module3, a, &filter(&1, c == "apple" or c == "cherry"))
+      query = narrowed_include(Module3, :a, &filter(&1, c == "apple" or c == "cherry"))
 
       assert [row] = agreed(query)
       assert matched_titles(row.a) == ["apple", "cherry"]
@@ -1637,7 +2242,7 @@ defmodule Hologram.Query.InterpreterTest do
       end)
 
       query =
-        include(Module3, a, fn related ->
+        narrowed_include(Module3, :a, fn related ->
           related
           |> sort(c)
           |> take(2)
@@ -1653,7 +2258,7 @@ defmodule Hologram.Query.InterpreterTest do
         |> Module5.new()
         |> create()
 
-      query = include(Module5, a, &include(&1, c))
+      query = include(Module5, a.c)
 
       assert [row] = agreed(query)
       assert row.a.c.id == required.id
@@ -1729,7 +2334,7 @@ defmodule Hologram.Query.InterpreterTest do
       query =
         Module26
         |> filter(name == "general")
-        |> include(messages, fn messages ->
+        |> narrowed_include(:messages, fn messages ->
           messages
           |> filter(position > 1)
           |> sort(position: :desc)

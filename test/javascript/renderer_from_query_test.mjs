@@ -32,7 +32,7 @@ describe("Renderer from_query props", () => {
   const slots = Type.keywordList();
 
   const filter = ManuallyPortedElixirHologramQueryStage["filter/2"];
-  const include = ManuallyPortedElixirHologramQueryStage["include/3"];
+  const include = ManuallyPortedElixirHologramQueryStage["include/2"];
   const one = ManuallyPortedElixirHologramQueryStage["one/1"];
   const sort = ManuallyPortedElixirHologramQueryStage["sort/2"];
 
@@ -468,7 +468,7 @@ describe("Renderer from_query props", () => {
     LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1", "t3"]);
 
     const capture = builder(0, () =>
-      include(Type.alias(PROJECT), Type.atom("tasks"), Type.nil()),
+      include(Type.alias(PROJECT), Type.atom("tasks")),
     );
 
     defineComponent("MyApp.Including", [queryProp("projects", capture)]);

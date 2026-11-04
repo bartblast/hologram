@@ -6,7 +6,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
   alias Hologram.DB.SortKey
-  alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
   alias Hologram.Policy
@@ -22,8 +22,11 @@ defmodule Hologram.DB.QueryRunner do
   references under their `<name>_id` fields). Each included relationship fills its
   embed field - a nested entity struct or nil for a to-one include, a list of entity
   structs for a to-many include - and relationships the query did not include keep
-  their NotIncluded defaults. Param values are given in the bindings map and encoded
-  with the slot's logical type.
+  their NotIncluded defaults. An included derived field holds its value, read by its
+  declared type, or the rows its definition holds - a list, or one struct or nil - each
+  embedding what the definition and the include ask for. One not included keeps its
+  NotIncluded default. Param values are given in the bindings map and encoded with the
+  slot's logical type.
 
   Bindings are validated before execution: a binding for a placeholder the query does not
   define raises, and each given value must match the logical type of the attribute
@@ -69,18 +72,22 @@ defmodule Hologram.DB.QueryRunner do
   end
 
   # A path binds as the attribute it ends at, on the type its relationships lead to.
+  # The relationships can run through a set a derived field holds - inside a quantifier over one.
   defp attribute_definition(entity_type, path) when is_list(path) do
     {relationship_names, [attribute_name]} = Enum.split(path, -1)
 
     entity_type
-    |> Entity.path_target(relationship_names)
+    |> Derived.path_target(relationship_names)
     |> attribute_definition(attribute_name)
   end
 
   # A name matching no attribute definition is a to-one reference field - every reference
-  # column carries the entity id type, and a bound value is never nil (nil placeholders raise).
+  # column carries the entity id type, and a bound value is never nil (nil placeholders raise). A
+  # derived field holding a value binds as the type it declares.
   defp attribute_definition(entity_type, attribute_name) do
-    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+    definitions =
+      entity_type.__attributes__() ++
+        entity_type.__system_attributes__() ++ entity_type.__derived__()
 
     case Enum.find(definitions, fn {name, _type, _opts} -> name == attribute_name end) do
       {_name, type, opts} -> {type, opts}
@@ -137,8 +144,10 @@ defmodule Hologram.DB.QueryRunner do
           inner_acc
       end)
 
+    # A derived field holding a value is included with nothing under it.
     term.include
     |> Map.values()
+    |> Enum.reject(&is_nil/1)
     |> Enum.reduce(acc_with_filters, fn sub_term, inner_acc ->
       collect_param_definitions(sub_term, inner_acc)
     end)
@@ -168,9 +177,18 @@ defmodule Hologram.DB.QueryRunner do
 
     nested_fields =
       Map.new(sub_term.include, fn {name, nested_sub_term} ->
-        nested_value = Map.fetch!(object, Atom.to_string(name))
+        nested_value =
+          object
+          |> Map.fetch!(Atom.to_string(name))
+          |> decode_included(
+            sub_term.entity,
+            name,
+            nested_sub_term,
+            mapping,
+            &decode_embedded_value/2
+          )
 
-        {name, decode_embed(nested_value, nested_sub_term, mapping)}
+        {name, nested_value}
       end)
 
     revisions_column = Enum.find(target_mapping.columns, &(&1.source == :revisions))
@@ -206,6 +224,10 @@ defmodule Hologram.DB.QueryRunner do
 
   defp decode_embedded_value(value, :enum), do: Codec.decode_enum_label(value)
 
+  # JSON writes a whole float as a whole number, so 7.0 arrives as 7 - read back as the float the
+  # column holds.
+  defp decode_embedded_value(value, :float) when is_integer(value), do: value * 1.0
+
   # Same story as :datetime one type over - JSON drops a fraction's trailing zeros, so a time
   # arriving this way is spelled shorter than the same time read from its own column, which is
   # always six digits. Promoted here so that one time of day is one struct however it was read.
@@ -216,6 +238,21 @@ defmodule Hologram.DB.QueryRunner do
   end
 
   defp decode_embedded_value(value, _type), do: value
+
+  # What an include holds: the related rows it embeds, a derived field's value read by its declared
+  # type with the given decoder, or the rows a derived field holding rows embeds, each read with
+  # what its definition and the include embed.
+  defp decode_included(value, entity_type, name, nil, _mapping, decode_value) do
+    {^name, type, _opts} = List.keyfind(entity_type.__derived__(), name, 0)
+
+    decode_value.(value, type)
+  end
+
+  defp decode_included(value, entity_type, name, sub_term, mapping, _decode_value) do
+    rows_term = Derived.rows_term(entity_type, name, sub_term)
+
+    decode_embed(value, rows_term, mapping)
+  end
 
   defp decode_result(%{rows: [[count]]}, %{cardinality: :count}, _mapping), do: count
 
@@ -252,7 +289,7 @@ defmodule Hologram.DB.QueryRunner do
       |> Enum.sort_by(fn {name, _sub_term} -> name end)
       |> Enum.zip(include_values)
       |> Map.new(fn {{name, sub_term}, value} ->
-        {name, decode_embed(value, sub_term, mapping)}
+        {name, decode_included(value, term.entity, name, sub_term, mapping, &Codec.decode/2)}
       end)
 
     revisions =

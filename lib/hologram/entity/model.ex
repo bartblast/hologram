@@ -14,6 +14,10 @@ defmodule Hologram.Entity.Model do
   # real default, not a flag).
   @flag_opts [:optional, :server_only, :unique]
 
+  # A to-many's order shapes its reads and nothing stored, so it stays on the declaration and out
+  # of the model: declaring or changing one needs no migration and no new hash.
+  @read_opts [:sort]
+
   # One-time transition values ride the migration op, never the model: a backfill is
   # what existing rows receive as the column arrives, not something the entity declares.
   @transition_opts [:backfill]
@@ -59,6 +63,8 @@ defmodule Hologram.Entity.Model do
   designated) - a declared fact like any other, carried in the term so a replayed history
   states the designation as it stood at that point rather than as the current modules
   spell it.
+
+  A to-many's sort option is left out - it orders reads and changes nothing stored.
 
   The role grant store is left out - it is derived from the rest of the model rather than
   declared (its enum values are the entity table names and role names), so it is computed
@@ -616,7 +622,8 @@ defmodule Hologram.Entity.Model do
     opts
     |> Enum.map(fn {key, value} -> {key, normalize_value(key, value)} end)
     |> Enum.reject(fn {key, value} ->
-      key in @transition_opts or is_nil(value) or (value == false and key in @flag_opts)
+      key in @read_opts or key in @transition_opts or is_nil(value) or
+        (value == false and key in @flag_opts)
     end)
     |> Enum.sort()
   end

@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   contextFixture,
   defineRuntimeGlobals,
+  narrowedInclude,
 } from "../../../support/helpers.mjs";
 
 import Elixir_Hologram_Query_Stage from "../../../../../assets/js/elixir/hologram/query/stage.mjs";
@@ -18,6 +19,7 @@ defineRuntimeGlobals();
 // and with the same raise messages. What differs is the term: these stages build the plain term
 // the client's kernel evaluates, where the Elixir ones build a boxed map keyed by atoms.
 describe("Elixir_Hologram_Query_Stage", () => {
+  const BINDER = "MyApp.Binder";
   const BOARD = "MyApp.Board";
   const BOOKING = "MyApp.Booking";
   const CHANNEL = "MyApp.Channel";
@@ -26,14 +28,18 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const MESSAGE = "MyApp.Message";
   const TOPIC = "MyApp.Topic";
   const GADGET = "MyApp.Gadget";
+  const POST = "MyApp.Post";
   const PROJECT = "MyApp.Project";
+  const ROOM = "MyApp.Room";
   const SHELF = "MyApp.Shelf";
   const TASK = "MyApp.Task";
   const USER = "MyApp.User";
   const VAULT = "MyApp.Vault";
 
   const booking = Type.alias(BOOKING);
+  const post = Type.alias(POST);
   const project = Type.alias(PROJECT);
+  const room = Type.alias(ROOM);
   const task = Type.alias(TASK);
   const user = Type.alias(USER);
 
@@ -45,7 +51,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const decrement = Elixir_Hologram_Query_Stage["decrement/3"];
   const increment = Elixir_Hologram_Query_Stage["increment/3"];
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
-  const include = Elixir_Hologram_Query_Stage["include/3"];
+  const include = Elixir_Hologram_Query_Stage["include/2"];
   const normalize = Elixir_Hologram_Query_Stage["normalize/1"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
   const skip = Elixir_Hologram_Query_Stage["skip/2"];
@@ -88,9 +94,8 @@ describe("Elixir_Hologram_Query_Stage", () => {
       pairs.map(([name, value]) => Type.tuple([Type.atom(name), value])),
     );
 
-  // A builder's sub-builder is an ordinary Elixir function, so it arrives boxed - what the port
-  // calls through the interpreter is what these build.
-  const subBuilder = (build) =>
+  // A function in a pinned include spec is an ordinary Elixir function, so it arrives boxed.
+  const boxedFunction = (build) =>
     Type.anonymousFunction(
       1,
       [
@@ -160,6 +165,16 @@ describe("Elixir_Hologram_Query_Stage", () => {
           relationships: {owner: {toMany: false, type: USER}},
           serverOnly: [],
         },
+        // A stored to-many declaring its order, the twin of the Elixir suite's
+        // DeclaredStoredOrderFixture.
+        [BINDER]: {
+          attributes: {id: "uuid"},
+          enumValues: {},
+          relationships: {
+            labels: {sort: [["name", "desc"]], toMany: true, type: LABEL},
+          },
+          serverOnly: [],
+        },
         // An inverse set declaring a list order, a direction in it.
         [BOARD]: {
           attributes: {id: "uuid"},
@@ -216,6 +231,86 @@ describe("Elixir_Hologram_Query_Stage", () => {
           attributes: {body: "string", id: "uuid", position: "integer"},
           enumValues: {},
           relationships: {channel: {toMany: false, type: CHANNEL}},
+          serverOnly: [],
+        },
+        // A channel with a derived field of each kind, and its messages with derived values - the
+        // twins of the Elixir suite's Module32 and Module33. A definition is what the kernel
+        // evaluates, so the stages read none.
+        [ROOM]: {
+          attributes: {
+            created_at: "datetime",
+            id: "uuid",
+            name: "string",
+            updated_at: "datetime",
+          },
+          derived: {
+            first_message: {
+              definition: {value: null},
+              entity: POST,
+              kind: "one",
+            },
+            first_messages: {
+              definition: {value: null},
+              entity: POST,
+              kind: "set",
+            },
+            message_count: {
+              definition: {value: 0},
+              kind: "scalar",
+              type: "integer",
+              values: null,
+            },
+            recent_messages: {
+              definition: {value: null},
+              entity: POST,
+              kind: "set",
+            },
+          },
+          enumValues: {},
+          inverses: {
+            messages: {
+              forward: "channel",
+              reference: true,
+              sort: [["position", "asc"]],
+              toMany: true,
+              type: POST,
+            },
+          },
+          relationships: {},
+          serverOnly: [],
+        },
+        [POST]: {
+          attributes: {
+            body: "string",
+            created_at: "datetime",
+            id: "uuid",
+            position: "integer",
+            updated_at: "datetime",
+          },
+          derived: {
+            channel_name: {
+              definition: {value: null},
+              kind: "scalar",
+              type: "string",
+              values: null,
+            },
+            later_count: {
+              definition: {value: 0},
+              kind: "scalar",
+              type: "integer",
+              values: null,
+            },
+            tier: {
+              definition: {value: "low"},
+              kind: "scalar",
+              type: "enum",
+              values: ["low", "high"],
+            },
+          },
+          enumValues: {},
+          relationships: {
+            channel: {optional: true, toMany: false, type: ROOM},
+          },
           serverOnly: [],
         },
         // The single inverse's side, so including CHANNEL's topic has a type to build a term for.
@@ -513,6 +608,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "add_relationship takes a target id string, got: 123",
       );
     });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          addRelationship(
+            entity(ROOM),
+            Type.atom("recent_messages"),
+            Type.bitstring("t2"),
+          ),
+        HologramBoxedError,
+        ":recent_messages is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
+      );
+    });
   });
 
   describe("delete_relationship/3", () => {
@@ -597,6 +705,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
           ),
         HologramBoxedError,
         "delete_relationship takes a target id string, got: 123",
+      );
+    });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          deleteRelationship(
+            entity(ROOM),
+            Type.atom("recent_messages"),
+            Type.bitstring("t2"),
+          ),
+        HologramBoxedError,
+        ":recent_messages is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
   });
@@ -809,6 +930,15 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ":count in MyApp.Item carries a put value that is not an integer (nil) - increment cannot move it",
       );
     });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          increment(entity(ROOM), Type.atom("message_count"), Type.integer(1)),
+        HologramBoxedError,
+        ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
+      );
+    });
   });
 
   describe("decrement/3", () => {
@@ -873,6 +1003,15 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => decrement(item(), Type.atom("bio"), Type.integer(1)),
         HologramBoxedError,
         ":bio is a :string attribute of MyApp.Item - decrement moves integer attributes only",
+      );
+    });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          decrement(entity(ROOM), Type.atom("message_count"), Type.integer(1)),
+        HologramBoxedError,
+        ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
   });
@@ -1090,6 +1229,20 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "put_attribute takes a keyword list or a map of attribute values, got: [1, 2]",
       );
     });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          putAttribute(
+            entity(ROOM),
+            Type.list([
+              Type.tuple([Type.atom("message_count"), Type.integer(3)]),
+            ]),
+          ),
+        HologramBoxedError,
+        ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
+      );
+    });
   });
 
   describe("put_attribute/3", () => {
@@ -1119,6 +1272,19 @@ describe("Elixir_Hologram_Query_Stage", () => {
           putAttributeValue(entity(TASK), Type.atom("nope"), Type.integer(1)),
         HologramBoxedError,
         "unknown attribute :nope in MyApp.Task - known attributes: :done, :due_on, :position, :starts_at, :status, :title",
+      );
+    });
+
+    it("raises on a derived field", () => {
+      assert.throw(
+        () =>
+          putAttributeValue(
+            entity(ROOM),
+            Type.atom("message_count"),
+            Type.integer(3),
+          ),
+        HologramBoxedError,
+        ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
   });
@@ -2226,6 +2392,265 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
+  describe("filter/2 - derived fields", () => {
+    const atoms = (...names) => Type.list(names.map(Type.atom));
+
+    const nameTerm = (name) =>
+      Array.isArray(name) ? atoms(...name) : Type.atom(name);
+
+    const outer = (levels, name) =>
+      Type.tuple([Type.atom("outer"), Type.integer(levels), nameTerm(name)]);
+
+    const pairs = (entries) =>
+      Type.list(
+        entries.map(([name, value]) =>
+          Type.tuple([
+            typeof name === "string" || Array.isArray(name)
+              ? nameTerm(name)
+              : name,
+            value,
+          ]),
+        ),
+      );
+
+    const quantified = (kind, source, entries) =>
+      Type.list([
+        Type.tuple([Type.atom(kind), Type.tuple([source, pairs(entries)])]),
+      ]);
+
+    const attribute = (name) =>
+      Type.tuple([
+        Type.atom("attribute"),
+        typeof name === "string" || Array.isArray(name) ? nameTerm(name) : name,
+      ]);
+
+    const op = (operator, value) => Type.tuple([Type.atom(operator), value]);
+
+    it("compares a derived value", () => {
+      const query = filter(
+        room,
+        pairs([["message_count", op(">", Type.integer(3))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["message_count", ">", 3]]);
+    });
+
+    it("compares an attribute with a derived value", () => {
+      const query = filter(
+        post,
+        pairs([["position", op("<", attribute("later_count"))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        ["position", "<", {attribute: "later_count"}],
+      ]);
+    });
+
+    it("compares a derived value at the end of a path", () => {
+      const query = filter(
+        post,
+        pairs([[["channel", "message_count"], op(">", Type.integer(3))]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        [["channel", "message_count"], ">", 3],
+      ]);
+    });
+
+    it("compares a derived enum by its declared values", () => {
+      const query = filter(post, pairs([["tier", op(">", Type.atom("low"))]]));
+
+      assert.deepStrictEqual(query.filter, [["tier", ">", "low"]]);
+    });
+
+    it("raises on a value a derived enum does not declare", () => {
+      assert.throw(
+        () => filter(post, pairs([["tier", op(">", Type.atom("mid"))]])),
+        HologramBoxedError,
+        ":mid is not a value of attribute :tier in MyApp.Post - the values are [:low, :high]",
+      );
+    });
+
+    it("compares a derived string for equality", () => {
+      const query = filter(
+        post,
+        pairs([["channel_name", Type.bitstring("general")]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [["channel_name", "==", "general"]]);
+    });
+
+    it("raises on an ordering comparison of a derived string", () => {
+      assert.throw(
+        () =>
+          filter(post, pairs([["channel_name", op(">", Type.bitstring("a"))]])),
+        HologramBoxedError,
+        "operator :> requires an orderable attribute - :channel_name in MyApp.Post is a derived string, and a string compares by the sort key stored with it, which a computed string has none of",
+      );
+    });
+
+    it("raises on an ordering comparison with a derived string", () => {
+      assert.throw(
+        () =>
+          filter(post, pairs([["body", op(">", attribute("channel_name"))]])),
+        HologramBoxedError,
+        "operator :> requires an orderable attribute - :channel_name in MyApp.Post is a derived string, and a string compares by the sort key stored with it, which a computed string has none of",
+      );
+    });
+
+    it("raises on a search of a derived string", () => {
+      assert.throw(
+        () =>
+          filter(
+            post,
+            pairs([["channel_name", op("contains", Type.bitstring("gen"))]]),
+          ),
+        HologramBoxedError,
+        "operator :contains requires a stored string - :channel_name in MyApp.Post is a derived string, and a search reads the forms stored with a string",
+      );
+    });
+
+    it("raises on a search for a derived string", () => {
+      assert.throw(
+        () =>
+          filter(
+            post,
+            pairs([["body", op("contains", attribute("channel_name"))]]),
+          ),
+        HologramBoxedError,
+        "operator :contains requires a stored string - :channel_name in MyApp.Post is a derived string, and a search reads the forms stored with a string",
+      );
+    });
+
+    it("raises on a derived field holding one row", () => {
+      assert.throw(
+        () => filter(room, pairs([["first_message", Type.nil()]])),
+        HologramBoxedError,
+        ":first_message is a derived field holding one row in MyApp.Room - only attributes can be filtered",
+      );
+    });
+
+    it("raises on a derived field holding a set", () => {
+      assert.throw(
+        () => filter(room, pairs([["recent_messages", Type.nil()]])),
+        HologramBoxedError,
+        ":recent_messages is a derived field holding a set of rows in MyApp.Room - only attributes can be filtered",
+      );
+    });
+
+    it("raises on a path through a derived field", () => {
+      assert.throw(
+        () =>
+          filter(
+            room,
+            pairs([[["first_message", "body"], Type.bitstring("hi")]]),
+          ),
+        HologramBoxedError,
+        ":first_message is a derived field in MyApp.Room - a path in a condition goes through to-one relationships that hold their reference",
+      );
+    });
+
+    it("compares a derived value inside a quantifier's condition", () => {
+      const query = filter(
+        room,
+        quantified("any", atoms("messages"), [
+          ["later_count", op(">", Type.integer(2))],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["later_count", ">", 2]],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("compares with a derived value of the row above inside a quantifier's condition", () => {
+      const query = filter(
+        room,
+        quantified("any", atoms("messages"), [
+          ["later_count", op("<", attribute(outer(1, "message_count")))],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [
+            [
+              "later_count",
+              "<",
+              {attribute: {name: "message_count", outer: 1}},
+            ],
+          ],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("quantifies over a derived set", () => {
+      const query = filter(
+        room,
+        quantified("any", atoms("recent_messages"), [
+          ["body", Type.bitstring("hi")],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "any",
+          source: ["recent_messages"],
+        },
+      ]);
+    });
+
+    it("quantifies over a derived set through a to-one", () => {
+      const query = filter(
+        post,
+        quantified("none", atoms("channel", "recent_messages"), []),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [],
+          quantifier: "none",
+          source: ["channel", "recent_messages"],
+        },
+      ]);
+    });
+
+    it("raises on a quantifier over a derived field holding one row", () => {
+      assert.throw(
+        () => filter(room, quantified("any", atoms("first_message"), [])),
+        HologramBoxedError,
+        ":first_message is a derived field holding one row in MyApp.Room - any, none and all ask about the rows of a set",
+      );
+    });
+
+    it("raises on a quantifier over a derived value", () => {
+      assert.throw(
+        () => filter(room, quantified("any", atoms("message_count"), [])),
+        HologramBoxedError,
+        ":message_count is a derived field holding a :integer value in MyApp.Room - any, none and all ask about the rows of a set",
+      );
+    });
+
+    it("raises on a quantifier's source through a derived field", () => {
+      assert.throw(
+        () =>
+          filter(
+            room,
+            quantified("any", atoms("first_message", "channel"), []),
+          ),
+        HologramBoxedError,
+        ":first_message is a derived field in MyApp.Room - a quantifier's source goes through relationships, with a derived set only at its end",
+      );
+    });
+  });
+
   describe("filter/2 - quantifiers", () => {
     const channel = Type.alias(CHANNEL);
     const label = Type.alias(LABEL);
@@ -2284,7 +2709,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
 
       assert.deepStrictEqual(query.filter, [
-        {filter: [["done", "==", true]], quantifier: "any", source: ["tasks"]},
+        {
+          filter: [["done", "==", true]],
+          quantifier: "any",
+          source: ["tasks"],
+        },
       ]);
     });
 
@@ -2357,7 +2786,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
 
       assert.deepStrictEqual(query.filter[0].filter, [
-        {filter: [["done", "==", true]], quantifier: "any", source: ["tasks"]},
+        {
+          filter: [["done", "==", true]],
+          quantifier: "any",
+          source: ["tasks"],
+        },
       ]);
     });
 
@@ -2507,6 +2940,82 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
     });
 
+    it("takes a source going through a to-many relationship", () => {
+      const query = filter(
+        user,
+        entry("any", atoms("projects", "tasks"), [
+          ["done", Type.boolean(true)],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["done", "==", true]],
+          quantifier: "any",
+          source: ["projects", "tasks"],
+        },
+      ]);
+    });
+
+    it("takes a source going through an inverse relationship holding one row", () => {
+      const query = filter(
+        channel,
+        entry("any", atoms("topic", "channel", "messages"), [["body", hi]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "any",
+          source: ["topic", "channel", "messages"],
+        },
+      ]);
+    });
+
+    it("takes a source through a set read on the row above", () => {
+      const query = filter(
+        channel,
+        entry("any", atoms("messages"), [
+          [
+            "any",
+            Type.tuple([
+              outer(1, ["messages", "channel", "messages"]),
+              pairs([["body", hi]]),
+            ]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [
+            {
+              filter: [["body", "==", "hi"]],
+              quantifier: "any",
+              source: {name: ["messages", "channel", "messages"], outer: 1},
+            },
+          ],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("takes a source going through an inverse relationship", () => {
+      const query = filter(
+        channel,
+        entry("any", atoms("messages", "channel", "messages"), [["body", hi]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "any",
+          source: ["messages", "channel", "messages"],
+        },
+      ]);
+    });
+
     const refusals = [
       [
         "raises on a source ending at a to-one relationship",
@@ -2519,16 +3028,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ":topic is an inverse relationship holding one row in MyApp.Channel - any, none and all ask about the rows of a to-many relationship",
       ],
       [
-        "raises on a source going through a to-many relationship",
-        () => filter(user, entry("any", atoms("projects", "tasks"), [])),
-        ":projects is a to-many relationship in MyApp.User - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own",
-      ],
-      [
-        "raises on a source going through an inverse relationship",
-        () => filter(channel, entry("any", atoms("messages", "channel"), [])),
-        ":messages is an inverse relationship in MyApp.Channel - a quantifier's source goes through to-one relationships that hold their reference to a set",
-      ],
-      [
         "raises on a source going through an attribute",
         () => filter(message, entry("any", atoms("body", "messages"), [])),
         ":body is an attribute in MyApp.Message - a quantifier's source names relationships",
@@ -2537,6 +3036,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "raises on a source going through an unknown relationship",
         () => filter(message, entry("any", atoms("thread", "messages"), [])),
         "unknown relationship :thread in MyApp.Message - known relationships: :channel",
+      ],
+      [
+        "raises on a source going through an unknown relationship, listing every relationship",
+        () => filter(channel, entry("any", atoms("posts", "messages"), [])),
+        "unknown relationship :posts in MyApp.Channel - known relationships: :messages, :owner, :topic",
       ],
       [
         "raises on a source naming an attribute",
@@ -2663,7 +3167,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
             channel,
             Type.list([Type.tuple([outer(1, "name"), Type.bitstring("x")])]),
           ),
-        "{:outer, 1, :name} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 1, :name} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a name of a row above reaching past the queried row",
@@ -2674,7 +3178,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               [outer(2, "name"), Type.bitstring("x")],
             ]),
           ),
-        "{:outer, 2, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 2, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a key naming a row zero levels out",
@@ -2685,7 +3189,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               [outer(0, "name"), Type.bitstring("x")],
             ]),
           ),
-        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a name of a row zero levels out",
@@ -2696,7 +3200,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               ["body", attribute(outer(0, "name"))],
             ]),
           ),
-        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a malformed attribute operand of a row above, quoting it as written",
@@ -2727,7 +3231,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               ["any", Type.tuple([outer(2, ["messages"]), Type.list([])])],
             ]),
           ),
-        "{:outer, 2, [:messages]} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row",
+        "{:outer, 2, [:messages]} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row",
       ],
       [
         "raises on a source of a row above naming no relationship",
@@ -2951,69 +3455,52 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  describe("include/3", () => {
+  describe("include/2", () => {
     it("includes an inverse set", () => {
-      const query = include(
-        Type.alias(CHANNEL),
-        Type.atom("messages"),
-        Type.nil(),
-      );
+      const query = include(Type.alias(CHANNEL), Type.atom("messages"));
 
       assert.deepStrictEqual(query.include, {messages: baseTerm(MESSAGE)});
     });
 
     it("includes a single inverse", () => {
-      const query = include(
-        Type.alias(CHANNEL),
-        Type.atom("topic"),
-        Type.nil(),
-      );
+      const query = include(Type.alias(CHANNEL), Type.atom("topic"));
 
       assert.deepStrictEqual(query.include, {topic: baseTerm(TOPIC)});
     });
 
     it("includes an inverse of a to-many", () => {
-      const query = include(
-        Type.alias(LABEL),
-        Type.atom("messages"),
-        Type.nil(),
-      );
+      const query = include(Type.alias(LABEL), Type.atom("messages"));
 
       assert.deepStrictEqual(query.include, {messages: baseTerm(MESSAGE)});
     });
 
     it("merges two includes of one inverse", () => {
       const query = include(
-        include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+        include(Type.alias(CHANNEL), Type.atom("messages")),
         Type.atom("messages"),
-        Type.nil(),
       );
 
       assert.deepStrictEqual(query.include, {messages: baseTerm(MESSAGE)});
     });
 
-    it("accepts a sub-builder as a spec value", () => {
+    it("raises on a function as a spec value", () => {
       const spec = Type.list([
-        Type.tuple([
-          Type.atom("tasks"),
-          subBuilder((related) =>
-            filter(related, predicates([["done", Type.boolean(true)]])),
-          ),
-        ]),
+        Type.tuple([Type.atom("tasks"), boxedFunction((related) => related)]),
       ]);
 
-      const query = include(project, spec, Type.nil());
-
-      assert.deepStrictEqual(query.include, {
-        tasks: {...freshTerm, filter: [["done", "==", true]]},
-      });
+      // A function's inspect carries a counter that depends on the functions built before it, so
+      // the entry is matched up to it.
+      assert.throw(
+        () => include(project, spec),
+        HologramBoxedError,
+        /invalid include spec entry \{:tasks, #Function<\d+\.\d+\/1 in MyModule>\} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, \[Task\], fn tasks -> filter\(tasks, \.\.\.\) end/,
+      );
     });
 
     it("accumulates multiple includes", () => {
       const query = include(
-        include(project, Type.atom("owner"), Type.nil()),
+        include(project, Type.atom("owner")),
         Type.atom("tasks"),
-        Type.nil(),
       );
 
       assert.deepStrictEqual(query.include, {
@@ -3023,14 +3510,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("embeds a to-many relationship", () => {
-      assert.deepStrictEqual(include(project, Type.atom("tasks"), Type.nil()), {
+      assert.deepStrictEqual(include(project, Type.atom("tasks")), {
         ...baseTerm(PROJECT),
         include: {tasks: freshTerm},
       });
     });
 
     it("embeds a to-one relationship", () => {
-      const query = include(project, Type.atom("owner"), Type.nil());
+      const query = include(project, Type.atom("owner"));
 
       assert.deepStrictEqual(query.include, {owner: baseTerm(USER)});
     });
@@ -3038,7 +3525,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("includes several relationships from a list spec", () => {
       const spec = Type.list([Type.atom("owner"), Type.atom("tasks")]);
 
-      const query = include(project, spec, Type.nil());
+      const query = include(project, spec);
 
       assert.deepStrictEqual(query.include, {
         owner: baseTerm(USER),
@@ -3047,25 +3534,23 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("includes three levels deep", () => {
-      const query = include(
-        user,
-        Type.atom("manager"),
-        subBuilder((levelOne) =>
-          include(
-            levelOne,
-            Type.atom("manager"),
-            subBuilder((levelTwo) =>
-              include(levelTwo, Type.atom("manager"), Type.nil()),
-            ),
-          ),
-        ),
-      );
+      const spec = Type.list([
+        Type.tuple([
+          Type.atom("manager"),
+          Type.list([Type.tuple([Type.atom("manager"), Type.atom("manager")])]),
+        ]),
+      ]);
+
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         manager: {
           ...baseTerm(USER),
           include: {
-            manager: {...baseTerm(USER), include: {manager: baseTerm(USER)}},
+            manager: {
+              ...baseTerm(USER),
+              include: {manager: baseTerm(USER)},
+            },
           },
         },
       });
@@ -3076,7 +3561,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
       ]);
 
-      const query = include(include(user, spec, Type.nil()), spec, Type.nil());
+      const query = include(include(user, spec), spec);
 
       assert.deepStrictEqual(query.include, {
         projects: {...baseTerm(PROJECT), include: {tasks: freshTerm}},
@@ -3085,43 +3570,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("merges a repeated include of a relationship", () => {
       const query = include(
-        include(project, Type.atom("tasks"), Type.nil()),
+        include(project, Type.atom("tasks")),
         Type.atom("tasks"),
-        Type.nil(),
       );
 
       assert.deepStrictEqual(query, {
         ...baseTerm(PROJECT),
         include: {tasks: freshTerm},
-      });
-    });
-
-    it("merges a second include that narrows a nested relationship", () => {
-      const narrowedSpec = Type.list([
-        Type.tuple([
-          Type.atom("projects"),
-          Type.list([
-            Type.tuple([
-              Type.atom("tasks"),
-              subBuilder((related) =>
-                filter(related, predicates([["done", Type.boolean(true)]])),
-              ),
-            ]),
-          ]),
-        ]),
-      ]);
-
-      const query = include(
-        include(user, Type.atom("projects"), Type.nil()),
-        narrowedSpec,
-        Type.nil(),
-      );
-
-      assert.deepStrictEqual(query.include, {
-        projects: {
-          ...baseTerm(PROJECT),
-          include: {tasks: {...freshTerm, filter: [["done", "==", true]]}},
-        },
       });
     });
 
@@ -3131,48 +3586,12 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
       ]);
 
-      const query = include(user, spec, Type.nil());
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         projects: {
           ...baseTerm(PROJECT),
           include: {owner: baseTerm(USER), tasks: freshTerm},
-        },
-      });
-    });
-
-    it("merges includes whose nested branches differ in clauses", () => {
-      const narrowedSpec = Type.list([
-        Type.tuple([
-          Type.atom("projects"),
-          Type.list([
-            Type.tuple([
-              Type.atom("tasks"),
-              subBuilder((related) =>
-                filter(related, predicates([["done", Type.boolean(true)]])),
-              ),
-            ]),
-          ]),
-        ]),
-      ]);
-
-      const ownerSpec = Type.list([
-        Type.tuple([Type.atom("projects"), Type.atom("owner")]),
-      ]);
-
-      const query = include(
-        include(user, narrowedSpec, Type.nil()),
-        ownerSpec,
-        Type.nil(),
-      );
-
-      assert.deepStrictEqual(query.include, {
-        projects: {
-          ...baseTerm(PROJECT),
-          include: {
-            owner: baseTerm(USER),
-            tasks: {...freshTerm, filter: [["done", "==", true]]},
-          },
         },
       });
     });
@@ -3186,11 +3605,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
       ]);
 
-      const query = include(
-        include(user, ownerSpec, Type.nil()),
-        tasksSpec,
-        Type.nil(),
-      );
+      const query = include(include(user, ownerSpec), tasksSpec);
 
       assert.deepStrictEqual(query.include, {
         projects: {
@@ -3206,7 +3621,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("projects"), Type.atom("owner")]),
       ]);
 
-      const query = include(user, spec, Type.nil());
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         manager: baseTerm(USER),
@@ -3222,7 +3637,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ]),
       ]);
 
-      const query = include(user, spec, Type.nil());
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         projects: {
@@ -3232,186 +3647,31 @@ describe("Elixir_Hologram_Query_Stage", () => {
       });
     });
 
-    it("nests includes through the sub-builder", () => {
-      const query = include(
-        user,
-        Type.atom("projects"),
-        subBuilder((related) =>
-          include(related, Type.atom("owner"), Type.nil()),
-        ),
-      );
-
-      assert.deepStrictEqual(query.include, {
-        projects: {...baseTerm(PROJECT), include: {owner: baseTerm(USER)}},
-      });
-    });
-
     it("nests traversal from a keyword spec", () => {
       const spec = Type.list([
         Type.tuple([Type.atom("projects"), Type.atom("owner")]),
       ]);
 
-      const query = include(user, spec, Type.nil());
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         projects: {...baseTerm(PROJECT), include: {owner: baseTerm(USER)}},
       });
     });
 
-    it("refines a to-many include with a sub-builder", () => {
-      const query = include(
-        project,
-        Type.atom("tasks"),
-        subBuilder((related) =>
-          sort(
-            filter(related, predicates([["done", Type.boolean(false)]])),
-            Type.atom("position"),
-          ),
-        ),
-      );
-
-      assert.deepStrictEqual(query.include, {
-        tasks: {
-          ...freshTerm,
-          filter: [["done", "==", false]],
-          sort: [["position", "asc"]],
-        },
-      });
-    });
-
-    it("raises on a non-function sub-builder", () => {
-      assert.throw(
-        () => include(project, Type.atom("tasks"), Type.integer(5)),
-        HologramBoxedError,
-        "include sub-builder for relationship :tasks must be a one-argument function, got: 5",
-      );
-    });
-
-    it("raises on a repeated include at the second level when one side has clauses", () => {
-      const narrowedSpec = Type.list([
-        Type.tuple([
-          Type.atom("projects"),
-          Type.list([
-            Type.tuple([
-              Type.atom("tasks"),
-              subBuilder((related) =>
-                filter(related, predicates([["done", Type.boolean(true)]])),
-              ),
-            ]),
-          ]),
-        ]),
-      ]);
-
-      const spec = Type.list([
-        Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
-      ]);
-
-      assert.throw(
-        () =>
-          include(include(user, narrowedSpec, Type.nil()), spec, Type.nil()),
-        HologramBoxedError,
-        "relationship :tasks is already included",
-      );
-    });
-
-    it("raises on a repeated include when the included one has clauses", () => {
-      const narrowed = include(
-        project,
-        Type.atom("tasks"),
-        subBuilder((related) =>
-          filter(related, predicates([["done", Type.boolean(true)]])),
-        ),
-      );
-
-      assert.throw(
-        () => include(narrowed, Type.atom("tasks"), Type.nil()),
-        HologramBoxedError,
-        "relationship :tasks is already included",
-      );
-    });
-
-    it("raises on a repeated include when the new one has clauses", () => {
-      const included = include(project, Type.atom("tasks"), Type.nil());
-
-      assert.throw(
-        () =>
-          include(
-            included,
-            Type.atom("tasks"),
-            subBuilder((related) =>
-              filter(related, predicates([["done", Type.boolean(true)]])),
-            ),
-          ),
-        HologramBoxedError,
-        "relationship :tasks is already included",
-      );
-    });
-
-    it("raises on a separate sub-builder with a shape spec", () => {
-      assert.throw(
-        () =>
-          include(
-            project,
-            Type.list([Type.atom("tasks")]),
-            subBuilder((related) => related),
-          ),
-        HologramBoxedError,
-        "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair",
-      );
-    });
-
-    it("raises on a sub-builder returning a different entity's term", () => {
-      assert.throw(
-        () =>
-          include(
-            project,
-            Type.atom("tasks"),
-            subBuilder((_related) => filter(project, Type.list([]))),
-          ),
-        HologramBoxedError,
-        "include sub-builder for relationship :tasks must return a query term for MyApp.Task - got a query term for MyApp.Project",
-      );
-    });
-
-    it("raises on a sub-builder returning a non-term", () => {
-      assert.throw(
-        () =>
-          include(
-            project,
-            Type.atom("tasks"),
-            subBuilder((_related) => Type.integer(123)),
-          ),
-        HologramBoxedError,
-        "include sub-builder for relationship :tasks must return a query term for MyApp.Task, got: 123",
-      );
-    });
-
     // The relationship declaration already says how many entities are embedded, so a sub-term
     // marking a cardinality of its own would be saying something the shape cannot honour.
-    it("raises on a sub-term carrying a cardinality marker", () => {
-      assert.throw(
-        () =>
-          include(
-            project,
-            Type.atom("tasks"),
-            subBuilder((related) => count(related)),
-          ),
-        HologramBoxedError,
-        "include sub-terms take no cardinality marker - the relationship declaration governs cardinality",
-      );
-    });
-
     it("raises on an attribute name", () => {
       assert.throw(
-        () => include(project, Type.atom("name"), Type.nil()),
+        () => include(project, Type.atom("name")),
         HologramBoxedError,
-        ":name is an attribute in MyApp.Project - only relationships can be included",
+        ":name is an attribute in MyApp.Project - only relationships and derived fields can be included",
       );
     });
 
     it("raises on an empty include spec", () => {
       assert.throw(
-        () => include(project, Type.list([]), Type.nil()),
+        () => include(project, Type.list([])),
         HologramBoxedError,
         "include spec must not be empty",
       );
@@ -3419,7 +3679,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on an invalid include spec", () => {
       assert.throw(
-        () => include(project, Type.integer(123), Type.nil()),
+        () => include(project, Type.integer(123)),
         HologramBoxedError,
         "include spec must be a relationship name or a shape list, got: 123",
       );
@@ -3427,71 +3687,136 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on an invalid include spec entry", () => {
       assert.throw(
-        () => include(project, Type.list([Type.integer(123)]), Type.nil()),
+        () => include(project, Type.list([Type.integer(123)])),
         HologramBoxedError,
-        "invalid include spec entry 123 - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair",
+        "invalid include spec entry 123 - use a relationship name or a {name, spec} pair",
       );
     });
 
-    it("raises on clauses for a single inverse", () => {
+    it("raises on a nil nested spec", () => {
+      const spec = Type.list([Type.tuple([Type.atom("channel"), Type.nil()])]);
+
       assert.throw(
-        () =>
-          include(
-            Type.alias(CHANNEL),
-            Type.atom("topic"),
-            subBuilder((related) =>
-              filter(related, predicates([["title", Type.bitstring("x")]])),
-            ),
-          ),
+        () => include(Type.alias(MESSAGE), spec),
         HologramBoxedError,
-        "to-one relationship :topic takes no clauses - clauses apply to to-many includes",
+        "unknown relationship nil in MyApp.Channel - known relationships and derived fields: :messages, :owner, :topic",
       );
     });
 
     it("raises on an unknown relationship, naming the inverses among the known ones", () => {
       assert.throw(
-        () => include(Type.alias(CHANNEL), Type.atom("x"), Type.nil()),
+        () => include(Type.alias(CHANNEL), Type.atom("x")),
         HologramBoxedError,
-        "unknown relationship :x in MyApp.Channel - known relationships: :messages, :owner, :topic",
-      );
-    });
-
-    it("raises on a second include of an inverse when either carries clauses", () => {
-      assert.throw(
-        () =>
-          include(
-            include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
-            Type.atom("messages"),
-            subBuilder((related) =>
-              filter(related, predicates([["body", Type.bitstring("x")]])),
-            ),
-          ),
-        HologramBoxedError,
-        "relationship :messages is already included",
+        "unknown relationship :x in MyApp.Channel - known relationships and derived fields: :messages, :owner, :topic",
       );
     });
 
     it("raises on an unknown relationship", () => {
       assert.throw(
-        () => include(project, Type.atom("x"), Type.nil()),
+        () => include(project, Type.atom("x")),
         HologramBoxedError,
-        "unknown relationship :x in MyApp.Project - known relationships: :owner, :tasks",
+        "unknown relationship :x in MyApp.Project - known relationships and derived fields: :owner, :tasks",
+      );
+    });
+  });
+
+  describe("include/2 - derived fields", () => {
+    const nested = (name, nestedName) =>
+      Type.list([Type.tuple([Type.atom(name), Type.atom(nestedName)])]);
+
+    it("includes a derived value", () => {
+      const query = include(room, Type.atom("message_count"));
+
+      assert.deepStrictEqual(query.include, {message_count: null});
+    });
+
+    it("merges two includes of one derived value", () => {
+      const query = include(
+        include(room, Type.atom("message_count")),
+        Type.atom("message_count"),
+      );
+
+      assert.deepStrictEqual(query.include, {message_count: null});
+    });
+
+    it("merges two includes of one derived set", () => {
+      const query = include(
+        include(room, nested("recent_messages", "channel")),
+        Type.atom("recent_messages"),
+      );
+
+      assert.deepStrictEqual(query.include, {
+        recent_messages: {
+          ...baseTerm(POST),
+          include: {channel: baseTerm(ROOM)},
+        },
+      });
+    });
+
+    it("includes a derived set", () => {
+      const query = include(room, Type.atom("recent_messages"));
+
+      assert.deepStrictEqual(query.include, {
+        recent_messages: baseTerm(POST),
+      });
+    });
+
+    it("includes a derived field holding one row", () => {
+      const query = include(room, Type.atom("first_message"));
+
+      assert.deepStrictEqual(query.include, {first_message: baseTerm(POST)});
+    });
+
+    it("nests an include under a derived set", () => {
+      const query = include(room, nested("recent_messages", "channel"));
+
+      assert.deepStrictEqual(query.include, {
+        recent_messages: {
+          ...baseTerm(POST),
+          include: {channel: baseTerm(ROOM)},
+        },
+      });
+    });
+
+    it("raises on an include under a derived value", () => {
+      assert.throw(
+        () => include(room, nested("message_count", "name")),
+        HologramBoxedError,
+        ":message_count is a :integer derived field in MyApp.Room - nothing is included under it",
       );
     });
 
-    it("raises on clauses on a to-one include", () => {
+    it("raises on a nil nested spec under a derived value", () => {
+      const spec = Type.list([
+        Type.tuple([Type.atom("message_count"), Type.nil()]),
+      ]);
+
       assert.throw(
-        () =>
-          include(
-            project,
-            Type.atom("owner"),
-            subBuilder((related) =>
-              filter(related, predicates([["email", Type.bitstring("x")]])),
-            ),
-          ),
+        () => include(room, spec),
         HologramBoxedError,
-        "to-one relationship :owner takes no clauses - clauses apply to to-many includes",
+        ":message_count is a :integer derived field in MyApp.Room - nothing is included under it",
       );
+    });
+
+    it("normalizes what a derived set includes without ordering its rows", () => {
+      const spec = Type.list([
+        Type.atom("message_count"),
+        Type.tuple([Type.atom("recent_messages"), Type.atom("channel")]),
+      ]);
+
+      const query = normalize(include(room, spec));
+
+      assert.deepStrictEqual(query, {
+        ...baseTerm(ROOM),
+        include: {
+          message_count: null,
+          recent_messages: {
+            ...baseTerm(POST),
+            include: {channel: baseTerm(ROOM)},
+          },
+        },
+        sort: [["id", "asc"]],
+      });
     });
   });
 
@@ -3568,7 +3893,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("orders an included inverse set by its declared order, then by id", () => {
       const query = normalize(
-        include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+        include(Type.alias(CHANNEL), Type.atom("messages")),
       );
 
       assert.deepStrictEqual(query.include.messages.sort, [
@@ -3577,24 +3902,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
     });
 
-    it("orders an included inverse set by the include's own order over the declared one", () => {
-      const query = normalize(
-        include(
-          Type.alias(CHANNEL),
-          Type.atom("messages"),
-          subBuilder((related) => sort(related, Type.atom("body"))),
-        ),
-      );
-
-      assert.deepStrictEqual(query.include.messages.sort, [
-        ["body", "asc"],
-        ["id", "asc"],
-      ]);
-    });
-
     it("orders an included inverse set by a declared list, directions kept, then by id", () => {
       const query = normalize(
-        include(Type.alias(BOARD), Type.atom("messages"), Type.nil()),
+        include(Type.alias(BOARD), Type.atom("messages")),
       );
 
       assert.deepStrictEqual(query.include.messages.sort, [
@@ -3604,9 +3914,18 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
     });
 
+    it("orders an included stored to-many by its declared order, then by id", () => {
+      const query = normalize(include(Type.alias(BINDER), Type.atom("labels")));
+
+      assert.deepStrictEqual(query.include.labels.sort, [
+        ["name", "desc"],
+        ["id", "asc"],
+      ]);
+    });
+
     it("normalizes a term including an inverse the same way twice", () => {
       const query = normalize(
-        include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+        include(Type.alias(CHANNEL), Type.atom("messages")),
       );
 
       assert.deepStrictEqual(normalize(query), query);
@@ -3614,16 +3933,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("orders an included inverse set declaring no order by id", () => {
       const query = normalize(
-        include(Type.alias(LABEL), Type.atom("messages"), Type.nil()),
+        include(Type.alias(LABEL), Type.atom("messages")),
       );
 
       assert.deepStrictEqual(query.include.messages.sort, [["id", "asc"]]);
     });
 
     it("gives an included single inverse no order", () => {
-      const query = normalize(
-        include(Type.alias(CHANNEL), Type.atom("topic"), Type.nil()),
-      );
+      const query = normalize(include(Type.alias(CHANNEL), Type.atom("topic")));
 
       assert.deepStrictEqual(query.include.topic.sort, []);
     });
@@ -3668,7 +3985,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
               ]),
             ),
             Type.atom("tasks"),
-            Type.nil(),
           ),
           Type.atom("name"),
         ),
@@ -3754,7 +4070,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("owner"), Type.atom("projects")]),
       ]);
 
-      const query = normalize(include(project, spec, Type.nil()));
+      const query = normalize(include(project, spec));
 
       assert.deepStrictEqual(query.include.owner.sort, []);
 
@@ -3765,17 +4081,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("normalizes to-many sub-terms", () => {
       const query = normalize(
-        include(
-          project,
-          Type.atom("tasks"),
-          subBuilder((related) =>
-            filter(
-              related,
-              predicates([
-                ["title", Type.bitstring("x")],
-                ["done", Type.boolean(true)],
-              ]),
-            ),
+        narrowedInclude(project, "tasks", (related) =>
+          filter(
+            related,
+            predicates([
+              ["title", Type.bitstring("x")],
+              ["done", Type.boolean(true)],
+            ]),
           ),
         ),
       );
@@ -3789,7 +4101,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("skips ordering for to-one includes", () => {
-      const query = normalize(include(project, Type.atom("owner"), Type.nil()));
+      const query = normalize(include(project, Type.atom("owner")));
 
       assert.deepStrictEqual(query.include.owner.sort, []);
     });
@@ -3957,6 +4269,55 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => sort(task, Type.atom("x")),
         HologramBoxedError,
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+  });
+
+  describe("sort/2 - derived fields", () => {
+    const entry = (name, direction) =>
+      Type.list([Type.tuple([Type.atom(name), Type.atom(direction)])]);
+
+    it("sorts by a derived value", () => {
+      const query = sort(room, entry("message_count", "desc"));
+
+      assert.deepStrictEqual(query.sort, [["message_count", "desc"]]);
+    });
+
+    it("sorts by a derived enum", () => {
+      const query = sort(post, Type.atom("tier"));
+
+      assert.deepStrictEqual(query.sort, [["tier", "asc"]]);
+    });
+
+    it("raises on a derived string", () => {
+      assert.throw(
+        () => sort(post, Type.atom("channel_name")),
+        HologramBoxedError,
+        ":channel_name is a derived string in MyApp.Post - a string is ordered by the sort key stored with it, which a computed string has none of",
+      );
+    });
+
+    it("raises on a derived field holding a set", () => {
+      assert.throw(
+        () => sort(room, Type.atom("recent_messages")),
+        HologramBoxedError,
+        ":recent_messages is a derived field holding a set of rows in MyApp.Room - only attributes can be ordered",
+      );
+    });
+
+    it("raises on a derived field holding one row", () => {
+      assert.throw(
+        () => sort(room, Type.atom("first_message")),
+        HologramBoxedError,
+        ":first_message is a derived field holding one row in MyApp.Room - only attributes can be ordered",
+      );
+    });
+
+    it("raises on an unknown name, listing the derived values it can sort by", () => {
+      assert.throw(
+        () => sort(post, Type.atom("nope")),
+        HologramBoxedError,
+        "unknown attribute :nope in MyApp.Post - known attributes: :body, :created_at, :id, :later_count, :position, :tier, :updated_at",
       );
     });
   });

@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.IR
+  alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Reflection
@@ -38,7 +39,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module35
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module36
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module37
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module38
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module39
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40
@@ -54,8 +54,30 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module50
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module51
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module52
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module57
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module58
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module59
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module60
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module61
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module62
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module64
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module65
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module66
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module67
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module68
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module69
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module70
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module71
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module72
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module73
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module74
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module75
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module76
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
   alias Hologram.Test.Fixtures.Component.Module10, as: Component10
@@ -71,6 +93,8 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module26, as: Entity26
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
+  alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
+  alias Hologram.Test.Fixtures.Entity.Module36, as: Entity36
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module5, as: Entity5
 
@@ -82,6 +106,242 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   # and the IR PLT the extractions read, which fills as they ask for modules.
   setup_all do
     [entity_types: Reflection.list_entities(), ir_plt: PLT.start()]
+  end
+
+  describe "derived_definition/3" do
+    test "follows a query builder called as the whole body", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Entity36, :unread_count, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  cardinality: :count,
+                  entity: Entity33,
+                  filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
+                  source: {Entity36, [:channel, :messages]}
+                }}
+
+      assert read_modules == [Module53]
+    end
+
+    test "follows a query builder piped into a stage", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Entity36, :recent_unread, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:channel, :messages]},
+                  take: 5
+                }}
+
+      assert read_modules == [Module53]
+    end
+
+    test "follows the query builders a query builder calls", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Entity36, :unread_through_helper, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:channel, :messages]}
+                }}
+
+      assert read_modules == [Module53, Module55]
+    end
+
+    test "reports a module whose function a query builder runs", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Module76, :capped, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:channel, :messages]},
+                  take: 2
+                }}
+
+      assert read_modules == [Module74, Module75]
+    end
+
+    test "reports a module whose function a closure inside a query builder runs", %{
+      ir_plt: ir_plt
+    } do
+      {_definition, read_modules} = derived_definition(Module76, :capped_in_closure, ir_plt)
+
+      assert read_modules == [Module74, Module75]
+    end
+
+    test "reads a chain of related rows two hops deep inside a query builder", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Entity36, :member_messages, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:member, :channel, :messages]}
+                }}
+
+      assert read_modules == [Module53]
+    end
+
+    test "takes the clause of a query builder a known argument matches", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Module54, :forked, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity36, [:channel, :messages]},
+                  take: 2
+                }}
+
+      assert read_modules == [Module53]
+    end
+
+    test "raises on a query builder guard reading a field of the row", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:7: derived field :guarded in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module64 branches on a field of the row - a derived field's definition is one query, built before any row is read
+
+            #{@app} lib/my_app/member.ex:7: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module64.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module64, :guarded, ir_plt)
+      end
+    end
+
+    test "raises on a branch on a field of the row", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:10: derived field :branched in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 branches on a field of the row - a derived field's definition is one query, built before any row is read
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.by_flag/2
+            #{@app} lib/my_app/member.ex:7: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :branched, ir_plt)
+      end
+    end
+
+    test "raises on a query builder clause chosen by a field of the row", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:15: derived field :dispatched in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 branches on a field of the row - a derived field's definition is one query, built before any row is read
+
+            #{@app} lib/my_app/member.ex:15: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :dispatched, ir_plt)
+      end
+    end
+
+    test "raises on a field of the row passed to Elixir", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:17: derived field :capitalized in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 passes a field of the row to String.capitalize/1 - a field of the row reaches query stages and query builders only
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:17: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.capitalized/1
+            #{@app} lib/my_app/member.ex:9: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :capitalized, ir_plt)
+      end
+    end
+
+    test "raises on a query builder returning a value", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:13: derived field :counted in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.message_total/1, which returns 3 - a builder builds a query, and a value computed from fields is written in the derived field's own body
+
+            #{@app} lib/my_app/member.ex:13: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :counted, ir_plt)
+      end
+    end
+
+    test "raises on a query builder given no field returning a value", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:11: derived field :constant in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.constant/0, which returns 5 - a builder builds a query, and a value computed from fields is written in the derived field's own body
+
+            #{@app} lib/my_app/member.ex:11: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :constant, ir_plt)
+      end
+    end
+
+    test "raises on a dot on a field of the row holding a value", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:25: derived field :dotted in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 reads length off the :nickname field of the row, which holds a value - a path goes through relationships
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:25: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.length_of/1
+            #{@app} lib/my_app/member.ex:17: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :dotted, ir_plt)
+      end
+    end
+
+    test "raises on a path a related row does not declare", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:33: derived field :missing in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 builds an invalid definition - member.nothing names :nothing, which is not a field of Hologram.Test.Fixtures.Entity.Module34
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:33: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.missing/1
+            #{@app} lib/my_app/member.ex:25: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :missing, ir_plt)
+      end
+    end
+
+    test "raises on a path through a set to one row", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:39: derived field :senders in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 builds an invalid definition - channel.messages.channel reads through a set to one value per row of it - a derived field reads a set's rows with a query, or one value of the row through to-one relationships
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:39: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.senders/1
+            #{@app} lib/my_app/member.ex:27: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :senders, ir_plt)
+      end
+    end
+
+    test "raises on a recursive query builder", %{ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:27: derived field :looping in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54 recursively calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.looping/1 - recursive helpers are not extractable
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_53.ex:27: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53.looping/1
+            #{@app} lib/my_app/member.ex:23: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module54, :looping, ir_plt)
+      end
+    end
   end
 
   describe "extract_module_queries/3" do
@@ -174,15 +434,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       terms = extract_module_queries(Module36, entity_types, ir_plt)
 
       assert Enum.map(terms, & &1.entity) == [Entity2, Entity4]
-    end
-
-    test "extracts only the relationships a sub-builder admits", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      terms = extract_module_queries(Module38, entity_types, ir_plt)
-
-      assert Enum.map(terms, &Map.keys(&1.include)) == [[:a]]
     end
 
     test "extracts one entity type when only one admits the query", %{
@@ -297,25 +548,27 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert extract_module_queries(Module12, entity_types, ir_plt) == [expected_term]
     end
 
-    test "extracts an anonymous sub-builder include", %{
+    test "extracts a query an anonymous function builds", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do
       expected_term =
         Entity3
-        |> include(a, fn sub -> filter(sub, b >= ^%Placeholder{name: :min_b}) end)
+        |> include(a)
+        |> filter(created_at >= ^%Placeholder{name: :since})
         |> Stage.normalize()
 
       assert extract_module_queries(Module20, entity_types, ir_plt) == [expected_term]
     end
 
-    test "extracts an include through a path with a sub-builder", %{
+    test "extracts an include through a path beside an argument", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do
       expected_term =
         Entity5
-        |> include(a.a, &filter(&1, b >= ^%Placeholder{name: :min_b}))
+        |> include(a.a)
+        |> filter(created_at >= ^%Placeholder{name: :since})
         |> Stage.normalize()
 
       assert extract_module_queries(Module47, entity_types, ir_plt) == [expected_term]
@@ -493,6 +746,223 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                else_branch_term,
                then_branch_term
              ]
+    end
+
+    test "takes the clause a known argument matches, past the ones it does not", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      assert extract_module_queries(Module57, entity_types, ir_plt) == [Stage.normalize(Entity2)]
+    end
+
+    test "takes the clause after one whose guard fails for a known argument", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> take(5)
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module58, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "takes the branch of an if on a known value", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module59, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "takes the first clause of a cond whose condition holds for a known value", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> take(3)
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module62, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "takes the clause whose guard holds for a known argument", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> take(10)
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module65, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "takes the clause whose guards joined by and hold for known arguments", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> take(5)
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module66, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "takes the clause after one whose guard raises for a known argument", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module67, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "raises on a case no clause of which matches a known value", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_56.ex:26: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module68 reaches a case on :closed, which no clause matches - the code raises CaseClauseError there
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_56.ex:26: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module56.case_kind/2
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_68.ex:21: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module68.entities_query/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module68, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a cond none of whose conditions holds for known values", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_56.ex:92: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module69 reaches a cond none of whose conditions holds - the code raises CondClauseError there
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_56.ex:92: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module56.strictly_sized/2
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_69.ex:18: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module69.entities_query/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module69, entity_types, ir_plt)
+      end
+    end
+
+    test "takes the branch on a known value inside an anonymous function", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module70, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "forks the clauses an argument leaves undecided, past the ones a known argument rules out",
+         %{
+           entity_types: entity_types,
+           ir_plt: ir_plt
+         } do
+      nil_clause_term =
+        Entity2
+        |> filter(a: true)
+        |> Stage.normalize()
+
+      bound_clause_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module71, entity_types, ir_plt) == [
+               nil_clause_term,
+               bound_clause_term
+             ]
+    end
+
+    test "prunes the variants forks combine and no run takes", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      first_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> take(10)
+        |> Stage.normalize()
+
+      second_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> take(1)
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module72, entity_types, ir_plt) == [first_term, second_term]
+    end
+
+    test "takes the clause a head naming one variable twice matches", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> take(2)
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module73, entity_types, ir_plt) == [expected_term]
+    end
+
+    test "forks the clauses of a guard reading an argument", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      capped_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> take(10)
+        |> Stage.normalize()
+
+      limited_term =
+        Entity2
+        |> filter(b >= ^%Placeholder{name: :min_b})
+        |> take(^%Placeholder{name: :limit})
+        |> Stage.normalize()
+
+      assert extract_module_queries(Module60, entity_types, ir_plt) == [capped_term, limited_term]
+    end
+
+    test "raises on a known argument no clause matches", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_61.ex:21: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module61 calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module56.by_kind/2 with :closed, min_b, which no clause matches - the code raises FunctionClauseError there
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_61.ex:21: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module61.entities_query/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_module_queries(Module61, entity_types, ir_plt)
+      end
     end
 
     # The PLT holds Module26's IR under Module2's key, so the term tells which IR was read: both
@@ -785,7 +1255,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
-    test "raises on branching inside an anonymous sub-builder", %{
+    test "raises on branching inside an anonymous function", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do

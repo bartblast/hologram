@@ -27,6 +27,7 @@ defmodule Hologram.PolicyTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
 
@@ -783,6 +784,10 @@ defmodule Hologram.PolicyTest do
 
     test "returns the row a delegation leads to" do
       assert related_chains(Policy.Module1) == [[:parent]]
+    end
+
+    test "returns the rows a derived field in a condition reads through its definition" do
+      assert related_chains(Module42) == [[:note]]
     end
 
     test "follows a delegation into the rows its target's rules read" do

@@ -34,7 +34,7 @@ defmodule Hologram.JobTest do
 
     test "raises when a framework attribute is redeclared" do
       expected_msg =
-        "duplicate name :status used for attribute in Hologram.Test.Fixtures.Job.RedeclaringJob - attribute and relationship names share one namespace and must be unique"
+        "duplicate name :status used for attribute in Hologram.Test.Fixtures.Job.RedeclaringJob - attribute, relationship and derived field names share one namespace and must be unique"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.eval_string("""

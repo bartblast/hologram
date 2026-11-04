@@ -26,6 +26,7 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.WriteError
 
@@ -823,6 +824,17 @@ defmodule Hologram.DBTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         update(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", role: :owner)
+      end
+    end
+
+    test "raises on a change to a derived field" do
+      {:ok, entity} = create(Module32.new(name: "general"))
+
+      expected_msg =
+        "invalid changes for Hologram.Test.Fixtures.Entity.Module32 - :message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module32, entity.id, message_count: 3)
       end
     end
   end

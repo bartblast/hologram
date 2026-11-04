@@ -138,19 +138,19 @@ defmodule Hologram.Query.Expression do
 
   @doc """
   Lowers the spec argument of `include/2` to the AST of what `Hologram.Query.Stage.include/2`
-  takes: a relationship name, or a shape list of names, `{name, nested_spec}` pairs and
-  `{name, sub_builder}` pairs.
+  takes: a relationship name, or a shape list of names and `{name, nested_spec}` pairs.
 
   A relationship is a bare name (`owner`) and a nested one a path (`tasks.owner`), lowering to
-  `:owner` and `[tasks: [:owner]]`. A list holds names, paths, pinned elements and, last, keyword
-  entries pairing a relationship with a sub-builder written in place or pinned
-  (`[owner, tasks.owner, project: &open/1]`). Paths sharing a first hop merge in the order they
-  first appear, so `[tasks.owner, tasks.project]` lowers to `[tasks: [:owner, :project]]`, and a
-  bare name beside a path through it is absorbed by the path. A pinned spec passes through.
+  `:owner` and `[tasks: [:owner]]`. A list holds names, paths, pinned elements and keyword entries
+  pairing a relationship with a pinned nested spec (`[owner, tasks.owner, project: ^nested]`).
+  Paths sharing a first hop merge in the order they first appear, so `[tasks.owner, tasks.project]`
+  lowers to `[tasks: [:owner, :project]]`, and a bare name beside a path through it is absorbed by
+  the path. A pinned spec passes through.
 
   Raises Hologram.CompileError, located at the offending node, on an atom where a bare name goes
-  (naming the bare spelling), on a keyword entry nesting a name or a list (naming the path), and
-  on anything else.
+  (naming the bare spelling), on a keyword entry nesting a name or a list (naming the path), on
+  any other unpinned keyword entry (naming the derived field that narrows a set), and on anything
+  else.
   """
   @spec inclusion(Macro.t(), Macro.Env.t()) :: Macro.t()
   def inclusion({:^, _meta, [expr]}, _env), do: expr
@@ -256,40 +256,6 @@ defmodule Hologram.Query.Expression do
   def predicates(list, env) when is_list(list), do: Enum.map(list, &keyword_entry!(&1, env))
 
   def predicates(ast, env), do: predicate_list!(ast, @filter_names, env)
-
-  @doc """
-  Lowers the relationship argument of `include/3` to the list of its hops: `[:owner]` for a bare
-  name, `[:project, :tasks]` for a path, and the pinned expression alone in a list for a pinned
-  name.
-
-  Raises Hologram.CompileError, located at the argument, on an atom where a bare name goes and on
-  anything else that is neither a name nor a path.
-  """
-  @spec relationship(Macro.t(), Macro.Env.t()) :: list(Macro.t())
-  def relationship({:^, _meta, [expr]}, _env), do: [expr]
-
-  def relationship(ast, env), do: hops(ast) || name_error!(ast, @inclusion_names, env)
-
-  @doc """
-  Lowers the sub-builder argument of `include/3`: a function written in place (`fn` or a capture)
-  passes through, and a pinned expression lowers to the expression.
-
-  Raises Hologram.CompileError, located at the argument, on anything else.
-  """
-  @spec sub_builder(Macro.t(), Macro.Env.t()) :: Macro.t()
-  def sub_builder({:^, _meta, [expr]}, _env), do: expr
-
-  def sub_builder(ast, env) do
-    if in_place_function?(ast) do
-      ast
-    else
-      compile_error!(
-        "include/3 takes a sub-builder written in place (fn or &) or a pinned expression, got: #{Macro.to_string(ast)}#{pin_suffix(ast)}",
-        ast,
-        env
-      )
-    end
-  end
 
   # A path joins the slot of its first hop, or opens one where it first appears - so paths sharing
   # a first hop merge, a bare name is a path with no tail, and elements that are not paths keep
@@ -498,30 +464,20 @@ defmodule Hologram.Query.Expression do
     )
   end
 
-  defp in_place_function?({:fn, _meta, _clauses}), do: true
-
-  defp in_place_function?({:&, _meta, _args}), do: true
-
-  defp in_place_function?(_ast), do: false
-
-  # A list element of an include spec: a pinned element keeps its place, a keyword entry pairs a
-  # relationship with a sub-builder, and a bare name or a path joins the merge.
+  # A list element of an include spec: a pinned element keeps its place, a keyword entry with a
+  # pinned value pairs a relationship with a nested spec chosen at runtime, and a bare name or a path
+  # joins the merge.
   defp include_element!({:^, _meta, [expr]}, _env), do: {:in_place, expr}
 
   defp include_element!({key, {:^, _meta, [expr]}}, _env) when is_atom(key),
     do: {:in_place, {key, expr}}
 
-  # A keyword entry pairs a relationship with a sub-builder. A value naming relationships is a
-  # nesting attempt, refused with the paths it means, and anything else a sub-builder missing its
-  # pin.
+  # A keyword entry naming relationships is a nesting attempt, refused with the paths it means, and
+  # any other one an attempt to narrow the set, which a derived field does.
   defp include_element!({key, value}, env) when is_atom(key) do
-    if in_place_function?(value) do
-      {:in_place, {key, value}}
-    else
-      case written_paths(key, value) do
-        nil -> keyword_sub_builder_error!(key, value, env)
-        paths -> nested_include_error!(key, value, paths, env)
-      end
+    case written_paths(key, value) do
+      nil -> narrowed_include_error!(key, value, env)
+      paths -> nested_include_error!(key, value, paths, env)
     end
   end
 
@@ -587,15 +543,6 @@ defmodule Hologram.Query.Expression do
     compile_error!(
       "a condition is an expression, got: #{Macro.to_string(list)}#{hint}",
       list,
-      env
-    )
-  end
-
-  @spec keyword_sub_builder_error!(atom, Macro.t(), Macro.Env.t()) :: no_return
-  defp keyword_sub_builder_error!(key, value, env) do
-    compile_error!(
-      "a keyword entry in include pairs a relationship with a sub-builder written in place (fn or &) or a pinned expression, got: #{Macro.to_string([{key, value}])}#{pin_suffix(value)}",
-      value,
       env
     )
   end
@@ -723,6 +670,15 @@ defmodule Hologram.Query.Expression do
     compile_error!(
       "#{names.stage} names #{names.names} with #{names.spelled}, or with a pinned expression when the name comes from the surrounding code, got: #{Macro.to_string(ast)}#{pin_suffix(ast)}",
       ast,
+      env
+    )
+  end
+
+  @spec narrowed_include_error!(atom, Macro.t(), Macro.Env.t()) :: no_return
+  defp narrowed_include_error!(key, value, env) do
+    compile_error!(
+      "include takes names and paths, got: #{Macro.to_string([{key, value}])} - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end",
+      value,
       env
     )
   end

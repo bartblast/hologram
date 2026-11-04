@@ -4,6 +4,7 @@ defmodule Hologram.Query.RegistryTest do
 
   import Hologram.Query.Registry
 
+  alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -12,6 +13,7 @@ defmodule Hologram.Query.RegistryTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module31
+  alias Hologram.Test.Fixtures.Entity.Module37
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Policy
 
@@ -64,6 +66,28 @@ defmodule Hologram.Query.RegistryTest do
   end
 
   describe "entity_types/1" do
+    test "returns the types a derived field a term includes is computed from" do
+      put_derived_definitions([Module37])
+
+      term =
+        Module37
+        |> include(member_count)
+        |> Stage.normalize()
+
+      assert entity_types(term) == MapSet.new([Module2, Module37])
+    end
+
+    test "returns the types the derived fields a term reads are computed from" do
+      put_derived_definitions([Module37])
+
+      term =
+        Module37
+        |> filter(member_count > 0)
+        |> Stage.normalize()
+
+      assert entity_types(term) == MapSet.new([Module2, Module37])
+    end
+
     test "returns the type a term reads" do
       term = Stage.normalize(Module2)
 
@@ -94,7 +118,7 @@ defmodule Hologram.Query.RegistryTest do
     test "walks includes to any depth" do
       term =
         Module5
-        |> include(a, &include(&1, b))
+        |> include(a.b)
         |> Stage.normalize()
 
       assert entity_types(term) == MapSet.new([Module2, Module3, Module5])
@@ -136,11 +160,30 @@ defmodule Hologram.Query.RegistryTest do
     test "returns a lowercase hex string of the truncated SHA-256" do
       term = Stage.normalize(Module2)
 
-      assert id(term) == "34af1788d77dce8ba5bdcbf857ad4c22"
+      assert id(term) == "c996d3d46dd3aad234b8ba93f6842571"
     end
   end
 
   describe "placeholder_shape/1" do
+    test "collects nothing under an included derived value" do
+      term =
+        Module37
+        |> filter(name == ^%Placeholder{name: :name})
+        |> include(pinned_count)
+        |> Stage.normalize()
+
+      assert placeholder_shape(term) == %{name: :string}
+    end
+
+    test "binds a placeholder compared with a derived field as the type it declares" do
+      term =
+        Module37
+        |> filter(pinned_count > ^%Placeholder{name: :threshold})
+        |> Stage.normalize()
+
+      assert placeholder_shape(term) == %{threshold: :integer}
+    end
+
     test "binds a placeholder inside a quantifier's condition as the related row's attribute" do
       term = %{
         Stage.normalize(Module31)

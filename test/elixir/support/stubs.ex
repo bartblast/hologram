@@ -130,8 +130,8 @@ defmodule Hologram.Test.Stubs do
 
   @doc """
   Writes the query cache dump the given stub reads, holding the registered queries of the given
-  component modules - the compile task's artifact, built the same way but for a chosen set, for a
-  build with or without a page checking permissions on the client.
+  component modules and no derived definitions - the compile task's artifact, built the same way
+  but for a chosen set, for a build with or without a page checking permissions on the client.
   """
   @spec dump_query_cache(module, list(module), boolean) :: :ok
   def dump_query_cache(stub, component_modules, permission_checking? \\ false) do
@@ -145,6 +145,7 @@ defmodule Hologram.Test.Stubs do
       component_modules
       |> Compiler.extract_component_queries(entity_types, PLT.start())
       |> Compiler.build_queries(entity_types, permission_checking?)
+      |> Map.put(:derived, %{})
 
     PLT.start()
     |> PLT.put(Map.to_list(queries))

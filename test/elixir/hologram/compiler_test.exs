@@ -41,6 +41,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Component.Module32, as: ComponentModule32
   alias Hologram.Test.Fixtures.Component.Module33, as: ComponentModule33
   alias Hologram.Test.Fixtures.Component.Module34, as: ComponentModule34
+  alias Hologram.Test.Fixtures.Entity.Derived.Module2, as: DerivedModule2
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
@@ -51,7 +52,15 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module26, as: Entity26
   alias Hologram.Test.Fixtures.Entity.Module29, as: Entity29
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
+  alias Hologram.Test.Fixtures.Entity.Module32, as: Entity32
+  alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
+  alias Hologram.Test.Fixtures.Entity.Module34, as: Entity34
+  alias Hologram.Test.Fixtures.Entity.Module35, as: Entity35
+  alias Hologram.Test.Fixtures.Entity.Module37, as: Entity37
+  alias Hologram.Test.Fixtures.Entity.Module38, as: Entity38
+  alias Hologram.Test.Fixtures.Entity.Module39, as: Entity39
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
+  alias Hologram.Test.Fixtures.Entity.Module40, as: Entity40
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
@@ -1683,6 +1692,23 @@ defmodule Hologram.CompilerTest do
       assert map_size(queries.entries) == 1
     end
 
+    test "collects a registered query including derived fields and quantifying over a derived set",
+         %{entity_types: entity_types} do
+      put_derived_definitions([Entity37, Entity38])
+
+      term =
+        Entity37
+        |> filter(any(messages.channel.recent_messages))
+        |> include([pinned_count, recent_messages])
+        |> Stage.normalize()
+
+      component_queries = %{DerivedQueries => %{prop_params: [], targets: [], terms: [term]}}
+
+      queries = build_queries(component_queries, entity_types, false)
+
+      assert map_size(queries.entries) == 1
+    end
+
     test "raises for a registered query whose root type declares no allow lines", %{
       entity_types: entity_types
     } do
@@ -1864,7 +1890,40 @@ defmodule Hologram.CompilerTest do
       end
     end
 
-    test "raises for a registered query filtering on a server-only attribute inside an include",
+    # An include reads its set in the order the relationship declares, so a declared order on a
+    # server-only attribute is one the client would have to sort by.
+    test "raises for a registered query including a set ordered by a server-only attribute", %{
+      entity_types: entity_types
+    } do
+      defmodule ServerOnlyOrderFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module15
+
+        relationship :secrets, [Module15], sort: token
+
+        allow :read
+      end
+
+      term =
+        ServerOnlyOrderFixture
+        |> Stage.include(:secrets)
+        |> Stage.normalize()
+
+      component_queries = %{ComponentModule1 => %{prop_params: [], targets: [], terms: [term]}}
+
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module1 filters or sorts on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, [ServerOnlyOrderFixture | entity_types], false)
+      end
+    end
+
+    test "raises for a registered query filtering on a server-only attribute inside a quantifier",
          %{
            entity_types: entity_types
          } do
@@ -2128,6 +2187,170 @@ defmodule Hologram.CompilerTest do
 
       assert build_sync_constants_js(sync_constants) ==
                ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+    end
+
+    # A client computes a derived field itself, from the definition the build resolved - spelled in
+    # the shapes its query kernel reads, values as the wire spells them.
+    test "renders a derived field holding a value with its declared type and its definition" do
+      put_derived_definitions([Entity32, Entity34])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity34])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"active":{"definition":{"condition":[["score",">",0],["score","<",3]]},/ <>
+                 ~s/"kind":"scalar","type":"boolean","values":null}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"badge":{"definition":{"else":{"value":null},"if":[["score",">=",3]],/ <>
+                 ~s/"then":{"value":"top"}},"kind":"scalar","type":"string","values":null}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"display_name":{"definition":{"concat":[{"name":"nickname"},{"value":" ("},/ <>
+                 ~s/{"name":["channel","name"]},{"value":")"}]},"kind":"scalar","type":"string","values":null}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"featured":{"definition":{"condition":[{"or":[[["score","not_in",[0]]],/ <>
+                 ~s/[["nickname","==","lead"]]]}]},"kind":"scalar","type":"boolean","values":null}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"ranked":{"definition":{"condition":[{"or":[[["score","in",[1,2]]],/ <>
+                 ~s/[[["channel","name"],"in",["general"]],["score",">",-1]]]}]},/ <>
+                 ~s/"kind":"scalar","type":"boolean","values":null}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"top_score":{"definition":{"value":10},"kind":"scalar","type":"integer","values":null}/
+             )
+    end
+
+    test "renders a derived enum with its labels, its values and the values compared with it spelled as labels" do
+      put_derived_definitions([Entity34, Entity39])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity39])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"tier":{"definition":{"else":{"else":{"value":"bronze"},"if":[["score",">",5]],/ <>
+                 ~s/"then":{"value":"silver"}},"if":[["score",">",10]],"then":{"value":"gold"}},/ <>
+                 ~s/"kind":"scalar","type":"enum","values":["gold","silver","bronze"]}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"gold":{"definition":{"condition":[["tier","==","gold"]]},/ <>
+                 ~s/"kind":"scalar","type":"boolean","values":null}/
+             )
+    end
+
+    test "renders a derived field's query with the owner and the chain its rows are read from" do
+      put_derived_definitions([Entity37, Entity38])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity37])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"unread_count":{"definition":{"query":{"cardinality":"count",/ <>
+                 ~s/"entity":"Hologram.Test.Fixtures.Entity.Module38",/ <>
+                 ~s/"filter":[["created_at",">",{"attribute":{"name":"last_read_at","outer":1}}]],/ <>
+                 ~s/"include":{},"skip":null,"sort":[],/ <>
+                 ~s/"source":{"chain":["messages"],"owner":"Hologram.Test.Fixtures.Entity.Module37"},/ <>
+                 ~s/"take":null}},"kind":"scalar","type":"integer","values":null}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"authored_messages":{"definition":{"query":{"cardinality":"set",/ <>
+                 ~s/"entity":"Hologram.Test.Fixtures.Entity.Module38","filter":[],/ <>
+                 ~s/"include":{"author":{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module1",/ <>
+                 ~s/"filter":[],"include":{},"skip":null,"sort":[],"take":null}},/ <>
+                 ~s/"skip":null,"sort":[["id","asc"]],/ <>
+                 ~s/"source":{"chain":["messages"],"owner":"Hologram.Test.Fixtures.Entity.Module37"},/ <>
+                 ~s/"take":null}},"entity":"Hologram.Test.Fixtures.Entity.Module38","kind":"set"}/
+             )
+    end
+
+    test "renders a derived set's order and bounds" do
+      put_derived_definitions([Entity37, Entity38])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity37])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"recent_messages":{"definition":{"query":{"cardinality":"set",/ <>
+                 ~s/"entity":"Hologram.Test.Fixtures.Entity.Module38","filter":[],"include":{},/ <>
+                 ~s/"skip":null,"sort":[["created_at","desc"],["id","asc"]],/ <>
+                 ~s/"source":{"chain":["messages"],"owner":"Hologram.Test.Fixtures.Entity.Module37"},/ <>
+                 ~s/"take":3}},"entity":"Hologram.Test.Fixtures.Entity.Module38","kind":"set"}/
+             )
+    end
+
+    test "renders a derived set an if chooses and one holding nil" do
+      put_derived_definitions([Entity37, Entity38])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity37])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"nothing":{"definition":{"value":null},/ <>
+                 ~s/"entity":"Hologram.Test.Fixtures.Entity.Module38","kind":"set"}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"picked":{"definition":{"else":{"query":{"cardinality":"set",/ <>
+                 ~s/"entity":"Hologram.Test.Fixtures.Entity.Module38","filter":[],"include":{},/ <>
+                 ~s/"skip":null,"sort":[["id","asc"]],/ <>
+                 ~s/"source":{"chain":["messages","channel","messages"],/ <>
+                 ~s/"owner":"Hologram.Test.Fixtures.Entity.Module37"},"take":null}},/ <>
+                 ~s/"if":[["name","==","general"]],/ <>
+                 ~s/"then":{"query":{"cardinality":"set","entity":"Hologram.Test.Fixtures.Entity.Module38",/ <>
+                 ~s/"filter":[],"include":{},"skip":null,"sort":[["id","asc"]],/ <>
+                 ~s/"source":{"chain":["messages"],"owner":"Hologram.Test.Fixtures.Entity.Module37"},/ <>
+                 ~s/"take":1}}},"entity":"Hologram.Test.Fixtures.Entity.Module38","kind":"set"}/
+             )
+    end
+
+    test "renders a derived row and a quantifier reaching the owner from inside a query" do
+      put_derived_definitions([Entity32, Entity40])
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity32, Entity40])}
+
+      js = build_sync_constants_js(sync_constants)
+
+      assert String.contains?(
+               js,
+               ~s/"first_message":{"definition":{"query":{"cardinality":"one",/ <>
+                 ~s/"entity":"Hologram.Test.Fixtures.Entity.Module33","filter":[],"include":{},/ <>
+                 ~s/"skip":null,"sort":[["position","asc"],["id","asc"]],/ <>
+                 ~s/"source":{"chain":["messages"],"owner":"Hologram.Test.Fixtures.Entity.Module32"},/ <>
+                 ~s/"take":null}},"entity":"Hologram.Test.Fixtures.Entity.Module33","kind":"one"}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"filter":[{"filter":[["c","==",{"attribute":{"name":"name","outer":2}}]],/ <>
+                 ~s/"quantifier":"any","source":["tags"]}]/
+             )
     end
 
     # A build declaring no entity type says null, so no client of it asks to sync.
@@ -3396,7 +3619,7 @@ defmodule Hologram.CompilerTest do
                ~s/model: {"Hologram.Test.Fixtures.Entity.Module4":{"attributes":{"a":"date",/ <>
                  ~s/"b":"datetime","c":"enum","created_at":"datetime","d":"float","id":"uuid",/ <>
                  ~s/"updated_at":"datetime"},"constraints":{},"creatorRoles":[],/ <>
-                 ~s/"defaults":{"c":Type.atom("x")},/ <>
+                 ~s/"defaults":{"c":Type.atom("x")},"derived":{},/ <>
                  ~s/"enumValues":{"c":["x","y"]},"expandedRoles":{},"frameworkAttributes":[],"inverses":{},/ <>
                  ~s/"operations":["create","delete","grant_role","read","read_roles",/ <>
                  ~s/"revoke_role","update"],"policy":{},/ <>
@@ -3759,9 +3982,41 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"relationships":{"a":{"optional":false,"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
+               ~s/"relationships":{"a":{"optional":false,"sort":[],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
                  ~s/"b":{"optional":true,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module2"},/ <>
                  ~s/"c":{"optional":false,"toMany":false,"type":"Hologram.Test.Fixtures.Entity.Module1"}}/
+             )
+    end
+
+    test "injects a to-many's declared order", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      defmodule SortedToManyFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module28
+
+        relationship :messages, [Module28], sort: [position: :desc, body: :asc]
+      end
+
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([SortedToManyFixture])}
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"relationships":{"messages":{"optional":false,"sort":[["position","desc"],["body","asc"]],"toMany":true,"type":"Hologram.Test.Fixtures.Entity.Module28"}}/
              )
     end
 
@@ -6126,15 +6381,15 @@ defmodule Hologram.CompilerTest do
       assert extract_component_queries([], entity_types, ir_plt) == %{}
     end
 
-    # The refusal is the query stage's rather than a validation's - an include sub-term cannot
-    # carry the mark at all, so the extraction never reaches a term to object to.
+    # The refusal is the query stage's rather than a validation's - the capture includes a name its
+    # entity type does not declare, so the extraction never reaches a term to object to.
     test "raises for a capture the extractor refuses", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do
       expected_msg =
-        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the " <>
-          "whole query, includes and all, on the server's authority"
+        "unknown relationship :unknown in Hologram.Test.Fixtures.Entity.Module3 - known " <>
+          "relationships and derived fields: :a, :b, :c"
 
       assert_error ArgumentError, expected_msg, fn ->
         extract_component_queries([ComponentModule29], entity_types, ir_plt)
@@ -8268,6 +8523,50 @@ defmodule Hologram.CompilerTest do
 
     test "returns no module when every module is kept", %{ir_plt: ir_plt} do
       assert prune_ir_plt(ir_plt, [Module1, Module2, Module3]) == []
+    end
+  end
+
+  describe "resolve_derived_definitions/2" do
+    test "resolves definitions natively and by walking the query builders they call" do
+      assert resolve_derived_definitions([Entity35, Entity33], PLT.start()) == %{
+               definitions: %{
+                 {Entity33, :channel_name} => {:name, [:channel, :name]},
+                 {Entity33, :later_count} =>
+                   {:query,
+                    %Query{
+                      cardinality: :count,
+                      entity: Entity33,
+                      filter: [{:position, :>, {:attribute, {:outer, 1, :position}}}],
+                      source: {Entity33, [:channel, :messages]}
+                    }},
+                 {Entity33, :tier} => {:value, :low},
+                 {Entity35, :channel_name} => {:name, [:channel, :name]},
+                 {Entity35, :latest} =>
+                   {:query,
+                    %Query{
+                      entity: Entity33,
+                      sort: [position: :desc, id: :asc],
+                      source: {Entity35, [:channel, :messages]},
+                      take: 1
+                    }},
+                 {Entity35, :recent} =>
+                   {:query,
+                    %Query{
+                      entity: Entity33,
+                      sort: [position: :desc, id: :asc],
+                      source: {Entity35, [:channel, :messages]},
+                      take: 2
+                    }}
+               },
+               read_modules: [DerivedModule2]
+             }
+    end
+
+    test "resolves nothing for entity types declaring no derived field" do
+      assert resolve_derived_definitions([Entity1, Entity2], PLT.start()) == %{
+               definitions: %{},
+               read_modules: []
+             }
     end
   end
 

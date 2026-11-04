@@ -20,6 +20,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Role
@@ -1483,6 +1484,17 @@ defmodule Hologram.DB.EntityOperationsTest do
 
       assert_error ArgumentError, expected_msg, fn ->
         update(Module10, created_entity.id, %{}, deltas: %{bio: 1, nope: 1, priority: 1})
+      end
+    end
+
+    test "raises when a delta names a derived field" do
+      {:ok, created_entity} = create(Module32.new(name: "general"))
+
+      expected_msg =
+        "invalid deltas for Hologram.Test.Fixtures.Entity.Module32 - :message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        update(Module32, created_entity.id, %{}, deltas: %{message_count: 1})
       end
     end
 

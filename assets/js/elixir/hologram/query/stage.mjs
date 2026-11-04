@@ -68,13 +68,26 @@ function attributeTriple(name, operator, other, entityType, scope) {
   validateOperandName(other, otherType);
   validateComparableAttributes(name, other, operator, entityType, otherType);
 
+  // Two compared attributes share a type, so the operand is orderable or searchable when the name
+  // is - unless it is a derived string, which has no stored sort key or search forms.
+  if (ORDERING_OPERATORS.includes(operator)) {
+    validateOrderableAttribute(other, otherType, operator);
+  }
+
+  if (SEARCH_OPERATORS.includes(operator)) {
+    validateSearchableAttribute(other, otherType, operator);
+  }
+
   return [nameValue(name), operator, {attribute: nameValue(other)}];
 }
 
-// A name matching no attribute definition is a to-one reference field, and every one of those
-// carries an entity id - the fallback both tiers make.
+// A name matching no attribute definition is a derived field holding a value, typed as declared,
+// or else a to-one reference field, which carries an entity id - the fallback both tiers make.
 function attributeType(entityType, name) {
-  return Model.entry(entityType).attributes[name] ?? "uuid";
+  const derived = Model.derivedField(entityType, name);
+  const derivedType = derived?.kind === "scalar" ? derived.type : null;
+
+  return Model.entry(entityType).attributes[name] ?? derivedType ?? "uuid";
 }
 
 function byKey(keyOf) {
@@ -112,6 +125,62 @@ function counterAttributeNames(entityType) {
 
   return integerNames(entityType).filter(
     (name) => constraints[name]?.optional !== true,
+  );
+}
+
+// The order a set relationship declares, stored or inverse - none for a name that is no set.
+function declaredOrder(entityType, name) {
+  const relationships = Model.relationships(entityType);
+  const inverses = Model.inverses(entityType);
+
+  if (Object.hasOwn(relationships, name)) {
+    return relationships[name].sort ?? [];
+  }
+
+  return Object.hasOwn(inverses, name) ? inverses[name].sort : [];
+}
+
+// The derived field of the given name holding rows - one or a set - or null for any other name.
+function derivedRows(entityType, name) {
+  const derived = Model.derivedField(entityType, name);
+
+  return derived && derived.kind !== "scalar" ? derived : null;
+}
+
+// What a derived field holds, as a message names it: one row or a set of them.
+function derivedRowsSpelled(derived) {
+  return derived.kind === "set" ? "a set of rows" : "one row";
+}
+
+// The element type of the derived set of the given name, refusing a derived field that holds no
+// set with the given reason, null for a name that is no derived field.
+function derivedSetTarget(name, entityType, reason) {
+  const derived = Model.derivedField(entityType, name.value);
+
+  if (!derived) {
+    return null;
+  }
+
+  if (derived.kind === "set") {
+    return derived.entity;
+  }
+
+  const held =
+    derived.kind === "one"
+      ? derivedRowsSpelled(derived)
+      : `a :${derived.type} value`;
+
+  Interpreter.raiseArgumentError(
+    `${Interpreter.inspect(name)} is a derived field holding ${held} in ${entityType} - ${reason}`,
+  );
+}
+
+// The derived fields holding a value of an attribute type, by name, with the type each declares.
+function derivedValueTypes(entityType) {
+  return Object.fromEntries(
+    Object.entries(Model.derived(entityType))
+      .filter(([_name, derived]) => derived.kind === "scalar")
+      .map(([name, derived]) => [name, derived.type]),
   );
 }
 
@@ -189,6 +258,14 @@ function entryClauses(pair, scope) {
   }
 
   return predicateTriples(name, value, entityType, scope);
+}
+
+// The values an enum declares, in their declared order: an enum attribute's, or a derived enum's.
+function enumValues(entityType, name) {
+  return (
+    Model.entry(entityType).enumValues[name] ??
+    Model.derivedField(entityType, name).values
+  );
 }
 
 function integerNames(entityType) {
@@ -277,45 +354,58 @@ function filterableNames(entityType) {
   return [
     ...attributeNames(entityType),
     ...referenceFieldNames(entityType),
+    ...Object.keys(derivedValueTypes(entityType)),
   ].sort();
 }
 
-// The sub-builder is handed a fresh term for the related type, so what it returns is a query in
-// its own right - filtered, ordered and bounded like any other - which is then embedded under the
-// relationship's name.
-function includeOne(query, name, subBuilder) {
+// A derived field holding a value is included with nothing under it, as null. Any other name is
+// included as its related type's whole term, what the nested spec names included under it - a
+// derived field holding rows takes nested includes only, since its definition states its rows.
+function includeOne(query, name, nestedSpec) {
   const term = toTerm(query);
-  const {kind, target} = validateRelationshipName(name, term.entity);
+  const {kind, target} = validateIncludedName(name, term.entity);
+
+  if (kind === "derived_value") {
+    if (nestedSpec !== null) {
+      Interpreter.raiseArgumentError(
+        `${Interpreter.inspect(name)} is a :${target} derived field in ${term.entity} - nothing is included under it`,
+      );
+    }
+
+    return {...term, include: putIncluded(term.include, name.value, null)};
+  }
+
   const relatedBaseTerm = toTerm(Type.alias(target));
 
-  const subTerm = subBuilder
-    ? Interpreter.callAnonymousFunction(subBuilder, [relatedBaseTerm])
-    : relatedBaseTerm;
-
-  validateSubTerm(subTerm, name, target, kind);
+  const subTerm =
+    nestedSpec === null
+      ? relatedBaseTerm
+      : Elixir_Hologram_Query_Stage["include/2"](relatedBaseTerm, nestedSpec);
 
   return {...term, include: putIncluded(term.include, name.value, subTerm)};
 }
 
-// A spec entry is a relationship name, a {name, sub-builder} pair, or a {name, nested spec} pair -
-// the last traversing deeper without writing a function for it.
+// A spec entry is a relationship name or a {name, nested spec} pair. A function would narrow the
+// set, which is what a derived field does - refused naming one.
 function includeSpecEntry(term, entry) {
-  const include = Elixir_Hologram_Query_Stage["include/3"];
-
   if (Type.isAtom(entry)) {
-    return include(term, entry, Type.nil());
+    return includeOne(term, entry, null);
   }
 
   if (isConstraintTuple(entry)) {
     const [name, spec] = entry.data;
 
-    return Type.isAnonymousFunction(spec)
-      ? include(term, name, spec)
-      : includeOne(term, name, nestedSubBuilder(spec));
+    if (Type.isAnonymousFunction(spec)) {
+      Interpreter.raiseArgumentError(
+        `invalid include spec entry ${Interpreter.inspect(entry)} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end`,
+      );
+    }
+
+    return includeOne(term, name, spec);
   }
 
   Interpreter.raiseArgumentError(
-    `invalid include spec entry ${Interpreter.inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair`,
+    `invalid include spec entry ${Interpreter.inspect(entry)} - use a relationship name or a {name, spec} pair`,
   );
 }
 
@@ -372,6 +462,15 @@ function isConstraintTuple(value) {
   return (
     Type.isTuple(value) && value.data.length === 2 && Type.isAtom(value.data[0])
   );
+}
+
+// Whether a name is a derived string: a computed string has no stored sort key or folded form, so
+// it is not ordered or searched.
+function isDerivedString(entityType, name) {
+  const declared = subject(entityType, name);
+  const derived = Model.derivedField(declared.entityType, declared.name);
+
+  return derived?.kind === "scalar" && derived.type === "string";
 }
 
 // {:outer, levels, name} with an integer number of levels and an attribute or a path as the name -
@@ -434,7 +533,7 @@ function isQuantifierValue(value) {
   );
 }
 
-// A stage returns the plain term this file builds, so what a sub-builder gives back is told from
+// A stage returns the plain term this file builds, so a query handed to a stage is told from
 // anything else by being one - a boxed value never carries an entity.
 function isQueryTerm(value) {
   return value !== null && typeof value === "object" && "entity" in value;
@@ -493,14 +592,11 @@ function membershipValues(values, name, entityType) {
   );
 }
 
-// Two includes of one relationship are one include when neither narrows it: what each includes
-// merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
-// than the other, so a relationship included twice with clauses on either side is refused.
-function mergedSubTerm(included, subTerm, name) {
-  if (subTermHasClauses(included) || subTermHasClauses(subTerm)) {
-    Interpreter.raiseArgumentError(
-      `relationship ${Interpreter.inspect(Type.atom(name))} is already included`,
-    );
+// Two includes of one relationship are one include: what each includes merges, by the same rule
+// all the way down.
+function mergedSubTerm(included, subTerm) {
+  if (included === null && subTerm === null) {
+    return null;
   }
 
   const include = Object.entries(subTerm.include).reduce(
@@ -533,7 +629,7 @@ function nameTypeOf(scope, name) {
 
   if (levels === null || levels < 1 || levels > rowsAbove) {
     Interpreter.raiseArgumentError(
-      `${Interpreter.inspect(name)} names no row above the condition it stands in, which has ${rowsSpelled(rowsAbove)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the queried row`,
+      `${Interpreter.inspect(name)} names no row above the condition it stands in, which has ${rowsSpelled(rowsAbove)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row`,
     );
   }
 
@@ -550,23 +646,16 @@ function nameValue(name) {
   return isPath(name) ? name.data.map((atom) => atom.value) : name.value;
 }
 
-// The nested-spec shorthand is the sub-builder that includes through the nested spec, boxed the
-// way a builder's own function arrives - so one code path calls both.
-function nestedSubBuilder(spec) {
-  const clause = {
-    params: (_context) => [Type.variablePattern("related_term")],
-    guards: [],
-    body: (context) =>
-      Elixir_Hologram_Query_Stage["include/2"](context.vars.related_term, spec),
-  };
-
-  return Type.anonymousFunction(1, [clause], Interpreter.buildContext());
-}
-
+// A to-one embeds one row, and a derived field's rows are the ones its definition states, so
+// neither carries an order of its own - only what it includes is normalized.
 function normalizedIncludes(term) {
   return Object.fromEntries(
     Object.entries(term.include).map(([name, subTerm]) => {
-      const {kind} = validateRelationshipName(Type.atom(name), term.entity);
+      if (subTerm === null) {
+        return [name, null];
+      }
+
+      const {kind} = validateIncludedName(Type.atom(name), term.entity);
       const orderedSubTerm = withDeclaredOrder(subTerm, term.entity, name);
 
       return [
@@ -762,16 +851,19 @@ function raiseUnknownOperator(operator, name) {
   );
 }
 
-// The known relationships are the ones the position takes: to-one ones before the set, every
-// relationship at the set.
-function raiseUnknownSourceName(name, entityType, knownNames) {
+// The known relationships are every relationship of the type - a source takes any of them.
+function raiseUnknownSourceName(name, entityType) {
   if (attributeNames(entityType).includes(name.value)) {
     Interpreter.raiseArgumentError(
       `${Interpreter.inspect(name)} is an attribute in ${entityType} - a quantifier's source names relationships`,
     );
   }
 
-  const known = knownNames.map((knownName) => `:${knownName}`).join(", ");
+  const known = relationshipNames(entityType)
+    .concat(Object.keys(Model.inverses(entityType)))
+    .sort()
+    .map((knownName) => `:${knownName}`)
+    .join(", ");
 
   Interpreter.raiseArgumentError(
     `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships: ${known}`,
@@ -811,15 +903,6 @@ function settableNames(entityType) {
 
 function structName(value) {
   return field(value, "__struct__").value.replace(/^Elixir\./, "");
-}
-
-function subTermHasClauses(subTerm) {
-  return (
-    subTerm.filter.length > 0 ||
-    subTerm.sort.length > 0 ||
-    subTerm.take !== null ||
-    subTerm.skip !== null
-  );
 }
 
 function referenceFieldNames(entityType) {
@@ -1091,7 +1174,7 @@ function putIncluded(include, name, subTerm) {
   return {
     ...include,
     [name]: Object.hasOwn(include, name)
-      ? mergedSubTerm(include[name], subTerm, name)
+      ? mergedSubTerm(include[name], subTerm)
       : subTerm,
   };
 }
@@ -1182,7 +1265,20 @@ function validateActorAttribute(name, entityType) {
 }
 
 function validateAttributeName(name, entityType, usage) {
-  const names = attributeNames(entityType);
+  const orderableDerivedNames = Object.entries(derivedValueTypes(entityType))
+    .filter(([_name, type]) => type !== "string")
+    .map(([derivedName]) => derivedName);
+
+  const names = [
+    ...attributeNames(entityType),
+    ...orderableDerivedNames,
+  ].sort();
+
+  if (isDerivedString(entityType, name)) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is a derived string in ${entityType} - a string is ${usage} by the sort key stored with it, which a computed string has none of`,
+    );
+  }
 
   if (names.includes(name.value)) {
     return;
@@ -1191,6 +1287,14 @@ function validateAttributeName(name, entityType, usage) {
   if (relationshipNames(entityType).includes(name.value)) {
     Interpreter.raiseArgumentError(
       `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be ${usage}`,
+    );
+  }
+
+  const derived = derivedRows(entityType, name.value);
+
+  if (derived) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is a derived field holding ${derivedRowsSpelled(derived)} in ${entityType} - only attributes can be ${usage}`,
     );
   }
 
@@ -1244,11 +1348,8 @@ function validateComparableAttributes(
 
   const declared = subject(entityType, name);
   const otherDeclared = subject(otherEntityType, other);
-  const values = Model.entry(declared.entityType).enumValues[declared.name];
-
-  const otherValues = Model.entry(otherDeclared.entityType).enumValues[
-    otherDeclared.name
-  ];
+  const values = enumValues(declared.entityType, declared.name);
+  const otherValues = enumValues(otherDeclared.entityType, otherDeclared.name);
 
   const sameValues =
     values.length === otherValues.length &&
@@ -1282,6 +1383,14 @@ function validateFilteredName(name, entityType) {
     );
   }
 
+  const derived = derivedRows(entityType, name.value);
+
+  if (derived) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is a derived field holding ${derivedRowsSpelled(derived)} in ${entityType} - only attributes can be filtered`,
+    );
+  }
+
   const known = names.map((known) => `:${known}`).join(", ");
 
   Interpreter.raiseArgumentError(
@@ -1298,13 +1407,57 @@ function validateEnumOperand(name, operand, entityType) {
   }
 
   const declared = subject(entityType, name);
-  const values = Model.entry(declared.entityType).enumValues[declared.name];
+  const values = enumValues(declared.entityType, declared.name);
 
   if (!values.includes(Model.unbox(operand, "enum"))) {
     Interpreter.raiseArgumentError(
       `${Interpreter.inspect(operand)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
     );
   }
+}
+
+// A stored relationship or an inverse - a set of either is included as a to-many, a single
+// inverse as a to-one - or a derived field: one holding rows is included as its rows' type, one
+// holding a value as its type.
+function validateIncludedName(name, entityType) {
+  const entry = Model.entry(entityType);
+
+  const relationship = Object.hasOwn(entry.relationships, name.value)
+    ? entry.relationships[name.value]
+    : Object.hasOwn(entry.inverses, name.value)
+      ? entry.inverses[name.value]
+      : null;
+
+  if (relationship) {
+    return {
+      kind: relationship.toMany ? "to_many" : "to_one",
+      target: relationship.type,
+    };
+  }
+
+  const derived = Model.derivedField(entityType, name.value);
+
+  if (derived) {
+    return derived.kind === "scalar"
+      ? {kind: "derived_value", target: derived.type}
+      : {kind: "derived_rows", target: derived.entity};
+  }
+
+  if (attributeNames(entityType).includes(name.value)) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(name)} is an attribute in ${entityType} - only relationships and derived fields can be included`,
+    );
+  }
+
+  const known = relationshipNames(entityType)
+    .concat(Object.keys(entry.inverses), Object.keys(entry.derived))
+    .sort()
+    .map((loadableName) => `:${loadableName}`)
+    .join(", ");
+
+  Interpreter.raiseArgumentError(
+    `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships and derived fields: ${known}`,
+  );
 }
 
 function validateMembershipList(operand, name, operator) {
@@ -1351,6 +1504,16 @@ function validateMembershipRange(range, name, entityType) {
   }
 }
 
+// A derived field holds no reference, so no relationship goes through it - a related row it holds
+// is read through the relationships its definition reads.
+function validateNotDerivedHop(hop, entityType, reason) {
+  if (Object.hasOwn(Model.derived(entityType), hop.value)) {
+    Interpreter.raiseArgumentError(
+      `${Interpreter.inspect(hop)} is a derived field in ${entityType} - ${reason}`,
+    );
+  }
+}
+
 // What an attribute operand names - another attribute of the row, or a path to one - refused in the
 // words a predicate's own name is, quoted as written, a row above's wrapper included.
 function validateOperandName(operandName, entityType) {
@@ -1375,6 +1538,12 @@ function validateOperandName(operandName, entityType) {
 // to compare by. An enum's is the list it declares, on every tier. A string's is the same derived
 // key its ordering uses, which the kernel reads off the row.
 function validateOrderableAttribute(name, entityType, operator) {
+  if (isDerivedString(entityType, name)) {
+    Interpreter.raiseArgumentError(
+      `operator :${operator} requires an orderable attribute - ${inspectName(name)} in ${entityType} is a derived string, and a string compares by the sort key stored with it, which a computed string has none of`,
+    );
+  }
+
   const type = nameType(entityType, name);
 
   if (!ORDERABLE_TYPES.includes(type)) {
@@ -1422,47 +1591,18 @@ function validatePathHop(hop, entityType) {
     );
   }
 
+  validateNotDerivedHop(
+    hop,
+    entityType,
+    "a path in a condition goes through to-one relationships that hold their reference",
+  );
+
   const known = relationshipNames(entityType)
     .map((relationshipName) => `:${relationshipName}`)
     .join(", ");
 
   Interpreter.raiseArgumentError(
     `unknown relationship ${Interpreter.inspect(hop)} in ${entityType} - known relationships: ${known}`,
-  );
-}
-
-// A stored relationship or an inverse - a set of either is included as a to-many, a single
-// inverse as a to-one.
-function validateRelationshipName(name, entityType) {
-  const entry = Model.entry(entityType);
-
-  const relationship = Object.hasOwn(entry.relationships, name.value)
-    ? entry.relationships[name.value]
-    : Object.hasOwn(entry.inverses, name.value)
-      ? entry.inverses[name.value]
-      : null;
-
-  if (relationship) {
-    return {
-      kind: relationship.toMany ? "to_many" : "to_one",
-      target: relationship.type,
-    };
-  }
-
-  if (attributeNames(entityType).includes(name.value)) {
-    Interpreter.raiseArgumentError(
-      `${Interpreter.inspect(name)} is an attribute in ${entityType} - only relationships can be included`,
-    );
-  }
-
-  const known = relationshipNames(entityType)
-    .concat(Object.keys(entry.inverses))
-    .sort()
-    .map((relationshipName) => `:${relationshipName}`)
-    .join(", ");
-
-  Interpreter.raiseArgumentError(
-    `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships: ${known}`,
   );
 }
 
@@ -1483,6 +1623,12 @@ function validateScalarOperand(name, operator, operand, refuseNil = false) {
 // A search matches text, so it reads a string attribute - its value, or its folded form for a
 // loose match.
 function validateSearchableAttribute(name, entityType, operator) {
+  if (isDerivedString(entityType, name)) {
+    Interpreter.raiseArgumentError(
+      `operator :${operator} requires a stored string - ${inspectName(name)} in ${entityType} is a derived string, and a search reads the forms stored with a string`,
+    );
+  }
+
   const type = nameType(entityType, name);
 
   if (type !== "string") {
@@ -1492,8 +1638,8 @@ function validateSearchableAttribute(name, entityType, operator) {
   }
 }
 
-// A source follows to-one relationships that hold their reference, and ends at a set - a to-many
-// or an inverse of either kind of relationship - whose type its predicates are about.
+// A source follows any relationships and ends at a set - a to-many, an inverse set or a derived
+// set - whose type its predicates are about.
 function validateSource(hops, entityType) {
   const ownerType = hops
     .slice(0, -1)
@@ -1502,26 +1648,27 @@ function validateSource(hops, entityType) {
   return validateSourceSet(hops[hops.length - 1], ownerType);
 }
 
+// A source follows any relationship to its set - a to-one, a to-many or an inverse of either kind.
+// A set before the last link reads as the rows every path reaches.
 function validateSourceHop(hop, entityType) {
-  if (Object.hasOwn(Model.inverses(entityType), hop.value)) {
-    Interpreter.raiseArgumentError(
-      `${Interpreter.inspect(hop)} is an inverse relationship in ${entityType} - a quantifier's source goes through to-one relationships that hold their reference to a set`,
-    );
+  const inverses = Model.inverses(entityType);
+  const relationships = Model.relationships(entityType);
+
+  if (Object.hasOwn(inverses, hop.value)) {
+    return inverses[hop.value].type;
   }
 
-  const relationship = Model.relationships(entityType)[hop.value];
-
-  if (relationship && relationship.toMany) {
-    Interpreter.raiseArgumentError(
-      `${Interpreter.inspect(hop)} is a to-many relationship in ${entityType} - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own`,
-    );
+  if (Object.hasOwn(relationships, hop.value)) {
+    return relationships[hop.value].type;
   }
 
-  if (relationship) {
-    return relationship.type;
-  }
+  validateNotDerivedHop(
+    hop,
+    entityType,
+    "a quantifier's source goes through relationships, with a derived set only at its end",
+  );
 
-  raiseUnknownSourceName(hop, entityType, toOneRelationshipNames(entityType));
+  raiseUnknownSourceName(hop, entityType);
 }
 
 function validateSourceSet(name, entityType) {
@@ -1549,39 +1696,17 @@ function validateSourceSet(name, entityType) {
     );
   }
 
-  const includable = relationshipNames(entityType)
-    .concat(Object.keys(inverses))
-    .sort();
+  const derivedTarget = derivedSetTarget(
+    name,
+    entityType,
+    "any, none and all ask about the rows of a set",
+  );
 
-  raiseUnknownSourceName(name, entityType, includable);
-}
-
-// A to-one embeds one entity, so there is nothing for a filter, an order or a bound to do to it -
-// nesting is its only refinement, to any depth.
-function validateSubTerm(subTerm, name, target, kind) {
-  if (!isQueryTerm(subTerm)) {
-    Interpreter.raiseArgumentError(
-      `include sub-builder for relationship ${Interpreter.inspect(name)} must return a query term for ${target}, got: ${Interpreter.inspect(subTerm)}`,
-    );
+  if (derivedTarget) {
+    return derivedTarget;
   }
 
-  if (subTerm.entity !== target) {
-    Interpreter.raiseArgumentError(
-      `include sub-builder for relationship ${Interpreter.inspect(name)} must return a query term for ${target} - got a query term for ${subTerm.entity}`,
-    );
-  }
-
-  if (subTerm.cardinality !== "set") {
-    Interpreter.raiseArgumentError(
-      "include sub-terms take no cardinality marker - the relationship declaration governs cardinality",
-    );
-  }
-
-  if (kind === "to_one" && subTermHasClauses(subTerm)) {
-    Interpreter.raiseArgumentError(
-      `to-one relationship ${Interpreter.inspect(name)} takes no clauses - clauses apply to to-many includes`,
-    );
-  }
+  raiseUnknownSourceName(name, entityType);
 }
 
 function validateAmount(amount, stage) {
@@ -1630,6 +1755,12 @@ function validateDeltaName(name, entityType, stage) {
     );
   }
 
+  if (named !== null && Object.hasOwn(Model.derived(entityType), named)) {
+    Interpreter.raiseArgumentError(
+      Model.derivedReadOnlyMessage(entityType, named),
+    );
+  }
+
   const known = counters.map((counter) => `:${counter}`).join(", ");
 
   Interpreter.raiseArgumentError(
@@ -1662,6 +1793,12 @@ function validateEdgeRelationshipName(name, entityType, stage) {
   if (named !== null && attributeNames(entityType).includes(named)) {
     Interpreter.raiseArgumentError(
       `${spelled} is an attribute in ${entityType} - only to-many relationships hold edges - put it via put_attribute`,
+    );
+  }
+
+  if (named !== null && Object.hasOwn(Model.derived(entityType), named)) {
+    Interpreter.raiseArgumentError(
+      Model.derivedReadOnlyMessage(entityType, named),
     );
   }
 
@@ -1706,6 +1843,12 @@ function validatePutName(name, entityType) {
     );
   }
 
+  if (named !== null && Object.hasOwn(Model.derived(entityType), named)) {
+    Interpreter.raiseArgumentError(
+      Model.derivedReadOnlyMessage(entityType, named),
+    );
+  }
+
   const known = settable.map((settableName) => `:${settableName}`).join(", ");
 
   Interpreter.raiseArgumentError(
@@ -1713,16 +1856,15 @@ function validatePutName(name, entityType) {
   );
 }
 
-// An inverse set is read in the order its declaration names when the include sets none, as the
-// server normalizes it. The build bakes that order already spelled the way a term spells one.
+// A set, stored or inverse, is read in the order its declaration names when the include sets none,
+// as the server normalizes it. The build bakes that order already spelled the way a term spells
+// one, on every to-many and every inverse.
 function withDeclaredOrder(subTerm, entityType, name) {
-  const inverses = Model.inverses(entityType);
-
-  if (subTerm.sort.length > 0 || !Object.hasOwn(inverses, name)) {
+  if (subTerm.sort.length > 0) {
     return subTerm;
   }
 
-  const declared = inverses[name].sort;
+  const declared = declaredOrder(entityType, name);
 
   return declared.length > 0 ? {...subTerm, sort: declared} : subTerm;
 }
@@ -1786,31 +1928,12 @@ const Elixir_Hologram_Query_Stage = {
 
     return {...term, filter: [...term.filter, ...clauses]};
   },
-  "include/2": (query, spec) =>
-    Elixir_Hologram_Query_Stage["include/3"](query, spec, Type.nil()),
-
-  "include/3": (query, spec, subBuilder) => {
+  "include/2": (query, spec) => {
     if (Type.isAtom(spec)) {
-      if (Type.isNil(subBuilder)) {
-        return includeOne(query, spec, null);
-      }
-
-      if (Type.isAnonymousFunction(subBuilder) && subBuilder.arity === 1) {
-        return includeOne(query, spec, subBuilder);
-      }
-
-      Interpreter.raiseArgumentError(
-        `include sub-builder for relationship ${Interpreter.inspect(spec)} must be a one-argument function, got: ${Interpreter.inspect(subBuilder)}`,
-      );
+      return includeOne(query, spec, null);
     }
 
     if (Type.isList(spec)) {
-      if (!Type.isNil(subBuilder)) {
-        Interpreter.raiseArgumentError(
-          "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair",
-        );
-      }
-
       if (spec.data.length === 0) {
         Interpreter.raiseArgumentError("include spec must not be empty");
       }

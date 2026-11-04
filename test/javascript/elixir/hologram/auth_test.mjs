@@ -104,6 +104,44 @@ describe("Elixir_Hologram_Auth", () => {
             summary: "string",
             title: "string",
           },
+          // Module42's derived fields, renamed onto this model, read in a rule as the reference
+          // reads them - late is this side's own, for a string ordered inside a definition.
+          derived: {
+            folder_hidden: {
+              definition: {condition: [[["folder", "archived"], "==", true]]},
+              kind: "scalar",
+              type: "boolean",
+              values: null,
+            },
+            label: {
+              definition: {concat: [{name: "title"}, {value: "!"}]},
+              kind: "scalar",
+              type: "string",
+              values: null,
+            },
+            late: {
+              definition: {condition: [["title", ">", "Banana"]]},
+              kind: "scalar",
+              type: "boolean",
+              values: null,
+            },
+            rank: {
+              definition: {
+                else: {value: "low"},
+                if: [["priority", ">", 5]],
+                then: {value: "high"},
+              },
+              kind: "scalar",
+              type: "enum",
+              values: ["high", "low"],
+            },
+            shout: {
+              definition: {concat: [{name: "label"}, {value: "!"}]},
+              kind: "scalar",
+              type: "string",
+              values: null,
+            },
+          },
           enumValues: {
             stage: ["draft", "review", "published"],
             status: ["draft", "review", "published"],
@@ -134,6 +172,22 @@ describe("Elixir_Hologram_Auth", () => {
             archived: "boolean",
             kind: "enum",
             name: "string",
+          },
+          // Shout stands in for Module42's origin row, the server's path end, and late is this side's
+          // own, for a string ordered inside a delegated row's definition.
+          derived: {
+            late: {
+              definition: {condition: [["name", ">", "Banana"]]},
+              kind: "scalar",
+              type: "boolean",
+              values: null,
+            },
+            shout: {
+              definition: {concat: [{name: "name"}, {value: "!!"}]},
+              kind: "scalar",
+              type: "string",
+              values: null,
+            },
           },
           enumValues: {kind: ["low", "medium", "high"]},
           expandedRoles: {},
@@ -293,6 +347,77 @@ describe("Elixir_Hologram_Auth", () => {
 
       return can(userOrId, Type.atom("read"), entity);
     };
+
+    it("computes a derived field from the row a path in its definition reads", () => {
+      const rules = [rule({predicates: [["folder_hidden", "==", true]]})];
+      const entity = document({folder_id: FOLDER_ID});
+
+      LocalDatabase.putRow(FOLDER, {archived: true, id: FOLDER_ID});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(true));
+
+      LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(false));
+      assert.deepStrictEqual(reads(rules, document()), Type.boolean(false));
+    });
+
+    it("computes a derived field reading another, nil where a string it joins is", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["shout", "==", "draft!!"]]})],
+          document({title: "draft"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["shout", "==", null]]})],
+          document({title: null}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("compares a derived enum by its declared order", () => {
+      const rules = [rule({predicates: [["rank", "<", "low"]]})];
+
+      assert.deepStrictEqual(
+        reads(rules, document({priority: 9})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(rules, document({priority: 1})),
+        Type.boolean(false),
+      );
+    });
+
+    it("takes a derived if's else branch when its condition reads nil", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["rank", "==", "low"]]})],
+          document({priority: null}),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("computes a derived field on the row a path leads to", () => {
+      const rules = [
+        rule({predicates: [[["folder", "shout"], "==", "Plans!!"]]}),
+      ];
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, name: "Plans"});
+
+      assert.deepStrictEqual(
+        reads(rules, document({folder_id: FOLDER_ID})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(reads(rules, document()), Type.boolean(false));
+    });
 
     it("requires every predicate of the rule to hold", () => {
       const rules = [
@@ -1601,6 +1726,47 @@ describe("Elixir_Hologram_Auth", () => {
       assert.deepStrictEqual(
         reads([rule({predicates: [[path, "==", false]]})], entity),
         Type.boolean(false),
+      );
+    });
+  });
+
+  // Cases this side alone has: the server orders a string by its sort key wherever it compares one,
+  // and a client orders a row's string by the key filed beside it.
+  describe("derived fields over the entity's own fields", () => {
+    it("orders a string inside a definition by its sort key", () => {
+      defineModel({read: [rule({predicates: [["late", "==", true]]})]});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({title: "apple"})),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({title: "cherry"})),
+        Type.boolean(true),
+      );
+    });
+
+    it("orders a string inside a delegated row's definition by its sort key", () => {
+      defineModel(
+        {read: [rule({via: ["read", ["folder"]]})]},
+        {read: [rule({predicates: [["late", "==", true]]})]},
+      );
+
+      const entity = document({folder_id: FOLDER_ID});
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, name: "apple"});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), entity),
+        Type.boolean(false),
+      );
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, name: "cherry"});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), entity),
+        Type.boolean(true),
       );
     });
   });

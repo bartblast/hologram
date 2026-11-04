@@ -21,8 +21,21 @@ import StringOrder from "./string_order.mjs";
 // related type's table and missing when a reference is empty or names a row not held. Inside a
 // quantifier's filter the row is the related one, and {outer: levels, name} names an attribute or a
 // path of the row that many quantifiers out. A source is the array of relationships to the set -
-// to-one ones, then a to-many or an inverse set - read on the row the quantifier is about, or
-// {outer: levels, name} read on a row above.
+// any relationships, then a to-many, an inverse set or a derived field holding rows, a set before
+// the last link reading as the rows every path reaches - read on the row the quantifier is about,
+// or {outer: levels, name} read on a row above.
+//
+// A derived field holding a value is computed from its definition - the model bakes it - wherever
+// its name is read: a predicate's side, a path's end, a sort key. `concat` is null when an operand
+// is, an `if` takes its else branch when its condition does not hold, a condition is true or false,
+// never null, and a count counts the rows its source leads to from the row - the last link's rows
+// of every row the links before it reach, each once - matched to its filter with the row as the row
+// above, its bounds applied. A derived field holding rows holds its query's rows in its order with
+// its bounds applied, the rows of the branch an `if` takes, or none for null. An included derived
+// field holds its value, or its rows - a list, or one row or null - each row embedding what its
+// definition and the include ask for. A derived enum compares and orders by its value's position
+// among the declared ones. An integer a float field reads needs no widening here, since a number is
+// one type whole or not.
 //
 // Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
@@ -43,7 +56,8 @@ export default class QueryKernel {
 
   // Runs the term over the database and returns what it evaluates to: nodes for a set, one node
   // or null for a single-result query, a number for a counting one.
-  static run(term, context = {}) {
+  static run(term, givenContext = {}) {
+    const context = QueryKernel.#withMemo(givenContext);
     const ranks = QueryKernel.#ranksFor(term.entity, term.filter);
 
     const matched = Object.values(LocalDatabase.getTable(term.entity)).filter(
@@ -59,23 +73,36 @@ export default class QueryKernel {
         return QueryKernel.#bound(matched, term).length;
 
       case "one": {
-        const [row] = QueryKernel.#arrange(matched, term);
+        const [row] = QueryKernel.#arrange(matched, term, context);
 
         return row ? QueryKernel.#node(row, term, context) : null;
       }
 
       default:
-        return QueryKernel.#arrange(matched, term).map((row) =>
+        return QueryKernel.#arrange(matched, term, context).map((row) =>
           QueryKernel.#node(row, term, context),
         );
     }
   }
 
+  // The value of the derived field of the given name on the row, computed from its definition the
+  // way a run reads it - for a reader holding a row outside a run, like a permission check. A
+  // definition reads no placeholder and no acting user, so it is computed with no context.
+  static derivedValue(row, entityType, name) {
+    const context = QueryKernel.#withMemo({});
+
+    return QueryKernel.#derivedValue(row, entityType, name, context);
+  }
+
   // The entity type is what an enum predicate is answered by: its declared value list decides
   // which of two labels comes first, and a caller that names its type gets the same answer run()
   // gives. Left out, nothing is ranked and labels compare as they are spelled - and a path cannot
-  // be followed at all, since what its relationships lead to is a fact about the type.
-  static matches(row, filter, context = {}, entityType = null) {
+  // be followed at all, since what its relationships lead to is a fact about the type. Nor is a
+  // derived field computed, since whether a name is one is a fact about the type too: it reads as
+  // the row holds it, which is nothing.
+  static matches(row, filter, givenContext = {}, entityType = null) {
+    const context = QueryKernel.#withMemo(givenContext);
+
     if (
       (entityType === null || entityType === undefined) &&
       QueryKernel.#needsEntityType(filter)
@@ -104,9 +131,9 @@ export default class QueryKernel {
     });
   }
 
-  static #arrange(rows, term) {
+  static #arrange(rows, term, context) {
     return QueryKernel.#bound(
-      QueryKernel.#sort(rows, term.sort, term.entity),
+      QueryKernel.#sort(rows, term.sort, term.entity, context),
       term,
     );
   }
@@ -117,6 +144,27 @@ export default class QueryKernel {
     return term.take === null || term.take === undefined
       ? rows.slice(skip)
       : rows.slice(skip, skip + term.take);
+  }
+
+  // The rows a source chain leads to from the row: the last link's rows of every row the links
+  // before it reach, each row once however many paths reach it.
+  static #chainRows(row, entityType, chain, context) {
+    let rows = [row];
+    let rowsType = entityType;
+
+    for (const name of chain) {
+      const seen = new Set();
+
+      rows = rows
+        .flatMap((current) =>
+          QueryKernel.#linkRows(current, rowsType, name, context),
+        )
+        .filter((linked) => !seen.has(linked.id) && seen.add(linked.id));
+
+      rowsType = QueryKernel.#relatedType(rowsType, name);
+    }
+
+    return rows;
   }
 
   static #compare(left, right) {
@@ -199,10 +247,82 @@ export default class QueryKernel {
     return QueryKernel.#compare(left[name], right[name]);
   }
 
-  // The row a name is read off and the attribute read there: the row itself for an attribute, and
-  // for a path the row its relationships lead to - none when a reference is empty or names a row
-  // the database does not hold, since a fill arrives in pieces. A name of a row above is read on
-  // that row, the rows above held nearest first.
+  // The rows a definition of a derived field holding rows holds for the row: a query's rows in its
+  // order with its bounds applied, only the first for one row, the rows of the branch an if takes,
+  // or none for null.
+  static #definitionRows(definition, row, entityType, context) {
+    if ("if" in definition) {
+      const holds = QueryKernel.#matches(
+        row,
+        definition.if,
+        context,
+        QueryKernel.#ranksFor(entityType, definition.if),
+        entityType,
+      );
+
+      return QueryKernel.#definitionRows(
+        holds ? definition.then : definition.else,
+        row,
+        entityType,
+        context,
+      );
+    }
+
+    if ("query" in definition) {
+      const term = definition.query;
+
+      const rows = QueryKernel.#arrange(
+        QueryKernel.#sourcedRows(row, entityType, term, context),
+        term,
+        context,
+      );
+
+      return term.cardinality === "one" ? rows.slice(0, 1) : rows;
+    }
+
+    return [];
+  }
+
+  static #derivedRows(row, entityType, name, context) {
+    return QueryKernel.#definitionRows(
+      Model.derivedField(entityType, name).definition,
+      row,
+      entityType,
+      context,
+    );
+  }
+
+  // Computed once per row and name in a run, however many times the run reads it - a filter and a
+  // sort over one count, an outer value read for every related row. A row a pending write folds is
+  // a fresh object per read, so it is computed again rather than read stale.
+  static #derivedValue(row, entityType, name, context) {
+    let values = context.derivedMemo.get(row);
+
+    if (values?.has(name)) {
+      return values.get(name);
+    }
+
+    const value = QueryKernel.#evaluated(
+      Model.derivedField(entityType, name).definition,
+      row,
+      entityType,
+      context,
+    );
+
+    if (!values) {
+      values = new Map();
+      context.derivedMemo.set(row, values);
+    }
+
+    values.set(name, value);
+
+    return value;
+  }
+
+  // The row a name is read off, its type and the field read there: the row itself for an attribute
+  // or a derived field, and for a path the row its relationships lead to - none when a reference is
+  // empty or names a row the database does not hold, since a fill arrives in pieces. A name of a
+  // row above is read on that row, the rows above held nearest first.
   static #endOf(row, name, entityType, outer = []) {
     if (QueryKernel.#isOuter(name)) {
       const above = outer[name.outer - 1];
@@ -211,7 +331,7 @@ export default class QueryKernel {
     }
 
     if (!Array.isArray(name)) {
-      return {name, row};
+      return {entityType, name, row};
     }
 
     let current = row;
@@ -226,13 +346,30 @@ export default class QueryKernel {
         targetId === null ? null : LocalDatabase.getRow(targetType, targetId);
 
       if (current === null) {
-        return {name: name[name.length - 1], row: null};
+        return {entityType: targetType, name: name[name.length - 1], row: null};
       }
 
       currentType = targetType;
     }
 
-    return {name: name[name.length - 1], row: current};
+    return {entityType: currentType, name: name[name.length - 1], row: current};
+  }
+
+  // What the end of a name holds: the attribute's value, a derived field's value computed on the
+  // row, or null when the row a path leads to is missing.
+  static #endValue(end, context) {
+    if (end.row === null) {
+      return null;
+    }
+
+    const derived =
+      end.entityType === null || end.entityType === undefined
+        ? null
+        : Model.derivedField(end.entityType, end.name);
+
+    return derived
+      ? QueryKernel.#derivedValue(end.row, end.entityType, end.name, context)
+      : (end.row[end.name] ?? null);
   }
 
   // What an enum compares by: each declared value against its position in the list the type
@@ -244,14 +381,69 @@ export default class QueryKernel {
     const ranks = {};
 
     for (const name of names) {
-      if (entry.attributes[name] === "enum") {
-        ranks[name] = new Map(
-          entry.enumValues[name].map((label, index) => [label, index]),
-        );
+      const derived = Model.derivedField(entityType, name);
+
+      const values =
+        entry.attributes[name] === "enum"
+          ? entry.enumValues[name]
+          : derived?.kind === "scalar" && derived.type === "enum"
+            ? derived.values
+            : null;
+
+      if (values) {
+        ranks[name] = new Map(values.map((label, index) => [label, index]));
       }
     }
 
     return ranks;
+  }
+
+  // A definition's expression on the row: strings joined, null when one of them is, an if's branch,
+  // whether a condition holds, a name of the row, the number of rows a count reads, or a value.
+  static #evaluated(definition, row, entityType, context) {
+    if ("concat" in definition) {
+      const values = definition.concat.map((operand) =>
+        QueryKernel.#evaluated(operand, row, entityType, context),
+      );
+
+      return values.some((value) => value === null) ? null : values.join("");
+    }
+
+    if ("condition" in definition || "if" in definition) {
+      const clauses = definition.condition ?? definition.if;
+
+      const holds = QueryKernel.#matches(
+        row,
+        clauses,
+        context,
+        QueryKernel.#ranksFor(entityType, clauses),
+        entityType,
+      );
+
+      if ("condition" in definition) {
+        return holds;
+      }
+
+      return QueryKernel.#evaluated(
+        holds ? definition.then : definition.else,
+        row,
+        entityType,
+        context,
+      );
+    }
+
+    if ("name" in definition) {
+      return QueryKernel.#read(row, definition.name, entityType, [], context);
+    }
+
+    if ("query" in definition) {
+      return QueryKernel.#bound(
+        QueryKernel.#sourcedRows(row, entityType, definition.query, context),
+        definition.query,
+      ).length;
+    }
+
+    return definition.value;
   }
 
   // The held rows the ids filed for the row name. A pair naming a row the database does not hold is
@@ -264,9 +456,20 @@ export default class QueryKernel {
   }
 
   // A relationship the query asked for is filled from the rest of the database - a to-one by
-  // following the id its row carries, a to-many by reading the pairs it is the source of. A row
-  // does not say what type it is, and does not need to: the term reading it does.
+  // following the id its row carries, a to-many by reading the pairs it is the source of. A derived
+  // field is computed from its definition. A row does not say what type it is, and does not need
+  // to: the term reading it does.
   static #included(row, entityType, name, subTerm, context) {
+    if (Model.derivedField(entityType, name)) {
+      return QueryKernel.#includedDerived(
+        row,
+        entityType,
+        name,
+        subTerm,
+        context,
+      );
+    }
+
     const inverses = Model.inverses(entityType);
 
     if (Object.hasOwn(inverses, name)) {
@@ -294,6 +497,25 @@ export default class QueryKernel {
       subTerm,
       context,
     );
+  }
+
+  // An included derived field holding a value is the value its definition computes for the row. One
+  // holding rows holds its definition's rows - a list, or one row or null - each row embedding what
+  // the definition and the include ask for.
+  static #includedDerived(row, entityType, name, subTerm, context) {
+    if (subTerm === null) {
+      return QueryKernel.#derivedValue(row, entityType, name, context);
+    }
+
+    const rowsTerm = Model.rowsTerm(entityType, name, subTerm);
+
+    const nodes = QueryKernel.#derivedRows(row, entityType, name, context).map(
+      (derivedRow) => QueryKernel.#node(derivedRow, rowsTerm, context),
+    );
+
+    return Model.derivedField(entityType, name).kind === "set"
+      ? nodes
+      : (nodes[0] ?? null);
   }
 
   // An inverse is read from where the relationship it reverses is stored. Of a to-one, it is the
@@ -334,7 +556,7 @@ export default class QueryKernel {
       ),
     );
 
-    return QueryKernel.#arrange(matching, subTerm).map((target) =>
+    return QueryKernel.#arrange(matching, subTerm, context).map((target) =>
       QueryKernel.#node(target, subTerm, context),
     );
   }
@@ -362,6 +584,26 @@ export default class QueryKernel {
       !Array.isArray(operand) &&
       "attribute" in operand
     );
+  }
+
+  // The rows one link of a source leads to from the row: the related row a to-one names, if the
+  // database holds it, or the rows of a set.
+  static #linkRows(row, entityType, name, context) {
+    const relationship = Object.hasOwn(Model.relationships(entityType), name)
+      ? Model.relationships(entityType)[name]
+      : null;
+
+    if (relationship && !relationship.toMany) {
+      const targetId = row[`${name}_id`] ?? null;
+      const target =
+        targetId === null
+          ? null
+          : LocalDatabase.getRow(relationship.type, targetId);
+
+      return target === null ? [] : [target];
+    }
+
+    return QueryKernel.#setRows(row, entityType, name, context);
   }
 
   // A visitor has no acting user, and each triple naming one answers false on its own - so a
@@ -403,35 +645,26 @@ export default class QueryKernel {
     });
   }
 
-  // The related rows the source leads to - none when one of its to-one relationships reads no row -
-  // matched against the quantifier's filter, with the row it is about as the first row above them.
+  // The related rows the source leads to - the last link's rows of every row the links before it
+  // reach, each once, and none when they reach none - matched against the quantifier's filter, with
+  // the row it is about as the first row above them.
   static #matchesQuantifier(row, clause, context, entityType, outer) {
     const start = Array.isArray(clause.source)
       ? {entityType, hops: clause.source, row}
       : {...outer[clause.source.outer - 1], hops: clause.source.name};
 
-    let owner = start.row;
-    let ownerType = start.entityType;
+    const related = QueryKernel.#chainRows(
+      start.row,
+      start.entityType,
+      start.hops,
+      context,
+    );
 
-    for (const hop of start.hops.slice(0, -1)) {
-      const targetId = owner[`${hop}_id`] ?? null;
-      const targetType = Model.relationships(ownerType)[hop].type;
+    const relatedType = start.hops.reduce(
+      (type, hop) => QueryKernel.#relatedType(type, hop),
+      start.entityType,
+    );
 
-      owner =
-        targetId === null ? null : LocalDatabase.getRow(targetType, targetId);
-
-      // No row to hold the set, so the set has no rows: any fails, none and all hold.
-      if (owner === null) {
-        return clause.quantifier !== "any";
-      }
-
-      ownerType = targetType;
-    }
-
-    const setName = start.hops[start.hops.length - 1];
-    const related = QueryKernel.#relatedRows(owner, ownerType, setName);
-
-    const relatedType = Model.pathTarget(ownerType, [setName]);
     const innerOuter = [{entityType, row}, ...outer];
     const ranks = QueryKernel.#ranksFor(relatedType, clause.filter, innerOuter);
 
@@ -471,7 +704,7 @@ export default class QueryKernel {
     const ranksForKey = ranks[QueryKernel.#nameKey(name)];
 
     const value = QueryKernel.#isAttribute(operand)
-      ? QueryKernel.#read(row, operand.attribute, entityType, outer)
+      ? QueryKernel.#read(row, operand.attribute, entityType, outer, context)
       : QueryKernel.#resolve(operand, context, ranksForKey);
 
     const end = QueryKernel.#endOf(row, name, entityType, outer);
@@ -488,7 +721,7 @@ export default class QueryKernel {
       ? false
       : QueryKernel.#satisfies(
           operator,
-          end.row === null ? null : (end.row[end.name] ?? null),
+          QueryKernel.#endValue(end, context),
           value,
           ranksForKey,
           pair,
@@ -590,10 +823,11 @@ export default class QueryKernel {
     return ranks;
   }
 
-  static #read(row, name, entityType, outer = []) {
-    const end = QueryKernel.#endOf(row, name, entityType, outer);
-
-    return end.row === null ? null : (end.row[end.name] ?? null);
+  static #read(row, name, entityType, outer, context) {
+    return QueryKernel.#endValue(
+      QueryKernel.#endOf(row, name, entityType, outer),
+      context,
+    );
   }
 
   // The rows of a set - an inverse of a to-one read off the related table by the reference field,
@@ -625,6 +859,13 @@ export default class QueryKernel {
       row,
       LocalDatabase.getTable(type),
     );
+  }
+
+  // The type of the rows a relationship or a derived field holding rows leads to.
+  static #relatedType(entityType, name) {
+    const derived = Model.derivedField(entityType, name);
+
+    return derived ? derived.entity : Model.pathTarget(entityType, [name]);
   }
 
   static #resolve(operand, context, ranksForKey) {
@@ -680,14 +921,65 @@ export default class QueryKernel {
     return value;
   }
 
+  // The rows of a set - a relationship's, or the ones a derived field holding them holds.
+  static #setRows(row, entityType, name, context) {
+    return Model.derivedField(entityType, name)
+      ? QueryKernel.#derivedRows(row, entityType, name, context)
+      : QueryKernel.#relatedRows(row, entityType, name);
+  }
+
   // Every key of the order is spent before two rows are called equal, and the last of them is
-  // always the id, so no two rows ever are.
-  static #sort(rows, keys, entityType) {
+  // always the id, so no two rows ever are. A derived key is computed once per row, onto a view of
+  // the row the comparison reads.
+  static #sort(rows, keys, entityType, context) {
     const names = keys.map(([name]) => name);
     const ranks = QueryKernel.#enumRanks(entityType, names);
 
-    return [...rows].sort((left, right) =>
-      QueryKernel.#compareRows(left, right, keys, ranks),
+    const derivedNames = names.filter((name) =>
+      Model.derivedField(entityType, name),
+    );
+
+    const views = rows.map((row) => {
+      if (derivedNames.length === 0) {
+        return {row, view: row};
+      }
+
+      const view = {...row};
+
+      for (const name of derivedNames) {
+        view[name] = QueryKernel.#derivedValue(row, entityType, name, context);
+      }
+
+      return {row, view};
+    });
+
+    return views
+      .sort((left, right) =>
+        QueryKernel.#compareRows(left.view, right.view, keys, ranks),
+      )
+      .map(({row}) => row);
+  }
+
+  // The rows a derived field's query reads off the owner row, matched to its filter with the owner
+  // as the row above them.
+  static #sourcedRows(owner, ownerType, term, context) {
+    const outer = [{entityType: ownerType, row: owner}];
+    const ranks = QueryKernel.#ranksFor(term.entity, term.filter, outer);
+
+    return QueryKernel.#chainRows(
+      owner,
+      ownerType,
+      term.source.chain,
+      context,
+    ).filter((row) =>
+      QueryKernel.#matches(
+        row,
+        term.filter,
+        context,
+        ranks,
+        term.entity,
+        outer,
+      ),
     );
   }
 
@@ -790,5 +1082,11 @@ export default class QueryKernel {
     throw new HologramRuntimeError(
       `invalid value ${QueryKernel.#inspectEnumValue(value)} for placeholder :${name} - expected one of [${declared}]`,
     );
+  }
+
+  // The context a run reads with, holding what it computes of derived fields - one per run, so
+  // nothing computed is read by a later one.
+  static #withMemo(context) {
+    return {...context, derivedMemo: new WeakMap()};
   }
 }

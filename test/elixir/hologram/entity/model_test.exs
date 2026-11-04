@@ -19,6 +19,7 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
+  alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
@@ -1426,6 +1427,14 @@ defmodule Hologram.Entity.ModelTest do
              }
     end
 
+    test "leaves derived fields out" do
+      assert from_modules([Module32]).entities[Module32] == %{
+               attributes: [{:name, :string, []}],
+               relationships: [],
+               roles: []
+             }
+    end
+
     test "derives attributes sorted by name" do
       assert from_modules([Module2]) == %{
                entities: %{
@@ -1487,6 +1496,20 @@ defmodule Hologram.Entity.ModelTest do
              }
 
       assert model.entities[Module29].relationships == []
+    end
+
+    # An order shapes reads only, so declaring or changing one is no change to the model term - no
+    # migration, and no new hash to reload the clients over.
+    test "leaves out a to-many's sort option" do
+      defmodule InlineSortedToManyFixture do
+        use Hologram.Entity
+
+        relationship :items, [Module2], sort: [c, created_at: :desc]
+      end
+
+      model = from_modules([InlineSortedToManyFixture])
+
+      assert model.entities[InlineSortedToManyFixture].relationships == [{:items, [Module2], []}]
     end
 
     test "derives global role entries from the given role modules" do

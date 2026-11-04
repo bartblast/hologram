@@ -23,6 +23,22 @@ describe("Model", () => {
   const PROJECT = "MyApp.Project";
   const TASK = "MyApp.Task";
 
+  // A derived field's query over a project's tasks, as the build bakes one.
+  const taskQuery = (overrides = {}) =>
+    Object.assign(
+      {
+        cardinality: "set",
+        entity: TASK,
+        filter: [],
+        include: {},
+        skip: null,
+        sort: [["id", "asc"]],
+        source: {chain: ["tasks"], owner: PROJECT},
+        take: null,
+      },
+      overrides,
+    );
+
   // One attribute of every admitted type, a server-only one, and both relationship
   // cardinalities - the shape the build bakes for a type this client can hold.
   //
@@ -40,6 +56,68 @@ describe("Model", () => {
           attributes: {id: "uuid", name: "string"},
           constraints: {},
           defaults: {},
+          // A derived field of each kind: a count, an enum, one task, and the tasks an if chooses -
+          // each branch's query including another relationship.
+          derived: {
+            first_task: {
+              definition: {query: taskQuery({cardinality: "one"})},
+              entity: TASK,
+              kind: "one",
+            },
+            lead_kind: {
+              definition: {value: "MyApp.Admin"},
+              kind: "scalar",
+              type: "enum",
+              values: ["MyApp.Admin", "MyApp.Guest"],
+            },
+            picked_tasks: {
+              definition: {
+                else: {
+                  query: taskQuery({
+                    include: {
+                      project: {
+                        cardinality: "set",
+                        entity: PROJECT,
+                        include: {},
+                      },
+                    },
+                  }),
+                },
+                if: [["name", "==", "Website"]],
+                then: {
+                  query: taskQuery({
+                    include: {
+                      tags: {
+                        cardinality: "set",
+                        entity: "MyApp.Tag",
+                        include: {},
+                      },
+                    },
+                  }),
+                },
+              },
+              entity: TASK,
+              kind: "set",
+            },
+            task_count: {
+              definition: {query: taskQuery({cardinality: "count"})},
+              kind: "scalar",
+              type: "integer",
+              values: null,
+            },
+            task_ratio: {
+              definition: {name: "position"},
+              kind: "scalar",
+              type: "float",
+              values: null,
+            },
+            tier: {
+              definition: {value: "high"},
+              kind: "scalar",
+              type: "enum",
+              values: ["low", "high"],
+            },
+          },
           enumValues: {},
           frameworkAttributes: [],
           operations: [
@@ -557,6 +635,20 @@ describe("Model", () => {
       assert.deepEqual(field(boxed, "tasks"), included);
     });
 
+    it("leaves a derived field the row was not asked for unasked-for", () => {
+      const boxed = Model.box(PROJECT, {id: "p1", name: "Launch"});
+
+      assert.deepStrictEqual(
+        field(boxed, "task_count"),
+        Model.notIncluded("task_count"),
+      );
+
+      assert.deepStrictEqual(
+        field(boxed, "picked_tasks"),
+        Model.notIncluded("picked_tasks"),
+      );
+    });
+
     it("boxes no reference field for an inverse", () => {
       const boxed = Model.box(PROJECT, {id: "p1", name: "Launch"});
 
@@ -659,10 +751,154 @@ describe("Model", () => {
       assert.equal(field(boxed.data[0], "tags").data.length, 1);
     });
 
+    it("boxes an included derived value by its declared type", () => {
+      const project = {
+        includes: {task_count: 3, tier: "high"},
+        row: {id: "p1", name: "Website"},
+      };
+
+      const boxed = Model.boxResult(
+        {
+          cardinality: "one",
+          entity: PROJECT,
+          include: {task_count: null, tier: null},
+        },
+        project,
+      );
+
+      assert.deepStrictEqual(field(boxed, "task_count"), Type.integer(3));
+      assert.deepStrictEqual(field(boxed, "tier"), Type.atom("high"));
+    });
+
+    it("boxes a whole number a float field holds as a float, a module label as an alias, and nil", () => {
+      const project = {
+        includes: {lead_kind: "MyApp.Admin", task_ratio: 2, tier: null},
+        row: {id: "p1", name: "Website"},
+      };
+
+      const boxed = Model.boxResult(
+        {
+          cardinality: "one",
+          entity: PROJECT,
+          include: {lead_kind: null, task_ratio: null, tier: null},
+        },
+        project,
+      );
+
+      assert.deepStrictEqual(
+        field(boxed, "lead_kind"),
+        Type.alias("MyApp.Admin"),
+      );
+
+      assert.deepStrictEqual(field(boxed, "task_ratio"), Type.float(2));
+      assert.deepStrictEqual(field(boxed, "tier"), Type.nil());
+    });
+
+    it("boxes an included derived row as its own struct, or nil", () => {
+      const projectTerm = {
+        cardinality: "set",
+        entity: PROJECT,
+        include: {
+          first_task: {cardinality: "set", entity: TASK, include: {}},
+        },
+      };
+
+      const boxed = Model.boxResult(projectTerm, [
+        {
+          includes: {first_task: node()},
+          row: {id: "p1", name: "Website"},
+        },
+        {includes: {first_task: null}, row: {id: "p2", name: "Blog"}},
+      ]);
+
+      assert.deepStrictEqual(
+        field(field(boxed.data[0], "first_task"), "title"),
+        Type.bitstring("Draft copy"),
+      );
+
+      assert.deepStrictEqual(field(boxed.data[1], "first_task"), Type.nil());
+    });
+
+    it("boxes an included derived set with what its definition includes", () => {
+      const task = node();
+      task.includes = {
+        project: {includes: {}, row: {id: "p1", name: "Website"}},
+        tags: [],
+      };
+
+      const boxed = Model.boxResult(
+        {
+          cardinality: "one",
+          entity: PROJECT,
+          include: {
+            picked_tasks: {cardinality: "set", entity: TASK, include: {}},
+          },
+        },
+        {includes: {picked_tasks: [task]}, row: {id: "p1", name: "Blog"}},
+      );
+
+      const [boxedTask] = field(boxed, "picked_tasks").data;
+
+      assert.deepStrictEqual(
+        field(field(boxedTask, "project"), "name"),
+        Type.bitstring("Website"),
+      );
+
+      assert.deepStrictEqual(field(boxedTask, "tags"), Type.list([]));
+    });
+
     it("leaves a relationship the term did not include unasked-for", () => {
       const boxed = Model.boxResult(term({cardinality: "one"}), node());
 
       assert.deepStrictEqual(field(boxed, "tags"), Model.notIncluded("tags"));
+    });
+  });
+
+  describe("rowsTerm()", () => {
+    const taskTerm = (include = {}) => ({
+      cardinality: "set",
+      entity: TASK,
+      include,
+    });
+
+    it("embeds what every query an if may choose includes", () => {
+      const term = Model.rowsTerm(PROJECT, "picked_tasks", taskTerm());
+
+      assert.deepStrictEqual(Object.keys(term.include).sort(), [
+        "project",
+        "tags",
+      ]);
+    });
+
+    it("keeps the definition's include of a relationship both include, gaining what the other includes", () => {
+      const includedTerm = taskTerm({
+        project: {
+          cardinality: "set",
+          entity: PROJECT,
+          include: {
+            first_task: {cardinality: "set", entity: TASK, include: {}},
+          },
+        },
+      });
+
+      const term = Model.rowsTerm(PROJECT, "picked_tasks", includedTerm);
+
+      assert.deepStrictEqual(term.include.project, {
+        cardinality: "set",
+        entity: PROJECT,
+        include: {
+          first_task: {cardinality: "set", entity: TASK, include: {}},
+        },
+      });
+    });
+
+    it("returns the term a relationship is included with as it is", () => {
+      const includedTerm = taskTerm();
+
+      assert.strictEqual(
+        Model.rowsTerm(TASK, "project", includedTerm),
+        includedTerm,
+      );
     });
   });
 

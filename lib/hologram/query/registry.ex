@@ -2,7 +2,7 @@ defmodule Hologram.Query.Registry do
   @moduledoc false
 
   alias Hologram.Commons.CryptographicUtils
-  alias Hologram.Entity
+  alias Hologram.Entity.Derived
   alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
@@ -55,12 +55,15 @@ defmodule Hologram.Query.Registry do
 
   @doc """
   Returns the set of entity types the given normalized query term reads - its own, every one it
-  includes, every one a path in its filter goes through and every one a quantifier's source goes
-  through, walked recursively.
+  includes, every one a path in its filter goes through, every one a quantifier's source goes
+  through and every one a derived field it reads is computed from, walked recursively: the types of
+  the rows its window downloads (see `Hologram.Query.Window.derive/2`).
   """
   @spec entity_types(Query.t()) :: MapSet.t(module)
   def entity_types(term) do
-    collect_entity_types(term, MapSet.new())
+    term
+    |> Window.derive(false)
+    |> collect_entity_types(MapSet.new())
   end
 
   @doc """
@@ -83,18 +86,22 @@ defmodule Hologram.Query.Registry do
   end
 
   # A path binds as the attribute it ends at, on the type its relationships lead to.
+  # The relationships can run through a set a derived field holds - inside a quantifier over one.
   defp attribute_type(entity_type, path) when is_list(path) do
     {relationship_names, [name]} = Enum.split(path, -1)
 
     entity_type
-    |> Entity.path_target(relationship_names)
+    |> Derived.path_target(relationship_names)
     |> attribute_type(name)
   end
 
   # A name matching no attribute definition is a to-one reference field - every reference
-  # column carries the entity id type.
+  # column carries the entity id type. A derived field holding a value binds as the type it
+  # declares.
   defp attribute_type(entity_type, name) do
-    definitions = entity_type.__attributes__() ++ entity_type.__system_attributes__()
+    definitions =
+      entity_type.__attributes__() ++
+        entity_type.__system_attributes__() ++ entity_type.__derived__()
 
     case Enum.find(definitions, fn {definition_name, _type, _opts} -> definition_name == name end) do
       {_name, type, _opts} -> type
@@ -107,7 +114,7 @@ defmodule Hologram.Query.Registry do
       term.filter
       |> Stage.relationship_chains()
       |> Enum.flat_map(fn relationship_names ->
-        Enum.scan(relationship_names, term.entity, &Entity.related_type(&2, &1))
+        Enum.scan(relationship_names, term.entity, &Derived.related_type(&2, &1))
       end)
 
     own_types =
@@ -171,8 +178,10 @@ defmodule Hologram.Query.Registry do
         collect_placeholder(triple, term.entity, inner_acc)
       end)
 
-    Enum.reduce(term.include, filter_acc, fn {_name, sub_term}, inner_acc ->
-      collect_params(sub_term, inner_acc)
+    # A derived field holding a value is included with nothing under it.
+    Enum.reduce(term.include, filter_acc, fn
+      {_name, nil}, inner_acc -> inner_acc
+      {_name, sub_term}, inner_acc -> collect_params(sub_term, inner_acc)
     end)
   end
 end
