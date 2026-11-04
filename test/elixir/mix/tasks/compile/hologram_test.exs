@@ -502,6 +502,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       RoleGrant.reset_resolution_cache()
       Model.reset_caches()
       Policy.reset_model_facts_cache()
+      Edges.reset_index_cache()
     end)
   end
 
@@ -1098,7 +1099,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
         RoleGrant.reset_resolution_cache()
         Model.reset_caches()
         Policy.reset_model_facts_cache()
+        Edges.reset_index_cache()
       end)
+    end
+
+    test "a validation with compilation skipped drops the cached policy dependency index", %{
+      opts: opts
+    } do
+      System.delete_env("HOLOGRAM_START")
+
+      :persistent_term.put({Edges, :index}, :cached)
+
+      assert run(opts) == :noop
+
+      assert :persistent_term.get({Edges, :index}, nil) == nil
     end
 
     test "skips compilation when HOLOGRAM_START env var is not set", %{opts: opts} do
@@ -1794,6 +1808,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       RoleGrant.reset_resolution_cache()
       Model.reset_caches()
       Policy.reset_model_facts_cache()
+      Edges.reset_index_cache()
 
       mfas = [{Reflection, :list_entities, 0}, {Reflection, :list_roles, 0}]
       Enum.each(mfas, &:erlang.trace_pattern(&1, true, [:call_count]))
@@ -4401,6 +4416,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         RoleGrant.reset_resolution_cache()
         Model.reset_caches()
         Policy.reset_model_facts_cache()
+        Edges.reset_index_cache()
       end)
 
       run(opts)

@@ -1,13 +1,13 @@
 defmodule Hologram.Policy.EdgesTest do
   # async: false - the index cache is one persistent term for the whole node, and proving it is
-  # READ means standing a value in it that is not the real index. Every concurrent caller of
-  # index/0, the sync layer routing a batch or a client resuming, would see that value while it
-  # stands.
+  # READ means standing a value in it that is not the real index. Every concurrent read of the index
+  # would see that value while it stands.
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Policy.Edges
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Entity.Model
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -272,18 +272,16 @@ defmodule Hologram.Policy.EdgesTest do
   # the project's real index.
   describe "index/0" do
     setup do
-      on_exit(&reset_index_cache/0)
+      on_exit(&reset_caches/0)
 
-      reset_index_cache()
+      reset_caches()
     end
 
     test "derives the index of the project's compiled data model" do
       assert index() == derive(Reflection.list_entities())
     end
 
-    test "answers from the cache once it has been derived" do
-      index()
-
+    test "answers from the cache" do
       :persistent_term.put(@index_key, :cached)
 
       assert index() == :cached
@@ -300,7 +298,9 @@ defmodule Hologram.Policy.EdgesTest do
 
   describe "reset_index_cache/0" do
     setup do
-      on_exit(&reset_index_cache/0)
+      on_exit(&reset_caches/0)
+
+      reset_caches()
     end
 
     test "drops the cached index" do
@@ -315,5 +315,12 @@ defmodule Hologram.Policy.EdgesTest do
     test "names the session-wide invalidation kinds" do
       assert universal_edges() == [:auth_change, :deploy]
     end
+  end
+
+  # The index is derived from the model cache, which an earlier test may have left holding
+  # something other than the project's model.
+  defp reset_caches do
+    Model.reset_caches()
+    reset_index_cache()
   end
 end

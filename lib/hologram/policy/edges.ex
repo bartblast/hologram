@@ -54,8 +54,7 @@ defmodule Hologram.Policy.Edges do
   end
 
   @doc """
-  Returns the dependency edges of the project's compiled data model, as `derive/1` gives them for
-  its entity types.
+  Returns the dependency edges of every entity type in the project's compiled data model.
 
   Cached for the lifetime of the runtime and derived on the first call: deriving grows with the
   model, tens of milliseconds for hundreds of entity types. Resetting the cache drops it, so a
