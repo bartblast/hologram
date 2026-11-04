@@ -11,6 +11,7 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
 import Once from "./once.mjs";
+import StringOrder from "./string_order.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -981,7 +982,7 @@ export default class Renderer {
     }
 
     return $.#expandSpreadAttributes(attrDom.data[1].data[0], null).sort(
-      ([nameA], [nameB]) => (nameA < nameB ? -1 : nameA > nameB ? 1 : 0),
+      ([nameA], [nameB]) => StringOrder.compare(nameA, nameB),
     );
   }
 
