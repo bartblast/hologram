@@ -1648,7 +1648,7 @@ It works on every event, including the window, document, resize, and reach event
 
 `once` is a precise guarantee, scoped to the binding's target. For an element binding the target is the element instance, so re-rendering keeps a fired binding spent however many times, and it re-arms only when the element is removed and re-added as a fresh DOM node. `$submit.once`, for example, stops a repeated click from double-submitting but comes back armed if the form is re-created. A `<window>` or `<document>` binding has no node to re-create - it keys on the global target, which lives for the whole page, so it fires once for the page and never re-arms. To get that same page-lifetime guarantee on an element, drive it from state: have the action record that it ran, then stop rendering or disable the control.
 
-In a `{%for}` list, a `once` binding stays with its item. After it fires, it won't fire again, even if the list is reordered or other items are removed. If the item's key changes, Hologram treats it as a new item, so its binding can fire again. See Keyed Lists in the Template Syntax documentation.
+In a `{%for}` list, a `once` binding on an item with a key stays with that item. After it fires, it won't fire again, even if the list is reordered or other items are removed. If the item's key changes, Hologram treats it as a new item, so its binding can fire again. Items without a key are matched by position, so a spent binding stays with its element, whichever item that element shows after the change. See Keyed Lists in the Template Syntax documentation.
 
 #### Controlling the Native Default
 
