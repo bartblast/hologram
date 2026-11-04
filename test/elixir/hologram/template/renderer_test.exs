@@ -4071,6 +4071,91 @@ defmodule Hologram.Template.RendererTest do
                {[{:element, "li", [{"$key", [text: "k:0#i1"]}], []}], %{}, @server}
     end
 
+    test "a negative integer id" do
+      node = {:loop_item, {%{id: -5}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i-5"]}], []}], %{}, @server}
+    end
+
+    test "a big integer id" do
+      node =
+        {:loop_item, {%{id: 18_446_744_073_709_551_616}},
+         [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i18446744073709551616"]}], []}], %{},
+                @server}
+    end
+
+    test "a non-ASCII string id" do
+      node =
+        {:loop_item, {%{id: "zażółć😀"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#szażółć😀"]}], []}], %{}, @server}
+    end
+
+    test "a non-ASCII atom id" do
+      node = {:loop_item, {%{id: :zażółć}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#azażółć"]}], []}], %{}, @server}
+    end
+
+    test "an atom id and a string id with the same text give different keys" do
+      li = {:element, "li", [{"$key", [text: "k:0"]}], []}
+
+      assert render_tree({:loop_item, {%{id: :abc}}, [li]}, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#aabc"]}], []}], %{}, @server}
+
+      assert render_tree({:loop_item, {%{id: "abc"}}, [li]}, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#sabc"]}], []}], %{}, @server}
+    end
+
+    test "two struct types with the same id give different keys" do
+      li = {:element, "li", [{"$key", [text: "k:0"]}], []}
+
+      comment = %{__struct__: MyApp.Comment, id: 1}
+      like = %{__struct__: MyApp.Like, id: 1}
+
+      assert render_tree({:loop_item, {comment}, [li]}, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#mElixir.MyApp.Comment#i1"]}], []}], %{},
+                @server}
+
+      assert render_tree({:loop_item, {like}, [li]}, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#mElixir.MyApp.Like#i1"]}], []}], %{},
+                @server}
+    end
+
+    test "a non-binary bitstring id keeps the plain key" do
+      node =
+        {:loop_item, {%{id: <<1::3>>}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0"]}], []}], %{}, @server}
+    end
+
+    test "a dynamic tag resolving to an element takes the item's key" do
+      node =
+        {:loop_item, {%{id: 1}}, [{:dynamic_tag, {"li"}, [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i1"]}], []}], %{}, @server}
+    end
+
+    test "the nodes a dynamic tag resolving to a component renders take the item's key" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node = {:loop_item, {%{id: 1}}, [{:dynamic_tag, {Module1}, [], []}]}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#i1"
+    end
+
     test "a slot inside a loop item of forwarded slot content is expanded" do
       env = %{
         @env

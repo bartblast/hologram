@@ -82,6 +82,7 @@ import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client
 import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client_only/module_2.mjs";
 import {defineClientOnlyModule3Fixture} from "./support/fixtures/renderer/client_only/module_3.mjs";
 import {defineClientOnlyModule4Fixture} from "./support/fixtures/renderer/client_only/module_4.mjs";
+import {defineClientOnlyModule5Fixture} from "./support/fixtures/renderer/client_only/module_5.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
@@ -166,6 +167,7 @@ defineClientOnlyModule1Fixture();
 defineClientOnlyModule2Fixture();
 defineClientOnlyModule3Fixture();
 defineClientOnlyModule4Fixture();
+defineClientOnlyModule5Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -11164,6 +11166,378 @@ describe("Renderer", () => {
     });
   });
 
+  describe("loop item keys", () => {
+    const loopItem = (item, nodes) =>
+      Type.tuple([
+        Type.atom("loop_item"),
+        item === null ? Type.nil() : Type.tuple([item]),
+        Type.list(nodes),
+      ]);
+
+    const itemWithId = (id) => Type.map([[Type.atom("id"), id]]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    const keysOf = (vnodes) => vnodes.map((node) => node.key);
+
+    it("an item with an integer id adds it to the key of its element", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i1"]);
+    });
+
+    it("an item with a string id", () => {
+      const node = loopItem(itemWithId(Type.bitstring("abc")), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#sabc"]);
+    });
+
+    it("an item with an atom id", () => {
+      const node = loopItem(itemWithId(Type.atom("abc")), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aabc"]);
+    });
+
+    it("an integer id and a string id with the same text give different keys", () => {
+      const integerNode = loopItem(itemWithId(Type.integer(1)), [
+        keyedElement("li", 0),
+      ]);
+
+      const stringNode = loopItem(itemWithId(Type.bitstring("1")), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(integerNode)), ["1a2b3c:0#i1"]);
+      assert.deepStrictEqual(keysOf(render(stringNode)), ["1a2b3c:0#s1"]);
+    });
+
+    it("a struct's id comes behind its module", () => {
+      const item = Type.map([
+        [Type.atom("__struct__"), Type.alias("MyApp.Comment")],
+        [Type.atom("id"), Type.integer(1)],
+      ]);
+
+      const node = loopItem(item, [keyedElement("li", 0)]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "1a2b3c:0#mElixir.MyApp.Comment#i1",
+      ]);
+    });
+
+    it("the characters keys are delimited by are escaped", () => {
+      const node = loopItem(itemWithId(Type.bitstring("a#b:c\\d")), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "1a2b3c:0#sa\\#b\\:c\\\\d",
+      ]);
+    });
+
+    it("an atom id is escaped", () => {
+      const node = loopItem(itemWithId(Type.atom("a#b:c")), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aa\\#b\\:c"]);
+    });
+
+    it("a struct's module is escaped", () => {
+      const item = Type.map([
+        [Type.atom("__struct__"), Type.atom("Elixir.A#B")],
+        [Type.atom("id"), Type.integer(1)],
+      ]);
+
+      const node = loopItem(item, [keyedElement("li", 0)]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "1a2b3c:0#mElixir.A\\#B#i1",
+      ]);
+    });
+
+    it("an item whose id can't be a key keeps the plain key", () => {
+      const items = [
+        itemWithId(Type.nil()),
+        itemWithId(Type.boolean(true)),
+        itemWithId(Type.boolean(false)),
+        itemWithId(Type.float(1.5)),
+        itemWithId(Bitstring.fromBytes([255])),
+        itemWithId(Type.list([Type.integer(1)])),
+        Type.map([[Type.atom("name"), Type.bitstring("no id")]]),
+        Type.integer(5),
+        Type.keywordList([[Type.atom("id"), Type.integer(1)]]),
+      ];
+
+      for (const item of items) {
+        const node = loopItem(item, [keyedElement("li", 0)]);
+
+        assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0"]);
+      }
+    });
+
+    it("an item without a source keeps the plain key", () => {
+      const node = loopItem(null, [keyedElement("li", 0)]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0"]);
+    });
+
+    it("an element's children keep their plain keys", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        keyedElement("li", 0, [keyedElement("span", 1)]),
+      ]);
+
+      const [li] = render(node);
+
+      assert.equal(li.key, "1a2b3c:0#i1");
+      assert.equal(li.children[0].key, "1a2b3c:1");
+    });
+
+    it("a loop directly in an item's body adds the inner item's part, then the outer one's", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        loopItem(itemWithId(Type.integer(7)), [keyedElement("li", 0)]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i7#i1"]);
+    });
+
+    it("an outer item's part still follows an inner item that has no key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        loopItem(null, [keyedElement("li", 0)]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i1"]);
+    });
+
+    it("a loop inside an element of an item's body starts without the outer item's part", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        keyedElement("ul", 0, [
+          loopItem(itemWithId(Type.integer(7)), [keyedElement("li", 1)]),
+        ]),
+      ]);
+
+      const [ul] = render(node);
+
+      assert.equal(ul.key, "1a2b3c:0#i1");
+      assert.equal(ul.children[0].key, "1a2b3c:1#i7");
+    });
+
+    it("the nodes a component's slot renders take the item's key", () => {
+      const component = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module68"),
+        Type.list(),
+        Type.list([keyedElement("li", 0)]),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [component]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i1"]);
+    });
+
+    it("a slot inside a loop item of forwarded slot content is expanded", () => {
+      const slotElement = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("slot"),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      const component = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module68"),
+        Type.list(),
+        Type.list([loopItem(itemWithId(Type.integer(1)), [slotElement])]),
+      ]);
+
+      const outerSlots = Type.keywordList([
+        [Type.atom("default"), Type.list([keyedElement("li", 0)])],
+      ]);
+
+      const result = Renderer.renderDom(
+        component,
+        context,
+        outerSlots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(keysOf(result), ["1a2b3c:0#i1"]);
+    });
+
+    it("a negative integer id", () => {
+      const node = loopItem(itemWithId(Type.integer(-5)), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i-5"]);
+    });
+
+    it("a big integer id", () => {
+      const node = loopItem(itemWithId(Type.integer(2n ** 64n)), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "1a2b3c:0#i18446744073709551616",
+      ]);
+    });
+
+    it("a non-ASCII string id", () => {
+      const node = loopItem(itemWithId(Type.bitstring("zażółć😀")), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#szażółć😀"]);
+    });
+
+    it("a non-ASCII atom id", () => {
+      const node = loopItem(itemWithId(Type.atom("zażółć")), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#azażółć"]);
+    });
+
+    it("an atom id and a string id with the same text give different keys", () => {
+      const atomNode = loopItem(itemWithId(Type.atom("abc")), [
+        keyedElement("li", 0),
+      ]);
+
+      const stringNode = loopItem(itemWithId(Type.bitstring("abc")), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(atomNode)), ["1a2b3c:0#aabc"]);
+      assert.deepStrictEqual(keysOf(render(stringNode)), ["1a2b3c:0#sabc"]);
+    });
+
+    it("two struct types with the same id give different keys", () => {
+      const struct = (module) =>
+        Type.map([
+          [Type.atom("__struct__"), Type.alias(module)],
+          [Type.atom("id"), Type.integer(1)],
+        ]);
+
+      const commentNode = loopItem(struct("MyApp.Comment"), [
+        keyedElement("li", 0),
+      ]);
+
+      const likeNode = loopItem(struct("MyApp.Like"), [keyedElement("li", 0)]);
+
+      assert.deepStrictEqual(keysOf(render(commentNode)), [
+        "1a2b3c:0#mElixir.MyApp.Comment#i1",
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(likeNode)), [
+        "1a2b3c:0#mElixir.MyApp.Like#i1",
+      ]);
+    });
+
+    it("a non-binary bitstring id keeps the plain key", () => {
+      const node = loopItem(itemWithId(Type.bitstring([1, 0, 1])), [
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0"]);
+    });
+
+    it("the nodes a stateless component renders take the item's key", () => {
+      const component = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module5",
+        ),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [component]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#i1"]);
+    });
+
+    it("a dynamic tag resolving to an element takes the item's key", () => {
+      const dynamicTag = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([Type.bitstring("li")]),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$key"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("1a2b3c:0")]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [dynamicTag]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i1"]);
+    });
+
+    it("the nodes a dynamic tag resolving to a component renders take the item's key", () => {
+      const dynamicTag = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([
+          Type.alias(
+            "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module5",
+          ),
+        ]),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [dynamicTag]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#i1"]);
+    });
+
+    it("the nodes of a page node take the item's key", () => {
+      const page = Type.tuple([
+        Type.atom("page"),
+        Type.list([keyedElement("li", 0)]),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [page]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i1"]);
+    });
+
+    it("items with ids keep their own keys among an element's children", () => {
+      const node = keyedElement("ul", 9, [
+        Type.list([
+          loopItem(itemWithId(Type.integer(1)), [keyedElement("li", 0)]),
+          loopItem(itemWithId(Type.integer(2)), [keyedElement("li", 0)]),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node).children), [
+        "1a2b3c:0#i1",
+        "1a2b3c:0#i2",
+      ]);
+    });
+
+    it("items without keys fall back to their position among an element's children", () => {
+      const node = keyedElement("ul", 9, [
+        Type.list([
+          loopItem(null, [keyedElement("li", 0)]),
+          loopItem(null, [keyedElement("li", 0)]),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node).children), [
+        "1a2b3c:0",
+        "1a2b3c:0:1",
+      ]);
+    });
+  });
+
   describe("renderTree()", () => {
     const text = (str) => Type.tuple([Type.atom("text"), Type.bitstring(str)]);
 
@@ -11184,6 +11558,28 @@ describe("Renderer", () => {
     // A page tree is the document's children, so a single node is wrapped in the list one
     // always is.
     const tree = (...nodes) => Type.list(nodes);
+
+    it("keys the server composed for loop items read back unchanged", () => {
+      const result = Renderer.renderTree(
+        tree(
+          treeElement(
+            "ul",
+            [],
+            [
+              treeElement("li", [attribute("$key", "1a2b3c:0#i7#i1")]),
+              treeElement("li", [attribute("$key", "1a2b3c:0#i8#i1")]),
+            ],
+          ),
+        ),
+      );
+
+      const ul = result.children[0].children[0];
+
+      assert.deepStrictEqual(
+        ul.children.map((li) => li.key),
+        ["1a2b3c:0#i7#i1", "1a2b3c:0#i8#i1"],
+      );
+    });
 
     it("a decoded trusted HTML node renders to a range", () => {
       const result = Renderer.renderTree(

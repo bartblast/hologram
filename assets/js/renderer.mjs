@@ -210,6 +210,9 @@ export default class Renderer {
   // renderer builds for the page's own render - otherwise hydration rebuilds nodes instead of
   // adopting them. Every normalization step here must therefore match render_tree/3, clause by
   // clause.
+  //
+  // keyScope mirrors the server's Env.key_scope: null wherever no loop item's key reaches, and
+  // {level, outer} where one does - see #renderLoopItem.
   static renderDom(
     dom,
     context,
@@ -218,6 +221,7 @@ export default class Renderer {
     parentTagName,
     parentModule,
     slotsParentModule,
+    keyScope = null,
   ) {
     if (Type.isList(dom)) {
       return Renderer.#renderNodes(
@@ -228,6 +232,7 @@ export default class Renderer {
         parentTagName,
         parentModule,
         slotsParentModule,
+        keyScope,
       );
     }
 
@@ -247,6 +252,7 @@ export default class Renderer {
           parentTagName,
           parentModule,
           slotsParentModule,
+          keyScope,
         );
 
       case "component":
@@ -257,6 +263,19 @@ export default class Renderer {
           defaultTarget,
           parentTagName,
           parentModule,
+          keyScope,
+        );
+
+      case "loop_item":
+        return Renderer.#renderLoopItem(
+          dom,
+          context,
+          slots,
+          defaultTarget,
+          parentTagName,
+          parentModule,
+          slotsParentModule,
+          keyScope,
         );
 
       case "expression": {
@@ -302,6 +321,7 @@ export default class Renderer {
           parentTagName,
           parentModule,
           slotsParentModule,
+          keyScope,
         );
 
       case "dynamic_tag":
@@ -313,6 +333,7 @@ export default class Renderer {
           parentTagName,
           parentModule,
           slotsParentModule,
+          keyScope,
         );
 
       case "doctype":
@@ -383,8 +404,9 @@ export default class Renderer {
   // walk. Sharing renderDom is what keeps this equal to renderPage today; a second walker would
   // have to reproduce every rule renderDom applies to a tree - the boolean attribute rule, the
   // controlled value/checked staging and its hooks, the focus hooks, the three resource-key rules,
-  // $key resolving to the last one, and finalizeChildren settling repeats - and drift in any of
-  // them shows up as a silently rebuilt DOM rather than a failing test.
+  // $key resolving to the last one and read verbatim, since the server already composed a loop
+  // item's parts into it, and finalizeChildren settling repeats - and drift in any of them shows
+  // up as a silently rebuilt DOM rather than a failing test.
   // See: docs/navigation_payload_wire_format.md
   static renderTree(tree) {
     const children = Vdom.finalizeChildren(
@@ -1094,6 +1116,18 @@ export default class Renderer {
     return null;
   }
 
+  // Based on escape_key_text/1
+  //
+  // Backslash-escapes the characters key parts are delimited by. The slot key holds no "#", its
+  // hash being base 36, so with values escaped every unescaped "#" after it starts a part and
+  // every unescaped ":" is a suffix Vdom.dedupeKeys adds. A value can therefore never pose as
+  // another part or as a repeat's number.
+  //
+  // WARNING: must match escape_key_text/1 on the server.
+  static #escapeKeyText(text) {
+    return text.replace(/[\\#:]/g, "\\$&");
+  }
+
   // Based on stringify_for_script_interpolation/1
   static #escapeScriptText(text) {
     return text.replace(
@@ -1200,6 +1234,10 @@ export default class Renderer {
       return Renderer.#expandSlotsInElementNode(dom, slots);
     }
 
+    if (dom.data[0].value === "loop_item") {
+      return Renderer.#expandSlotsInLoopItemNode(dom, slots);
+    }
+
     return dom;
   }
 
@@ -1246,6 +1284,13 @@ export default class Renderer {
       attrsDom,
       Renderer.#expandSlots(childrenDom, slots),
     ]);
+  }
+
+  // Based on expand_slots/2 (loop item case)
+  static #expandSlotsInLoopItemNode(dom, slots) {
+    const [nodeType, source, nodes] = dom.data;
+
+    return Type.tuple([nodeType, source, Renderer.#expandSlots(nodes, slots)]);
   }
 
   // Based on expand_slots/3 (list case)
@@ -1520,6 +1565,79 @@ export default class Renderer {
 
   static #isTrustedHtml(value) {
     return Type.isStruct(value, "Hologram.Template.TrustedHTML");
+  }
+
+  // Based on item_key_part/1
+  //
+  // The key part of a loop item: its :id, behind the struct's module for a struct, so that items
+  // of two struct types sharing an id stay apart. An item whose :id can't be a key gets none and
+  // falls back to its position, since nobody asked for that key. The source is the one-tuple
+  // holding the item, or nil for a loop the compiler gives no item.
+  //
+  // WARNING: must match item_key_part/1 on the server.
+  // Deps: [:maps.get/3]
+  static #itemKeyPart(source) {
+    if (!Type.isTuple(source) || source.data.length !== 1) {
+      return null;
+    }
+
+    const item = source.data[0];
+
+    if (!Type.isMap(item)) {
+      return null;
+    }
+
+    const id = Erlang_Maps["get/3"](Type.atom("id"), item, null);
+
+    if (id === null) {
+      return null;
+    }
+
+    const body = $.#keyBody(id);
+
+    return body === null ? null : `${$.#structKeyPart(item)}#${body}`;
+  }
+
+  // Based on key_body/1
+  //
+  // A key value as text, tagged by its type so that 1, "1" and :"1" stay apart, or null for a
+  // value that can't be a key. nil, true and false are refused with the other non-identifying
+  // values.
+  //
+  // WARNING: must match key_body/1 on the server.
+  static #keyBody(value) {
+    if (Type.isInteger(value)) {
+      return `i${value.value.toString()}`;
+    }
+
+    if (Type.isBinary(value) && Bitstring.isText(value)) {
+      return `s${$.#escapeKeyText(Bitstring.toText(value))}`;
+    }
+
+    if (
+      Type.isAtom(value) &&
+      value.value !== "nil" &&
+      value.value !== "true" &&
+      value.value !== "false"
+    ) {
+      return `a${$.#escapeKeyText(value.value)}`;
+    }
+
+    return null;
+  }
+
+  // Based on key_scope_parts/1
+  //
+  // The key parts a node in the given scope carries after its slot key: its item's own part, then
+  // those of the enclosing items it also belongs to the top level of.
+  //
+  // WARNING: must match key_scope_parts/1 on the server.
+  static #keyScopeParts(keyScope) {
+    if (!keyScope) {
+      return "";
+    }
+
+    return (keyScope.level ?? "") + keyScope.outer;
   }
 
   static #mapEventName(eventName, tagName, attrsVdom) {
@@ -1926,6 +2044,7 @@ export default class Renderer {
     defaultTarget,
     parentTagName,
     parentModule,
+    keyScope,
   ) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
     const propsDom = dom.data[2];
@@ -1951,6 +2070,7 @@ export default class Renderer {
         context,
         parentTagName,
         parentModule,
+        keyScope,
       );
     } else {
       return Renderer.#renderTemplate(
@@ -1961,6 +2081,7 @@ export default class Renderer {
         defaultTarget,
         parentTagName,
         parentModule,
+        keyScope,
       );
     }
   }
@@ -1974,6 +2095,7 @@ export default class Renderer {
     parentTagName,
     parentModule,
     slotsParentModule,
+    keyScope,
   ) {
     const value = dom.data[1].data[0];
     const attrsDom = dom.data[2];
@@ -1993,6 +2115,7 @@ export default class Renderer {
         parentTagName,
         parentModule,
         slotsParentModule,
+        keyScope,
       );
     }
 
@@ -2012,6 +2135,7 @@ export default class Renderer {
       parentTagName,
       parentModule,
       slotsParentModule,
+      keyScope,
     );
   }
 
@@ -2031,6 +2155,7 @@ export default class Renderer {
     parentTagName,
     parentModule,
     slotsParentModule,
+    keyScope,
   ) {
     const currentTagName = Bitstring.toText(dom.data[1]);
 
@@ -2041,6 +2166,7 @@ export default class Renderer {
         defaultTarget,
         parentTagName,
         slotsParentModule,
+        keyScope,
       );
     }
 
@@ -2082,6 +2208,10 @@ export default class Renderer {
 
     // The element's children are complete here, whatever nesting of blocks, loops and components
     // produced them, so this is where a repeated key is settled against the rest of the list.
+    //
+    // The element is one node of whatever children list it sits in, so a loop item's key reaches
+    // the element and stops there: its children are rendered without a key scope, as
+    // render_tree/3's element clause renders them on the server.
     let childrenVdom = Vdom.finalizeChildren(
       Renderer.renderDom(
         childrenDom,
@@ -2091,6 +2221,7 @@ export default class Renderer {
         currentTagName,
         parentModule,
         slotsParentModule,
+        null,
       ),
     );
 
@@ -2209,7 +2340,7 @@ export default class Renderer {
     } else {
       // What the element loads names it better than where it sits, so a slot key only applies to
       // elements that load nothing.
-      const slotKey = $.#renderSlotKey(attrsDom);
+      const slotKey = $.#renderSlotKey(attrsDom, keyScope);
 
       if (slotKey !== null) {
         data.key = slotKey;
@@ -2308,6 +2439,40 @@ export default class Renderer {
     return null;
   }
 
+  // Based on render_tree/3 (loop item case)
+  //
+  // A loop's iteration renders into the children list the loop sits in, so the nodes it places
+  // there carry the item's key on top of the place they hold in the template. Its scope starts
+  // afresh even when the item has no key, so an enclosing item's part stays an outer part.
+  //
+  // WARNING: must match render_tree/3's loop item clause on the server.
+  static #renderLoopItem(
+    dom,
+    context,
+    slots,
+    defaultTarget,
+    parentTagName,
+    parentModule,
+    slotsParentModule,
+    keyScope,
+  ) {
+    const itemKeyScope = {
+      level: $.#itemKeyPart(dom.data[1]),
+      outer: $.#keyScopeParts(keyScope),
+    };
+
+    return Renderer.renderDom(
+      dom.data[2],
+      context,
+      slots,
+      defaultTarget,
+      parentTagName,
+      parentModule,
+      slotsParentModule,
+      itemKeyScope,
+    );
+  }
+
   // Based on render_tree/3 (list case)
   //
   // WARNING: must match render_tree/3's list clause step for step: filter out nil input nodes,
@@ -2325,6 +2490,7 @@ export default class Renderer {
     parentTagName,
     parentModule,
     slotsParentModule,
+    keyScope,
   ) {
     return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
@@ -2339,6 +2505,7 @@ export default class Renderer {
             parentTagName,
             parentModule,
             slotsParentModule,
+            keyScope,
           ),
         )
         .flat(),
@@ -2404,6 +2571,8 @@ export default class Renderer {
   ) {
     const childrenDom = dom.data[1];
 
+    // Rendered without a key scope, as render_tree/3's public comment clause renders them: the
+    // comment is one node, and its children are markup inside it.
     let childrenVdom = Renderer.renderDom(
       childrenDom,
       context,
@@ -2412,6 +2581,7 @@ export default class Renderer {
       parentTagName,
       parentModule,
       slotsParentModule,
+      null,
     );
 
     // WARNING: must match render_tree/3's public comment clause on the server.
@@ -2447,7 +2617,13 @@ export default class Renderer {
   //
   // Scanned from the end because the compiler appends the key after everything the template author
   // wrote, so the scan ends on its first step.
-  static #renderSlotKey(attrsDom) {
+  //
+  // Inside a loop item the item's key parts follow the key of the element's place, as
+  // render_tree_attribute/2 composes it on the server. A server tree carries the composed key as
+  // the attribute's text and renders without a key scope, so it reads back unchanged.
+  //
+  // WARNING: must match render_tree_attribute/2's $key clause on the server.
+  static #renderSlotKey(attrsDom, keyScope) {
     for (let index = attrsDom.data.length - 1; index >= 0; index -= 1) {
       const attrDom = attrsDom.data[index];
 
@@ -2456,7 +2632,19 @@ export default class Renderer {
       }
 
       if (Bitstring.toText(attrDom.data[0]) === "$key") {
-        return $.#valueDomToText(attrDom.data[1]);
+        const valueDom = attrDom.data[1];
+
+        if (
+          valueDom.data.length === 1 &&
+          Type.isRecordTuple(valueDom.data[0], "text", 2)
+        ) {
+          return (
+            Bitstring.toText(valueDom.data[0].data[1]) +
+            $.#keyScopeParts(keyScope)
+          );
+        }
+
+        return $.#valueDomToText(valueDom);
       }
     }
 
@@ -2470,6 +2658,7 @@ export default class Renderer {
     defaultTarget,
     parentTagName,
     slotsParentModule,
+    keyScope,
   ) {
     const slotDom = Interpreter.accessKeywordListElement(
       slots,
@@ -2484,10 +2673,11 @@ export default class Renderer {
       parentTagName,
       slotsParentModule,
       slotsParentModule,
+      keyScope,
     );
   }
 
-  // Based on render_stateful_component/4
+  // Based on render_stateful_component/7
   // Deps: [:maps.get/2, :maps.merge/2]
   static #renderStatefulComponent(
     moduleProxy,
@@ -2496,6 +2686,7 @@ export default class Renderer {
     context,
     parentTagName,
     parentModule,
+    keyScope,
   ) {
     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
 
@@ -2521,10 +2712,14 @@ export default class Renderer {
       cid,
       parentTagName,
       parentModule,
+      keyScope,
     );
   }
 
-  // Based on render_template/4
+  // Based on render_template/7
+  //
+  // A component has no node of its own: the nodes its template renders sit in the children list
+  // the component is placed in, so they take the key scope the component was given.
   static #renderTemplate(
     moduleProxy,
     vars,
@@ -2533,6 +2728,7 @@ export default class Renderer {
     defaultTarget,
     parentTagName,
     parentModule,
+    keyScope,
   ) {
     const dom = Renderer.#evaluateTemplate(moduleProxy, vars);
     const slots = Type.keywordList([[Type.atom("default"), childrenDom]]);
@@ -2545,6 +2741,7 @@ export default class Renderer {
       parentTagName,
       moduleProxy.__exModule__,
       parentModule,
+      keyScope,
     );
   }
 
@@ -2573,6 +2770,18 @@ export default class Renderer {
     return Type.isTrue(
       Erlang_Maps["is_key/2"](Type.atom("stop_propagation"), modifiersDom),
     );
+  }
+
+  // Based on struct_key_part/1
+  //
+  // WARNING: must match struct_key_part/1 on the server.
+  // Deps: [:maps.get/3]
+  static #structKeyPart(item) {
+    const module = Erlang_Maps["get/3"](Type.atom("__struct__"), item, null);
+
+    return module !== null && Type.isAtom(module)
+      ? `#m${$.#escapeKeyText(module.value)}`
+      : "";
   }
 
   // Returns the throttle window in milliseconds from a modifiers map, or null when there is no
