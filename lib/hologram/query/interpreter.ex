@@ -49,7 +49,8 @@ defmodule Hologram.Query.Interpreter do
   each once - matched to its clauses with the row as the row above them, its bounds applied. A
   derived field holding rows holds its query's rows in its order with its bounds applied, the rows
   of the branch an `if` takes, or none for nil. A derived enum compares and orders by its value's
-  position among the declared ones.
+  position among the declared ones. An included derived field holds its value, or its rows - a
+  list, or one row or nil - each row embedding what its definition and the include ask for.
 
   `:actor_user_id` in the options is who is asking, for the predicates that name the acting user.
   An anonymous one matches nothing, the way an actor-referencing statement matches nothing when
@@ -216,16 +217,46 @@ defmodule Hologram.Query.Interpreter do
   end
 
   # A relationship the query asked for is filled from the rest of the database - a to-one by
-  # following the id its row carries, a to-many by reading the pairs. What it did not ask for
-  # keeps the sentinel saying so, which is a different answer from an empty one.
+  # following the id its row carries, a to-many by reading the pairs. A derived field it asked for is
+  # computed from its definition. What the query did not ask for keeps the sentinel saying so, which
+  # is a different answer from an empty one.
   defp embed(nil, _term, _database, _opts), do: nil
 
   defp embed(row, term, database, opts) do
     Enum.reduce(term.include, row, fn {name, sub_term}, embedded ->
-      kind = relationship_kind(term.entity, name)
+      value =
+        if Derived.declared?(term.entity, name) do
+          embedded_derived_value(row, name, sub_term, database, opts)
+        else
+          kind = relationship_kind(term.entity, name)
 
-      Map.put(embedded, name, embedded_value(row, name, kind, sub_term, database, opts))
+          embedded_value(row, name, kind, sub_term, database, opts)
+        end
+
+      Map.put(embedded, name, value)
     end)
+  end
+
+  # An included derived field holding a value is the value its definition computes for the row. One
+  # holding rows holds its definition's rows - a list, or one row or nil - each row embedding what
+  # the definition and the include ask for.
+  defp embedded_derived_value(row, name, nil, database, opts) do
+    derived_value(row, name, embedding_scope(row, database, opts))
+  end
+
+  defp embedded_derived_value(row, name, sub_term, database, opts) do
+    entity_type = row.__struct__
+    rows_term = Derived.rows_term(entity_type, name, sub_term)
+
+    rows =
+      row
+      |> derived_rows(name, embedding_scope(row, database, opts))
+      |> Enum.map(&embed(&1, rows_term, database, opts))
+
+    case List.keyfind(entity_type.__derived__(), name, 0) do
+      {^name, [_row_type], _opts} -> rows
+      {^name, _row_type, _opts} -> List.first(rows)
+    end
   end
 
   defp embedded_set(rows, sub_term, database, opts) do
@@ -279,6 +310,11 @@ defmodule Hologram.Query.Interpreter do
     |> Enum.sort_by(& &1.id)
     |> List.first()
     |> embed(sub_term, database, opts)
+  end
+
+  # Where a row's derived field is read while it is embedded: on the row, with no row above it.
+  defp embedding_scope(row, database, opts) do
+    %{database: database, opts: opts, outer: [], ranks: %{}, types: [row.__struct__]}
   end
 
   # What an enum compares by: each declared value against its position in the list the entity

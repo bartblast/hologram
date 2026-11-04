@@ -1902,6 +1902,151 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
+  describe "run/3 - derived includes" do
+    setup do
+      put_derived_definitions([
+        Module32,
+        Module33,
+        Module34,
+        Module37,
+        Module38,
+        Module39,
+        Module40
+      ])
+    end
+
+    test "includes a derived value read by its declared type" do
+      channel("general", [1, 2, 3])
+      created(Module39, kind: :guest, score: 7)
+
+      [general] = agreed(include(Module32, message_count))
+      [entity] = agreed(include(Module39, [ratio, tier]))
+
+      assert general.message_count == 3
+      assert entity.ratio === 7.0
+      assert entity.tier == :silver
+    end
+
+    test "includes a derived set's rows in its order, its bounds applied" do
+      channel("general", [1, 2, 3])
+
+      [general] = agreed(include(Module32, recent_messages))
+
+      assert Enum.map(general.recent_messages, & &1.position) == [3, 2]
+    end
+
+    test "includes a derived row, or nil where there is none" do
+      channel("busy", [2, 1])
+      channel("empty", [])
+
+      first_messages =
+        Module32
+        |> include(first_message)
+        |> sort(name)
+        |> agreed()
+        |> Enum.map(& &1.first_message)
+
+      assert [%Module33{position: 1}, nil] = first_messages
+    end
+
+    test "includes the row a skip leaves first, and nil for a field holding none" do
+      team("team", [true, true, true])
+
+      [second_id] =
+        Module41
+        |> sort(id)
+        |> skip(1)
+        |> take(1)
+        |> agreed()
+        |> Enum.map(& &1.id)
+
+      [team] = agreed(include(Module40, [no_note, second_note]))
+
+      assert team.second_note.id == second_id
+      assert team.no_note == nil
+    end
+
+    test "includes a related row under a derived set's rows" do
+      room = created(Module37, name: "general")
+      author = created(Module1, %{})
+      created(Module38, author_id: author.id, channel_id: room.id, pinned: false)
+
+      [general] = agreed(include(Module37, recent_messages.author))
+      [message] = general.recent_messages
+
+      assert message.author.id == author.id
+    end
+
+    test "includes what a derived set's definition includes" do
+      room = created(Module37, name: "general")
+      author = created(Module1, %{})
+      created(Module38, author_id: author.id, channel_id: room.id, pinned: false)
+
+      [general] = agreed(include(Module37, authored_messages))
+      [message] = general.authored_messages
+
+      assert message.author.id == author.id
+      assert message.channel == %NotIncluded{relationship: :channel}
+    end
+
+    test "includes the rows of the branch an if chooses, and none for nil" do
+      room("general", 3)
+      room("random", 2)
+
+      rooms =
+        Module37
+        |> include([nothing, picked])
+        |> sort(name)
+        |> agreed()
+
+      assert Enum.map(rooms, &length(&1.picked)) == [1, 2]
+      assert Enum.map(rooms, & &1.nothing) == [[], []]
+    end
+
+    test "includes a derived value under a related row" do
+      channel("general", [1, 2, 3])
+      team = team("team", [])
+      player = created(Module39, kind: :guest, score: 7)
+
+      :ok = add_relationship(Module40, team.id, :players, player.id)
+
+      [general] = agreed(include(Module32, [messages.later_count, messages.tier]))
+      [included_team] = agreed(include(Module40, players.ratio))
+
+      assert Enum.map(general.messages, &{&1.later_count, &1.tier}) == [
+               {2, :low},
+               {1, :low},
+               {0, :low}
+             ]
+
+      assert [%Module39{ratio: 7.0}] = included_team.players
+    end
+
+    test "includes a derived value under a derived set's rows" do
+      channel("general", [1, 2, 3])
+
+      [general] = agreed(include(Module32, recent_messages.later_count))
+
+      assert Enum.map(general.recent_messages, &{&1.position, &1.later_count}) == [{3, 0}, {2, 1}]
+    end
+
+    # A row the session may not read is not in what it holds, so it is not among a derived set's
+    # rows on either tier.
+    test "leaves a row the session may not read out of an included derived set" do
+      team("tagged", [true, false])
+
+      term =
+        Module40
+        |> include(picked_notes)
+        |> Stage.normalize()
+
+      policied_rows = QueryRunner.run_policied(term, @mapping, nil)
+
+      assert run(term, readable_database(nil)) == policied_rows
+      assert [%{picked_notes: [%Module41{public: true, tags: []}]}] = policied_rows
+    end
+  end
+
   describe "run/3 - includes" do
     setup do
       {:ok, required} = create(Module1.new())
