@@ -22,6 +22,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Entity.Model
   alias Hologram.Entity.NotIncluded
   alias Hologram.Policy
+  alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, as: QueryExtractorModule53
@@ -1724,7 +1725,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
         RoleGrant.reset_resolution_cache()
         Model.reset_caches()
         Policy.reset_model_facts_cache()
+        Edges.reset_index_cache()
       end)
+    end
+
+    test "a compile drops the cached policy dependency index", %{opts: opts} do
+      :persistent_term.put({Edges, :index}, :cached)
+
+      assert run(opts) == :ok
+
+      assert :persistent_term.get({Edges, :index}, nil) == nil
     end
 
     # Read from the store, since a read through the model would fill an empty cache itself.

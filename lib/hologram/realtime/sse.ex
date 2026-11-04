@@ -4,7 +4,6 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Assets.ChunkRegistry
   alias Hologram.Component.Action
   alias Hologram.DB.Oplog
-  alias Hologram.Entity.Model
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
   alias Hologram.Policy.Edges
@@ -932,11 +931,10 @@ defmodule Hologram.Realtime.SSE do
         # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
         # is sent every row it may see, so there is nothing to reach back for.
         #
-        # Derived per resume rather than kept, from the cached model: deriving costs nothing once
-        # the policies are built, and the list it is derived from is dropped by a compile, so a live
-        # reload is picked up by the next client that resumes. A connect already fills every
-        # window, which is where this cost belongs - never a per-frame path.
-        edges = if gap, do: Edges.derive(Model.entity_types())
+        # Read from the runtime's cache rather than derived per resume: deriving grows with the
+        # model. A compile drops the cache, so a live reload is picked up by the next client that
+        # resumes.
+        edges = if gap, do: Edges.index()
 
         replica_id = verified_replica_id(greeting, conn, user_id)
 
