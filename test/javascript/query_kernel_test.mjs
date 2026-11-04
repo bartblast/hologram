@@ -1949,6 +1949,307 @@ describe("QueryKernel", () => {
     });
   });
 
+  describe("run() - derived includes", () => {
+    const AUTHOR = "MyApp.Author";
+    const CHANNEL = "MyApp.Channel";
+    const MESSAGE = "MyApp.Message";
+    const NOTE = "MyApp.Note";
+    const PLAYER = "MyApp.Player";
+    const POST = "MyApp.Post";
+    const ROOM = "MyApp.Room";
+    const TEAM = "MyApp.Team";
+
+    let nextId;
+
+    const id = (prefix) => `${prefix}${++nextId}`;
+
+    const term = (entity, overrides = {}) =>
+      Object.assign(
+        {
+          cardinality: "set",
+          entity,
+          filter: [],
+          include: {},
+          skip: null,
+          sort: [["id", "asc"]],
+          take: null,
+        },
+        overrides,
+      );
+
+    const byName = (nodes) =>
+      Object.fromEntries(nodes.map((node) => [node.row.name, node]));
+
+    const channel = (name, positions) => {
+      const channelId = id("c");
+
+      LocalDatabase.putRow(CHANNEL, {id: channelId, name});
+
+      for (const position of positions) {
+        LocalDatabase.putRow(MESSAGE, {
+          body: "message",
+          channel_id: channelId,
+          id: id("m"),
+          position,
+        });
+      }
+
+      return channelId;
+    };
+
+    const post = (roomId, authorId = null) =>
+      LocalDatabase.putRow(POST, {
+        author_id: authorId,
+        channel_id: roomId,
+        created_at: null,
+        id: id("p"),
+        pinned: false,
+      });
+
+    const room = (name, postCount = 0) => {
+      const roomId = id("r");
+
+      LocalDatabase.putRow(ROOM, {id: roomId, last_read_at: null, name});
+
+      for (let index = 0; index < postCount; index++) {
+        post(roomId);
+      }
+
+      return roomId;
+    };
+
+    const team = (name, notePublicity) => {
+      const teamId = id("t");
+
+      LocalDatabase.putRow(TEAM, {id: teamId, name});
+
+      const noteIds = notePublicity.map((isPublic) => {
+        const noteId = id("n");
+
+        LocalDatabase.putRow(NOTE, {
+          id: noteId,
+          public: isPublic,
+          team_id: teamId,
+        });
+
+        return noteId;
+      });
+
+      return {noteIds, teamId};
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {model: derivedModel};
+
+      LocalDatabase.reset();
+      Model.reset();
+
+      nextId = 0;
+    });
+
+    it("includes a derived value read by its declared type", () => {
+      channel("general", [1, 2, 3]);
+
+      LocalDatabase.putRow(PLAYER, {
+        id: id("p"),
+        kind: "guest",
+        member_id: null,
+        score: 7,
+      });
+
+      const [general] = QueryKernel.run(
+        term(CHANNEL, {include: {message_count: null}}),
+      );
+
+      const [player] = QueryKernel.run(
+        term(PLAYER, {include: {ratio: null, tier: null}}),
+      );
+
+      assert.equal(general.includes.message_count, 3);
+      assert.deepEqual(player.includes, {ratio: 7, tier: "silver"});
+    });
+
+    it("includes a derived set's rows in its order, its bounds applied", () => {
+      channel("general", [1, 2, 3]);
+
+      const [general] = QueryKernel.run(
+        term(CHANNEL, {include: {recent_messages: term(MESSAGE)}}),
+      );
+
+      assert.deepEqual(
+        general.includes.recent_messages.map((node) => node.row.position),
+        [3, 2],
+      );
+    });
+
+    it("includes a derived row, or null where there is none", () => {
+      channel("busy", [2, 1]);
+      channel("empty", []);
+
+      const channels = byName(
+        QueryKernel.run(
+          term(CHANNEL, {include: {first_message: term(MESSAGE)}}),
+        ),
+      );
+
+      assert.equal(channels.busy.includes.first_message.row.position, 1);
+      assert.isNull(channels.empty.includes.first_message);
+    });
+
+    it("includes the row a skip leaves first, and null for a field holding none", () => {
+      const {noteIds} = team("team", [true, true, true]);
+
+      const [included] = QueryKernel.run(
+        term(TEAM, {include: {no_note: term(NOTE), second_note: term(NOTE)}}),
+      );
+
+      assert.equal(included.includes.second_note.row.id, noteIds[1]);
+      assert.isNull(included.includes.no_note);
+    });
+
+    it("includes a related row under a derived set's rows", () => {
+      const roomId = room("general");
+      const authorId = id("a");
+
+      LocalDatabase.putRow(AUTHOR, {id: authorId});
+      post(roomId, authorId);
+
+      const [general] = QueryKernel.run(
+        term(ROOM, {
+          include: {
+            recent_messages: term(POST, {include: {author: term(AUTHOR)}}),
+          },
+        }),
+      );
+
+      const [message] = general.includes.recent_messages;
+
+      assert.equal(message.includes.author.row.id, authorId);
+    });
+
+    it("includes what a derived set's definition includes", () => {
+      const roomId = room("general");
+      const authorId = id("a");
+
+      LocalDatabase.putRow(AUTHOR, {id: authorId});
+      post(roomId, authorId);
+
+      const [general] = QueryKernel.run(
+        term(ROOM, {include: {authored_messages: term(POST)}}),
+      );
+
+      const [message] = general.includes.authored_messages;
+
+      assert.deepEqual(Object.keys(message.includes), ["author"]);
+      assert.equal(message.includes.author.row.id, authorId);
+    });
+
+    it("includes the rows of the branch an if chooses, and none for null", () => {
+      room("general", 3);
+      room("random", 2);
+
+      const rooms = byName(
+        QueryKernel.run(
+          term(ROOM, {include: {nothing: term(POST), picked: term(POST)}}),
+        ),
+      );
+
+      assert.equal(rooms.general.includes.picked.length, 1);
+      assert.equal(rooms.random.includes.picked.length, 2);
+      assert.deepEqual(rooms.general.includes.nothing, []);
+      assert.deepEqual(rooms.random.includes.nothing, []);
+    });
+
+    it("includes a derived value under a related row", () => {
+      channel("general", [1, 2, 3]);
+
+      const {teamId} = team("team", []);
+      const playerId = id("p");
+
+      LocalDatabase.putRow(PLAYER, {
+        id: playerId,
+        kind: "guest",
+        member_id: null,
+        score: 7,
+      });
+
+      LocalDatabase.addFact(TEAM, "players", teamId, playerId);
+
+      const messages = term(MESSAGE, {
+        include: {later_count: null, tier: null},
+        sort: [
+          ["position", "asc"],
+          ["id", "asc"],
+        ],
+      });
+
+      const [general] = QueryKernel.run(term(CHANNEL, {include: {messages}}));
+
+      const [included] = QueryKernel.run(
+        term(TEAM, {
+          include: {players: term(PLAYER, {include: {ratio: null}})},
+        }),
+      );
+
+      assert.deepEqual(
+        general.includes.messages.map((node) => [
+          node.includes.later_count,
+          node.includes.tier,
+        ]),
+        [
+          [2, "low"],
+          [1, "low"],
+          [0, "low"],
+        ],
+      );
+
+      assert.equal(included.includes.players[0].includes.ratio, 7);
+    });
+
+    it("includes a derived value under a derived set's rows", () => {
+      channel("general", [1, 2, 3]);
+
+      const [general] = QueryKernel.run(
+        term(CHANNEL, {
+          include: {
+            recent_messages: term(MESSAGE, {include: {later_count: null}}),
+          },
+        }),
+      );
+
+      assert.deepEqual(
+        general.includes.recent_messages.map((node) => [
+          node.row.position,
+          node.includes.later_count,
+        ]),
+        [
+          [3, 0],
+          [2, 1],
+        ],
+      );
+    });
+
+    // The client holds only the rows its session may read, so a row it does not hold is not among
+    // a derived set's rows.
+    it("leaves a row the client does not hold out of an included derived set", () => {
+      const {noteIds} = team("tagged", [true, false]);
+
+      LocalDatabase.deleteRow(NOTE, noteIds[1]);
+
+      const [included] = QueryKernel.run(
+        term(TEAM, {include: {picked_notes: term(NOTE)}}),
+      );
+
+      assert.deepEqual(
+        included.includes.picked_notes.map((node) => [
+          node.row.id,
+          node.includes,
+        ]),
+        [[noteIds[0], {tags: [], team: {includes: {}, row: included.row}}]],
+      );
+    });
+  });
+
   // Mirrors the interpreter's "run/3 - comparing attributes" describe case for case.
   describe("matches() - comparing attributes", () => {
     const BOOKING = "MyApp.Booking";

@@ -30,9 +30,11 @@ import StringOrder from "./string_order.mjs";
 // never null, and a count counts the rows its source leads to from the row - the last link's rows
 // of every row the links before it reach, each once - matched to its filter with the row as the row
 // above, its bounds applied. A derived field holding rows holds its query's rows in its order with
-// its bounds applied, the rows of the branch an `if` takes, or none for null. A derived enum
-// compares and orders by its value's position among the declared ones. An integer a float field
-// reads needs no widening here, since a number is one type whole or not.
+// its bounds applied, the rows of the branch an `if` takes, or none for null. An included derived
+// field holds its value, or its rows - a list, or one row or null - each row embedding what its
+// definition and the include ask for. A derived enum compares and orders by its value's position
+// among the declared ones. An integer a float field reads needs no widening here, since a number is
+// one type whole or not.
 //
 // Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
@@ -444,9 +446,20 @@ export default class QueryKernel {
   }
 
   // A relationship the query asked for is filled from the rest of the database - a to-one by
-  // following the id its row carries, a to-many by reading the pairs it is the source of. A row
-  // does not say what type it is, and does not need to: the term reading it does.
+  // following the id its row carries, a to-many by reading the pairs it is the source of. A derived
+  // field is computed from its definition. A row does not say what type it is, and does not need
+  // to: the term reading it does.
   static #included(row, entityType, name, subTerm, context) {
+    if (Model.derivedField(entityType, name)) {
+      return QueryKernel.#includedDerived(
+        row,
+        entityType,
+        name,
+        subTerm,
+        context,
+      );
+    }
+
     const inverses = Model.inverses(entityType);
 
     if (Object.hasOwn(inverses, name)) {
@@ -474,6 +487,25 @@ export default class QueryKernel {
       subTerm,
       context,
     );
+  }
+
+  // An included derived field holding a value is the value its definition computes for the row. One
+  // holding rows holds its definition's rows - a list, or one row or null - each row embedding what
+  // the definition and the include ask for.
+  static #includedDerived(row, entityType, name, subTerm, context) {
+    if (subTerm === null) {
+      return QueryKernel.#derivedValue(row, entityType, name, context);
+    }
+
+    const rowsTerm = Model.rowsTerm(entityType, name, subTerm);
+
+    const nodes = QueryKernel.#derivedRows(row, entityType, name, context).map(
+      (derivedRow) => QueryKernel.#node(derivedRow, rowsTerm, context),
+    );
+
+    return Model.derivedField(entityType, name).kind === "set"
+      ? nodes
+      : (nodes[0] ?? null);
   }
 
   // An inverse is read from where the relationship it reverses is stored. Of a to-one, it is the
