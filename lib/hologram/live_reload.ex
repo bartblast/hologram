@@ -36,13 +36,26 @@ defmodule Hologram.LiveReload do
   # in milliseconds
   @debounce_delay 1_000
 
+  # How long asset changes are gathered before the tabs are told, in milliseconds. A tool that
+  # rebuilds the app's assets writes several files at once, and they make one change.
+  @asset_debounce_delay 100
+
+  # The asset types whose change in the app's priv/static dir the tabs are told about, the ones
+  # Phoenix's default live reload patterns list.
+  @asset_extensions ~w(.css .js .png .jpeg .jpg .gif .svg)
+
+  # The priv/static subdirs whose files are not the app's assets: Hologram's own bundles, which
+  # live reload passes already reload the tabs for, and files users upload, as in Phoenix's default
+  # live reload patterns.
+  @ignored_static_subdirs ~w(hologram uploads)
+
   @doc """
   Starts live reload process, registered under its module name.
 
   ## Options
 
-    * `:watch?` - whether to watch the source files (default: `true`). Tests start the process
-      without watching the source tree.
+    * `:watch?` - whether to watch the source files and the app's static dir (default: `true`).
+      Tests start the process without watching anything.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -182,8 +195,8 @@ defmodule Hologram.LiveReload do
 
   @impl GenServer
   def handle_info({:file_event, _pid, {file_path, _events}}, state) do
-    case should_process_file_event?(file_path) do
-      {:ok, target_file_path} ->
+    case classify_file_event(file_path) do
+      {:code, target_file_path} ->
         if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
 
         # File change events are debounced to avoid multiple recompilations
@@ -193,10 +206,37 @@ defmodule Hologram.LiveReload do
 
         {:noreply, %{state | timer_ref: timer_ref}}
 
+      {:asset, kind} ->
+        # Started once per batch of changes and not pushed back, so that a tool writing assets
+        # continuously still gets its changes shown.
+        asset_timer_ref =
+          state.asset_timer_ref ||
+            Process.send_after(self(), :debounced_asset_change, @asset_debounce_delay)
+
+        {:noreply,
+         %{
+           state
+           | asset_change: merge_asset_change(state.asset_change, kind),
+             asset_timer_ref: asset_timer_ref
+         }}
+
       :ignore ->
         # Ignore irrelevant files (backup files, temp files, etc.)
         {:noreply, state}
     end
+  end
+
+  # Only CSS changed: the tabs swap their stylesheets in place. Anything else reloads every tab,
+  # which brings changed CSS in too. Independent of a live reload pass, which rebuilds Hologram's
+  # bundles, not the app's assets.
+  @impl GenServer
+  def handle_info(:debounced_asset_change, state) do
+    case state.asset_change do
+      :css -> Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :css_changed)
+      :other -> broadcast_reload(:all)
+    end
+
+    {:noreply, %{state | asset_change: nil, asset_timer_ref: nil}}
   end
 
   @impl GenServer
@@ -262,6 +302,12 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
+  Returns the asset debounce delay in milliseconds.
+  """
+  @spec asset_debounce_delay :: pos_integer
+  def asset_debounce_delay, do: @asset_debounce_delay
+
+  @doc """
   Returns the debounce delay in milliseconds.
   """
   @spec debounce_delay :: pos_integer
@@ -272,6 +318,10 @@ defmodule Hologram.LiveReload do
   @spec initial_state(any) :: map
   def initial_state(endpoint) do
     %{
+      # What changed in the app's assets since the asset timer started: :css when only CSS did,
+      # :other when anything else did too, nil with no timer running.
+      asset_change: nil,
+      asset_timer_ref: nil,
       endpoint: endpoint,
       # What each tab showed at its last render, by instance id, with when it was first seen without
       # an SSE connection (nil while it holds one).
@@ -393,7 +443,8 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
-  Returns the list of directories that are watched for file changes.
+  Returns the source directories that are watched for file changes. The app's static dir is
+  watched too (see `watched_static_dir/0`).
 
   In a single-app project the directories are the project's own
   `:elixirc_paths`, joined to the project's directory.
@@ -430,11 +481,21 @@ defmodule Hologram.LiveReload do
   """
   @spec watcher_opts({atom, atom}) :: keyword
   def watcher_opts({:unix, :darwin}) do
-    [dirs: watched_dirs(), latency: 0, no_defer: true]
+    [dirs: all_watched_dirs(), latency: 0, no_defer: true]
   end
 
   def watcher_opts(_os_type) do
-    [dirs: watched_dirs()]
+    [dirs: all_watched_dirs()]
+  end
+
+  @doc """
+  Returns the app's static dir, whose assets live reload watches besides the source files: the
+  `priv/static` dir in the app's source dir. Not the one in the build dir, which is a symbolic link
+  to it.
+  """
+  @spec watched_static_dir :: String.t()
+  def watched_static_dir do
+    Path.join(Reflection.otp_app_dir(), "priv/static")
   end
 
   defp active_project_dir do
@@ -550,23 +611,71 @@ defmodule Hologram.LiveReload do
     end)
   end
 
-  # Determines whether to process a file event and returns the target file to reload
-  defp should_process_file_event?(file_path) do
+  # Determines what a file event is about: source code, with the file a live reload pass recompiles,
+  # an asset of the app, CSS or another kind, or nothing live reload acts on.
+  defp classify_file_event(file_path) do
     case Path.extname(file_path) do
       ".ex" ->
-        {:ok, file_path}
+        {:code, file_path}
 
       ".holo" ->
         ex_file = Path.rootname(file_path) <> ".ex"
 
         if File.exists?(ex_file) do
-          {:ok, ex_file}
+          {:code, ex_file}
         else
           :ignore
         end
 
+      extension when extension in @asset_extensions ->
+        classify_asset_event(file_path, extension)
+
       _fallback ->
         :ignore
+    end
+  end
+
+  # Matched by the path's segments, not by the watched static dir as a prefix: the watcher can
+  # report the path with a symbolic link on the way resolved. Phoenix's live reload matches its
+  # patterns anywhere in the path for the same reason. What counts is what follows the last
+  # priv/static in the path, since the project's own path can hold one too.
+  defp classify_asset_event(file_path, extension) do
+    if static_asset_path?(file_path) do
+      {:asset, if(extension == ".css", do: :css, else: :other)}
+    else
+      :ignore
+    end
+  end
+
+  # The segments that follow the last "priv", "static" pair, or nil when there is none.
+  defp last_static_subpath(["priv", "static" | rest], _subpath) do
+    last_static_subpath(rest, rest)
+  end
+
+  defp last_static_subpath([_segment | rest], subpath), do: last_static_subpath(rest, subpath)
+
+  defp last_static_subpath([], subpath), do: subpath
+
+  defp merge_asset_change(:other, _kind), do: :other
+  defp merge_asset_change(_asset_change, kind), do: kind
+
+  defp static_asset_path?(file_path) do
+    case last_static_subpath(Path.split(file_path), nil) do
+      [subdir, _file_name | _rest] -> subdir not in @ignored_static_subdirs
+      [_file_name] -> true
+      _no_static_subpath -> false
+    end
+  end
+
+  # A missing dir can fail the watcher's backend, so the static dir is watched only when it exists:
+  # one created after the server started is watched from the next start.
+  defp all_watched_dirs do
+    static_dir = watched_static_dir()
+
+    if File.dir?(static_dir) do
+      [static_dir | watched_dirs()]
+    else
+      watched_dirs()
     end
   end
 
