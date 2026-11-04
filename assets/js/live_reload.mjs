@@ -74,6 +74,21 @@ export default class LiveReload {
     document.location.reload();
   }
 
+  // Phoenix's live reload runs in an iframe its plug adds to every page, and reloads the tab on
+  // any change to a file its patterns match, Hologram's own bundles among them. Where Hologram's
+  // live reload runs, it does that job for the page, so the iframe goes before the page renders.
+  // Where it does not, Phoenix's is the only one, so the iframe stays. The iframe is told by its
+  // path, which an endpoint path prefix or the :suffix option only add to.
+  static removePhoenixReloader() {
+    if (!globalThis.Hologram.config.liveReload) {
+      return;
+    }
+
+    document
+      .querySelectorAll('iframe[src*="/phoenix/live_reload/frame"]')
+      .forEach((iframe) => iframe.remove());
+  }
+
   // Whether a page snapshot can be restored into the code given by the page digest and the
   // runtime digest: the snapshot holds component state shaped by the code it was taken
   // with, and component code lives in the page bundle and, for components the runtime

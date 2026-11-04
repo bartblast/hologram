@@ -137,6 +137,67 @@ describe("LiveReload", () => {
     sinon.assert.calledOnce(reloadSpy);
   });
 
+  describe("removePhoenixReloader()", () => {
+    const useDocument = (body) => {
+      const {window} = new JSDOM(
+        `<!DOCTYPE html><html><head></head><body>${body}</body></html>`,
+      );
+
+      globalThis.document = window.document;
+    };
+
+    beforeEach(() => {
+      globalThis.Hologram.config.liveReload = true;
+    });
+
+    const iframeSrcs = () =>
+      Array.from(document.querySelectorAll("iframe")).map((iframe) =>
+        iframe.getAttribute("src"),
+      );
+
+    it("removes Phoenix's live reload iframe", () => {
+      useDocument(
+        '<div id="app"></div><iframe hidden height="0" width="0" src="/phoenix/live_reload/frame"></iframe>',
+      );
+
+      LiveReload.removePhoenixReloader();
+
+      assert.deepStrictEqual(iframeSrcs(), []);
+      assert.isNotNull(document.getElementById("app"));
+    });
+
+    it("removes it under an endpoint path prefix and with a suffix", () => {
+      useDocument(
+        '<iframe src="/app/phoenix/live_reload/frame"></iframe>' +
+          '<iframe src="/phoenix/live_reload/frame/proxied/app/path"></iframe>',
+      );
+
+      LiveReload.removePhoenixReloader();
+
+      assert.deepStrictEqual(iframeSrcs(), []);
+    });
+
+    it("leaves other iframes", () => {
+      useDocument('<iframe src="https://www.youtube.com/embed/abc"></iframe>');
+
+      LiveReload.removePhoenixReloader();
+
+      assert.deepStrictEqual(iframeSrcs(), [
+        "https://www.youtube.com/embed/abc",
+      ]);
+    });
+
+    it("leaves it where live reload does not run", () => {
+      globalThis.Hologram.config.liveReload = false;
+
+      useDocument('<iframe src="/phoenix/live_reload/frame"></iframe>');
+
+      LiveReload.removePhoenixReloader();
+
+      assert.deepStrictEqual(iframeSrcs(), ["/phoenix/live_reload/frame"]);
+    });
+  });
+
   describe("snapshotFits()", () => {
     const snapshot = {pageDigest: "page-1", runtimeDigest: "runtime-1"};
 
