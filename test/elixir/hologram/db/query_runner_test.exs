@@ -33,8 +33,11 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module34
   alias Hologram.Test.Fixtures.Entity.Module37
+  alias Hologram.Test.Fixtures.Entity.Module38
   alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module40
+  alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module8
   alias Hologram.Test.Fixtures.Entity.Module9
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -44,7 +47,21 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
   alias Hologram.Test.Fixtures.Role
 
-  @derived_mapping Mapper.derive!([Module32, Module33, Module34, Module39], [])
+  @derived_mapping Mapper.derive!(
+                     [
+                       Module1,
+                       Module2,
+                       Module32,
+                       Module33,
+                       Module34,
+                       Module37,
+                       Module38,
+                       Module39,
+                       Module40,
+                       Module41
+                     ],
+                     []
+                   )
 
   @mapping Mapper.derive!([Module1, Module2, Module3], [])
 
@@ -1007,6 +1024,144 @@ defmodule Hologram.DB.QueryRunnerTest do
     end
   end
 
+  describe "run/3 - derived counts and sets" do
+    setup do
+      put_derived_definitions([Module32, Module33, Module34, Module37, Module38, Module40])
+    end
+
+    defp create_module_32_entity(name, positions) do
+      {:ok, channel} = create(Module32.new(name: name))
+
+      for position <- positions, do: create_module_33_entity(channel, position)
+
+      channel
+    end
+
+    defp create_module_33_entity(channel, position) do
+      {:ok, message} =
+        %{body: "message #{position}", channel_id: channel && channel.id, position: position}
+        |> Module33.new()
+        |> create()
+
+      message
+    end
+
+    defp create_module_37_entity(name, message_count) do
+      {:ok, channel} = create(Module37.new(name: name))
+
+      for _index <- 1..message_count//1 do
+        {:ok, _message} =
+          %{channel_id: channel.id, pinned: false}
+          |> Module38.new()
+          |> create()
+      end
+
+      channel
+    end
+
+    defp create_module_40_entity(name, note_publicity) do
+      {:ok, team} = create(Module40.new(name: name))
+
+      for public <- note_publicity do
+        {:ok, _note} =
+          %{public: public, team_id: team.id}
+          |> Module41.new()
+          |> create()
+      end
+
+      team
+    end
+
+    test "filters and sorts by a count" do
+      create_module_32_entity("busy", [1, 2, 3])
+      create_module_32_entity("quiet", [1])
+      create_module_32_entity("empty", [])
+
+      query =
+        Module32
+        |> filter(message_count > 0)
+        |> sort(message_count: :desc)
+
+      assert derived_query_results(query, :name) == ["busy", "quiet"]
+    end
+
+    test "counts the rows a clause reading the owner row matches" do
+      create_module_32_entity("general", [1, 2, 3])
+
+      query = filter(Module33, later_count == 1)
+
+      assert derived_query_results(query, :position) == [2]
+    end
+
+    test "counts no rows through a missing to-one" do
+      create_module_32_entity("general", [1, 2, 3])
+      create_module_33_entity(nil, 5)
+
+      query =
+        Module33
+        |> filter(later_count == 0)
+        |> sort(position)
+
+      assert derived_query_results(query, :position) == [3, 5]
+    end
+
+    test "counts a row several paths reach once" do
+      general = create_module_32_entity("general", [1, 2])
+      team = create_module_40_entity("team", [])
+
+      for nickname <- ["ann", "gina"] do
+        {:ok, mentor} =
+          %{channel_id: general.id, nickname: nickname, score: 1}
+          |> Module34.new()
+          |> create()
+
+        :ok = add_relationship(Module40, team.id, :mentors, mentor.id)
+      end
+
+      query = filter(Module40, mentor_message_count == 2)
+
+      assert derived_query_results(query, :name) == ["team"]
+    end
+
+    test "caps a count by its bounds" do
+      create_module_40_entity("full", [true, true, true])
+      create_module_40_entity("sparse", [true])
+
+      query = filter(Module40, capped_note_count == 2)
+
+      assert derived_query_results(query, :name) == ["full"]
+    end
+
+    test "matches a quantifier's rows to a derived set's bounded rows" do
+      create_module_32_entity("short", [1, 2])
+      create_module_32_entity("long", [1, 2, 3])
+
+      query = filter(Module32, any(message <- recent_messages, message.position == 1))
+
+      assert derived_query_results(query, :name) == ["short"]
+    end
+
+    test "matches a quantifier's rows to a derived set reached through a to-one" do
+      create_module_32_entity("short", [1, 2])
+      long = create_module_32_entity("long", [1, 2, 3])
+
+      query = filter(Module33, any(message <- channel.recent_messages, message.position == 3))
+
+      assert derived_query_results(query, :channel_id) == [long.id, long.id, long.id]
+    end
+
+    test "counts the rows of a derived set the branch of an if chooses" do
+      create_module_37_entity("general", 3)
+      create_module_37_entity("random", 2)
+
+      first_query = filter(Module37, picked_count == 1)
+      all_query = filter(Module37, picked_count == 2)
+
+      assert derived_query_results(first_query, :name) == ["general"]
+      assert derived_query_results(all_query, :name) == ["random"]
+    end
+  end
+
   describe "run/3 - derived fields" do
     setup do
       put_derived_definitions([Module34, Module39])
@@ -1199,6 +1354,60 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> Stage.normalize()
 
       assert run(term, @mapping) == []
+    end
+  end
+
+  describe "run_policied/4 - derived counts" do
+    test "leaves a related row the session may not read out of a count" do
+      put_derived_definitions([Module40])
+
+      {:ok, team} = create(Module40.new(name: "team"))
+
+      for public <- [true, false] do
+        {:ok, _note} =
+          %{public: public, team_id: team.id}
+          |> Module41.new()
+          |> create()
+      end
+
+      term =
+        Module40
+        |> filter(note_count == 1)
+        |> Stage.normalize()
+
+      policied_rows = run_policied(term, @derived_mapping, nil)
+      raw_rows = run(term, @derived_mapping)
+
+      assert Enum.map(policied_rows, & &1.name) == ["team"]
+      assert raw_rows == []
+    end
+
+    test "leaves a row the session may not read out of the rows a count's source passes through" do
+      put_derived_definitions([Module40])
+
+      {:ok, team} = create(Module40.new(name: "team"))
+
+      for {public, tag_name} <- [{true, "shown"}, {false, "hidden"}] do
+        {:ok, note} =
+          %{public: public, team_id: team.id}
+          |> Module41.new()
+          |> create()
+
+        {:ok, tag} = create(Module2.new(c: tag_name))
+
+        :ok = add_relationship(Module41, note.id, :tags, tag.id)
+      end
+
+      term =
+        Module40
+        |> filter(note_tag_count == 1)
+        |> Stage.normalize()
+
+      policied_rows = run_policied(term, @derived_mapping, nil)
+      raw_rows = run(term, @derived_mapping)
+
+      assert Enum.map(policied_rows, & &1.name) == ["team"]
+      assert raw_rows == []
     end
   end
 

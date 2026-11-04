@@ -25,8 +25,12 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module37
+  alias Hologram.Test.Fixtures.Entity.Module38
   alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module40
+  alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Entity.Module6
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
@@ -1579,6 +1583,251 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(sql, ~s( WHERE "id" = $1))
       assert String.contains?(sql, ~s( AND "a" = $2))
+    end
+  end
+
+  describe "compile/2 - derived counts and sets" do
+    setup do
+      put_derived_definitions([Module32, Module33, Module34, Module37, Module38, Module40])
+
+      mapping =
+        Mapper.derive!(
+          [
+            Module1,
+            Module2,
+            Module32,
+            Module33,
+            Module34,
+            Module37,
+            Module38,
+            Module40,
+            Module41
+          ],
+          []
+        )
+
+      [mapping: mapping]
+    end
+
+    test "counts the rows a source leads to in a correlated subquery", %{mapping: mapping} do
+      term =
+        Module32
+        |> filter(message_count > 1)
+        |> sort(message_count: :desc)
+        |> Stage.normalize()
+
+      message_count =
+        ~s|(SELECT count(*) FROM #{table(Module33)} AS "$s1" | <>
+          ~s|WHERE "$s1"."channel_id" = "test_fixtures_entity_module32"."id")|
+
+      assert %{params: [{:value, 1}], sql: sql} = compile(term, mapping)
+
+      assert String.ends_with?(
+               sql,
+               ~s| WHERE #{message_count} > $1 ORDER BY #{message_count} DESC, "id" ASC|
+             )
+    end
+
+    test "reads the owner row as the row above a count's rows", %{mapping: mapping} do
+      term =
+        Module33
+        |> filter(later_count == 0)
+        |> Stage.normalize()
+
+      channel =
+        ~s|EXISTS (SELECT 1 FROM #{table(Module32)} AS "$s1_1" | <>
+          ~s|WHERE "$s1_1"."id" = "test_fixtures_entity_module33"."channel_id" | <>
+          ~s|AND "$s1"."channel_id" = "$s1_1"."id")|
+
+      later_count =
+        ~s|(SELECT count(*) FROM #{table(Module33)} AS "$s1" WHERE #{channel} | <>
+          ~s|AND "position" > "test_fixtures_entity_module33"."position")|
+
+      assert %{params: [{:value, 0}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| WHERE #{later_count} = $1 ORDER BY|)
+    end
+
+    test "flattens a source through a set into the rows it reaches", %{mapping: mapping} do
+      term =
+        Module40
+        |> filter(mentor_message_count == 2)
+        |> Stage.normalize()
+
+      mentors =
+        ~s|EXISTS (SELECT 1 FROM #{table(Module34)} AS "$s1_1" WHERE "$s1_1"."id" IN | <>
+          ~s|(SELECT "$sj1"."target_id" FROM "hologram_data"."test_fixtures_entity_module40_mentors_$join" AS "$sj1" | <>
+          ~s|WHERE "$sj1"."source_id" = "test_fixtures_entity_module40"."id") | <>
+          ~s|AND "$s1_2"."id" = "$s1_1"."channel_id")|
+
+      channels =
+        ~s|EXISTS (SELECT 1 FROM #{table(Module32)} AS "$s1_2" WHERE #{mentors} | <>
+          ~s|AND "$s1"."channel_id" = "$s1_2"."id")|
+
+      assert %{params: [{:value, 2}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE (SELECT count(*) FROM #{table(Module33)} AS "$s1" WHERE #{channels}) = $1 ORDER BY|
+             )
+    end
+
+    test "caps a count by its bounds", %{mapping: mapping} do
+      term =
+        Module40
+        |> filter(capped_note_count == 2)
+        |> Stage.normalize()
+
+      assert %{params: [{:value, 2}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE (SELECT count(*) FROM (SELECT 1 FROM #{table(Module41)} AS "$s1" | <>
+                 ~s|WHERE "$s1"."team_id" = "test_fixtures_entity_module40"."id" LIMIT 2) AS "$sc1") = $1 ORDER BY|
+             )
+    end
+
+    test "applies the related type's read policy inside a count", %{mapping: mapping} do
+      term =
+        Module40
+        |> filter(note_count > 0)
+        |> Stage.normalize()
+
+      policy = %{rules: [%{predicates: [], to: nil, via: nil}]}
+
+      assert %{params: [{:value, true}, {:value, 0}], sql: sql} = compile(term, mapping, policy)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE (SELECT count(*) FROM #{table(Module41)} AS "$s1" | <>
+                 ~s|WHERE "$s1"."team_id" = "test_fixtures_entity_module40"."id" AND "public" = $1) > $2 ORDER BY|
+             )
+    end
+
+    test "matches a quantifier's rows to a derived set's bounded, ordered rows", %{
+      mapping: mapping
+    } do
+      term =
+        Module32
+        |> filter(any(message <- recent_messages, message.position == 1))
+        |> Stage.normalize()
+
+      recent_messages =
+        ~s|SELECT "$s2"."id" FROM #{table(Module33)} AS "$s2" | <>
+          ~s|WHERE "$s2"."channel_id" = "test_fixtures_entity_module32"."id" | <>
+          ~s|ORDER BY "position" DESC, "id" ASC LIMIT 2|
+
+      assert %{params: [{:value, 1}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(Module33)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."id" IN (#{recent_messages}) AND "position" = $1) ORDER BY|
+             )
+    end
+
+    test "reads a count at a path's end on the row the path reaches", %{mapping: mapping} do
+      term =
+        Module34
+        |> filter(channel_load > 0)
+        |> Stage.normalize()
+
+      message_count =
+        ~s|(SELECT count(*) FROM #{table(Module33)} AS "$s1" WHERE "$s1"."channel_id" = "$p1"."id")|
+
+      channel_load =
+        hop(1, Module32, message_count, ~s("test_fixtures_entity_module34"."channel_id"))
+
+      assert %{params: [{:value, 0}], sql: sql} = compile(term, mapping)
+      assert String.contains?(sql, ~s| WHERE #{channel_load} > $1 ORDER BY|)
+    end
+
+    test "counts the rows of a quantifier's related row", %{mapping: mapping} do
+      term =
+        Module37
+        |> filter(any(message <- messages, message.sibling_count > 1))
+        |> Stage.normalize()
+
+      sibling_count =
+        ~s|(SELECT count(*) FROM #{table(Module38)} AS "$s1" | <>
+          ~s|WHERE EXISTS (SELECT 1 FROM #{table(Module37)} AS "$s1_1" | <>
+          ~s|WHERE "$s1_1"."id" = "$q1"."channel_id" AND "$s1"."channel_id" = "$s1_1"."id"))|
+
+      assert %{params: [{:value, 1}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| AND #{sibling_count} > $1) ORDER BY|
+             )
+    end
+
+    test "reaches a derived set through a quantifier source's to-ones", %{mapping: mapping} do
+      term =
+        Module33
+        |> filter(any(message <- channel.recent_messages, message.position == 3))
+        |> Stage.normalize()
+
+      recent_messages =
+        ~s|SELECT "$s2"."id" FROM #{table(Module33)} AS "$s2" | <>
+          ~s|WHERE "$s2"."channel_id" = "$s1_1"."id" ORDER BY "position" DESC, "id" ASC LIMIT 2|
+
+      channel =
+        ~s|EXISTS (SELECT 1 FROM #{table(Module32)} AS "$s1_1" | <>
+          ~s|WHERE "$s1_1"."id" = "test_fixtures_entity_module33"."channel_id" | <>
+          ~s|AND "$q1"."id" IN (#{recent_messages}))|
+
+      assert %{params: [{:value, 3}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(Module33)} AS "$q1" WHERE #{channel} | <>
+                 ~s|AND "position" = $1) ORDER BY|
+             )
+    end
+
+    test "reads the rows of the branch an if chooses, nested a level deeper", %{mapping: mapping} do
+      term =
+        Module37
+        |> filter(picked_count > 0)
+        |> Stage.normalize()
+
+      first_message =
+        ~s|SELECT "$s2"."id" FROM #{table(Module38)} AS "$s2" | <>
+          ~s|WHERE "$s2"."channel_id" = "test_fixtures_entity_module37"."id" ORDER BY "id" ASC LIMIT 1|
+
+      messages =
+        ~s|EXISTS (SELECT 1 FROM #{table(Module38)} AS "$s2_1" | <>
+          ~s|WHERE "$s2_1"."channel_id" = "test_fixtures_entity_module37"."id" | <>
+          ~s|AND "$s2_2"."id" = "$s2_1"."channel_id")|
+
+      colleagues =
+        ~s|SELECT "$s2"."id" FROM #{table(Module38)} AS "$s2" | <>
+          ~s|WHERE EXISTS (SELECT 1 FROM #{table(Module37)} AS "$s2_2" WHERE #{messages} | <>
+          ~s|AND "$s2"."channel_id" = "$s2_2"."id")|
+
+      picked =
+        ~s|CASE WHEN "test_fixtures_entity_module37"."name" = $1 | <>
+          ~s|THEN "$s1"."id" IN (#{first_message}) ELSE "$s1"."id" IN (#{colleagues}) END|
+
+      assert %{params: [{:value, "general"}, {:value, 0}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE (SELECT count(*) FROM #{table(Module38)} AS "$s1" WHERE #{picked}) > $2 ORDER BY|
+             )
+    end
+
+    test "holds no rows for a nil definition", %{mapping: mapping} do
+      term =
+        Module37
+        |> filter(any(nothing))
+        |> Stage.normalize()
+
+      assert %{params: [], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(Module38)} AS "$q1" WHERE FALSE) ORDER BY|
+             )
     end
   end
 

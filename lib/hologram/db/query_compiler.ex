@@ -115,8 +115,9 @@ defmodule Hologram.DB.QueryCompiler do
   them for `none`, and `NOT EXISTS` of the related rows its condition is not true of for `all` -
   `IS NOT TRUE`, so a row the condition compares against nil counts against `all`, the way the
   comparison passes over nil everywhere else. The related rows are the ones the set's join table
-  pairs with the row, or whose reference field names it, the row reached through the source's
-  to-one relationships first - a hop finding no row leaves the set empty. When a policy is given,
+  pairs with the row, or whose reference field names it, or the rows a derived field holding them
+  holds, the row reached through the source's to-one relationships first - a hop finding no row
+  leaves the set empty. When a policy is given,
   the related type's `:read` policy applies inside the subquery, so a row the session may not read
   is not among them. Inside the condition the related row's columns are the subquery's, and a name
   of a row above is qualified with the name the statement gives that row.
@@ -129,6 +130,18 @@ defmodule Hologram.DB.QueryCompiler do
   is not true, and a condition is `COALESCE(..., false)`, never missing. Any other computed value
   can be missing, so the nil rules of an optional attribute apply to it. A computed enum is its
   label, and it orders and compares by the label's position among the declared ones.
+
+  A count a derived field holds compiles to a `(SELECT count(*) ...)` subquery, aliased `"$s<n>"`
+  by how deep it nests and correlated on the row that holds the field - which its clauses reach as
+  the row above, the way a quantifier's condition reaches the row its source starts at - its
+  bounds capping the rows counted. Its rows are the ones its source leads to from that row: the
+  last link's rows of every row the links before it reach, each such row matched with `EXISTS`, so
+  a set before the last is flattened and a row several paths reach is counted once. A missing
+  related row leads nowhere, so a count through one is 0. A derived field holding rows matches a
+  row with `IN` over its rows - bounded in its order - an `if` choosing between such sets with
+  `CASE WHEN`, and nil holding no rows. When a policy is given, the read policy applies to the
+  counted rows and to every row along the way, so a row the session may not read is not among
+  them and leads nowhere.
   """
   @spec compile(Query.t(), %{module => %{atom => any}}, %{atom => any} | nil) ::
           %{atom => any}
@@ -371,16 +384,12 @@ defmodule Hologram.DB.QueryCompiler do
   # moduledoc for what each one asks of them.
   defp condition({quantifier, {source, clauses}}, scope, reversed_params)
        when quantifier in @quantifiers do
-    {source_scope, hops} = source_scope(scope, source)
-    {owner_hops, [set_name]} = Enum.split(hops, -1)
-    owner_type = Entity.path_target(source_scope.entity_type, owner_hops)
-
-    {owner_id_sql, params_after_owner} = owner_id_sql(source_scope, owner_hops, reversed_params)
-    {target_type, membership} = set_membership(owner_type, set_name, scope.mapping, owner_id_sql)
-
     depth = scope.quantifier_depth + 1
     quoted_alias = Mapper.quote_identifier("$q#{depth}")
     quoted_join = Mapper.quote_identifier("$qj#{depth}")
+
+    {target_type, membership_sql, params_after_owner} =
+      quantified_set(scope, source, quoted_alias, quoted_join, reversed_params)
 
     inner_scope =
       target_type
@@ -391,7 +400,11 @@ defmodule Hologram.DB.QueryCompiler do
         scope.path_depth,
         scope.delegation_depth
       )
-      |> Map.merge(%{outer: [scope | scope.outer], quantifier_depth: depth})
+      |> Map.merge(%{
+        outer: [scope | scope.outer],
+        quantifier_depth: depth,
+        source_depth: scope.source_depth
+      })
 
     {policy_conditions, params_after_policy} =
       path_policy_conditions(
@@ -405,7 +418,7 @@ defmodule Hologram.DB.QueryCompiler do
     {inner_conditions, new_params} = conditions(clauses, inner_scope, params_after_policy)
 
     where_sql =
-      [membership.(quoted_alias, quoted_join)]
+      [membership_sql]
       |> Enum.concat(policy_conditions)
       |> Enum.concat(quantified_conditions(quantifier, inner_conditions))
       |> Enum.join(" AND ")
@@ -639,11 +652,12 @@ defmodule Hologram.DB.QueryCompiler do
   # statement gives it - and how a path reads a related row there. Under a statement's policy a
   # hop applies the hop type's read policy, so an unreadable related row reads as a missing one,
   # and inside a policy rule (no policy) hops read the related rows raw, as delegation does. The
-  # depths name the aliases a nested path or delegation takes, so none shadows a row an enclosing
-  # subquery correlates on. Inside a quantifier's condition the scope is the related row's, and the
-  # scopes of the rows above it are kept, nearest first, for the names that reach them. A row above
-  # is read with its columns qualified with its name, since inside a quantifier the unqualified ones
-  # are the related row's. The row a path ends at and an include's wrapper are read qualified too.
+  # depths name the aliases a nested path, delegation, quantifier or derived field's rows take, so
+  # none shadows a row an enclosing subquery correlates on. Inside a quantifier's condition the
+  # scope is the related row's, and the scopes of the rows above it are kept, nearest first, for the
+  # names that reach them. A row above is read with its columns qualified with its name, since
+  # inside a quantifier the unqualified ones are the related row's. The row a path ends at and an
+  # include's wrapper are read qualified too.
   defp condition_scope(
          entity_type,
          mapping,
@@ -662,8 +676,32 @@ defmodule Hologram.DB.QueryCompiler do
       policy: policy,
       qualified: false,
       quantifier_depth: 0,
-      row_prefix: quoted_row_prefix
+      row_prefix: quoted_row_prefix,
+      source_depth: 0
     }
+  end
+
+  # How a row related through the given relationship is matched to the parent row: a set's rows
+  # through the reference or the join table that pairs them, a single row through the reference
+  # naming it or naming the parent.
+  defp relationship_membership(parent_type, parent_mapping, name, mapping, parent_prefix) do
+    join_table = Enum.find(parent_mapping.join_tables, &(&1.relationship == name))
+    inverse = Entity.inverse_relationship(parent_type, name)
+    parent_id_sql = ~s|#{parent_prefix}."id"|
+
+    cond do
+      inverse && inverse.to_many? ->
+        {:to_many, inverse_membership(inverse, mapping, parent_id_sql)}
+
+      inverse ->
+        {:to_one, inverse_match(inverse, mapping, parent_prefix)}
+
+      join_table ->
+        {:to_many, join_membership(join_table, parent_id_sql)}
+
+      true ->
+        {:to_one, reference_match(name, parent_mapping, parent_prefix)}
+    end
   end
 
   defp relationship_target(entity_type, relationship_name) do
@@ -775,7 +813,7 @@ defmodule Hologram.DB.QueryCompiler do
             number,
             scope.delegation_depth
           )
-          |> Map.put(:qualified, true)
+          |> Map.merge(%{qualified: true, source_depth: scope.source_depth})
           |> path_end_sql(leaf, reversed_params)
 
         _later_hops ->
@@ -1086,6 +1124,48 @@ defmodule Hologram.DB.QueryCompiler do
     end)
   end
 
+  # Whether the given row is among a derived set's rows for the scope's row: a query's rows, bounded
+  # in its order, the rows of the branch an if takes, or none for nil.
+  defp rows_membership_sql(
+         {:if, clauses, then_rows, else_rows},
+         scope,
+         quoted_target,
+         reversed_params
+       ) do
+    {condition_sqls, params_after_conditions} = conditions(clauses, scope, reversed_params)
+
+    {then_sql, params_after_then} =
+      rows_membership_sql(then_rows, scope, quoted_target, params_after_conditions)
+
+    {else_sql, new_params} =
+      rows_membership_sql(else_rows, scope, quoted_target, params_after_then)
+
+    case_sql =
+      "CASE WHEN #{Enum.join(condition_sqls, " AND ")} THEN #{then_sql} ELSE #{else_sql} END"
+
+    {case_sql, new_params}
+  end
+
+  defp rows_membership_sql({:query, term}, scope, quoted_target, reversed_params) do
+    {from_sql, inner_scope, params_after_from} = sourced_from_sql(scope, term, reversed_params)
+    bounds_sql = bounds_clause(term)
+
+    {order_sql, new_params} =
+      if bounds_sql == "" do
+        {"", params_after_from}
+      else
+        order_clause(term.sort, inner_scope, params_after_from)
+      end
+
+    rows_sql = ~s|SELECT #{inner_scope.row_prefix}."id" #{from_sql}#{order_sql}#{bounds_sql}|
+
+    {~s|#{quoted_target}."id" IN (#{rows_sql})|, new_params}
+  end
+
+  defp rows_membership_sql({:value, nil}, _scope, _quoted_target, reversed_params) do
+    {"FALSE", reversed_params}
+  end
+
   # The type a computed value is read as - an enum as its label, since no enum type in the database
   # holds a derived field's labels.
   defp scalar_sql_type(:boolean), do: "boolean"
@@ -1173,10 +1253,102 @@ defmodule Hologram.DB.QueryCompiler do
     {key_slot, raw_slot, new_params}
   end
 
+  # Whether the given row is among the rows a source chain leads to from the scope's row: the last
+  # link's rows of every row the links before it reach, so a set before the last is flattened and a
+  # row reached twice is one row. A row along the way the read policy hides leads nowhere, and a
+  # missing one leads nowhere either.
+  defp source_membership_sql(scope, [name], quoted_target, reversed_params) do
+    link_membership_sql(scope, name, quoted_target, reversed_params)
+  end
+
+  defp source_membership_sql(scope, chain, quoted_target, reversed_params) do
+    {earlier_links, [name]} = Enum.split(chain, -1)
+    link_type = Derived.path_target(scope.entity_type, earlier_links)
+    quoted_alias = Mapper.quote_identifier("$s#{scope.source_depth}_#{length(earlier_links)}")
+
+    {reached_sql, params_after_reached} =
+      source_membership_sql(scope, earlier_links, quoted_alias, reversed_params)
+
+    {policy_conditions, params_after_policy} =
+      path_policy_conditions(
+        scope,
+        link_type,
+        quoted_alias,
+        scope.path_depth,
+        params_after_reached
+      )
+
+    {link_sql, new_params} =
+      link_type
+      |> condition_scope(
+        scope.mapping,
+        quoted_alias,
+        scope.policy,
+        scope.path_depth,
+        scope.delegation_depth
+      )
+      |> Map.merge(%{qualified: true, source_depth: scope.source_depth})
+      |> link_membership_sql(name, quoted_target, params_after_policy)
+
+    where_sql = Enum.join([reached_sql | policy_conditions] ++ [link_sql], " AND ")
+    link_table = Map.fetch!(scope.mapping, link_type).table
+
+    exists_sql =
+      "EXISTS (SELECT 1 FROM #{qualified_table(link_table)} AS #{quoted_alias} WHERE #{where_sql})"
+
+    {exists_sql, new_params}
+  end
+
   # The scope a quantifier's source is read on: the current row's, or the row's that many out.
   defp source_scope(scope, {:outer, levels, hops}), do: {Enum.at(scope.outer, levels - 1), hops}
 
   defp source_scope(scope, hops), do: {scope, hops}
+
+  # The FROM and WHERE of a subquery over the rows a derived field's query reads, aliased by how
+  # deep it nests: the rows its source leads to from the owner row, readable under the read policy,
+  # matching its clauses - inside which the owner is the nearest row above, as a quantifier's row is.
+  # Returned with the scope of those rows.
+  defp sourced_from_sql(owner_scope, %{source: {_owner_type, chain}} = term, reversed_params) do
+    depth = owner_scope.source_depth + 1
+    quoted_alias = Mapper.quote_identifier("$s#{depth}")
+
+    {membership_sql, params_after_membership} =
+      owner_scope
+      |> Map.merge(%{qualified: true, source_depth: depth})
+      |> source_membership_sql(chain, quoted_alias, reversed_params)
+
+    {policy_conditions, params_after_policy} =
+      path_policy_conditions(
+        owner_scope,
+        term.entity,
+        quoted_alias,
+        owner_scope.path_depth,
+        params_after_membership
+      )
+
+    inner_scope =
+      term.entity
+      |> condition_scope(
+        owner_scope.mapping,
+        quoted_alias,
+        owner_scope.policy,
+        owner_scope.path_depth,
+        owner_scope.delegation_depth
+      )
+      |> Map.merge(%{
+        outer: [owner_scope | owner_scope.outer],
+        quantifier_depth: owner_scope.quantifier_depth,
+        source_depth: depth
+      })
+
+    {conditions, new_params} = conditions(term.filter, inner_scope, params_after_policy)
+
+    where_sql = Enum.join([membership_sql | policy_conditions] ++ conditions, " AND ")
+    table = Map.fetch!(owner_scope.mapping, term.entity).table
+
+    {"FROM #{qualified_table(table)} AS #{quoted_alias} WHERE #{where_sql}", inner_scope,
+     new_params}
+  end
 
   defp bind_placeholder_slot(placeholder_name, type, reversed_params) do
     {"$#{length(reversed_params) + 1}",
@@ -1234,6 +1406,24 @@ defmodule Hologram.DB.QueryCompiler do
     {name_sql, name_column, new_params} = subject_sql(scope, name, reversed_params)
 
     {cast_sql(name_sql, name_column, column), new_params}
+  end
+
+  # A count is a correlated subquery over the rows the source leads to. Bounds cap the rows counted,
+  # as a counting statement's do.
+  defp expression_sql({:query, %{cardinality: :count} = term}, scope, _column, reversed_params) do
+    {from_sql, _inner_scope, new_params} = sourced_from_sql(scope, term, reversed_params)
+    bounds_sql = bounds_clause(term)
+
+    count_sql =
+      if bounds_sql == "" do
+        "(SELECT count(*) #{from_sql})"
+      else
+        quoted_wrapper = Mapper.quote_identifier("$sc#{scope.source_depth + 1}")
+
+        "(SELECT count(*) FROM (SELECT 1 #{from_sql}#{bounds_sql}) AS #{quoted_wrapper})"
+      end
+
+    {count_sql, new_params}
   end
 
   # A slot's type can't be told from a CASE whose branches are all slots, so every literal is cast
@@ -1305,28 +1495,11 @@ defmodule Hologram.DB.QueryCompiler do
          parent_prefix,
          acc
        ) do
-    join_table = Enum.find(parent_mapping.join_tables, &(&1.relationship == name))
-    inverse = Entity.inverse_relationship(parent_type, name)
-
-    cond do
-      inverse && inverse.to_many? ->
-        membership = inverse_membership(inverse, mapping, ~s|#{parent_prefix}."id"|)
-
+    case relationship_membership(parent_type, parent_mapping, name, mapping, parent_prefix) do
+      {:to_many, membership} ->
         to_many_include_expression(sub_term, membership, mapping, policy, acc)
 
-      inverse ->
-        match = inverse_match(inverse, mapping, parent_prefix)
-
-        to_one_include_expression(sub_term, match, mapping, policy, acc)
-
-      join_table ->
-        membership = join_membership(join_table, ~s|#{parent_prefix}."id"|)
-
-        to_many_include_expression(sub_term, membership, mapping, policy, acc)
-
-      true ->
-        match = reference_match(name, parent_mapping, parent_prefix)
-
+      {:to_one, match} ->
         to_one_include_expression(sub_term, match, mapping, policy, acc)
     end
   end
@@ -1461,6 +1634,32 @@ defmodule Hologram.DB.QueryCompiler do
     end)
   end
 
+  # Whether the given row is among the rows one link of a source leads to from the scope's row: a
+  # relationship's related rows, or the rows a derived field's definition holds.
+  defp link_membership_sql(scope, name, quoted_target, reversed_params) do
+    if Derived.declared?(scope.entity_type, name) do
+      scope.entity_type
+      |> Derived.definition(name)
+      |> rows_membership_sql(scope, quoted_target, reversed_params)
+    else
+      quoted_join = Mapper.quote_identifier("$sj#{scope.source_depth}")
+
+      membership_sql =
+        case relationship_membership(
+               scope.entity_type,
+               scope.entity_mapping,
+               name,
+               scope.mapping,
+               scope.row_prefix
+             ) do
+          {:to_many, membership} -> membership.(quoted_target, quoted_join)
+          {:to_one, match} -> match.(quoted_target)
+        end
+
+      {membership_sql, reversed_params}
+    end
+  end
+
   defp maybe_require_value(condition_sql, subject_sql, %{null: true}) do
     "(#{condition_sql} AND #{subject_sql} IS NOT NULL)"
   end
@@ -1549,6 +1748,32 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp quantified_conditions(_quantifier, conditions), do: conditions
+
+  # The rows a quantifier is about and the condition matching one of them to the row its source
+  # starts at: a relationship's through the id of the row its to-ones lead to, a derived field's
+  # through its definition, read on that row. A derived field's chain nests a level below the
+  # scope's, so no alias it takes shadows a row the quantifier's condition is read on.
+  defp quantified_set(scope, source, quoted_alias, quoted_join, reversed_params) do
+    {source_scope, hops} = source_scope(scope, source)
+    {owner_hops, [set_name]} = Enum.split(hops, -1)
+    owner_type = Entity.path_target(source_scope.entity_type, owner_hops)
+
+    if Derived.declared?(owner_type, set_name) do
+      {membership_sql, new_params} =
+        source_scope
+        |> Map.merge(%{qualified: true, source_depth: scope.source_depth + 1})
+        |> source_membership_sql(hops, quoted_alias, reversed_params)
+
+      {Derived.related_type(owner_type, set_name), membership_sql, new_params}
+    else
+      {owner_id_sql, new_params} = owner_id_sql(source_scope, owner_hops, reversed_params)
+
+      {target_type, membership} =
+        set_membership(owner_type, set_name, source_scope.mapping, owner_id_sql)
+
+      {target_type, membership.(quoted_alias, quoted_join), new_params}
+    end
+  end
 
   # A string's sort key - its companion column, read through the path when the string is a related
   # row's - or nil for a value of any other type.
