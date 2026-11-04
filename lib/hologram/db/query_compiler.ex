@@ -119,16 +119,18 @@ defmodule Hologram.DB.QueryCompiler do
   comparison on an attribute binds none.
 
   A quantifier compiles to a correlated subquery over the related table, aliased `"$q<n>"` by its
-  nesting depth: `EXISTS` of the related rows matching its condition for `any`, `NOT EXISTS` of
-  them for `none`, and `NOT EXISTS` of the related rows its condition is not true of for `all` -
+  nesting depth: `EXISTS` of the related rows matching its condition for `any`, `NOT EXISTS` of them
+  for `none`, and `NOT EXISTS` of the related rows its condition is not true of for `all` -
   `IS NOT TRUE`, so a row the condition compares against nil counts against `all`, the way the
   comparison passes over nil everywhere else. The related rows are the ones the set's join table
   pairs with the row, or whose reference field names it, or the rows a derived field holding them
   holds, the row reached through the source's to-one relationships first - a hop finding no row
-  leaves the set empty. When a policy is given,
-  the related type's `:read` policy applies inside the subquery, so a row the session may not read
-  is not among them. Inside the condition the related row's columns are the subquery's, and a name
-  of a row above is qualified with the name the statement gives that row.
+  leaves the set empty. A source with a set or an inverse before its last link reads the related
+  rows the way a derived field's source does, below: the last link's rows of every row the links
+  before it reach, each once. When a policy is given, the related type's `:read` policy applies
+  inside the subquery, so a row the session may not read is not among them. Inside the condition the
+  related row's columns are the subquery's, and a name of a row above is qualified with the name the
+  statement gives that row.
 
   A derived field holding a value is computed from its definition wherever its name is read - a
   subject, an operand, a path's end, a sort entry - so the database still runs one statement. A
@@ -1427,6 +1429,24 @@ defmodule Hologram.DB.QueryCompiler do
      new_params}
   end
 
+  # Whether every link of a chain is a relationship stored on its row as a reference - a to-one,
+  # whose related row the reference names.
+  defp stored_to_ones?(entity_type, chain) do
+    {all?, _last_type} =
+      Enum.reduce(chain, {true, entity_type}, fn name, {acc, link_type} ->
+        stored_to_one? =
+          Entity.inverse_relationship(link_type, name) == nil and
+            not match?(
+              {_name, [_target], _opts},
+              List.keyfind(link_type.__relationships__(), name, 0)
+            )
+
+        {acc and stored_to_one?, Entity.related_type(link_type, name)}
+      end)
+
+    all?
+  end
+
   defp bind_placeholder_slot(placeholder_name, type, reversed_params) do
     {"$#{length(reversed_params) + 1}",
      [{:placeholder, placeholder_name, type} | reversed_params]}
@@ -1858,15 +1878,17 @@ defmodule Hologram.DB.QueryCompiler do
   defp quantified_conditions(_quantifier, conditions), do: conditions
 
   # The rows a quantifier is about and the condition matching one of them to the row its source
-  # starts at: a relationship's through the id of the row its to-ones lead to, a derived field's
-  # through its definition, read on that row. A derived field's chain nests a level below the
+  # starts at: a relationship's set, matched by the id of the row its to-ones lead to, and otherwise
+  # - a set or an inverse before the last link, or a derived field's rows - the way a derived
+  # field's source reads them, a set before the last flattened. That chain nests a level below the
   # scope's, so no alias it takes shadows a row the quantifier's condition is read on.
   defp quantified_set(scope, source, quoted_alias, quoted_join, reversed_params) do
     {source_scope, hops} = source_scope(scope, source)
     {owner_hops, [set_name]} = Enum.split(hops, -1)
     owner_type = Entity.path_target(source_scope.entity_type, owner_hops)
 
-    if Derived.declared?(owner_type, set_name) do
+    if Derived.declared?(owner_type, set_name) or
+         not stored_to_ones?(source_scope.entity_type, owner_hops) do
       {membership_sql, new_params} =
         source_scope
         |> Map.merge(%{qualified: true, source_depth: scope.source_depth + 1})

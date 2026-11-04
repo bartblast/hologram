@@ -1077,6 +1077,81 @@ defmodule Hologram.Query.InterpreterTest do
     end
   end
 
+  describe "run/3 - quantifiers through sets" do
+    # general's two messages both carry urgent, so its sources reach urgent twice - quiet's one
+    # message carries later, and empty has no message for a source to go through.
+    setup do
+      general = created(Module26, name: "general")
+      quiet = created(Module26, name: "quiet")
+      created(Module26, name: "empty")
+
+      urgent = created(Module29, name: "urgent")
+      later = created(Module29, name: "later")
+
+      for {channel, body, labels} <- [
+            {general, "first", [urgent, later]},
+            {general, "second", [urgent]},
+            {quiet, "third", [later]}
+          ] do
+        message = message(channel, body, 1)
+
+        for label <- labels, do: :ok = add_relationship(Module28, message.id, :labels, label.id)
+      end
+
+      :ok
+    end
+
+    test "answers any, none and all over the rows every path reaches" do
+      any_query = filter(Module26, any(label <- messages.labels, label.name == "urgent"))
+      none_query = filter(Module26, none(label <- messages.labels, label.name == "urgent"))
+      all_query = filter(Module26, all(label <- messages.labels, label.name == "later"))
+
+      assert channel_names(agreed(any_query)) == ["general"]
+      assert channel_names(agreed(none_query)) == ["empty", "quiet"]
+      assert channel_names(agreed(all_query)) == ["empty", "quiet"]
+    end
+
+    test "reads a source through an inverse holding one row, and none through a missing to-one" do
+      general =
+        Module26
+        |> agreed()
+        |> Enum.find(&(&1.name == "general"))
+
+      created(Module27, channel_id: general.id, summary: "welcome")
+      message(nil, "orphan", 2)
+
+      topic_query =
+        filter(Module26, any(message <- topic.channel.messages, message.body == "first"))
+
+      orphan_bodies =
+        Module28
+        |> filter(any(sibling <- channel.messages, sibling.body == "orphan"))
+        |> agreed()
+
+      assert channel_names(agreed(topic_query)) == ["general"]
+      assert orphan_bodies == []
+    end
+
+    test "binds a placeholder inside a condition through a set" do
+      query =
+        filter(Module26, any(label <- messages.labels, label.name == ^%Placeholder{name: :name}))
+
+      assert channel_names(agreed(query, bindings: %{name: "later"})) == ["general", "quiet"]
+    end
+
+    test "matches a label through the messages it shares with another label" do
+      query = filter(Module29, any(other <- messages.labels, other.name == "later"))
+
+      names =
+        query
+        |> agreed()
+        |> Enum.map(& &1.name)
+        |> Enum.sort()
+
+      assert names == ["later", "urgent"]
+    end
+  end
+
   describe "run/3 - quantifiers over other kinds of rows" do
     test "answers over a self-referencing inverse, comparing a reply with its parent" do
       parent = created(Module30, body: "echo")
@@ -1807,6 +1882,13 @@ defmodule Hologram.Query.InterpreterTest do
 
       assert derived_names(filter(Module37, picked_count == 1)) == ["general"]
       assert derived_names(filter(Module37, picked_count == 2)) == ["random"]
+    end
+
+    test "reads a derived set at the end of a source through a set" do
+      room("general", 2)
+      room("empty", 0)
+
+      assert derived_names(filter(Module37, none(messages.channel.recent_messages))) == ["empty"]
     end
 
     test "holds no rows for a nil definition" do

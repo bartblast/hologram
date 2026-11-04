@@ -730,6 +730,73 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
+    test "embeds a set a source goes through whole and narrows only the last" do
+      window =
+        Module37
+        |> filter(any(message <- messages.channel.messages, message.pinned == true))
+        |> Stage.normalize()
+        |> derive(false)
+
+      assert window.include == %{
+               messages: %Query{
+                 entity: Module38,
+                 include: %{
+                   channel: %Query{
+                     entity: Module37,
+                     include: %{
+                       messages: %Query{entity: Module38, filter: [{:pinned, :==, true}]}
+                     }
+                   }
+                 }
+               }
+             }
+    end
+
+    test "keeps the narrowing of a parent set a nested quantifier's source starts inside" do
+      window =
+        Module37
+        |> filter(
+          any(
+            message <- messages,
+            message.pinned == true and
+              any(colleague <- message.channel.messages, colleague.pinned == false)
+          )
+        )
+        |> Stage.normalize()
+        |> derive(false)
+
+      assert {:pinned, :==, true} in window.include.messages.filter
+    end
+
+    test "embeds whole a set a source read on the row above goes through" do
+      window =
+        Module37
+        |> filter(
+          any(
+            message <- messages,
+            message.pinned == true and
+              any(colleague <- messages.channel.messages, colleague.pinned == false)
+          )
+        )
+        |> Stage.normalize()
+        |> derive(false)
+
+      assert window.include.messages.filter == []
+    end
+
+    test "embeds a set a source goes through whole beside another quantifier narrowing it" do
+      window =
+        Module37
+        |> filter(
+          any(message <- messages, message.pinned == true) and
+            any(colleague <- messages.channel.messages, colleague.pinned == false)
+        )
+        |> Stage.normalize()
+        |> derive(false)
+
+      assert window.include.messages.filter == []
+    end
+
     test "embeds a set read on the queried row from inside another quantifier on the queried row" do
       window =
         Module30

@@ -2771,6 +2771,84 @@ defmodule Hologram.DB.QueryCompilerTest do
   end
 
   describe "compile/2 - quantifiers" do
+    test "compiles none and all through a set over the rows every path reaches" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      none_term = path_term(Module26, none: {[:messages, :labels], [name: "u"]})
+      all_term = path_term(Module26, all: {[:messages, :labels], [name: "u"]})
+
+      labels =
+        ~s|EXISTS (SELECT 1 FROM #{table(Module28)} AS "$s1_1" | <>
+          ~s|WHERE "$s1_1"."channel_id" = "test_fixtures_entity_module26"."id" | <>
+          ~s|AND "$q1"."id" IN (SELECT "$sj1"."target_id" | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$sj1" | <>
+          ~s|WHERE "$sj1"."source_id" = "$s1_1"."id"))|
+
+      assert %{params: [{:value, "u"}], sql: none_sql} = compile(none_term, mapping)
+      assert %{params: [{:value, "u"}], sql: all_sql} = compile(all_term, mapping)
+
+      assert String.contains?(
+               none_sql,
+               ~s| WHERE NOT EXISTS (SELECT 1 FROM #{table(Module29)} AS "$q1" | <>
+                 ~s|WHERE #{labels} AND "name" = $1) ORDER BY|
+             )
+
+      assert String.contains?(
+               all_sql,
+               ~s| WHERE NOT EXISTS (SELECT 1 FROM #{table(Module29)} AS "$q1" | <>
+                 ~s|WHERE #{labels} AND ("name" = $1) IS NOT TRUE) ORDER BY|
+             )
+    end
+
+    test "reads a source going first through a to-many or an inverse holding one row" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      to_many_term = path_term(Module28, any: {[:labels, :messages], [body: "hi"]})
+      inverse_term = path_term(Module26, any: {[:topic, :channel, :messages], [body: "hi"]})
+
+      labels =
+        ~s|EXISTS (SELECT 1 FROM #{table(Module29)} AS "$s1_1" | <>
+          ~s|WHERE "$s1_1"."id" IN (SELECT "$sj1"."target_id" | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$sj1" | <>
+          ~s|WHERE "$sj1"."source_id" = "test_fixtures_entity_module28"."id") | <>
+          ~s|AND "$q1"."id" IN (SELECT "$sj1"."source_id" | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$sj1" | <>
+          ~s|WHERE "$sj1"."target_id" = "$s1_1"."id"))|
+
+      topic =
+        ~s|EXISTS (SELECT 1 FROM #{table(Module26)} AS "$s1_2" | <>
+          ~s|WHERE EXISTS (SELECT 1 FROM #{table(Module27)} AS "$s1_1" | <>
+          ~s|WHERE "$s1_1"."channel_id" = "test_fixtures_entity_module26"."id" | <>
+          ~s|AND "$s1_2"."id" = "$s1_1"."channel_id") | <>
+          ~s|AND "$q1"."channel_id" = "$s1_2"."id")|
+
+      assert %{params: [{:value, "hi"}], sql: to_many_sql} = compile(to_many_term, mapping)
+      assert %{params: [{:value, "hi"}], sql: inverse_sql} = compile(inverse_term, mapping)
+
+      assert String.contains?(to_many_sql, ~s| WHERE #{labels} AND "body" = $1) ORDER BY|)
+      assert String.contains?(inverse_sql, ~s| WHERE #{topic} AND "body" = $1) ORDER BY|)
+    end
+
+    test "compiles any through a set to nested EXISTS" do
+      mapping = path_mapping([Module26, Module27, Module28, Module29])
+      term = path_term(Module26, any: {[:messages, :labels], [name: "u"]})
+
+      labels =
+        ~s|"$q1"."id" IN (SELECT "$sj1"."target_id" | <>
+          ~s|FROM "hologram_data"."test_fixtures_entity_module28_labels_$join" AS "$sj1" | <>
+          ~s|WHERE "$sj1"."source_id" = "$s1_1"."id")|
+
+      messages =
+        ~s|EXISTS (SELECT 1 FROM #{table(Module28)} AS "$s1_1" | <>
+          ~s|WHERE "$s1_1"."channel_id" = "test_fixtures_entity_module26"."id" AND #{labels})|
+
+      assert %{params: [{:value, "u"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(Module29)} AS "$q1" | <>
+                 ~s|WHERE #{messages} AND "name" = $1) ORDER BY|
+             )
+    end
+
     test "compiles any over an inverse of a to-one to an EXISTS on the related rows' reference" do
       mapping = path_mapping([Module26, Module27, Module28, Module29])
       term = path_term(Module26, any: {[:messages], [body: "hi"]})

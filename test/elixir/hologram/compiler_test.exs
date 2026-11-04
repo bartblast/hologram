@@ -54,6 +54,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module3, as: Entity3
   alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
   alias Hologram.Test.Fixtures.Entity.Module35, as: Entity35
+  alias Hologram.Test.Fixtures.Entity.Module37, as: Entity37
+  alias Hologram.Test.Fixtures.Entity.Module38, as: Entity38
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
@@ -1680,6 +1682,23 @@ defmodule Hologram.CompilerTest do
          %{entity_types: entity_types} do
       component_queries =
         extract_component_queries([ComponentModule20], entity_types, PLT.start())
+
+      queries = build_queries(component_queries, entity_types, false)
+
+      assert map_size(queries.entries) == 1
+    end
+
+    test "collects a registered query including derived fields and quantifying over a derived set",
+         %{entity_types: entity_types} do
+      put_derived_definitions([Entity37, Entity38])
+
+      term =
+        Entity37
+        |> filter(any(messages.channel.recent_messages))
+        |> include([pinned_count, recent_messages])
+        |> Stage.normalize()
+
+      component_queries = %{DerivedQueries => %{prop_params: [], targets: [], terms: [term]}}
 
       queries = build_queries(component_queries, entity_types, false)
 

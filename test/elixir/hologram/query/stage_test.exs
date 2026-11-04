@@ -1504,7 +1504,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on a quantifier's source through a derived field" do
       expected_msg =
-        ":first_message is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a quantifier's source goes through to-one relationships that hold their reference to a set"
+        ":first_message is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a quantifier's source goes through relationships, with a derived set only at its end"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module32, any: {[:first_message, :channel], []})
@@ -1665,22 +1665,33 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
-    test "raises on a source going through a to-many relationship" do
-      expected_msg =
-        ":labels is a to-many relationship in Hologram.Test.Fixtures.Entity.Module28 - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own"
+    test "takes a source going through a to-many relationship" do
+      query = filter(Module28, any: {[:labels, :messages], [body: "hi"]})
 
-      assert_error ArgumentError, expected_msg, fn ->
-        filter(Module28, any: {[:labels, :messages], []})
-      end
+      assert query.filter == [any: {[:labels, :messages], [{:body, :==, "hi"}]}]
     end
 
-    test "raises on a source going through an inverse relationship" do
-      expected_msg =
-        ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a quantifier's source goes through to-one relationships that hold their reference to a set"
+    test "takes a source going through an inverse relationship holding one row" do
+      query = filter(Module26, any: {[:topic, :channel, :messages], [body: "hi"]})
 
-      assert_error ArgumentError, expected_msg, fn ->
-        filter(Module26, any: {[:messages, :labels], []})
-      end
+      assert query.filter == [any: {[:topic, :channel, :messages], [{:body, :==, "hi"}]}]
+    end
+
+    test "takes a source through a set read on the row above" do
+      query =
+        filter(Module26,
+          any: {[:messages], [any: {{:outer, 1, [:messages, :labels]}, [name: "u"]}]}
+        )
+
+      assert query.filter == [
+               any: {[:messages], [any: {{:outer, 1, [:messages, :labels]}, [{:name, :==, "u"}]}]}
+             ]
+    end
+
+    test "takes a source going through an inverse relationship" do
+      query = filter(Module26, any: {[:messages, :labels], [name: "urgent"]})
+
+      assert query.filter == [any: {[:messages, :labels], [{:name, :==, "urgent"}]}]
     end
 
     test "raises on a source going through an attribute" do
@@ -1694,7 +1705,7 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on a source going through an unknown relationship" do
       expected_msg =
-        "unknown relationship :thread in Hologram.Test.Fixtures.Entity.Module28 - known relationships: :channel"
+        "unknown relationship :thread in Hologram.Test.Fixtures.Entity.Module28 - known relationships: :channel, :labels"
 
       assert_error ArgumentError, expected_msg, fn ->
         filter(Module28, any: {[:thread, :messages], []})

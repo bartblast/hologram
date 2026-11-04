@@ -4693,9 +4693,11 @@ defmodule Hologram.Compiler do
 
   defp declare_verb(_entity_types), do: "declare"
 
+  # A derived field holding a value includes no rows, so it names no type.
   defp included_entity_types(term) do
     term.include
     |> Map.values()
+    |> Enum.reject(&is_nil/1)
     |> Enum.flat_map(&queried_entity_types/1)
     |> Enum.uniq()
   end
@@ -4705,17 +4707,19 @@ defmodule Hologram.Compiler do
   end
 
   # The types a term's paths and quantifiers lead through, its includes' included: every type a hop
-  # or a quantifier's set reaches, which a policied read applies the read policy of.
+  # or a quantifier's set reaches - a derived set's rows among them - which a policied read applies
+  # the read policy of.
   defp path_entity_types(term) do
     hop_types =
       term.filter
       |> Stage.relationship_chains()
       |> Enum.flat_map(fn relationship_names ->
-        Enum.scan(relationship_names, term.entity, &Entity.related_type(&2, &1))
+        Enum.scan(relationship_names, term.entity, &Derived.related_type(&2, &1))
       end)
 
     term.include
     |> Map.values()
+    |> Enum.reject(&is_nil/1)
     |> Enum.flat_map(&path_entity_types/1)
     |> Enum.concat(hop_types)
     |> Enum.uniq()
@@ -4743,6 +4747,7 @@ defmodule Hologram.Compiler do
     nested_types =
       term.include
       |> Map.values()
+      |> Enum.reject(&is_nil/1)
       |> Enum.flat_map(&queried_entity_types/1)
 
     Enum.uniq([term.entity | nested_types])
@@ -4775,13 +4780,14 @@ defmodule Hologram.Compiler do
 
   # Pairs each entity type with the server-only attributes a term's filter and sort name on it -
   # the term's own type first, then the types its paths lead to - walking include sub-terms so a
-  # reference nested under an include is reached too.
+  # reference nested under an include is reached too. A derived field's own reads are checked where
+  # its definition is resolved.
   defp server_only_references(term) do
     filter_references =
       term.filter
       |> Stage.predicate_references()
       |> Enum.map(fn {relationship_names, name} ->
-        {Entity.path_target(term.entity, relationship_names), name}
+        {Derived.path_target(term.entity, relationship_names), name}
       end)
 
     sort_references =
@@ -4799,6 +4805,7 @@ defmodule Hologram.Compiler do
     nested_references =
       term.include
       |> Map.values()
+      |> Enum.reject(&is_nil/1)
       |> Enum.flat_map(&server_only_references/1)
 
     sorted_path_references =

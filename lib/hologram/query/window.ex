@@ -65,15 +65,16 @@ defmodule Hologram.Query.Window do
   queries differing only in a pinned alternative must name one window.
 
   A QUANTIFIER reads the rows of a related set, and the client answers it over the ones it holds,
-  so every set a quantifier reads - nested ones and the to-one rows along its source included - is
+  so every set a quantifier reads - nested ones and the rows along its source included - is
   embedded in the window as an include, the rows its condition's paths read with it, and a change
   to one of them reaches the window the way a change to an included row does. A set read off its
   rows' own reference field is narrowed by the quantifier's condition, as the queried rows are by
   theirs: `any` and `none` are decided by the related rows the condition matches, so only those are
   downloaded, the parts of the condition that bound nothing - a placeholder, a row above the set -
   left out. `all` is decided by the rows the condition does NOT match, so its set is downloaded
-  whole, and so is a set the client reads through ids, for the reason above. Two narrowings of one
-  set are joined with `or`, and a whole one wins.
+  whole, and so is a set the client reads through ids, for the reason above. A set before the last
+  link of a source is downloaded whole too, whatever else narrows it, since every row of it leads
+  to related rows. Two narrowings of one set are joined with `or`, and a whole one wins.
 
   The window runs over every row, and a client is handed the rows it may read - so a predicate may
   only bound the download when a client reading fewer related rows can never answer it true where
@@ -274,6 +275,30 @@ defmodule Hologram.Query.Window do
         several -> Stage.normalized_filter([{:or, several}])
       end
     end
+  end
+
+  # The sets before the last link of a quantifier's own source, each downloaded whole: every row of
+  # one leads to related rows, so none narrows it - a set the source starts inside, a nested
+  # quantifier's parent set, keeps its own narrowing.
+  defp linked_sets(entity_type, chain, source) do
+    hops =
+      case source do
+        {:outer, _levels, hops} -> hops
+        hops -> hops
+      end
+
+    start_length = length(chain) - length(hops)
+
+    (start_length + 1)..(length(chain) - 1)//1
+    |> Enum.map(&Enum.take(chain, &1))
+    |> Enum.filter(fn link_chain ->
+      {owner_chain, [name]} = Enum.split(link_chain, -1)
+
+      set_hop?(Derived.path_target(entity_type, owner_chain), name)
+    end)
+    |> Enum.flat_map(&mapped_chains(entity_type, &1))
+    |> Enum.uniq()
+    |> Enum.map(&{&1, nil})
   end
 
   # A chain read through the rows derived fields hold, as the chains to the rows they are computed
@@ -581,9 +606,10 @@ defmodule Hologram.Query.Window do
   end
 
   # The set at the end of a chain, embedded with the given narrowing - nil for the whole set - and
-  # the to-one rows before it with no clauses. Two narrowings of one set join with or and a whole one
-  # wins, an authored narrowing included - a render embeds into a map of its own, which leaves its
-  # authored includes as written (see embed/2).
+  # the rows before it as they are, a set there keeping the narrowing it has (see linked_sets/3).
+  # Two narrowings of one set join with or and a whole one wins, an authored narrowing included - a
+  # render embeds into a map of its own, which leaves its authored includes as written (see
+  # embed/2).
   defp put_quantified_set(include, entity_type, [name], narrowing) do
     target_type = Entity.related_type(entity_type, name)
 
@@ -674,7 +700,10 @@ defmodule Hologram.Query.Window do
         Enum.flat_map(alternatives, &quantified_sets(&1, entity_type, prefixes))
 
       {quantifier, {source, inner}} when quantifier in @quantifiers ->
-        quantifier_sets(quantifier, source_chain(source, prefixes), inner, entity_type, prefixes)
+        chain = source_chain(source, prefixes)
+
+        quantifier_sets(quantifier, chain, inner, entity_type, prefixes) ++
+          linked_sets(entity_type, chain, source)
 
       _triple ->
         []

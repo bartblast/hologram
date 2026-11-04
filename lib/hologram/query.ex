@@ -76,9 +76,10 @@ defmodule Hologram.Query do
   @type predicate :: {name | placeholder, operator, any}
 
   # Holds when any, none or all of the rows of a related set match its clauses, which are about one
-  # related row. The source is the relationships followed to the set - to-one ones and a to-many or
-  # an inverse set last - from the row the quantifier is about, or from the row the given number of
-  # quantifiers out.
+  # related row. The source is the relationships followed to the set - any relationships, and a
+  # to-many, an inverse set or a derived set last - from the row the quantifier is about, or from
+  # the row the given number of quantifiers out. A set before the last reads as the rows every path
+  # reaches.
   @type quantifier :: {:all | :any | :none, {source, list(clause)}}
 
   @type source :: list(atom) | {:outer, pos_integer, list(atom)}
@@ -252,16 +253,17 @@ defmodule Hologram.Query do
   rows along a path are downloaded and kept current with the query, whether or not it includes
   them.
 
-  A quantifier asks about the rows of a related set: `any(message <- messages,
-  message.author_id == ^user_id)` holds when some message of the row matches the condition,
-  `none(...)` when none does, and `all(...)` when every one does. Without a condition,
-  `any(messages)` asks whether the row has a message and `none(messages)` whether it has none -
-  `all` always takes one. The set is a to-many relationship or an inverse set, reached through
-  to-one relationships when it is written as a path (`channel.messages`). Inside the condition the
-  bound name is one related row and a bare name is still the queried row's -
-  `message.created_at > last_read_at` compares the message with the row being filtered - and a
-  value from the surrounding code is pinned. A bound name hides a relationship or attribute of the
-  queried row of the same name inside the condition.
+  A quantifier asks about the rows of a related set:
+  `any(message <- messages, message.author_id == ^user_id)` holds when some message of the row
+  matches the condition, `none(...)` when none does, and `all(...)` when every one does. Without a
+  condition, `any(messages)` asks whether the row has a message and `none(messages)` whether it has
+  none - `all` always takes one. The set is a to-many relationship or an inverse set, reached
+  through other relationships when it is written as a path (`channel.messages`). Through a set, the
+  related rows are the ones every path reaches, each once - `any(message <- channels.messages, ...)`
+  asks about every message of every channel. Inside the condition the bound name is one related row
+  and a bare name is still the queried row's - `message.created_at > last_read_at` compares the
+  message with the row being filtered - and a value from the surrounding code is pinned. A bound
+  name hides a relationship or attribute of the queried row of the same name inside the condition.
 
       Channel |> filter(any(messages))
       Channel |> filter(none(message <- messages, message.author_id == ^user_id))
@@ -339,10 +341,10 @@ defmodule Hologram.Query do
   when a predicate names a relationship or an unknown attribute - on the right side of a
   comparison, which is how a forgotten pin on a variable reads - when a path goes through a
   to-many relationship, an attribute or an unknown relationship, or ends at a name the related type
-  does not declare, when a quantifier's relationships do not lead through to-one relationships to
-  a to-many relationship or an inverse set, when `{:outer, levels, name}` reaches past the queried
-  row, when a disjunction holds fewer than two predicate lists or one of them is empty or not such
-  a list, when a comparison names an attribute with itself or
+  does not declare, when a quantifier's relationships do not lead through relationships to a
+  to-many relationship, an inverse set or a derived set, when `{:outer, levels, name}` reaches
+  past the queried row, when a disjunction holds fewer than two predicate lists or one of them is
+  empty or not such a list, when a comparison names an attribute with itself or
   two attributes that do not compare, when a search names an attribute that isn't a string or its
   term isn't a string, or when a value is invalid for its attribute or its operator
   - a pinned keyword value holding a list, a tuple or a range is refused as an equality operand,

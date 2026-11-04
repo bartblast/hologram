@@ -96,7 +96,8 @@ defmodule Hologram.Query.Stage do
   # An any:, none: or all: entry whose value is a {source, predicates} pair is a quantifier, which
   # becomes one {quantifier, {source, clauses}} clause holding when any, none or all of the rows of a
   # related set match the predicates. The source is the list of relationships followed to the set -
-  # to-one ones, then a to-many or an inverse set - and the predicates are about one related row.
+  # any relationships, then a to-many, an inverse set or a derived set, a set before the last read
+  # as the rows every path reaches - and the predicates are about one related row.
   # Inside them {:outer, levels, name} stands wherever a name does and names an attribute or a path
   # of the row the given number of quantifiers out - 1 for the row the quantifier is about - and a
   # source written {:outer, levels, list} is read from that row too. As with or:, the shape decides
@@ -436,7 +437,9 @@ defmodule Hologram.Query.Stage do
 
     {hops, [set_name]} = Enum.split(chain, -1)
 
-    set_owner_type = Enum.reduce(hops, owner, &validate_sourced_hop!/2)
+    set_owner_type =
+      Enum.reduce(hops, owner, &validate_chain_hop!(&1, &2, "a derived field's query"))
+
     target = validate_sourced_set!(set_name, set_owner_type)
 
     %Query{entity: target, source: {owner, chain}}
@@ -1342,23 +1345,19 @@ defmodule Hologram.Query.Stage do
         "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect_name(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact"
   end
 
-  # The known relationships are the ones the position takes: a quantifier's source takes to-one
-  # ones before the set and every relationship at the set, a derived field's query every
-  # relationship at every step.
-  @spec raise_unknown_source_name!(atom, module, list(atom), String.t()) :: no_return
-  defp raise_unknown_source_name!(
-         name,
-         entity_type,
-         known_names,
-         source
-       ) do
+  # The known relationships are every relationship of the type - a source takes any of them.
+  @spec raise_unknown_source_name!(atom, module, String.t()) :: no_return
+  defp raise_unknown_source_name!(name, entity_type, source) do
     if name in attribute_names(entity_type) do
       raise ArgumentError,
         message:
           "#{inspect(name)} is an attribute in #{inspect(entity_type)} - #{source} names relationships"
     end
 
-    known = Enum.map_join(known_names, ", ", &inspect/1)
+    known =
+      entity_type
+      |> Entity.includable_names()
+      |> Enum.map_join(", ", &inspect/1)
 
     raise ArgumentError,
       message:
@@ -1702,6 +1701,29 @@ defmodule Hologram.Query.Stage do
         raise ArgumentError,
           message:
             "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
+    end
+  end
+
+  # A source - a derived field's query's, or a quantifier's - follows any relationship to its set: a
+  # to-one, a to-many or an inverse of either kind, a set before the last read as the rows every
+  # path reaches.
+  defp validate_chain_hop!(hop, entity_type, usage) do
+    definitions = includable_definitions(entity_type)
+
+    case List.keyfind(definitions, hop, 0) do
+      {_name, type, _opts} ->
+        type
+        |> List.wrap()
+        |> hd()
+
+      nil ->
+        validate_not_derived_hop!(
+          hop,
+          entity_type,
+          "#{usage} goes through relationships, with a derived set only at its end"
+        )
+
+        raise_unknown_source_name!(hop, entity_type, usage)
     end
   end
 
@@ -2114,46 +2136,19 @@ defmodule Hologram.Query.Stage do
     end
   end
 
-  # A source follows to-one relationships that hold their reference, and ends at a set - a to-many
-  # or an inverse of either kind of relationship - whose type its predicates are about.
+  # A source follows any relationships and ends at a set - a to-many, an inverse set or a derived
+  # set - whose type its predicates are about.
   defp validate_source!(hops, entity_type) do
-    {to_one_hops, [set_name]} = Enum.split(hops, -1)
+    {earlier_hops, [set_name]} = Enum.split(hops, -1)
 
-    set_owner_type = Enum.reduce(to_one_hops, entity_type, &validate_source_hop!/2)
+    set_owner_type =
+      Enum.reduce(
+        earlier_hops,
+        entity_type,
+        &validate_chain_hop!(&1, &2, "a quantifier's source")
+      )
 
     validate_source_set!(set_name, set_owner_type)
-  end
-
-  defp validate_source_hop!(hop, entity_type) do
-    if hop in inverse_relationship_names(entity_type) do
-      raise ArgumentError,
-        message:
-          "#{inspect(hop)} is an inverse relationship in #{inspect(entity_type)} - a quantifier's source goes through to-one relationships that hold their reference to a set"
-    end
-
-    case List.keyfind(entity_type.__relationships__(), hop, 0) do
-      {_name, [_target], _opts} ->
-        raise ArgumentError,
-          message:
-            "#{inspect(hop)} is a to-many relationship in #{inspect(entity_type)} - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own"
-
-      {_name, target, _opts} ->
-        target
-
-      nil ->
-        validate_not_derived_hop!(
-          hop,
-          entity_type,
-          "a quantifier's source goes through to-one relationships that hold their reference to a set"
-        )
-
-        raise_unknown_source_name!(
-          hop,
-          entity_type,
-          to_one_relationship_names(entity_type),
-          "a quantifier's source"
-        )
-    end
   end
 
   defp validate_source_set!(name, entity_type) do
@@ -2178,12 +2173,7 @@ defmodule Hologram.Query.Stage do
 
           nil ->
             derived_set_target(name, entity_type, "any, none and all ask about the rows of a set") ||
-              raise_unknown_source_name!(
-                name,
-                entity_type,
-                Entity.includable_names(entity_type),
-                "a quantifier's source"
-              )
+              raise_unknown_source_name!(name, entity_type, "a quantifier's source")
         end
     end
   end
@@ -2193,33 +2183,6 @@ defmodule Hologram.Query.Stage do
       raise ArgumentError,
         message:
           "a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: #{inspect(source)}"
-    end
-  end
-
-  # A derived field's query follows any relationship to its set - a to-one, a to-many or an inverse
-  # of either kind.
-  defp validate_sourced_hop!(hop, entity_type) do
-    definitions = includable_definitions(entity_type)
-
-    case List.keyfind(definitions, hop, 0) do
-      {_name, type, _opts} ->
-        type
-        |> List.wrap()
-        |> hd()
-
-      nil ->
-        validate_not_derived_hop!(
-          hop,
-          entity_type,
-          "a derived field's query goes through relationships, with a derived set only at its end"
-        )
-
-        raise_unknown_source_name!(
-          hop,
-          entity_type,
-          Entity.includable_names(entity_type),
-          "a derived field's query"
-        )
     end
   end
 
@@ -2242,12 +2205,7 @@ defmodule Hologram.Query.Stage do
 
       nil ->
         derived_set_target(name, entity_type, "a derived field's query reads a set") ||
-          raise_unknown_source_name!(
-            name,
-            entity_type,
-            Entity.includable_names(entity_type),
-            "a derived field's query"
-          )
+          raise_unknown_source_name!(name, entity_type, "a derived field's query")
     end
   end
 

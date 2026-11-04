@@ -37,9 +37,9 @@ defmodule Hologram.Query.Interpreter do
 
   A quantifier reads the rows of a related set out of the same rows - the ones the pairs name, the
   ones whose reference names the row, or the ones a derived field holding rows holds - reached
-  through its source's to-one relationships first, a set with no rows when one of them reads
-  nothing. Its condition is matched against each related row, a name of a row above read on that
-  row.
+  through the links of its source before it, the last link's rows of every row they reach, each
+  once, and no rows when they reach none. Its condition is matched against each related row, a
+  name of a row above read on that row.
 
   A derived field holding a value is computed from its definition wherever its name is read - a
   predicate's side, a path's end, a sort key - the way the database computes it: `<>` is nil when
@@ -461,13 +461,7 @@ defmodule Hologram.Query.Interpreter do
   defp matches_clause?(row, {quantifier, {source, clauses}}, scope)
        when quantifier in @quantifiers do
     {source_row, hops} = source_row(row, source, scope)
-    {owner_hops, [set_name]} = Enum.split(hops, -1)
-
-    related_rows =
-      case related_row(source_row, owner_hops, scope.database) do
-        nil -> []
-        owner -> set_rows(owner, set_name, scope)
-      end
+    related_rows = chain_rows(source_row, hops, scope)
 
     types = [Derived.path_target(source_row.__struct__, hops) | scope.types]
 
