@@ -2929,6 +2929,82 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
     });
 
+    it("takes a source going through a to-many relationship", () => {
+      const query = filter(
+        user,
+        entry("any", atoms("projects", "tasks"), [
+          ["done", Type.boolean(true)],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["done", "==", true]],
+          quantifier: "any",
+          source: ["projects", "tasks"],
+        },
+      ]);
+    });
+
+    it("takes a source going through an inverse relationship holding one row", () => {
+      const query = filter(
+        channel,
+        entry("any", atoms("topic", "channel", "messages"), [["body", hi]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "any",
+          source: ["topic", "channel", "messages"],
+        },
+      ]);
+    });
+
+    it("takes a source through a set read on the row above", () => {
+      const query = filter(
+        channel,
+        entry("any", atoms("messages"), [
+          [
+            "any",
+            Type.tuple([
+              outer(1, ["messages", "channel", "messages"]),
+              pairs([["body", hi]]),
+            ]),
+          ],
+        ]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [
+            {
+              filter: [["body", "==", "hi"]],
+              quantifier: "any",
+              source: {name: ["messages", "channel", "messages"], outer: 1},
+            },
+          ],
+          quantifier: "any",
+          source: ["messages"],
+        },
+      ]);
+    });
+
+    it("takes a source going through an inverse relationship", () => {
+      const query = filter(
+        channel,
+        entry("any", atoms("messages", "channel", "messages"), [["body", hi]]),
+      );
+
+      assert.deepStrictEqual(query.filter, [
+        {
+          filter: [["body", "==", "hi"]],
+          quantifier: "any",
+          source: ["messages", "channel", "messages"],
+        },
+      ]);
+    });
+
     const refusals = [
       [
         "raises on a source ending at a to-one relationship",
@@ -2941,16 +3017,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ":topic is an inverse relationship holding one row in MyApp.Channel - any, none and all ask about the rows of a to-many relationship",
       ],
       [
-        "raises on a source going through a to-many relationship",
-        () => filter(user, entry("any", atoms("projects", "tasks"), [])),
-        ":projects is a to-many relationship in MyApp.User - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own",
-      ],
-      [
-        "raises on a source going through an inverse relationship",
-        () => filter(channel, entry("any", atoms("messages", "channel"), [])),
-        ":messages is an inverse relationship in MyApp.Channel - a quantifier's source goes through to-one relationships that hold their reference to a set",
-      ],
-      [
         "raises on a source going through an attribute",
         () => filter(message, entry("any", atoms("body", "messages"), [])),
         ":body is an attribute in MyApp.Message - a quantifier's source names relationships",
@@ -2959,6 +3025,11 @@ describe("Elixir_Hologram_Query_Stage", () => {
         "raises on a source going through an unknown relationship",
         () => filter(message, entry("any", atoms("thread", "messages"), [])),
         "unknown relationship :thread in MyApp.Message - known relationships: :channel",
+      ],
+      [
+        "raises on a source going through an unknown relationship, listing every relationship",
+        () => filter(channel, entry("any", atoms("posts", "messages"), [])),
+        "unknown relationship :posts in MyApp.Channel - known relationships: :messages, :owner, :topic",
       ],
       [
         "raises on a source naming an attribute",

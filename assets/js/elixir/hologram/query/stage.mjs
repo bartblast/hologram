@@ -861,16 +861,19 @@ function raiseUnknownOperator(operator, name) {
   );
 }
 
-// The known relationships are the ones the position takes: to-one ones before the set, every
-// relationship at the set.
-function raiseUnknownSourceName(name, entityType, knownNames) {
+// The known relationships are every relationship of the type - a source takes any of them.
+function raiseUnknownSourceName(name, entityType) {
   if (attributeNames(entityType).includes(name.value)) {
     Interpreter.raiseArgumentError(
       `${Interpreter.inspect(name)} is an attribute in ${entityType} - a quantifier's source names relationships`,
     );
   }
 
-  const known = knownNames.map((knownName) => `:${knownName}`).join(", ");
+  const known = relationshipNames(entityType)
+    .concat(Object.keys(Model.inverses(entityType)))
+    .sort()
+    .map((knownName) => `:${knownName}`)
+    .join(", ");
 
   Interpreter.raiseArgumentError(
     `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships: ${known}`,
@@ -1654,8 +1657,8 @@ function validateSearchableAttribute(name, entityType, operator) {
   }
 }
 
-// A source follows to-one relationships that hold their reference, and ends at a set - a to-many
-// or an inverse of either kind of relationship - whose type its predicates are about.
+// A source follows any relationships and ends at a set - a to-many, an inverse set or a derived
+// set - whose type its predicates are about.
 function validateSource(hops, entityType) {
   const ownerType = hops
     .slice(0, -1)
@@ -1664,23 +1667,18 @@ function validateSource(hops, entityType) {
   return validateSourceSet(hops[hops.length - 1], ownerType);
 }
 
+// A source follows any relationship to its set - a to-one, a to-many or an inverse of either kind.
+// A set before the last link reads as the rows every path reaches.
 function validateSourceHop(hop, entityType) {
-  if (Object.hasOwn(Model.inverses(entityType), hop.value)) {
-    Interpreter.raiseArgumentError(
-      `${Interpreter.inspect(hop)} is an inverse relationship in ${entityType} - a quantifier's source goes through to-one relationships that hold their reference to a set`,
-    );
+  const inverses = Model.inverses(entityType);
+  const relationships = Model.relationships(entityType);
+
+  if (Object.hasOwn(inverses, hop.value)) {
+    return inverses[hop.value].type;
   }
 
-  const relationship = Model.relationships(entityType)[hop.value];
-
-  if (relationship && relationship.toMany) {
-    Interpreter.raiseArgumentError(
-      `${Interpreter.inspect(hop)} is a to-many relationship in ${entityType} - a quantifier's source goes through to-one relationships to one set - quantify each set with a quantifier of its own`,
-    );
-  }
-
-  if (relationship) {
-    return relationship.type;
+  if (Object.hasOwn(relationships, hop.value)) {
+    return relationships[hop.value].type;
   }
 
   validateNotDerivedHop(
@@ -1689,7 +1687,7 @@ function validateSourceHop(hop, entityType) {
     "a quantifier's source goes through relationships, with a derived set only at its end",
   );
 
-  raiseUnknownSourceName(hop, entityType, toOneRelationshipNames(entityType));
+  raiseUnknownSourceName(hop, entityType);
 }
 
 function validateSourceSet(name, entityType) {
@@ -1727,11 +1725,7 @@ function validateSourceSet(name, entityType) {
     return derivedTarget;
   }
 
-  const includable = relationshipNames(entityType)
-    .concat(Object.keys(inverses))
-    .sort();
-
-  raiseUnknownSourceName(name, entityType, includable);
+  raiseUnknownSourceName(name, entityType);
 }
 
 // A to-one embeds one entity, so there is nothing for a filter, an order or a bound to do to it -

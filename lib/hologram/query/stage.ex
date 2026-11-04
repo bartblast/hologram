@@ -96,8 +96,8 @@ defmodule Hologram.Query.Stage do
   # An any:, none: or all: entry whose value is a {source, predicates} pair is a quantifier, which
   # becomes one {quantifier, {source, clauses}} clause holding when any, none or all of the rows of a
   # related set match the predicates. The source is the list of relationships followed to the set -
-  # any relationships, then a to-many, an inverse set or a derived set, a set before the last read
-  # as the rows every path reaches - and the predicates are about one related row.
+  # any relationships, then a to-many, an inverse set or a derived set, a set before the last link
+  # reading as the rows every path reaches - and the predicates are about one related row.
   # Inside them {:outer, levels, name} stands wherever a name does and names an attribute or a path
   # of the row the given number of quantifiers out - 1 for the row the quantifier is about - and a
   # source written {:outer, levels, list} is read from that row too. As with or:, the shape decides
@@ -1705,8 +1705,8 @@ defmodule Hologram.Query.Stage do
   end
 
   # A source - a derived field's query's, or a quantifier's - follows any relationship to its set: a
-  # to-one, a to-many or an inverse of either kind, a set before the last read as the rows every
-  # path reaches.
+  # to-one, a to-many or an inverse of either kind. A set before the last link reads as the rows
+  # every path reaches.
   defp validate_chain_hop!(hop, entity_type, usage) do
     definitions = includable_definitions(entity_type)
 

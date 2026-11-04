@@ -1817,6 +1817,22 @@ describe("QueryKernel", () => {
       assert.deepEqual(names(ROOM, [["picked_count", "==", 2]]), ["random"]);
     });
 
+    it("reads a derived set at the end of a source through a set", () => {
+      room("general", 2);
+      room("empty", 0);
+
+      assert.deepEqual(
+        names(ROOM, [
+          {
+            filter: [],
+            quantifier: "none",
+            source: ["messages", "channel", "recent_messages"],
+          },
+        ]),
+        ["empty"],
+      );
+    });
+
     it("holds no rows for a null definition", () => {
       room("general", 1);
 
@@ -2849,6 +2865,7 @@ describe("QueryKernel", () => {
     const MESSAGE = "MyApp.Message";
     const POST = "MyApp.Post";
     const SHELF = "MyApp.Shelf";
+    const TOPIC = "MyApp.Topic";
 
     const matchingIds = (entityType, filter, context = {}) =>
       Object.values(LocalDatabase.getTable(entityType))
@@ -2892,6 +2909,13 @@ describe("QueryKernel", () => {
                 sort: [["position", "asc"]],
                 toMany: true,
                 type: MESSAGE,
+              },
+              topic: {
+                forward: "channel",
+                reference: true,
+                sort: [],
+                toMany: false,
+                type: TOPIC,
               },
             },
             relationships: {},
@@ -2954,6 +2978,14 @@ describe("QueryKernel", () => {
             attributes: {floor: "enum", id: "uuid"},
             enumValues: {floor: ["low", "medium", "high"]},
             relationships: {items: {toMany: true, type: GADGET}},
+            serverOnly: [],
+          },
+          [TOPIC]: {
+            attributes: {id: "uuid", summary: "string"},
+            enumValues: {},
+            relationships: {
+              channel: {optional: true, toMany: false, type: CHANNEL},
+            },
             serverOnly: [],
           },
         },
@@ -3242,6 +3274,78 @@ describe("QueryKernel", () => {
         "general",
         "random",
       ]);
+    });
+
+    // Mirrors the interpreter's "run/3 - quantifiers through sets" describe: general's hi carries
+    // urgent and later, random's bye carries later, and quiet has no message for a source to go
+    // through.
+    it("answers any, none and all over the rows every path reaches", () => {
+      const through = (kind, filter) => [
+        quantifier(kind, ["messages", "labels"], filter),
+      ];
+
+      assert.deepEqual(
+        matchingIds(CHANNEL, through("any", [["name", "==", "urgent"]])),
+        ["general"],
+      );
+
+      assert.deepEqual(
+        matchingIds(CHANNEL, through("none", [["name", "==", "urgent"]])),
+        ["quiet", "random"],
+      );
+
+      assert.deepEqual(
+        matchingIds(CHANNEL, through("all", [["name", "==", "later"]])),
+        ["quiet", "random"],
+      );
+    });
+
+    it("reads a source through an inverse holding one row, and none through a missing to-one", () => {
+      LocalDatabase.putRow(TOPIC, {
+        channel_id: "general",
+        id: "welcome",
+        summary: "welcome",
+      });
+
+      message("orphan", null, "orphan", 5);
+
+      const topicFilter = [
+        quantifier(
+          "any",
+          ["topic", "channel", "messages"],
+          [["body", "==", "hi"]],
+        ),
+      ];
+
+      const orphanFilter = [
+        quantifier("any", ["channel", "messages"], [["body", "==", "orphan"]]),
+      ];
+
+      assert.deepEqual(matchingIds(CHANNEL, topicFilter), ["general"]);
+      assert.deepEqual(matchingIds(MESSAGE, orphanFilter), []);
+    });
+
+    it("binds a placeholder inside a condition through a set", () => {
+      const filter = [
+        quantifier(
+          "any",
+          ["messages", "labels"],
+          [["name", "==", {placeholder: "name"}]],
+        ),
+      ];
+
+      assert.deepEqual(
+        matchingIds(CHANNEL, filter, {bindings: {name: "later"}}),
+        ["general", "random"],
+      );
+    });
+
+    it("matches a label through the messages it shares with another label", () => {
+      const filter = [
+        quantifier("any", ["messages", "labels"], [["name", "==", "later"]]),
+      ];
+
+      assert.deepEqual(matchingIds(LABEL, filter), ["later", "urgent"]);
     });
 
     it("answers over a self-referencing inverse, comparing a reply with its parent", () => {

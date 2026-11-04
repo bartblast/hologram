@@ -21,8 +21,9 @@ import StringOrder from "./string_order.mjs";
 // related type's table and missing when a reference is empty or names a row not held. Inside a
 // quantifier's filter the row is the related one, and {outer: levels, name} names an attribute or a
 // path of the row that many quantifiers out. A source is the array of relationships to the set -
-// to-one ones, then a to-many, an inverse set or a derived field holding rows - read on the row the
-// quantifier is about, or {outer: levels, name} read on a row above.
+// any relationships, then a to-many, an inverse set or a derived field holding rows, a set before
+// the last link reading as the rows every path reaches - read on the row the quantifier is about,
+// or {outer: levels, name} read on a row above.
 //
 // A derived field holding a value is computed from its definition - the model bakes it - wherever
 // its name is read: a predicate's side, a path's end, a sort key. `concat` is null when an operand
@@ -635,34 +636,26 @@ export default class QueryKernel {
     });
   }
 
-  // The related rows the source leads to - none when one of its to-one relationships reads no row -
-  // matched against the quantifier's filter, with the row it is about as the first row above them.
+  // The related rows the source leads to - the last link's rows of every row the links before it
+  // reach, each once, and none when they reach none - matched against the quantifier's filter, with
+  // the row it is about as the first row above them.
   static #matchesQuantifier(row, clause, context, entityType, outer) {
     const start = Array.isArray(clause.source)
       ? {entityType, hops: clause.source, row}
       : {...outer[clause.source.outer - 1], hops: clause.source.name};
 
-    let owner = start.row;
-    let ownerType = start.entityType;
+    const related = QueryKernel.#chainRows(
+      start.row,
+      start.entityType,
+      start.hops,
+      context,
+    );
 
-    for (const hop of start.hops.slice(0, -1)) {
-      const targetId = owner[`${hop}_id`] ?? null;
-      const targetType = Model.relationships(ownerType)[hop].type;
+    const relatedType = start.hops.reduce(
+      (type, hop) => QueryKernel.#relatedType(type, hop),
+      start.entityType,
+    );
 
-      owner =
-        targetId === null ? null : LocalDatabase.getRow(targetType, targetId);
-
-      // No row to hold the set, so the set has no rows: any fails, none and all hold.
-      if (owner === null) {
-        return clause.quantifier !== "any";
-      }
-
-      ownerType = targetType;
-    }
-
-    const setName = start.hops[start.hops.length - 1];
-    const related = QueryKernel.#setRows(owner, ownerType, setName, context);
-    const relatedType = QueryKernel.#relatedType(ownerType, setName);
     const innerOuter = [{entityType, row}, ...outer];
     const ranks = QueryKernel.#ranksFor(relatedType, clause.filter, innerOuter);
 
