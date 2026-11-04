@@ -585,6 +585,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.<(left, right) == true
     end
 
+    test "atom < atom, character above U+FFFF" do
+      left = wrap_term(:"\uFFFD")
+      right = wrap_term(:"😀")
+
+      assert :erlang.<(left, right) == true
+    end
+
     test "float < atom (always)" do
       left = wrap_term(1.0)
       right = wrap_term(:a)
