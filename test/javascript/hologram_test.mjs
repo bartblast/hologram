@@ -5467,26 +5467,26 @@ describe("Hologram", () => {
       Hologram.virtualDocument = {sel: "html", data: {}, children: []};
     };
 
-    describe("Phoenix's live reload iframe", () => {
-      const stubFirstRender = () => {
-        sinon.stub(Renderer, "renderPage").returns({
-          sel: "html",
-          data: {},
-          children: [],
-        });
+    const stubFirstRender = () => {
+      sinon.stub(Renderer, "renderPage").returns({
+        sel: "html",
+        data: {},
+        children: [],
+      });
 
-        sinon.stub(EventListenerRegistry, "reconcile");
-        sinon.stub(EventListeners, "recheckScrollEdges");
-        sinon.stub(Vdom, "patchVirtualDocument");
+      sinon.stub(EventListenerRegistry, "reconcile");
+      sinon.stub(EventListeners, "recheckScrollEdges");
+      sinon.stub(Vdom, "patchVirtualDocument");
 
-        return {
-          mirrorStub: sinon
-            .stub(Vdom, "mirror")
-            .returns({sel: "html", data: {}, children: []}),
-          removeStub: sinon.stub(LiveReload, "removePhoenixReloader"),
-        };
+      return {
+        mirrorStub: sinon
+          .stub(Vdom, "mirror")
+          .returns({sel: "html", data: {}, children: []}),
+        removeStub: sinon.stub(LiveReload, "removePhoenixReloader"),
       };
+    };
 
+    describe("Phoenix's live reload iframe", () => {
       it("is removed before the first render mirrors the page", () => {
         const {mirrorStub, removeStub} = stubFirstRender();
 
@@ -5503,6 +5503,87 @@ describe("Hologram", () => {
         Hologram.render();
 
         sinon.assert.notCalled(removeStub);
+      });
+    });
+
+    describe("the bundle scripts the document was served with", () => {
+      const scriptPaths = () =>
+        Array.from(document.querySelectorAll("script")).map((script) =>
+          script.getAttribute("src"),
+        );
+
+      let bodyScript;
+      let originalGlobals;
+
+      beforeEach(() => {
+        originalGlobals = {
+          assetManifest: globalThis.Hologram.assetManifest,
+          initialChunkDigests: globalThis.Hologram.initialChunkDigests,
+          initialPageDigest: globalThis.Hologram.initialPageDigest,
+        };
+
+        globalThis.Hologram.assetManifest = {
+          "hologram/runtime.js": "/hologram/runtime-aaa.js",
+        };
+
+        globalThis.Hologram.initialChunkDigests = ["ccc"];
+        globalThis.Hologram.initialPageDigest = "ppp";
+
+        document.head.innerHTML =
+          '<script async src="/hologram/runtime-aaa.js"></script>' +
+          '<script async src="/hologram/page-MyApp.MyPage-ppp.js"></script>' +
+          '<script async src="/hologram/page-MyApp.OtherPage-qqq.js"></script>' +
+          '<script src="/assets/app.js"></script>';
+
+        // The runtime component can sit in the body too.
+        bodyScript = document.createElement("script");
+        bodyScript.setAttribute("src", "/hologram/chunk-ccc.js");
+        document.body.appendChild(bodyScript);
+      });
+
+      afterEach(() => {
+        Object.assign(globalThis.Hologram, originalGlobals);
+        document.head.innerHTML = "";
+        bodyScript.remove();
+      });
+
+      it("are removed before the first render mirrors the page", () => {
+        const {mirrorStub} = stubFirstRender();
+
+        let pathsAtMirror = null;
+
+        mirrorStub.callsFake(() => {
+          pathsAtMirror = scriptPaths();
+          return {sel: "html", data: {}, children: []};
+        });
+
+        Hologram.render();
+
+        assert.deepStrictEqual(pathsAtMirror, [
+          "/hologram/page-MyApp.OtherPage-qqq.js",
+          "/assets/app.js",
+        ]);
+      });
+
+      it("are not looked for again by a later render", () => {
+        stubFirstRender();
+        Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+
+        Hologram.render();
+
+        assert.lengthOf(scriptPaths(), 5);
+      });
+
+      it("are none to remove when the document names none", () => {
+        stubFirstRender();
+
+        globalThis.Hologram.assetManifest = undefined;
+        globalThis.Hologram.initialChunkDigests = undefined;
+        globalThis.Hologram.initialPageDigest = undefined;
+
+        Hologram.render();
+
+        assert.lengthOf(scriptPaths(), 5);
       });
     });
 

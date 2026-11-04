@@ -793,8 +793,10 @@ export default class Hologram {
       // adopts those nodes instead of recreating the whole page.
       if (Hologram.virtualDocument === null) {
         // Phoenix's live reload iframe is taken out before the mirror reads the page (see
-        // LiveReload.removePhoenixReloader()).
+        // LiveReload.removePhoenixReloader()), and so are the bundle scripts the document was
+        // served with (see #removeBootScripts()).
         LiveReload.removePhoenixReloader();
+        Hologram.#removeBootScripts();
 
         Hologram.virtualDocument = Vdom.mirror(
           newVirtualDocument,
@@ -2457,6 +2459,42 @@ export default class Hologram {
 
   static #registerPageModule(pageModule) {
     $.#registeredPageModules.add(pageModule.value);
+  }
+
+  // Takes out the bundle scripts the document was served with: the runtime, the page bundle and the
+  // chunks its page needs. Only a document load needs them, so the render leaves them out, and by
+  // the first render they have all run, since the mount waits for them. A page bundle is told by
+  // its digest, which names the page's code, so the page module isn't needed: on a snapshot restore
+  // it is the snapshot's, which need not be the one the document was served with.
+  static #removeBootScripts() {
+    const runtimePath =
+      globalThis.Hologram.assetManifest?.["hologram/runtime.js"];
+
+    const pageDigest = globalThis.Hologram.initialPageDigest;
+
+    const chunkPaths = new Set(
+      (globalThis.Hologram.initialChunkDigests ?? []).map((digest) =>
+        $.#chunkBundlePath(digest),
+      ),
+    );
+
+    // Any page bundle with the document's digest (see Hologram.Router.Helpers.page_bundle_path/2)
+    const isPageBundlePath = (path) =>
+      typeof pageDigest === "string" &&
+      path.startsWith("/hologram/page-") &&
+      path.endsWith(`-${pageDigest}.js`);
+
+    document.querySelectorAll("script[src]").forEach((script) => {
+      const path = script.getAttribute("src");
+
+      if (
+        path === runtimePath ||
+        chunkPaths.has(path) ||
+        isPageBundlePath(path)
+      ) {
+        script.remove();
+      }
+    });
   }
 
   // Fetches a page's own code, which announces itself when it has run (see ScriptRegistry). A

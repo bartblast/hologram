@@ -9,6 +9,10 @@ defmodule Hologram.UI.Runtime do
   prop :page_module, :module, from_context: {Hologram.Runtime, :page_module}
   prop :page_mounted?, :boolean, from_context: {Hologram.Runtime, :page_mounted?}
 
+  # The client's render leaves out everything below. The inline scripts remove themselves once they
+  # have run, and the runtime takes the bundle scripts out before its first render (see
+  # #removeBootScripts() in hologram.mjs). The page bundle script is also in a navigation's tree,
+  # which the client drops itself (see #dropPageBundleScript() in hologram.mjs).
   @impl Component
   def template do
     ~HOLO"""
@@ -26,6 +30,8 @@ defmodule Hologram.UI.Runtime do
         globalThis.Hologram.dispatchAction = function(actionName, target, params) \{
           globalThis.Hologram._pendingJsInteropActions.push([actionName, target, params]);
         \}
+
+        document.currentScript.remove();
       </script>
     {/if}
 
@@ -44,6 +50,8 @@ defmodule Hologram.UI.Runtime do
               subReceiptDrops: $SUB_RECEIPT_DROPS_JS_PLACEHOLDER
             };
           };
+
+          document.currentScript.remove();
         {/raw}
       </script>
     {/if}

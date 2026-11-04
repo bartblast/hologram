@@ -128,6 +128,25 @@ defmodule Hologram.UI.RuntimeTest do
     assert String.contains?(markup, "hologram/page")
   end
 
+  # Only a document load needs them, and the client's render leaves them out.
+  test "inline scripts remove themselves once they have run", %{context: context} do
+    context = Map.put(context, {Hologram.Runtime, :initial_page?}, true)
+    markup = render_component(Runtime, %{}, context)
+
+    inline_scripts =
+      ~r/<script>(.*?)<\/script>/s
+      |> Regex.scan(markup, capture: :all_but_first)
+      |> List.flatten()
+
+    assert length(inline_scripts) == 2
+
+    for inline_script <- inline_scripts do
+      assert inline_script
+             |> String.trim()
+             |> String.ends_with?("document.currentScript.remove();")
+    end
+  end
+
   test "csrf_token prop", %{context: initial_context} do
     context = Map.put(initial_context, {Hologram.Runtime, :initial_page?}, true)
     markup = render_component(Runtime, %{}, context)
