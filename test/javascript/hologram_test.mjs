@@ -5506,6 +5506,118 @@ describe("Hologram", () => {
       });
     });
 
+    describe("the state the document was served with", () => {
+      const servedDocument = {sel: "html", data: {}, children: []};
+      const mountedDocument = {sel: "html", data: {}, children: []};
+      const mirroredDocument = {sel: "html", data: {}, children: []};
+
+      const servedPageModule = Type.alias("ServedPage");
+      const servedRegistry = Type.map();
+
+      let mirrorStub;
+      let mountedRegistry;
+      let patchStub;
+      let renderPageStub;
+      let registriesRenderedWith;
+
+      beforeEach(() => {
+        mountedRegistry = Type.map();
+        ComponentRegistry.populate(mountedRegistry);
+
+        registriesRenderedWith = [];
+
+        globalThis.Hologram.pageMountData = () => ({
+          componentRegistry: servedRegistry,
+          pageModule: servedPageModule,
+          pageParams: Type.map(),
+        });
+
+        renderPageStub = sinon
+          .stub(Renderer, "renderPage")
+          .callsFake((pageModule) => {
+            registriesRenderedWith.push(ComponentRegistry.entries);
+
+            return pageModule === servedPageModule
+              ? servedDocument
+              : mountedDocument;
+          });
+
+        sinon.stub(EventListenerRegistry, "reconcile");
+        sinon.stub(EventListeners, "recheckScrollEdges");
+        sinon.stub(LiveReload, "removePhoenixReloader");
+
+        mirrorStub = sinon.stub(Vdom, "mirror").returns(mirroredDocument);
+        patchStub = sinon.stub(Vdom, "patchVirtualDocument");
+      });
+
+      afterEach(() => {
+        delete globalThis.Hologram.pageMountData;
+        Hologram.isServedStateMounted = false;
+        ComponentRegistry.clear();
+      });
+
+      it("is what the first render mirrors when the page is mounted with other state", () => {
+        Hologram.isServedStateMounted = false;
+
+        Hologram.render();
+
+        sinon.assert.calledOnceWithExactly(
+          mirrorStub,
+          servedDocument,
+          document.documentElement,
+        );
+
+        sinon.assert.calledOnceWithExactly(
+          patchStub,
+          mirroredDocument,
+          mountedDocument,
+        );
+
+        // First, since a render starts the bindings it collects afresh.
+        assert.deepStrictEqual(registriesRenderedWith, [
+          servedRegistry,
+          mountedRegistry,
+        ]);
+
+        assert.equal(ComponentRegistry.entries, mountedRegistry);
+      });
+
+      it("leaves the mounted page's registry in place when its render raises", () => {
+        Hologram.isServedStateMounted = false;
+
+        renderPageStub.callsFake(() => {
+          throw new Error("boom");
+        });
+
+        assert.throws(() => Hologram.render(), "boom");
+        assert.equal(ComponentRegistry.entries, mountedRegistry);
+      });
+
+      it("is not rendered when the page is mounted with it", () => {
+        Hologram.isServedStateMounted = true;
+
+        Hologram.render();
+
+        sinon.assert.calledOnce(renderPageStub);
+
+        sinon.assert.calledOnceWithExactly(
+          mirrorStub,
+          mountedDocument,
+          document.documentElement,
+        );
+      });
+
+      it("is not rendered by a later render", () => {
+        Hologram.isServedStateMounted = false;
+        Hologram.virtualDocument = mirroredDocument;
+
+        Hologram.render();
+
+        sinon.assert.calledOnce(renderPageStub);
+        sinon.assert.notCalled(mirrorStub);
+      });
+    });
+
     describe("the bundle scripts the document was served with", () => {
       const scriptPaths = () =>
         Array.from(document.querySelectorAll("script")).map((script) =>

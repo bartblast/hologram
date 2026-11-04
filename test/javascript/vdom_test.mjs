@@ -458,5 +458,289 @@ describe("Vdom", () => {
 
       assert.equal(container.querySelector("script"), serverScript);
     });
+
+    // Other tools add to <head> and <body> wherever they please, so there only the elements the
+    // render has an exact match for are Hologram's.
+    describe("in head and body", () => {
+      const adoptSection = (tagName, renderedChildren, html) => {
+        const section = document.createElement(tagName);
+        section.innerHTML = html;
+
+        const rendered = vnode(tagName, {attrs: {}}, renderedChildren);
+        const mirrored = Vdom.mirror(rendered, section);
+
+        return {section, patched: () => patch(mirrored, rendered)};
+      };
+
+      const meta = (attrs) => vnode("meta", {attrs}, []);
+
+      const stylesheet = (href) =>
+        vnode(
+          "link",
+          {key: `__hologramLink__:${href}`, attrs: {rel: "stylesheet", href}},
+          [],
+        );
+
+      const childNames = (section) =>
+        Array.from(section.children).map(
+          (child) => child.getAttribute("name") ?? child.localName,
+        );
+
+      it("leaves elements other tools add at the start, middle and end of the head alone", () => {
+        const {section, patched} = adoptSection(
+          "head",
+          [meta({charset: "utf-8"}), vnode("title", {attrs: {}}, ["Page"])],
+          '<meta name="x-first" content="1">' +
+            '<meta charset="utf-8">' +
+            '<meta name="x-middle" content="1">' +
+            "<title>Page</title>" +
+            '<meta name="x-last" content="1">',
+        );
+
+        const serverChildren = Array.from(section.children);
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), serverChildren);
+
+        assert.deepStrictEqual(childNames(section), [
+          "x-first",
+          "meta",
+          "x-middle",
+          "title",
+          "x-last",
+        ]);
+
+        for (const name of ["x-first", "x-middle", "x-last"]) {
+          assert.equal(
+            section
+              .querySelector(`meta[name="${name}"]`)
+              .getAttribute("content"),
+            "1",
+          );
+        }
+      });
+
+      it("doesn't take an element another tool put before the layout's for it", () => {
+        const {section, patched} = adoptSection(
+          "head",
+          [meta({charset: "utf-8"})],
+          '<meta name="x-tool" content="1"><meta charset="utf-8">',
+        );
+
+        const [toolMeta, layoutMeta] = section.children;
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), [
+          toolMeta,
+          layoutMeta,
+        ]);
+
+        assert.equal(toolMeta.getAttribute("name"), "x-tool");
+        assert.isFalse(toolMeta.hasAttribute("charset"));
+      });
+
+      it("doesn't take a style another tool put before the layout's for it", () => {
+        const {section, patched} = adoptSection(
+          "head",
+          [vnode("style", {attrs: {}}, ["body { color: red; }"])],
+          "<style>.x-tool {}</style><style>body { color: red; }</style>",
+        );
+
+        const [toolStyle, layoutStyle] = section.children;
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), [
+          toolStyle,
+          layoutStyle,
+        ]);
+
+        assert.equal(toolStyle.textContent, ".x-tool {}");
+      });
+
+      it("adopts an element whose nonce the browser hides", () => {
+        const {section, patched} = adoptSection(
+          "head",
+          [
+            vnode(
+              "link",
+              {
+                key: "__hologramLink__:/app.css",
+                attrs: {rel: "stylesheet", href: "/app.css", nonce: "abc"},
+              },
+              [],
+            ),
+          ],
+          // The browser keeps the nonce from the markup but reads an empty attribute back.
+          '<link rel="stylesheet" href="/app.css" nonce="">',
+        );
+
+        const serverLink = section.querySelector("link");
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), [serverLink]);
+      });
+
+      it("adopts a form control whose value the render keeps out of its attributes", () => {
+        const {section, patched} = adoptSection(
+          "body",
+          [
+            vnode(
+              "input",
+              {attrs: {type: "text"}, hologramFormInputValue: "abc"},
+              [],
+            ),
+          ],
+          '<input type="text" value="abc">',
+        );
+
+        const serverInput = section.querySelector("input");
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), [serverInput]);
+      });
+
+      it("matches attribute names whatever case the template spells them in", () => {
+        const {section, patched} = adoptSection(
+          "body",
+          [vnode("div", {attrs: {tabIndex: "0"}}, [])],
+          '<div tabindex="0"></div>',
+        );
+
+        const serverDiv = section.querySelector("div");
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), [serverDiv]);
+      });
+
+      it("adopts a checkbox whose checked state the render keeps out of its attributes", () => {
+        const {section, patched} = adoptSection(
+          "body",
+          [
+            vnode(
+              "input",
+              {attrs: {type: "checkbox"}, hologramFormInputChecked: true},
+              [],
+            ),
+          ],
+          '<input type="checkbox" checked>',
+        );
+
+        const serverInput = section.querySelector("input");
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), [serverInput]);
+      });
+
+      it("adopts a stylesheet whose attributes changed before the first render", () => {
+        const {section, patched} = adoptSection(
+          "head",
+          [
+            vnode(
+              "link",
+              {
+                key: "__hologramLink__:/app.css",
+                attrs: {rel: "stylesheet", href: "/app.css", media: "print"},
+              },
+              [],
+            ),
+          ],
+          // A stylesheet loaded with media="print" that switched itself on once it loaded.
+          '<link rel="stylesheet" href="/app.css" media="all">',
+        );
+
+        const serverLink = section.querySelector("link");
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), [serverLink]);
+      });
+
+      it("claims as many identical elements as the render has", () => {
+        const {section, patched} = adoptSection(
+          "head",
+          [meta({name: "x"}), meta({name: "x"})],
+          '<meta name="x"><meta name="x"><meta name="x">',
+        );
+
+        const serverChildren = Array.from(section.children);
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), serverChildren);
+      });
+
+      it("doesn't hand an element that found no match the node another one claimed", () => {
+        const {section, patched} = adoptSection(
+          "body",
+          // Each with the key of its place, the way every rendered element carries one.
+          [
+            vnode("div", {attrs: {class: "shell"}, key: "k1"}, []),
+            vnode("div", {attrs: {id: "modals"}, key: "k2"}, [
+              vnode("iframe", {attrs: {}}, []),
+            ]),
+          ],
+          // An extension marked the shell before the first render.
+          '<div class="shell" data-ext="1"></div>' +
+            '<div id="modals"><iframe></iframe></div>',
+        );
+
+        const serverModals = section.querySelector("#modals");
+        const serverIframe = serverModals.querySelector("iframe");
+
+        patched();
+
+        assert.equal(section.querySelector("#modals"), serverModals);
+        assert.equal(serverModals.querySelector("iframe"), serverIframe);
+      });
+
+      it("leaves elements other tools add at the start and end of the body alone", () => {
+        const {section, patched} = adoptSection(
+          "body",
+          [vnode("div", {attrs: {id: "app"}}, [])],
+          '<div id="x-start"></div><div id="app"></div><div id="x-end"></div>',
+        );
+
+        const serverChildren = Array.from(section.children);
+        patched();
+
+        assert.deepStrictEqual(Array.from(section.children), serverChildren);
+      });
+
+      it("still removes what the render lacks deeper down", () => {
+        const {section, patched} = adoptSection(
+          "body",
+          [vnode("div", {attrs: {id: "app"}}, [vnode("p", {attrs: {}}, [])])],
+          '<div id="app"><p></p><i>injected</i></div>',
+        );
+
+        patched();
+
+        assert.isNull(section.querySelector("i"));
+        assert.isNotNull(section.querySelector("#app > p"));
+      });
+
+      it("leaves elements other tools add alone through later patches", () => {
+        const section = document.createElement("head");
+        section.innerHTML =
+          '<meta charset="utf-8"><meta name="x-tool" content="1">';
+
+        const toolMeta = section.querySelector('meta[name="x-tool"]');
+
+        const bootRender = vnode("head", {attrs: {}}, [
+          meta({charset: "utf-8"}),
+        ]);
+        const booted = patch(Vdom.mirror(bootRender, section), bootRender);
+
+        // A navigation to a page with a stylesheet of its own.
+        patch(
+          booted,
+          vnode("head", {attrs: {}}, [
+            meta({charset: "utf-8"}),
+            stylesheet("/page.css"),
+          ]),
+        );
+
+        assert.equal(section.querySelector('meta[name="x-tool"]'), toolMeta);
+        assert.isNotNull(section.querySelector('link[href="/page.css"]'));
+      });
+    });
   });
 });

@@ -101,6 +101,12 @@ export default class Hologram {
   static isRendering = false;
 
   // Made public to make tests easier
+  // Whether the page is mounted with the state the document was served with, the state the page on
+  // screen shows until the first render. A snapshot restored over it is other state, and so is a
+  // page mounted from a navigation that came before the first render (see #renderServedPage).
+  static isServedStateMounted = false;
+
+  // Made public to make tests easier
   // The navigations begun so far: every click on a link and every page an action puts, every page
   // loadNewPage is asked for, and every popstate. A page on its way - its fetch, a redirect's hop,
   // the frame it is shown in - is dropped when a navigation was begun after it, so that what the
@@ -783,14 +789,27 @@ export default class Hologram {
     $.isRendering = true;
 
     try {
+      // The mirror needs a render of the state the page on screen was served with (see
+      // Vdom.mirror()), and the page can be mounted with other state, a restored snapshot's. That
+      // render comes first: renderPage() starts the bindings it collects afresh, and the ones
+      // reconciled below have to be the page's own. A document with no mount data (a test one) has
+      // no served state to render.
+      const servedVirtualDocument =
+        Hologram.virtualDocument === null &&
+        !$.isServedStateMounted &&
+        globalThis.Hologram.pageMountData !== undefined
+          ? $.#renderServedPage()
+          : null;
+
       const newVirtualDocument = Renderer.renderPage(
         Hologram.#pageModule,
         Hologram.#pageParams,
       );
 
       // On a full document load there is no previous render to diff against, only the page the
-      // server sent, so the old side is built by mirroring this render onto it. The patch then
-      // adopts those nodes instead of recreating the whole page.
+      // server sent, so the old side is built by mirroring a render of the served state onto it.
+      // The patch then adopts those nodes instead of recreating the whole page, and takes them to
+      // this render's state, a restored snapshot's included.
       if (Hologram.virtualDocument === null) {
         // Phoenix's live reload iframe is taken out before the mirror reads the page (see
         // LiveReload.removePhoenixReloader()), and so are the bundle scripts the document was
@@ -799,7 +818,7 @@ export default class Hologram {
         Hologram.#removeBootScripts();
 
         Hologram.virtualDocument = Vdom.mirror(
-          newVirtualDocument,
+          servedVirtualDocument ?? newVirtualDocument,
           document.documentElement,
         );
       }
@@ -2036,6 +2055,8 @@ export default class Hologram {
   // A loaded document has no payload, so it carries the same six values as an inline script that
   // defines pageMountData - the one channel markup has for structured state.
   static #loadMountData() {
+    $.isServedStateMounted = $.#mountData === null;
+
     // A loaded document's bundle digest comes with the other values its boot script sets.
     // Its state was rendered for the identity the document was loaded for.
     const mountData = $.#mountData ?? {
@@ -2495,6 +2516,24 @@ export default class Hologram {
         script.remove();
       }
     });
+  }
+
+  // Renders the page in the state the document was served with, which its mount data holds, and
+  // puts the mounted page's registry back. The render writes props into the registry it reads, and
+  // every stateful component it reaches is in the mount data's registry, since the server rendered
+  // the same page from it, so no component inits. The bindings it collects are dropped by the next
+  // renderPage(), which starts them afresh.
+  static #renderServedPage() {
+    const mountData = globalThis.Hologram.pageMountData(Hologram.#deps);
+    const restoredEntries = ComponentRegistry.entries;
+
+    ComponentRegistry.populate(mountData.componentRegistry);
+
+    try {
+      return Renderer.renderPage(mountData.pageModule, mountData.pageParams);
+    } finally {
+      ComponentRegistry.populate(restoredEntries);
+    }
   }
 
   // Fetches a page's own code, which announces itself when it has run (see ScriptRegistry). A
