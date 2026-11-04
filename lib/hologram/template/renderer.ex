@@ -459,6 +459,8 @@ defmodule Hologram.Template.Renderer do
       |> inject_default_prop_values(module)
       |> validate_props(module, env.parent_module)
 
+    key_scope = component_key_scope(explicit_key(props_dom), props, env.key_scope)
+
     if has_cid_prop?(props) do
       render_stateful_component(
         module,
@@ -467,7 +469,7 @@ defmodule Hologram.Template.Renderer do
         env.context,
         server_struct,
         env.parent_module,
-        env.key_scope
+        key_scope
       )
     else
       render_template(
@@ -477,7 +479,7 @@ defmodule Hologram.Template.Renderer do
         env.context,
         server_struct,
         env.parent_module,
-        env.key_scope
+        key_scope
       )
     end
   end
@@ -784,6 +786,30 @@ defmodule Hologram.Template.Renderer do
     if name_prefix, do: name_prefix <> "-" <> segment, else: segment
   end
 
+  # The key scope a component's template renders in. A $key on the component takes the place of the
+  # item's own part, and so does the cid of a stateful component placed in a loop item, since the
+  # cid already is that component's identity. A stateful component can't take both: two
+  # identities could disagree.
+  #
+  # WARNING: must match the client renderer's #componentKeyScope (renderer.mjs).
+  defp component_key_scope({:ok, value}, props, key_scope) do
+    if has_cid_prop?(props) do
+      raise ArgumentError,
+        message: "a stateful component is keyed by its cid, so it can't take $key"
+    end
+
+    put_key_scope_level(key_scope, explicit_key_part(value))
+  end
+
+  defp component_key_scope(:error, %{cid: cid}, %{} = key_scope) do
+    case key_body(cid) do
+      nil -> key_scope
+      body -> put_key_scope_level(key_scope, "#" <> body)
+    end
+  end
+
+  defp component_key_scope(:error, _props, key_scope), do: key_scope
+
   defp contains_trusted_html?(nodes) do
     Enum.any?(nodes, fn
       {:trusted_html, _html} -> true
@@ -980,6 +1006,37 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
+  # The template author's $key among a component's props: the expression part of its value, which on
+  # a dynamic tag follows the key of the tag's place.
+  defp explicit_key(props_dom) do
+    Enum.find_value(props_dom, :error, fn
+      {"$key", value_dom} ->
+        Enum.find_value(value_dom, fn
+          {:expression, {value}} -> {:ok, value}
+          _part -> nil
+        end)
+
+      _prop_dom ->
+        nil
+    end)
+  end
+
+  # The key part of a $key the template author wrote, which raises for a value that can't be a
+  # key, since the author asked for that key.
+  #
+  # WARNING: must match the client renderer's #explicitKeyPart (renderer.mjs).
+  defp explicit_key_part(value) do
+    case key_body(value) do
+      nil ->
+        raise ArgumentError,
+          message:
+            "$key takes a string, an integer or an atom other than nil, true and false, got: #{inspect(value)}"
+
+      body ->
+        "#" <> body
+    end
+  end
+
   # The name a fill marker files its value under: the text of its name attribute.
   defp fill_name(attributes) do
     Enum.find_value(attributes, fn
@@ -1172,6 +1229,10 @@ defmodule Hologram.Template.Renderer do
     {String.to_existing_atom(name), value}
   end
 
+  defp outer_key_parts(nil), do: ""
+
+  defp outer_key_parts(%{outer: outer}), do: outer
+
   defp print_attribute({name, []}), do: name
 
   defp print_attribute({name, [text: ""]}), do: name
@@ -1264,6 +1325,10 @@ defmodule Hologram.Template.Renderer do
       initial_page?
     )
   end
+
+  defp put_key_scope_level(nil, level), do: %{level: level, outer: ""}
+
+  defp put_key_scope_level(key_scope, level), do: %{key_scope | level: level}
 
   defp put_page_digest_context(page_component_struct, page_digest) do
     Component.put_context(
@@ -1442,6 +1507,12 @@ defmodule Hologram.Template.Renderer do
 
   defp render_tree_attribute({"$key", [text: slot_key]}, key_scope) do
     {"$key", [text: slot_key <> key_scope_parts(key_scope)]}
+  end
+
+  # The template author's own $key, which the compiler puts behind the key of the element's place.
+  # It takes the place of the item's own part, and the parts of enclosing items still follow it.
+  defp render_tree_attribute({"$key", [text: slot_key, expression: {value}]}, key_scope) do
+    {"$key", [text: slot_key <> explicit_key_part(value) <> outer_key_parts(key_scope)]}
   end
 
   defp render_tree_attribute({name, []}, _key_scope), do: {name, []}

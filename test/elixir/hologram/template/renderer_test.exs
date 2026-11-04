@@ -84,6 +84,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
   alias Hologram.Test.Fixtures.Template.Renderer.Module96
   alias Hologram.Test.Fixtures.Template.Renderer.Module97
+  alias Hologram.Test.Fixtures.Template.Renderer.Module98
 
   @csp_nonce "test-csp-nonce"
   @csp_nonced_elements ["link", "script", "style"]
@@ -4212,6 +4213,289 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_tree(node, env, @server) ==
                {[{:element, "li", [{"$key", [text: "k:0#i1"]}], []}], %{}, @server}
+    end
+  end
+
+  describe "render_tree/3, explicit keys" do
+    test "an element's $key takes the place of the item's own part" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {"abc"}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#sabc"]}], []}], %{}, @server}
+    end
+
+    test "an integer $key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {5}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i5"]}], []}], %{}, @server}
+    end
+
+    test "an atom $key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {:abc}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#aabc"]}], []}], %{}, @server}
+    end
+
+    test "a sibling without $key keeps the item's own part" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:element, "dt", [{"$key", [text: "k:0", expression: {"abc"}]}], []},
+           {:element, "dd", [{"$key", [text: "k:1"]}], []}
+         ]}
+
+      assert render_tree(node, @env, @server) ==
+               {[
+                  {:element, "dt", [{"$key", [text: "k:0#sabc"]}], []},
+                  {:element, "dd", [{"$key", [text: "k:1#i1"]}], []}
+                ], %{}, @server}
+    end
+
+    test "an enclosing item's part follows the $key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:loop_item, {%{id: 7}},
+            [{:element, "li", [{"$key", [text: "k:0", expression: {"abc"}]}], []}]}
+         ]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#sabc#i1"]}], []}], %{}, @server}
+    end
+
+    test "a $key outside a loop item" do
+      node = {:element, "li", [{"$key", [text: "k:0", expression: {"abc"}]}], []}
+
+      assert render_tree(node, @env, @server) ==
+               {{:element, "li", [{"$key", [text: "k:0#sabc"]}], []}, %{}, @server}
+    end
+
+    test "a $key that can't be a key raises" do
+      for {value, text} <- [
+            {1.5, "1.5"},
+            {%{}, "%{}"},
+            {[1], "[1]"},
+            {nil, "nil"},
+            {true, "true"},
+            {false, "false"}
+          ] do
+        node = {:element, "li", [{"$key", [text: "k:0", expression: {value}]}], []}
+
+        assert_raise ArgumentError,
+                     "$key takes a string, an integer or an atom other than nil, true and false, got: #{text}",
+                     fn -> render_tree(node, @env, @server) end
+      end
+    end
+
+    test "a $key that can't be a key raises on an element keyed by what it loads" do
+      node =
+        {:element, "link",
+         [{"href", [text: "/a.css"]}, {"$key", [text: "k:0", expression: {1.5}]}], []}
+
+      assert_raise ArgumentError,
+                   "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "a $key that can't be a key raises before the element's children render" do
+      node =
+        {:element, "textarea", [{"$key", [text: "k:0", expression: {1.5}]}],
+         [expression: {%TrustedHTML{html: "<b>bold</b>"}}]}
+
+      assert_raise ArgumentError,
+                   "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "a dynamic tag resolving to an element takes its $key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:dynamic_tag, {"li"}, [{"$key", [text: "k:0", expression: {"abc"}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#sabc"]}], []}], %{}, @server}
+    end
+
+    test "a stateless component's $key keys every top-level node it renders" do
+      assert {[
+                {:element, "div", [{"$key", [text: div_key]}],
+                 [{:element, "span", [{"$key", [text: span_key]}], _span_children}]},
+                {:element, "p", [{"$key", [text: p_key]}], _p_children}
+              ], %{}, @server} = render_tree({:component, Module98, [], []}, @env, @server)
+
+      node =
+        {:loop_item, {%{id: 1}}, [{:component, Module98, [{"$key", [expression: {"abc"}]}], []}]}
+
+      assert {[
+                {:element, "div", [{"$key", [text: keyed_div_key]}],
+                 [{:element, "span", [{"$key", [text: ^span_key]}], _span_children}]},
+                {:element, "p", [{"$key", [text: keyed_p_key]}], _p_children}
+              ], %{}, @server} = render_tree(node, @env, @server)
+
+      assert keyed_div_key == div_key <> "#sabc"
+      assert keyed_p_key == p_key <> "#sabc"
+    end
+
+    test "a component's $key under an outer item" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:loop_item, {%{id: 7}},
+            [{:component, Module1, [{"$key", [expression: {"abc"}]}], []}]}
+         ]}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#sabc#i1"
+    end
+
+    test "a component's $key doesn't reach the component's siblings" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:component, Module1, [{"$key", [expression: {"abc"}]}], []},
+           {:element, "li", [{"$key", [text: "k:0"]}], []}
+         ]}
+
+      assert {[
+                {:element, "div", [{"$key", [text: div_key]}], _children},
+                {:element, "li", [{"$key", [text: "k:0#i1"]}], []}
+              ], %{}, @server} = render_tree(node, @env, @server)
+
+      assert div_key == slot_key <> "#sabc"
+    end
+
+    test "a stateless component's $key outside a loop item" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node = {:component, Module1, [{"$key", [expression: {"abc"}]}], []}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#sabc"
+    end
+
+    test "a dynamic tag resolving to a component takes the $key behind the tag's place" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:dynamic_tag, {Module1}, [{"$key", [text: "k:0", expression: {"abc"}]}], []}]}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#sabc"
+    end
+
+    test "a stateful component in a loop item is keyed by its cid" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node =
+        {:loop_item, {%{id: 1}}, [{:component, Module1, [{"cid", [text: "my_component"]}], []}]}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], _registry, _server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#smy_component"
+    end
+
+    test "a stateful component's cid doesn't reach the component's siblings" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:component, Module1, [{"cid", [text: "my_component"]}], []},
+           {:element, "li", [{"$key", [text: "k:0"]}], []}
+         ]}
+
+      assert {[_div, {:element, "li", [{"$key", [text: "k:0#i1"]}], []}], _registry, _server} =
+               render_tree(node, @env, @server)
+    end
+
+    test "a stateful component with an integer cid" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node = {:loop_item, {%{id: 1}}, [{:component, Module1, [{"cid", [expression: {5}]}], []}]}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], _registry, _server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#i5"
+    end
+
+    test "a stateful component outside a loop item keeps the plain key" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node = {:component, Module1, [{"cid", [text: "my_component"]}], []}
+
+      assert {[{:element, "div", [{"$key", [text: ^slot_key]}], _children}], _registry, _server} =
+               render_tree(node, @env, @server)
+    end
+
+    test "a stateful component's cid takes the place of the item's own part under an outer item" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:loop_item, {%{id: 7}},
+            [{:component, Module1, [{"cid", [text: "my_component"]}], []}]}
+         ]}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], _registry, _server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#smy_component#i1"
+    end
+
+    test "a stateful component with $key raises" do
+      node =
+        {:component, Module1, [{"cid", [text: "my_component"]}, {"$key", [expression: {"abc"}]}],
+         []}
+
+      assert_raise ArgumentError,
+                   "a stateful component is keyed by its cid, so it can't take $key",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "a component with $key whose cid comes from a spread raises" do
+      node =
+        {:component, Module1,
+         [{:spread, {%{cid: "my_component"}}}, {"$key", [expression: {"abc"}]}], []}
+
+      assert_raise ArgumentError,
+                   "a stateful component is keyed by its cid, so it can't take $key",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "a component's $key that can't be a key raises" do
+      node = {:component, Module1, [{"$key", [expression: {1.5}]}], []}
+
+      assert_raise ArgumentError,
+                   "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+                   fn -> render_tree(node, @env, @server) end
     end
   end
 

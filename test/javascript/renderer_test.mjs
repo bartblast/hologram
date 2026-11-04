@@ -83,6 +83,7 @@ import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client
 import {defineClientOnlyModule3Fixture} from "./support/fixtures/renderer/client_only/module_3.mjs";
 import {defineClientOnlyModule4Fixture} from "./support/fixtures/renderer/client_only/module_4.mjs";
 import {defineClientOnlyModule5Fixture} from "./support/fixtures/renderer/client_only/module_5.mjs";
+import {defineClientOnlyModule6Fixture} from "./support/fixtures/renderer/client_only/module_6.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
@@ -168,6 +169,7 @@ defineClientOnlyModule2Fixture();
 defineClientOnlyModule3Fixture();
 defineClientOnlyModule4Fixture();
 defineClientOnlyModule5Fixture();
+defineClientOnlyModule6Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -11534,6 +11536,354 @@ describe("Renderer", () => {
       assert.deepStrictEqual(keysOf(render(node).children), [
         "1a2b3c:0",
         "1a2b3c:0:1",
+      ]);
+    });
+  });
+
+  describe("explicit keys", () => {
+    const module5 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module5",
+    );
+
+    const loopItem = (item, nodes) =>
+      Type.tuple([
+        Type.atom("loop_item"),
+        item === null ? Type.nil() : Type.tuple([item]),
+        Type.list(nodes),
+      ]);
+
+    const itemWithId = (id) => Type.map([[Type.atom("id"), id]]);
+
+    const textPart = (text) => [Type.atom("text"), Type.bitstring(text)];
+
+    const expressionPart = (value) => [
+      Type.atom("expression"),
+      Type.tuple([value]),
+    ];
+
+    const keyAttr = (...parts) =>
+      Type.tuple([Type.bitstring("$key"), Type.keywordList(parts)]);
+
+    const cidAttr = (value) =>
+      Type.tuple([Type.bitstring("cid"), Type.keywordList([textPart(value)])]);
+
+    const elementWithAttrs = (tagName, attrs) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrs),
+        Type.list(),
+      ]);
+
+    const explicitlyKeyed = (tagName, slotKey, value) =>
+      elementWithAttrs(tagName, [
+        keyAttr(textPart(slotKey), expressionPart(value)),
+      ]);
+
+    const component = (module, props) =>
+      Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list(props),
+        Type.list(),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    const keysOf = (vnodes) => vnodes.map((node) => node.key);
+
+    it("an element's $key takes the place of the item's own part", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed("li", "1a2b3c:0", Type.bitstring("abc")),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#sabc"]);
+    });
+
+    it("an integer $key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed("li", "1a2b3c:0", Type.integer(5)),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i5"]);
+    });
+
+    it("an atom $key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed("li", "1a2b3c:0", Type.atom("abc")),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aabc"]);
+    });
+
+    it("a sibling without $key keeps the item's own part", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed("dt", "1a2b3c:0", Type.bitstring("abc")),
+        keyedElement("dd", 1),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "1a2b3c:0#sabc",
+        "1a2b3c:1#i1",
+      ]);
+    });
+
+    it("an enclosing item's part follows the $key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        loopItem(itemWithId(Type.integer(7)), [
+          explicitlyKeyed("li", "1a2b3c:0", Type.bitstring("abc")),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#sabc#i1"]);
+    });
+
+    it("a $key outside a loop item", () => {
+      const result = render(
+        explicitlyKeyed("li", "1a2b3c:0", Type.bitstring("abc")),
+      );
+
+      assert.equal(result.key, "1a2b3c:0#sabc");
+    });
+
+    it("a $key that can't be a key raises", () => {
+      const cases = [
+        [Type.float(1.5), "1.5"],
+        [Type.map(), "%{}"],
+        [Type.list([Type.integer(1)]), "[1]"],
+        [Type.nil(), "nil"],
+        [Type.boolean(true), "true"],
+        [Type.boolean(false), "false"],
+      ];
+
+      for (const [value, text] of cases) {
+        assertBoxedError(
+          () => render(explicitlyKeyed("li", "1a2b3c:0", value)),
+          "ArgumentError",
+          `$key takes a string, an integer or an atom other than nil, true and false, got: ${text}`,
+        );
+      }
+    });
+
+    it("a $key that can't be a key raises on an element keyed by what it loads", () => {
+      const node = elementWithAttrs("link", [
+        Type.tuple([
+          Type.bitstring("href"),
+          Type.keywordList([textPart("/a.css")]),
+        ]),
+        keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+      );
+    });
+
+    it("a $key that can't be a key raises before the element's children render", () => {
+      const trustedHtml = Type.struct("Hologram.Template.TrustedHTML", [
+        [Type.atom("html"), Type.bitstring("<b>bold</b>")],
+      ]);
+
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("textarea"),
+        Type.list([
+          keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
+        ]),
+        Type.list([
+          Type.tuple([Type.atom("expression"), Type.tuple([trustedHtml])]),
+        ]),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+      );
+    });
+
+    it("a dynamic tag resolving to an element takes its $key", () => {
+      const dynamicTag = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([Type.bitstring("li")]),
+        Type.list([
+          keyAttr(textPart("1a2b3c:0"), expressionPart(Type.bitstring("abc"))),
+        ]),
+        Type.list(),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [dynamicTag]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#sabc"]);
+    });
+
+    it("a stateless component's $key keys every top-level node it renders", () => {
+      const module6 = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module6",
+      );
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        component(module6, [keyAttr(expressionPart(Type.bitstring("abc")))]),
+      ]);
+
+      const [div, p] = render(node);
+
+      assert.equal(div.key, "7a8b9c:0#sabc");
+      assert.equal(div.children[0].key, "7a8b9c:1");
+      assert.equal(p.key, "7a8b9c:2#sabc");
+    });
+
+    it("a component's $key under an outer item", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        loopItem(itemWithId(Type.integer(7)), [
+          component(module5, [keyAttr(expressionPart(Type.bitstring("abc")))]),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#sabc#i1"]);
+    });
+
+    it("a stateless component's $key outside a loop item", () => {
+      const node = component(module5, [
+        keyAttr(expressionPart(Type.bitstring("abc"))),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#sabc"]);
+    });
+
+    it("a dynamic tag resolving to a component takes the $key behind the tag's place", () => {
+      const dynamicTag = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([module5]),
+        Type.list([
+          keyAttr(textPart("1a2b3c:0"), expressionPart(Type.bitstring("abc"))),
+        ]),
+        Type.list(),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [dynamicTag]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#sabc"]);
+    });
+
+    it("a stateful component in a loop item is keyed by its cid", () => {
+      initComponentRegistryEntry(Type.bitstring("my_component"), module5);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        component(module5, [cidAttr("my_component")]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#smy_component"]);
+    });
+
+    it("a stateful component's cid doesn't reach the component's siblings", () => {
+      initComponentRegistryEntry(Type.bitstring("my_component"), module5);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        component(module5, [cidAttr("my_component")]),
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "4d5e6f:0#smy_component",
+        "1a2b3c:0#i1",
+      ]);
+    });
+
+    it("a stateful component with an integer cid", () => {
+      initComponentRegistryEntry(Type.integer(5), module5);
+
+      const cid = Type.tuple([
+        Type.bitstring("cid"),
+        Type.keywordList([expressionPart(Type.integer(5))]),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        component(module5, [cid]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#i5"]);
+    });
+
+    it("a stateful component outside a loop item keeps the plain key", () => {
+      initComponentRegistryEntry(Type.bitstring("my_component"), module5);
+
+      const node = component(module5, [cidAttr("my_component")]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0"]);
+    });
+
+    it("a stateful component's cid takes the place of the item's own part under an outer item", () => {
+      initComponentRegistryEntry(Type.bitstring("my_component"), module5);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        loopItem(itemWithId(Type.integer(7)), [
+          component(module5, [cidAttr("my_component")]),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "4d5e6f:0#smy_component#i1",
+      ]);
+    });
+
+    it("a stateful component with $key raises", () => {
+      const node = component(module5, [
+        cidAttr("my_component"),
+        keyAttr(expressionPart(Type.bitstring("abc"))),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "a stateful component is keyed by its cid, so it can't take $key",
+      );
+    });
+
+    it("a component with $key whose cid comes from a spread raises", () => {
+      const spread = Type.tuple([
+        Type.atom("spread"),
+        Type.tuple([
+          Type.map([[Type.atom("cid"), Type.bitstring("my_component")]]),
+        ]),
+      ]);
+
+      const node = component(module5, [
+        spread,
+        keyAttr(expressionPart(Type.bitstring("abc"))),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "a stateful component is keyed by its cid, so it can't take $key",
+      );
+    });
+
+    it("a component's $key that can't be a key raises", () => {
+      const node = component(module5, [
+        keyAttr(expressionPart(Type.float(1.5))),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+      );
+    });
+
+    it("a component's $key doesn't reach the component's siblings", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        component(module5, [keyAttr(expressionPart(Type.bitstring("abc")))]),
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "4d5e6f:0#sabc",
+        "1a2b3c:0#i1",
       ]);
     });
   });

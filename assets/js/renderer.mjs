@@ -997,6 +997,40 @@ export default class Renderer {
     return namePrefix === null ? segment : `${namePrefix}-${segment}`;
   }
 
+  // Based on component_key_scope/3
+  //
+  // The key scope a component's template renders in. A $key on the component takes the place of
+  // the item's own part, and so does the cid of a stateful component placed in a loop item, since
+  // the cid already is that component's identity. A stateful component can't take both: two
+  // identities could disagree. An override is a scope of its own, never a change to the one the
+  // component was given.
+  //
+  // WARNING: must match component_key_scope/3 on the server.
+  // Deps: [:maps.get/2]
+  static #componentKeyScope(explicitKey, props, keyScope) {
+    const hasCid = Renderer.#hasCidProp(props);
+
+    if (explicitKey !== null) {
+      if (hasCid) {
+        Interpreter.raiseArgumentError(
+          "a stateful component is keyed by its cid, so it can't take $key",
+        );
+      }
+
+      return $.#putKeyScopeLevel(keyScope, $.#explicitKeyPart(explicitKey));
+    }
+
+    if (hasCid && keyScope) {
+      const body = $.#keyBody(Erlang_Maps["get/2"](Type.atom("cid"), props));
+
+      return body === null
+        ? keyScope
+        : $.#putKeyScopeLevel(keyScope, `#${body}`);
+    }
+
+    return keyScope;
+  }
+
   // Whether rendered children hold trusted HTML, at any depth.
   static #containsTrustedHtml(childrenVdom) {
     return childrenVdom.some(
@@ -1388,6 +1422,47 @@ export default class Renderer {
     return keyFilters.data.every((keyFilter) =>
       KeyboardEvent.matchesKeyFilter(keyFilter, event),
     );
+  }
+
+  // Based on explicit_key/1
+  //
+  // The template author's $key among a component's props: the expression part of its value, which
+  // on a dynamic tag follows the key of the tag's place. Null when there is none.
+  static #explicitKey(propsDom) {
+    for (const propDom of propsDom.data) {
+      if (
+        Type.isRecordTuple(propDom, "spread", 2) ||
+        Bitstring.toText(propDom.data[0]) !== "$key"
+      ) {
+        continue;
+      }
+
+      for (const partDom of propDom.data[1].data) {
+        if (Type.isRecordTuple(partDom, "expression", 2)) {
+          return partDom.data[1].data[0];
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // Based on explicit_key_part/1
+  //
+  // The key part of a $key the template author wrote, which raises for a value that can't be a
+  // key, since the author asked for that key.
+  //
+  // WARNING: must match explicit_key_part/1 on the server.
+  static #explicitKeyPart(value) {
+    const body = $.#keyBody(value);
+
+    if (body === null) {
+      Interpreter.raiseArgumentError(
+        `$key takes a string, an integer or an atom other than nil, true and false, got: ${Interpreter.inspect(value)}`,
+      );
+    }
+
+    return `#${body}`;
   }
 
   // Based on filter_allowed_props/2
@@ -1847,6 +1922,11 @@ export default class Renderer {
     );
   }
 
+  // Based on outer_key_parts/1
+  static #outerKeyParts(keyScope) {
+    return keyScope ? keyScope.outer : "";
+  }
+
   // The single vnode a document is patched from, given the children a render produced.
   //
   // A render that names no <html> element describes a fragment rather than a document, so it is
@@ -1875,6 +1955,14 @@ export default class Renderer {
     return Type.isTrue(
       Erlang_Maps["is_key/2"](Type.atom("prevent_default"), modifiersDom),
     );
+  }
+
+  // Based on put_key_scope_level/2
+  //
+  // A new scope rather than a changed one, since the scope a component was given is shared with
+  // its siblings.
+  static #putKeyScopeLevel(keyScope, level) {
+    return {level, outer: keyScope ? keyScope.outer : ""};
   }
 
   // Based on raise_invalid_spread_value/1
@@ -2062,6 +2150,12 @@ export default class Renderer {
 
     Renderer.#validateProps(props, moduleProxy, dom.data[1], parentModule);
 
+    const componentKeyScope = Renderer.#componentKeyScope(
+      Renderer.#explicitKey(propsDom),
+      props,
+      keyScope,
+    );
+
     if (Renderer.#hasCidProp(props)) {
       return Renderer.#renderStatefulComponent(
         moduleProxy,
@@ -2070,7 +2164,7 @@ export default class Renderer {
         context,
         parentTagName,
         parentModule,
-        keyScope,
+        componentKeyScope,
       );
     } else {
       return Renderer.#renderTemplate(
@@ -2081,7 +2175,7 @@ export default class Renderer {
         defaultTarget,
         parentTagName,
         parentModule,
-        keyScope,
+        componentKeyScope,
       );
     }
   }
@@ -2183,6 +2277,11 @@ export default class Renderer {
 
     const {attrs: attrsVdom, props: propsVdom} =
       Renderer.#renderAttributesAndProps(attrsDom, currentTagName);
+
+    // Read right after the other attributes, before the children render, so that a $key which can't
+    // be a key raises where render_tree_attributes/2 raises on the server - also on an element that
+    // takes a resource key instead.
+    const slotKey = $.#renderSlotKey(attrsDom, keyScope);
 
     // $focused renders as autofocus, the way the server renders it, so the boot patch finds the
     // attribute the server sent and the focus hooks read one attribute either way. An autofocus
@@ -2340,8 +2439,6 @@ export default class Renderer {
     } else {
       // What the element loads names it better than where it sits, so a slot key only applies to
       // elements that load nothing.
-      const slotKey = $.#renderSlotKey(attrsDom, keyScope);
-
       if (slotKey !== null) {
         data.key = slotKey;
       }
@@ -2641,6 +2738,21 @@ export default class Renderer {
           return (
             Bitstring.toText(valueDom.data[0].data[1]) +
             $.#keyScopeParts(keyScope)
+          );
+        }
+
+        // The template author's own $key, which the compiler puts behind the key of the element's
+        // place. It takes the place of the item's own part, and the parts of enclosing items still
+        // follow it.
+        if (
+          valueDom.data.length === 2 &&
+          Type.isRecordTuple(valueDom.data[0], "text", 2) &&
+          Type.isRecordTuple(valueDom.data[1], "expression", 2)
+        ) {
+          return (
+            Bitstring.toText(valueDom.data[0].data[1]) +
+            $.#explicitKeyPart(valueDom.data[1].data[1].data[0]) +
+            $.#outerKeyParts(keyScope)
           );
         }
 
