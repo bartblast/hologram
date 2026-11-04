@@ -2538,7 +2538,7 @@ defmodule Hologram.ControllerTest do
       render_page_with_instance(Module14, "test-instance-id")
 
       assert LiveReload.open_pages() == %{}
-      assert :sys.get_state(pid).css_versions == %{}
+      assert :sys.get_state(pid).document_versions == %{}
     end
 
     test "in dev, tells live reload the tab rendered its document on a first page" do
@@ -2547,7 +2547,7 @@ defmodule Hologram.ControllerTest do
 
       render_page_with_instance(Module14, "test-instance-id")
 
-      assert :sys.get_state(pid).css_versions == %{"test-instance-id" => 1}
+      assert :sys.get_state(pid).document_versions == %{"test-instance-id" => {1, 0}}
     end
 
     test "in dev, does not tell live reload of a document on a later page" do
@@ -2567,7 +2567,7 @@ defmodule Hologram.ControllerTest do
       state = :sys.get_state(pid)
 
       assert Map.keys(state.open_pages) == ["test-instance-id"]
-      assert state.css_versions == %{}
+      assert state.document_versions == %{}
     end
 
     test "in dev, renders a page whose bundle a live reload is building once it is built" do

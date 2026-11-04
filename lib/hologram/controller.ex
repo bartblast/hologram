@@ -775,8 +775,8 @@ defmodule Hologram.Controller do
   end
 
   # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
-  # it rendered last. A first page also renders the tab's document, which loads the app's CSS, so
-  # live reload can tell the tab about a CSS change it missed. The document is noted after the
+  # it rendered last. A first page also renders the tab's document, which loads the app's assets, so
+  # live reload can tell the tab about an asset change it missed. The document is noted after the
   # page: live reload keeps a tab's document only while it keeps the tab's page.
   defp maybe_note_page_rendered(nil, _page_module, _initial_page?), do: :ok
 
