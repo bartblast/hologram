@@ -16,6 +16,11 @@ defmodule Hologram.Template.DOM do
   # and rebuilt on every navigation, taking the stylesheets and the scroll position with them.
   @unkeyable_tags ["body", "document", "head", "html", "slot", "window"]
 
+  # The variable a loop's generator binds the whole item to, so that the renderers can key the item
+  # by its :id however the generator's pattern takes it apart. Not underscore-prefixed, since the
+  # transpiler turns such a name into a wildcard that binds nothing.
+  @loop_item_var :holo_loop_item
+
   @type attribute :: {String.t(), t} | {:spread, {any}}
 
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
@@ -146,6 +151,22 @@ defmodule Hologram.Template.DOM do
     |> String.trim()
   end
 
+  # The generator's pattern is matched against the item as before, and the item is bound whole
+  # beside it. A guard stays outside the match, where the generator's syntax puts it.
+  defp bind_loop_item({:<-, meta, [{:when, when_meta, [pattern, guard]}, enum]}) do
+    {:<-, meta, [{:when, when_meta, [bind_loop_item_pattern(pattern), guard]}, enum]}
+  end
+
+  defp bind_loop_item({:<-, meta, [pattern, enum]}) do
+    {:<-, meta, [bind_loop_item_pattern(pattern), enum]}
+  end
+
+  defp bind_loop_item(qualifier), do: qualifier
+
+  defp bind_loop_item_pattern(pattern) do
+    {:=, [], [pattern, {@loop_item_var, [], nil}]}
+  end
+
   defp inject_slot_key({tag_type, {tag_name, attributes}}, index, hash)
        when tag_type in [:start_tag, :self_closing_tag] do
     if keyable_tag?(tag_name) do
@@ -165,6 +186,33 @@ defmodule Hologram.Template.DOM do
     Helpers.tag_type(tag_name) == :element and tag_name not in @unkeyable_tags
   end
 
+  # The loop's qualifiers with its one generator binding the whole item, printed back as source, or
+  # :error when the loop has no single list generator to take the item from. A trailing keyword
+  # list of options prints as a list, which parses to the same AST.
+  #
+  # The uniq option compares what each iteration renders, so it gets no item either: binding the
+  # item into every iteration would make two that render the same nodes count as different.
+  defp keyed_for_qualifiers(content) do
+    with {:ok, {:for, _meta, args}} <- Code.string_to_quoted("for #{content} do nil end"),
+         {qualifiers, [[do: nil]]} <- Enum.split(args, -1),
+         [{:<-, _meta, _args}] <- Enum.filter(qualifiers, &generator?/1),
+         false <- Enum.any?(qualifiers, &uniq_option?/1) do
+      {:ok, Enum.map_join(qualifiers, ", ", &Macro.to_string(bind_loop_item(&1)))}
+    else
+      _no_single_list_generator -> :error
+    end
+  end
+
+  # A list generator, or a bitstring generator: the last part of a binary in qualifier position that
+  # holds a <-, as the transformer reads it.
+  defp generator?({:<-, _meta, _args}), do: true
+
+  defp generator?({:<<>>, _meta, parts}) when is_list(parts) do
+    match?({:<-, _meta, _args}, List.last(parts))
+  end
+
+  defp generator?(_qualifier), do: false
+
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
   defp normalize_implicit_keyword_list(templ_expr) do
@@ -178,6 +226,10 @@ defmodule Hologram.Template.DOM do
         templ_expr
     end
   end
+
+  defp uniq_option?(qualifier) when is_list(qualifier), do: Keyword.has_key?(qualifier, :uniq)
+
+  defp uniq_option?(_qualifier), do: false
 
   # Templates checked out on Windows carry CRLF line endings, which would otherwise give the same
   # template a different hash per platform, so keys could not be asserted verbatim.
@@ -234,12 +286,25 @@ defmodule Hologram.Template.DOM do
     "] else ["
   end
 
+  # Each iteration renders as a loop item, which the renderers key by the item's :id. Only a loop
+  # with one list generator has a single value that is the item. A loop with a bitstring generator
+  # or several generators, a loop with the uniq option, or one that doesn't parse gets no item: it
+  # still renders as a loop item, so that an enclosing item's key stays an outer part, and a source
+  # that doesn't parse fails the build as it did before.
   defp render_code({:block_start, {"for", expr_str}}) do
-    "(for #{extract_expression_content(expr_str)} do ["
+    content = extract_expression_content(expr_str)
+
+    case keyed_for_qualifiers(content) do
+      {:ok, qualifiers} ->
+        "(for #{qualifiers} do {:loop_item, {#{@loop_item_var}}, ["
+
+      :error ->
+        "(for #{content} do {:loop_item, nil, ["
+    end
   end
 
   defp render_code({:block_end, "for"}) do
-    "] end)"
+    "]} end)"
   end
 
   defp render_code({:block_start, {"if", expr_str}}) do

@@ -82,6 +82,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module93
   alias Hologram.Test.Fixtures.Template.Renderer.Module94
   alias Hologram.Test.Fixtures.Template.Renderer.Module95
+  alias Hologram.Test.Fixtures.Template.Renderer.Module96
+  alias Hologram.Test.Fixtures.Template.Renderer.Module97
 
   @csp_nonce "test-csp-nonce"
   @csp_nonced_elements ["link", "script", "style"]
@@ -4154,6 +4156,50 @@ defmodule Hologram.Template.RendererTest do
                render_tree(node, @env, @server)
 
       assert key == slot_key <> "#i1"
+    end
+
+    test "a compiled loop keys each item by its id" do
+      items = [%{id: 1, name: "a"}, %{id: 2, name: "b"}]
+      node = {:component, Module96, [{"items", [expression: {items}]}], []}
+
+      assert {[{:element, "ul", _ul_attrs, [li_1, li_2]}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert {:element, "li", [{"$key", [text: key_1]}], [text: "a"]} = li_1
+      assert {:element, "li", [{"$key", [text: key_2]}], [text: "b"]} = li_2
+
+      assert [slot_key, "i1"] = String.split(key_1, "#")
+      assert key_2 == slot_key <> "#i2"
+    end
+
+    test "a compiled loop over items without ids keeps the plain keys" do
+      items = [%{name: "a"}, %{name: "b"}]
+      node = {:component, Module96, [{"items", [expression: {items}]}], []}
+
+      assert {[{:element, "ul", _ul_attrs, [li_1, li_2]}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert {:element, "li", [{"$key", [text: key]}], [text: "a"]} = li_1
+      assert {:element, "li", [{"$key", [text: ^key]}], [text: "b"]} = li_2
+      refute key =~ "#"
+    end
+
+    test "a compiled loop with the uniq option still drops iterations that render the same" do
+      products = [
+        %{id: 1, category: "books"},
+        %{id: 2, category: "books"},
+        %{id: 3, category: "games"}
+      ]
+
+      node = {:component, Module97, [{"products", [expression: {products}]}], []}
+
+      assert {[{:element, "select", _select_attrs, options}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert [
+               {:element, "option", _books_attrs, [text: "books"]},
+               {:element, "option", _games_attrs, [text: "games"]}
+             ] = options
     end
 
     test "a slot inside a loop item of forwarded slot content is expanded" do
