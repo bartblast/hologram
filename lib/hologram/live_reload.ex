@@ -202,14 +202,16 @@ defmodule Hologram.LiveReload do
   #
   # A tab live reload knows nothing of, rendered before the process started or forgotten since,
   # counts as having missed every CSS change, since a needless swap is harmless, and no reload,
-  # since a needless one loses the tab's state. It stays unknown for as long as it keeps its
-  # document, so a reload it misses is not replayed.
+  # since a needless one loses the tab's state. What it missed before can't be known, but from its
+  # first stream on, a reload it misses is replayed like for any tab.
   #
-  # Nothing is recorded once sent: the stream can close before it writes the message. A tab told
-  # twice swaps its stylesheets twice, or reloads once, since a reload renders a new document.
+  # Nothing else is recorded once sent: the stream can close before it writes the message. A tab
+  # told twice swaps its stylesheets twice, or reloads once, since a reload renders a new document.
   def handle_cast({:replay_asset_change, pid, instance_id}, state) do
+    unknown_tab_versions = {0, state.reload_version}
+
     {css_version, reload_version} =
-      Map.get(state.document_versions, instance_id, {0, state.reload_version})
+      Map.get(state.document_versions, instance_id, unknown_tab_versions)
 
     cond do
       reload_version < state.reload_version -> send(pid, {:reload, :all})
@@ -217,7 +219,9 @@ defmodule Hologram.LiveReload do
       true -> :ok
     end
 
-    {:noreply, state}
+    document_versions = Map.put_new(state.document_versions, instance_id, unknown_tab_versions)
+
+    {:noreply, %{state | document_versions: document_versions}}
   end
 
   def handle_cast({:replay_outcome, pid}, state) do
@@ -369,7 +373,8 @@ defmodule Hologram.LiveReload do
       # process started, whose CSS it can't vouch for, counts as older (see replay_asset_change/2).
       css_version: 1,
       # The CSS version and the reload version each tab's document rendered with, by instance id,
-      # kept for the tabs open_pages keeps.
+      # or for a tab live reload knew nothing of, the ones it counts as having when its stream first
+      # asked for a replay (see replay_asset_change/2 and prune_tabs/1).
       document_versions: %{},
       endpoint: endpoint,
       # What each tab showed at its last render, by instance id, with when it was first seen without
@@ -497,7 +502,8 @@ defmodule Hologram.LiveReload do
   missed since its document rendered, as the message the change was broadcast as: `{:reload, :all}`
   when an asset other than CSS changed, else `:css_changed` when CSS did. A tab live reload knows
   nothing of, rendered before the process started or forgotten since, is sent `:css_changed` and
-  no reload. Sends nothing when live reload is not running.
+  no reload, and a reload it misses later is replayed. Sends nothing when live reload is not
+  running.
   """
   @spec replay_asset_change(pid, String.t()) :: :ok
   def replay_asset_change(pid, instance_id) do
@@ -608,11 +614,19 @@ defmodule Hologram.LiveReload do
   end
 
   # Forgets the tabs closed since (see prune_open_pages/1): their pages and their documents.
+  #
+  # Only the documents of tabs open_pages drops go: a tab first seen through its stream (see
+  # replay_asset_change/2) rendered no page this process saw, so its document stays. Those are the
+  # tabs open when the process started, a handful, gone with the process.
   defp prune_tabs(state) do
     open_pages = prune_open_pages(state.open_pages)
-    document_versions = Map.take(state.document_versions, Map.keys(open_pages))
+    closed_tabs = Map.keys(state.open_pages) -- Map.keys(open_pages)
 
-    %{state | document_versions: document_versions, open_pages: open_pages}
+    %{
+      state
+      | document_versions: Map.drop(state.document_versions, closed_tabs),
+        open_pages: open_pages
+    }
   end
 
   # A tab seen without an SSE connection for longer than the grace period is closed, and its page is
@@ -748,8 +762,9 @@ defmodule Hologram.LiveReload do
     end
   end
 
-  # A missing dir can fail the watcher's backend, so the static dir is watched only when it exists:
-  # one created after the server started is watched from the next start.
+  # In a project with a priv dir, Hologram's compile writes its bundles to priv/static/hologram
+  # through the build's priv symlink, so the static dir exists before the app starts. The check
+  # keeps a project without one, or a dir deleted meanwhile, from failing the watcher's backend.
   defp all_watched_dirs do
     static_dir = watched_static_dir()
 

@@ -400,6 +400,14 @@ defmodule Hologram.LiveReloadTest do
       assert :sys.get_state(LiveReload).document_versions == %{"instance-2" => {1, 0}}
     end
 
+    test "keeps the document of a tab first seen through its stream" do
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      LiveReload.open_pages()
+
+      assert :sys.get_state(LiveReload).document_versions == %{"instance-1" => {0, 0}}
+    end
+
     test "a live reload batch forgets the document of a tab it forgets" do
       long_ago = System.monotonic_time(:millisecond) - 60_000
 
@@ -532,6 +540,27 @@ defmodule Hologram.LiveReloadTest do
 
       assert_receive :css_changed
       refute_receive {:reload, :all}, 100
+    end
+
+    test "a tab it knows nothing of is sent the CSS change again by its next stream" do
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive :css_changed
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive :css_changed
+    end
+
+    test "a tab it knows nothing of is sent a reload it misses after its first stream", %{
+      pid: pid
+    } do
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive :css_changed
+
+      change_js(pid)
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      assert_receive {:reload, :all}
     end
 
     test "a stream of a tab whose document rendered before a CSS change and another change is sent only a reload",
