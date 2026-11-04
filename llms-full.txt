@@ -716,6 +716,48 @@ Use `{%for}` blocks to iterate over collections. The syntax follows Elixir's com
 </ul>
 ```
 
+###### Keyed Lists
+
+When a list changes, Hologram has to decide which element on the page to reuse for which item. That matters for what an element holds that your component's state doesn't: text typed into an input whose value isn't bound to state, focus, a playing video, and the state of `once`, `debounce` and `throttle` bindings. An input bound to state shows its state's value wherever its element ends up, but its focus and cursor position still stay with the element.
+
+Take a list of comments, each with a reply box that isn't bound to state:
+
+```holo
+<ul>
+  {%for comment <- @comments}
+    <li>
+      <p>{comment.text}</p>
+      <textarea placeholder="Reply..."></textarea>
+    </li>
+  {/for}
+</ul>
+```
+
+Say a user is typing a reply to the second comment when the first one is deleted. If Hologram matched elements by their position, it would update the first `<li>` to show what was the second comment and remove the last `<li>`. The half-written reply would stay in the second `<li>`, which now shows the third comment, so it would end up under the wrong comment.
+
+To avoid that, Hologram gives each item a key and matches elements by key instead of position. An item that is a map or struct with an `:id`, like each comment above, is keyed by its `:id` automatically, so the example works as written and the reply stays with its comment. Two structs of different types with the same id get different keys.
+
+For items without an `:id`, such as strings, add a `$key` to the tag, with a value that identifies the item:
+
+```holo
+<ul>
+  {%for email <- @invites}
+    <li $key={email}>
+      {email}
+      <input placeholder="Personal message" />
+    </li>
+  {/for}
+</ul>
+```
+
+A `$key` replaces the automatic key, so you can also use it when the `:id` isn't the right identity, like a list that can show the same record twice. It keys only the tag it's on, so if the loop body renders several tags, give each one a `$key`. When the loop body is a stateless component, put the `$key` on its tag, like `<Invite email={email} $key={email} />`. Whatever the component renders then stays with its item when the list changes, as it would with a `$key` on an element. A stateful component is keyed by its `cid`, so it needs no `$key` and can't take one.
+
+Put a `$key` on a tag directly inside the `{%for}` block, or inside an `{%if}` block there. Anywhere else, the build fails. The value must be a string, an integer, or an atom other than `nil`, `true` and `false`. Any other value raises an `ArgumentError`. Keys only need to be unique within one list.
+
+Items without a key are matched by position. So are the items of a loop with several generators or with the `uniq` option, since those get no automatic key. When two items in one list have the same key, Hologram matches them by position too and logs a warning in the browser console.
+
+If an item's key changes, Hologram treats it as a new item and builds a new element for it.
+
 #### Event Binding
 
 You can bind events to elements using event attributes. For detailed information about event binding syntax and available event types, see the Events documentation.
@@ -1605,6 +1647,8 @@ Append `once` to fire a binding a single time, then stop. It suits one-shot inte
 It works on every event, including the window, document, resize, and reach events, and it combines with `debounce` and `throttle` - the single debounced or throttled dispatch fires, then the binding stops. A spent binding still handles the event as before - suppressing the native default and stopping propagation just as its modifiers do - and only stops dispatching the action.
 
 `once` is a precise guarantee, scoped to the binding's target. For an element binding the target is the element instance, so re-rendering keeps a fired binding spent however many times, and it re-arms only when the element is removed and re-added as a fresh DOM node. `$submit.once`, for example, stops a repeated click from double-submitting but comes back armed if the form is re-created. A `<window>` or `<document>` binding has no node to re-create - it keys on the global target, which lives for the whole page, so it fires once for the page and never re-arms. To get that same page-lifetime guarantee on an element, drive it from state: have the action record that it ran, then stop rendering or disable the control.
+
+In a `{%for}` list, a `once` binding stays with its item. After it fires, it won't fire again, even if the list is reordered or other items are removed. If the item's key changes, Hologram treats it as a new item, so its binding can fire again. See Keyed Lists in the Template Syntax documentation.
 
 #### Controlling the Native Default
 
@@ -4498,7 +4542,7 @@ Comprehensive overview of all Hologram features organized by area. Each feature 
 
 **UI:** Components (done), Context (done), Layouts (done), Navigation (done), Pages (done), Routing (done), Template Colocation (done)
 
-**Markup:** Component node (done), Element node (done), Interpolation (done), For Block (done), If Block (done), Public Comment (done), Raw Block (done), Text node (done)
+**Markup:** Component node (done), Element node (done), Interpolation (done), For Block (done), If Block (done), Keyed Lists (done), Public Comment (done), Raw Block (done), Text node (done)
 
 #### Framework Runtime
 
@@ -4577,7 +4621,6 @@ Our development roadmap is organized by timeline, with colors representing proxi
 - **Client MFAs Whitelisting** - Create a mechanism to explicitly whitelist Module-Function-Arity combinations that should be compiled for client-side execution when not automatically detected by the compiler.
 - **Command Failure Handling Control** - Add more granular control over how command failures are handled, allowing developers to customize error handling strategies, retry logic, and failure recovery mechanisms.
 - **Internationalization** - Built-in i18n: locale detection and management, locale-aware routing, translation resolution across server and client, and locale-aware date, number, and currency formatting.
-- **Keyed Lists** - Reconcile rendered comprehension lists by key rather than position, auto-keying items by their `:id` with an explicit `$key` override, so reordered items reuse the correct DOM nodes.
 - **Props Validation** - Add a system for validating component props.
 - **Reactivity Layer** - Introduce derived values, prop watchers, and effects for a cohesive reactivity system.
 - **Render Coalescing** - Batch multiple state updates that land in the same tick into a single render pass automatically, rather than rendering once per action.
