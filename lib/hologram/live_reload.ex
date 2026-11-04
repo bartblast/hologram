@@ -142,8 +142,7 @@ defmodule Hologram.LiveReload do
   end
 
   def handle_call({:next_batch, remaining, links}, _from, state) do
-    open_pages = prune_open_pages(state.open_pages)
-    new_state = %{state | open_pages: open_pages, pending: remaining}
+    new_state = %{prune_tabs(state) | pending: remaining}
 
     # A save that arrived during the pass ends it here: its compile takes up what this one leaves
     # pending, with the pages its own edit reaches.
@@ -151,7 +150,9 @@ defmodule Hologram.LiveReload do
       {:reply, :stop, new_state}
     else
       open_page_modules =
-        MapSet.new(open_pages, fn {_instance_id, {page_module, _missing_since}} -> page_module end)
+        MapSet.new(new_state.open_pages, fn {_instance_id, {page_module, _missing_since}} ->
+          page_module
+        end)
 
       batch =
         plan_batch(
@@ -167,20 +168,37 @@ defmodule Hologram.LiveReload do
   end
 
   def handle_call(:open_pages, _from, state) do
-    open_pages = prune_open_pages(state.open_pages)
+    new_state = prune_tabs(state)
 
     reply =
-      Map.new(open_pages, fn {instance_id, {page_module, _missing_since}} ->
+      Map.new(new_state.open_pages, fn {instance_id, {page_module, _missing_since}} ->
         {instance_id, page_module}
       end)
 
-    {:reply, reply, %{state | open_pages: open_pages}}
+    {:reply, reply, new_state}
   end
 
   @impl GenServer
+  def handle_cast({:document_rendered, instance_id}, state) do
+    css_versions = Map.put(state.css_versions, instance_id, state.css_version)
+    {:noreply, %{state | css_versions: css_versions}}
+  end
+
   def handle_cast({:page_rendered, instance_id, page_module}, state) do
     open_pages = Map.put(state.open_pages, instance_id, {page_module, nil})
     {:noreply, %{state | open_pages: open_pages}}
+  end
+
+  # A tab whose document rendered before the last CSS change may hold the older CSS: the change can
+  # land while it loads or while its stream reconnects, when the tab has no stream to be told.
+  # Nothing is recorded once sent: the stream can close before it writes the message, and a tab told
+  # twice only swaps its stylesheets twice.
+  def handle_cast({:replay_css_change, pid, instance_id}, state) do
+    if Map.get(state.css_versions, instance_id, 0) < state.css_version do
+      send(pid, :css_changed)
+    end
+
+    {:noreply, state}
   end
 
   def handle_cast({:replay_outcome, pid}, state) do
@@ -231,12 +249,18 @@ defmodule Hologram.LiveReload do
   # bundles, not the app's assets.
   @impl GenServer
   def handle_info(:debounced_asset_change, state) do
-    case state.asset_change do
-      :css -> Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :css_changed)
-      :other -> broadcast_reload(:all)
-    end
+    new_state =
+      case state.asset_change do
+        :css ->
+          Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :css_changed)
+          %{state | css_version: state.css_version + 1}
 
-    {:noreply, %{state | asset_change: nil, asset_timer_ref: nil}}
+        :other ->
+          broadcast_reload(:all)
+          state
+      end
+
+    {:noreply, %{new_state | asset_change: nil, asset_timer_ref: nil}}
   end
 
   @impl GenServer
@@ -322,6 +346,12 @@ defmodule Hologram.LiveReload do
       # :other when anything else did too, nil with no timer running.
       asset_change: nil,
       asset_timer_ref: nil,
+      # Counts the CSS changes the tabs were told about, from 1, so that a tab rendered before this
+      # process started, whose CSS it can't vouch for, counts as older (see replay_css_change/2).
+      css_version: 1,
+      # The CSS version each tab's document rendered with, by instance id, kept for the tabs
+      # open_pages keeps.
+      css_versions: %{},
       endpoint: endpoint,
       # What each tab showed at its last render, by instance id, with when it was first seen without
       # an SSE connection (nil while it holds one).
@@ -340,6 +370,15 @@ defmodule Hologram.LiveReload do
       # The requests waiting for a page's bundle, by page module.
       waiters: %{}
     }
+  end
+
+  @doc """
+  Records that the tab with the given instance id rendered its document, and so loads the app's
+  CSS as it is now (see `replay_css_change/2`). Does nothing when live reload is not running.
+  """
+  @spec document_rendered(String.t()) :: :ok
+  def document_rendered(instance_id) do
+    GenServer.cast(__MODULE__, {:document_rendered, instance_id})
   end
 
   @doc """
@@ -429,6 +468,17 @@ defmodule Hologram.LiveReload do
       reload_runtime()
       :ok
     end
+  end
+
+  @doc """
+  Sends the given process `:css_changed`, the message a CSS change is broadcast as, when the app's
+  CSS changed since the document of the tab with the given instance id rendered. A tab live reload
+  knows nothing of, rendered before the process started or forgotten since, is sent it too, since
+  its CSS may be older. Sends nothing when live reload is not running.
+  """
+  @spec replay_css_change(pid, String.t()) :: :ok
+  def replay_css_change(pid, instance_id) do
+    GenServer.cast(__MODULE__, {:replay_css_change, pid, instance_id})
   end
 
   @doc """
@@ -532,6 +582,14 @@ defmodule Hologram.LiveReload do
 
   defp impl do
     Application.get_env(:hologram, :live_reload_impl, __MODULE__)
+  end
+
+  # Forgets the tabs closed since (see prune_open_pages/1): their pages and their documents.
+  defp prune_tabs(state) do
+    open_pages = prune_open_pages(state.open_pages)
+    css_versions = Map.take(state.css_versions, Map.keys(open_pages))
+
+    %{state | css_versions: css_versions, open_pages: open_pages}
   end
 
   # A tab seen without an SSE connection for longer than the grace period is closed, and its page is

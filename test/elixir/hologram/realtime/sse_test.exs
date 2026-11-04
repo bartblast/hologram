@@ -1781,6 +1781,19 @@ defmodule Hologram.Realtime.SSETest do
       assert_receive {:"$gen_cast", {:replay_outcome, ^pid}}
       assert live_reload_subscriber?(pid)
     end
+
+    test "asks live reload for a CSS change its tab missed once listening" do
+      # Stands in for live reload, which does not run in the test env.
+      Process.register(self(), LiveReload)
+
+      conn = Plug.Conn.fetch_query_params(conn_with_instance_id())
+      instance_id = conn.query_params["instance_id"]
+      pid = spawn(fn -> stream(conn) end)
+      on_exit(fn -> Process.exit(pid, :kill) end)
+
+      assert_receive {:"$gen_cast", {:replay_css_change, ^pid, ^instance_id}}
+      assert live_reload_subscriber?(pid)
+    end
   end
 
   describe "subscribe_to_announce_topics/1" do

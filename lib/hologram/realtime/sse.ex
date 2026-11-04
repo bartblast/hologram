@@ -752,11 +752,13 @@ defmodule Hologram.Realtime.SSE do
   # The outcome of the last live reload is asked for once subscribed, since a broadcast reaches
   # only the streams attached when it is sent: a tab reloaded while a live reload was still
   # building, or one reconnecting, would otherwise miss the compilation error, or keep one a
-  # later live reload compiled past.
+  # later live reload compiled past. A CSS change the tab missed is asked for too, since the tab
+  # would otherwise keep the CSS its document loaded.
   defp maybe_subscribe_to_live_reload(conn) do
     if Hologram.env() in [:dev, :test] do
       Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
       LiveReload.replay_outcome(self())
+      LiveReload.replay_css_change(self(), conn.query_params["instance_id"])
     end
 
     conn

@@ -2532,12 +2532,42 @@ defmodule Hologram.ControllerTest do
 
     test "outside dev, tells live reload nothing" do
       put_hologram_env("test")
-      start_live_reload()
+      pid = start_live_reload()
       :ok = SubscriptionRegistry.register_connection("test-instance-id", self())
 
       render_page_with_instance(Module14, "test-instance-id")
 
       assert LiveReload.open_pages() == %{}
+      assert :sys.get_state(pid).css_versions == %{}
+    end
+
+    test "in dev, tells live reload the tab rendered its document on a first page" do
+      put_hologram_env("dev")
+      pid = start_live_reload()
+
+      render_page_with_instance(Module14, "test-instance-id")
+
+      assert :sys.get_state(pid).css_versions == %{"test-instance-id" => 1}
+    end
+
+    test "in dev, does not tell live reload of a document on a later page" do
+      put_hologram_env("dev")
+      pid = start_live_reload()
+
+      :get
+      |> Plug.Test.conn("/")
+      |> Plug.Test.init_test_session(%{})
+      |> Plug.Conn.fetch_cookies()
+      |> handle_page_request(Module14, %{}, [],
+        initial_page?: false,
+        instance_id: "test-instance-id",
+        csrf_token: @masked_csrf_token
+      )
+
+      state = :sys.get_state(pid)
+
+      assert Map.keys(state.open_pages) == ["test-instance-id"]
+      assert state.css_versions == %{}
     end
 
     test "in dev, renders a page whose bundle a live reload is building once it is built" do
