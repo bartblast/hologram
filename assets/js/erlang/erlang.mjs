@@ -2447,7 +2447,8 @@ const Erlang = {
     }
 
     const areCodePointsValid = codePoints.data.every(
-      (item) => Type.isInteger(item) && Bitstring.validateCodePoint(item.value),
+      (item) =>
+        Type.isInteger(item) && Bitstring.isUnicodeScalarValue(item.value),
     );
 
     if (!areCodePointsValid) {
