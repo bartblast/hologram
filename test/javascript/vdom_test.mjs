@@ -158,6 +158,107 @@ describe("Vdom", () => {
         ["1a2b3c:0"],
       );
     });
+
+    it("skips a number a later sibling's key holds", () => {
+      const children = [
+        vnode("li", {attrs: {}, key: "K"}, []),
+        vnode("li", {attrs: {}, key: "K"}, []),
+        vnode("li", {attrs: {}, key: "K:1"}, []),
+      ];
+
+      Vdom.dedupeKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.key),
+        ["K", "K:2", "K:1"],
+      );
+    });
+
+    it("skips a number an earlier sibling's key holds", () => {
+      const children = [
+        vnode("li", {attrs: {}, key: "K"}, []),
+        vnode("li", {attrs: {}, key: "K:1"}, []),
+        vnode("li", {attrs: {}, key: "K"}, []),
+        vnode("li", {attrs: {}, key: "K"}, []),
+      ];
+
+      Vdom.dedupeKeys(children);
+
+      assert.deepStrictEqual(
+        children.map((child) => child.key),
+        ["K", "K:1", "K:2", "K:3"],
+      );
+    });
+
+    describe("duplicate key warning", () => {
+      let warnStub;
+
+      beforeEach(() => {
+        warnStub = sinon.stub(console, "warn");
+      });
+
+      afterEach(() => {
+        warnStub.restore();
+      });
+
+      const scoped = (key, scope) =>
+        vnode("li", {attrs: {}, key, hologramKeyScope: scope}, []);
+
+      it("a key repeated across two item scopes is logged", () => {
+        Vdom.dedupeKeys([
+          scoped("vdom_warn_1#i1", {level: "#i1", outer: ""}),
+          scoped("vdom_warn_1#i1", {level: "#i1", outer: ""}),
+        ]);
+
+        sinon.assert.calledOnceWithExactly(
+          warnStub,
+          'Hologram: sibling elements share the key "vdom_warn_1#i1", so they\'re matched by position. Give each loop item a unique :id or $key.',
+        );
+      });
+
+      it("is logged once per key", () => {
+        const render = () =>
+          Vdom.dedupeKeys([
+            scoped("vdom_warn_2#i1", {level: "#i1", outer: ""}),
+            scoped("vdom_warn_2#i1", {level: "#i1", outer: ""}),
+            scoped("vdom_warn_2#i1", {level: "#i1", outer: ""}),
+          ]);
+
+        render();
+        render();
+
+        sinon.assert.calledOnce(warnStub);
+      });
+
+      it("a key repeated within one item scope isn't logged", () => {
+        const scope = {level: "#i1", outer: ""};
+
+        Vdom.dedupeKeys([
+          scoped("vdom_warn_3#i1", scope),
+          scoped("vdom_warn_3#i1", scope),
+        ]);
+
+        sinon.assert.notCalled(warnStub);
+      });
+
+      it("a key repeated across the scopes of two loops isn't logged", () => {
+        Vdom.dedupeKeys([
+          scoped("vdom_warn_5#i1", {level: "#i1", outer: "", loop: {}}),
+          scoped("vdom_warn_5#i1", {level: "#i1", outer: "", loop: {}}),
+        ]);
+
+        sinon.assert.notCalled(warnStub);
+      });
+
+      it("a key repeated without scopes isn't logged", () => {
+        Vdom.dedupeKeys([
+          vnode("li", {attrs: {}, key: "vdom_warn_4"}, []),
+          vnode("li", {attrs: {}, key: "vdom_warn_4"}, []),
+        ]);
+
+        sinon.assert.notCalled(warnStub);
+      });
+    });
   });
 
   describe("finalizeChildren()", () => {

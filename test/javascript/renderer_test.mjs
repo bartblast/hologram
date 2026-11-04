@@ -11888,6 +11888,232 @@ describe("Renderer", () => {
     });
   });
 
+  describe("duplicate key warning", () => {
+    let warnStub;
+
+    beforeEach(() => {
+      warnStub = sinon.stub(console, "warn");
+    });
+
+    afterEach(() => {
+      warnStub.restore();
+    });
+
+    const module5 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module5",
+    );
+
+    const loopItem = (item, nodes) =>
+      Type.tuple([
+        Type.atom("loop_item"),
+        item === null ? Type.nil() : Type.tuple([item]),
+        Type.list(nodes),
+      ]);
+
+    const itemWithId = (id) => Type.map([[Type.atom("id"), Type.integer(id)]]);
+
+    const component = (props) =>
+      Type.tuple([
+        Type.atom("component"),
+        module5,
+        Type.list(props),
+        Type.list(),
+      ]);
+
+    const keyProp = (value) =>
+      Type.tuple([
+        Type.bitstring("$key"),
+        Type.keywordList([
+          [Type.atom("expression"), Type.tuple([Type.bitstring(value)])],
+        ]),
+      ]);
+
+    const renderList = (nodes) =>
+      Renderer.renderDom(
+        keyedElement("ul", 9, [Type.list(nodes)]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+    it("two items with the same id are logged", () => {
+      renderList([
+        loopItem(itemWithId(901), [keyedElement("li", 0)]),
+        loopItem(itemWithId(901), [keyedElement("li", 0)]),
+      ]);
+
+      sinon.assert.calledOnceWithExactly(
+        warnStub,
+        'Hologram: sibling elements share the key "1a2b3c:0#i901", so they\'re matched by position. Give each loop item a unique :id or $key.',
+      );
+    });
+
+    it("two components with the same $key in one item are logged", () => {
+      renderList([
+        loopItem(itemWithId(902), [
+          component([keyProp("renderer_warn")]),
+          component([keyProp("renderer_warn")]),
+        ]),
+      ]);
+
+      sinon.assert.calledOnce(warnStub);
+    });
+
+    it("one item placing the same component twice isn't logged", () => {
+      renderList([loopItem(itemWithId(903), [component([]), component([])])]);
+
+      sinon.assert.notCalled(warnStub);
+    });
+
+    it("items without keys aren't logged", () => {
+      renderList([
+        loopItem(null, [keyedElement("li", 0)]),
+        loopItem(null, [keyedElement("li", 0)]),
+      ]);
+
+      sinon.assert.notCalled(warnStub);
+    });
+
+    it("items without keys under a keyed item aren't logged", () => {
+      renderList([
+        loopItem(itemWithId(904), [
+          Type.list([
+            loopItem(null, [keyedElement("li", 0)]),
+            loopItem(null, [keyedElement("li", 0)]),
+          ]),
+        ]),
+      ]);
+
+      sinon.assert.notCalled(warnStub);
+    });
+
+    it("the same loop rendered twice into one list isn't logged", () => {
+      const loop = () =>
+        Type.list([
+          loopItem(itemWithId(906), [keyedElement("li", 0)]),
+          loopItem(itemWithId(907), [keyedElement("li", 0)]),
+        ]);
+
+      const result = Renderer.renderDom(
+        keyedElement("ul", 9, [loop(), loop()]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        result.children.map((child) => child.key),
+        [
+          "1a2b3c:0#i906",
+          "1a2b3c:0#i907",
+          "1a2b3c:0#i906:1",
+          "1a2b3c:0#i907:1",
+        ],
+      );
+
+      sinon.assert.notCalled(warnStub);
+    });
+
+    it("two items whose elements carry the same $key are logged", () => {
+      const explicitlyKeyedLi = () =>
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("li"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("$key"),
+              Type.keywordList([
+                [Type.atom("text"), Type.bitstring("1a2b3c:0")],
+                [
+                  Type.atom("expression"),
+                  Type.tuple([Type.bitstring("renderer_dup")]),
+                ],
+              ]),
+            ]),
+          ]),
+          Type.list(),
+        ]);
+
+      renderList([
+        loopItem(itemWithId(908), [explicitlyKeyedLi()]),
+        loopItem(itemWithId(909), [explicitlyKeyedLi()]),
+      ]);
+
+      sinon.assert.calledOnceWithExactly(
+        warnStub,
+        'Hologram: sibling elements share the key "1a2b3c:0#srenderer_dup", so they\'re matched by position. Give each loop item a unique :id or $key.',
+      );
+    });
+
+    it("two items without a source whose elements carry the same $key are logged", () => {
+      const explicitlyKeyedLi = () =>
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("li"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("$key"),
+              Type.keywordList([
+                [Type.atom("text"), Type.bitstring("1a2b3c:0")],
+                [
+                  Type.atom("expression"),
+                  Type.tuple([Type.bitstring("renderer_dup_no_source")]),
+                ],
+              ]),
+            ]),
+          ]),
+          Type.list(),
+        ]);
+
+      renderList([
+        loopItem(null, [explicitlyKeyedLi()]),
+        loopItem(null, [explicitlyKeyedLi()]),
+      ]);
+
+      sinon.assert.calledOnce(warnStub);
+    });
+
+    it("stateful components with their own cids aren't logged", () => {
+      initComponentRegistryEntry(Type.bitstring("renderer_c1"), module5);
+      initComponentRegistryEntry(Type.bitstring("renderer_c2"), module5);
+
+      const cidProp = (cid) =>
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring(cid)]]),
+        ]);
+
+      renderList([
+        loopItem(itemWithId(910), [component([cidProp("renderer_c1")])]),
+        loopItem(itemWithId(910), [component([cidProp("renderer_c2")])]),
+      ]);
+
+      sinon.assert.notCalled(warnStub);
+    });
+
+    it("repeated keys in a server tree aren't logged", () => {
+      const li = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("li"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$key"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("1a2b3c:0#i905")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderTree(Type.list([li, li]));
+
+      sinon.assert.notCalled(warnStub);
+    });
+  });
+
   describe("renderTree()", () => {
     const text = (str) => Type.tuple([Type.atom("text"), Type.bitstring(str)]);
 

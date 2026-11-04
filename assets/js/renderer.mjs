@@ -1962,7 +1962,7 @@ export default class Renderer {
   // A new scope rather than a changed one, since the scope a component was given is shared with
   // its siblings.
   static #putKeyScopeLevel(keyScope, level) {
-    return {level, outer: keyScope ? keyScope.outer : ""};
+    return {level, outer: keyScope ? keyScope.outer : "", loop: keyScope?.loop};
   }
 
   // Based on raise_invalid_spread_value/1
@@ -2440,7 +2440,14 @@ export default class Renderer {
       // What the element loads names it better than where it sits, so a slot key only applies to
       // elements that load nothing.
       if (slotKey !== null) {
-        data.key = slotKey;
+        data.key = slotKey.key;
+
+        // An element keyed by its item's identity carries the item's key scope, which tells two
+        // items of one loop that claim the same identity apart from one item rendering a place
+        // twice, or one loop rendered twice - see Vdom.dedupeKeys.
+        if (slotKey.isItemKeyed) {
+          data.hologramKeyScope = keyScope;
+        }
       }
     }
 
@@ -2542,7 +2549,12 @@ export default class Renderer {
   // there carry the item's key on top of the place they hold in the template. Its scope starts
   // afresh even when the item has no key, so an enclosing item's part stays an outer part.
   //
-  // WARNING: must match render_tree/3's loop item clause on the server.
+  // The loop is the run of items one evaluation of a for block produced, shared by its items' scopes
+  // (and by the scopes components in them override), so that Vdom.dedupeKeys tells two items of one
+  // loop claiming the same identity apart from the same loop rendered twice into one list. The
+  // server has no such check, so it keeps no loop.
+  //
+  // WARNING: the key parts must match render_tree/3's loop item clause on the server.
   static #renderLoopItem(
     dom,
     context,
@@ -2552,10 +2564,12 @@ export default class Renderer {
     parentModule,
     slotsParentModule,
     keyScope,
+    loop = {},
   ) {
     const itemKeyScope = {
       level: $.#itemKeyPart(dom.data[1]),
       outer: $.#keyScopeParts(keyScope),
+      loop,
     };
 
     return Renderer.renderDom(
@@ -2589,21 +2603,36 @@ export default class Renderer {
     slotsParentModule,
     keyScope,
   ) {
+    // The loop items of one list are one evaluation of a for block - see #renderLoopItem.
+    const loop = {};
+
     return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
         // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
         .filter((node) => !Type.isNil(node))
         .map((node) =>
-          Renderer.renderDom(
-            node,
-            context,
-            slots,
-            defaultTarget,
-            parentTagName,
-            parentModule,
-            slotsParentModule,
-            keyScope,
-          ),
+          Type.isRecordTuple(node, "loop_item", 3)
+            ? Renderer.#renderLoopItem(
+                node,
+                context,
+                slots,
+                defaultTarget,
+                parentTagName,
+                parentModule,
+                slotsParentModule,
+                keyScope,
+                loop,
+              )
+            : Renderer.renderDom(
+                node,
+                context,
+                slots,
+                defaultTarget,
+                parentTagName,
+                parentModule,
+                slotsParentModule,
+                keyScope,
+              ),
         )
         .flat(),
     );
@@ -2719,7 +2748,11 @@ export default class Renderer {
   // render_tree_attribute/2 composes it on the server. A server tree carries the composed key as
   // the attribute's text and renders without a key scope, so it reads back unchanged.
   //
-  // WARNING: must match render_tree_attribute/2's $key clause on the server.
+  // Returns {key, isItemKeyed}, where isItemKeyed says the element is keyed by the identity of the
+  // item whose top level it belongs to - its own $key, the item's :id, or a component's $key or cid
+  // - rather than only by its place and the parts of enclosing items.
+  //
+  // WARNING: the key must match render_tree_attribute/2's $key clause on the server.
   static #renderSlotKey(attrsDom, keyScope) {
     for (let index = attrsDom.data.length - 1; index >= 0; index -= 1) {
       const attrDom = attrsDom.data[index];
@@ -2735,10 +2768,12 @@ export default class Renderer {
           valueDom.data.length === 1 &&
           Type.isRecordTuple(valueDom.data[0], "text", 2)
         ) {
-          return (
-            Bitstring.toText(valueDom.data[0].data[1]) +
-            $.#keyScopeParts(keyScope)
-          );
+          return {
+            key:
+              Bitstring.toText(valueDom.data[0].data[1]) +
+              $.#keyScopeParts(keyScope),
+            isItemKeyed: Boolean(keyScope) && keyScope.level !== null,
+          };
         }
 
         // The template author's own $key, which the compiler puts behind the key of the element's
@@ -2749,14 +2784,16 @@ export default class Renderer {
           Type.isRecordTuple(valueDom.data[0], "text", 2) &&
           Type.isRecordTuple(valueDom.data[1], "expression", 2)
         ) {
-          return (
-            Bitstring.toText(valueDom.data[0].data[1]) +
-            $.#explicitKeyPart(valueDom.data[1].data[1].data[0]) +
-            $.#outerKeyParts(keyScope)
-          );
+          return {
+            key:
+              Bitstring.toText(valueDom.data[0].data[1]) +
+              $.#explicitKeyPart(valueDom.data[1].data[1].data[0]) +
+              $.#outerKeyParts(keyScope),
+            isItemKeyed: Boolean(keyScope),
+          };
         }
 
-        return $.#valueDomToText(valueDom);
+        return {key: $.#valueDomToText(valueDom), isItemKeyed: false};
       }
     }
 
