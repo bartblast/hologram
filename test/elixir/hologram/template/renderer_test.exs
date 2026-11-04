@@ -61,6 +61,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module65
   alias Hologram.Test.Fixtures.Template.Renderer.Module66
   alias Hologram.Test.Fixtures.Template.Renderer.Module67
+  alias Hologram.Test.Fixtures.Template.Renderer.Module68
   alias Hologram.Test.Fixtures.Template.Renderer.Module69
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module70
@@ -3898,6 +3899,188 @@ defmodule Hologram.Template.RendererTest do
                     }
                   }
                 }}
+    end
+  end
+
+  describe "render_tree/3, loop item keys" do
+    test "an item with an integer id adds it to the key of its element" do
+      node = {:loop_item, {%{id: 1}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i1"]}], []}], %{}, @server}
+    end
+
+    test "an item with a string id" do
+      node = {:loop_item, {%{id: "abc"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#sabc"]}], []}], %{}, @server}
+    end
+
+    test "an item with an atom id" do
+      node = {:loop_item, {%{id: :abc}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#aabc"]}], []}], %{}, @server}
+    end
+
+    test "an integer id and a string id with the same text give different keys" do
+      li = {:element, "li", [{"$key", [text: "k:0"]}], []}
+
+      assert render_tree({:loop_item, {%{id: 1}}, [li]}, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i1"]}], []}], %{}, @server}
+
+      assert render_tree({:loop_item, {%{id: "1"}}, [li]}, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#s1"]}], []}], %{}, @server}
+    end
+
+    test "a struct's id comes behind its module" do
+      item = %{__struct__: MyApp.Comment, id: 1}
+      node = {:loop_item, {item}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#mElixir.MyApp.Comment#i1"]}], []}], %{},
+                @server}
+    end
+
+    test "the characters keys are delimited by are escaped" do
+      node =
+        {:loop_item, {%{id: "a#b:c\\d"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#sa\\#b\\:c\\\\d"]}], []}], %{}, @server}
+    end
+
+    test "an atom id is escaped" do
+      node = {:loop_item, {%{id: :"a#b:c"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#aa\\#b\\:c"]}], []}], %{}, @server}
+    end
+
+    test "a struct's module is escaped" do
+      item = %{__struct__: :"Elixir.A#B", id: 1}
+      node = {:loop_item, {item}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#mElixir.A\\#B#i1"]}], []}], %{}, @server}
+    end
+
+    test "an item whose id can't be a key keeps the plain key" do
+      li = {:element, "li", [{"$key", [text: "k:0"]}], []}
+
+      for item <- [
+            %{id: nil},
+            %{id: true},
+            %{id: false},
+            %{id: 1.5},
+            %{id: <<255>>},
+            %{id: [1]},
+            %{name: "no id"},
+            5,
+            [id: 1]
+          ] do
+        assert render_tree({:loop_item, {item}, [li]}, @env, @server) ==
+                 {[{:element, "li", [{"$key", [text: "k:0"]}], []}], %{}, @server}
+      end
+    end
+
+    test "an item without a source keeps the plain key" do
+      node = {:loop_item, nil, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0"]}], []}], %{}, @server}
+    end
+
+    test "an element's children keep their plain keys" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:element, "li", [{"$key", [text: "k:0"]}],
+            [{:element, "span", [{"$key", [text: "k:1"]}], []}]}
+         ]}
+
+      assert render_tree(node, @env, @server) ==
+               {[
+                  {:element, "li", [{"$key", [text: "k:0#i1"]}],
+                   [{:element, "span", [{"$key", [text: "k:1"]}], []}]}
+                ], %{}, @server}
+    end
+
+    test "a comment's children keep their plain keys" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:public_comment, [{:element, "div", [{"$key", [text: "k:0"]}], []}]}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:public_comment, [{:element, "div", [{"$key", [text: "k:0"]}], []}]}], %{},
+                @server}
+    end
+
+    test "a loop directly in an item's body adds the inner item's part, then the outer one's" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:loop_item, {%{id: 7}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i7#i1"]}], []}], %{}, @server}
+    end
+
+    test "an outer item's part still follows an inner item that has no key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:loop_item, nil, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i1"]}], []}], %{}, @server}
+    end
+
+    test "a loop inside an element of an item's body starts without the outer item's part" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:element, "ul", [{"$key", [text: "k:0"]}],
+            [{:loop_item, {%{id: 7}}, [{:element, "li", [{"$key", [text: "k:1"]}], []}]}]}
+         ]}
+
+      assert render_tree(node, @env, @server) ==
+               {[
+                  {:element, "ul", [{"$key", [text: "k:0#i1"]}],
+                   [{:element, "li", [{"$key", [text: "k:1#i7"]}], []}]}
+                ], %{}, @server}
+    end
+
+    test "the nodes a stateless component renders take the item's key" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node = {:loop_item, {%{id: 1}}, [{:component, Module1, [], []}]}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#i1"
+    end
+
+    test "the nodes a slot renders take the item's key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:component, Module68, [], [{:element, "li", [{"$key", [text: "k:0"]}], []}]}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i1"]}], []}], %{}, @server}
+    end
+
+    test "a slot inside a loop item of forwarded slot content is expanded" do
+      env = %{
+        @env
+        | slots: [default: [{:element, "li", [{"$key", [text: "k:0"]}], []}]]
+      }
+
+      node = {:component, Module68, [], [{:loop_item, {%{id: 1}}, [{:element, "slot", [], []}]}]}
+
+      assert render_tree(node, env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i1"]}], []}], %{}, @server}
     end
   end
 

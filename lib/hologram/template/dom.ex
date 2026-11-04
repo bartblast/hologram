@@ -24,6 +24,7 @@ defmodule Hologram.Template.DOM do
           | {:dynamic_tag, {any}, list(attribute), t}
           | {:element, String.t(), list(attribute), t}
           | {:expression, {any}}
+          | {:loop_item, {any} | nil, t}
           | {:page, module, list(attribute), []}
           | {:public_comment, t}
           | {:text, String.t()}

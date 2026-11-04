@@ -128,7 +128,12 @@ defmodule Hologram.Template.Renderer do
   defmodule Env do
     @moduledoc false
 
+    # key_scope is nil wherever no loop item's key reaches: outside loop items, and under an element
+    # or a comment inside one. Where one does, level is the item's own key part (nil when the item
+    # has no key) and outer holds the parts of the enclosing loop items whose iteration this node
+    # also belongs to the top level of.
     defstruct context: %{},
+              key_scope: nil,
               parent_module: nil,
               slots: [],
               slots_parent_module: nil,
@@ -136,6 +141,7 @@ defmodule Hologram.Template.Renderer do
 
     @type t :: %__MODULE__{
             context: %{(atom | {any, atom}) => any},
+            key_scope: %{level: String.t() | nil, outer: String.t()} | nil,
             parent_module: module | nil,
             slots: keyword(DOM.t()),
             slots_parent_module: module | nil,
@@ -460,7 +466,8 @@ defmodule Hologram.Template.Renderer do
         expanded_children_dom,
         env.context,
         server_struct,
-        env.parent_module
+        env.parent_module,
+        env.key_scope
       )
     else
       render_template(
@@ -469,7 +476,8 @@ defmodule Hologram.Template.Renderer do
         expanded_children_dom,
         env.context,
         server_struct,
-        env.parent_module
+        env.parent_module,
+        env.key_scope
       )
     end
   end
@@ -528,10 +536,16 @@ defmodule Hologram.Template.Renderer do
   # Children of a void element are rendered even though no projection shows them, so that whatever
   # side effects the render has (component inits, server struct mutations) do not depend on the
   # tag they happen to sit in.
+  #
+  # An element is one node of whatever children list it sits in, so a loop item's key reaches the
+  # element and stops there: its children make a list of their own.
+  #
+  # WARNING: must match the client renderer's #renderElement, which clears the key scope for the
+  # children the same way.
   def render_tree({:element, tag_name, attrs_dom, children_dom}, %Env{} = env, server_struct) do
-    attributes = render_tree_attributes(attrs_dom)
+    attributes = render_tree_attributes(attrs_dom, env.key_scope)
 
-    children_env = %Env{env | tag_name: tag_name}
+    children_env = %Env{env | key_scope: nil, tag_name: tag_name}
 
     {children, component_registry, mutated_server_struct} =
       render_tree(children_dom, children_env, server_struct)
@@ -589,10 +603,23 @@ defmodule Hologram.Template.Renderer do
     {{:text, to_string(value)}, %{}, server_struct}
   end
 
+  # A loop's iteration renders into the children list the loop sits in, so the nodes it places
+  # there carry the item's key on top of the place they hold in the template. Its scope starts
+  # afresh even when the item has no key, so an enclosing item's part stays an outer part.
+  #
+  # WARNING: must match the client renderer's loop_item case (renderer.mjs).
+  def render_tree({:loop_item, source, nodes}, %Env{} = env, server_struct) do
+    key_scope = %{level: item_key_part(source), outer: key_scope_parts(env.key_scope)}
+
+    render_tree(nodes, %Env{env | key_scope: key_scope}, server_struct)
+  end
+
   def render_tree({:public_comment, children_dom}, %Env{} = env, server_struct) do
     {children, component_registry, mutated_server_struct} =
-      render_tree(children_dom, env, server_struct)
+      render_tree(children_dom, %Env{env | key_scope: nil}, server_struct)
 
+    # WARNING: the key scope is cleared as the client renderer's #renderPublicComment clears it.
+    #
     # A comment keeps the tag name of the element it sits in, so the env can't tell trusted HTML
     # inside one apart from trusted HTML next to it - the rendered children can.
     if contains_trusted_html?(children) do
@@ -819,6 +846,16 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
+  # Backslash-escapes the characters key parts are delimited by. The slot key holds no "#", its hash
+  # being base 36, so with values escaped every unescaped "#" after it starts a part and every
+  # unescaped ":" is a suffix Vdom.dedupeKeys adds on the client. A value can therefore never pose
+  # as another part or as a repeat's number.
+  #
+  # WARNING: must match the client renderer's #escapeKeyText (renderer.mjs).
+  defp escape_key_text(text) do
+    String.replace(text, ["\\", "#", ":"], &("\\" <> &1))
+  end
+
   defp evaluate_prop_value({name, [expression: {value}]}) do
     {name, value}
   end
@@ -904,6 +941,10 @@ defmodule Hologram.Template.Renderer do
 
   defp expand_slots({:element, tag_name, attrs_dom, children_dom}, slots) do
     {:element, tag_name, attrs_dom, expand_slots(children_dom, slots)}
+  end
+
+  defp expand_slots({:loop_item, source, nodes}, slots) do
+    {:loop_item, source, expand_slots(nodes, slots)}
   end
 
   defp expand_slots(node, _slots), do: node
@@ -1029,6 +1070,44 @@ defmodule Hologram.Template.Renderer do
   defp invalid_dynamic_tag_value_message(value) do
     "dynamic tag expression must evaluate to a component module or an HTML tag name string, got: #{inspect(value)}"
   end
+
+  # The key part of a loop item: its :id, behind the struct's module for a struct, so that items of
+  # two struct types sharing an id stay apart. An item whose :id can't be a key gets none and falls
+  # back to its position, since nobody asked for that key.
+  #
+  # WARNING: must match the client renderer's #itemKeyPart (renderer.mjs).
+  defp item_key_part({%{id: id} = item}) do
+    case key_body(id) do
+      nil -> nil
+      body -> struct_key_part(item) <> "#" <> body
+    end
+  end
+
+  defp item_key_part(_source), do: nil
+
+  # A key value as text, tagged by its type so that 1, "1" and :"1" stay apart, or nil for a value
+  # that can't be a key. nil, true and false are refused with the other non-identifying values.
+  #
+  # WARNING: must match the client renderer's #keyBody (renderer.mjs).
+  defp key_body(value) when is_integer(value), do: "i" <> Integer.to_string(value)
+
+  defp key_body(value) when is_binary(value) do
+    if String.valid?(value), do: "s" <> escape_key_text(value)
+  end
+
+  defp key_body(value) when is_atom(value) and value not in [nil, true, false] do
+    "a" <> escape_key_text(Atom.to_string(value))
+  end
+
+  defp key_body(_value), do: nil
+
+  # The key parts a node in the given scope carries after its slot key: its item's own part, then
+  # those of the enclosing items it also belongs to the top level of.
+  #
+  # WARNING: must match the client renderer's #keyScopeParts (renderer.mjs).
+  defp key_scope_parts(nil), do: ""
+
+  defp key_scope_parts(%{level: level, outer: outer}), do: (level || "") <> outer
 
   # An initial page puts the nonce in the context when it is given one, and nothing otherwise.
   defp maybe_put_csp_nonce_context(page_component_struct, opts, true) do
@@ -1257,7 +1336,8 @@ defmodule Hologram.Template.Renderer do
          children_dom,
          context,
          server_struct,
-         parent_module
+         parent_module,
+         key_scope
        ) do
     server_struct = %{server_struct | cid: props.cid}
     {component_struct, mutated_server_struct} = init_component(module, props, server_struct)
@@ -1272,7 +1352,8 @@ defmodule Hologram.Template.Renderer do
         children_dom,
         merged_context,
         mutated_server_struct,
-        parent_module
+        parent_module,
+        key_scope
       )
 
     component_registry =
@@ -1283,9 +1364,23 @@ defmodule Hologram.Template.Renderer do
 
   # parent_module is the module whose template holds this usage - it owns the slot content passed in,
   # while the template about to be rendered owns everything written inside it.
-  defp render_template(module, vars, children_dom, context, server_struct, parent_module) do
+  #
+  # A component has no node of its own: the nodes its template renders are what sits in the
+  # children list the component is placed in, so they take the key scope the component was given.
+  #
+  # WARNING: must match the client renderer's #renderTemplate, which passes the key scope on too.
+  defp render_template(
+         module,
+         vars,
+         children_dom,
+         context,
+         server_struct,
+         parent_module,
+         key_scope
+       ) do
     env = %Env{
       context: context,
+      key_scope: key_scope,
       parent_module: module,
       slots: [default: children_dom],
       slots_parent_module: parent_module
@@ -1336,15 +1431,26 @@ defmodule Hologram.Template.Renderer do
   # WARNING: must match the client renderer's #renderAttribute normalization: an empty value list
   # is a boolean attribute, a nil or false expression value removes the attribute, and everything
   # else collapses to one unescaped string.
-  defp render_tree_attribute(attr_dom)
+  #
+  # The key the compiler gives an element for its place in the template is the only key an element
+  # outside a loop item has. Inside one, the item's key parts follow it, so the tree carries the
+  # key the client diffs by, whole. That one is not collapsed like other values.
+  #
+  # WARNING: the $key clause must match the client renderer's #renderSlotKey, which composes the
+  # key from the scope the same way.
+  defp render_tree_attribute(attr_dom, key_scope)
 
-  defp render_tree_attribute({name, []}), do: {name, []}
+  defp render_tree_attribute({"$key", [text: slot_key]}, key_scope) do
+    {"$key", [text: slot_key <> key_scope_parts(key_scope)]}
+  end
 
-  defp render_tree_attribute({_name, [expression: {nil}]}), do: nil
+  defp render_tree_attribute({name, []}, _key_scope), do: {name, []}
 
-  defp render_tree_attribute({_name, [expression: {false}]}), do: nil
+  defp render_tree_attribute({_name, [expression: {nil}]}, _key_scope), do: nil
 
-  defp render_tree_attribute({name, value_dom}) do
+  defp render_tree_attribute({_name, [expression: {false}]}, _key_scope), do: nil
+
+  defp render_tree_attribute({name, value_dom}, _key_scope) do
     {name, [text: value_dom_to_text(value_dom)]}
   end
 
@@ -1352,11 +1458,11 @@ defmodule Hologram.Template.Renderer do
   # cannot carry, and the interim page a navigation patches in is display-only until hydration
   # attaches real listeners. The `$key` attribute travels, since it is what carries element
   # identity into the client's diff. `$focused` travels as the `autofocus` attribute it renders as.
-  defp render_tree_attributes(attrs_dom)
+  defp render_tree_attributes(attrs_dom, key_scope)
 
-  defp render_tree_attributes([]), do: []
+  defp render_tree_attributes([], _key_scope), do: []
 
-  defp render_tree_attributes(attrs_dom) do
+  defp render_tree_attributes(attrs_dom, key_scope) do
     attrs_dom
     |> expand_attribute_spreads()
     |> apply_focused_attribute()
@@ -1364,7 +1470,7 @@ defmodule Hologram.Template.Renderer do
       name = elem(attr_dom, 0)
       String.starts_with?(name, "$") and name != "$key"
     end)
-    |> Enum.map(&render_tree_attribute/1)
+    |> Enum.map(&render_tree_attribute(&1, key_scope))
     |> Enum.reject(&is_nil/1)
   end
 
@@ -1380,6 +1486,12 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp spread_entries(value), do: raise_invalid_spread_value(value)
+
+  defp struct_key_part(%{__struct__: module}) when is_atom(module) do
+    "#m" <> escape_key_text(Atom.to_string(module))
+  end
+
+  defp struct_key_part(_map), do: ""
 
   # Runs last in the props pipeline, so the map it sees is exactly what the component's template
   # will see - defaults filled and context injected. The compiler already rejects a required prop
