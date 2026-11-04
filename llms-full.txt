@@ -735,7 +735,7 @@ Take a list of comments, each with a reply box that isn't bound to state:
 
 Say a user is typing a reply to the second comment when the first one is deleted. If Hologram matched elements by their position, it would update the first `<li>` to show what was the second comment and remove the last `<li>`. The half-written reply would stay in the second `<li>`, which now shows the third comment, so it would end up under the wrong comment.
 
-To avoid that, Hologram gives each item a key and matches elements by key instead of position. An item that is a map or struct with an `:id`, like each comment above, is keyed by its `:id` automatically, so the example works as written and the reply stays with its comment. Two structs of different types with the same id get different keys.
+To avoid that, Hologram gives each item a key and matches elements by key instead of position. An item that is a map or struct with an `:id`, like each comment above, is keyed by its `:id` automatically, so the example works as written and the reply stays with its comment. Two structs of different types with the same id get different keys. The `:id` must be a string, an integer, or an atom other than `nil`, `true` and `false`. An item with any other `:id`, such as a float or a tuple, gets no automatic key.
 
 For items without an `:id`, such as strings, add a `$key` to the tag, with a value that identifies the item:
 
