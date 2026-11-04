@@ -15,6 +15,8 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module114 do
   end
 
   defp channels_query do
-    include(Entity26, messages, &filter(&1, channel.name != "nothing"))
+    Entity26
+    |> filter(any(message <- messages, message.channel.name != "nothing"))
+    |> include(messages)
   end
 end

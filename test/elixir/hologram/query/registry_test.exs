@@ -118,7 +118,7 @@ defmodule Hologram.Query.RegistryTest do
     test "walks includes to any depth" do
       term =
         Module5
-        |> include(a, &include(&1, b))
+        |> include(a.b)
         |> Stage.normalize()
 
       assert entity_types(term) == MapSet.new([Module2, Module3, Module5])

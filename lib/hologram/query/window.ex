@@ -15,8 +15,7 @@ defmodule Hologram.Query.Window do
 
   @doc """
   Returns the window term of the given query term - the same query with the predicates that
-  cannot say anything about the download taken out, and an included set the client reads through
-  ids downloaded whole.
+  cannot say anything about the download taken out.
 
   A predicate is dropped when a PLACEHOLDER stands on either side of it - as the value, whatever the
   operator, or as the attribute being compared. Both are unknown when the window is derived, so
@@ -31,14 +30,13 @@ defmodule Hologram.Query.Window do
   one reading a PATH, by the same rule, unless a missing related row satisfies it (see below):
   `channel.archived == false` keeps the messages of unarchived channels.
 
-  An included set the client reads through the ids filed for its row - a to-many, or an inverse of
-  one - keeps none of its predicates: it is downloaded whole, every related row the read rules
-  admit. A row on the wire states the whole set it names, and every window holding the row shares
-  that one set in the client, so a narrowed set would stand for the complete one another window
-  reads, and an edge the narrowing leaves out would be reported gone. The narrowing still applies
-  where the query is answered, so the rows its paths read are embedded as for any filter. A set
-  read off its rows' own reference field - an inverse of a to-one - and a to-one are narrowed as
-  any query is.
+  An include is whole - a narrowed set is a derived field. A set the window embeds for a quantifier
+  or a derived field is downloaded whole too when the client reads it through the ids filed for its
+  row - a to-many, or an inverse of one - every related row the read rules admit. A row on the wire
+  states the whole set it names, and every window holding the row shares that one set in the
+  client, so a narrowed set would stand for the complete one another window reads, and an edge the
+  narrowing leaves out would be reported gone. A set read off its rows' own reference field - an
+  inverse of a to-one - is narrowed as any query is.
 
   A PATH reads rows the query does not return, and the client answers the query over what it
   holds, so every path the filter names - kept or dropped, on either side of a comparison, inside
@@ -98,14 +96,6 @@ defmodule Hologram.Query.Window do
   window - but a window IS a query term and is run as one, so it keeps a term's shape and states
   that it asks for every row, in no order.
 
-  KNOWN CONSEQUENCE, recorded rather than worked around: a filtered include of a to-many or of an
-  inverse of one downloads the whole set, until narrowed includes give way to derived fields. A
-  render answers the authored term (see `embed/2`), so a first paint can carry a narrowed set for a
-  row the client does not hold yet, until the window's fill replaces it with the whole one. The
-  same holds for a quantifier over a set the authored term also includes narrowed: the render
-  carries the authored set, so the browser's first answer of the quantifier can differ from the
-  server's until the fill lands.
-
   KNOWN CONSEQUENCE, recorded rather than worked around: a query whose only bound is a placeholder
   downloads everything the policy admits. A thirty-day message window written as
   `created_at > ^cutoff` downloads the channel's whole history, because a cutoff computed
@@ -124,7 +114,7 @@ defmodule Hologram.Query.Window do
       term.include
       |> Enum.reject(fn {name, _sub_term} -> Derived.declared?(term.entity, name) end)
       |> Map.new(fn {name, sub_term} ->
-        {name, downloaded(derive(sub_term, permission_checking?), term.entity, name)}
+        {name, derive(sub_term, permission_checking?)}
       end)
       |> put_embedded_includes(term, permission_checking?)
 
@@ -138,10 +128,9 @@ defmodule Hologram.Query.Window do
   checking permissions on the client, the chains the rules of the types it returns and includes
   read are embedded beside them, the way `derive/2` embeds them into the window.
 
-  The term's own clauses stay as written, a narrowed include's filter included - it answers the
-  query as authored, where the window downloads such a set whole. The sets its quantifiers read are
-  embedded the way the window embeds them, narrowed alike, beside the authored includes - an
-  authored include of the same set is left as authored.
+  The term's own clauses stay as written - it answers the query as authored. The sets its
+  quantifiers read are embedded the way the window embeds them, narrowed alike, beside the
+  authored includes - an authored include of the same set, whole, is left as authored.
 
   A term with nothing to embed comes back unchanged.
   """
@@ -244,22 +233,9 @@ defmodule Hologram.Query.Window do
     derived_at?(entity_type, relationship_names, last_name)
   end
 
-  # A set the client reads through the ids filed for its row - a to-many, or an inverse of one - is
-  # downloaded whole: a row states the whole set it names, so a narrowed one would stand for the
-  # complete set every other window reads, and an edge the narrowing leaves out would be reported
-  # gone. Its window is derived first, so the rows its filter's paths read stay embedded - the
-  # client still applies the narrowing when it answers the query.
-  defp downloaded(derived_sub_term, entity_type, name) do
-    if read_through_ids?(entity_type, name) do
-      %{derived_sub_term | filter: []}
-    else
-      derived_sub_term
-    end
-  end
-
   # Narrowings of one set download what any of them needs: one disjunction of their clause lists,
   # each list once, flattened from a disjunction they already form. A whole set - nil, or an empty
-  # filter such as an authored include's with no clauses - needs everything.
+  # filter such as an authored include's - needs everything.
   defp joined_narrowing(narrowings) do
     if Enum.any?(narrowings, &(&1 in [nil, []])) do
       nil
@@ -323,7 +299,8 @@ defmodule Hologram.Query.Window do
   end
 
   # A render's authored includes as written, beside what it embeds - an authored include of an
-  # embedded relationship keeps its own clauses and gains what the embedded one includes.
+  # embedded relationship stays whole, in its declared order, and gains what the embedded one
+  # includes.
   defp merged_includes(authored_include, embedded_include) do
     Map.merge(embedded_include, authored_include, fn
       _name, _embedded_sub_term, nil ->
@@ -607,7 +584,7 @@ defmodule Hologram.Query.Window do
 
   # The set at the end of a chain, embedded with the given narrowing - nil for the whole set - and
   # the rows before it as they are, a set there keeping the narrowing it has (see linked_sets/3).
-  # Two narrowings of one set join with or and a whole one wins, an authored narrowing included - a
+  # Two narrowings of one set join with or and a whole one wins, an authored include among them - a
   # render embeds into a map of its own, which leaves its authored includes as written (see
   # embed/2).
   defp put_quantified_set(include, entity_type, [name], narrowing) do
@@ -721,16 +698,6 @@ defmodule Hologram.Query.Window do
             do: {mapped, set_narrowing(quantifier, inner, entity_type, mapped, prefixes)}
 
       sets ++ nested_sets
-    end
-  end
-
-  defp read_through_ids?(entity_type, name) do
-    case Entity.inverse_relationship(entity_type, name) do
-      nil ->
-        match?({_name, [_target], _opts}, List.keyfind(entity_type.__relationships__(), name, 0))
-
-      inverse ->
-        not inverse.reference?
     end
   end
 

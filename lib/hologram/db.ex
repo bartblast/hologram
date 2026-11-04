@@ -52,7 +52,6 @@ defmodule Hologram.DB do
           delete_relationship: 3,
           filter: 2,
           include: 2,
-          include: 3,
           increment: 3,
           one: 1,
           paginate: 2,

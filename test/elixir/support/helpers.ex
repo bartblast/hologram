@@ -19,6 +19,8 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.DB.Mapper
   alias Hologram.Entity
   alias Hologram.Entity.Derived
+  alias Hologram.Query
+  alias Hologram.Query.Stage
   alias Hologram.Realtime
   alias Hologram.Reflection
   alias Hologram.Server
@@ -211,6 +213,18 @@ defmodule Hologram.Test.Helpers do
     File.write!(package_json_digest_path, package_json_digest)
 
     Path.join(lib_assets_dir, "node_modules")
+  end
+
+  @doc """
+  Returns the given query with the given relationship included, its sub-term narrowed by the given
+  function - a sub-term built directly, as an executor may receive one, which an include written in
+  a query never builds.
+  """
+  @spec narrowed_include(module | Query.t(), atom, (Query.t() -> Query.t())) :: Query.t()
+  def narrowed_include(query, name, narrow) do
+    term = Stage.include(query, name)
+
+    %{term | include: Map.update!(term.include, name, narrow)}
   end
 
   @doc """

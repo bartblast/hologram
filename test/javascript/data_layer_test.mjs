@@ -576,7 +576,6 @@ describe("DataLayer", () => {
           "delete_relationship/3",
           "filter/2",
           "include/2",
-          "include/3",
           "increment/3",
           "normalize/1",
           "one/1",

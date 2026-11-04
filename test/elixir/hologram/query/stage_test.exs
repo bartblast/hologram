@@ -2210,7 +2210,7 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
-  describe "include/3" do
+  describe "include/2" do
     test "includes an inverse set" do
       query = include(Module26, :messages)
 
@@ -2238,10 +2238,13 @@ defmodule Hologram.Query.StageTest do
       assert query.include == %{messages: base_term(Module28)}
     end
 
-    test "accepts a sub-builder as a spec value" do
-      query = include(Module3, a: &filter(&1, a: true))
+    test "raises on a function as a spec value" do
+      expected_msg =
+        "invalid include spec entry {:a, &Function.identity/1} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end"
 
-      assert query.include == %{a: %{base_term(Module2) | filter: [{:a, :==, true}]}}
+      assert_error ArgumentError, expected_msg, fn ->
+        include(Module3, a: &Function.identity/1)
+      end
     end
 
     test "accumulates multiple includes" do
@@ -2270,12 +2273,7 @@ defmodule Hologram.Query.StageTest do
     end
 
     test "includes three levels deep" do
-      query =
-        include(Module5, :b, fn level_1 ->
-          include(level_1, :b, fn level_2 ->
-            include(level_2, :b)
-          end)
-        end)
+      query = include(Module5, b: [b: :b])
 
       assert query.include == %{
                b: %Query{
@@ -2303,35 +2301,11 @@ defmodule Hologram.Query.StageTest do
       assert query == %Query{entity: Module3, include: %{a: base_term(Module2)}}
     end
 
-    test "merges a second include that narrows a nested relationship" do
-      query =
-        Module5
-        |> include(:a)
-        |> include(a: [a: &filter(&1, a: true)])
-
-      expected_nested = %{base_term(Module2) | filter: [{:a, :==, true}]}
-
-      assert query.include == %{a: %{base_term(Module3) | include: %{a: expected_nested}}}
-    end
-
     test "merges includes repeated in one list spec" do
       query = include(Module5, a: :a, a: :b)
 
       assert query.include == %{
                a: %{base_term(Module3) | include: %{a: base_term(Module2), b: base_term(Module2)}}
-             }
-    end
-
-    test "merges includes whose nested branches differ in clauses" do
-      query =
-        Module5
-        |> include(a: [a: &filter(&1, a: true)])
-        |> include(a: :b)
-
-      expected_nested = %{base_term(Module2) | filter: [{:a, :==, true}]}
-
-      assert query.include == %{
-               a: %{base_term(Module3) | include: %{a: expected_nested, b: base_term(Module2)}}
              }
     end
 
@@ -2363,121 +2337,10 @@ defmodule Hologram.Query.StageTest do
              }
     end
 
-    test "nests includes through the sub-builder" do
-      query = include(Module5, :a, &include(&1, :a))
-
-      assert query.include == %{a: %{base_term(Module3) | include: %{a: base_term(Module2)}}}
-    end
-
     test "nests traversal from a keyword spec" do
       query = include(Module5, a: :a)
 
       assert query.include == %{a: %{base_term(Module3) | include: %{a: base_term(Module2)}}}
-    end
-
-    test "refines a to-many include with a sub-builder" do
-      query =
-        include(Module3, :a, fn related_query ->
-          related_query
-          |> filter(a: false)
-          |> sort(:c)
-        end)
-
-      expected_sub_term = %{
-        base_term(Module2)
-        | filter: [{:a, :==, false}],
-          sort: [{:c, :asc}]
-      }
-
-      assert query.include == %{a: expected_sub_term}
-    end
-
-    test "raises on a non-function sub-builder" do
-      expected_msg =
-        "include sub-builder for relationship :a must be a one-argument function, got: 5"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, :a, wrap_term(5))
-      end
-    end
-
-    test "raises on a repeated include at the second level when one side has clauses" do
-      expected_msg = "relationship :a is already included"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        Module5
-        |> include(a: [a: &filter(&1, a: true)])
-        |> include(a: :a)
-      end
-    end
-
-    test "raises on a repeated include when the included one has clauses" do
-      expected_msg = "relationship :a is already included"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        Module3
-        |> include(:a, &filter(&1, a: true))
-        |> include(:a)
-      end
-    end
-
-    test "raises on a repeated include when the new one has clauses" do
-      expected_msg = "relationship :a is already included"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        Module3
-        |> include(:a)
-        |> include(:a, &filter(&1, a: true))
-      end
-    end
-
-    test "raises on a separate sub-builder with a shape spec" do
-      expected_msg =
-        "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, wrap_term([:a]), fn related_query -> related_query end)
-      end
-    end
-
-    test "raises on a sub-builder returning a different entity's term" do
-      expected_msg =
-        "include sub-builder for relationship :a must return a query term for Hologram.Test.Fixtures.Entity.Module2 - got a query term for Hologram.Test.Fixtures.Entity.Module1"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, :a, fn _related_query -> filter(Module1, []) end)
-      end
-    end
-
-    test "raises on a sub-builder returning a non-term" do
-      expected_msg =
-        "include sub-builder for relationship :a must return a query term for Hologram.Test.Fixtures.Entity.Module2, got: 123"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, :a, fn _related_query -> 123 end)
-      end
-    end
-
-    # The relationship declaration already says how many entities are embedded, so a sub-term
-    # marking a cardinality of its own would be saying something the shape cannot honour.
-    test "raises on a sub-term carrying a cardinality marker" do
-      expected_msg =
-        "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, :a, &count/1)
-      end
-    end
-
-    # The root's mark already reads the whole query on the server's authority, includes and all,
-    # so a sub-term marking one of its own would say nothing the read honours.
-    test "raises on a sub-term carrying a trust mark" do
-      expected_msg =
-        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, :a, &trust/1)
-      end
     end
 
     test "raises on an attribute name" do
@@ -2507,19 +2370,19 @@ defmodule Hologram.Query.StageTest do
 
     test "raises on an invalid include spec entry" do
       expected_msg =
-        "invalid include spec entry 123 - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair"
+        "invalid include spec entry 123 - use a relationship name or a {name, spec} pair"
 
       assert_error ArgumentError, expected_msg, fn ->
         include(Module3, [123])
       end
     end
 
-    test "raises on clauses for a single inverse" do
+    test "raises on a nil nested spec" do
       expected_msg =
-        "to-one relationship :topic takes no clauses - clauses apply to to-many includes"
+        "unknown relationship nil in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c"
 
       assert_error ArgumentError, expected_msg, fn ->
-        include(Module26, :topic, &filter(&1, summary: "x"))
+        include(Module5, a: nil)
       end
     end
 
@@ -2542,14 +2405,6 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
-    test "raises on a second include of an inverse when either carries clauses" do
-      assert_error ArgumentError, "relationship :messages is already included", fn ->
-        Module26
-        |> include(:messages)
-        |> include(:messages, &filter(&1, body: "x"))
-      end
-    end
-
     test "raises on an unknown relationship" do
       expected_msg =
         "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c"
@@ -2558,18 +2413,9 @@ defmodule Hologram.Query.StageTest do
         include(Module3, :x)
       end
     end
-
-    test "raises on clauses on a to-one include" do
-      expected_msg =
-        "to-one relationship :b takes no clauses - clauses apply to to-many includes"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, :b, &filter(&1, a: true))
-      end
-    end
   end
 
-  describe "include/3 - derived fields" do
+  describe "include/2 - derived fields" do
     test "includes a derived value" do
       query = include(Module32, :message_count)
 
@@ -2625,12 +2471,12 @@ defmodule Hologram.Query.StageTest do
       end
     end
 
-    test "raises on clauses on a derived set" do
+    test "raises on a nil nested spec under a derived value" do
       expected_msg =
-        "derived field :recent_messages takes no clauses - its definition states its rows, so only includes nest under it"
+        ":message_count is a :integer derived field in Hologram.Test.Fixtures.Entity.Module32 - nothing is included under it"
 
       assert_error ArgumentError, expected_msg, fn ->
-        include(Module32, :recent_messages, &take(&1, 1))
+        include(Module32, message_count: nil)
       end
     end
   end
@@ -2890,15 +2736,6 @@ defmodule Hologram.Query.StageTest do
       assert query.include.messages.sort == [{:position, :asc}, {:id, :asc}]
     end
 
-    test "orders an included inverse set by the include's own order over the declared one" do
-      query =
-        Module26
-        |> include(:messages, &sort(&1, :body))
-        |> normalize()
-
-      assert query.include.messages.sort == [{:body, :asc}, {:id, :asc}]
-    end
-
     test "orders an included inverse set by a declared list, directions kept, then by id" do
       defmodule DeclaredListOrderFixture do
         use Hologram.Entity
@@ -2931,23 +2768,6 @@ defmodule Hologram.Query.StageTest do
         |> normalize()
 
       assert query.include.labels.sort == [{:name, :desc}, {:id, :asc}]
-    end
-
-    test "orders an included stored to-many by the include's own order over the declared one" do
-      defmodule DeclaredStoredOrderOverrideFixture do
-        use Hologram.Entity
-
-        alias Hologram.Test.Fixtures.Entity.Module29
-
-        relationship :labels, [Module29], sort: [name: :desc]
-      end
-
-      query =
-        DeclaredStoredOrderOverrideFixture
-        |> include(:labels, &sort(&1, :name))
-        |> normalize()
-
-      assert query.include.labels.sort == [{:name, :asc}, {:id, :asc}]
     end
 
     test "normalizes a term including an inverse the same way twice" do
@@ -3059,7 +2879,7 @@ defmodule Hologram.Query.StageTest do
     test "normalizes to-many sub-terms" do
       query =
         Module3
-        |> include(:a, &filter(&1, c: "x", a: true))
+        |> narrowed_include(:a, &filter(&1, c: "x", a: true))
         |> normalize()
 
       assert query.include.a.filter == [{:a, :==, true}, {:c, :==, "x"}]
@@ -3189,15 +3009,6 @@ defmodule Hologram.Query.StageTest do
       assert one(Module2) == %Query{cardinality: :one, entity: Module2}
     end
 
-    test "raises on a cardinality marker in an include sub-term" do
-      expected_msg =
-        "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, :b, &one/1)
-      end
-    end
-
     test "raises when cardinality is already marked" do
       expected_msg = "cardinality is already set to :one"
 
@@ -3312,7 +3123,7 @@ defmodule Hologram.Query.StageTest do
     end
 
     test "collects placeholders from include sub-terms" do
-      query = include(Module3, :a, &filter(&1, c: %Placeholder{name: :owner}))
+      query = narrowed_include(Module3, :a, &filter(&1, c: %Placeholder{name: :owner}))
 
       assert placeholder_names(query) == [:owner]
     end
@@ -4191,15 +4002,6 @@ defmodule Hologram.Query.StageTest do
 
     test "marks an entity type's query as trusted" do
       assert trust(Module2) == %Query{entity: Module2, trust: true}
-    end
-
-    test "raises on a trust mark in an include sub-term" do
-      expected_msg =
-        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
-
-      assert_error ArgumentError, expected_msg, fn ->
-        include(Module3, :b, &trust/1)
-      end
     end
 
     test "raises when the subject is neither an entity struct, an entity type nor a query term" do

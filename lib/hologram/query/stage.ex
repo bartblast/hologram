@@ -147,18 +147,15 @@ defmodule Hologram.Query.Stage do
   end
 
   @doc false
-  @spec include(module | Query.t(), atom | list, (Query.t() -> Query.t()) | nil) :: Query.t()
-  def include(query, spec, sub_builder \\ nil)
-
-  def include(query, name, sub_builder)
-      when is_atom(name) and (is_nil(sub_builder) or is_function(sub_builder, 1)) do
+  @spec include(module | Query.t(), atom | list) :: Query.t()
+  def include(query, name) when is_atom(name) do
     term = to_term(query)
-    sub_term = included_sub_term!(term.entity, name, sub_builder)
+    sub_term = included_sub_term!(term.entity, name)
 
-    %{term | include: put_included!(term.include, name, sub_term)}
+    %{term | include: put_included(term.include, name, sub_term)}
   end
 
-  def include(query, spec, nil) when is_list(spec) do
+  def include(query, spec) when is_list(spec) do
     if spec == [] do
       raise ArgumentError, message: "include spec must not be empty"
     end
@@ -168,19 +165,7 @@ defmodule Hologram.Query.Stage do
     Enum.reduce(spec, term, fn entry, acc -> include_spec_entry!(acc, entry) end)
   end
 
-  def include(_query, name, sub_builder) when is_atom(name) do
-    raise ArgumentError,
-      message:
-        "include sub-builder for relationship #{inspect(name)} must be a one-argument function, got: #{inspect(sub_builder)}"
-  end
-
-  def include(_query, spec, _sub_builder) when is_list(spec) do
-    raise ArgumentError,
-      message:
-        "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair"
-  end
-
-  def include(_query, spec, _sub_builder) do
+  def include(_query, spec) do
     raise ArgumentError,
       message: "include spec must be a relationship name or a shape list, got: #{inspect(spec)}"
   end
@@ -755,19 +740,24 @@ defmodule Hologram.Query.Stage do
     include(term, name)
   end
 
-  defp include_spec_entry!(term, {name, sub_builder})
-       when is_atom(name) and is_function(sub_builder) do
-    include(term, name, sub_builder)
+  # A function would narrow the set, which is what a derived field does - refused naming one.
+  defp include_spec_entry!(_term, {name, function} = entry)
+       when is_atom(name) and is_function(function) do
+    raise ArgumentError,
+      message:
+        "invalid include spec entry #{inspect(entry)} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end"
   end
 
-  defp include_spec_entry!(term, {name, sub_spec}) when is_atom(name) do
-    include(term, name, fn related_term -> include(related_term, sub_spec) end)
+  defp include_spec_entry!(term, {name, nested_spec}) when is_atom(name) do
+    sub_term = nested_sub_term!(term.entity, name, nested_spec)
+
+    %{term | include: put_included(term.include, name, sub_term)}
   end
 
   defp include_spec_entry!(_term, entry) do
     raise ArgumentError,
       message:
-        "invalid include spec entry #{inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair"
+        "invalid include spec entry #{inspect(entry)} - use a relationship name or a {name, spec} pair"
   end
 
   defp includable_definitions(entity_type) do
@@ -794,26 +784,11 @@ defmodule Hologram.Query.Stage do
   end
 
   # What an include of the given name holds: nil for a derived value, which has nothing under it,
-  # or the related type's term the sub-builder refines - a derived field's rows take nested includes
-  # only, since its definition states which rows it holds.
-  defp included_sub_term!(entity_type, name, sub_builder) do
+  # or the related type's whole term.
+  defp included_sub_term!(entity_type, name) do
     case validate_included_name!(name, entity_type) do
-      {type, :derived_value} ->
-        if sub_builder do
-          raise ArgumentError,
-            message:
-              "#{inspect(name)} is a #{inspect(type)} derived field in #{inspect(entity_type)} - nothing is included under it"
-        end
-
-        nil
-
-      {target, kind} ->
-        related_base_term = to_term(target)
-        sub_term = if sub_builder, do: sub_builder.(related_base_term), else: related_base_term
-
-        validate_sub_term!(sub_term, name, target, kind)
-
-        sub_term
+      {_type, :derived_value} -> nil
+      {target, _kind} -> to_term(target)
     end
   end
 
@@ -851,20 +826,14 @@ defmodule Hologram.Query.Stage do
 
   defp local_name?(name), do: is_atom(name) or path?(name)
 
-  # Two includes of one relationship are one include when neither narrows it: what each includes
-  # merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
-  # than the other, so a relationship included twice with clauses on either side is refused.
-  defp merged_sub_term!(nil, nil, _name), do: nil
+  # Two includes of one relationship are one include: what each includes merges, by the same rule
+  # all the way down.
+  defp merged_sub_term(nil, nil), do: nil
 
-  defp merged_sub_term!(included, sub_term, name) do
-    if sub_term_has_clauses?(included) or sub_term_has_clauses?(sub_term) do
-      raise ArgumentError,
-        message: "relationship #{inspect(name)} is already included"
-    end
-
+  defp merged_sub_term(included, sub_term) do
     merged_include =
       Enum.reduce(sub_term.include, included.include, fn {nested_name, nested_sub_term}, acc ->
-        put_included!(acc, nested_name, nested_sub_term)
+        put_included(acc, nested_name, nested_sub_term)
       end)
 
     %{included | include: merged_include}
@@ -905,6 +874,22 @@ defmodule Hologram.Query.Stage do
   end
 
   defp name_type!(scope, _name), do: hd(scope)
+
+  # What an include of the given name holds with what the nested spec names included under it - a
+  # derived value has nothing under it.
+  defp nested_sub_term!(entity_type, name, nested_spec) do
+    case validate_included_name!(name, entity_type) do
+      {type, :derived_value} ->
+        raise ArgumentError,
+          message:
+            "#{inspect(name)} is a #{inspect(type)} derived field in #{inspect(entity_type)} - nothing is included under it"
+
+      {target, _kind} ->
+        target
+        |> to_term()
+        |> include(nested_spec)
+    end
+  end
 
   defp normalize_membership_values(values) do
     Enum.map(values, fn
@@ -1269,9 +1254,9 @@ defmodule Hologram.Query.Stage do
     end
   end
 
-  defp put_included!(include, name, sub_term) do
+  defp put_included(include, name, sub_term) do
     case Map.fetch(include, name) do
-      {:ok, included} -> Map.put(include, name, merged_sub_term!(included, sub_term, name))
+      {:ok, included} -> Map.put(include, name, merged_sub_term(included, sub_term))
       :error -> Map.put(include, name, sub_term)
     end
   end
@@ -1585,11 +1570,6 @@ defmodule Hologram.Query.Stage do
     validate_source_shape!(hops, hops)
 
     {hd(scope), hops}
-  end
-
-  defp sub_term_has_clauses?(sub_term) do
-    sub_term.filter != [] or sub_term.sort != [] or sub_term.take != nil or
-      sub_term.skip != nil
   end
 
   # Where a name is declared: an attribute on the queried type, a path's last name on the type its
@@ -2209,48 +2189,6 @@ defmodule Hologram.Query.Stage do
     end
   end
 
-  defp validate_sub_term!(sub_term, name, target, kind) do
-    validate_sub_term_entity!(sub_term, name, target)
-
-    if sub_term.cardinality != :set do
-      raise ArgumentError,
-        message:
-          "include sub-terms take no cardinality marker - the relationship declaration governs cardinality"
-    end
-
-    if sub_term.trust do
-      raise ArgumentError,
-        message:
-          "include sub-terms take no trust mark - trust/1 goes on the query root and reads the whole query, includes and all, on the server's authority"
-    end
-
-    if kind == :to_one and sub_term_has_clauses?(sub_term) do
-      raise ArgumentError,
-        message:
-          "to-one relationship #{inspect(name)} takes no clauses - clauses apply to to-many includes"
-    end
-
-    if kind == :derived_rows and sub_term_has_clauses?(sub_term) do
-      raise ArgumentError,
-        message:
-          "derived field #{inspect(name)} takes no clauses - its definition states its rows, so only includes nest under it"
-    end
-  end
-
-  defp validate_sub_term_entity!(%Query{entity: target}, _name, target), do: :ok
-
-  defp validate_sub_term_entity!(%Query{entity: other_entity_type}, name, target) do
-    raise ArgumentError,
-      message:
-        "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)} - got a query term for #{inspect(other_entity_type)}"
-  end
-
-  defp validate_sub_term_entity!(sub_term, name, target) do
-    raise ArgumentError,
-      message:
-        "include sub-builder for relationship #{inspect(name)} must return a query term for #{inspect(target)}, got: #{inspect(sub_term)}"
-  end
-
   defp value_placeholder_names({:placeholder, name}), do: [name]
 
   defp value_placeholder_names(values) when is_list(values),
@@ -2258,10 +2196,9 @@ defmodule Hologram.Query.Stage do
 
   defp value_placeholder_names(_value), do: []
 
-  # A set is read in the order its declaration names when the include sets none, the way a later
-  # sort replaces an earlier one - so a sub-builder's own order wins. Applied here rather than where
-  # the include is built, so two includes of one set still merge: a built order would be a clause on
-  # each.
+  # A set is read in the order its declaration names when its term states none, the way a later
+  # sort replaces an earlier one - so a derived field's query keeps its own. Applied here rather
+  # than where the include is built, so a term reads the same however its includes were written.
   defp with_declared_order(%{sort: []} = sub_term, entity_type, name) do
     case Entity.declared_order(entity_type, name) do
       [] -> sub_term

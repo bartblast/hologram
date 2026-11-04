@@ -318,49 +318,6 @@ defmodule Hologram.Query.WindowTest do
              }
     end
 
-    test "embeds the relationships a path reads inside an included to-many downloaded whole" do
-      term =
-        Module6
-        |> include(a, &filter(&1, b.a == true))
-        |> Stage.normalize()
-
-      assert derive(term, false).include.a == %Query{
-               entity: Module3,
-               include: %{b: %Query{entity: Module2}}
-             }
-    end
-
-    test "embeds the relationships a path reads inside an included inverse of a to-many downloaded whole" do
-      term =
-        Module29
-        |> include(messages, &filter(&1, channel.name == "general"))
-        |> Stage.normalize()
-
-      assert derive(term, false).include.messages == %Query{
-               entity: Module28,
-               include: %{channel: %Query{entity: Module26}}
-             }
-    end
-
-    test "downloads a to-many included under a to-many whole too" do
-      term =
-        Module6
-        |> include(a, &include(&1, a, fn nested -> filter(nested, a == true) end))
-        |> Stage.normalize()
-
-      assert derive(term, false).include.a.include.a == %Query{entity: Module2}
-    end
-
-    test "keeps the narrowing of an inverse of a to-one included under a set downloaded whole" do
-      term =
-        Module29
-        |> include(messages.channel.messages, &filter(&1, position == 1))
-        |> Stage.normalize()
-
-      assert derive(term, false).include.messages.include.channel.include.messages ==
-               %Query{entity: Module28, filter: [{:position, :==, 1}]}
-    end
-
     test "merges a path's relationships into the query's own includes" do
       base_term =
         Module5
@@ -495,64 +452,6 @@ defmodule Hologram.Query.WindowTest do
                entity: Module28,
                filter: [{:position, :==, 1}]
              }
-    end
-
-    test "downloads an included to-many whole, whatever its query narrows" do
-      term =
-        Module3
-        |> include(a, &filter(&1, a == true))
-        |> Stage.normalize()
-
-      assert derive(term, false).include.a == %Query{entity: Module2}
-    end
-
-    test "downloads an included inverse of a to-many whole, whatever its query narrows" do
-      term =
-        Module29
-        |> include(messages, &filter(&1, position == 1))
-        |> Stage.normalize()
-
-      assert derive(term, false).include.messages == %Query{entity: Module28}
-    end
-
-    # Every window holding a row shares the one set the client files for it, so a window narrowing
-    # the set would overwrite the complete one another window reads - and report an edge outside
-    # its narrowing as gone.
-    test "runs to every related row of an included to-many, whatever its query narrows" do
-      red =
-        %{a: true, c: "red"}
-        |> Module2.new()
-        |> DB.create!()
-
-      blue =
-        %{a: false, c: "blue"}
-        |> Module2.new()
-        |> DB.create!()
-
-      required = DB.create!(Module1.new())
-
-      source =
-        %{c_id: required.id}
-        |> Module3.new()
-        |> DB.create!()
-
-      source
-      |> add_relationship(:a, red.id)
-      |> add_relationship(:a, blue.id)
-      |> DB.update!()
-
-      window =
-        Module3
-        |> include(a, &filter(&1, a == true))
-        |> Stage.normalize()
-        |> derive(false)
-        |> Stage.normalize()
-
-      assert [row] = QueryRunner.run(window, DB.mapping())
-
-      assert row.a
-             |> Enum.map(& &1.id)
-             |> Enum.sort() == Enum.sort([red.id, blue.id])
     end
 
     test "gives two queries choosing different values one window" do
@@ -829,17 +728,17 @@ defmodule Hologram.Query.WindowTest do
     test "joins three narrowings of one set into one disjunction whatever order they come in" do
       first =
         Module26
+        |> filter(none(message <- messages, message.body == "a"))
         |> filter(none(message <- messages, message.body == "b"))
         |> filter(none(message <- messages, message.body == "c"))
-        |> include(messages, &filter(&1, body == "a"))
         |> Stage.normalize()
         |> derive(false)
 
       second =
         Module26
-        |> filter(none(message <- messages, message.body == "a"))
         |> filter(none(message <- messages, message.body == "c"))
-        |> include(messages, &filter(&1, body == "b"))
+        |> filter(none(message <- messages, message.body == "a"))
+        |> filter(none(message <- messages, message.body == "b"))
         |> Stage.normalize()
         |> derive(false)
 
@@ -848,19 +747,6 @@ defmodule Hologram.Query.WindowTest do
              ]
 
       assert first == second
-    end
-
-    test "joins a quantifier's narrowing with an authored narrowing of the set" do
-      window =
-        Module26
-        |> filter(any(message <- messages, message.body == "x"))
-        |> include(messages, &filter(&1, position > 3))
-        |> Stage.normalize()
-        |> derive(false)
-
-      assert window.include.messages.filter == [
-               {:or, [[{:body, :==, "x"}], [{:position, :>, 3}]]}
-             ]
     end
 
     test "narrows a set by its condition's parts reading no row above it" do
@@ -1343,7 +1229,7 @@ defmodule Hologram.Query.WindowTest do
       term =
         Module26
         |> filter(any(message <- messages, any(label <- message.labels, label.name == "u")))
-        |> include(messages, &filter(&1, position > 3))
+        |> include(messages)
         |> Stage.normalize()
 
       embedded = embed(term, false).include.messages
@@ -1356,7 +1242,7 @@ defmodule Hologram.Query.WindowTest do
       term =
         Module26
         |> filter(any(message <- messages, message.body == "x"))
-        |> include(messages, &filter(&1, position > 3))
+        |> include(messages)
         |> Stage.normalize()
 
       assert embed(term, false).include == term.include

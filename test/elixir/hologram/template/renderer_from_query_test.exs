@@ -479,8 +479,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
       assert carried_titles() == ["shown"]
     end
 
-    # A path inside an included inverse reads its rows' relationships too - and the template is
-    # handed the inverse's rows as the query asked for them, without what the path read.
+    # A path inside a quantifier over an inverse reads its rows' relationships too - and the template
+    # is handed the included inverse's rows as the query asked for them, without what the path read.
     test "hands the template no relationship of an inverse's rows the query did not include" do
       {:ok, channel} =
         %{name: "general"}

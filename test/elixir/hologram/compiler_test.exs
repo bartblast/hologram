@@ -1890,7 +1890,40 @@ defmodule Hologram.CompilerTest do
       end
     end
 
-    test "raises for a registered query filtering on a server-only attribute inside an include",
+    # An include reads its set in the order the relationship declares, so a declared order on a
+    # server-only attribute is one the client would have to sort by.
+    test "raises for a registered query including a set ordered by a server-only attribute", %{
+      entity_types: entity_types
+    } do
+      defmodule ServerOnlyOrderFixture do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module15
+
+        relationship :secrets, [Module15], sort: token
+
+        allow :read
+      end
+
+      term =
+        ServerOnlyOrderFixture
+        |> Stage.include(:secrets)
+        |> Stage.normalize()
+
+      component_queries = %{ComponentModule1 => %{prop_params: [], targets: [], terms: [term]}}
+
+      expected_msg =
+        "the registered query in Hologram.Test.Fixtures.Component.Module1 filters or sorts on " <>
+          "server_only attributes (Hologram.Test.Fixtures.Entity.Module15 :token) - the client " <>
+          "never holds those values, so it could not evaluate the reference locally. Drop the " <>
+          "reference, or read the rows through the trusted backend API."
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        build_queries(component_queries, [ServerOnlyOrderFixture | entity_types], false)
+      end
+    end
+
+    test "raises for a registered query filtering on a server-only attribute inside a quantifier",
          %{
            entity_types: entity_types
          } do
@@ -6348,15 +6381,15 @@ defmodule Hologram.CompilerTest do
       assert extract_component_queries([], entity_types, ir_plt) == %{}
     end
 
-    # The refusal is the query stage's rather than a validation's - an include sub-term cannot
-    # carry the mark at all, so the extraction never reaches a term to object to.
+    # The refusal is the query stage's rather than a validation's - the capture includes a name its
+    # entity type does not declare, so the extraction never reaches a term to object to.
     test "raises for a capture the extractor refuses", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do
       expected_msg =
-        "include sub-terms take no trust mark - trust/1 goes on the query root and reads the " <>
-          "whole query, includes and all, on the server's authority"
+        "unknown relationship :unknown in Hologram.Test.Fixtures.Entity.Module3 - known " <>
+          "relationships and derived fields: :a, :b, :c"
 
       assert_error ArgumentError, expected_msg, fn ->
         extract_component_queries([ComponentModule29], entity_types, ir_plt)

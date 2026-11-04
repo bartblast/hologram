@@ -23,7 +23,7 @@ defmodule Hologram.Policy.EdgesTest do
                  {:attributes, [:note_id]},
                  {:relationship_attributes, [:note], Module41, [:public]}
                ],
-               {Module42, :update} => [{:attributes, [:title]}]
+               {Module42, :update} => [{:attributes, [:caption]}]
              }
     end
 

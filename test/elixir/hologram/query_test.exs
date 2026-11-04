@@ -133,12 +133,6 @@ defmodule Hologram.QueryTest do
       assert include(Module3, a).include == %{a: %Query{entity: Module2}}
     end
 
-    test "lowers a keyword entry with an in-place sub-builder" do
-      query = include(Module3, a: &filter(&1, a: true))
-
-      assert query.include == %{a: %Query{entity: Module2, filter: [{:a, :==, true}]}}
-    end
-
     test "lowers a list of paths" do
       query = include(Module5, [a.a, a.b])
 
@@ -189,6 +183,28 @@ defmodule Hologram.QueryTest do
                    fn -> Code.eval_string(code) end
     end
 
+    test "raises on a keyword entry pairing a relationship with a function" do
+      code = """
+      import Hologram.Query
+      include(Hologram.Test.Fixtures.Entity.Module3, a: &open/1)
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: include takes names and paths, got: [a: &open/1] - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end",
+                   fn -> Code.eval_string(code) end
+    end
+
+    test "raises on a keyword entry pairing a relationship with a function in a list" do
+      code = """
+      import Hologram.Query
+      include(Hologram.Test.Fixtures.Entity.Module3, [c, a: fn query -> query end])
+      """
+
+      assert_error Hologram.CompileError,
+                   "nofile:2: include takes names and paths, got: [a: fn query -> query end] - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end",
+                   fn -> Code.eval_string(code) end
+    end
+
     test "lowers a derived value" do
       assert include(Module32, message_count).include == %{message_count: nil}
     end
@@ -205,52 +221,6 @@ defmodule Hologram.QueryTest do
     end
   end
 
-  describe "include/3" do
-    test "lowers a path with a sub-builder" do
-      query = include(Module5, a.a, &filter(&1, a: true))
-
-      assert query.include == %{
-               a: %Query{
-                 entity: Module3,
-                 include: %{a: %Query{entity: Module2, filter: [{:a, :==, true}]}}
-               }
-             }
-    end
-
-    test "lowers an in-place fn" do
-      query = include(Module3, a, fn related -> filter(related, a: true) end)
-
-      assert query.include == %{a: %Query{entity: Module2, filter: [{:a, :==, true}]}}
-    end
-
-    test "takes a pinned sub-builder" do
-      sub_builder = &filter(&1, a: true)
-
-      query = include(Module3, a, ^sub_builder)
-
-      assert query.include == %{a: %Query{entity: Module2, filter: [{:a, :==, true}]}}
-    end
-
-    test "raises on a pinned sub-builder that is not a function, through a path" do
-      not_a_sub_builder = :a
-
-      assert_error ArgumentError,
-                   "include sub-builder for relationship :a must be a one-argument function, got: :a",
-                   fn -> include(Module5, a.a, ^not_a_sub_builder) end
-    end
-
-    test "raises the lowering's compile error" do
-      code = """
-      import Hologram.Query
-      include(Hologram.Test.Fixtures.Entity.Module3, a, sub_builder)
-      """
-
-      assert_error Hologram.CompileError,
-                   "nofile:2: include/3 takes a sub-builder written in place (fn or &) or a pinned expression, got: sub_builder - a value from the surrounding code is pinned: ^sub_builder",
-                   fn -> Code.eval_string(code) end
-    end
-  end
-
   describe "inspect/2" do
     test "leaves out every field at its default" do
       assert inspect(%Query{entity: Module2}) ==
@@ -261,7 +231,7 @@ defmodule Hologram.QueryTest do
       term =
         Module3
         |> filter(c_id: "x")
-        |> include(a, &filter(&1, a: true))
+        |> narrowed_include(:a, &filter(&1, a: true))
         |> take(5)
         |> one()
 
@@ -278,7 +248,7 @@ defmodule Hologram.QueryTest do
     end
 
     test "shows an include as its nested struct" do
-      term = include(Module3, a, &filter(&1, a: true))
+      term = narrowed_include(Module3, :a, &filter(&1, a: true))
 
       assert inspect(term) ==
                "%Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module3, include: %{a: %Hologram.Query{entity: Hologram.Test.Fixtures.Entity.Module2, filter: [{:a, :==, true}]}}}"

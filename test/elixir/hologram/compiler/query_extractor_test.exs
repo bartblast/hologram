@@ -39,7 +39,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module35
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module36
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module37
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module38
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module39
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module40
@@ -437,15 +436,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert Enum.map(terms, & &1.entity) == [Entity2, Entity4]
     end
 
-    test "extracts only the relationships a sub-builder admits", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      terms = extract_module_queries(Module38, entity_types, ir_plt)
-
-      assert Enum.map(terms, &Map.keys(&1.include)) == [[:a]]
-    end
-
     test "extracts one entity type when only one admits the query", %{
       entity_types: entity_types,
       ir_plt: ir_plt
@@ -558,25 +548,27 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert extract_module_queries(Module12, entity_types, ir_plt) == [expected_term]
     end
 
-    test "extracts an anonymous sub-builder include", %{
+    test "extracts a query an anonymous function builds", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do
       expected_term =
         Entity3
-        |> include(a, fn sub -> filter(sub, b >= ^%Placeholder{name: :min_b}) end)
+        |> include(a)
+        |> filter(created_at >= ^%Placeholder{name: :since})
         |> Stage.normalize()
 
       assert extract_module_queries(Module20, entity_types, ir_plt) == [expected_term]
     end
 
-    test "extracts an include through a path with a sub-builder", %{
+    test "extracts an include through a path beside an argument", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do
       expected_term =
         Entity5
-        |> include(a.a, &filter(&1, b >= ^%Placeholder{name: :min_b}))
+        |> include(a.a)
+        |> filter(created_at >= ^%Placeholder{name: :since})
         |> Stage.normalize()
 
       assert extract_module_queries(Module47, entity_types, ir_plt) == [expected_term]
@@ -1263,7 +1255,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       end
     end
 
-    test "raises on branching inside an anonymous sub-builder", %{
+    test "raises on branching inside an anonymous function", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do

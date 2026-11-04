@@ -5003,8 +5003,8 @@ defmodule Hologram.Compiler do
   end
 
   # Pairs each entity type with the server-only attributes a term's filter and sort name on it -
-  # the term's own type first, then the types its paths lead to - walking include sub-terms so a
-  # reference nested under an include is reached too. A derived field's own reads are checked where
+  # the term's own type first, then the types its paths lead to - walking include sub-terms, whose
+  # sets carry the order their relationship declares. A derived field's own reads are checked where
   # its definition is resolved.
   defp server_only_references(term) do
     filter_references =

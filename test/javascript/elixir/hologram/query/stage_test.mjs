@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   contextFixture,
   defineRuntimeGlobals,
+  narrowedInclude,
 } from "../../../support/helpers.mjs";
 
 import Elixir_Hologram_Query_Stage from "../../../../../assets/js/elixir/hologram/query/stage.mjs";
@@ -50,7 +51,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
   const decrement = Elixir_Hologram_Query_Stage["decrement/3"];
   const increment = Elixir_Hologram_Query_Stage["increment/3"];
   const filter = Elixir_Hologram_Query_Stage["filter/2"];
-  const include = Elixir_Hologram_Query_Stage["include/3"];
+  const include = Elixir_Hologram_Query_Stage["include/2"];
   const normalize = Elixir_Hologram_Query_Stage["normalize/1"];
   const one = Elixir_Hologram_Query_Stage["one/1"];
   const skip = Elixir_Hologram_Query_Stage["skip/2"];
@@ -93,9 +94,8 @@ describe("Elixir_Hologram_Query_Stage", () => {
       pairs.map(([name, value]) => Type.tuple([Type.atom(name), value])),
     );
 
-  // A builder's sub-builder is an ordinary Elixir function, so it arrives boxed - what the port
-  // calls through the interpreter is what these build.
-  const subBuilder = (build) =>
+  // A function in a pinned include spec is an ordinary Elixir function, so it arrives boxed.
+  const boxedFunction = (build) =>
     Type.anonymousFunction(
       1,
       [
@@ -3455,69 +3455,50 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
   });
 
-  describe("include/3", () => {
+  describe("include/2", () => {
     it("includes an inverse set", () => {
-      const query = include(
-        Type.alias(CHANNEL),
-        Type.atom("messages"),
-        Type.nil(),
-      );
+      const query = include(Type.alias(CHANNEL), Type.atom("messages"));
 
       assert.deepStrictEqual(query.include, {messages: baseTerm(MESSAGE)});
     });
 
     it("includes a single inverse", () => {
-      const query = include(
-        Type.alias(CHANNEL),
-        Type.atom("topic"),
-        Type.nil(),
-      );
+      const query = include(Type.alias(CHANNEL), Type.atom("topic"));
 
       assert.deepStrictEqual(query.include, {topic: baseTerm(TOPIC)});
     });
 
     it("includes an inverse of a to-many", () => {
-      const query = include(
-        Type.alias(LABEL),
-        Type.atom("messages"),
-        Type.nil(),
-      );
+      const query = include(Type.alias(LABEL), Type.atom("messages"));
 
       assert.deepStrictEqual(query.include, {messages: baseTerm(MESSAGE)});
     });
 
     it("merges two includes of one inverse", () => {
       const query = include(
-        include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+        include(Type.alias(CHANNEL), Type.atom("messages")),
         Type.atom("messages"),
-        Type.nil(),
       );
 
       assert.deepStrictEqual(query.include, {messages: baseTerm(MESSAGE)});
     });
 
-    it("accepts a sub-builder as a spec value", () => {
+    it("raises on a function as a spec value", () => {
       const spec = Type.list([
-        Type.tuple([
-          Type.atom("tasks"),
-          subBuilder((related) =>
-            filter(related, predicates([["done", Type.boolean(true)]])),
-          ),
-        ]),
+        Type.tuple([Type.atom("tasks"), boxedFunction((related) => related)]),
       ]);
 
-      const query = include(project, spec, Type.nil());
-
-      assert.deepStrictEqual(query.include, {
-        tasks: {...freshTerm, filter: [["done", "==", true]]},
-      });
+      assert.throw(
+        () => include(project, spec),
+        HologramBoxedError,
+        "invalid include spec entry {:tasks, #Function<1.1/1 in MyModule>} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end",
+      );
     });
 
     it("accumulates multiple includes", () => {
       const query = include(
-        include(project, Type.atom("owner"), Type.nil()),
+        include(project, Type.atom("owner")),
         Type.atom("tasks"),
-        Type.nil(),
       );
 
       assert.deepStrictEqual(query.include, {
@@ -3527,14 +3508,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("embeds a to-many relationship", () => {
-      assert.deepStrictEqual(include(project, Type.atom("tasks"), Type.nil()), {
+      assert.deepStrictEqual(include(project, Type.atom("tasks")), {
         ...baseTerm(PROJECT),
         include: {tasks: freshTerm},
       });
     });
 
     it("embeds a to-one relationship", () => {
-      const query = include(project, Type.atom("owner"), Type.nil());
+      const query = include(project, Type.atom("owner"));
 
       assert.deepStrictEqual(query.include, {owner: baseTerm(USER)});
     });
@@ -3542,7 +3523,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("includes several relationships from a list spec", () => {
       const spec = Type.list([Type.atom("owner"), Type.atom("tasks")]);
 
-      const query = include(project, spec, Type.nil());
+      const query = include(project, spec);
 
       assert.deepStrictEqual(query.include, {
         owner: baseTerm(USER),
@@ -3551,19 +3532,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("includes three levels deep", () => {
-      const query = include(
-        user,
-        Type.atom("manager"),
-        subBuilder((levelOne) =>
-          include(
-            levelOne,
-            Type.atom("manager"),
-            subBuilder((levelTwo) =>
-              include(levelTwo, Type.atom("manager"), Type.nil()),
-            ),
-          ),
-        ),
-      );
+      const spec = Type.list([
+        Type.tuple([
+          Type.atom("manager"),
+          Type.list([Type.tuple([Type.atom("manager"), Type.atom("manager")])]),
+        ]),
+      ]);
+
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         manager: {
@@ -3583,7 +3559,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
       ]);
 
-      const query = include(include(user, spec, Type.nil()), spec, Type.nil());
+      const query = include(include(user, spec), spec);
 
       assert.deepStrictEqual(query.include, {
         projects: {...baseTerm(PROJECT), include: {tasks: freshTerm}},
@@ -3592,43 +3568,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("merges a repeated include of a relationship", () => {
       const query = include(
-        include(project, Type.atom("tasks"), Type.nil()),
+        include(project, Type.atom("tasks")),
         Type.atom("tasks"),
-        Type.nil(),
       );
 
       assert.deepStrictEqual(query, {
         ...baseTerm(PROJECT),
         include: {tasks: freshTerm},
-      });
-    });
-
-    it("merges a second include that narrows a nested relationship", () => {
-      const narrowedSpec = Type.list([
-        Type.tuple([
-          Type.atom("projects"),
-          Type.list([
-            Type.tuple([
-              Type.atom("tasks"),
-              subBuilder((related) =>
-                filter(related, predicates([["done", Type.boolean(true)]])),
-              ),
-            ]),
-          ]),
-        ]),
-      ]);
-
-      const query = include(
-        include(user, Type.atom("projects"), Type.nil()),
-        narrowedSpec,
-        Type.nil(),
-      );
-
-      assert.deepStrictEqual(query.include, {
-        projects: {
-          ...baseTerm(PROJECT),
-          include: {tasks: {...freshTerm, filter: [["done", "==", true]]}},
-        },
       });
     });
 
@@ -3638,48 +3584,12 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
       ]);
 
-      const query = include(user, spec, Type.nil());
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         projects: {
           ...baseTerm(PROJECT),
           include: {owner: baseTerm(USER), tasks: freshTerm},
-        },
-      });
-    });
-
-    it("merges includes whose nested branches differ in clauses", () => {
-      const narrowedSpec = Type.list([
-        Type.tuple([
-          Type.atom("projects"),
-          Type.list([
-            Type.tuple([
-              Type.atom("tasks"),
-              subBuilder((related) =>
-                filter(related, predicates([["done", Type.boolean(true)]])),
-              ),
-            ]),
-          ]),
-        ]),
-      ]);
-
-      const ownerSpec = Type.list([
-        Type.tuple([Type.atom("projects"), Type.atom("owner")]),
-      ]);
-
-      const query = include(
-        include(user, narrowedSpec, Type.nil()),
-        ownerSpec,
-        Type.nil(),
-      );
-
-      assert.deepStrictEqual(query.include, {
-        projects: {
-          ...baseTerm(PROJECT),
-          include: {
-            owner: baseTerm(USER),
-            tasks: {...freshTerm, filter: [["done", "==", true]]},
-          },
         },
       });
     });
@@ -3693,11 +3603,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
       ]);
 
-      const query = include(
-        include(user, ownerSpec, Type.nil()),
-        tasksSpec,
-        Type.nil(),
-      );
+      const query = include(include(user, ownerSpec), tasksSpec);
 
       assert.deepStrictEqual(query.include, {
         projects: {
@@ -3713,7 +3619,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("projects"), Type.atom("owner")]),
       ]);
 
-      const query = include(user, spec, Type.nil());
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         manager: baseTerm(USER),
@@ -3729,7 +3635,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         ]),
       ]);
 
-      const query = include(user, spec, Type.nil());
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         projects: {
@@ -3739,178 +3645,23 @@ describe("Elixir_Hologram_Query_Stage", () => {
       });
     });
 
-    it("nests includes through the sub-builder", () => {
-      const query = include(
-        user,
-        Type.atom("projects"),
-        subBuilder((related) =>
-          include(related, Type.atom("owner"), Type.nil()),
-        ),
-      );
-
-      assert.deepStrictEqual(query.include, {
-        projects: {...baseTerm(PROJECT), include: {owner: baseTerm(USER)}},
-      });
-    });
-
     it("nests traversal from a keyword spec", () => {
       const spec = Type.list([
         Type.tuple([Type.atom("projects"), Type.atom("owner")]),
       ]);
 
-      const query = include(user, spec, Type.nil());
+      const query = include(user, spec);
 
       assert.deepStrictEqual(query.include, {
         projects: {...baseTerm(PROJECT), include: {owner: baseTerm(USER)}},
       });
     });
 
-    it("refines a to-many include with a sub-builder", () => {
-      const query = include(
-        project,
-        Type.atom("tasks"),
-        subBuilder((related) =>
-          sort(
-            filter(related, predicates([["done", Type.boolean(false)]])),
-            Type.atom("position"),
-          ),
-        ),
-      );
-
-      assert.deepStrictEqual(query.include, {
-        tasks: {
-          ...freshTerm,
-          filter: [["done", "==", false]],
-          sort: [["position", "asc"]],
-        },
-      });
-    });
-
-    it("raises on a non-function sub-builder", () => {
-      assert.throw(
-        () => include(project, Type.atom("tasks"), Type.integer(5)),
-        HologramBoxedError,
-        "include sub-builder for relationship :tasks must be a one-argument function, got: 5",
-      );
-    });
-
-    it("raises on a repeated include at the second level when one side has clauses", () => {
-      const narrowedSpec = Type.list([
-        Type.tuple([
-          Type.atom("projects"),
-          Type.list([
-            Type.tuple([
-              Type.atom("tasks"),
-              subBuilder((related) =>
-                filter(related, predicates([["done", Type.boolean(true)]])),
-              ),
-            ]),
-          ]),
-        ]),
-      ]);
-
-      const spec = Type.list([
-        Type.tuple([Type.atom("projects"), Type.atom("tasks")]),
-      ]);
-
-      assert.throw(
-        () =>
-          include(include(user, narrowedSpec, Type.nil()), spec, Type.nil()),
-        HologramBoxedError,
-        "relationship :tasks is already included",
-      );
-    });
-
-    it("raises on a repeated include when the included one has clauses", () => {
-      const narrowed = include(
-        project,
-        Type.atom("tasks"),
-        subBuilder((related) =>
-          filter(related, predicates([["done", Type.boolean(true)]])),
-        ),
-      );
-
-      assert.throw(
-        () => include(narrowed, Type.atom("tasks"), Type.nil()),
-        HologramBoxedError,
-        "relationship :tasks is already included",
-      );
-    });
-
-    it("raises on a repeated include when the new one has clauses", () => {
-      const included = include(project, Type.atom("tasks"), Type.nil());
-
-      assert.throw(
-        () =>
-          include(
-            included,
-            Type.atom("tasks"),
-            subBuilder((related) =>
-              filter(related, predicates([["done", Type.boolean(true)]])),
-            ),
-          ),
-        HologramBoxedError,
-        "relationship :tasks is already included",
-      );
-    });
-
-    it("raises on a separate sub-builder with a shape spec", () => {
-      assert.throw(
-        () =>
-          include(
-            project,
-            Type.list([Type.atom("tasks")]),
-            subBuilder((related) => related),
-          ),
-        HologramBoxedError,
-        "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair",
-      );
-    });
-
-    it("raises on a sub-builder returning a different entity's term", () => {
-      assert.throw(
-        () =>
-          include(
-            project,
-            Type.atom("tasks"),
-            subBuilder((_related) => filter(project, Type.list([]))),
-          ),
-        HologramBoxedError,
-        "include sub-builder for relationship :tasks must return a query term for MyApp.Task - got a query term for MyApp.Project",
-      );
-    });
-
-    it("raises on a sub-builder returning a non-term", () => {
-      assert.throw(
-        () =>
-          include(
-            project,
-            Type.atom("tasks"),
-            subBuilder((_related) => Type.integer(123)),
-          ),
-        HologramBoxedError,
-        "include sub-builder for relationship :tasks must return a query term for MyApp.Task, got: 123",
-      );
-    });
-
     // The relationship declaration already says how many entities are embedded, so a sub-term
     // marking a cardinality of its own would be saying something the shape cannot honour.
-    it("raises on a sub-term carrying a cardinality marker", () => {
-      assert.throw(
-        () =>
-          include(
-            project,
-            Type.atom("tasks"),
-            subBuilder((related) => count(related)),
-          ),
-        HologramBoxedError,
-        "include sub-terms take no cardinality marker - the relationship declaration governs cardinality",
-      );
-    });
-
     it("raises on an attribute name", () => {
       assert.throw(
-        () => include(project, Type.atom("name"), Type.nil()),
+        () => include(project, Type.atom("name")),
         HologramBoxedError,
         ":name is an attribute in MyApp.Project - only relationships and derived fields can be included",
       );
@@ -3918,7 +3669,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on an empty include spec", () => {
       assert.throw(
-        () => include(project, Type.list([]), Type.nil()),
+        () => include(project, Type.list([])),
         HologramBoxedError,
         "include spec must not be empty",
       );
@@ -3926,7 +3677,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on an invalid include spec", () => {
       assert.throw(
-        () => include(project, Type.integer(123), Type.nil()),
+        () => include(project, Type.integer(123)),
         HologramBoxedError,
         "include spec must be a relationship name or a shape list, got: 123",
       );
@@ -3934,89 +3685,53 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on an invalid include spec entry", () => {
       assert.throw(
-        () => include(project, Type.list([Type.integer(123)]), Type.nil()),
+        () => include(project, Type.list([Type.integer(123)])),
         HologramBoxedError,
-        "invalid include spec entry 123 - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair",
+        "invalid include spec entry 123 - use a relationship name or a {name, spec} pair",
       );
     });
 
-    it("raises on clauses for a single inverse", () => {
+    it("raises on a nil nested spec", () => {
+      const spec = Type.list([Type.tuple([Type.atom("channel"), Type.nil()])]);
+
       assert.throw(
-        () =>
-          include(
-            Type.alias(CHANNEL),
-            Type.atom("topic"),
-            subBuilder((related) =>
-              filter(related, predicates([["title", Type.bitstring("x")]])),
-            ),
-          ),
+        () => include(Type.alias(MESSAGE), spec),
         HologramBoxedError,
-        "to-one relationship :topic takes no clauses - clauses apply to to-many includes",
+        "unknown relationship nil in MyApp.Channel - known relationships and derived fields: :messages, :owner, :topic",
       );
     });
 
     it("raises on an unknown relationship, naming the inverses among the known ones", () => {
       assert.throw(
-        () => include(Type.alias(CHANNEL), Type.atom("x"), Type.nil()),
+        () => include(Type.alias(CHANNEL), Type.atom("x")),
         HologramBoxedError,
         "unknown relationship :x in MyApp.Channel - known relationships and derived fields: :messages, :owner, :topic",
       );
     });
 
-    it("raises on a second include of an inverse when either carries clauses", () => {
-      assert.throw(
-        () =>
-          include(
-            include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
-            Type.atom("messages"),
-            subBuilder((related) =>
-              filter(related, predicates([["body", Type.bitstring("x")]])),
-            ),
-          ),
-        HologramBoxedError,
-        "relationship :messages is already included",
-      );
-    });
-
     it("raises on an unknown relationship", () => {
       assert.throw(
-        () => include(project, Type.atom("x"), Type.nil()),
+        () => include(project, Type.atom("x")),
         HologramBoxedError,
         "unknown relationship :x in MyApp.Project - known relationships and derived fields: :owner, :tasks",
       );
     });
-
-    it("raises on clauses on a to-one include", () => {
-      assert.throw(
-        () =>
-          include(
-            project,
-            Type.atom("owner"),
-            subBuilder((related) =>
-              filter(related, predicates([["email", Type.bitstring("x")]])),
-            ),
-          ),
-        HologramBoxedError,
-        "to-one relationship :owner takes no clauses - clauses apply to to-many includes",
-      );
-    });
   });
 
-  describe("include/3 - derived fields", () => {
+  describe("include/2 - derived fields", () => {
     const nested = (name, nestedName) =>
       Type.list([Type.tuple([Type.atom(name), Type.atom(nestedName)])]);
 
     it("includes a derived value", () => {
-      const query = include(room, Type.atom("message_count"), Type.nil());
+      const query = include(room, Type.atom("message_count"));
 
       assert.deepStrictEqual(query.include, {message_count: null});
     });
 
     it("merges two includes of one derived value", () => {
       const query = include(
-        include(room, Type.atom("message_count"), Type.nil()),
+        include(room, Type.atom("message_count")),
         Type.atom("message_count"),
-        Type.nil(),
       );
 
       assert.deepStrictEqual(query.include, {message_count: null});
@@ -4024,9 +3739,8 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("merges two includes of one derived set", () => {
       const query = include(
-        include(room, nested("recent_messages", "channel"), Type.nil()),
+        include(room, nested("recent_messages", "channel")),
         Type.atom("recent_messages"),
-        Type.nil(),
       );
 
       assert.deepStrictEqual(query.include, {
@@ -4038,7 +3752,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("includes a derived set", () => {
-      const query = include(room, Type.atom("recent_messages"), Type.nil());
+      const query = include(room, Type.atom("recent_messages"));
 
       assert.deepStrictEqual(query.include, {
         recent_messages: baseTerm(POST),
@@ -4046,17 +3760,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("includes a derived field holding one row", () => {
-      const query = include(room, Type.atom("first_message"), Type.nil());
+      const query = include(room, Type.atom("first_message"));
 
       assert.deepStrictEqual(query.include, {first_message: baseTerm(POST)});
     });
 
     it("nests an include under a derived set", () => {
-      const query = include(
-        room,
-        nested("recent_messages", "channel"),
-        Type.nil(),
-      );
+      const query = include(room, nested("recent_messages", "channel"));
 
       assert.deepStrictEqual(query.include, {
         recent_messages: {
@@ -4068,22 +3778,21 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("raises on an include under a derived value", () => {
       assert.throw(
-        () => include(room, nested("message_count", "name"), Type.nil()),
+        () => include(room, nested("message_count", "name")),
         HologramBoxedError,
         ":message_count is a :integer derived field in MyApp.Room - nothing is included under it",
       );
     });
 
-    it("raises on clauses on a derived set", () => {
+    it("raises on a nil nested spec under a derived value", () => {
+      const spec = Type.list([
+        Type.tuple([Type.atom("message_count"), Type.nil()]),
+      ]);
+
       assert.throw(
-        () =>
-          include(
-            room,
-            Type.atom("recent_messages"),
-            subBuilder((related) => take(related, Type.integer(1))),
-          ),
+        () => include(room, spec),
         HologramBoxedError,
-        "derived field :recent_messages takes no clauses - its definition states its rows, so only includes nest under it",
+        ":message_count is a :integer derived field in MyApp.Room - nothing is included under it",
       );
     });
 
@@ -4093,7 +3802,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("recent_messages"), Type.atom("channel")]),
       ]);
 
-      const query = normalize(include(room, spec, Type.nil()));
+      const query = normalize(include(room, spec));
 
       assert.deepStrictEqual(query, {
         ...baseTerm(ROOM),
@@ -4182,7 +3891,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("orders an included inverse set by its declared order, then by id", () => {
       const query = normalize(
-        include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+        include(Type.alias(CHANNEL), Type.atom("messages")),
       );
 
       assert.deepStrictEqual(query.include.messages.sort, [
@@ -4191,24 +3900,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
     });
 
-    it("orders an included inverse set by the include's own order over the declared one", () => {
-      const query = normalize(
-        include(
-          Type.alias(CHANNEL),
-          Type.atom("messages"),
-          subBuilder((related) => sort(related, Type.atom("body"))),
-        ),
-      );
-
-      assert.deepStrictEqual(query.include.messages.sort, [
-        ["body", "asc"],
-        ["id", "asc"],
-      ]);
-    });
-
     it("orders an included inverse set by a declared list, directions kept, then by id", () => {
       const query = normalize(
-        include(Type.alias(BOARD), Type.atom("messages"), Type.nil()),
+        include(Type.alias(BOARD), Type.atom("messages")),
       );
 
       assert.deepStrictEqual(query.include.messages.sort, [
@@ -4219,9 +3913,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("orders an included stored to-many by its declared order, then by id", () => {
-      const query = normalize(
-        include(Type.alias(BINDER), Type.atom("labels"), Type.nil()),
-      );
+      const query = normalize(include(Type.alias(BINDER), Type.atom("labels")));
 
       assert.deepStrictEqual(query.include.labels.sort, [
         ["name", "desc"],
@@ -4229,24 +3921,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
     });
 
-    it("orders an included stored to-many by the include's own order over the declared one", () => {
-      const query = normalize(
-        include(
-          Type.alias(BINDER),
-          Type.atom("labels"),
-          subBuilder((related) => sort(related, Type.atom("name"))),
-        ),
-      );
-
-      assert.deepStrictEqual(query.include.labels.sort, [
-        ["name", "asc"],
-        ["id", "asc"],
-      ]);
-    });
-
     it("normalizes a term including an inverse the same way twice", () => {
       const query = normalize(
-        include(Type.alias(CHANNEL), Type.atom("messages"), Type.nil()),
+        include(Type.alias(CHANNEL), Type.atom("messages")),
       );
 
       assert.deepStrictEqual(normalize(query), query);
@@ -4254,16 +3931,14 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("orders an included inverse set declaring no order by id", () => {
       const query = normalize(
-        include(Type.alias(LABEL), Type.atom("messages"), Type.nil()),
+        include(Type.alias(LABEL), Type.atom("messages")),
       );
 
       assert.deepStrictEqual(query.include.messages.sort, [["id", "asc"]]);
     });
 
     it("gives an included single inverse no order", () => {
-      const query = normalize(
-        include(Type.alias(CHANNEL), Type.atom("topic"), Type.nil()),
-      );
+      const query = normalize(include(Type.alias(CHANNEL), Type.atom("topic")));
 
       assert.deepStrictEqual(query.include.topic.sort, []);
     });
@@ -4308,7 +3983,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
               ]),
             ),
             Type.atom("tasks"),
-            Type.nil(),
           ),
           Type.atom("name"),
         ),
@@ -4394,7 +4068,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("owner"), Type.atom("projects")]),
       ]);
 
-      const query = normalize(include(project, spec, Type.nil()));
+      const query = normalize(include(project, spec));
 
       assert.deepStrictEqual(query.include.owner.sort, []);
 
@@ -4405,17 +4079,13 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     it("normalizes to-many sub-terms", () => {
       const query = normalize(
-        include(
-          project,
-          Type.atom("tasks"),
-          subBuilder((related) =>
-            filter(
-              related,
-              predicates([
-                ["title", Type.bitstring("x")],
-                ["done", Type.boolean(true)],
-              ]),
-            ),
+        narrowedInclude(project, "tasks", (related) =>
+          filter(
+            related,
+            predicates([
+              ["title", Type.bitstring("x")],
+              ["done", Type.boolean(true)],
+            ]),
           ),
         ),
       );
@@ -4429,7 +4099,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("skips ordering for to-one includes", () => {
-      const query = normalize(include(project, Type.atom("owner"), Type.nil()));
+      const query = normalize(include(project, Type.atom("owner")));
 
       assert.deepStrictEqual(query.include.owner.sort, []);
     });

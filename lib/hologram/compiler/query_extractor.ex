@@ -142,8 +142,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   only the recorded stages are replayed. What narrows the set is the builder's own
   validation, whatever stage refuses: `filter(entity.type, done: false)` keeps
   precisely the types declaring a boolean `done`, and a candidate a LATER stage
-  cannot satisfy - a sub-builder refusing the relationship a replay chose, an entity
-  declaring no relationship to include - is dropped rather than failing the build.
+  cannot satisfy - an entity declaring no relationship to include - is dropped rather
+  than failing the build.
 
   Raises Hologram.CompileError when a from_query value is not a function capture,
   when a capture argument is destructured instead of a plain name, when a capture
@@ -152,8 +152,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   when an anonymous function has multiple clauses, arity above 3, or a branch on
   an argument, when a body uses a construct
   symbolic evaluation does not cover, when a placeholder stands somewhere the build
-  can neither drop nor enumerate (a whole predicates list, a paginate option map, a
-  sub-builder), or when no candidate survives - a prop with no window would read
+  can neither drop nor enumerate (a whole predicates list, a paginate option map), or
+  when no candidate survives - a prop with no window would read
   rows nothing ever fills. Zero-arity captures are free of these limits - they
   evaluate concretely at build time.
 
@@ -1466,7 +1466,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   # Every stage runs inside the rescue, and the rescue covers the whole continuation - so a
   # candidate refused by a LATER stage drops out here rather than failing the build, however deep
-  # the refusal happens. A sub-builder refusing the relationship a replay chose is the replay's
+  # the refusal happens. A later stage refusing the candidate a replay chose is the replay's
   # problem, not the developer's, which is what apply_authored_stage!/3 keeps loud for a query the
   # developer wrote concretely.
   defp replay([], query), do: [query]

@@ -91,7 +91,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(a, fn related_query ->
+        |> narrowed_include(:a, fn related_query ->
           related_query
           |> filter(a: true)
           |> sort(c)
@@ -117,7 +117,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(a, fn related_query -> sort(related_query, c) end)
+        |> narrowed_include(:a, fn related_query -> sort(related_query, c) end)
         |> Stage.normalize()
 
       assert %{sql: sql} = compile(term, mapping)
@@ -921,7 +921,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(a, &filter(&1, a == true or c == "x"))
+        |> narrowed_include(:a, &filter(&1, a == true or c == "x"))
         |> Stage.normalize()
 
       assert %{params: [{:value, true}, {:value, "x"}], sql: sql} = compile(term, mapping)
@@ -1225,7 +1225,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module3
-        |> include(a, fn related_query -> filter(related_query, c >= "Zoe") end)
+        |> narrowed_include(:a, fn related_query -> filter(related_query, c >= "Zoe") end)
         |> Stage.normalize()
 
       assert %{params: [{:value, "zoe"}, {:value, "Zoe"}], sql: sql} = compile(term, mapping)
@@ -1573,7 +1573,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       base_term =
         Module3
-        |> include(a, &filter(&1, a: true))
+        |> narrowed_include(:a, &filter(&1, a: true))
         |> Stage.normalize()
 
       term = %{base_term | filter: [{:id, :==, {:placeholder, :root_id}}]}
@@ -2240,7 +2240,7 @@ defmodule Hologram.DB.QueryCompilerTest do
     } do
       term =
         Module39
-        |> include(mentors, fn related_query -> sort(related_query, active: :desc) end)
+        |> narrowed_include(:mentors, fn related_query -> sort(related_query, active: :desc) end)
         |> Stage.normalize()
 
       assert %{params: [{:value, 0}, {:value, 3}, {:value, 0}, {:value, 3}], sql: sql} =
@@ -2760,7 +2760,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module6
-        |> Stage.include(:a, &Stage.filter(&1, [{[:b, :a], true}]))
+        |> narrowed_include(:a, &Stage.filter(&1, [{[:b, :a], true}]))
         |> Stage.normalize()
 
       b_a = hop(1, Module2, ~s("$p1"."a"), ~s("$t1"."b_id"))
@@ -3039,7 +3039,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       term =
         Module26
-        |> Stage.include(:messages, &Stage.filter(&1, any: {[:labels], [name: "u"]}))
+        |> narrowed_include(:messages, &Stage.filter(&1, any: {[:labels], [name: "u"]}))
         |> Stage.normalize()
 
       assert %{params: [{:value, "u"}], sql: sql} = compile(term, mapping)

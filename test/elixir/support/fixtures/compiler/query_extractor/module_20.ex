@@ -12,7 +12,11 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module20 do
     ~HOLO""
   end
 
-  defp entities_query(min_b) do
-    include(Entity3, a, fn sub -> filter(sub, b >= ^min_b) end)
+  defp entities_query(since) do
+    Enum.reduce([:a], Entity3, fn name, query ->
+      query
+      |> include(^name)
+      |> filter(created_at >= ^since)
+    end)
   end
 end

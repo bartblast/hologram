@@ -358,18 +358,15 @@ function filterableNames(entityType) {
   ].sort();
 }
 
-// The sub-builder is handed a fresh term for the related type, so what it returns is a query in
-// its own right - filtered, ordered and bounded like any other - which is then embedded under the
-// relationship's name.
-//
-// A derived field holding a value is included with nothing under it, as null. One holding rows is
-// included as its rows' type, taking nested includes only, since its definition states its rows.
-function includeOne(query, name, subBuilder) {
+// A derived field holding a value is included with nothing under it, as null. Any other name is
+// included as its related type's whole term, what the nested spec names included under it - a
+// derived field holding rows takes nested includes only, since its definition states its rows.
+function includeOne(query, name, nestedSpec) {
   const term = toTerm(query);
   const {kind, target} = validateIncludedName(name, term.entity);
 
   if (kind === "derived_value") {
-    if (subBuilder) {
+    if (nestedSpec !== null) {
       Interpreter.raiseArgumentError(
         `${Interpreter.inspect(name)} is a :${target} derived field in ${term.entity} - nothing is included under it`,
       );
@@ -380,34 +377,35 @@ function includeOne(query, name, subBuilder) {
 
   const relatedBaseTerm = toTerm(Type.alias(target));
 
-  const subTerm = subBuilder
-    ? Interpreter.callAnonymousFunction(subBuilder, [relatedBaseTerm])
-    : relatedBaseTerm;
-
-  validateSubTerm(subTerm, name, target, kind);
+  const subTerm =
+    nestedSpec === null
+      ? relatedBaseTerm
+      : Elixir_Hologram_Query_Stage["include/2"](relatedBaseTerm, nestedSpec);
 
   return {...term, include: putIncluded(term.include, name.value, subTerm)};
 }
 
-// A spec entry is a relationship name, a {name, sub-builder} pair, or a {name, nested spec} pair -
-// the last traversing deeper without writing a function for it.
+// A spec entry is a relationship name or a {name, nested spec} pair. A function would narrow the
+// set, which is what a derived field does - refused naming one.
 function includeSpecEntry(term, entry) {
-  const include = Elixir_Hologram_Query_Stage["include/3"];
-
   if (Type.isAtom(entry)) {
-    return include(term, entry, Type.nil());
+    return includeOne(term, entry, null);
   }
 
   if (isConstraintTuple(entry)) {
     const [name, spec] = entry.data;
 
-    return Type.isAnonymousFunction(spec)
-      ? include(term, name, spec)
-      : includeOne(term, name, nestedSubBuilder(spec));
+    if (Type.isAnonymousFunction(spec)) {
+      Interpreter.raiseArgumentError(
+        `invalid include spec entry ${Interpreter.inspect(entry)} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end`,
+      );
+    }
+
+    return includeOne(term, name, spec);
   }
 
   Interpreter.raiseArgumentError(
-    `invalid include spec entry ${Interpreter.inspect(entry)} - use a relationship name, a {name, spec} pair, or a {name, sub_builder} pair`,
+    `invalid include spec entry ${Interpreter.inspect(entry)} - use a relationship name or a {name, spec} pair`,
   );
 }
 
@@ -535,7 +533,7 @@ function isQuantifierValue(value) {
   );
 }
 
-// A stage returns the plain term this file builds, so what a sub-builder gives back is told from
+// A stage returns the plain term this file builds, so a query handed to a stage is told from
 // anything else by being one - a boxed value never carries an entity.
 function isQueryTerm(value) {
   return value !== null && typeof value === "object" && "entity" in value;
@@ -594,18 +592,11 @@ function membershipValues(values, name, entityType) {
   );
 }
 
-// Two includes of one relationship are one include when neither narrows it: what each includes
-// merges, by the same rule all the way down. A sub-term that narrows it asks for different rows
-// than the other, so a relationship included twice with clauses on either side is refused.
-function mergedSubTerm(included, subTerm, name) {
+// Two includes of one relationship are one include: what each includes merges, by the same rule
+// all the way down.
+function mergedSubTerm(included, subTerm) {
   if (included === null && subTerm === null) {
     return null;
-  }
-
-  if (subTermHasClauses(included) || subTermHasClauses(subTerm)) {
-    Interpreter.raiseArgumentError(
-      `relationship ${Interpreter.inspect(Type.atom(name))} is already included`,
-    );
   }
 
   const include = Object.entries(subTerm.include).reduce(
@@ -653,19 +644,6 @@ function nameValue(name) {
   }
 
   return isPath(name) ? name.data.map((atom) => atom.value) : name.value;
-}
-
-// The nested-spec shorthand is the sub-builder that includes through the nested spec, boxed the
-// way a builder's own function arrives - so one code path calls both.
-function nestedSubBuilder(spec) {
-  const clause = {
-    params: (_context) => [Type.variablePattern("related_term")],
-    guards: [],
-    body: (context) =>
-      Elixir_Hologram_Query_Stage["include/2"](context.vars.related_term, spec),
-  };
-
-  return Type.anonymousFunction(1, [clause], Interpreter.buildContext());
 }
 
 // A to-one embeds one row, and a derived field's rows are the ones its definition states, so
@@ -925,15 +903,6 @@ function settableNames(entityType) {
 
 function structName(value) {
   return field(value, "__struct__").value.replace(/^Elixir\./, "");
-}
-
-function subTermHasClauses(subTerm) {
-  return (
-    subTerm.filter.length > 0 ||
-    subTerm.sort.length > 0 ||
-    subTerm.take !== null ||
-    subTerm.skip !== null
-  );
 }
 
 function referenceFieldNames(entityType) {
@@ -1205,7 +1174,7 @@ function putIncluded(include, name, subTerm) {
   return {
     ...include,
     [name]: Object.hasOwn(include, name)
-      ? mergedSubTerm(include[name], subTerm, name)
+      ? mergedSubTerm(include[name], subTerm)
       : subTerm,
   };
 }
@@ -1740,40 +1709,6 @@ function validateSourceSet(name, entityType) {
   raiseUnknownSourceName(name, entityType);
 }
 
-// A to-one embeds one entity, so there is nothing for a filter, an order or a bound to do to it -
-// nesting is its only refinement, to any depth.
-function validateSubTerm(subTerm, name, target, kind) {
-  if (!isQueryTerm(subTerm)) {
-    Interpreter.raiseArgumentError(
-      `include sub-builder for relationship ${Interpreter.inspect(name)} must return a query term for ${target}, got: ${Interpreter.inspect(subTerm)}`,
-    );
-  }
-
-  if (subTerm.entity !== target) {
-    Interpreter.raiseArgumentError(
-      `include sub-builder for relationship ${Interpreter.inspect(name)} must return a query term for ${target} - got a query term for ${subTerm.entity}`,
-    );
-  }
-
-  if (subTerm.cardinality !== "set") {
-    Interpreter.raiseArgumentError(
-      "include sub-terms take no cardinality marker - the relationship declaration governs cardinality",
-    );
-  }
-
-  if (kind === "to_one" && subTermHasClauses(subTerm)) {
-    Interpreter.raiseArgumentError(
-      `to-one relationship ${Interpreter.inspect(name)} takes no clauses - clauses apply to to-many includes`,
-    );
-  }
-
-  if (kind === "derived_rows" && subTermHasClauses(subTerm)) {
-    Interpreter.raiseArgumentError(
-      `derived field ${Interpreter.inspect(name)} takes no clauses - its definition states its rows, so only includes nest under it`,
-    );
-  }
-}
-
 function validateAmount(amount, stage) {
   if (Type.isInteger(amount) && (stage === "increment" || amount.value > 0n)) {
     return;
@@ -1993,31 +1928,12 @@ const Elixir_Hologram_Query_Stage = {
 
     return {...term, filter: [...term.filter, ...clauses]};
   },
-  "include/2": (query, spec) =>
-    Elixir_Hologram_Query_Stage["include/3"](query, spec, Type.nil()),
-
-  "include/3": (query, spec, subBuilder) => {
+  "include/2": (query, spec) => {
     if (Type.isAtom(spec)) {
-      if (Type.isNil(subBuilder)) {
-        return includeOne(query, spec, null);
-      }
-
-      if (Type.isAnonymousFunction(subBuilder) && subBuilder.arity === 1) {
-        return includeOne(query, spec, subBuilder);
-      }
-
-      Interpreter.raiseArgumentError(
-        `include sub-builder for relationship ${Interpreter.inspect(spec)} must be a one-argument function, got: ${Interpreter.inspect(subBuilder)}`,
-      );
+      return includeOne(query, spec, null);
     }
 
     if (Type.isList(spec)) {
-      if (!Type.isNil(subBuilder)) {
-        Interpreter.raiseArgumentError(
-          "an include shape spec takes no separate sub-builder - nest it in the spec as a {name, sub_builder} pair",
-        );
-      }
-
       if (spec.data.length === 0) {
         Interpreter.raiseArgumentError("include spec must not be empty");
       }

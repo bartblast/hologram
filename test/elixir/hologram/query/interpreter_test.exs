@@ -1795,7 +1795,7 @@ defmodule Hologram.Query.InterpreterTest do
       [silver] =
         Module39
         |> filter(score == 7)
-        |> include(mentors, fn related_query -> sort(related_query, active: :asc) end)
+        |> narrowed_include(:mentors, fn related_query -> sort(related_query, active: :asc) end)
         |> agreed()
 
       assert Enum.map(silver.mentors, & &1.nickname) == ["bob", "ann"]
@@ -2213,7 +2213,7 @@ defmodule Hologram.Query.InterpreterTest do
       :ok = add_relationship(Module3, source.id, :a, kept.id)
       :ok = add_relationship(Module3, source.id, :a, dropped.id)
 
-      query = include(Module3, a, &filter(&1, c: "kept"))
+      query = narrowed_include(Module3, :a, &filter(&1, c: "kept"))
 
       assert [row] = agreed(query)
       assert titles(row.a) == ["kept"]
@@ -2228,7 +2228,7 @@ defmodule Hologram.Query.InterpreterTest do
       :ok = add_relationship(Module3, source.id, :a, banana.id)
       :ok = add_relationship(Module3, source.id, :a, cherry.id)
 
-      query = include(Module3, a, &filter(&1, c == "apple" or c == "cherry"))
+      query = narrowed_include(Module3, :a, &filter(&1, c == "apple" or c == "cherry"))
 
       assert [row] = agreed(query)
       assert matched_titles(row.a) == ["apple", "cherry"]
@@ -2242,7 +2242,7 @@ defmodule Hologram.Query.InterpreterTest do
       end)
 
       query =
-        include(Module3, a, fn related ->
+        narrowed_include(Module3, :a, fn related ->
           related
           |> sort(c)
           |> take(2)
@@ -2258,7 +2258,7 @@ defmodule Hologram.Query.InterpreterTest do
         |> Module5.new()
         |> create()
 
-      query = include(Module5, a, &include(&1, c))
+      query = include(Module5, a.c)
 
       assert [row] = agreed(query)
       assert row.a.c.id == required.id
@@ -2334,7 +2334,7 @@ defmodule Hologram.Query.InterpreterTest do
       query =
         Module26
         |> filter(name == "general")
-        |> include(messages, fn messages ->
+        |> narrowed_include(:messages, fn messages ->
           messages
           |> filter(position > 1)
           |> sort(position: :desc)

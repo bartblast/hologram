@@ -414,7 +414,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         PolicyModule3
-        |> include(children, &include(&1, parent))
+        |> include(children.parent)
         |> Stage.normalize()
 
       assert [%{children: [included_child]}] = run_policied(term, @policy_mapping, user.id)
@@ -556,7 +556,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module3
-        |> include(a, fn related_query ->
+        |> narrowed_include(:a, fn related_query ->
           related_query
           |> filter(a: true)
           |> sort(c)
@@ -769,7 +769,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       term =
         Module9
-        |> include(a, fn related_query ->
+        |> narrowed_include(:a, fn related_query ->
           related_query
           |> filter(source_id >= 2)
           |> sort(source_id)
@@ -1292,7 +1292,9 @@ defmodule Hologram.DB.QueryRunnerTest do
       :ok = add_relationship(Module39, source.id, :mentors, members["bob"].id)
 
       query =
-        include(Module39, mentors, fn related_query -> sort(related_query, active: :asc) end)
+        narrowed_include(Module39, :mentors, fn related_query ->
+          sort(related_query, active: :asc)
+        end)
 
       assert [mentors] = derived_query_results(query, :mentors)
       assert Enum.map(mentors, & &1.nickname) == ["bob", "ann"]
@@ -1514,7 +1516,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     test "reads the path of a derived field in a rule as stored" do
       put_derived_definitions([Module42])
 
-      for {title, public} <- [{"hidden", false}, {"shown", true}, {"none", nil}] do
+      for {caption, public} <- [{"hidden", false}, {"shown", true}, {"none", nil}] do
         note_id =
           if public != nil do
             {:ok, note} = create(Module41.new(public: public))
@@ -1523,18 +1525,18 @@ defmodule Hologram.DB.QueryRunnerTest do
           end
 
         {:ok, _row} =
-          %{note_id: note_id, score: 1, title: title}
+          %{note_id: note_id, score: 1, caption: caption}
           |> Module42.new()
           |> create()
       end
 
-      titles =
+      captions =
         Module42
         |> Stage.normalize()
         |> run_policied(@derived_mapping, nil)
-        |> Enum.map(& &1.title)
+        |> Enum.map(& &1.caption)
 
-      assert titles == ["hidden"]
+      assert captions == ["hidden"]
     end
 
     test "leaves a related row the session may not read out of a count" do

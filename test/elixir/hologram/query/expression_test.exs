@@ -33,11 +33,6 @@ defmodule Hologram.Query.ExpressionTest do
 
   defp lower_predicates(code, binding \\ []), do: lower(&predicates(&1, env()), code, binding)
 
-  defp lower_relationship(code, binding \\ []),
-    do: lower(&relationship(&1, env()), code, binding)
-
-  defp lower_sub_builder(code, binding \\ []), do: lower(&sub_builder(&1, env()), code, binding)
-
   describe "bound/3" do
     test "lowers a negative integer for the stage to judge" do
       assert lower_bound("-1") == -1
@@ -305,21 +300,6 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_inclusion("owner") == :owner
     end
 
-    test "lowers a keyword entry with a capture" do
-      assert lower_inclusion("[tasks: &Function.identity/1]") ==
-               [tasks: &Function.identity/1]
-    end
-
-    test "lowers a keyword entry with a pinned sub-builder" do
-      assert lower_inclusion("[tasks: ^builder]", builder: &Function.identity/1) ==
-               [tasks: &Function.identity/1]
-    end
-
-    test "lowers a keyword entry with an in-place fn" do
-      assert [tasks: sub_builder] = lower_inclusion("[tasks: fn query -> {:refined, query} end]")
-      assert sub_builder.(:query) == {:refined, :query}
-    end
-
     test "lowers a list of names and paths" do
       assert lower_inclusion("[owner, tasks.owner]") == [:owner, tasks: [:owner]]
     end
@@ -330,6 +310,10 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "lowers a three-hop path" do
       assert lower_inclusion("a.b.c") == [a: [b: [:c]]]
+    end
+
+    test "lowers a keyword entry with a pinned nested spec" do
+      assert lower_inclusion("[tasks: ^nested]", nested: [:owner]) == [tasks: [:owner]]
     end
 
     test "merges paths sharing a first hop in the order it first appears" do
@@ -375,15 +359,27 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_inclusion("[tasks: :owner]") end
     end
 
-    test "raises on a keyword entry with an unpinned sub-builder call" do
+    test "raises on a keyword entry with a capture" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: a keyword entry in include pairs a relationship with a sub-builder written in place (fn or &) or a pinned expression, got: [tasks: Foo.builder()] - a value from the surrounding code is pinned: ^Foo.builder()",
+                   "lib/my_app/queries.ex:12: include takes names and paths, got: [tasks: &Function.identity/1] - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end",
+                   fn -> lower_inclusion("[tasks: &Function.identity/1]") end
+    end
+
+    test "raises on a keyword entry with an in-place fn" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: include takes names and paths, got: [tasks: fn query -> query end] - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end",
+                   fn -> lower_inclusion("[tasks: fn query -> query end]") end
+    end
+
+    test "raises on a keyword entry with an unpinned call" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: include takes names and paths, got: [tasks: Foo.builder()] - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end",
                    fn -> lower_inclusion("[tasks: Foo.builder()]") end
     end
 
     test "raises on a keyword entry with nil" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: a keyword entry in include pairs a relationship with a sub-builder written in place (fn or &) or a pinned expression, got: [tasks: nil]",
+                   "lib/my_app/queries.ex:7: include takes names and paths, got: [tasks: nil] - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end",
                    fn -> lower_inclusion("[tasks: nil]") end
     end
 
@@ -1286,55 +1282,6 @@ defmodule Hologram.Query.ExpressionTest do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute, a path or a pinned expression, got: user_id() - a value from the surrounding code is pinned: ^user_id()",
                    fn -> lower_predicates("owner_id == user_id()") end
-    end
-  end
-
-  describe "relationship/2" do
-    test "lowers a bare name" do
-      assert lower_relationship("owner") == [:owner]
-    end
-
-    test "lowers a path" do
-      assert lower_relationship("project.tasks") == [:project, :tasks]
-    end
-
-    test "lowers a pinned name" do
-      assert lower_relationship("^rel", rel: :owner) == [:owner]
-    end
-
-    test "raises on a call" do
-      assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: include names a relationship with a bare name or a path, or with a pinned expression when the name comes from the surrounding code, got: relationship_for(x) - a value from the surrounding code is pinned: ^relationship_for(x)",
-                   fn -> lower_relationship("relationship_for(x)") end
-    end
-
-    test "raises on an atom" do
-      assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: include names a relationship with a bare name, got: :owner - write owner",
-                   fn -> lower_relationship(":owner") end
-    end
-  end
-
-  describe "sub_builder/2" do
-    test "lowers a pinned sub-builder" do
-      assert lower_sub_builder("^builder", builder: &Function.identity/1) ==
-               (&Function.identity/1)
-    end
-
-    test "passes a capture through" do
-      assert lower_sub_builder("&Function.identity/1") == (&Function.identity/1)
-    end
-
-    test "passes an in-place fn through" do
-      sub_builder = lower_sub_builder("fn query -> {:refined, query} end")
-
-      assert sub_builder.(:query) == {:refined, :query}
-    end
-
-    test "raises on a bare name" do
-      assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: include/3 takes a sub-builder written in place (fn or &) or a pinned expression, got: builder - a value from the surrounding code is pinned: ^builder",
-                   fn -> lower_sub_builder("builder") end
     end
   end
 end

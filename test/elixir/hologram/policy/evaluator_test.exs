@@ -101,8 +101,8 @@ defmodule Hologram.Policy.EvaluatorTest do
       rule = rule(predicates: [{:shout, :==, "draft!!"}])
       missing_rule = rule(predicates: [{:shout, :==, nil}])
 
-      assert rule_matches?(rule, %Module42{title: "draft"}, nil, &deny/3)
-      assert rule_matches?(missing_rule, %Module42{title: nil}, nil, &deny/3)
+      assert rule_matches?(rule, %Module42{caption: "draft"}, nil, &deny/3)
+      assert rule_matches?(missing_rule, %Module42{caption: nil}, nil, &deny/3)
     end
 
     test "compares a derived enum by its declared order" do
@@ -120,7 +120,11 @@ defmodule Hologram.Policy.EvaluatorTest do
 
     test "computes a derived field on the row a path leads to" do
       rule = rule(predicates: [{[:origin, :shout], :==, "draft!!"}])
-      checker = fn {:related, [:origin]}, _entity, _actor_user_id -> %Module42{title: "draft"} end
+
+      checker = fn {:related, [:origin]}, _entity, _actor_user_id ->
+        %Module42{caption: "draft"}
+      end
+
       missing_checker = fn {:related, [:origin]}, _entity, _actor_user_id -> nil end
 
       assert rule_matches?(rule, %Module42{}, nil, checker)

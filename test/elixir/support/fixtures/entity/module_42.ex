@@ -4,13 +4,13 @@ defmodule Hologram.Test.Fixtures.Entity.Module42 do
 
   alias Hologram.Test.Fixtures.Entity.Module41
 
+  attribute :caption, :string
   attribute :score, :integer
-  attribute :title, :string
 
   relationship :note, Module41, optional: true
   relationship :origin, __MODULE__, optional: true
 
-  derived :label, :string, fn title -> title <> "!" end
+  derived :label, :string, fn caption -> caption <> "!" end
 
   derived :note_hidden, :boolean, fn note -> note.public == false end
 
