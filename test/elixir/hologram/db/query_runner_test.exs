@@ -29,7 +29,11 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module31
+  alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module33
+  alias Hologram.Test.Fixtures.Entity.Module34
   alias Hologram.Test.Fixtures.Entity.Module37
+  alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module8
   alias Hologram.Test.Fixtures.Entity.Module9
@@ -39,6 +43,8 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Policy.Module6, as: PolicyModule6
   alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
   alias Hologram.Test.Fixtures.Role
+
+  @derived_mapping Mapper.derive!([Module32, Module33, Module34, Module39], [])
 
   @mapping Mapper.derive!([Module1, Module2, Module3], [])
 
@@ -998,6 +1004,141 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert_error ArgumentError, expected_msg, fn ->
         run(term, @mapping, %{search: "x", serach: "y"})
       end
+    end
+  end
+
+  describe "run/3 - derived fields" do
+    setup do
+      put_derived_definitions([Module34, Module39])
+
+      {:ok, general} = create(Module32.new(name: "general"))
+
+      members =
+        Map.new([{"ann", 1, general}, {"bob", 5, nil}, {"general", 0, general}], fn
+          {nickname, score, channel} ->
+            {:ok, member} =
+              %{channel_id: channel && channel.id, nickname: nickname, score: score}
+              |> Module34.new()
+              |> create()
+
+            {nickname, member}
+        end)
+
+      [members: members]
+    end
+
+    defp create_module_39_entity(score, member \\ nil) do
+      {:ok, entity} =
+        %{kind: :guest, member_id: member && member.id, score: score}
+        |> Module39.new()
+        |> create()
+
+      entity
+    end
+
+    defp derived_query_results(query, field) do
+      query
+      |> Stage.normalize()
+      |> run(@derived_mapping)
+      |> Enum.map(&Map.fetch!(&1, field))
+    end
+
+    test "filters on a derived value missing where the related row it reads is" do
+      unequal_query =
+        Module34
+        |> filter(display_name != "ann (general)")
+        |> sort(nickname)
+
+      missing_query = filter(Module34, display_name == nil)
+
+      assert derived_query_results(unequal_query, :nickname) == ["bob", "general"]
+      assert derived_query_results(missing_query, :nickname) == ["bob"]
+    end
+
+    test "filters on a derived boolean false where its condition is not true" do
+      active_query = filter(Module34, active == true)
+
+      unnamed_query =
+        Module34
+        |> filter(named_after_channel == false)
+        |> sort(nickname)
+
+      assert derived_query_results(active_query, :nickname) == ["ann"]
+      assert derived_query_results(unnamed_query, :nickname) == ["ann", "bob"]
+    end
+
+    test "filters on a path ending at a derived value", %{members: members} do
+      create_module_39_entity(1, members["ann"])
+      create_module_39_entity(2, members["bob"])
+
+      query = filter(Module39, member.display_name == "ann (general)")
+
+      assert derived_query_results(query, :score) == [1]
+    end
+
+    test "compares a derived enum by its declared order" do
+      for score <- [1, 7, 12], do: create_module_39_entity(score)
+
+      query =
+        Module39
+        |> filter(tier < :bronze)
+        |> sort(score)
+
+      assert derived_query_results(query, :score) == [7, 12]
+    end
+
+    test "compares a derived enum with an enum attribute of the row" do
+      {:ok, _staff} =
+        %{kind: :staff, score: 2}
+        |> Module39.new()
+        |> create()
+
+      create_module_39_entity(1)
+
+      equal_query =
+        Module39
+        |> filter(kind_label == kind)
+        |> sort(score)
+
+      lower_query = filter(Module39, kind < kind_label)
+
+      assert derived_query_results(equal_query, :score) == [1, 2]
+      assert derived_query_results(lower_query, :score) == []
+    end
+
+    test "computes derived fields inside a quantifier's condition", %{members: members} do
+      low = create_module_39_entity(0)
+      high = create_module_39_entity(6)
+
+      :ok = add_relationship(Module39, low.id, :mentors, members["bob"].id)
+      :ok = add_relationship(Module39, high.id, :mentors, members["ann"].id)
+
+      above_query = filter(Module39, any(mentor <- mentors, mentor.score > ratio))
+      related_query = filter(Module39, any(mentor <- mentors, mentor.active == true))
+
+      assert derived_query_results(above_query, :score) == [0]
+      assert derived_query_results(related_query, :score) == [6]
+    end
+
+    test "sorts by a derived enum in its declared order" do
+      for score <- [7, 1, 12], do: create_module_39_entity(score)
+
+      query = sort(Module39, tier: :asc)
+
+      assert derived_query_results(query, :score) == [12, 7, 1]
+    end
+
+    test "sorts a to-many include by a derived field", %{members: members} do
+      source = create_module_39_entity(1)
+
+      :ok = add_relationship(Module39, source.id, :mentors, members["ann"].id)
+      :ok = add_relationship(Module39, source.id, :mentors, members["bob"].id)
+
+      query =
+        include(Module39, mentors, fn related_query -> sort(related_query, active: :asc) end)
+
+      assert [mentors] = derived_query_results(query, :mentors)
+      assert Enum.map(mentors, & &1.nickname) == ["bob", "ann"]
     end
   end
 

@@ -8,6 +8,7 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.DB.Mapper
   alias Hologram.Policy
   alias Hologram.Query
+  alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -21,6 +22,10 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
+  alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module33
+  alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Entity.Module6
@@ -1574,6 +1579,434 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(sql, ~s( WHERE "id" = $1))
       assert String.contains?(sql, ~s( AND "a" = $2))
+    end
+  end
+
+  describe "compile/2 - derived fields" do
+    setup do
+      put_derived_definitions([Module34, Module39])
+
+      [mapping: Mapper.derive!([Module32, Module33, Module34, Module39], [])]
+    end
+
+    test "binds a literal a definition holds, cast to the declared type", %{mapping: mapping} do
+      term =
+        Module34
+        |> filter(top_score == 10)
+        |> Stage.normalize()
+
+      assert compile(term, mapping) == %{
+               params: [{:value, 10}, {:value, 10}],
+               sql:
+                 ~s(SELECT "id", "nickname", "score", "channel_id", "created_at", "updated_at", "$revisions" ) <>
+                   ~s(FROM "hologram_data"."test_fixtures_entity_module34" ) <>
+                   ~s(WHERE $1::int8 = $2 ORDER BY "id" ASC)
+             }
+    end
+
+    test "widens an integer attribute a float field reads", %{mapping: mapping} do
+      term =
+        Module39
+        |> filter(ratio > 1.5)
+        |> Stage.normalize()
+
+      assert %{params: [{:value, 1.5}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s( WHERE "score"::float8 > $1 ORDER BY))
+    end
+
+    test "reads an enum attribute an enum field reads as its label", %{mapping: mapping} do
+      term =
+        Module39
+        |> filter(kind_label == :staff)
+        |> Stage.normalize()
+
+      assert %{params: [{:value, "staff"}], sql: sql} = compile(term, mapping)
+
+      assert String.contains?(sql, ~s( WHERE "kind"::text = $1 ORDER BY))
+    end
+
+    test "concatenates the operands of <> with ||", %{mapping: mapping} do
+      term =
+        Module34
+        |> filter(display_name == "ann (general)")
+        |> Stage.normalize()
+
+      channel_name =
+        hop(1, Module32, ~s("$p1"."name"), ~s("test_fixtures_entity_module34"."channel_id"))
+
+      assert %{
+               params: [{:value, " ("}, {:value, ")"}, {:value, "ann (general)"}],
+               sql: sql
+             } = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("nickname" \|\| $1::text \|\| #{channel_name} \|\| $2::text) = $3 ORDER BY|
+             )
+    end
+
+    test "widens an inequality on a derived value to a missing one", %{mapping: mapping} do
+      term =
+        Module34
+        |> filter(display_name != "ann (general)")
+        |> Stage.normalize()
+
+      channel_name =
+        hop(1, Module32, ~s("$p1"."name"), ~s("test_fixtures_entity_module34"."channel_id"))
+
+      display_name = ~s|("nickname" \|\| $1::text \|\| #{channel_name} \|\| $2::text)|
+
+      assert %{params: [{:value, " ("}, {:value, ")"}, {:value, "ann (general)"}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE (#{display_name} != $3 OR #{display_name} IS NULL) ORDER BY|
+             )
+    end
+
+    test "compiles if to CASE WHEN, a missing else branch to NULL", %{mapping: mapping} do
+      term =
+        Module34
+        |> filter(badge == "top")
+        |> Stage.normalize()
+
+      assert %{params: [{:value, 3}, {:value, "top"}, {:value, "top"}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s( WHERE CASE WHEN "score" >= $1 THEN $2::text ELSE NULL::text END = $3 ORDER BY)
+             )
+    end
+
+    test "compiles a condition field to a value false where the condition is not true", %{
+      mapping: mapping
+    } do
+      term =
+        Module34
+        |> filter(active == true)
+        |> Stage.normalize()
+
+      assert %{params: [{:value, 0}, {:value, 3}, {:value, true}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE COALESCE(("score" > $1 AND "score" < $2), false) = $3 ORDER BY|
+             )
+    end
+
+    test "computes a derived field another definition reads", %{mapping: mapping} do
+      term =
+        Module39
+        |> filter(gold == true)
+        |> Stage.normalize()
+
+      tier =
+        ~s(CASE WHEN "score" > $1 THEN $2::text ELSE ) <>
+          ~s(CASE WHEN "score" > $3 THEN $4::text ELSE $5::text END END)
+
+      assert %{
+               params: [
+                 {:value, 10},
+                 {:value, "gold"},
+                 {:value, 5},
+                 {:value, "silver"},
+                 {:value, "bronze"},
+                 {:value, "gold"},
+                 {:value, true}
+               ],
+               sql: sql
+             } = compile(term, mapping)
+
+      assert String.contains?(sql, ~s| WHERE COALESCE((#{tier} = $6), false) = $7 ORDER BY|)
+    end
+
+    test "computes a derived field a path ends at on the row the path reaches", %{
+      mapping: mapping
+    } do
+      term =
+        Module39
+        |> filter(member.display_name == "ann (general)")
+        |> Stage.normalize()
+
+      channel_name = hop(2, Module32, ~s("$p2"."name"), ~s("$p1"."channel_id"))
+
+      display_name =
+        hop(
+          1,
+          Module34,
+          ~s|("$p1"."nickname" \|\| $1::text \|\| #{channel_name} \|\| $2::text)|,
+          ~s("test_fixtures_entity_module39"."member_id")
+        )
+
+      assert %{
+               params: [{:value, " ("}, {:value, ")"}, {:value, "ann (general)"}],
+               sql: sql
+             } = compile(term, mapping)
+
+      assert String.contains?(sql, ~s( WHERE #{display_name} = $3 ORDER BY))
+    end
+
+    test "compares a derived enum by its label's declared position", %{mapping: mapping} do
+      term =
+        Module39
+        |> filter(tier < :bronze)
+        |> Stage.normalize()
+
+      tier =
+        ~s(CASE WHEN "score" > $1 THEN $2::text ELSE ) <>
+          ~s(CASE WHEN "score" > $3 THEN $4::text ELSE $5::text END END)
+
+      labels = "ARRAY['gold', 'silver', 'bronze']"
+
+      assert %{
+               params: [
+                 {:value, 10},
+                 {:value, "gold"},
+                 {:value, 5},
+                 {:value, "silver"},
+                 {:value, "bronze"},
+                 {:value, "bronze"}
+               ],
+               sql: sql
+             } = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE array_position(#{labels}, #{tier}) < array_position(#{labels}, $6) ORDER BY|
+             )
+    end
+
+    test "sorts by a derived enum in its declared order", %{mapping: mapping} do
+      term =
+        Module39
+        |> sort(tier: :desc)
+        |> Stage.normalize()
+
+      tier =
+        ~s(CASE WHEN "score" > $1 THEN $2::text ELSE ) <>
+          ~s(CASE WHEN "score" > $3 THEN $4::text ELSE $5::text END END)
+
+      assert %{
+               params: [
+                 {:value, 10},
+                 {:value, "gold"},
+                 {:value, 5},
+                 {:value, "silver"},
+                 {:value, "bronze"}
+               ],
+               sql: sql
+             } = compile(term, mapping)
+
+      assert String.ends_with?(
+               sql,
+               ~s| ORDER BY array_position(ARRAY['gold', 'silver', 'bronze'], #{tier}) DESC, "id" ASC|
+             )
+    end
+
+    test "compares a derived value with an attribute of the row", %{mapping: mapping} do
+      where_sql = fn query ->
+        %{params: [], sql: sql} =
+          query
+          |> Stage.normalize()
+          |> compile(mapping)
+
+        [_select_sql, condition_sql] = String.split(sql, " WHERE ")
+
+        String.replace_suffix(condition_sql, ~s( ORDER BY "id" ASC), "")
+      end
+
+      labels = "ARRAY['guest', 'staff']"
+      kind_type = ~s("hologram_data"."test_fixtures_entity_module39_kind_$enum")
+
+      widened_sql =
+        Module39
+        |> filter(ratio > score)
+        |> where_sql.()
+
+      label_sql =
+        Module39
+        |> filter(kind_label <= kind)
+        |> where_sql.()
+
+      enum_sql =
+        Module39
+        |> filter(kind == kind_label)
+        |> where_sql.()
+
+      assert widened_sql == ~s("score"::float8 > "score")
+
+      assert label_sql ==
+               ~s|array_position(#{labels}, "kind"::text) <= array_position(#{labels}, "kind"::text)|
+
+      assert enum_sql == ~s("kind" IS NOT DISTINCT FROM "kind"::text::#{kind_type})
+    end
+
+    test "computes a derived field of the related row inside a quantifier's condition", %{
+      mapping: mapping
+    } do
+      term =
+        Module39
+        |> filter(any(mentor <- mentors, mentor.active == true))
+        |> Stage.normalize()
+
+      assert %{params: [{:value, 0}, {:value, 3}, {:value, true}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| AND COALESCE(("score" > $1 AND "score" < $2), false) = $3) ORDER BY|
+             )
+    end
+
+    test "computes a derived field of a row above inside a quantifier's condition", %{
+      mapping: mapping
+    } do
+      term =
+        Module39
+        |> filter(any(mentor <- mentors, mentor.score > ratio and tier == :gold))
+        |> Stage.normalize()
+
+      row_score = ~s("test_fixtures_entity_module39"."score")
+
+      tier =
+        ~s(CASE WHEN #{row_score} > $1 THEN $2::text ELSE ) <>
+          ~s(CASE WHEN #{row_score} > $3 THEN $4::text ELSE $5::text END END)
+
+      assert %{
+               params: [
+                 {:value, 10},
+                 {:value, "gold"},
+                 {:value, 5},
+                 {:value, "silver"},
+                 {:value, "bronze"},
+                 {:value, "gold"}
+               ],
+               sql: sql
+             } = compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s| AND "score" > #{row_score}::float8 AND #{tier} = $6) ORDER BY|
+             )
+    end
+
+    test "keeps nil's meaning in a membership on a derived value", %{mapping: mapping} do
+      tier =
+        ~s(CASE WHEN "score" > $1 THEN $2::text ELSE ) <>
+          ~s(CASE WHEN "score" > $3 THEN $4::text ELSE $5::text END END)
+
+      expected_params = [
+        {:value, 10},
+        {:value, "gold"},
+        {:value, 5},
+        {:value, "silver"},
+        {:value, "bronze"},
+        {:value, ["gold"]}
+      ]
+
+      member_term =
+        Module39
+        |> filter(tier in [:gold, nil])
+        |> Stage.normalize()
+
+      non_member_term =
+        Module39
+        |> filter(tier not in [:gold, nil])
+        |> Stage.normalize()
+
+      assert %{params: member_params, sql: member_sql} = compile(member_term, mapping)
+      assert member_params == expected_params
+
+      assert String.contains?(
+               member_sql,
+               ~s| WHERE (#{tier} = ANY($6) OR #{tier} IS NULL) ORDER BY|
+             )
+
+      assert %{params: non_member_params, sql: non_member_sql} = compile(non_member_term, mapping)
+      assert non_member_params == expected_params
+
+      assert String.contains?(
+               non_member_sql,
+               ~s| WHERE (#{tier} != ALL($6) AND #{tier} IS NOT NULL) ORDER BY|
+             )
+    end
+
+    test "binds membership element placeholders on a derived enum as labels", %{mapping: mapping} do
+      term =
+        Module39
+        |> filter(tier in [^%Placeholder{name: :tier}, :gold])
+        |> Stage.normalize()
+
+      assert %{params: params, sql: sql} = compile(term, mapping)
+
+      assert params == [
+               {:value, 10},
+               {:value, "gold"},
+               {:value, 5},
+               {:value, "silver"},
+               {:value, "bronze"},
+               {:placeholder, :tier, :enum},
+               {:value, "gold"}
+             ]
+
+      assert String.contains?(sql, ~s| = ANY(ARRAY[$6, $7]::text[]) ORDER BY|)
+    end
+
+    test "binds a derived sort's slots after the policy's", %{mapping: mapping} do
+      term =
+        Module39
+        |> sort(tier: :desc)
+        |> Stage.normalize()
+
+      policy = %{rules: [%{predicates: [{:score, :>, 0}], to: nil, via: nil}]}
+
+      tier =
+        ~s(CASE WHEN "score" > $2 THEN $3::text ELSE ) <>
+          ~s(CASE WHEN "score" > $4 THEN $5::text ELSE $6::text END END)
+
+      assert %{
+               params: [
+                 {:value, 0},
+                 {:value, 10},
+                 {:value, "gold"},
+                 {:value, 5},
+                 {:value, "silver"},
+                 {:value, "bronze"}
+               ],
+               sql: sql
+             } = compile(term, mapping, policy)
+
+      assert String.ends_with?(
+               sql,
+               ~s| WHERE "score" > $1 ORDER BY array_position(ARRAY['gold', 'silver', 'bronze'], #{tier}) DESC, "id" ASC|
+             )
+    end
+
+    test "sorts a to-many include by a derived field computed on each related row", %{
+      mapping: mapping
+    } do
+      term =
+        Module39
+        |> include(mentors, fn related_query -> sort(related_query, active: :desc) end)
+        |> Stage.normalize()
+
+      assert %{params: [{:value, 0}, {:value, 3}, {:value, 0}, {:value, 3}], sql: sql} =
+               compile(term, mapping)
+
+      assert String.contains?(
+               sql,
+               ~s|ORDER BY COALESCE(("score" > $1 AND "score" < $2), false) DESC, "id" ASC) AS "$i1"|
+             )
+
+      assert String.contains?(
+               sql,
+               ~s|ORDER BY COALESCE(("$i1"."score" > $3 AND "$i1"."score" < $4), false) DESC, | <>
+                 ~s|"$i1"."id" ASC), '[]'::jsonb|
+             )
     end
   end
 
