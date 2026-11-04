@@ -3,8 +3,11 @@ defmodule Hologram.Policy.Edges do
 
   alias Hologram.Entity
   alias Hologram.Entity.Derived
+  alias Hologram.Entity.Model
   alias Hologram.Policy
   alias Hologram.Query.Stage
+
+  @index_key {__MODULE__, :index}
 
   @universal_edges [:auth_change, :deploy]
 
@@ -48,6 +51,36 @@ defmodule Hologram.Policy.Edges do
         into: %{} do
       {{entity_type, operation}, operation_edges(entity_type, rules)}
     end
+  end
+
+  @doc """
+  Returns the dependency edges of every entity type in the project's compiled data model.
+
+  Cached for the lifetime of the runtime and derived on the first call: deriving grows with the
+  model, tens of milliseconds for hundreds of entity types. Resetting the cache drops it, so a
+  recompiled data model is picked up by the next call.
+  """
+  @spec index() :: %{{module, Entity.operation()} => list(tuple)}
+  def index do
+    case :persistent_term.get(@index_key, nil) do
+      nil ->
+        index = derive(Model.entity_types())
+
+        :persistent_term.put(@index_key, index)
+
+        index
+
+      index ->
+        index
+    end
+  end
+
+  @doc false
+  @spec reset_index_cache() :: :ok
+  def reset_index_cache do
+    :persistent_term.erase(@index_key)
+
+    :ok
   end
 
   @doc """

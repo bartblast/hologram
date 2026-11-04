@@ -5,7 +5,6 @@ defmodule Hologram.Sync.Fanout do
   # evaluators sits the question of which windows a batch of writes could have changed the answer
   # of, and this is where that question is asked and acted on.
 
-  alias Hologram.Entity.Model
   alias Hologram.Policy.Edges
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
@@ -24,10 +23,10 @@ defmodule Hologram.Sync.Fanout do
   """
   @spec route(list({non_neg_integer, list(map)}), {non_neg_integer, non_neg_integer}) :: :ok
   def route(transactions, place) do
-    # Derived per batch rather than kept, from the cached model: deriving costs nothing once the
-    # policies are built, and the list it is derived from is the one fact a sweep produces - cached
-    # for the runtime and dropped by a compile, so a live reload is picked up by the next batch.
-    edges = Edges.derive(Model.entity_types())
+    # Read from the runtime's cache rather than derived per batch: deriving grows with the model,
+    # and this runs for every batch before any of it reaches a client. A compile drops the cache, so
+    # a live reload is picked up by the next batch.
+    edges = Edges.index()
 
     transactions
     |> Scoper.affected(Evaluators.live(), edges)

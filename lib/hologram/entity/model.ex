@@ -38,11 +38,10 @@ defmodule Hologram.Entity.Model do
   Returns the entity type modules of the project's compiled data model, sorted by name.
 
   Cached for the lifetime of the runtime, with the global roles and the user entity type (see
-  `put_facts/3`): this is read for every batch of writes a node routes to its windows and for
-  every client that resumes with a place in the log. The compiler fills the cache in the VM it runs
-  in, and a read that finds the cache empty fills it from the module info dump the last compile
-  wrote, without reading a beam. A missing dump raises. The application boot resets the cache, so
-  a recompiled data model is picked up.
+  `put_facts/3`). The compiler fills the cache in the VM it runs in, and a read that finds the cache
+  empty fills it from the module info dump the last compile wrote, without reading a beam. A
+  missing dump raises. The application boot resets the cache, so a recompiled data model is picked
+  up.
   """
   @spec entity_types() :: list(module)
   def entity_types, do: facts().entity_types

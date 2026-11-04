@@ -1,9 +1,14 @@
 defmodule Hologram.Policy.EdgesTest do
-  use Hologram.Test.BasicCase, async: true
+  # async: false - the index cache is one persistent term for the whole node, and proving it is
+  # READ means standing a value in it that is not the real index. Every concurrent read of the index
+  # would see that value while it stands.
+  use Hologram.Test.BasicCase, async: false
 
   import Hologram.Policy.Edges
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Entity.Model
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module17
@@ -13,6 +18,8 @@ defmodule Hologram.Policy.EdgesTest do
   alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy
   alias Hologram.Test.Fixtures.Role
+
+  @index_key {Hologram.Policy.Edges, :index}
 
   describe "derive/1" do
     # A derived field has no column - the rows and attributes its definition reads are what a change
@@ -261,9 +268,59 @@ defmodule Hologram.Policy.EdgesTest do
     end
   end
 
+  # The cache is one term for the whole node, so these leave it empty, for the next read to derive
+  # the project's real index.
+  describe "index/0" do
+    setup do
+      on_exit(&reset_caches/0)
+
+      reset_caches()
+    end
+
+    test "derives the index of the project's compiled data model" do
+      assert index() == derive(Reflection.list_entities())
+    end
+
+    test "answers from the cache" do
+      :persistent_term.put(@index_key, :cached)
+
+      assert index() == :cached
+    end
+
+    test "keeps the derived index for the calls after it" do
+      assert :persistent_term.get(@index_key, nil) == nil
+
+      derived = index()
+
+      assert :persistent_term.get(@index_key, nil) == derived
+    end
+  end
+
+  describe "reset_index_cache/0" do
+    setup do
+      on_exit(&reset_caches/0)
+
+      reset_caches()
+    end
+
+    test "drops the cached index" do
+      index()
+
+      assert reset_index_cache() == :ok
+      assert :persistent_term.get(@index_key, nil) == nil
+    end
+  end
+
   describe "universal_edges/0" do
     test "names the session-wide invalidation kinds" do
       assert universal_edges() == [:auth_change, :deploy]
     end
+  end
+
+  # The index is derived from the model cache, which an earlier test may have left holding
+  # something other than the project's model.
+  defp reset_caches do
+    Model.reset_caches()
+    reset_index_cache()
   end
 end

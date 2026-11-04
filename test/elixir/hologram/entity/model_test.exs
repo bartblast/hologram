@@ -57,8 +57,8 @@ defmodule Hologram.Entity.ModelTest do
       assert count_calls({Reflection, :list_entities, 0}, &entity_types/0) == 0
     end
 
-    # This runs for every batch of writes a node routes, so the cache is the point rather than a
-    # nicety. Asserted through the store rather than by timing.
+    # The model is read on every client handshake, so the cache is the point rather than a nicety.
+    # Asserted through the store rather than by timing.
     test "remembers the list rather than reading the dump again" do
       assert :persistent_term.get(@facts_key, nil) == nil
 

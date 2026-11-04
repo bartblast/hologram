@@ -101,6 +101,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
   alias Hologram.Policy
+  alias Hologram.Policy.Edges
   alias Hologram.Policy.Validator, as: PolicyValidator
   alias Hologram.Reflection
 
@@ -1687,12 +1688,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     })
   end
 
-  # Replaces what the running app knows of the data model. The two caches derived from the model
-  # cache are dropped with it.
+  # Replaces what the running app knows of the data model. The caches derived from the model cache
+  # are dropped with it.
   defp put_model_facts(entity_types, role_modules, user_entity) do
     RoleGrant.reset_resolution_cache()
     Model.put_facts(entity_types, role_modules, user_entity)
     Policy.reset_model_facts_cache()
+    Edges.reset_index_cache()
   end
 
   # The components of the build. Overridable so this project's own test suite can compile: it
