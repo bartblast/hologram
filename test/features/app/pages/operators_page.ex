@@ -12,6 +12,9 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  @atom_a :"\uFFFD"
+  @atom_b :"😀"
+
   @binary_a <<0xFF>>
   @binary_b <<0xFE>>
 
@@ -98,6 +101,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="<=" $click="<="> &lt;= </button>
       <button id=">=" $click=">="> &gt;= </button>
       <button id="< (non-text binaries)" $click="< (non-text binaries)"> &lt; (non-text binaries) </button>
+      <button id="< (atoms above U+FFFF)" $click="< (atoms above U+FFFF)"> &lt; (atoms above U+FFFF) </button>
     </p>
     <p>
       <h2><code>Custom and Overriden Operators</code></h2>
@@ -347,6 +351,15 @@ defmodule HologramFeatureTests.OperatorsPage do
 
     result =
       {binary_a < binary_b, binary_a > binary_b, binary_a <= binary_b, binary_a >= binary_b}
+
+    put_state(component, :result, result)
+  end
+
+  def action(:"< (atoms above U+FFFF)", _params, component) do
+    atom_a = wrap_term(@atom_a)
+    atom_b = wrap_term(@atom_b)
+
+    result = {atom_a < atom_b, atom_a > atom_b, atom_a <= atom_b, atom_a >= atom_b}
 
     put_state(component, :result, result)
   end

@@ -381,6 +381,13 @@ defmodule Hologram.Template.RendererTest do
                {~s(<div my-key-1="a" my-key-2="b" my-key-3="c"></div>), %{}, @server}
     end
 
+    test "entries are sorted by code point" do
+      node = {:element, "div", [{:spread, {%{"😀": "my_value_1", "\uFFFD": "my_value_2"}}}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s(<div \uFFFD="my_value_2" 😀="my_value_1"></div>), %{}, @server}
+    end
+
     test "entries are sorted by the composed name, so nested ones stay next to their siblings" do
       node =
         {:element, "div",

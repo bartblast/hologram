@@ -838,6 +838,10 @@ describe("Erlang", () => {
       assertBoxedTrue(testedFun(atomA, atomB));
     });
 
+    it("atom < atom, character above U+FFFF", () => {
+      assertBoxedTrue(testedFun(Type.atom("\uFFFD"), Type.atom("😀")));
+    });
+
     it("float < atom (always)", () => {
       assertBoxedTrue(testedFun(float1, atomA));
     });
