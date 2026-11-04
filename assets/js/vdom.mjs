@@ -213,6 +213,9 @@ const patchModules = [
 
 const patch = init(patchModules, domApi);
 
+// The keys a duplicate-key warning was logged for, so that each is logged once per page load.
+const warnedDuplicateKeys = new Set();
+
 export default class Vdom {
   // The DOM API the diff runs with: snabbdom's own, with trusted HTML ranges handled as units.
   static domApi = domApi;
@@ -289,11 +292,22 @@ export default class Vdom {
   // already consumed.
   //
   // Every kind of key is numbered by the same rule, since every kind can repeat: the key an
-  // element carries for its place, and the href or src a resource is named by.
+  // element carries for its place, and the href or src a resource is named by. A number another
+  // sibling's key already holds is skipped, so the numbered keys stay unique too.
   //
   // Only the vnode key is renumbered, never anything in the markup, so server-rendered and
-  // client-rendered pages stay byte-identical. Both sides walk a children list in document order,
-  // so both arrive at the same keys.
+  // client-rendered pages stay byte-identical. The server never numbers: the client does it on
+  // both of its render paths, its own render and the tree a navigation brings, which build the
+  // same children lists, so both arrive at the same keys.
+  //
+  // A repeat among keys the items of one loop gave by their identity - their :id, a $key or a cid -
+  // means two items claim to be the same one, so the diff falls back to their positions. That is
+  // logged, once per key: the client's own render stamps such an element with the key scope of its
+  // item (data.hologramKeyScope), which knows the loop it came from. A key repeated across two
+  // scopes of one loop is two items. One repeated within a scope is the same component placed
+  // twice in one item, and one repeated across two loops is the same loop rendered twice, the
+  // repeats numbered in document order either way. A server tree carries no scopes, and the
+  // client's own render of the same page follows it at once.
   static dedupeKeys(children) {
     // Nothing can repeat on its own, and a children list of one is the common case.
     if (children.length < 2) {
@@ -301,21 +315,46 @@ export default class Vdom {
     }
 
     const counts = new Map();
+    let scopes = null;
+    let takenKeys = null;
 
     for (const child of children) {
       if (!child?.key) {
         continue;
       }
 
-      const count = counts.get(child.key) ?? 0;
-      counts.set(child.key, count + 1);
+      const key = child.key;
+      const scope = child.data.hologramKeyScope;
+
+      if (scope) {
+        scopes ??= new Map();
+
+        const firstScope = scopes.get(key);
+
+        if (firstScope === undefined) {
+          scopes.set(key, scope);
+        } else if (firstScope !== scope && firstScope.loop === scope.loop) {
+          $.#warnDuplicateKey(key);
+        }
+      }
+
+      let count = counts.get(key) ?? 0;
 
       if (count > 0) {
-        const dedupedKey = `${child.key}:${count}`;
+        takenKeys ??= new Set(children.map((sibling) => sibling?.key));
 
+        while (takenKeys.has(`${key}:${count}`)) {
+          count += 1;
+        }
+
+        const dedupedKey = `${key}:${count}`;
+
+        takenKeys.add(dedupedKey);
         child.key = dedupedKey;
         child.data.key = dedupedKey;
       }
+
+      counts.set(key, count + 1);
     }
 
     return children;
@@ -825,6 +864,18 @@ export default class Vdom {
     );
 
     return rawVnode(domNode.localName, data, children, undefined, domNode);
+  }
+
+  static #warnDuplicateKey(key) {
+    if (warnedDuplicateKeys.has(key)) {
+      return;
+    }
+
+    warnedDuplicateKeys.add(key);
+
+    console.warn(
+      `Hologram: sibling elements share the key "${key}", so they're matched by position. Give each loop item a unique :id or $key.`,
+    );
   }
 }
 

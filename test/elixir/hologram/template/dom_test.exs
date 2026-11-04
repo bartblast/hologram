@@ -2,6 +2,9 @@ defmodule Hologram.Template.DOMTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Template.DOM
 
+  alias Hologram.Compiler.AST
+  alias Hologram.Template.Parser
+
   # The key an element carries for the place it holds in the given template, counted over the
   # elements in source order. Built the way the compiler builds it rather than written out, so that
   # editing a template in a test doesn't silently invalidate the hash - the hash itself is asserted
@@ -1905,6 +1908,18 @@ defmodule Hologram.Template.DOMTest do
   end
 
   describe "build_ast/1, for block" do
+    # The for block's loop item: the one-tuple holding the item the generator binds whole, and the
+    # body's nodes.
+    defp loop_item(nodes) do
+      {:{}, [line: 1], [:loop_item, {:{}, [line: 1], [{:holo_loop_item, [line: 1], nil}]}, nodes]}
+    end
+
+    defp loop_item_var, do: {:holo_loop_item, [line: 1], nil}
+
+    defp items_ast do
+      {{:., [line: 1], [{:vars, [line: 1], nil}, :items]}, [no_parens: true, line: 1], []}
+    end
+
     test "with one child" do
       tags = [{:block_start, {"for", "{ item <- @items}"}}, {:text, "abc"}, {:block_end, "for"}]
 
@@ -1912,12 +1927,8 @@ defmodule Hologram.Template.DOMTest do
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
-                   [
-                     {:item, [line: 1], nil},
-                     {{:., [line: 1], [{:vars, [line: 1], nil}, :items]},
-                      [no_parens: true, line: 1], []}
-                   ]},
-                  [do: {:__block__, [], [[text: "abc"]]}]
+                   [{:=, [line: 1], [{:item, [line: 1], nil}, loop_item_var()]}, items_ast()]},
+                  [do: {:__block__, [], [loop_item(text: "abc")]}]
                 ]}
              ]
     end
@@ -1935,18 +1946,507 @@ defmodule Hologram.Template.DOMTest do
                {:for, [line: 1],
                 [
                   {:<-, [line: 1],
-                   [
-                     {:item, [line: 1], nil},
-                     {{:., [line: 1], [{:vars, [line: 1], nil}, :items]},
-                      [no_parens: true, line: 1], []}
-                   ]},
+                   [{:=, [line: 1], [{:item, [line: 1], nil}, loop_item_var()]}, items_ast()]},
                   [
                     do:
                       {:__block__, [],
-                       [[{:text, "abc"}, {:{}, [line: 1], [:element, "div", [key(tags, 0)], []]}]]}
+                       [
+                         loop_item([
+                           {:text, "abc"},
+                           {:{}, [line: 1], [:element, "div", [key(tags, 0)], []]}
+                         ])
+                       ]}
                   ]
                 ]}
              ]
+    end
+
+    test "without children" do
+      tags = [{:block_start, {"for", "{ item <- @items}"}}, {:block_end, "for"}]
+
+      assert [{:for, [line: 1], [_generator, [do: {:__block__, [], [loop_item]}]]}] =
+               build_ast(tags)
+
+      assert loop_item == loop_item([])
+    end
+
+    test "a destructuring pattern still binds the whole item" do
+      tags = [
+        {:block_start, {"for", "{ %{name: name} <- @items}"}},
+        {:expression, "{name}"},
+        {:block_end, "for"}
+      ]
+
+      assert [
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1],
+                   [
+                     {:=, [line: 1], [{:%{}, [line: 1], [name: {:name, [line: 1], nil}]}, var]},
+                     _enum
+                   ]},
+                  _do
+                ]}
+             ] = build_ast(tags)
+
+      assert var == loop_item_var()
+    end
+
+    test "a guard stays outside the match" do
+      tags = [
+        {:block_start, {"for", "{ item when item > 1 <- @items}"}},
+        {:block_end, "for"}
+      ]
+
+      assert [
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1],
+                   [
+                     {:when, [line: 1],
+                      [
+                        {:=, [line: 1], [{:item, [line: 1], nil}, var]},
+                        {:>, [line: 1], [{:item, [line: 1], nil}, 1]}
+                      ]},
+                     _enum
+                   ]},
+                  _do
+                ]}
+             ] = build_ast(tags)
+
+      assert var == loop_item_var()
+    end
+
+    test "filters and options are kept" do
+      tags = [
+        {:block_start, {"for", "{ item <- @items, item != nil, into: []}"}},
+        {:block_end, "for"}
+      ]
+
+      assert [
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1], [{:=, [line: 1], [{:item, [line: 1], nil}, _var]}, enum]},
+                  {:!=, [line: 1], [{:item, [line: 1], nil}, nil]},
+                  [into: []],
+                  [do: {:__block__, [], [body]}]
+                ]}
+             ] = build_ast(tags)
+
+      assert enum == items_ast()
+      assert body == loop_item([])
+    end
+
+    test "two generators give no item" do
+      tags = [
+        {:block_start, {"for", "{ x <- @xs, y <- @ys}"}},
+        {:block_end, "for"}
+      ]
+
+      assert [
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1], [{:x, [line: 1], nil}, _xs]},
+                  {:<-, [line: 1], [{:y, [line: 1], nil}, _ys]},
+                  [do: {:__block__, [], [{:{}, [line: 1], [:loop_item, nil, []]}]}]
+                ]}
+             ] = build_ast(tags)
+    end
+
+    test "patterns and qualifiers survive being printed back" do
+      for {source, expected_qualifiers} <- [
+            {"^x <- @items", "^x = holo_loop_item <- vars.items"},
+            {"1 <- @items", "1 = holo_loop_item <- vars.items"},
+            {~S|"a\"#b" <> rest <- @items|, ~S|"a\"#b" <> rest = holo_loop_item <- vars.items|},
+            {"<<a::8, rest::binary>> <- @items",
+             "<<a::8, rest::binary>> = holo_loop_item <- vars.items"},
+            {"x <- ~w(a b)", "x = holo_loop_item <- ~w(a b)"},
+            {"x <- @items, y = x * 2", "x = holo_loop_item <- vars.items, y = x * 2"},
+            {"x <-\n  @items", "x = holo_loop_item <- vars.items"},
+            {"x <- @items, into: @acc", "x = holo_loop_item <- vars.items, into: vars.acc"}
+          ] do
+        tags = [{:block_start, {"for", "{ #{source}}"}}, {:block_end, "for"}]
+
+        expected =
+          AST.for_code("[(for #{expected_qualifiers} do {:loop_item, {holo_loop_item}, []} end)]")
+
+        assert build_ast(tags) == expected, "for #{source}"
+      end
+    end
+
+    test "the uniq option gives no item" do
+      tags = [
+        {:block_start, {"for", "{ item <- @items, uniq: true}"}},
+        {:block_end, "for"}
+      ]
+
+      assert [
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1], [{:item, [line: 1], nil}, _items]},
+                  [uniq: true],
+                  [do: {:__block__, [], [{:{}, [line: 1], [:loop_item, nil, []]}]}]
+                ]}
+             ] = build_ast(tags)
+    end
+
+    test "a bitstring generator next to a list generator gives no item" do
+      tags = [
+        {:block_start, {"for", "{ <<c <- @bytes>>, item <- @items}"}},
+        {:block_end, "for"}
+      ]
+
+      assert [
+               {:for, [line: 1],
+                [
+                  {:<<>>, [line: 1], [{:<-, [line: 1], [{:c, [line: 1], nil}, _bytes]}]},
+                  {:<-, [line: 1], [{:item, [line: 1], nil}, _items]},
+                  [do: {:__block__, [], [{:{}, [line: 1], [:loop_item, nil, []]}]}]
+                ]}
+             ] = build_ast(tags)
+    end
+
+    test "a bitstring generator gives no item" do
+      tags = [
+        {:block_start, {"for", "{ <<c <- @bytes>>}"}},
+        {:block_end, "for"}
+      ]
+
+      assert [
+               {:for, [line: 1],
+                [
+                  {:<<>>, [line: 1], [{:<-, [line: 1], [{:c, [line: 1], nil}, _bytes]}]},
+                  [do: {:__block__, [], [{:{}, [line: 1], [:loop_item, nil, []]}]}]
+                ]}
+             ] = build_ast(tags)
+    end
+
+    test "a nested for block binds its own item" do
+      tags = [
+        {:block_start, {"for", "{ group <- @groups}"}},
+        {:block_start, {"for", "{ item <- group.items}"}},
+        {:text, "abc"},
+        {:block_end, "for"},
+        {:block_end, "for"}
+      ]
+
+      assert [
+               {:for, [line: 1],
+                [
+                  {:<-, [line: 1],
+                   [{:=, [line: 1], [{:group, [line: 1], nil}, _outer_var]}, _groups]},
+                  [
+                    do:
+                      {:__block__, [],
+                       [
+                         {:{}, [line: 1],
+                          [
+                            :loop_item,
+                            outer_item,
+                            [
+                              {:for, [line: 1],
+                               [
+                                 {:<-, [line: 1],
+                                  [{:=, [line: 1], [{:item, [line: 1], nil}, _inner_var]}, _items]},
+                                 [do: {:__block__, [], [inner_loop_item]}]
+                               ]}
+                            ]
+                          ]}
+                       ]}
+                  ]
+                ]}
+             ] = build_ast(tags)
+
+      assert outer_item == {:{}, [line: 1], [loop_item_var()]}
+      assert inner_loop_item == loop_item(text: "abc")
+    end
+  end
+
+  describe "build_ast/1, $key attribute" do
+    # The nodes of the one loop item a single for block's body compiles to.
+    defp loop_body(tags) do
+      assert [{:for, [line: 1], [_generator, [do: {:__block__, [], [loop_item]}]]}] =
+               build_ast(tags)
+
+      {:{}, [line: 1], [:loop_item, _source, nodes]} = loop_item
+      nodes
+    end
+
+    defp item_expression, do: {:{}, [line: 1], [{:item, [line: 1], nil}]}
+
+    # The attributes of every element with the given tag name, wherever it sits in the AST.
+    defp element_attrs(ast, tag_name) do
+      {_ast, attrs} =
+        Macro.prewalk(ast, [], fn
+          {:{}, _meta, [:element, ^tag_name, attrs, _children]} = node, acc ->
+            {node, [attrs | acc]}
+
+          node, acc ->
+            {node, acc}
+        end)
+
+      Enum.reverse(attrs)
+    end
+
+    defp merged_key(tags, index, expression) do
+      {"$key", [text: "#{template_hash(tags)}:#{index}", expression: expression]}
+    end
+
+    defp in_for(tags) do
+      Enum.concat([[{:block_start, {"for", "{ item <- @items}"}}], tags, [{:block_end, "for"}]])
+    end
+
+    test "on an element, follows the key of the element's place" do
+      # {%for item <- @items}<li $key={item}></li>{/for}
+      tags = in_for([{:self_closing_tag, {"li", [{"$key", [expression: "{item}"]}]}}])
+
+      assert loop_body(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "li",
+                  [{"$key", [text: "#{template_hash(tags)}:0", expression: item_expression()]}],
+                  []
+                ]}
+             ]
+    end
+
+    test "on an element, trails the other attributes" do
+      # {%for item <- @items}<li $key={item} class="a"></li>{/for}
+      tags =
+        in_for([
+          {:self_closing_tag, {"li", [{"$key", [expression: "{item}"]}, {"class", [text: "a"]}]}}
+        ])
+
+      assert [{:{}, [line: 1], [:element, "li", attrs, []]}] = loop_body(tags)
+
+      assert attrs == [
+               {"class", [text: "a"]},
+               {"$key", [text: "#{template_hash(tags)}:0", expression: item_expression()]}
+             ]
+    end
+
+    test "on a dynamic tag, follows the key of the tag's place" do
+      # {%for item <- @items}<{@tag} $key={item} />{/for}
+      tags =
+        in_for([
+          {:self_closing_tag, {{:expression, "{@tag}"}, [{"$key", [expression: "{item}"]}]}}
+        ])
+
+      assert [{:{}, [line: 1], [:dynamic_tag, _tag, attrs, []]}] = loop_body(tags)
+
+      assert attrs == [
+               {"$key", [text: "#{template_hash(tags)}:0", expression: item_expression()]}
+             ]
+    end
+
+    test "on a component, stays as a prop" do
+      # {%for item <- @items}<Card $key={item} />{/for}
+      tags = in_for([{:self_closing_tag, {"Card", [{"$key", [expression: "{item}"]}]}}])
+
+      assert [{:{}, [line: 1], [:component, _module, props, []]}] = loop_body(tags)
+      assert props == [{"$key", [expression: item_expression()]}]
+    end
+
+    test "inside an if block in a for block's body" do
+      # {%for item <- @items}{%if true}<li $key={item}></li>{/if}{/for}
+      tags =
+        in_for([
+          {:block_start, {"if", "{ true}"}},
+          {:self_closing_tag, {"li", [{"$key", [expression: "{item}"]}]}},
+          {:block_end, "if"}
+        ])
+
+      assert element_attrs(build_ast(tags), "li") == [[merged_key(tags, 0, item_expression())]]
+    end
+
+    test "inside an else block in a for block's body" do
+      # {%for item <- @items}{%if true}a{%else}<li $key={item}></li>{/if}{/for}
+      tags =
+        in_for([
+          {:block_start, {"if", "{ true}"}},
+          {:text, "a"},
+          {:block_start, "else"},
+          {:self_closing_tag, {"li", [{"$key", [expression: "{item}"]}]}},
+          {:block_end, "if"}
+        ])
+
+      assert element_attrs(build_ast(tags), "li") == [[merged_key(tags, 0, item_expression())]]
+    end
+
+    test "on a tag directly inside a nested for block" do
+      # {%for item <- @items}{%for x <- item.xs}<li $key={x}></li>{/for}{/for}
+      tags =
+        in_for([
+          {:block_start, {"for", "{ x <- item.xs}"}},
+          {:self_closing_tag, {"li", [{"$key", [expression: "{x}"]}]}},
+          {:block_end, "for"}
+        ])
+
+      x_expression = {:{}, [line: 1], [{:x, [line: 1], nil}]}
+
+      assert element_attrs(build_ast(tags), "li") == [[merged_key(tags, 0, x_expression)]]
+    end
+
+    test "after a closed sibling tag" do
+      # {%for item <- @items}<span></span><li $key={item}></li>{/for}
+      tags =
+        in_for([
+          {:start_tag, {"span", []}},
+          {:end_tag, "span"},
+          {:self_closing_tag, {"li", [{"$key", [expression: "{item}"]}]}}
+        ])
+
+      assert element_attrs(build_ast(tags), "li") == [[merged_key(tags, 1, item_expression())]]
+    end
+
+    test "after a comment in a for block's body" do
+      tags = Parser.parse_markup("{%for item <- @items}<!-- c --><li $key={item}></li>{/for}")
+
+      assert element_attrs(build_ast(tags), "li") == [[merged_key(tags, 0, item_expression())]]
+    end
+
+    test "after a raw block in a for block's body" do
+      tags =
+        Parser.parse_markup("{%for item <- @items}{%raw}<b></b>{/raw}<li $key={item}></li>{/for}")
+
+      # The tag inside the raw block is an element the template renders, so it takes index 0.
+      assert element_attrs(build_ast(tags), "li") == [[merged_key(tags, 1, item_expression())]]
+    end
+
+    test "a binding sharing the prefix is not a $key" do
+      # <input $key_down="go" />
+      tags = [{:self_closing_tag, {"input", [{"$key_down", [text: "go"]}]}}]
+
+      assert [{:{}, [line: 1], [:element, "input", [{"$key_down", [text: "go"]}, _key], []]}] =
+               build_ast(tags)
+    end
+
+    test "raises outside a for block" do
+      # <li $key={item}></li>
+      tags = [{:self_closing_tag, {"li", [{"$key", [expression: "{item}"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "$key goes on a tag directly inside a {%for} block",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a tag nested in an element of a for block's body" do
+      # {%for item <- @items}<ul><li $key={item}></li></ul>{/for}
+      tags =
+        in_for([
+          {:start_tag, {"ul", []}},
+          {:self_closing_tag, {"li", [{"$key", [expression: "{item}"]}]}},
+          {:end_tag, "ul"}
+        ])
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "$key goes on a tag directly inside a {%for} block",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a tag in a component's children in a for block's body" do
+      # {%for item <- @items}<Card><li $key={item}></li></Card>{/for}
+      tags =
+        in_for([
+          {:start_tag, {"Card", []}},
+          {:self_closing_tag, {"li", [{"$key", [expression: "{item}"]}]}},
+          {:end_tag, "Card"}
+        ])
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "$key goes on a tag directly inside a {%for} block",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises after the for block ends" do
+      # {%for item <- @items}a{/for}<li $key={item}></li>
+      tags =
+        [{:text, "a"}]
+        |> in_for()
+        |> Enum.concat([{:self_closing_tag, {"li", [{"$key", [expression: "{item}"]}]}}])
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "$key goes on a tag directly inside a {%for} block",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a tag a key would name nothing new on" do
+      for tag_name <- ["document", "slot", "window"] do
+        # e.g. {%for item <- @items}<slot $key={item} />{/for}
+        tags = in_for([{:self_closing_tag, {tag_name, [{"$key", [expression: "{item}"]}]}}])
+
+        assert_raise Hologram.TemplateSyntaxError,
+                     "$key can't go on a <#{tag_name}> tag",
+                     fn -> build_ast(tags) end
+      end
+
+      for tag_name <- ["body", "head", "html"] do
+        # e.g. {%for item <- @items}<body $key={item}></body>{/for}
+        tags =
+          in_for([
+            {:start_tag, {tag_name, [{"$key", [expression: "{item}"]}]}},
+            {:end_tag, tag_name}
+          ])
+
+        assert_raise Hologram.TemplateSyntaxError,
+                     "$key can't go on a <#{tag_name}> tag",
+                     fn -> build_ast(tags) end
+      end
+    end
+
+    test "raises on a component with a literal cid" do
+      # {%for item <- @items}<Card cid="card" $key={item} />{/for}
+      tags =
+        in_for([
+          {:self_closing_tag,
+           {"Card", [{"cid", [text: "card"]}, {"$key", [expression: "{item}"]}]}}
+        ])
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "a stateful component is keyed by its cid, so it can't take $key",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a modifier" do
+      # {%for item <- @items}<li $key.once={item}></li>{/for}
+      tags = in_for([{:self_closing_tag, {"li", [{"$key.once", [expression: "{item}"]}]}}])
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the $key attribute takes no modifiers, got "once"',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a missing value, a text value and a mixed value" do
+      for value_parts <- [[], [text: "a"], [text: "a", expression: "{item}"]] do
+        # {%for item <- @items}<li $key="a"></li>{/for}
+        tags = in_for([{:self_closing_tag, {"li", [{"$key", value_parts}]}}])
+
+        assert_raise Hologram.TemplateSyntaxError,
+                     "the $key attribute takes a single expression, like $key={item.slug}",
+                     fn -> build_ast(tags) end
+      end
+    end
+
+    test "raises for a quoted expression, as $focused does" do
+      tags = Parser.parse_markup(~s'{%for item <- @items}<li $key="{item}"></li>{/for}')
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "the $key attribute takes a single expression, like $key={item.slug}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for two $key attributes" do
+      # {%for item <- @items}<li $key={item} $key={item}></li>{/for}
+      tags =
+        in_for([
+          {:self_closing_tag,
+           {"li", [{"$key", [expression: "{item}"]}, {"$key", [expression: "{item}"]}]}}
+        ])
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "a tag takes one $key attribute",
+                   fn -> build_ast(tags) end
     end
   end
 

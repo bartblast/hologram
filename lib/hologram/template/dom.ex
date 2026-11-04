@@ -16,6 +16,11 @@ defmodule Hologram.Template.DOM do
   # and rebuilt on every navigation, taking the stylesheets and the scroll position with them.
   @unkeyable_tags ["body", "document", "head", "html", "slot", "window"]
 
+  # The variable a loop's generator binds the whole item to, so that the renderers can key the item
+  # by its :id however the generator's pattern takes it apart. Not underscore-prefixed, since the
+  # transpiler turns such a name into a wildcard that binds nothing.
+  @loop_item_var :holo_loop_item
+
   @type attribute :: {String.t(), t} | {:spread, {any}}
 
   # 'dom_node' name used instead of 'node" because type node/0 is a built-in type and it cannot be redefined.
@@ -24,6 +29,7 @@ defmodule Hologram.Template.DOM do
           | {:dynamic_tag, {any}, list(attribute), t}
           | {:element, String.t(), list(attribute), t}
           | {:expression, {any}}
+          | {:loop_item, {any} | nil, t}
           | {:page, module, list(attribute), []}
           | {:public_comment, t}
           | {:text, String.t()}
@@ -88,9 +94,12 @@ defmodule Hologram.Template.DOM do
   end
 
   # The key trails the attributes the template author wrote, so that reading a tag reads what was
-  # written first, and appending is the point rather than an oversight.
-  # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
-  defp add_slot_key(attributes, hash, index), do: attributes ++ [slot_key_attribute(hash, index)]
+  # written first, and appending is the point rather than an oversight. A $key the author wrote
+  # follows the key of the place inside the same attribute, where the renderers read it.
+  defp add_slot_key(attributes, hash, index, author_key_parts) do
+    # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
+    attributes ++ [slot_key_attribute(hash, index, author_key_parts)]
+  end
 
   # Gives every element the key of the place it holds in this template, counted in source order.
   #
@@ -102,11 +111,17 @@ defmodule Hologram.Template.DOM do
   # content is spliced into a children list belonging to another template, where bare counters
   # would collide.
   #
-  # Only elements are keyed. A component has no node of its own - it renders the nodes of its own
-  # template, which carry their own keys - and the tags that produce no node at all have nothing to
-  # key.
+  # Only elements are keyed for their place. A component has no node of its own - it renders the
+  # nodes of its own template, which carry their own keys - and the tags that produce no node at all
+  # have nothing to key.
+  #
+  # A $key the template author writes keys a loop item's tag by the item's identity instead of its
+  # position, so it goes only on a tag that renders straight into the loop's children list: one
+  # whose nearest enclosing tag or block, past any if blocks, is the for block. On an element it
+  # joins the key of the element's place, and on a component it stays as a prop the renderers read
+  # to key every node the component renders.
   defp add_slot_keys(tags, hash) do
-    {keyed_tags, _index} = Enum.map_reduce(tags, 0, &inject_slot_key(&1, &2, hash))
+    {keyed_tags, _acc} = Enum.map_reduce(tags, {0, []}, &inject_slot_key(&1, &2, hash))
 
     keyed_tags
   end
@@ -145,24 +160,102 @@ defmodule Hologram.Template.DOM do
     |> String.trim()
   end
 
-  defp inject_slot_key({tag_type, {tag_name, attributes}}, index, hash)
-       when tag_type in [:start_tag, :self_closing_tag] do
-    if keyable_tag?(tag_name) do
-      {{tag_type, {tag_name, add_slot_key(attributes, hash, index)}}, index + 1}
-    else
-      {{tag_type, {tag_name, attributes}}, index}
-    end
+  # The generator's pattern is matched against the item as before, and the item is bound whole
+  # beside it. A guard stays outside the match, where the generator's syntax puts it.
+  defp bind_loop_item({:<-, meta, [{:when, when_meta, [pattern, guard]}, enum]}) do
+    {:<-, meta, [{:when, when_meta, [bind_loop_item_pattern(pattern), guard]}, enum]}
   end
 
-  defp inject_slot_key(tag, index, _hash), do: {tag, index}
+  defp bind_loop_item({:<-, meta, [pattern, enum]}) do
+    {:<-, meta, [bind_loop_item_pattern(pattern), enum]}
+  end
 
-  # A dynamic tag is keyed too: it renders an element whenever its expression names one, and a key
-  # reaching a component instead is dropped with the rest of the props it does not declare.
+  defp bind_loop_item(qualifier), do: qualifier
+
+  defp bind_loop_item_pattern(pattern) do
+    {:=, [], [pattern, {@loop_item_var, [], nil}]}
+  end
+
+  # The accumulator holds the index of the next keyed element and the stack of tags and blocks open
+  # around the current tag, innermost first.
+  defp inject_slot_key({tag_type, {tag_name, attributes}}, {index, contexts}, hash)
+       when tag_type in [:start_tag, :self_closing_tag] do
+    {author_key_parts, other_attributes} = take_author_key(attributes)
+
+    if author_key_parts do
+      validate_author_key(tag_name, attributes, contexts)
+    end
+
+    {keyed_attributes, next_index} =
+      if keyable_tag?(tag_name) do
+        {add_slot_key(other_attributes, hash, index, author_key_parts || []), index + 1}
+      else
+        {attributes, index}
+      end
+
+    next_contexts = if tag_type == :start_tag, do: [:tag | contexts], else: contexts
+
+    {{tag_type, {tag_name, keyed_attributes}}, {next_index, next_contexts}}
+  end
+
+  defp inject_slot_key({:block_start, {"for", _expr_str}} = tag, {index, contexts}, _hash) do
+    {tag, {index, [:for | contexts]}}
+  end
+
+  defp inject_slot_key({:block_start, {"if", _expr_str}} = tag, {index, contexts}, _hash) do
+    {tag, {index, [:if | contexts]}}
+  end
+
+  defp inject_slot_key({:block_start, "raw"} = tag, {index, contexts}, _hash) do
+    {tag, {index, [:raw | contexts]}}
+  end
+
+  defp inject_slot_key(:public_comment_start = tag, {index, contexts}, _hash) do
+    {tag, {index, [:comment | contexts]}}
+  end
+
+  defp inject_slot_key(tag, {index, contexts}, _hash)
+       when tag == :public_comment_end or elem(tag, 0) in [:end_tag, :block_end] do
+    {tag, {index, Enum.drop(contexts, 1)}}
+  end
+
+  defp inject_slot_key(tag, acc, _hash), do: {tag, acc}
+
+  # A dynamic tag is keyed too: it renders an element whenever its expression names one. When it
+  # names a component instead, the key of its place is dropped with the rest of the props the
+  # component doesn't declare, and a $key the template author wrote keys the component's nodes.
   defp keyable_tag?({:expression, _templ_expr}), do: true
 
   defp keyable_tag?(tag_name) do
     Helpers.tag_type(tag_name) == :element and tag_name not in @unkeyable_tags
   end
+
+  # The loop's qualifiers with its one generator binding the whole item, printed back as source, or
+  # :error when the loop has no single list generator to take the item from. A trailing keyword
+  # list of options prints as a list, which parses to the same AST.
+  #
+  # The uniq option compares what each iteration renders, so it gets no item either: binding the
+  # item into every iteration would make two that render the same nodes count as different.
+  defp keyed_for_qualifiers(content) do
+    with {:ok, {:for, _meta, args}} <- Code.string_to_quoted("for #{content} do nil end"),
+         {qualifiers, [[do: nil]]} <- Enum.split(args, -1),
+         [{:<-, _meta, _args}] <- Enum.filter(qualifiers, &generator?/1),
+         false <- Enum.any?(qualifiers, &uniq_option?/1) do
+      {:ok, Enum.map_join(qualifiers, ", ", &Macro.to_string(bind_loop_item(&1)))}
+    else
+      _no_single_list_generator -> :error
+    end
+  end
+
+  # A list generator, or a bitstring generator: the last part of a binary in qualifier position that
+  # holds a <-, as the transformer reads it.
+  defp generator?({:<-, _meta, _args}), do: true
+
+  defp generator?({:<<>>, _meta, parts}) when is_list(parts) do
+    match?({:<-, _meta, _args}, List.last(parts))
+  end
+
+  defp generator?(_qualifier), do: false
 
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
@@ -177,6 +270,10 @@ defmodule Hologram.Template.DOM do
         templ_expr
     end
   end
+
+  defp uniq_option?(qualifier) when is_list(qualifier), do: Keyword.has_key?(qualifier, :uniq)
+
+  defp uniq_option?(_qualifier), do: false
 
   # Templates checked out on Windows carry CRLF line endings, which would otherwise give the same
   # template a different hash per platform, so keys could not be asserted verbatim.
@@ -233,12 +330,25 @@ defmodule Hologram.Template.DOM do
     "] else ["
   end
 
+  # Each iteration renders as a loop item, which the renderers key by the item's :id. Only a loop
+  # with one list generator has a single value that is the item. A loop with a bitstring generator
+  # or several generators, a loop with the uniq option, or one that doesn't parse gets no item: it
+  # still renders as a loop item, so that an enclosing item's key stays an outer part, and a source
+  # that doesn't parse fails the build as it did before.
   defp render_code({:block_start, {"for", expr_str}}) do
-    "(for #{extract_expression_content(expr_str)} do ["
+    content = extract_expression_content(expr_str)
+
+    case keyed_for_qualifiers(content) do
+      {:ok, qualifiers} ->
+        "(for #{qualifiers} do {:loop_item, {#{@loop_item_var}}, ["
+
+      :error ->
+        "(for #{content} do {:loop_item, nil, ["
+    end
   end
 
   defp render_code({:block_end, "for"}) do
-    "] end)"
+    "]} end)"
   end
 
   defp render_code({:block_start, {"if", expr_str}}) do
@@ -336,9 +446,31 @@ defmodule Hologram.Template.DOM do
     inspect(EventModifiers.parse(base_name, modifiers))
   end
 
-  defp slot_key_attribute(hash, index) do
-    {"$key", [{:text, "#{hash}:#{index}"}]}
+  defp slot_key_attribute(hash, index, author_key_parts) do
+    {"$key", [{:text, "#{hash}:#{index}"} | author_key_parts]}
   end
+
+  # Splits the $key the template author wrote off the other attributes, returning its value parts,
+  # or nil when there is none. Bindings such as $key_down share the prefix but not the name.
+  defp take_author_key(attributes) do
+    case Enum.split_with(attributes, &author_key_attribute?/1) do
+      {[], attributes} ->
+        {nil, attributes}
+
+      {[{name, value_parts}], other_attributes} ->
+        validate_author_key_value(name, value_parts)
+        {value_parts, other_attributes}
+
+      {_author_keys, _other_attributes} ->
+        raise TemplateSyntaxError, message: "a tag takes one $key attribute"
+    end
+  end
+
+  defp author_key_attribute?({name, _value_parts}) when is_binary(name) do
+    match?({"$key", _modifiers}, decompose_event_attribute_name(name))
+  end
+
+  defp author_key_attribute?(_spread), do: false
 
   defp substitute_module_attributes({:@, meta_1, [{name, _meta_2, _args}]}) do
     {{:., meta_1, [{:vars, meta_1, nil}, name]}, [{:no_parens, true} | meta_1], []}
@@ -373,6 +505,39 @@ defmodule Hologram.Template.DOM do
   end
 
   defp validate_event_binding_value(_name, _value_parts), do: :ok
+
+  # A $key keys a loop item's tag, so it goes on a tag that renders straight into the loop's
+  # children list, on a tag that renders a node, and not next to the cid that already is a stateful
+  # component's identity.
+  defp validate_author_key(tag_name, attributes, contexts) do
+    unless Enum.find(contexts, &(&1 != :if)) == :for do
+      raise TemplateSyntaxError, message: "$key goes on a tag directly inside a {%for} block"
+    end
+
+    if is_binary(tag_name) and tag_name in @unkeyable_tags do
+      raise TemplateSyntaxError, message: "$key can't go on a <#{tag_name}> tag"
+    end
+
+    if is_binary(tag_name) and Helpers.tag_type(tag_name) == :component and
+         List.keymember?(attributes, "cid", 0) do
+      raise TemplateSyntaxError,
+        message: "a stateful component is keyed by its cid, so it can't take $key"
+    end
+  end
+
+  defp validate_author_key_value(name, value_parts) do
+    case decompose_event_attribute_name(name) do
+      {"$key", [modifier | _rest]} ->
+        raise TemplateSyntaxError,
+          message: ~s'the $key attribute takes no modifiers, got "#{modifier}"'
+
+      {"$key", []} ->
+        unless match?([expression: _expr_str], value_parts) do
+          raise TemplateSyntaxError,
+            message: "the $key attribute takes a single expression, like $key={item.slug}"
+        end
+    end
+  end
 
   # autofocus is what $focused renders as, so an element carrying both would have the markup and
   # the state disagree about it. Only literal attributes are judged here: an autofocus arriving
