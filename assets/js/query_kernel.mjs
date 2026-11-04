@@ -85,6 +85,15 @@ export default class QueryKernel {
     }
   }
 
+  // The value of the derived field of the given name on the row, computed from its definition the
+  // way a run reads it - for a reader holding a row outside a run, like a permission check. A
+  // definition reads no placeholder and no acting user, so it is computed with no context.
+  static derivedValue(row, entityType, name) {
+    const context = QueryKernel.#withMemo({});
+
+    return QueryKernel.#derivedValue(row, entityType, name, context);
+  }
+
   // The entity type is what an enum predicate is answered by: its declared value list decides
   // which of two labels comes first, and a caller that names its type gets the same answer run()
   // gives. Left out, nothing is ranked and labels compare as they are spelled - and a path cannot
