@@ -120,6 +120,9 @@ defmodule Hologram.Test.BrowserSession do
   Starts Wallaby with ChromeDriver's log on, in place of
   `Application.ensure_all_started(:wallaby)` in a test helper.
 
+  Mix starts Wallaby before the test helper runs when it's a runtime dep, so a
+  running Wallaby is stopped first, for the changes below to apply.
+
   Wallaby starts ChromeDriver with its log off, so its configured ChromeDriver
   path is pointed at a wrapper script that adds the log flags. Each ChromeDriver
   process writes `chromedriver-<os pid>.log` in the log dir, with Chrome's own
@@ -148,6 +151,10 @@ defmodule Hologram.Test.BrowserSession do
     chromedriver_path = Keyword.get_lazy(opts, :chromedriver_path, &find_chromedriver!/0)
     put_env_fn = Keyword.get(opts, :put_env_fn, &Application.put_env/3)
     start_fn = Keyword.get(opts, :start_fn, &ensure_wallaby_started/0)
+    stop_fn = Keyword.get(opts, :stop_fn, fn -> Application.stop(:wallaby) end)
+
+    # Wallaby reads the ChromeDriver path when it starts.
+    stop_fn.()
 
     log_dir =
       opts
@@ -172,9 +179,9 @@ defmodule Hologram.Test.BrowserSession do
       |> Keyword.put_new(:attempts, @default_start_attempts)
       |> Keyword.put_new(:chromedrivers, Wallaby.Chromedrivers)
       |> Keyword.put_new(:ready_timeout, @default_ready_timeout)
-      |> Keyword.put_new(:stop_fn, fn -> Application.stop(:wallaby) end)
       |> Keyword.put(:log_dir, log_dir)
       |> Keyword.put(:start_fn, start_fn)
+      |> Keyword.put(:stop_fn, stop_fn)
 
     start_wallaby(1, opts)
   end

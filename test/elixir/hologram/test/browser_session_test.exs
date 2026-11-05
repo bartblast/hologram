@@ -48,6 +48,7 @@ defmodule Hologram.Test.BrowserSessionTest do
     assert Process.info(self(), :messages) ==
              {:messages,
               [
+                :stopped,
                 {:put_env, :wallaby, :chromedriver, [path: wrapper_path]},
                 {:put_env, :hologram, :__browser_session_log_dir__, log_dir},
                 :started,
@@ -533,10 +534,11 @@ defmodule Hologram.Test.BrowserSessionTest do
       [args_path: args_path, log_dir: log_dir, opts: opts]
     end
 
-    test "points Wallaby at a ChromeDriver wrapper and sets the log dir, then starts Wallaby", %{
-      log_dir: log_dir,
-      opts: opts
-    } do
+    test "stops Wallaby, points it at a ChromeDriver wrapper and sets the log dir, then starts it",
+         %{
+           log_dir: log_dir,
+           opts: opts
+         } do
       assert start_wallaby(opts) == :ok
 
       wrapper_path = Path.join(log_dir, "chromedriver")
@@ -544,6 +546,7 @@ defmodule Hologram.Test.BrowserSessionTest do
       assert Process.info(self(), :messages) ==
                {:messages,
                 [
+                  :stopped,
                   {:put_env, :wallaby, :chromedriver, [path: wrapper_path]},
                   {:put_env, :hologram, :__browser_session_log_dir__, log_dir},
                   :started
