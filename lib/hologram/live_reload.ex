@@ -11,6 +11,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.Assets.PathRegistry
   alias Hologram.DB
   alias Hologram.DB.QueryCache
+  alias Hologram.Entity.Model
   alias Hologram.LiveReload.Diagnostic
   alias Hologram.Realtime.SubscriptionRegistry
   alias Hologram.Reflection
@@ -118,6 +119,12 @@ defmodule Hologram.LiveReload do
       PageDigestRegistry.reload()
     else
       reload_runtime()
+
+      # The runtime now reads all the compile derived from the data model: the policy caches and
+      # the database schema of its data model step, then the derived field definitions, the
+      # registered queries and the page windows. Before the tabs are told to reload, so that they
+      # reload into a released model, unless a save since holds it again.
+      maybe_release_model(state.pass)
     end
 
     # A rebuilt runtime bundle no longer matches the page bundles any tab holds, so every tab
@@ -242,6 +249,11 @@ defmodule Hologram.LiveReload do
   def handle_info({:file_event, _pid, {file_path, _events}}, state) do
     case classify_file_event(file_path) do
       {:code, target_file_path} ->
+        # Held from the save itself, not from the pass it starts: Phoenix's code reloader loads the
+        # new code on the first request after the save, which can come before the pass. The pass
+        # that follows releases it (see maybe_release_model/1).
+        :ok = Model.hold()
+
         if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
 
         # File change events are debounced to avoid multiple recompilations
@@ -304,6 +316,10 @@ defmodule Hologram.LiveReload do
   @impl GenServer
   def handle_info({ref, result}, %{pass: %{ref: ref}} = state) do
     Process.demonitor(ref, [:flush])
+
+    # A pass that compiled having built no bundle releases here: its registries were reloaded at the
+    # end of reload/3. A pass that failed before its first batch leaves the hold in place.
+    if result == :ok, do: maybe_release_model(state.pass)
 
     # A superseded pass reports nothing: the pass its save starts reports on the newer code, so the
     # tabs never show the outcome of code a newer save has replaced.
@@ -386,7 +402,7 @@ defmodule Hologram.LiveReload do
       open_pages: %{},
       # The outcome the last pass reported, as broadcast, nil before any did and while a pass runs.
       outcome: nil,
-      # The live reload pass running, if any.
+      # The live reload pass running, if any, with the hold the data model was under as it started.
       pass: nil,
       # The pages the running or the last pass has not built.
       pending: MapSet.new(),
@@ -638,6 +654,16 @@ defmodule Hologram.LiveReload do
     Application.get_env(:hologram, :live_reload_impl, __MODULE__)
   end
 
+  # Releases the data model from the hold the pass started under, once the runtime reads all that
+  # the pass's compile derived from the model. A hold put since, by a save during the pass, is about code this
+  # pass may not have compiled, so it stays for the pass that save starts. Hold and release both
+  # happen in this process, so nothing can put a hold between the comparison and the release.
+  defp maybe_release_model(%{hold: hold}) do
+    if Model.current_hold() == hold, do: Model.release()
+
+    :ok
+  end
+
   # Forgets the tabs closed since (see prune_open_pages/1): their pages and their documents.
   #
   # Only the documents of tabs open_pages drops go: a tab first seen through its stream (see
@@ -818,6 +844,9 @@ defmodule Hologram.LiveReload do
       next_batch: &GenServer.call(scheduler, {:next_batch, &1, &2}, :infinity)
     ]
 
+    # Read before the task starts, so that it is the hold of the code the pass compiles.
+    hold = Model.current_hold()
+
     task =
       Task.Supervisor.async_nolink(Hologram.LiveReload.TaskSupervisor, fn ->
         impl().reload(file_path, endpoint, opts)
@@ -826,7 +855,7 @@ defmodule Hologram.LiveReload do
     # The outcome is forgotten while the pass runs: the code it was about has changed, and a tab
     # reloaded or opened meanwhile must not be shown an error a newer save may have fixed. A stream
     # attached by the time the pass ends gets its outcome broadcast.
-    %{state | outcome: nil, pass: %{ref: task.ref, registries_reloaded?: false}}
+    %{state | outcome: nil, pass: %{hold: hold, ref: task.ref, registries_reloaded?: false}}
   end
 
   # The message a pass's outcome is broadcast as. The tabs' SSE streams forward it: a tab takes its

@@ -2144,8 +2144,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   # after it. So a failure here, of any kind, is undone. The entries the update replaced are put
   # back, and the tracer still holds the compiled modules, so the next compile in this VM finds the
   # same changes again, from the kept state and not from the dumps. The model cache keeps what
-  # this compile put there: it describes the modules that are loaded, valid or not, and while the
-  # model is under a hold nothing but the compile reads it (see Hologram.Entity.Model.hold/0). The
+  # this compile put there: it describes the modules that are loaded, valid or not. Live reload
+  # keeps the model under a hold from a save until the runtime has loaded what a compile derived
+  # from it, so meanwhile nothing but the compile reads it (see Hologram.Entity.Model.hold/0). The
   # failure is then told to the :data_model_failed option, with the kept state already back, and
   # raised again.
   defp load_data_model!(module_info_plt, before, opts) do

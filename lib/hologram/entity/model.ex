@@ -208,7 +208,8 @@ defmodule Hologram.Entity.Model do
   Puts the data model under a new hold, replacing any it was under: the code loaded in the VM may
   be ahead of the model the last compile validated, so model state built before is not to be read
   with it, and neither is model state built from it before a compile validates it (see
-  `ensure_released!/0`).
+  `ensure_released!/0`). Live reload holds the model from a save until the runtime has loaded what
+  the compile that follows derived from it.
   """
   @spec hold() :: :ok
   def hold do
