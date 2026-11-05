@@ -111,12 +111,18 @@ defmodule Hologram.Sync.Dispatcher do
         move_to(state, edge)
 
       transactions ->
-        # The place moves only once the handler has taken them: crashing halfway means reading
-        # the same window again, which routing must tolerate, rather than passing it silently.
+        # The place moves only once the handler has taken them: a round that crashes halfway, or is
+        # skipped while the data model is held, reads the same window again, which routing must
+        # tolerate, rather than passing it silently.
         state.handler.(transactions, {state.cursor, 0})
 
         move_to(state, edge)
     end
+  rescue
+    # A data model under a hold can't be routed against until it is released (see
+    # Hologram.Entity.Model.hold/0). The round is skipped rather than crashed, which would restart
+    # this process on every round for as long as the hold stands.
+    Hologram.StaleModelError -> state
   end
 
   defp default_poll_interval_ms do

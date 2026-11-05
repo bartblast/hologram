@@ -6,6 +6,7 @@ defmodule Hologram.Realtime.SSETest do
   import Mox
 
   alias Hologram.Component.Action
+  alias Hologram.Entity.Model
   alias Hologram.LiveReload
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -55,7 +56,7 @@ defmodule Hologram.Realtime.SSETest do
     |> Plug.Test.init_test_session(session)
   end
 
-  defp conn_with_instance_id(session \\ %{}) do
+  defp conn_with_instance_id(session \\ %{}, extra_query \\ "") do
     instance_id = "test-instance-#{:erlang.unique_integer([:positive])}"
 
     session_id =
@@ -74,8 +75,13 @@ defmodule Hologram.Realtime.SSETest do
     session = Map.put(session, :hologram_session_id, session_id)
 
     :get
-    |> Plug.Test.conn("/?instance_id=#{instance_id}&handshake_id=#{handshake_id}")
+    |> Plug.Test.conn("/?instance_id=#{instance_id}&handshake_id=#{handshake_id}" <> extra_query)
     |> Plug.Test.init_test_session(session)
+  end
+
+  # What a client built with this build's protocol and another model greets a stream with.
+  defp greeting_query do
+    "model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=#{Frame.protocol_version()}"
   end
 
   defp build_session(opts) do
@@ -111,6 +117,18 @@ defmodule Hologram.Realtime.SSETest do
     Hologram.PubSub
     |> Registry.lookup("hologram_live_reload")
     |> Enum.any?(fn {subscriber_pid, _value} -> subscriber_pid == pid end)
+  end
+
+  # A stream whose client greeted it with this build's protocol and another model.
+  defp prepared_greeting_conn do
+    conn =
+      :get
+      |> Plug.Test.conn("/?" <> greeting_query())
+      |> Plug.Conn.fetch_query_params()
+      |> prepare()
+
+    flush_plug_conn_sent()
+    conn
   end
 
   defp prepared_test_conn do
@@ -1062,6 +1080,31 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ ~r/\Aevent: compiled\nid: \d+\ndata:\n\n\z/
     end
+
+    # Started as a stream connecting now would be: this greeting names another model, so starting
+    # it tells the client to reload, which is how the test sees it started without a database.
+    test "starts syncing a stream that connected while the data model was held" do
+      conn = prepared_greeting_conn()
+      send(self(), :compiled)
+
+      assert {:cont, _conn, "session-1", 7, nil} =
+               process_message(conn, "session-1", 7, sync_session: {:held, true})
+
+      assert_received {:sync_reload, :model_hash}
+    end
+
+    test "keeps a stream waiting while the data model is still held" do
+      on_exit(&Model.release/0)
+
+      conn = prepared_greeting_conn()
+      Model.hold()
+      send(self(), :compiled)
+
+      assert {:cont, _conn, "session-1", 7, {:held, false}} =
+               process_message(conn, "session-1", 7, sync_session: {:held, false})
+
+      refute_received {:sync_reload, _reason}
+    end
   end
 
   describe "process_message/4 on :css_changed" do
@@ -1245,6 +1288,21 @@ defmodule Hologram.Realtime.SSETest do
       process_message(conn, "session-1", 7, sync_session: old_session)
 
       assert_receive {:DOWN, ^ref, :process, ^old_session, :normal}
+    end
+
+    # The client may hold rows from before the hold, as who it was, and the session that starts
+    # once the hold is released fills it afresh rather than resuming.
+    test "sends a stream waiting for a held data model through the resync door" do
+      on_exit(&Model.release/0)
+
+      conn = prepared_greeting_conn()
+      Model.hold()
+      send(self(), {:identity_changed, "session-1", 8})
+
+      assert {:cont, _conn, "session-1", 8, {:held, false}} =
+               process_message(conn, "session-1", 7, sync_session: {:held, true})
+
+      assert_received {:sync_resync, :identity}
     end
 
     # A stream carrying no sync at all - a client built before any of it, or one whose build has
@@ -1960,6 +2018,22 @@ defmodule Hologram.Realtime.SSETest do
       Process.sleep(50)
 
       assert Process.alive?(pid)
+
+      Process.exit(pid, :kill)
+    end
+
+    # It forwards the outcome of the last live reload then, which is how a tab connecting after a
+    # failed compile shows the error.
+    test "keeps the stream of a client greeting it while the data model is held" do
+      on_exit(&Model.release/0)
+
+      conn = conn_with_instance_id(%{}, "&" <> greeting_query())
+      Model.hold()
+
+      pid = spawn(fn -> stream(conn) end)
+      ref = Process.monitor(pid)
+
+      refute_receive {:DOWN, ^ref, :process, ^pid, _reason}, 100
 
       Process.exit(pid, :kill)
     end

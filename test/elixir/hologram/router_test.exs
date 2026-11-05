@@ -8,6 +8,7 @@ defmodule Hologram.RouterTest do
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
+  alias Hologram.LiveReload
   alias Hologram.Realtime.Handshake
   alias Hologram.Reflection
   alias Hologram.Runtime.CSRFProtection
@@ -270,6 +271,116 @@ defmodule Hologram.RouterTest do
       assert conn.resp_body == nil
       assert conn.state == :unset
       assert conn.status == nil
+    end
+  end
+
+  describe "data model wait" do
+    defp page_request_json do
+      [
+        2,
+        %{
+          "t" => "m",
+          "d" => [
+            ["aclient_claimed_sub_keys", %{"t" => "l", "d" => []}],
+            ["ainstance_id", "b074657374696e7374616e6365"]
+          ]
+        }
+      ]
+    end
+
+    setup do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
+
+      on_exit(fn -> System.delete_env("HOLOGRAM_ENV") end)
+    end
+
+    # A save holds the data model until its live reload has compiled it, and a page reads it.
+    test "a page request waits on the data model in dev" do
+      System.put_env("HOLOGRAM_ENV", "dev")
+
+      count =
+        count_calls({LiveReload, :await_model, 0}, fn ->
+          :get
+          |> Plug.Test.conn("/hologram-test-fixtures-router-module1/123/xyz")
+          |> Plug.Test.init_test_session(%{})
+          |> call([])
+        end)
+
+      assert count == 1
+    end
+
+    test "a subsequent page request waits on the data model in dev" do
+      System.put_env("HOLOGRAM_ENV", "dev")
+
+      count =
+        count_calls({LiveReload, :await_model, 0}, fn ->
+          :post
+          |> Plug.Test.conn(
+            "/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz",
+            ""
+          )
+          |> Plug.Test.init_test_session(%{})
+          |> Map.put(:body_params, %{"_json" => page_request_json()})
+          |> call([])
+        end)
+
+      assert count == 1
+    end
+
+    # Answered 403 without a CSRF token, after the wait.
+    test "a command request waits on the data model in dev" do
+      System.put_env("HOLOGRAM_ENV", "dev")
+
+      count =
+        count_calls({LiveReload, :await_model, 0}, fn ->
+          :post
+          |> Plug.Test.conn("/hologram/command", "")
+          |> Plug.Test.init_test_session(%{})
+          |> call([])
+        end)
+
+      assert count == 1
+    end
+
+    # Answered 403 without a CSRF token, after the wait.
+    test "a mutation request waits on the data model in dev" do
+      System.put_env("HOLOGRAM_ENV", "dev")
+
+      count =
+        count_calls({LiveReload, :await_model, 0}, fn ->
+          :post
+          |> Plug.Test.conn("/hologram/mutation", "")
+          |> Plug.Test.init_test_session(%{})
+          |> call([])
+        end)
+
+      assert count == 1
+    end
+
+    # It goes on to the app's own routes, which can read the data model too.
+    test "a request for a path that is no page waits on the data model in dev" do
+      System.put_env("HOLOGRAM_ENV", "dev")
+
+      count =
+        count_calls({LiveReload, :await_model, 0}, fn ->
+          :get
+          |> Plug.Test.conn("/my-unmatched-request-path")
+          |> call([])
+        end)
+
+      assert count == 1
+    end
+
+    test "a page request doesn't wait on the data model outside dev" do
+      count =
+        count_calls({LiveReload, :await_model, 0}, fn ->
+          :get
+          |> Plug.Test.conn("/hologram-test-fixtures-router-module1/123/xyz")
+          |> Plug.Test.init_test_session(%{})
+          |> call([])
+        end)
+
+      assert count == 0
     end
   end
 

@@ -84,6 +84,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @num_pages Enum.count(Reflection.list_pages())
 
+  @stale_model_msg "the code changed since the last compile that validated the data model - fix the compile error, if there is one, and save again"
+
   # An entity type whose attribute and relationship derive the same column. The entity macro
   # refuses that collision while the module compiles, so the entity contract is written by hand
   # here, and the mapping-error test below is what reaches the collision through the compile
@@ -1741,6 +1743,28 @@ defmodule Mix.Tasks.Compile.HologramTest do
         Policy.reset_model_facts_cache()
         Edges.reset_index_cache()
       end)
+    end
+
+    # The compile is what validates the code a hold is about.
+    test "a compile reads the data model through a hold", %{opts: opts} do
+      on_exit(&Model.release/0)
+
+      Model.hold()
+
+      assert run(opts) == :ok
+    end
+
+    # The hold outlasts the compile, which reads through it only while it runs.
+    test "a compile failing on the data model leaves the hold in place", %{opts: opts} do
+      on_exit(&Model.release/0)
+
+      Model.hold()
+
+      failing_opts = Keyword.put(opts, :data_model_ready, &raise_hook_failed/2)
+
+      assert_error RuntimeError, "hook failed", fn -> run(failing_opts) end
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> Model.entity_types() end
     end
 
     test "a compile drops the cached policy dependency index", %{opts: opts} do

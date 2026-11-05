@@ -65,6 +65,16 @@ defmodule Hologram.Sync.HandshakeTest do
       assert check(%{}) == :no_sync
     end
 
+    # Neither the model nor its hash can be read under a hold, so the answer waits for the release.
+    test "holds off a client arriving while the data model is held" do
+      on_exit(&Model.release/0)
+
+      arriving = greeting()
+      Model.hold()
+
+      assert check(arriving) == :held
+    end
+
     test "leaves a client that said only part of it alone" do
       assert check(%{page: MyApp.BoardPage}) == :no_sync
     end

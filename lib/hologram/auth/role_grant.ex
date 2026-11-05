@@ -317,6 +317,8 @@ defmodule Hologram.Auth.RoleGrant do
   # physical name mapping. The compiler and the application boot reset the cache, so a
   # recompiled data model is picked up.
   defp resolved(key) do
+    Model.ensure_released!()
+
     case :persistent_term.get(@resolution_key, nil) do
       nil ->
         resolution = build_resolution()

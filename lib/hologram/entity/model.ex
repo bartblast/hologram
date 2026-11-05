@@ -24,8 +24,33 @@ defmodule Hologram.Entity.Model do
 
   @hash_bytes 16
 
+  @compiler_key {__MODULE__, :compiler}
   @facts_key {__MODULE__, :facts}
   @hash_key {__MODULE__, :hash}
+  @hold_key {__MODULE__, :hold}
+
+  @doc """
+  Runs the given function with the calling process registered as the compile running in this VM,
+  and returns what it returns. The process, and the tasks it starts, read the data model through a
+  hold (see `hold/0`): the compile is what validates the code the hold is about. Compiles in one VM
+  are serialized by the compiler lock, so there is one at a time.
+  """
+  @spec compiling((-> result)) :: result when result: any
+  def compiling(fun) do
+    :persistent_term.put(@compiler_key, self())
+
+    try do
+      fun.()
+    after
+      :persistent_term.erase(@compiler_key)
+    end
+  end
+
+  @doc """
+  Returns the id of the hold the data model is under, or nil when there is none (see `hold/0`).
+  """
+  @spec current_hold() :: pos_integer | nil
+  def current_hold, do: :persistent_term.get(@hold_key, nil)
 
   @doc """
   Returns the empty model term - a model with no entity types, no global roles, and no
@@ -35,13 +60,31 @@ defmodule Hologram.Entity.Model do
   def empty, do: %{entities: %{}, roles: %{}, user_entity: nil}
 
   @doc """
+  Returns :ok when the calling process may read the data model, and raises
+  `Hologram.StaleModelError` when it may not: the model is under a hold (see `hold/0`) and the
+  process is neither the compile running in this VM nor a task that compile started (see
+  `compiling/1`).
+
+  Every runtime read of model state calls it first, so that nothing reads a model the loaded code
+  may be ahead of - neither a cache filled before the hold nor one filled since.
+  """
+  @spec ensure_released!() :: :ok
+  def ensure_released! do
+    if held?() do
+      raise Hologram.StaleModelError
+    end
+
+    :ok
+  end
+
+  @doc """
   Returns the entity type modules of the project's compiled data model, sorted by name.
 
   Cached for the lifetime of the runtime, with the global roles and the user entity type (see
   `put_facts/3`). The compiler fills the cache in the VM it runs in, and a read that finds the cache
   empty fills it from the module info dump the last compile wrote, without reading a beam. A
   missing dump raises. The application boot resets the cache, so a recompiled data model is picked
-  up.
+  up. Raises while the model is under a hold (see `ensure_released!/0`).
   """
   @spec entity_types() :: list(module)
   def entity_types, do: facts().entity_types
@@ -108,10 +151,13 @@ defmodule Hologram.Entity.Model do
   Derived from the cached entity types and global roles (see `entity_types/0` and `roles/0`) on
   the first call, which reads what every one of them declares and costs far more than the writes
   that stamp it, so the answer is cached beside them. Filling or resetting the cache drops it, so
-  a recompiled data model is picked up.
+  a recompiled data model is picked up. Raises while the model is under a hold (see
+  `ensure_released!/0`).
   """
   @spec hash() :: String.t()
   def hash do
+    ensure_released!()
+
     case :persistent_term.get(@hash_key, nil) do
       nil ->
         %{entity_types: entity_types, roles: role_modules} = facts()
@@ -148,6 +194,29 @@ defmodule Hologram.Entity.Model do
   end
 
   @doc """
+  Returns whether the calling process may not read the data model (see `ensure_released!/0`).
+  """
+  @spec held?() :: boolean
+  def held? do
+    case :persistent_term.get(@hold_key, nil) do
+      nil -> false
+      _hold -> not compiler?()
+    end
+  end
+
+  @doc """
+  Puts the data model under a new hold, replacing any it was under: the code loaded in the VM may
+  be ahead of the model the last compile validated, so model state built before is not to be read
+  with it, and neither is model state built from it before a compile validates it (see
+  `ensure_released!/0`). Live reload holds the model from a save until the runtime has loaded what
+  the compile that follows derived from it.
+  """
+  @spec hold() :: :ok
+  def hold do
+    :persistent_term.put(@hold_key, System.unique_integer([:positive, :monotonic]))
+  end
+
+  @doc """
   Returns the neutral value of the given option - the value whose meaning equals the
   option's absence: false for flag options, nil for value options.
 
@@ -170,6 +239,16 @@ defmodule Hologram.Entity.Model do
 
     :persistent_term.put(@facts_key, facts)
     :persistent_term.erase(@hash_key)
+
+    :ok
+  end
+
+  @doc """
+  Releases the data model from the hold it is under, if any (see `hold/0`).
+  """
+  @spec release() :: :ok
+  def release do
+    :persistent_term.erase(@hold_key)
 
     :ok
   end
@@ -497,6 +576,15 @@ defmodule Hologram.Entity.Model do
     {name, new_type, normalize_opts(new_opts)}
   end
 
+  # The compile, or a task it started: a task's callers name the process that started it, and the
+  # tasks that one started in turn.
+  defp compiler? do
+    case :persistent_term.get(@compiler_key, nil) do
+      nil -> false
+      pid -> pid == self() or pid in Process.get(:"$callers", [])
+    end
+  end
+
   defp delete_member(model, entity_type, list_key, kind, name) do
     members = members!(model, entity_type, list_key)
 
@@ -515,6 +603,8 @@ defmodule Hologram.Entity.Model do
   end
 
   defp facts do
+    ensure_released!()
+
     case :persistent_term.get(@facts_key, nil) do
       nil ->
         load_facts()

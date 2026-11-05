@@ -277,6 +277,30 @@ defmodule Hologram.Sync.DispatcherTest do
       settle(dispatcher)
     end
 
+    test "skips a round whose handler finds the data model under a hold, keeping its place" do
+      seed(200, @entity_id)
+
+      test_pid = self()
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      handler = fn transactions, place ->
+        call = Agent.get_and_update(calls, &{&1 + 1, &1 + 1})
+        send(test_pid, {:dispatched, call, transactions, place})
+
+        if call == 1, do: raise(Hologram.StaleModelError)
+      end
+
+      dispatcher = start_dispatcher!(cursor: 200, handler: handler)
+
+      wake(dispatcher)
+      assert_receive {:dispatched, 1, [{200, _events}], {200, 0}}
+
+      wake(dispatcher)
+      assert_receive {:dispatched, 2, [{200, _events}], {200, 0}}
+
+      settle(dispatcher)
+    end
+
     # Whether draining the mailbox happens before or after the window is read cannot be told
     # apart here: the sandbox runs the test inside one transaction, so the dispatcher's edge
     # never reaches the rows this test writes, and every round after the first reads nothing

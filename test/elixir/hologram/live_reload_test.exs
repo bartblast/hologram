@@ -12,6 +12,7 @@ defmodule Hologram.LiveReloadTest do
   import Mox
 
   alias Hologram.Commons.ETS
+  alias Hologram.Entity.Model
   alias Hologram.LiveReload
   alias Hologram.Realtime.SubscriptionRegistry
 
@@ -60,6 +61,9 @@ defmodule Hologram.LiveReloadTest do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
+    # A source file event puts the data model under a hold, which is node-wide.
+    on_exit(&Model.release/0)
+
     :ok
   end
 
@@ -92,6 +96,14 @@ defmodule Hologram.LiveReloadTest do
 
       assert {:noreply, new_state} = result
       assert is_reference(new_state.timer_ref)
+    end
+
+    test "puts the data model under a hold for .ex file changes", %{state: state} do
+      Model.release()
+
+      LiveReload.handle_info({:file_event, self(), {@file_path, [:modified]}}, state)
+
+      assert Model.held?() == true
     end
 
     test "starts debounce timer for .holo file changes", %{state: state} do
@@ -131,6 +143,26 @@ defmodule Hologram.LiveReloadTest do
         result = LiveReload.handle_info({:file_event, self(), {file_path, [:modified]}}, state)
         assert result == {:noreply, state}
       end
+    end
+
+    test "leaves the data model alone for an asset change", %{state: state} do
+      Model.release()
+
+      LiveReload.handle_info(
+        {:file_event, self(), {"#{@static_dir}/assets/app.css", [:modified]}},
+        state
+      )
+
+      assert Model.held?() == false
+    end
+
+    test "leaves the data model alone for irrelevant file types", %{state: state} do
+      Model.release()
+      css_file = Path.join([@fixtures_dir, "live_reload", "file.css"])
+
+      LiveReload.handle_info({:file_event, self(), {css_file, [:modified]}}, state)
+
+      assert Model.held?() == false
     end
 
     test "cancels existing timer and starts new one", %{state: state} do
@@ -316,7 +348,7 @@ defmodule Hologram.LiveReloadTest do
         | asset_change: :css,
           asset_timer_ref: make_ref(),
           outcome: :compiled,
-          pass: %{ref: make_ref(), registries_reloaded?: false},
+          pass: %{hold: nil, ref: make_ref(), registries_reloaded?: false},
           timer_ref: make_ref()
       }
 
@@ -780,11 +812,58 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
+  describe "await_model/0" do
+    test "returns at once when live reload is not running" do
+      wait_for_process_cleanup(LiveReload)
+      Model.hold()
+
+      assert LiveReload.await_model() == :ok
+    end
+  end
+
   describe "await_page/1" do
     test "returns at once when live reload is not running" do
       wait_for_process_cleanup(LiveReload)
 
       assert LiveReload.await_page(Page1) == :ok
+    end
+  end
+
+  describe "handle_call/3, :await_model" do
+    setup do
+      [from: {self(), make_ref()}, state: LiveReload.initial_state(nil)]
+    end
+
+    test "answers at once when the data model is under no hold", %{from: from, state: state} do
+      Model.release()
+
+      assert LiveReload.handle_call(:await_model, from, state) == {:reply, :ok, state}
+    end
+
+    # The model stays held until a save starts a pass, so waiting longer changes nothing.
+    test "answers at once when the data model is held and no pass is coming or running", %{
+      from: from,
+      state: state
+    } do
+      Model.hold()
+
+      assert LiveReload.handle_call(:await_model, from, state) == {:reply, :ok, state}
+    end
+
+    test "keeps the request while a pass runs", %{from: from, state: state} do
+      Model.hold()
+      state = %{state | pass: %{hold: Model.current_hold(), ref: make_ref()}}
+
+      assert LiveReload.handle_call(:await_model, from, state) ==
+               {:noreply, %{state | model_waiters: [from]}}
+    end
+
+    test "keeps the request while a save waits for its pass", %{from: from, state: state} do
+      Model.hold()
+      state = %{state | timer_ref: make_ref()}
+
+      assert LiveReload.handle_call(:await_model, from, state) ==
+               {:noreply, %{state | model_waiters: [from]}}
     end
   end
 
@@ -827,6 +906,260 @@ defmodule Hologram.LiveReloadTest do
       assert Enum.sort(option_keys) == [:bundles_built, :next_batch]
 
       wait_until(fn -> :sys.get_state(pid).pass == nil end)
+    end
+
+    test "the first batch releases the data model from the hold the pass started under", %{
+      pid: pid
+    } do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+        bundles_built.([Page1])
+        send(test_pid, {:hold_after_first_batch, Model.current_hold()})
+
+        :ok
+      end)
+
+      Model.hold()
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:hold_after_first_batch, nil}
+    end
+
+    # A save during the pass holds the model for code this pass may not have compiled.
+    test "the first batch leaves a hold put during the pass", %{pid: pid} do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+        Model.hold()
+        hold = Model.current_hold()
+
+        bundles_built.([Page1])
+        send(test_pid, {:hold_after_first_batch, hold, Model.current_hold()})
+
+        :ok
+      end)
+
+      Model.hold()
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:hold_after_first_batch, hold, hold}
+      assert_receive :compiled
+      assert Model.current_hold() == hold
+    end
+
+    test "a pass that compiled having built nothing releases the data model from its hold", %{
+      pid: pid
+    } do
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, _opts -> :ok end)
+
+      Model.hold()
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive :compiled
+      assert Model.current_hold() == nil
+    end
+
+    test "a pass that a compile refused leaves the data model under its hold", %{pid: pid} do
+      lines = [[%{tone: :banner, text: "** (Hologram.CompileError) boom"}]]
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, _opts -> {:error, lines} end)
+
+      Model.hold()
+      hold = Model.current_hold()
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:compilation_error, ^lines}
+      assert Model.current_hold() == hold
+    end
+
+    test "a pass started under no hold leaves a hold put during it", %{pid: pid} do
+      Model.release()
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, _opts ->
+        Model.hold()
+        send(test_pid, {:hold, Model.current_hold()})
+
+        :ok
+      end)
+
+      send(pid, {:debounced_reload, @file_path})
+
+      assert_receive {:hold, hold}
+      assert_receive :compiled
+      assert Model.current_hold() == hold
+    end
+
+    test "a request waiting on the data model is answered when the first batch releases it", %{
+      pid: pid
+    } do
+      test_pid = self()
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, opts ->
+        bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+        send(test_pid, {:pass_started, self()})
+
+        receive do
+          :continue -> :ok
+        end
+
+        bundles_built.([Page1])
+        send(test_pid, :first_batch_built)
+
+        receive do
+          :continue -> :ok
+        end
+
+        :ok
+      end)
+
+      Model.hold()
+      send(pid, {:debounced_reload, @file_path})
+      assert_receive {:pass_started, task_pid}
+
+      request = Task.async(&LiveReload.await_model/0)
+      wait_until(fn -> :sys.get_state(pid).model_waiters != [] end)
+
+      send(task_pid, :continue)
+      assert_receive :first_batch_built
+
+      assert Task.await(request) == :ok
+      assert Model.current_hold() == nil
+
+      send(task_pid, :continue)
+      assert_receive :compiled
+    end
+
+    test "a request waiting on the data model is answered when the pass ends held, with none to follow",
+         %{pid: pid} do
+      test_pid = self()
+      lines = [[%{tone: :banner, text: "** (Hologram.CompileError) boom"}]]
+
+      expect(LiveReloadMock, :reload, fn _file_path, _endpoint, _opts ->
+        send(test_pid, {:pass_started, self()})
+
+        receive do
+          :continue -> :ok
+        end
+
+        {:error, lines}
+      end)
+
+      Model.hold()
+      hold = Model.current_hold()
+      send(pid, {:debounced_reload, @file_path})
+      assert_receive {:pass_started, task_pid}
+
+      request = Task.async(&LiveReload.await_model/0)
+      wait_until(fn -> :sys.get_state(pid).model_waiters != [] end)
+
+      send(task_pid, :continue)
+
+      assert Task.await(request) == :ok
+      assert Model.current_hold() == hold
+    end
+
+    test "a request waiting on the data model waits through a pass a save superseded", %{
+      pid: pid
+    } do
+      test_pid = self()
+      lines = [[%{tone: :banner, text: "** (Hologram.CompileError) boom"}]]
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, _opts ->
+          send(test_pid, {:first_started, self()})
+
+          receive do
+            :continue -> :ok
+          end
+
+          {:error, lines}
+
+        "second.ex", _endpoint, opts ->
+          bundles_built = Keyword.fetch!(opts, :bundles_built)
+
+          send(test_pid, {:second_started, self()})
+
+          receive do
+            :continue -> :ok
+          end
+
+          bundles_built.([Page1])
+          :ok
+      end)
+
+      Model.hold()
+      send(pid, {:debounced_reload, "first.ex"})
+      assert_receive {:first_started, first_task_pid}
+
+      request = Task.async(&LiveReload.await_model/0)
+      wait_until(fn -> :sys.get_state(pid).model_waiters != [] end)
+
+      # A save holds the model again, for the pass it starts.
+      Model.hold()
+      send(pid, {:debounced_reload, "second.ex"})
+      send(first_task_pid, :continue)
+      assert_receive {:second_started, second_task_pid}
+
+      request_pid = request.pid
+      assert [{^request_pid, _tag}] = :sys.get_state(pid).model_waiters
+
+      send(second_task_pid, :continue)
+
+      assert Task.await(request) == :ok
+      assert Model.current_hold() == nil
+    end
+
+    test "a request waiting on the data model waits through a pass that ends before a save's pass",
+         %{pid: pid} do
+      test_pid = self()
+      lines = [[%{tone: :banner, text: "** (Hologram.CompileError) boom"}]]
+
+      expect(LiveReloadMock, :reload, 2, fn
+        "first.ex", _endpoint, _opts ->
+          send(test_pid, {:first_started, self()})
+
+          receive do
+            :continue -> :ok
+          end
+
+          {:error, lines}
+
+        "second.ex", _endpoint, opts ->
+          bundles_built = Keyword.fetch!(opts, :bundles_built)
+          bundles_built.([Page1])
+
+          :ok
+      end)
+
+      Model.hold()
+      send(pid, {:debounced_reload, "first.ex"})
+      assert_receive {:first_started, first_task_pid}
+
+      request = Task.async(&LiveReload.await_model/0)
+      wait_until(fn -> :sys.get_state(pid).model_waiters != [] end)
+
+      # A save whose debounce timer is still running when the pass ends.
+      Model.hold()
+      :sys.replace_state(pid, &%{&1 | timer_ref: make_ref()})
+
+      send(first_task_pid, :continue)
+      assert_receive {:compilation_error, ^lines}
+      wait_until(fn -> :sys.get_state(pid).pass == nil end)
+
+      request_pid = request.pid
+      assert [{^request_pid, _tag}] = :sys.get_state(pid).model_waiters
+
+      send(pid, {:debounced_reload, "second.ex"})
+
+      assert Task.await(request) == :ok
+      assert Model.current_hold() == nil
     end
 
     test "a pass that compiled reports it", %{pid: pid} do

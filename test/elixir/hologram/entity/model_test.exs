@@ -9,6 +9,7 @@ defmodule Hologram.Entity.ModelTest do
   import Hologram.Entity.Model
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Policy
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -26,6 +27,8 @@ defmodule Hologram.Entity.ModelTest do
   @facts_key {Hologram.Entity.Model, :facts}
   @hash_key {Hologram.Entity.Model, :hash}
 
+  @stale_model_msg "the code changed since the last compile that validated the data model - fix the compile error, if there is one, and save again"
+
   defp task_model(entry_overrides) do
     entry =
       Map.merge(
@@ -36,9 +39,142 @@ defmodule Hologram.Entity.ModelTest do
     %{entities: %{MyApp.Task => entry}, roles: %{}, user_entity: nil}
   end
 
+  describe "compiling/1" do
+    setup do
+      on_exit(&release/0)
+    end
+
+    test "returns what the given function returns" do
+      assert compiling(fn -> :result end) == :result
+    end
+
+    test "the calling process reads the model through a hold" do
+      hold()
+
+      assert compiling(fn -> entity_types() end) == Reflection.list_entities()
+    end
+
+    test "a task the calling process starts reads the model through a hold" do
+      hold()
+
+      result =
+        compiling(fn ->
+          fn -> entity_types() end
+          |> Task.async()
+          |> Task.await()
+        end)
+
+      assert result == Reflection.list_entities()
+    end
+
+    test "a process the calling process spawns does not read the model through a hold" do
+      hold()
+      test_pid = self()
+
+      compiling(fn ->
+        spawn(fn -> send(test_pid, {:held?, held?()}) end)
+
+        assert_receive {:held?, true}
+      end)
+    end
+
+    test "the calling process no longer reads through a hold once the function returns" do
+      compiling(fn -> :ok end)
+
+      hold()
+
+      assert held?() == true
+    end
+
+    test "the calling process no longer reads through a hold once the function raises" do
+      assert_error RuntimeError, "failed", fn -> compiling(fn -> raise "failed" end) end
+
+      hold()
+
+      assert held?() == true
+    end
+  end
+
+  describe "current_hold/0" do
+    setup do
+      on_exit(&release/0)
+    end
+
+    test "nil when the model is under no hold" do
+      release()
+
+      assert current_hold() == nil
+    end
+
+    test "each hold has a positive integer id of its own" do
+      hold()
+      first_hold = current_hold()
+
+      hold()
+      second_hold = current_hold()
+
+      assert is_integer(first_hold) and first_hold > 0
+      assert is_integer(second_hold) and second_hold > 0
+      refute second_hold == first_hold
+    end
+  end
+
   describe "empty/0" do
     test "returns a model with no entity types, no global roles, and no designated user entity type" do
       assert empty() == %{entities: %{}, roles: %{}, user_entity: nil}
+    end
+  end
+
+  describe "ensure_released!/0" do
+    setup do
+      on_exit(&release/0)
+    end
+
+    test ":ok when the model is under no hold" do
+      release()
+
+      assert ensure_released!() == :ok
+    end
+
+    test "raises when the model is under a hold" do
+      hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> ensure_released!() end
+    end
+
+    test ":ok for the compile when the model is under a hold" do
+      hold()
+
+      assert compiling(&ensure_released!/0) == :ok
+    end
+
+    # Checked here rather than in the policy tests, which run async while the hold is node-global.
+    test "Policy.build/1 checks it" do
+      hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> Policy.build(Module1) end
+    end
+
+    # Filled first, so that the check is the cached read's, not the model read's that fills it.
+    test "the cached global role chains check it" do
+      on_exit(&Policy.reset_model_facts_cache/0)
+
+      Policy.expand_global_role(RoleModule1)
+      hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn ->
+        Policy.expand_global_role(RoleModule1)
+      end
+    end
+
+    # Filled first, so that the check is the cached read's, not the model read's that fills it.
+    test "the cached role grant resolution checks it" do
+      on_exit(&RoleGrant.reset_resolution_cache/0)
+
+      RoleGrant.user_entity()
+      hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> RoleGrant.user_entity() end
     end
   end
 
@@ -65,6 +201,15 @@ defmodule Hologram.Entity.ModelTest do
       entity_types()
 
       assert :persistent_term.get(@facts_key).entity_types == Reflection.list_entities()
+    end
+
+    test "raises when the model is under a hold, even when cached" do
+      on_exit(&release/0)
+
+      entity_types()
+      hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> entity_types() end
     end
   end
 
@@ -1686,6 +1831,52 @@ defmodule Hologram.Entity.ModelTest do
 
       assert :persistent_term.get(@hash_key, nil) == derived
     end
+
+    test "raises when the model is under a hold, even when cached" do
+      on_exit(&release/0)
+
+      hash()
+      hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> hash() end
+    end
+  end
+
+  describe "held?/0" do
+    setup do
+      on_exit(&release/0)
+    end
+
+    test "false when the model is under no hold" do
+      release()
+
+      assert held?() == false
+    end
+
+    test "true when the model is under a hold" do
+      hold()
+
+      assert held?() == true
+    end
+
+    test "false for the compile when the model is under a hold" do
+      hold()
+
+      assert compiling(&held?/0) == false
+    end
+  end
+
+  describe "hold/0" do
+    setup do
+      on_exit(&release/0)
+    end
+
+    test "puts the model under a hold" do
+      release()
+
+      assert hold() == :ok
+      assert held?() == true
+    end
   end
 
   describe "put_facts/3" do
@@ -1719,6 +1910,22 @@ defmodule Hologram.Entity.ModelTest do
         |> hash()
 
       assert hash() == expected
+    end
+  end
+
+  describe "release/0" do
+    test "releases the model from the hold it is under" do
+      hold()
+
+      assert release() == :ok
+      assert current_hold() == nil
+    end
+
+    test "does nothing when the model is under no hold" do
+      release()
+
+      assert release() == :ok
+      assert current_hold() == nil
     end
   end
 
@@ -1757,6 +1964,14 @@ defmodule Hologram.Entity.ModelTest do
 
       assert :persistent_term.get(@facts_key).roles == Reflection.list_roles()
     end
+
+    test "raises when the model is under a hold" do
+      on_exit(&release/0)
+
+      hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> roles() end
+    end
   end
 
   describe "user_entity/0" do
@@ -1776,6 +1991,14 @@ defmodule Hologram.Entity.ModelTest do
       user_entity()
 
       assert :persistent_term.get(@facts_key).user_entity == Module14
+    end
+
+    test "raises when the model is under a hold" do
+      on_exit(&release/0)
+
+      hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> user_entity() end
     end
   end
 
@@ -1804,6 +2027,14 @@ defmodule Hologram.Entity.ModelTest do
       put_facts([], [], nil)
 
       assert exists?() == false
+    end
+
+    test "raises when the model is under a hold" do
+      on_exit(&release/0)
+
+      hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> exists?() end
     end
   end
 
