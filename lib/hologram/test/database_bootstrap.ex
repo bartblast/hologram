@@ -9,6 +9,7 @@ defmodule Hologram.Test.DatabaseBootstrap do
   alias Hologram.DB.Config
   alias Hologram.DB.Mapper
   alias Hologram.Reflection
+  alias Hologram.Test.DatabaseBootstrap.Connection
 
   @doc """
   Prepares the test databases before a suite runs and returns :ok.
@@ -25,9 +26,10 @@ defmodule Hologram.Test.DatabaseBootstrap do
   test env has claimed, is dropped whichever mechanism claimed it.
 
   Runs before anything connects a pool, so it holds no assumption about the app being
-  up. A connection that cannot be established prints what to check and halts: a usable
-  server is a hard requirement of any suite calling this, and every later failure would
-  be noise.
+  up. Each connection opens synchronously: a server slow to answer is waited for, while
+  one that refuses the connection fails at once. A connection that cannot be established
+  prints the error with what to check and halts: a usable server is a hard requirement of
+  any suite calling this, and every later failure would be noise.
 
   Refuses to run outside the test environment - the schema drop is what makes this
   function test-only. When neither HOLOGRAM_ENV nor MIX_ENV is set, environment
@@ -53,14 +55,33 @@ defmodule Hologram.Test.DatabaseBootstrap do
     :ok
   end
 
+  # No handshake timeout: the handshake starts once the server accepted the TCP connection,
+  # and a server that is up either finishes it, however long its cold start takes, or closes
+  # the socket. The TCP connect itself keeps the driver's timeout.
   defp connection_opts(database_opts, database) do
     [
       database: database,
+      handshake_timeout: :infinity,
       hostname: database_opts[:host],
       password: database_opts[:password],
       port: database_opts[:port],
       username: database_opts[:user]
     ]
+  end
+
+  defp create_database_when_absent!(connection_pid, database) do
+    # The simple query protocol takes no parameters, so the name goes in as a literal.
+    database_existence_query =
+      "SELECT 1 FROM pg_database WHERE datname = #{quote_literal(database)}"
+
+    case Connection.query!(connection_pid, database_existence_query) do
+      %{rows: []} ->
+        quoted_database = Mapper.quote_identifier(database)
+        Connection.query!(connection_pid, "CREATE DATABASE #{quoted_database}")
+
+      _result ->
+        :ok
+    end
   end
 
   # The connection is stopped on a refusal too, so a caller rescuing the refusal is not left
@@ -69,13 +90,13 @@ defmodule Hologram.Test.DatabaseBootstrap do
     {:ok, connection_pid} =
       database_opts
       |> connection_opts(database)
-      |> Postgrex.start_link()
+      |> Connection.start()
 
     try do
       refuse_claimed_elsewhere!(connection_pid, database, claim)
-      Enum.each(drop_statements(), &Postgrex.query!(connection_pid, &1, []))
+      Enum.each(drop_statements(), &Connection.query!(connection_pid, &1))
     after
-      GenServer.stop(connection_pid)
+      Connection.stop(connection_pid)
     end
   end
 
@@ -86,34 +107,26 @@ defmodule Hologram.Test.DatabaseBootstrap do
     ]
   end
 
+  # The maintenance database always exists, so connecting to it doubles as the server
+  # connectivity check.
   defp ensure_database!(database_opts, database) do
-    {:ok, connection_pid} =
+    connection_result =
       database_opts
       |> connection_opts("postgres")
-      |> Postgrex.start_link()
+      |> Connection.start()
 
-    database_existence_query = "SELECT 1 FROM pg_database WHERE datname = $1"
+    case connection_result do
+      {:ok, connection_pid} ->
+        try do
+          create_database_when_absent!(connection_pid, database)
+        after
+          Connection.stop(connection_pid)
+        end
 
-    # The maintenance database always exists, so this query doubles as the server
-    # connectivity check.
-    case Postgrex.query(connection_pid, database_existence_query, [database]) do
-      {:ok, %{rows: []}} ->
-        quoted_database = Mapper.quote_identifier(database)
-        Postgrex.query!(connection_pid, "CREATE DATABASE #{quoted_database}", [])
-
-      {:ok, _result} ->
-        :ok
-
-      # The reason carried here is always the pool's :queue_timeout, whatever went wrong -
-      # the driver retries in the background and this is the wait giving up. What actually
-      # failed is in the connection error the driver logged just above, so the message
-      # names the candidates and sends the reader there rather than asserting one.
-      {:error, _reason} ->
-        print_unusable_server_message(database_opts)
+      {:error, reason} ->
+        print_unusable_server_message(database_opts, reason)
         System.halt(1)
     end
-
-    GenServer.stop(connection_pid)
   end
 
   # Read on this connection: no pool exists yet when this runs, and the marker table may be
@@ -122,27 +135,30 @@ defmodule Hologram.Test.DatabaseBootstrap do
     system_schema = Mapper.system_schema()
     existence_query = ~s[SELECT to_regclass('"#{system_schema}"."database"')]
 
-    case Postgrex.query!(connection_pid, existence_query, []) do
+    case Connection.query!(connection_pid, existence_query) do
       %{rows: [[nil]]} ->
         nil
 
       _present ->
         marker_query = ~s(SELECT "otp_app", "env" FROM "#{system_schema}"."database")
 
-        case Postgrex.query!(connection_pid, marker_query, []) do
+        case Connection.query!(connection_pid, marker_query) do
           %{rows: []} -> nil
           %{rows: [[otp_app, env]]} -> %{otp_app: otp_app, env: env}
         end
     end
   end
 
-  defp print_unusable_server_message(database_opts) do
+  defp print_unusable_server_message(database_opts, reason) do
     # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
     IO.puts(:stderr, """
 
     Postgres is required to run this test suite, but no connection could be established \
-    to #{database_opts[:host]}:#{database_opts[:port]} as user \
-    "#{database_opts[:user]}". The connection error logged above says which of these it is:
+    to #{database_opts[:host]}:#{database_opts[:port]} as user "#{database_opts[:user]}":
+
+      #{Exception.format_banner(:error, reason)}
+
+    The usual causes are:
 
       * no server is running there - start one, e.g.
           macOS (Homebrew): brew services start postgresql
@@ -154,6 +170,12 @@ defmodule Hologram.Test.DatabaseBootstrap do
 
     Override the connection settings with config :hologram, :database in config/test.exs.
     """)
+  end
+
+  # Doubles the single quotes. Backslashes stay literal under standard_conforming_strings,
+  # which Postgres has on by default since 9.1.
+  defp quote_literal(value) do
+    "'" <> String.replace(value, "'", "''") <> "'"
   end
 
   defp refuse_claimed_elsewhere!(connection_pid, database, claim) do

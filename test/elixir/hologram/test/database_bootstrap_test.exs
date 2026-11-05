@@ -43,6 +43,25 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
     :ok
   end
 
+  defp accept_connections(listen_socket, upstream_opts, delay_ms, test_pid) do
+    case :gen_tcp.accept(listen_socket) do
+      {:ok, client_socket} ->
+        send(test_pid, :proxy_connection_accepted)
+
+        forwarder =
+          spawn_link(fn -> forward_connection(client_socket, upstream_opts, delay_ms) end)
+
+        :ok = :gen_tcp.controlling_process(client_socket, forwarder)
+        send(forwarder, :socket_handed_over)
+
+        accept_connections(listen_socket, upstream_opts, 0, test_pid)
+
+      # The listen socket closes with the test process that owns it.
+      {:error, :closed} ->
+        :ok
+    end
+  end
+
   defp claim(scratch, context) do
     route(scratch, fn -> SchemaReconciler.ensure_managed!(context) end)
   end
@@ -69,6 +88,23 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
     end)
   end
 
+  defp forward_connection(client_socket, upstream_opts, delay_ms) do
+    receive do
+      :socket_handed_over -> :ok
+    end
+
+    Process.sleep(delay_ms)
+
+    {:ok, upstream_socket} =
+      upstream_opts[:hostname]
+      |> String.to_charlist()
+      |> :gen_tcp.connect(upstream_opts[:port], [:binary, active: true])
+
+    :ok = :inet.setopts(client_socket, active: true)
+
+    relay(client_socket, upstream_socket)
+  end
+
   defp hologram_schemas(scratch) do
     statement = """
     SELECT nspname
@@ -80,6 +116,38 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
     %{rows: rows} = Postgrex.query!(scratch, statement, [])
 
     Enum.map(rows, fn [name] -> name end)
+  end
+
+  # Either side closing ends the relay normally, which closes the other side too: the bootstrap
+  # stops its connections while the test still runs, and a crash would take the linked test
+  # process down.
+  defp relay(client_socket, upstream_socket) do
+    receive do
+      {:tcp, ^client_socket, data} ->
+        :gen_tcp.send(upstream_socket, data)
+        relay(client_socket, upstream_socket)
+
+      {:tcp, ^upstream_socket, data} ->
+        :gen_tcp.send(client_socket, data)
+        relay(client_socket, upstream_socket)
+
+      {:tcp_closed, _socket} ->
+        :ok
+    end
+  end
+
+  # A TCP proxy in front of the given server that holds the first connection it accepts for
+  # the given time before forwarding it, the way a server just started answers its first
+  # connection, and forwards later ones at once. Sends the calling process
+  # :proxy_connection_accepted for each connection it accepts. Returns the port it listens on.
+  defp start_slow_first_connection_proxy(upstream_opts, delay_ms) do
+    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false])
+    {:ok, port} = :inet.port(listen_socket)
+    test_pid = self()
+
+    spawn_link(fn -> accept_connections(listen_socket, upstream_opts, delay_ms, test_pid) end)
+
+    port
   end
 
   describe "run!/1" do
@@ -116,6 +184,32 @@ defmodule Hologram.Test.DatabaseBootstrapTest do
         Postgrex.query!(scratch, ~s[SELECT to_regclass('"public"."kept"')::text], [])
 
       assert regclass == "kept"
+    end
+
+    test "waits for a server slow to answer its first connection", %{
+      scratch: scratch,
+      scratch_opts: scratch_opts
+    } do
+      claim(scratch, @claim)
+
+      # DBConnection's pool drops a request queued for a connection still opening about 6 s
+      # after the pool starts (the third poll of its default 2 s queue interval), so a shorter
+      # hold would not tell a connection that waits from one that gives up.
+      proxy_port = start_slow_first_connection_proxy(scratch_opts, 8_000)
+
+      Application.put_env(:hologram, :database,
+        database: scratch_opts[:database],
+        port: proxy_port
+      )
+
+      assert run!() == :ok
+
+      # One connection to the maintenance database, one to the scratch database.
+      assert_received :proxy_connection_accepted
+      assert_received :proxy_connection_accepted
+      refute_received :proxy_connection_accepted
+
+      assert hologram_schemas(scratch) == []
     end
 
     test "drops the Hologram schemas of a database this app's test env has claimed", %{
