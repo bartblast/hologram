@@ -3885,6 +3885,8 @@ end
 
 In this example, clicking "Populate JS subtree" adds a span via JavaScript and increments the counter. Clicking "Increment counter" afterwards will update the counter display without removing the JS-managed span.
 
+What happens to nodes other tools put on the page before Hologram's first render depends on where they sit. Hologram leaves alone any tag it didn't render that sits directly inside `<head>` or `<body>`, wherever it is, like a dev toolbar's `<meta>` and `<script>` or a browser extension's `<div>`. Inside the elements Hologram renders, the first render removes them. The exception is Phoenix's live reload iframe, which Hologram removes in development, since its own live reload reloads Hologram pages.
+
 #### Coming from LiveView
 
 If you're migrating from Phoenix LiveView, Hologram offers two paths for JS interop. The event-based dispatching API (`JS.dispatch_event` and `Hologram.dispatchAction()`) maps directly to LiveView hooks patterns and is provided as a convenience for faster migration - it lets you port existing hook-based integrations with minimal changes.

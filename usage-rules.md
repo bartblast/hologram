@@ -251,6 +251,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Dispatch actions from JS: `Hologram.dispatchAction("action_name", "page", {key: value})`. Available immediately - calls before the runtime loads are queued and replayed on mount (safe for inline `<script>`).
 - Dispatch DOM events from Elixir: `JS.dispatch_event(target, "my:event", detail: %{value: 42})`.
 - Direct DOM manipulation via JS interop is preserved across Hologram re-renders, as long as the container element stays in the template.
+- Hologram leaves alone tags it didn't render directly inside `<head>` or `<body>`, so other tools can add tags there. Inside the elements Hologram renders, the first render removes the nodes it didn't render.
 - Elixir anonymous functions can be passed as JS callbacks.
 - JS interop only works in action handlers (client-side). It is a no-op during server-side rendering.
 - Prefer `JS.call` over `JS.exec`/`JS.eval`. Isolate JS interop behind facade modules.
