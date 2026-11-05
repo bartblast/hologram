@@ -96,6 +96,26 @@ defmodule Hologram.Job.WorkerTest do
       refute_receive {:passed, _job_types}, 100
     end
 
+    test "skips a pass that finds the data model under a hold" do
+      test_pid = self()
+      {:ok, calls} = Agent.start_link(fn -> 0 end)
+
+      pass = fn _job_types ->
+        call = Agent.get_and_update(calls, &{&1 + 1, &1 + 1})
+        send(test_pid, {:passed, call})
+
+        if call == 1, do: raise(Hologram.StaleModelError), else: 0
+      end
+
+      worker = start_worker!(pass: pass)
+
+      wake(worker)
+      assert_receive {:passed, 1}, @timeout_ms
+
+      wake(worker)
+      assert_receive {:passed, 2}, @timeout_ms
+    end
+
     test "answers the wakes that arrived while it worked with one pass" do
       worker = start_worker!(pass: counting_pass(self(), []))
 
