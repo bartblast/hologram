@@ -218,8 +218,8 @@ defmodule HologramFeatureTests.LiveReloadTest do
   end
 
   describe "Phoenix's live reload frame" do
-    # The server sends the page with the frame, as Phoenix's live reload plug does in dev. Until
-    # #1380 the first render removes it anyway, along with every other node it did not render.
+    # The server sends the page with the frame, as Phoenix's live reload plug does in dev. It's the
+    # one node another tool adds that the first render takes out.
     feature "is removed from the page", %{session: session} do
       session = visit(session, Page3)
 

@@ -13,6 +13,8 @@ defmodule HologramFeatureTestsWeb.Endpoint do
 
   plug HologramFeatureTestsWeb.Plugs.PhoenixReloadFrame
 
+  plug HologramFeatureTestsWeb.Plugs.ForeignNodes
+
   plug Plug.Static,
     at: "/",
     from: :hologram_feature_tests,
