@@ -32,7 +32,9 @@ System.cmd("epmd", ["-daemon"])
 {:ok, _pid} = Node.start(:"cluster_test@127.0.0.1", :longnames)
 Node.set_cookie(:hologram_cluster_tests)
 
-{:ok, _apps} = Application.ensure_all_started(:wallaby)
+# Starts Wallaby with ChromeDriver's log on, in tmp/chromedriver, restarting it when
+# ChromeDriver doesn't get ready. CI uploads that dir when a run fails or hangs.
+Hologram.Test.BrowserSession.start_wallaby()
 
 # The browser talks only to the proxy - never to a peer directly. Which peer serves each
 # request is the routing policy's decision, not the browser's.
