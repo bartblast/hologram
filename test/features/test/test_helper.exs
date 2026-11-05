@@ -59,5 +59,7 @@ case System.find_executable("pkill") do
   pkill -> System.cmd(pkill, ["-f", "test-type=webdriver"])
 end
 
-{:ok, _apps} = Application.ensure_all_started(:wallaby)
+# Starts Wallaby with ChromeDriver's log on, in tmp/chromedriver, restarting it when
+# ChromeDriver doesn't get ready. CI uploads that dir when a run fails or hangs.
+Hologram.Test.BrowserSession.start_wallaby()
 Application.put_env(:wallaby, :base_url, HologramFeatureTestsWeb.Endpoint.url())
