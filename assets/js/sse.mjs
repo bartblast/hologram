@@ -179,6 +179,10 @@ export default class Sse {
         LiveReload.hideErrorOverlay();
       });
 
+      $.eventSource.addEventListener("css_changed", () => {
+        LiveReload.swapStylesheets();
+      });
+
       $.eventSource.addEventListener("drop_sub_receipts", (event) => {
         const keys = Deserializer.deserialize(event.data);
         App.subscriptionReceiptRegistry.purge(keys);

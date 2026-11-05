@@ -100,6 +100,17 @@ defmodule Hologram.Realtime.SSE do
   end
 
   @doc """
+  Builds the SSE event-stream chunk for a `css_changed` event: the standard
+  `event:`/`id:`/`data:` framing with the given id and an empty data payload,
+  since the event says only that the app's CSS changed. The empty `data:` line
+  is still sent: the browser drops an event that carries no data field.
+  """
+  @spec encode_css_changed_envelope(integer) :: String.t()
+  def encode_css_changed_envelope(id) do
+    "event: css_changed\nid: #{id}\ndata:\n\n"
+  end
+
+  @doc """
   Builds the SSE event-stream chunk for a `drop_sub_receipts` event: the
   standard `event:`/`id:`/`data:` framing with the given id and the serialized
   list of `{channel, cid}` keys as the data payload.
@@ -295,6 +306,16 @@ defmodule Hologram.Realtime.SSE do
           {:error, _reason} -> {:halt, conn}
         end
 
+      # The app's CSS changed. Forwarded to every tab, which swaps its stylesheets in place.
+      :css_changed ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = encode_css_changed_envelope(id)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
       {:drop_channel, channel} ->
         conn = Plug.Conn.fetch_query_params(conn)
         instance_id = conn.query_params["instance_id"]
@@ -348,7 +369,9 @@ defmodule Hologram.Realtime.SSE do
         end
 
       # A live reload rebuilt these pages' bundles. Every tab gets the list, and the
-      # client decides whether the page it shows is among them.
+      # client decides whether the page it shows is among them. As :all, every tab
+      # reloads: the runtime or chunk bundles were rebuilt, or an asset of the app other
+      # than CSS changed.
       {:reload, pages} ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = encode_reload_envelope(id, pages)
@@ -730,11 +753,13 @@ defmodule Hologram.Realtime.SSE do
   # The outcome of the last live reload is asked for once subscribed, since a broadcast reaches
   # only the streams attached when it is sent: a tab reloaded while a live reload was still
   # building, or one reconnecting, would otherwise miss the compilation error, or keep one a
-  # later live reload compiled past.
+  # later live reload compiled past. A change to the app's assets the tab missed is asked for too,
+  # since the tab would otherwise keep the assets its document loaded.
   defp maybe_subscribe_to_live_reload(conn) do
     if Hologram.env() in [:dev, :test] do
       Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
       LiveReload.replay_outcome(self())
+      LiveReload.replay_asset_change(self(), conn.query_params["instance_id"])
     end
 
     conn
