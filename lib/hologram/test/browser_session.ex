@@ -6,8 +6,10 @@ defmodule Hologram.Test.BrowserSession do
 
   # Wallaby is not a Hologram dependency - client apps that use these helpers
   # bring their own. This lets the module compile without Wallaby present.
-  @compile {:no_warn_undefined, [Wallaby.Chrome, Wallaby.WebdriverClient]}
+  @compile {:no_warn_undefined,
+            [Wallaby.Chrome, Wallaby.Chrome.Chromedriver.Server, Wallaby.WebdriverClient]}
 
+  alias Wallaby.Chrome.Chromedriver.Server
   alias Wallaby.WebdriverClient
 
   # Tunable policy, not derived. A normal session start takes about a second.
@@ -16,6 +18,15 @@ defmodule Hologram.Test.BrowserSession do
   # behaves the same.
   @default_attempt_timeout 10_000
   @default_attempts 3
+
+  # Tunable policy, not derived. Wallaby's ChromeDriver server gives ChromeDriver a
+  # hardcoded 10 s to get ready, so a shorter wait would restart a ChromeDriver
+  # Wallaby would still take. Anything above that behaves the same.
+  @default_ready_timeout 15_000
+
+  # Tunable policy, not derived. Starting Wallaby runs before ExUnit, so no test
+  # timeout bounds it. Each attempt takes up to the 10 s Wallaby allows.
+  @default_start_attempts 3
 
   # Tunable policy, not derived. Ending a session takes well under a second. The
   # real bound is the on_exit callback's own timeout, which is the test timeout
@@ -115,13 +126,22 @@ defmodule Hologram.Test.BrowserSession do
   output in it too. The log dir is emptied first, so it holds one run's logs, and
   it's where the other functions here write `hangs.txt`.
 
+  Then it waits until every ChromeDriver Wallaby started is ready. Wallaby's tree
+  can go down when they aren't ready in time, failing every test of the run, so
+  Wallaby is restarted when one isn't, up to the attempt count.
+
   ## Options
 
+    * `:attempts` - how many times Wallaby is started before raising
+    * `:chromedrivers` - the partition supervisor of Wallaby's ChromeDriver
+      servers, defaults to `Wallaby.Chromedrivers`
     * `:chromedriver_path` - the ChromeDriver the wrapper runs, defaults to the
       one Wallaby would run
     * `:log_dir` - defaults to `tmp/chromedriver` in the current dir
     * `:put_env_fn` - sets an app env key, defaults to `&Application.put_env/3`
+    * `:ready_timeout` - how long to wait for each ChromeDriver, in ms
     * `:start_fn` - starts Wallaby
+    * `:stop_fn` - stops Wallaby
   """
   @spec start_wallaby(keyword) :: :ok
   def start_wallaby(opts \\ []) do
@@ -147,9 +167,16 @@ defmodule Hologram.Test.BrowserSession do
     put_env_fn.(:wallaby, :chromedriver, chromedriver_env)
     put_env_fn.(:hologram, :__browser_session_log_dir__, log_dir)
 
-    start_fn.()
+    opts =
+      opts
+      |> Keyword.put_new(:attempts, @default_start_attempts)
+      |> Keyword.put_new(:chromedrivers, Wallaby.Chromedrivers)
+      |> Keyword.put_new(:ready_timeout, @default_ready_timeout)
+      |> Keyword.put_new(:stop_fn, fn -> Application.stop(:wallaby) end)
+      |> Keyword.put(:log_dir, log_dir)
+      |> Keyword.put(:start_fn, start_fn)
 
-    :ok
+    start_wallaby(1, opts)
   end
 
   defp await_exit(pid) do
@@ -172,6 +199,22 @@ defmodule Hologram.Test.BrowserSession do
         Process.sleep(10)
         await_sessions_ended(test_pid, sessions_fn, deadline)
     end
+  end
+
+  # A crashed server or a gone tree exits the call. A tree going down mid-lookup
+  # raises.
+  defp chromedrivers_ready?(chromedrivers, timeout) do
+    partitions = PartitionSupervisor.partitions(chromedrivers)
+
+    # Integer keys pick partitions by rem/2, so 0..n-1 covers each one.
+    Enum.all?(0..(partitions - 1), fn partition ->
+      server = {:via, PartitionSupervisor, {chromedrivers, partition}}
+      Server.wait_until_ready(server, timeout) == :ok
+    end)
+  rescue
+    ArgumentError -> false
+  catch
+    :exit, _reason -> false
   end
 
   defp create_session(attempt_fn, base_url, attempt, opts) do
@@ -346,6 +389,31 @@ defmodule Hologram.Test.BrowserSession do
 
   defp shell_quote(string) do
     "'" <> String.replace(string, "'", "'\\''") <> "'"
+  end
+
+  defp start_wallaby(attempt, opts) do
+    attempts = opts[:attempts]
+
+    opts[:start_fn].()
+
+    cond do
+      chromedrivers_ready?(opts[:chromedrivers], opts[:ready_timeout]) ->
+        :ok
+
+      attempt < attempts ->
+        report_hang(
+          "ChromeDriver didn't get ready (attempt #{attempt} of #{attempts}), restarting Wallaby",
+          opts
+        )
+
+        opts[:stop_fn].()
+        start_wallaby(attempt + 1, opts)
+
+      true ->
+        message = "ChromeDriver didn't get ready after #{attempts} attempts"
+        report_hang(message, opts)
+        raise message
+    end
   end
 
   defp unwrap_result({:returned, result}), do: result

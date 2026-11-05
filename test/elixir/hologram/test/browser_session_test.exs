@@ -2,10 +2,31 @@ defmodule Hologram.Test.BrowserSessionTest do
   use Hologram.Test.BasicCase, async: true
 
   import ExUnit.CaptureIO
+  import ExUnit.CaptureLog
   import Hologram.Test.BrowserSession
 
   @base_url "http://localhost:9515/"
   @capabilities %{browserName: "chrome"}
+
+  defmodule StandInChromedriver do
+    use GenServer
+
+    # answer_fn says how to answer a readiness wait: :ready, :silent or :crash.
+    @spec start_link((-> atom)) :: GenServer.on_start()
+    def start_link(answer_fn), do: GenServer.start_link(__MODULE__, answer_fn)
+
+    @impl GenServer
+    def init(answer_fn), do: {:ok, answer_fn}
+
+    @impl GenServer
+    def handle_call(:wait_until_ready, _from, answer_fn) do
+      case answer_fn.() do
+        :crash -> raise "not ready"
+        :ready -> {:reply, :ok, answer_fn}
+        :silent -> {:noreply, answer_fn}
+      end
+    end
+  end
 
   defmodule StandInStore do
     use GenServer
@@ -19,6 +40,20 @@ defmodule Hologram.Test.BrowserSessionTest do
 
   defp alive_process do
     spawn(fn -> Process.sleep(:infinity) end)
+  end
+
+  defp assert_restarted_once(log_dir) do
+    wrapper_path = Path.join(log_dir, "chromedriver")
+
+    assert Process.info(self(), :messages) ==
+             {:messages,
+              [
+                {:put_env, :wallaby, :chromedriver, [path: wrapper_path]},
+                {:put_env, :hologram, :__browser_session_log_dir__, log_dir},
+                :started,
+                :stopped,
+                :started
+              ]}
   end
 
   defp blocking_create_fn(test_pid, session_id) do
@@ -51,6 +86,30 @@ defmodule Hologram.Test.BrowserSessionTest do
 
   defp deleting_fn(test_pid) do
     fn base_url, session_id -> send(test_pid, {:deleted, base_url, session_id}) end
+  end
+
+  # Partition 1 answers as answer_fn says for the current start, partition 0 is ready.
+  defp start_chromedrivers(answer_fn) do
+    starts = :counters.new(1, [])
+
+    partition_answer_fn = fn
+      0 ->
+        :ready
+
+      1 ->
+        start = :counters.get(starts, 1)
+        answer_fn.(start)
+    end
+
+    start_supervised!(
+      {PartitionSupervisor,
+       child_spec: {StandInChromedriver, nil},
+       name: :browser_session_test_chromedrivers,
+       partitions: 2,
+       with_arguments: fn [nil], partition -> [fn -> partition_answer_fn.(partition) end] end}
+    )
+
+    starts
   end
 
   defp start_store_supervisor(store) do
@@ -435,7 +494,7 @@ defmodule Hologram.Test.BrowserSessionTest do
     @describetag :skip_on_windows
     @describetag :tmp_dir
 
-    setup %{tmp_dir: tmp_dir} do
+    setup %{tmp_dir: tmp_dir} = context do
       # A ChromeDriver stand-in that writes its pid and args, one per line.
       args_path = Path.join(tmp_dir, "args.txt")
       chromedriver_path = Path.join(tmp_dir, "fake chromedriver")
@@ -452,11 +511,21 @@ defmodule Hologram.Test.BrowserSessionTest do
       # A quote and a space, so the wrapper has to quote its paths.
       log_dir = Path.join(tmp_dir, "it's logs")
 
+      # How partition 1 answers on each start, :ready unless a test tags otherwise.
+      answers = Map.get(context, :chromedriver_answers, %{})
+      starts = start_chromedrivers(&Map.get(answers, &1, :ready))
+
       opts = [
         chromedriver_path: chromedriver_path,
+        chromedrivers: :browser_session_test_chromedrivers,
         log_dir: log_dir,
         put_env_fn: fn app, key, value -> send(self(), {:put_env, app, key, value}) end,
-        start_fn: fn -> send(self(), :started) end
+        ready_timeout: 5_000,
+        start_fn: fn ->
+          :counters.add(starts, 1, 1)
+          send(self(), :started)
+        end,
+        stop_fn: fn -> send(self(), :stopped) end
       ]
 
       [args_path: args_path, log_dir: log_dir, opts: opts]
@@ -535,6 +604,34 @@ defmodule Hologram.Test.BrowserSessionTest do
       assert args == ["--version"]
     end
 
+    @tag chromedriver_answers: %{1 => :silent}
+    test "restarts Wallaby when a ChromeDriver doesn't get ready in time, and reports it", %{
+      log_dir: log_dir,
+      opts: opts
+    } do
+      capture_io(fn ->
+        assert start_wallaby(Keyword.merge(opts, attempts: 3, ready_timeout: 50)) == :ok
+      end)
+
+      assert_restarted_once(log_dir)
+
+      hangs =
+        log_dir
+        |> Path.join("hangs.txt")
+        |> File.read!()
+
+      assert hangs == "ChromeDriver didn't get ready (attempt 1 of 3), restarting Wallaby\n"
+    end
+
+    @tag chromedriver_answers: %{1 => :crash}
+    test "restarts Wallaby when a ChromeDriver server crashes", %{log_dir: log_dir, opts: opts} do
+      capture_log(fn ->
+        capture_io(fn -> assert start_wallaby(opts) == :ok end)
+      end)
+
+      assert_restarted_once(log_dir)
+    end
+
     test "empties a log dir left by an earlier run", %{log_dir: log_dir, opts: opts} do
       File.mkdir_p!(log_dir)
 
@@ -545,6 +642,29 @@ defmodule Hologram.Test.BrowserSessionTest do
       start_wallaby(opts)
 
       assert File.ls!(log_dir) == ["chromedriver"]
+    end
+
+    test "raises after the last attempt, also when Wallaby's ChromeDriver tree is gone", %{
+      log_dir: log_dir,
+      opts: opts
+    } do
+      capture_io(fn ->
+        assert_error RuntimeError, "ChromeDriver didn't get ready after 2 attempts", fn ->
+          start_wallaby(Keyword.merge(opts, attempts: 2, chromedrivers: :missing_chromedrivers))
+        end
+      end)
+
+      assert_restarted_once(log_dir)
+
+      hangs =
+        log_dir
+        |> Path.join("hangs.txt")
+        |> File.read!()
+
+      assert hangs == """
+             ChromeDriver didn't get ready (attempt 1 of 2), restarting Wallaby
+             ChromeDriver didn't get ready after 2 attempts
+             """
     end
   end
 end
