@@ -30,6 +30,8 @@ defmodule Hologram.DBTest do
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.WriteError
 
+  @stale_model_msg "the code changed since the last compile that validated the data model - fix the compile error, if there is one, and save again"
+
   describe "__using__/1" do
     test "imports the query and write stages, and aliases the modules the verbs live on" do
       {{:module, module, _binary, _result}, _bindings} =
@@ -115,6 +117,14 @@ defmodule Hologram.DBTest do
   describe "mapping/0" do
     test "returns the mapping derived from the discovered entity types" do
       assert mapping() == Mapper.derive!(Reflection.list_entities(), Reflection.list_roles())
+    end
+
+    test "raises when the model is under a hold" do
+      on_exit(&Model.release/0)
+
+      Model.hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> mapping() end
     end
   end
 

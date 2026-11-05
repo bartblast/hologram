@@ -21,6 +21,8 @@ defmodule Hologram.Policy.EdgesTest do
 
   @index_key {Hologram.Policy.Edges, :index}
 
+  @stale_model_msg "the code changed since the last compile that validated the data model - fix the compile error, if there is one, and save again"
+
   describe "derive/1" do
     # A derived field has no column - the rows and attributes its definition reads are what a change
     # to it is a change to.
@@ -293,6 +295,54 @@ defmodule Hologram.Policy.EdgesTest do
       derived = index()
 
       assert :persistent_term.get(@index_key, nil) == derived
+    end
+
+    test "raises when the model is under a hold, even when cached" do
+      on_exit(&Model.release/0)
+
+      index()
+      Model.hold()
+
+      assert_error Hologram.StaleModelError, @stale_model_msg, fn -> index() end
+    end
+
+    # A dev VM whose compile refused a via cycle has the cycle's modules loaded and named by the
+    # model cache. Deriving from them follows delegation forever, so the read is refused instead.
+    # Run in a task, so that a derivation that does not end fails the test rather than hanging it.
+    test "raises rather than derives when the model is under a hold" do
+      defmodule InlineEdgesFixture1 do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.EdgesTest.InlineEdgesFixture2, optional: true
+
+        allow :read, via: peer
+      end
+
+      defmodule InlineEdgesFixture2 do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.EdgesTest.InlineEdgesFixture1, optional: true
+
+        allow :read, via: peer
+      end
+
+      on_exit(&Model.release/0)
+
+      Model.put_facts([InlineEdgesFixture1, InlineEdgesFixture2], [], nil)
+      Model.hold()
+
+      task =
+        Task.async(fn ->
+          try do
+            index()
+          rescue
+            error -> error
+          end
+        end)
+
+      result = Task.yield(task, 2_000) || Task.shutdown(task, :brutal_kill)
+
+      assert result == {:ok, %Hologram.StaleModelError{message: @stale_model_msg}}
     end
   end
 

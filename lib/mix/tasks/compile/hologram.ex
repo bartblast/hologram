@@ -1081,8 +1081,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp compile_with_lock(opts) do
     lock_path = Path.join(opts[:build_dir], Reflection.compiler_lock_file_name())
 
+    # The whole compile reads through a hold (see Hologram.Entity.Model.hold/0), not only its data
+    # model step: it is what validates the code the hold is about, and a hold put during its later
+    # steps doesn't stop those steps, which still read the model.
     with_lock(lock_path, fn ->
-      compile(opts)
+      Model.compiling(fn -> compile(opts) end)
     end)
   end
 
@@ -2141,8 +2144,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   # after it. So a failure here, of any kind, is undone. The entries the update replaced are put
   # back, and the tracer still holds the compiled modules, so the next compile in this VM finds the
   # same changes again, from the kept state and not from the dumps. The model cache keeps what
-  # this compile put there: it describes the modules that are loaded, valid or not. The failure is
-  # then told to the :data_model_failed option, with the kept state already back, and raised again.
+  # this compile put there: it describes the modules that are loaded, valid or not, and while the
+  # model is under a hold nothing but the compile reads it (see Hologram.Entity.Model.hold/0). The
+  # failure is then told to the :data_model_failed option, with the kept state already back, and
+  # raised again.
   defp load_data_model!(module_info_plt, before, opts) do
     entity_types = Reflection.list_entities(module_info_plt)
     role_modules = Reflection.list_roles(module_info_plt)

@@ -596,10 +596,13 @@ defmodule Hologram.DB do
 
   @doc """
   Returns the physical name mapping derived from the discovered entity type modules.
-  The mapping is derived once at boot and cached for the lifetime of the runtime.
+  The mapping is derived once at boot and cached for the lifetime of the runtime. Raises while the
+  data model is under a hold (see `Hologram.Entity.Model.ensure_released!/0`).
   """
   @spec mapping() :: %{module => %{atom => any}}
   def mapping do
+    Model.ensure_released!()
+
     :persistent_term.get(@mapping_key)
   end
 

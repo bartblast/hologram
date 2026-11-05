@@ -223,6 +223,9 @@ defmodule Hologram.Policy do
   declared role its holders may cover - a holder's own role and every role it extends, so nobody is
   qualified above what they hold. The bare key is then the union of the per-role rules, answering
   whether the acting user may grant (or revoke) some role at all.
+
+  Raises while the data model is under a hold (see `Hologram.Entity.Model.ensure_released!/0`): the
+  policy is read from the loaded module, which may be ahead of the validated model.
   """
   @spec build(module) :: %{
           Entity.operation() =>
@@ -235,6 +238,8 @@ defmodule Hologram.Policy do
   def build(RoleGrant), do: %{read: role_grant_read_rules()}
 
   def build(entity_type) do
+    Model.ensure_released!()
+
     entity_type.__policies__()
     |> Enum.map(fn {operation, to, via, predicates} ->
       rule = %{
@@ -643,6 +648,8 @@ defmodule Hologram.Policy do
   # derived once and kept, like the physical name mapping. The compiler and the application boot
   # reset the cache, so a recompiled model is picked up.
   defp model_facts do
+    Model.ensure_released!()
+
     case :persistent_term.get(@model_facts_key, nil) do
       nil ->
         facts = %{

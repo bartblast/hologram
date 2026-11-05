@@ -42,7 +42,9 @@ defmodule Hologram.Policy.Edges do
   Takes a validated data model: the transitive expansion follows delegation to its end, so a
   via cycle would not terminate. Cycles are a compile error, raised by
   `Hologram.Policy.Validator.validate_model!/2` before anything reads the model - the same
-  guarantee SQL composition relies on to terminate.
+  guarantee SQL composition relies on to terminate. A model under a hold, whose loaded code no
+  compile may have validated, raises rather than loops: the policies are built through
+  `Hologram.Policy.build/1`, which refuses it (see `Hologram.Entity.Model.hold/0`).
   """
   @spec derive(list(module)) :: %{{module, Entity.operation()} => list(tuple)}
   def derive(entity_types) do
@@ -58,10 +60,13 @@ defmodule Hologram.Policy.Edges do
 
   Cached for the lifetime of the runtime and derived on the first call: deriving grows with the
   model, tens of milliseconds for hundreds of entity types. Resetting the cache drops it, so a
-  recompiled data model is picked up by the next call.
+  recompiled data model is picked up by the next call. Raises while the data model is under a hold,
+  cached or not (see `Hologram.Entity.Model.ensure_released!/0`).
   """
   @spec index() :: %{{module, Entity.operation()} => list(tuple)}
   def index do
+    Model.ensure_released!()
+
     case :persistent_term.get(@index_key, nil) do
       nil ->
         index = derive(Model.entity_types())
