@@ -17,6 +17,62 @@ defmodule Hologram.Test.BrowserSession do
   @default_attempt_timeout 10_000
   @default_attempts 3
 
+  # Tunable policy, not derived. Ending a session takes well under a second. The
+  # real bound is the on_exit callback's own timeout, which is the test timeout
+  # (60 s), minus the store's 5 s shutdown wait on a restart.
+  @default_teardown_timeout 10_000
+
+  @doc """
+  Waits until Wallaby's session store has ended the browser sessions of the given
+  test process. If the store doesn't get there within the timeout, it's stuck on a
+  session that doesn't answer, so it's restarted. A restart drops the store's
+  table, so every session in it gets deleted in the background once its test
+  process is gone. Meant for an `on_exit` callback, given the test's pid.
+
+  It checks the store's session table rather than asking the store, since the
+  store gets the test process's `:DOWN` in no guaranteed order with a request
+  from the `on_exit` process.
+
+  ## Options
+
+    * `:delete_fn` - deletes a session the store dropped, defaults to
+      `&Wallaby.WebdriverClient.delete_session/1`
+    * `:log_dir` - the dir whose `hangs.txt` gets a line on a restart, defaults to
+      the one `start_wallaby/1` set up
+    * `:sessions_fn` - lists the store's sessions as `{owner_pid, session}`
+      tuples, defaults to reading the store's table
+    * `:store` - the store's name and child id, defaults to `Wallaby.SessionStore`
+    * `:supervisor` - the store's supervisor, defaults to `Wallaby.Supervisor`
+    * `:timeout` - how long the store may take, in ms
+  """
+  @spec await_teardown(pid, keyword) :: :ok
+  def await_teardown(test_pid, opts \\ []) do
+    sessions_fn = Keyword.get(opts, :sessions_fn, &list_sessions/0)
+    store = Keyword.get(opts, :store, Wallaby.SessionStore)
+    timeout = Keyword.get(opts, :timeout, @default_teardown_timeout)
+
+    opts =
+      opts
+      |> Keyword.put_new(:delete_fn, &WebdriverClient.delete_session/1)
+      |> Keyword.put_new(:supervisor, Wallaby.Supervisor)
+      |> Keyword.put(:sessions_fn, sessions_fn)
+      |> Keyword.put(:store, store)
+      |> Keyword.put(:timeout, timeout)
+
+    # Taken first, so a store another test already restarted isn't restarted again.
+    store_pid = GenServer.whereis(store)
+    deadline = System.monotonic_time(:millisecond) + timeout
+
+    case await_sessions_ended(test_pid, sessions_fn, deadline) do
+      :ok ->
+        :ok
+
+      # One restart at a time, so tests stuck on the same store restart it once.
+      :timeout ->
+        :global.trans({__MODULE__, self()}, fn -> restart_store(store_pid, opts) end)
+    end
+  end
+
   @doc """
   Creates a ChromeDriver session like `Wallaby.WebdriverClient.create_session/2`,
   but gives up on an attempt that gets no answer within the attempt timeout and
@@ -49,6 +105,28 @@ defmodule Hologram.Test.BrowserSession do
     create_session(fn -> create_fn.(base_url, capabilities) end, base_url, 1, opts)
   end
 
+  defp await_exit(pid) do
+    ref = Process.monitor(pid)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    end
+  end
+
+  defp await_sessions_ended(test_pid, sessions_fn, deadline) do
+    cond do
+      not Enum.any?(sessions_fn.(), &match?({^test_pid, _session}, &1)) ->
+        :ok
+
+      System.monotonic_time(:millisecond) >= deadline ->
+        :timeout
+
+      true ->
+        Process.sleep(10)
+        await_sessions_ended(test_pid, sessions_fn, deadline)
+    end
+  end
+
   defp create_session(attempt_fn, base_url, attempt, opts) do
     attempt_timeout = opts[:attempt_timeout]
     attempts = opts[:attempts]
@@ -78,6 +156,17 @@ defmodule Hologram.Test.BrowserSession do
     end
   end
 
+  defp delete_after_exit({owner_pid, session}, delete_fn) do
+    await_exit(owner_pid)
+    delete_fn.(session)
+  end
+
+  defp delete_created_session({:returned, {:ok, %{"sessionId" => session_id}}}, base_url, opts) do
+    opts[:delete_fn].(base_url, session_id)
+  end
+
+  defp delete_created_session(_result, _base_url, _opts), do: :ok
+
   # A struct built at runtime, since Wallaby may be missing when this compiles.
   defp delete_session(base_url, session_id) do
     session_url = base_url <> "session/" <> session_id
@@ -85,6 +174,14 @@ defmodule Hologram.Test.BrowserSession do
     Wallaby.Session
     |> struct(id: session_id, session_url: session_url, url: session_url)
     |> WebdriverClient.delete_session()
+  end
+
+  # Rows of Wallaby.SessionStore's table are {{ref, session_id, owner_pid}, session}.
+  # The table is gone when Wallaby isn't running.
+  defp list_sessions do
+    :ets.select(:session_store, [{{{:_, :_, :"$1"}, :"$2"}, [], [{{:"$1", :"$2"}}]}])
+  rescue
+    ArgumentError -> []
   end
 
   # Appends to hangs.txt too, which CI checks to decide whether to upload the
@@ -111,6 +208,32 @@ defmodule Hologram.Test.BrowserSession do
       log_dir
       |> Path.join("hangs.txt")
       |> File.write!(message <> "\n", [:append])
+    end
+
+    :ok
+  end
+
+  # Synchronous, so the next test finds the new store. The store traps exits, so
+  # terminate_child/2 waits out the child's shutdown time before killing it. A
+  # store another test restarted meanwhile is left alone.
+  defp restart_store(store_pid, opts) do
+    store = opts[:store]
+
+    if GenServer.whereis(store) == store_pid do
+      report_hang(
+        "#{inspect(store)} didn't end the test's browser sessions within #{opts[:timeout]} ms, " <>
+          "restarting it",
+        opts
+      )
+
+      # Read before the restart drops them. The stuck store can't change them.
+      sessions = opts[:sessions_fn].()
+
+      :ok = Supervisor.terminate_child(opts[:supervisor], store)
+      {:ok, _pid} = Supervisor.restart_child(opts[:supervisor], store)
+
+      # One process each, since a DELETE to the hung session can block for minutes.
+      Enum.each(sessions, &spawn(fn -> delete_after_exit(&1, opts[:delete_fn]) end))
     end
 
     :ok
@@ -155,12 +278,6 @@ defmodule Hologram.Test.BrowserSession do
         end
     end
   end
-
-  defp delete_created_session({:returned, {:ok, %{"sessionId" => session_id}}}, base_url, opts) do
-    opts[:delete_fn].(base_url, session_id)
-  end
-
-  defp delete_created_session(_result, _base_url, _opts), do: :ok
 
   defp run_attempt_fn(attempt_fn) do
     {:returned, attempt_fn.()}

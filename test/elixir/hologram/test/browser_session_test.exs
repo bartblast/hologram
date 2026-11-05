@@ -7,6 +7,20 @@ defmodule Hologram.Test.BrowserSessionTest do
   @base_url "http://localhost:9515/"
   @capabilities %{browserName: "chrome"}
 
+  defmodule StandInStore do
+    use GenServer
+
+    @spec start_link(atom) :: GenServer.on_start()
+    def start_link(name), do: GenServer.start_link(__MODULE__, nil, name: name)
+
+    @impl GenServer
+    def init(state), do: {:ok, state}
+  end
+
+  defp alive_process do
+    spawn(fn -> Process.sleep(:infinity) end)
+  end
+
   defp blocking_create_fn(test_pid, session_id) do
     fn _base_url, _capabilities ->
       send(test_pid, {:attempt_started, self()})
@@ -26,8 +40,209 @@ defmodule Hologram.Test.BrowserSessionTest do
     end
   end
 
+  defp dead_process do
+    pid = spawn(fn -> :ok end)
+    ref = Process.monitor(pid)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> pid
+    end
+  end
+
   defp deleting_fn(test_pid) do
     fn base_url, session_id -> send(test_pid, {:deleted, base_url, session_id}) end
+  end
+
+  defp start_store_supervisor(store) do
+    child_spec = %{id: store, start: {StandInStore, :start_link, [store]}}
+
+    start_supervised!(%{
+      id: :store_supervisor,
+      start: {Supervisor, :start_link, [[child_spec], [strategy: :one_for_one]]},
+      type: :supervisor
+    })
+  end
+
+  describe "await_teardown/2" do
+    setup do
+      # Tests within a module run one at a time, so a fixed name is safe.
+      store = :browser_session_test_store
+      supervisor = start_store_supervisor(store)
+
+      [store: store, supervisor: supervisor]
+    end
+
+    test "returns :ok and keeps the store when the test has no sessions left", %{
+      store: store,
+      supervisor: supervisor
+    } do
+      store_pid = Process.whereis(store)
+      other_test_pid = alive_process()
+
+      assert await_teardown(self(),
+               sessions_fn: fn -> [{other_test_pid, :other_test_session}] end,
+               store: store,
+               supervisor: supervisor,
+               timeout: 5_000
+             ) == :ok
+
+      assert Process.whereis(store) == store_pid
+    end
+
+    test "waits for the store to end the test's sessions", %{store: store, supervisor: supervisor} do
+      store_pid = Process.whereis(store)
+      test_pid = self()
+      {:ok, sessions} = Agent.start_link(fn -> [{test_pid, :session}] end)
+
+      task =
+        Task.async(fn ->
+          await_teardown(test_pid,
+            sessions_fn: fn -> Agent.get(sessions, & &1) end,
+            store: store,
+            supervisor: supervisor,
+            timeout: 5_000
+          )
+        end)
+
+      refute Task.yield(task, 100)
+
+      Agent.update(sessions, fn _sessions -> [] end)
+
+      assert Task.await(task) == :ok
+      assert Process.whereis(store) == store_pid
+    end
+
+    test "returns :ok when Wallaby isn't running" do
+      assert await_teardown(self(), store: :not_running_store, timeout: 5_000) == :ok
+    end
+
+    @tag :tmp_dir
+    test "restarts a store that doesn't end the test's sessions in time, and reports it", %{
+      store: store,
+      supervisor: supervisor,
+      tmp_dir: tmp_dir
+    } do
+      store_pid = Process.whereis(store)
+      test_pid = self()
+
+      capture_io(fn ->
+        assert await_teardown(test_pid,
+                 delete_fn: fn _session -> :ok end,
+                 log_dir: tmp_dir,
+                 sessions_fn: fn -> [{test_pid, :hung_session}] end,
+                 store: store,
+                 supervisor: supervisor,
+                 timeout: 50
+               ) == :ok
+      end)
+
+      new_store_pid = Process.whereis(store)
+
+      assert is_pid(new_store_pid)
+      refute new_store_pid == store_pid
+
+      hangs =
+        tmp_dir
+        |> Path.join("hangs.txt")
+        |> File.read!()
+
+      assert hangs ==
+               ":browser_session_test_store didn't end the test's browser sessions within 50 ms, restarting it\n"
+    end
+
+    test "deletes the sessions a restarted store dropped, each on its own", %{
+      store: store,
+      supervisor: supervisor
+    } do
+      test_pid = self()
+      dead_test_pid = dead_process()
+
+      # The hung session's DELETE never returns.
+      delete_fn = fn
+        :hung_session -> Process.sleep(:infinity)
+        session -> send(test_pid, {:deleted, session})
+      end
+
+      sessions_fn = fn -> [{dead_test_pid, :hung_session}, {dead_test_pid, :other_session}] end
+
+      capture_io(fn ->
+        assert await_teardown(dead_test_pid,
+                 delete_fn: delete_fn,
+                 sessions_fn: sessions_fn,
+                 store: store,
+                 supervisor: supervisor,
+                 timeout: 50
+               ) == :ok
+      end)
+
+      assert_receive {:deleted, :other_session}
+    end
+
+    test "deletes a running test's session the restarted store dropped once that test ends", %{
+      store: store,
+      supervisor: supervisor
+    } do
+      test_pid = self()
+      ended_test_pid = dead_process()
+      other_test_pid = alive_process()
+
+      sessions_fn = fn ->
+        [{ended_test_pid, :hung_session}, {other_test_pid, :other_test_session}]
+      end
+
+      capture_io(fn ->
+        await_teardown(ended_test_pid,
+          delete_fn: fn session -> send(test_pid, {:deleted, session}) end,
+          sessions_fn: sessions_fn,
+          store: store,
+          supervisor: supervisor,
+          timeout: 50
+        )
+      end)
+
+      assert_receive {:deleted, :hung_session}
+      refute_receive {:deleted, :other_test_session}, 100
+
+      Process.exit(other_test_pid, :kill)
+
+      assert_receive {:deleted, :other_test_session}
+    end
+
+    @tag :tmp_dir
+    test "leaves alone a store another test restarted meanwhile", %{
+      store: store,
+      supervisor: supervisor,
+      tmp_dir: tmp_dir
+    } do
+      restarted = :counters.new(1, [])
+      test_pid = self()
+
+      # Restarts the store on the first look, as another test's await_teardown/2 would.
+      sessions_fn = fn ->
+        if :counters.get(restarted, 1) == 0 do
+          :counters.add(restarted, 1, 1)
+          :ok = Supervisor.terminate_child(supervisor, store)
+          {:ok, pid} = Supervisor.restart_child(supervisor, store)
+          send(test_pid, {:restarted, pid})
+        end
+
+        [{test_pid, :hung_session}]
+      end
+
+      await_teardown(test_pid,
+        delete_fn: fn _session -> :ok end,
+        log_dir: tmp_dir,
+        sessions_fn: sessions_fn,
+        store: store,
+        supervisor: supervisor,
+        timeout: 50
+      )
+
+      assert_received {:restarted, restarted_store_pid}
+      assert Process.whereis(store) == restarted_store_pid
+      hangs_path = Path.join(tmp_dir, "hangs.txt")
+      refute File.exists?(hangs_path)
+    end
   end
 
   describe "create_session/3" do
