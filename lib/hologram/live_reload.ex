@@ -80,7 +80,18 @@ defmodule Hologram.LiveReload do
     {:ok, initial_state(Reflection.phoenix_endpoint())}
   end
 
+  # Kept until the pass releases the model or ends with it held and none to follow (see
+  # await_model/0). Kept rather than waited for here: the pass calls this process for each batch, so
+  # a callback that blocked until the release would wait for itself.
   @impl GenServer
+  def handle_call(:await_model, from, state) do
+    if Model.current_hold() != nil and (state.pass != nil or state.timer_ref != nil) do
+      {:noreply, %{state | model_waiters: [from | state.model_waiters]}}
+    else
+      {:reply, :ok, state}
+    end
+  end
+
   def handle_call({:await_page, page_module}, from, state) do
     if MapSet.member?(state.pending, page_module) do
       # Kept in request order, which is the order they are built in. A handful of pages at most.
@@ -114,18 +125,21 @@ defmodule Hologram.LiveReload do
     # chunk bundles, the chunks each struct type needs and each page preloads, the page digests,
     # the page windows and the registered queries. Later batches change the page digests and the
     # chunks their pages preload only.
-    if state.pass.registries_reloaded? do
-      ChunkRegistry.reload()
-      PageDigestRegistry.reload()
-    else
-      reload_runtime()
+    state =
+      if state.pass.registries_reloaded? do
+        ChunkRegistry.reload()
+        PageDigestRegistry.reload()
 
-      # The runtime now reads all the compile derived from the data model: the policy caches and
-      # the database schema of its data model step, then the derived field definitions, the
-      # registered queries and the page windows. Before the tabs are told to reload, so that they
-      # reload into a released model, unless a save since holds it again.
-      maybe_release_model(state.pass)
-    end
+        state
+      else
+        reload_runtime()
+
+        # The runtime now reads all the compile derived from the data model: the policy caches and
+        # the database schema of its data model step, then the derived field definitions, the
+        # registered queries and the page windows. Before the tabs are told to reload, so that they
+        # reload into a released model, unless a save since holds it again.
+        maybe_release_model(state)
+      end
 
     # A rebuilt runtime bundle no longer matches the page bundles any tab holds, so every tab
     # reloads, the ones on pages this pass has not built yet included: they ask for their page,
@@ -319,7 +333,7 @@ defmodule Hologram.LiveReload do
 
     # A pass that compiled having built no bundle releases here: its registries were reloaded at the
     # end of reload/3. A pass that failed before its first batch leaves the hold in place.
-    if result == :ok, do: maybe_release_model(state.pass)
+    state = if result == :ok, do: maybe_release_model(state), else: state
 
     # A superseded pass reports nothing: the pass its save starts reports on the newer code, so the
     # tabs never show the outcome of code a newer save has replaced.
@@ -341,6 +355,30 @@ defmodule Hologram.LiveReload do
   def handle_info({:DOWN, ref, :process, _pid, reason}, %{pass: %{ref: ref}} = state) do
     Logger.error("Hologram: live reload pass failed: " <> Exception.format_exit(reason))
     {:noreply, finish_pass(state)}
+  end
+
+  @doc """
+  Waits while the data model is under a hold (see `Hologram.Entity.Model.hold/0`) and a live reload
+  pass is coming or running, until the pass releases it, or ends with it held and none to follow.
+  Returns at once when the model is under no hold, when no pass is coming or running, and when live
+  reload is not running. Model reads refuse under a hold rather than wait, since a read inside a
+  transaction can hold locks the schema reconcile needs.
+
+  Returns after a minute, or when the live reload process goes away, with the hold as it is.
+  """
+  @spec await_model() :: :ok
+  def await_model do
+    case GenServer.whereis(__MODULE__) do
+      nil ->
+        :ok
+
+      pid ->
+        try do
+          GenServer.call(pid, :await_model, @await_page_timeout)
+        catch
+          :exit, _reason -> :ok
+        end
+    end
   end
 
   @doc """
@@ -397,6 +435,8 @@ defmodule Hologram.LiveReload do
       # asked for a replay (see replay_asset_change/2 and prune_tabs/1).
       document_versions: %{},
       endpoint: endpoint,
+      # The requests waiting on the data model while a pass is coming or running (see await_model/0).
+      model_waiters: [],
       # What each tab showed at its last render, by instance id, with when it was first seen without
       # an SSE connection (nil while it holds one).
       open_pages: %{},
@@ -644,7 +684,11 @@ defmodule Hologram.LiveReload do
 
     new_state = %{state | pass: nil, priority: [], waiters: %{}}
 
+    # The requests waiting on the model are answered once no pass follows: the model is then
+    # released, or held by code the last pass refused or never got through, which a request waiting
+    # longer won't change.
     case new_state.superseded_by do
+      nil when new_state.timer_ref == nil -> reply_to_model_waiters(new_state)
       nil -> new_state
       file_path -> start_pass(file_path, %{new_state | superseded_by: nil})
     end
@@ -655,13 +699,14 @@ defmodule Hologram.LiveReload do
   end
 
   # Releases the data model from the hold the pass started under, once the runtime reads all that
-  # the pass's compile derived from the model. A hold put since, by a save during the pass, is about code this
-  # pass may not have compiled, so it stays for the pass that save starts. Hold and release both
-  # happen in this process, so nothing can put a hold between the comparison and the release.
-  defp maybe_release_model(%{hold: hold}) do
-    if Model.current_hold() == hold, do: Model.release()
+  # the pass's compile derived from the model, and answers the requests waiting on it. A hold put
+  # since, by a save during the pass, is about code this pass may not have compiled, so it stays for
+  # the pass that save starts, and so do the requests. Hold and release both happen in this process,
+  # so nothing can put a hold between the comparison and the release.
+  defp maybe_release_model(state) do
+    if Model.current_hold() == state.pass.hold, do: Model.release()
 
-    :ok
+    if Model.current_hold() == nil, do: reply_to_model_waiters(state), else: state
   end
 
   # Forgets the tabs closed since (see prune_open_pages/1): their pages and their documents.
@@ -751,6 +796,12 @@ defmodule Hologram.LiveReload do
     PageDigestRegistry.reload()
     PageWindows.reload()
     QueryCache.reload()
+  end
+
+  defp reply_to_model_waiters(state) do
+    Enum.each(state.model_waiters, &GenServer.reply(&1, :ok))
+
+    %{state | model_waiters: []}
   end
 
   defp reply_to_waiters(waiters) do

@@ -4,6 +4,7 @@ defmodule Hologram.Router do
   use Plug.Router
 
   alias Hologram.Controller
+  alias Hologram.LiveReload
   alias Hologram.Realtime.SSE
   alias Hologram.Router.PageModuleResolver
   alias Hologram.Runtime.Connection
@@ -28,6 +29,7 @@ defmodule Hologram.Router do
   end
 
   post "/hologram/command" do
+    maybe_await_model()
     Controller.handle_command_request(conn)
   end
 
@@ -36,11 +38,13 @@ defmodule Hologram.Router do
   end
 
   post "/hologram/mutation" do
+    maybe_await_model()
     Controller.handle_mutation_request(conn)
   end
 
   post "/hologram/page/:module_str" do
     page_module = Module.safe_concat([module_str])
+    maybe_await_model()
     Controller.handle_subsequent_page_request(conn, page_module)
   end
 
@@ -74,11 +78,24 @@ defmodule Hologram.Router do
     |> halt()
   end
 
+  # A request for a path that is no page goes on to the app's own routes, which can read the data
+  # model too.
   match _ do
+    maybe_await_model()
+
     if page_module = PageModuleResolver.resolve(conn.request_path) do
       Controller.handle_initial_page_request(conn, page_module)
     else
       conn
     end
+  end
+
+  # In dev, a save holds the data model until its live reload pass has compiled it (see
+  # Hologram.LiveReload.await_model/0). The requests that can read the model wait for that here,
+  # before they open any transaction, rather than being refused by their first read of it.
+  defp maybe_await_model do
+    if Hologram.env() == :dev, do: LiveReload.await_model()
+
+    :ok
   end
 end
