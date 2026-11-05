@@ -430,4 +430,121 @@ defmodule Hologram.Test.BrowserSessionTest do
       assert :counters.get(counter, 1) == 1
     end
   end
+
+  describe "start_wallaby/1" do
+    @describetag :skip_on_windows
+    @describetag :tmp_dir
+
+    setup %{tmp_dir: tmp_dir} do
+      # A ChromeDriver stand-in that writes its pid and args, one per line.
+      args_path = Path.join(tmp_dir, "args.txt")
+      chromedriver_path = Path.join(tmp_dir, "fake chromedriver")
+
+      File.write!(chromedriver_path, """
+      #!/bin/sh
+      args_path="$(dirname "$0")/args.txt"
+      echo $$ > "$args_path"
+      for arg in "$@"; do echo "$arg" >> "$args_path"; done
+      """)
+
+      File.chmod!(chromedriver_path, 0o755)
+
+      # A quote and a space, so the wrapper has to quote its paths.
+      log_dir = Path.join(tmp_dir, "it's logs")
+
+      opts = [
+        chromedriver_path: chromedriver_path,
+        log_dir: log_dir,
+        put_env_fn: fn app, key, value -> send(self(), {:put_env, app, key, value}) end,
+        start_fn: fn -> send(self(), :started) end
+      ]
+
+      [args_path: args_path, log_dir: log_dir, opts: opts]
+    end
+
+    test "points Wallaby at a ChromeDriver wrapper and sets the log dir, then starts Wallaby", %{
+      log_dir: log_dir,
+      opts: opts
+    } do
+      assert start_wallaby(opts) == :ok
+
+      wrapper_path = Path.join(log_dir, "chromedriver")
+
+      assert Process.info(self(), :messages) ==
+               {:messages,
+                [
+                  {:put_env, :wallaby, :chromedriver, [path: wrapper_path]},
+                  {:put_env, :hologram, :__browser_session_log_dir__, log_dir},
+                  :started
+                ]}
+    end
+
+    test "keeps the rest of Wallaby's ChromeDriver config", %{log_dir: log_dir, opts: opts} do
+      # No other test reads it, and tests within a module run one at a time.
+      Application.put_env(:wallaby, :chromedriver, capabilities: %{browserName: "chrome"})
+      on_exit(fn -> Application.delete_env(:wallaby, :chromedriver) end)
+
+      start_wallaby(opts)
+
+      wrapper_path = Path.join(log_dir, "chromedriver")
+
+      assert_received {:put_env, :wallaby, :chromedriver, chromedriver_env}
+      assert chromedriver_env == [path: wrapper_path, capabilities: %{browserName: "chrome"}]
+    end
+
+    test "the wrapper runs ChromeDriver with the log flags after Wallaby's args", %{
+      args_path: args_path,
+      log_dir: log_dir,
+      opts: opts
+    } do
+      start_wallaby(opts)
+
+      wrapper_path = Path.join(log_dir, "chromedriver")
+      {"", 0} = System.cmd(wrapper_path, ["--log-level=OFF", "--port=9515"])
+
+      [pid | args] =
+        args_path
+        |> File.read!()
+        |> String.split("\n", trim: true)
+
+      assert args == [
+               "--log-level=OFF",
+               "--port=9515",
+               "--log-level=DEBUG",
+               "--log-path=#{log_dir}/chromedriver-#{pid}.log",
+               "--enable-chrome-logs",
+               "--readable-timestamp"
+             ]
+    end
+
+    test "the wrapper passes --version on without the log flags", %{
+      args_path: args_path,
+      log_dir: log_dir,
+      opts: opts
+    } do
+      start_wallaby(opts)
+
+      wrapper_path = Path.join(log_dir, "chromedriver")
+      {"", 0} = System.cmd(wrapper_path, ["--version"])
+
+      [_pid | args] =
+        args_path
+        |> File.read!()
+        |> String.split("\n", trim: true)
+
+      assert args == ["--version"]
+    end
+
+    test "empties a log dir left by an earlier run", %{log_dir: log_dir, opts: opts} do
+      File.mkdir_p!(log_dir)
+
+      log_dir
+      |> Path.join("chromedriver-123.log")
+      |> File.write!("earlier run")
+
+      start_wallaby(opts)
+
+      assert File.ls!(log_dir) == ["chromedriver"]
+    end
+  end
 end

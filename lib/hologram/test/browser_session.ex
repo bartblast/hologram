@@ -6,7 +6,7 @@ defmodule Hologram.Test.BrowserSession do
 
   # Wallaby is not a Hologram dependency - client apps that use these helpers
   # bring their own. This lets the module compile without Wallaby present.
-  @compile {:no_warn_undefined, [Wallaby.WebdriverClient]}
+  @compile {:no_warn_undefined, [Wallaby.Chrome, Wallaby.WebdriverClient]}
 
   alias Wallaby.WebdriverClient
 
@@ -105,6 +105,53 @@ defmodule Hologram.Test.BrowserSession do
     create_session(fn -> create_fn.(base_url, capabilities) end, base_url, 1, opts)
   end
 
+  @doc """
+  Starts Wallaby with ChromeDriver's log on, in place of
+  `Application.ensure_all_started(:wallaby)` in a test helper.
+
+  Wallaby starts ChromeDriver with its log off, so its configured ChromeDriver
+  path is pointed at a wrapper script that adds the log flags. Each ChromeDriver
+  process writes `chromedriver-<os pid>.log` in the log dir, with Chrome's own
+  output in it too. The log dir is emptied first, so it holds one run's logs, and
+  it's where the other functions here write `hangs.txt`.
+
+  ## Options
+
+    * `:chromedriver_path` - the ChromeDriver the wrapper runs, defaults to the
+      one Wallaby would run
+    * `:log_dir` - defaults to `tmp/chromedriver` in the current dir
+    * `:put_env_fn` - sets an app env key, defaults to `&Application.put_env/3`
+    * `:start_fn` - starts Wallaby
+  """
+  @spec start_wallaby(keyword) :: :ok
+  def start_wallaby(opts \\ []) do
+    chromedriver_path = Keyword.get_lazy(opts, :chromedriver_path, &find_chromedriver!/0)
+    put_env_fn = Keyword.get(opts, :put_env_fn, &Application.put_env/3)
+    start_fn = Keyword.get(opts, :start_fn, &ensure_wallaby_started/0)
+
+    log_dir =
+      opts
+      |> Keyword.get(:log_dir, "tmp/chromedriver")
+      |> Path.expand()
+
+    File.rm_rf!(log_dir)
+    File.mkdir_p!(log_dir)
+
+    wrapper_path = write_chromedriver_wrapper(log_dir, chromedriver_path)
+
+    chromedriver_env =
+      :wallaby
+      |> Application.get_env(:chromedriver, [])
+      |> Keyword.put(:path, wrapper_path)
+
+    put_env_fn.(:wallaby, :chromedriver, chromedriver_env)
+    put_env_fn.(:hologram, :__browser_session_log_dir__, log_dir)
+
+    start_fn.()
+
+    :ok
+  end
+
   defp await_exit(pid) do
     ref = Process.monitor(pid)
 
@@ -174,6 +221,17 @@ defmodule Hologram.Test.BrowserSession do
     Wallaby.Session
     |> struct(id: session_id, session_url: session_url, url: session_url)
     |> WebdriverClient.delete_session()
+  end
+
+  defp ensure_wallaby_started do
+    {:ok, _apps} = Application.ensure_all_started(:wallaby)
+  end
+
+  defp find_chromedriver! do
+    case Wallaby.Chrome.find_chromedriver_executable() do
+      {:ok, path} -> path
+      {:error, exception} -> raise exception
+    end
   end
 
   # Rows of Wallaby.SessionStore's table are {{ref, session_id, owner_pid}, session}.
@@ -286,6 +344,10 @@ defmodule Hologram.Test.BrowserSession do
       {:raised, kind, reason, __STACKTRACE__}
   end
 
+  defp shell_quote(string) do
+    "'" <> String.replace(string, "'", "'\\''") <> "'"
+  end
+
   defp unwrap_result({:returned, result}), do: result
 
   # The caller's frames go after the worker's, so the trace still shows the
@@ -295,5 +357,29 @@ defmodule Hologram.Test.BrowserSession do
       Process.info(self(), :current_stacktrace)
 
     :erlang.raise(kind, reason, stacktrace ++ caller_stacktrace)
+  end
+
+  # The log flags go after Wallaby's args, since ChromeDriver takes the last of
+  # a repeated switch, so --log-level=DEBUG wins over Wallaby's --log-level=OFF.
+  # DEBUG logs the DevTools traffic, which shows whether a hung command reached
+  # Chrome and whether Chrome answered. exec keeps the pid Wallaby tracks.
+  defp write_chromedriver_wrapper(log_dir, chromedriver_path) do
+    chromedriver = shell_quote(chromedriver_path)
+    log_path = shell_quote(log_dir) <> "/chromedriver-$$.log"
+    wrapper_path = Path.join(log_dir, "chromedriver")
+
+    File.write!(wrapper_path, """
+    #!/bin/sh
+    # Runs ChromeDriver with its log on. Wallaby checks the version with
+    # --version, which gets no log.
+    if [ "$1" = "--version" ]; then
+      exec #{chromedriver} "$@"
+    fi
+    exec #{chromedriver} "$@" --log-level=DEBUG --log-path=#{log_path} --enable-chrome-logs --readable-timestamp
+    """)
+
+    File.chmod!(wrapper_path, 0o755)
+
+    wrapper_path
   end
 end
