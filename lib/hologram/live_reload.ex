@@ -39,13 +39,26 @@ defmodule Hologram.LiveReload do
   # in milliseconds
   @debounce_delay 1_000
 
+  # How long asset changes are gathered before the tabs are told, in milliseconds. A tool that
+  # rebuilds the app's assets writes several files at once, and they make one change.
+  @asset_debounce_delay 100
+
+  # The asset types whose change in the app's priv/static dir the tabs are told about, the ones
+  # Phoenix's default live reload patterns list.
+  @asset_extensions ~w(.css .js .png .jpeg .jpg .gif .svg)
+
+  # The priv/static subdirs whose files are not the app's assets: Hologram's own bundles, which
+  # live reload passes already reload the tabs for, and files users upload, as in Phoenix's default
+  # live reload patterns.
+  @ignored_static_subdirs ~w(hologram uploads)
+
   @doc """
   Starts live reload process, registered under its module name.
 
   ## Options
 
-    * `:watch?` - whether to watch the source files (default: `true`). Tests start the process
-      without watching the source tree.
+    * `:watch?` - whether to watch the source files and the app's static dir (default: `true`).
+      Tests start the process without watching anything.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -133,8 +146,7 @@ defmodule Hologram.LiveReload do
   end
 
   def handle_call({:next_batch, remaining, links}, _from, state) do
-    open_pages = prune_open_pages(state.open_pages)
-    new_state = %{state | open_pages: open_pages, pending: remaining}
+    new_state = %{prune_tabs(state) | pending: remaining}
 
     # A save that arrived during the pass ends it here: its compile takes up what this one leaves
     # pending, with the pages its own edit reaches.
@@ -142,7 +154,9 @@ defmodule Hologram.LiveReload do
       {:reply, :stop, new_state}
     else
       open_page_modules =
-        MapSet.new(open_pages, fn {_instance_id, {page_module, _missing_since}} -> page_module end)
+        MapSet.new(new_state.open_pages, fn {_instance_id, {page_module, _missing_since}} ->
+          page_module
+        end)
 
       batch =
         plan_batch(
@@ -158,20 +172,60 @@ defmodule Hologram.LiveReload do
   end
 
   def handle_call(:open_pages, _from, state) do
-    open_pages = prune_open_pages(state.open_pages)
+    new_state = prune_tabs(state)
 
     reply =
-      Map.new(open_pages, fn {instance_id, {page_module, _missing_since}} ->
+      Map.new(new_state.open_pages, fn {instance_id, {page_module, _missing_since}} ->
         {instance_id, page_module}
       end)
 
-    {:reply, reply, %{state | open_pages: open_pages}}
+    {:reply, reply, new_state}
   end
 
   @impl GenServer
+  def handle_cast({:document_rendered, instance_id}, state) do
+    document_versions =
+      Map.put(
+        state.document_versions,
+        instance_id,
+        {state.css_version, state.reload_version}
+      )
+
+    {:noreply, %{state | document_versions: document_versions}}
+  end
+
   def handle_cast({:page_rendered, instance_id, page_module}, state) do
     open_pages = Map.put(state.open_pages, instance_id, {page_module, nil})
     {:noreply, %{state | open_pages: open_pages}}
+  end
+
+  # A tab whose document rendered before the last change to the app's assets may hold them in an
+  # older version: the change can land while it loads or while its stream reconnects, when the tab
+  # has no stream to be told. A reload brings changed CSS in too, so a tab that missed one is sent
+  # only the reload.
+  #
+  # A tab live reload knows nothing of, rendered before the process started or forgotten since,
+  # counts as having missed every CSS change, since a needless swap is harmless, and no reload,
+  # since a needless one loses the tab's state. What it missed before can't be known, but from its
+  # first stream on, a reload it misses is replayed like for any tab.
+  #
+  # Nothing else is recorded once sent: the stream can close before it writes the message. A tab
+  # told twice swaps its stylesheets twice, or reloads once, since a reload renders a new document.
+  def handle_cast({:replay_asset_change, pid, instance_id}, state) do
+    unknown_tab_versions = {0, state.reload_version}
+
+    {css_version, reload_version} =
+      Map.get(state.document_versions, instance_id, unknown_tab_versions)
+
+    cond do
+      reload_version < state.reload_version -> send(pid, {:reload, :all})
+      css_version < state.css_version -> send(pid, :css_changed)
+      true -> :ok
+    end
+
+    document_versions = Map.put_new(state.document_versions, instance_id, unknown_tab_versions)
+
+    {:noreply, %{state | document_versions: document_versions}}
   end
 
   def handle_cast({:replay_outcome, pid}, state) do
@@ -186,8 +240,8 @@ defmodule Hologram.LiveReload do
 
   @impl GenServer
   def handle_info({:file_event, _pid, {file_path, _events}}, state) do
-    case should_process_file_event?(file_path) do
-      {:ok, target_file_path} ->
+    case classify_file_event(file_path) do
+      {:code, target_file_path} ->
         if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
 
         # File change events are debounced to avoid multiple recompilations
@@ -197,10 +251,43 @@ defmodule Hologram.LiveReload do
 
         {:noreply, %{state | timer_ref: timer_ref}}
 
+      {:asset, kind} ->
+        # Started once per batch of changes and not pushed back, so that a tool writing assets
+        # continuously still gets its changes shown.
+        asset_timer_ref =
+          state.asset_timer_ref ||
+            Process.send_after(self(), :debounced_asset_change, @asset_debounce_delay)
+
+        {:noreply,
+         %{
+           state
+           | asset_change: merge_asset_change(state.asset_change, kind),
+             asset_timer_ref: asset_timer_ref
+         }}
+
       :ignore ->
         # Ignore irrelevant files (backup files, temp files, etc.)
         {:noreply, state}
     end
+  end
+
+  # Only CSS changed: the tabs swap their stylesheets in place. Anything else reloads every tab,
+  # which brings changed CSS in too. Independent of a live reload pass, which rebuilds Hologram's
+  # bundles, not the app's assets.
+  @impl GenServer
+  def handle_info(:debounced_asset_change, state) do
+    new_state =
+      case state.asset_change do
+        :css ->
+          Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :css_changed)
+          %{state | css_version: state.css_version + 1}
+
+        :other ->
+          broadcast_reload(:all)
+          %{state | reload_version: state.reload_version + 1}
+      end
+
+    {:noreply, %{new_state | asset_change: nil, asset_timer_ref: nil}}
   end
 
   @impl GenServer
@@ -266,6 +353,12 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
+  Returns the asset debounce delay in milliseconds.
+  """
+  @spec asset_debounce_delay :: pos_integer
+  def asset_debounce_delay, do: @asset_debounce_delay
+
+  @doc """
   Returns the debounce delay in milliseconds.
   """
   @spec debounce_delay :: pos_integer
@@ -276,6 +369,17 @@ defmodule Hologram.LiveReload do
   @spec initial_state(any) :: map
   def initial_state(endpoint) do
     %{
+      # What changed in the app's assets since the asset timer started: :css when only CSS did,
+      # :other when anything else did too, nil with no timer running.
+      asset_change: nil,
+      asset_timer_ref: nil,
+      # Counts the CSS changes the tabs were told about, from 1, so that a tab rendered before this
+      # process started, whose CSS it can't vouch for, counts as older (see replay_asset_change/2).
+      css_version: 1,
+      # The CSS version and the reload version each tab's document rendered with, by instance id,
+      # or for a tab live reload knew nothing of, the ones it counts as having when its stream first
+      # asked for a replay (see replay_asset_change/2 and prune_tabs/1).
+      document_versions: %{},
       endpoint: endpoint,
       # What each tab showed at its last render, by instance id, with when it was first seen without
       # an SSE connection (nil while it holds one).
@@ -288,12 +392,24 @@ defmodule Hologram.LiveReload do
       pending: MapSet.new(),
       # Pages asked for while pending, built first.
       priority: [],
+      # Counts the changes to the app's assets other than CSS, which reload every tab.
+      reload_version: 0,
       # A save that arrived during the pass, which starts the next one.
       superseded_by: nil,
       timer_ref: nil,
       # The requests waiting for a page's bundle, by page module.
       waiters: %{}
     }
+  end
+
+  @doc """
+  Records that the tab with the given instance id rendered its document, and so loads the app's
+  assets as they are now (see `replay_asset_change/2`). Does nothing when live reload is not
+  running.
+  """
+  @spec document_rendered(String.t()) :: :ok
+  def document_rendered(instance_id) do
+    GenServer.cast(__MODULE__, {:document_rendered, instance_id})
   end
 
   @doc """
@@ -407,6 +523,19 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
+  Sends the given process the change to the app's assets that the tab with the given instance id
+  missed since its document rendered, as the message the change was broadcast as: `{:reload, :all}`
+  when an asset other than CSS changed, else `:css_changed` when CSS did. A tab live reload knows
+  nothing of, rendered before the process started or forgotten since, is sent `:css_changed` and
+  no reload, and a reload it misses later is replayed. Sends nothing when live reload is not
+  running.
+  """
+  @spec replay_asset_change(pid, String.t()) :: :ok
+  def replay_asset_change(pid, instance_id) do
+    GenServer.cast(__MODULE__, {:replay_asset_change, pid, instance_id})
+  end
+
+  @doc """
   Sends the given process the outcome the last live reload pass reported, the message it was
   broadcast as. Sends nothing while a pass runs, before any pass reported, and when live reload is
   not running. The outcome comes from the process that broadcasts the outcomes, so it arrives in
@@ -418,7 +547,8 @@ defmodule Hologram.LiveReload do
   end
 
   @doc """
-  Returns the list of directories that are watched for file changes.
+  Returns the source directories that are watched for file changes. The app's static dir is
+  watched too (see `watched_static_dir/0`).
 
   In a single-app project the directories are the project's own
   `:elixirc_paths`, joined to the project's directory.
@@ -455,11 +585,21 @@ defmodule Hologram.LiveReload do
   """
   @spec watcher_opts({atom, atom}) :: keyword
   def watcher_opts({:unix, :darwin}) do
-    [dirs: watched_dirs(), latency: 0, no_defer: true]
+    [dirs: all_watched_dirs(), latency: 0, no_defer: true]
   end
 
   def watcher_opts(_os_type) do
-    [dirs: watched_dirs()]
+    [dirs: all_watched_dirs()]
+  end
+
+  @doc """
+  Returns the app's static dir, whose assets live reload watches besides the source files: the
+  `priv/static` dir in the app's source dir. Not the one in the build dir, which is a symbolic link
+  to it.
+  """
+  @spec watched_static_dir :: String.t()
+  def watched_static_dir do
+    Path.join(Reflection.otp_app_dir(), "priv/static")
   end
 
   defp active_project_dir do
@@ -496,6 +636,22 @@ defmodule Hologram.LiveReload do
 
   defp impl do
     Application.get_env(:hologram, :live_reload_impl, __MODULE__)
+  end
+
+  # Forgets the tabs closed since (see prune_open_pages/1): their pages and their documents.
+  #
+  # Only the documents of tabs open_pages drops go: a tab first seen through its stream (see
+  # replay_asset_change/2) rendered no page this process saw, so its document stays. Those are the
+  # tabs open when the process started, a handful, gone with the process.
+  defp prune_tabs(state) do
+    open_pages = prune_open_pages(state.open_pages)
+    closed_tabs = Map.keys(state.open_pages) -- Map.keys(open_pages)
+
+    %{
+      state
+      | document_versions: Map.drop(state.document_versions, closed_tabs),
+        open_pages: open_pages
+    }
   end
 
   # A tab seen without an SSE connection for longer than the grace period is closed, and its page is
@@ -577,23 +733,72 @@ defmodule Hologram.LiveReload do
     end)
   end
 
-  # Determines whether to process a file event and returns the target file to reload
-  defp should_process_file_event?(file_path) do
+  # Determines what a file event is about: source code, with the file a live reload pass recompiles,
+  # an asset of the app, CSS or another kind, or nothing live reload acts on.
+  defp classify_file_event(file_path) do
     case Path.extname(file_path) do
       ".ex" ->
-        {:ok, file_path}
+        {:code, file_path}
 
       ".holo" ->
         ex_file = Path.rootname(file_path) <> ".ex"
 
         if File.exists?(ex_file) do
-          {:ok, ex_file}
+          {:code, ex_file}
         else
           :ignore
         end
 
+      extension when extension in @asset_extensions ->
+        classify_asset_event(file_path, extension)
+
       _fallback ->
         :ignore
+    end
+  end
+
+  # Matched by the path's segments, not by the watched static dir as a prefix: the watcher can
+  # report the path with a symbolic link on the way resolved. Phoenix's live reload matches its
+  # patterns anywhere in the path for the same reason. What counts is what follows the last
+  # priv/static in the path, since the project's own path can hold one too.
+  defp classify_asset_event(file_path, extension) do
+    if static_asset_path?(file_path) do
+      {:asset, if(extension == ".css", do: :css, else: :other)}
+    else
+      :ignore
+    end
+  end
+
+  # The segments that follow the last "priv", "static" pair, or nil when there is none.
+  defp last_static_subpath(["priv", "static" | rest], _subpath) do
+    last_static_subpath(rest, rest)
+  end
+
+  defp last_static_subpath([_segment | rest], subpath), do: last_static_subpath(rest, subpath)
+
+  defp last_static_subpath([], subpath), do: subpath
+
+  defp merge_asset_change(:other, _kind), do: :other
+  defp merge_asset_change(_asset_change, kind), do: kind
+
+  defp static_asset_path?(file_path) do
+    case last_static_subpath(Path.split(file_path), nil) do
+      [subdir, _file_name | _rest] -> subdir not in @ignored_static_subdirs
+      [_file_name] -> true
+      _no_static_subpath -> false
+    end
+  end
+
+  # In a project with a priv dir, Hologram's compile writes its bundles to priv/static/hologram
+  # through the build's priv symlink, so the static dir exists before the app starts. The check
+  # keeps a project without one, or a dir deleted meanwhile, from failing the watcher's backend.
+  defp all_watched_dirs do
+    static_dir = watched_static_dir()
+
+    if File.dir?(static_dir) do
+      [static_dir | watched_dirs()]
+    else
+      watched_dirs()
     end
   end
 

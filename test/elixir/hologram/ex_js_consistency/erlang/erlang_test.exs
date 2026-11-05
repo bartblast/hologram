@@ -585,6 +585,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.<(left, right) == true
     end
 
+    test "atom < atom, character above U+FFFF" do
+      left = wrap_term(:"\uFFFD")
+      right = wrap_term(:"😀")
+
+      assert :erlang.<(left, right) == true
+    end
+
     test "float < atom (always)" do
       left = wrap_term(1.0)
       right = wrap_term(:a)
@@ -5935,6 +5942,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :list_to_atom, [[-1]]}
     end
 
+    test "raises ArgumentError if list contains a surrogate code point" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list of characters"),
+                   {:erlang, :list_to_atom, [[0xD800]]}
+    end
+
     test "raises ArgumentError if given a binary instead of a charlist" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
@@ -6083,7 +6096,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   # Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
   # The client version works exactly the same as list_to_atom/1.
-  # test "list_to_existing_atom/1"
+  describe "list_to_existing_atom/1" do
+    test "raises ArgumentError if list contains a surrogate code point" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list of characters"),
+                   {:erlang, :list_to_existing_atom, [[0xD800]]}
+    end
+  end
 
   describe "list_to_float/1" do
     test "positive float without sign in decimal notation" do

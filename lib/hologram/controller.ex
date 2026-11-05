@@ -948,12 +948,16 @@ defmodule Hologram.Controller do
   end
 
   # In dev a live reload builds the pages open in tabs first, and the page a tab shows is the page
-  # it rendered last.
-  defp maybe_note_page_rendered(nil, _page_module), do: :ok
+  # it rendered last. A first page also renders the tab's document, which loads the app's assets, so
+  # live reload can tell the tab about an asset change it missed. The document is noted after the
+  # page: live reload keeps a tab's document only while it keeps the tab's page.
+  defp maybe_note_page_rendered(nil, _page_module, _initial_page?), do: :ok
 
-  defp maybe_note_page_rendered(instance_id, page_module) do
+  defp maybe_note_page_rendered(instance_id, page_module, initial_page?) do
     if Hologram.env() == :dev do
       LiveReload.page_rendered(instance_id, page_module)
+
+      if initial_page?, do: LiveReload.document_rendered(instance_id)
     end
   end
 
@@ -1096,7 +1100,11 @@ defmodule Hologram.Controller do
       ensure_no_content_security_policy!(rendered_server_struct)
       ensure_no_content_type!(rendered_server_struct)
 
-      maybe_note_page_rendered(renderer_opts[:instance_id], page_module)
+      maybe_note_page_rendered(
+        renderer_opts[:instance_id],
+        page_module,
+        renderer_opts[:initial_page?]
+      )
 
       # Transition subscriptions before flushing broadcasts so a registry failure
       # (GenServer.call timeout) leaves no half-done state. flush_broadcasts is

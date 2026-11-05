@@ -926,6 +926,15 @@ jobs:
           name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}-partition-${{ matrix.partition }}
           path: test/features/tmp/screenshots
 
+      # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
+      - name: Archive ChromeDriver logs
+        # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
+        if: ${{ !cancelled() && (failure() || hashFiles('test/features/tmp/chromedriver/hangs.txt') != '') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}-partition-${{ matrix.partition }}
+          path: test/features/tmp/chromedriver
+
   feature_tests_https:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
@@ -1046,6 +1055,15 @@ jobs:
         with:
           name: https-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/features/tmp/screenshots
+
+      # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
+      - name: Archive ChromeDriver logs
+        # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
+        if: ${{ !cancelled() && (failure() || hashFiles('test/features/tmp/chromedriver/hangs.txt') != '') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: https-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/features/tmp/chromedriver
 
   cluster_tests:
     runs-on: ubuntu-latest
@@ -1210,6 +1228,15 @@ jobs:
         with:
           name: cluster-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/cluster/tmp/screenshots
+
+      # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
+      - name: Archive ChromeDriver logs
+        # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
+        if: ${{ !cancelled() && (failure() || hashFiles('test/cluster/tmp/chromedriver/hangs.txt') != '') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cluster-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/cluster/tmp/chromedriver
   cowboy_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
@@ -1365,6 +1392,15 @@ jobs:
         with:
           name: cowboy-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/cowboy/tmp/screenshots
+
+      # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
+      - name: Archive ChromeDriver logs
+        # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
+        if: ${{ !cancelled() && (failure() || hashFiles('test/cowboy/tmp/chromedriver/hangs.txt') != '') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cowboy-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/cowboy/tmp/chromedriver
   ecosystem_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
@@ -1520,6 +1556,15 @@ jobs:
         with:
           name: ecosystem-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/ecosystem/tmp/screenshots
+
+      # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
+      - name: Archive ChromeDriver logs
+        # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
+        if: ${{ !cancelled() && (failure() || hashFiles('test/ecosystem/tmp/chromedriver/hangs.txt') != '') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ecosystem-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/ecosystem/tmp/chromedriver
   minimal_tests:
     runs-on: ubuntu-latest
     # Started once the lib checks have ended, so that 21 jobs start together and one waits on
@@ -1829,4 +1874,13 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: umbrella-fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
-          path: test/umbrella/tmp/screenshots
+          path: test/umbrella/apps/app_1/tmp/screenshots
+
+      # Step: Archive the ChromeDriver logs of a run that failed or recovered from a browser hang.
+      - name: Archive ChromeDriver logs
+        # Execute the step if the job has failed or a browser hang was reported, but don't execute it if the job has been canceled.
+        if: ${{ !cancelled() && (failure() || hashFiles('test/umbrella/apps/app_1/tmp/chromedriver/hangs.txt') != '') }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: umbrella-chromedriver-logs-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          path: test/umbrella/apps/app_1/tmp/chromedriver

@@ -838,6 +838,10 @@ describe("Erlang", () => {
       assertBoxedTrue(testedFun(atomA, atomB));
     });
 
+    it("atom < atom, character above U+FFFF", () => {
+      assertBoxedTrue(testedFun(Type.atom("\uFFFD"), Type.atom("😀")));
+    });
+
     it("float < atom (always)", () => {
       assertBoxedTrue(testedFun(float1, atomA));
     });
@@ -9083,6 +9087,14 @@ describe("Erlang", () => {
       );
     });
 
+    it("raises ArgumentError if list contains a surrogate code point", () => {
+      assertBoxedError(
+        () => list_to_atom(Type.list([Type.integer(0xd800)])),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not a list of characters"),
+      );
+    });
+
     it("raises ArgumentError if given a binary instead of a charlist", () => {
       assertBoxedError(
         () => list_to_atom(Type.bitstring("abc")),
@@ -9356,6 +9368,14 @@ describe("Erlang", () => {
       const expected = Erlang["list_to_atom/1"](codePoints);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if list contains a surrogate code point", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([Type.integer(0xd800)])),
+        "ArgumentError",
+        buildArgumentErrorMsg(1, "not a list of characters"),
+      );
     });
   });
 

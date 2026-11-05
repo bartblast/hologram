@@ -1379,6 +1379,26 @@ describe("Interpreter", () => {
 
         assert.equal(result, 1);
       });
+
+      // In UTF-16 a character above U+FFFF is two code units from 0xD800-0xDFFF, which sort below the
+      // code units 0xE000-0xFFFF - while the character sorts above them.
+      it("atom < atom, character above U+FFFF", () => {
+        const result = Interpreter.compareTerms(
+          Type.atom("\uFFFD"),
+          Type.atom("😀"),
+        );
+
+        assert.equal(result, -1);
+      });
+
+      it("atom > atom, character above U+FFFF", () => {
+        const result = Interpreter.compareTerms(
+          Type.atom("😀"),
+          Type.atom("\uFFFD"),
+        );
+
+        assert.equal(result, 1);
+      });
     });
 
     it("bitstring type", () => {

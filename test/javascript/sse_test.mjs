@@ -694,6 +694,10 @@ describe("Sse", () => {
 
     beforeEach(() => {
       clock = sinon.useFakeTimers();
+
+      // A stream loss logs, and the log is kept in session storage, which a run of this file
+      // alone has none of.
+      sinon.stub(Logger, "debug");
     });
 
     // A batch whose send got no answer is still pending, and this is the one signal that means
@@ -1066,6 +1070,19 @@ describe("Sse", () => {
       Sse.eventSource.listeners.compiled({data: ""});
 
       sinon.assert.calledOnceWithExactly(hideStub);
+    });
+  });
+
+  describe("css_changed event", () => {
+    it("swaps the page's stylesheets", async () => {
+      stubHandshakeResponse();
+      const swapStub = sinon.stub(LiveReload, "swapStylesheets");
+
+      await Sse.connect();
+
+      Sse.eventSource.listeners.css_changed({data: ""});
+
+      sinon.assert.calledOnceWithExactly(swapStub);
     });
   });
 

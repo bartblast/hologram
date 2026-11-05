@@ -6119,6 +6119,45 @@ describe("Hologram", () => {
       Hologram.virtualDocument = {sel: "html", data: {}, children: []};
     };
 
+    describe("Phoenix's live reload iframe", () => {
+      const stubFirstRender = () => {
+        sinon.stub(Renderer, "renderPage").returns({
+          sel: "html",
+          data: {},
+          children: [],
+        });
+
+        sinon.stub(EventListenerRegistry, "reconcile");
+        sinon.stub(EventListeners, "recheckScrollEdges");
+        sinon.stub(Vdom, "patchVirtualDocument");
+
+        return {
+          mirrorStub: sinon
+            .stub(Vdom, "mirror")
+            .returns({sel: "html", data: {}, children: []}),
+          removeStub: sinon.stub(LiveReload, "removePhoenixReloader"),
+        };
+      };
+
+      it("is removed before the first render mirrors the page", () => {
+        const {mirrorStub, removeStub} = stubFirstRender();
+
+        Hologram.render();
+
+        sinon.assert.calledOnce(removeStub);
+        sinon.assert.callOrder(removeStub, mirrorStub);
+      });
+
+      it("is not looked for again by a later render", () => {
+        const {removeStub} = stubFirstRender();
+        Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+
+        Hologram.render();
+
+        sinon.assert.notCalled(removeStub);
+      });
+    });
+
     it("reconciles the global and resolved observer bindings collected during the render", () => {
       const listenerBindings = [
         {target: window, eventName: "keydown", handler: () => {}},

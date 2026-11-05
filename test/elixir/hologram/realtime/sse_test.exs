@@ -308,6 +308,12 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "encode_css_changed_envelope/1" do
+    test "wraps the id in a css_changed SSE event envelope with no data" do
+      assert encode_css_changed_envelope(42) == "event: css_changed\nid: 42\ndata:\n\n"
+    end
+  end
+
   describe "encode_drop_sub_receipts_envelope/2" do
     test "wraps the keys list in a drop_sub_receipts SSE event envelope" do
       keys = [{:notifications, "c1"}]
@@ -1055,6 +1061,17 @@ defmodule Hologram.Realtime.SSETest do
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
       assert updated_conn.resp_body =~ ~r/\Aevent: compiled\nid: \d+\ndata:\n\n\z/
+    end
+  end
+
+  describe "process_message/4 on :css_changed" do
+    test "pushes a css_changed SSE event" do
+      conn = prepared_test_conn()
+      send(self(), :css_changed)
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~r/\Aevent: css_changed\nid: \d+\ndata:\n\n\z/
     end
   end
 
@@ -2032,6 +2049,19 @@ defmodule Hologram.Realtime.SSETest do
       on_exit(fn -> Process.exit(pid, :kill) end)
 
       assert_receive {:"$gen_cast", {:replay_outcome, ^pid}}
+      assert live_reload_subscriber?(pid)
+    end
+
+    test "asks live reload for an asset change its tab missed once listening" do
+      # Stands in for live reload, which does not run in the test env.
+      Process.register(self(), LiveReload)
+
+      conn = Plug.Conn.fetch_query_params(conn_with_instance_id())
+      instance_id = conn.query_params["instance_id"]
+      pid = spawn(fn -> stream(conn) end)
+      on_exit(fn -> Process.exit(pid, :kill) end)
+
+      assert_receive {:"$gen_cast", {:replay_asset_change, ^pid, ^instance_id}}
       assert live_reload_subscriber?(pid)
     end
   end

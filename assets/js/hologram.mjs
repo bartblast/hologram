@@ -916,6 +916,10 @@ export default class Hologram {
       // On a full document load the old side is built by mirroring this render onto the page the
       // server sent. The patch then adopts those nodes instead of recreating the whole page.
       if (isBootRender) {
+        // Phoenix's live reload iframe is taken out before the mirror reads the page (see
+        // LiveReload.removePhoenixReloader()).
+        LiveReload.removePhoenixReloader();
+
         Hologram.virtualDocument = Vdom.mirror(
           newVirtualDocument,
           document.documentElement,

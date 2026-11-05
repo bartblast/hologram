@@ -54,10 +54,10 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module113
   alias Hologram.Test.Fixtures.Template.Renderer.Module114
   alias Hologram.Test.Fixtures.Template.Renderer.Module115
-  alias Hologram.Test.Fixtures.Template.Renderer.Module95
-  alias Hologram.Test.Fixtures.Template.Renderer.Module97
-  alias Hologram.Test.Fixtures.Template.Renderer.Module98
-  alias Hologram.Test.Fixtures.Template.Renderer.Module99
+  alias Hologram.Test.Fixtures.Template.Renderer.Module117
+  alias Hologram.Test.Fixtures.Template.Renderer.Module118
+  alias Hologram.Test.Fixtures.Template.Renderer.Module119
+  alias Hologram.Test.Fixtures.Template.Renderer.Module120
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -71,7 +71,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     setup_chunk_registry(ChunkRegistryStub)
     setup_query_cache(QueryCacheStub, false)
 
-    dump_query_cache(QueryCacheStub, [Module97, Module105, Module106, Module108, Module95])
+    dump_query_cache(QueryCacheStub, [Module118, Module105, Module106, Module108, Module117])
 
     QueryCache.init(nil)
 
@@ -150,7 +150,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   test "injects a zero-arity from_query prop" do
     create_entities()
 
-    node = {:component, Module97, [], []}
+    node = {:component, Module118, [], []}
 
     assert {"entities = banana,cherry", %{}, @server} = render_dom(node, @env, @server)
   end
@@ -158,7 +158,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   test "rejects template values for from_query props" do
     create_entities()
 
-    node = {:component, Module97, [{"entities", [expression: {[:template_value]}]}], []}
+    node = {:component, Module118, [{"entities", [expression: {[:template_value]}]}], []}
 
     assert {"entities = banana,cherry", %{}, @server} = render_dom(node, @env, @server)
   end
@@ -182,7 +182,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
       |> Module15.new()
       |> create()
 
-    node = {:component, Module95, [], []}
+    node = {:component, Module117, [], []}
 
     {html, _component_registry, _server_struct} = render_dom(node, @env, @server)
 
@@ -303,11 +303,11 @@ defmodule Hologram.Template.RendererFromQueryTest do
       setup_asset_manifest_cache(AssetManifestCacheStub)
       setup_page_digest_registry(PageDigestRegistryStub)
 
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module99, :dummy_module_99_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module120, :dummy_module_120_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module100, :dummy_module_100_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module102, :dummy_module_102_digest)
 
-      dump_query_cache(QueryCacheStub, [Module98, Module95, Module101])
+      dump_query_cache(QueryCacheStub, [Module119, Module117, Module101])
       QueryCache.init(nil)
 
       :ok
@@ -337,7 +337,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       :ok = add_relationship(Module3, source.id, :a, target.id)
 
-      html = render_page_html(Module99)
+      html = render_page_html(Module120)
 
       assert String.contains?(html, ~s|"syncRows":{"put_entity":{|)
       assert String.contains?(html, ~s|"#{@entity_2_type}":[{|)
@@ -363,14 +363,14 @@ defmodule Hologram.Template.RendererFromQueryTest do
 
       :ok = add_relationship(Module3, source.id, :a, target.id)
 
-      html = render_page_html(Module99)
+      html = render_page_html(Module120)
 
       refute String.contains?(html, "</script><script>alert(1)")
       assert String.contains?(html, ~S|"c":"\u003C/script>\u003Cscript>alert(1)\u003C/script>"|)
     end
 
     test "carries nothing for a page whose props read no rows" do
-      html = render_page_html(Module99)
+      html = render_page_html(Module120)
 
       assert String.contains?(html, ~s|"syncRows":{}|)
     end
@@ -399,13 +399,13 @@ defmodule Hologram.Template.RendererFromQueryTest do
         |> Module14.new()
         |> DB.create!()
 
-      html = render_page_html(Module99, %Server{user_id: user.id})
+      html = render_page_html(Module120, %Server{user_id: user.id})
 
       assert String.contains?(html, ~s|"actorUserId":"#{user.id}"|)
     end
 
     test "names nobody for a visitor" do
-      html = render_page_html(Module99)
+      html = render_page_html(Module120)
 
       assert String.contains?(html, ~s|"actorUserId":null|)
     end
@@ -620,10 +620,10 @@ defmodule Hologram.Template.RendererFromQueryTest do
       setup_asset_manifest_cache(AssetManifestCacheStub)
       setup_page_digest_registry(PageDigestRegistryStub)
 
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module99, :dummy_module_99_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module120, :dummy_module_120_digest)
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module102, :dummy_module_102_digest)
 
-      dump_query_cache(QueryCacheStub, [Module101, Module98])
+      dump_query_cache(QueryCacheStub, [Module101, Module119])
       QueryCache.init(nil)
 
       :ok
@@ -657,7 +657,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
 
     test "carries nothing for a page whose props count nothing" do
-      html = render_page_html(Module99)
+      html = render_page_html(Module120)
 
       assert String.contains?(html, ~s|"syncCounts":{}|)
     end

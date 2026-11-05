@@ -1,19 +1,13 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module99 do
-  use Hologram.Page
+  use Hologram.Component
 
-  alias Hologram.Test.Fixtures.Template.Renderer.Module98
+  prop :words, :list
 
-  route "/hologram-test-fixtures-template-renderer-module99"
-
-  # The layout that renders Hologram.UI.Runtime, which is what puts the mount data - the seed
-  # among it - into the page.
-  layout Hologram.Test.Fixtures.Template.Renderer.Module49
-
-  @impl Page
+  @impl Component
   def template do
     ~HOLO"""
-    <Module98 />
+    <ul>{%for word <- @words}<li $key={word}>{word}</li>{/for}</ul>
     """
   end
 end

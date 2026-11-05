@@ -1,7 +1,10 @@
 defmodule Hologram.TemplateTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Template
+  alias Hologram.Template.TrustedHTML
   alias Hologram.Test.Fixtures.Template.Module1
+  alias Hologram.Test.Fixtures.Template.Module3
+  alias Hologram.Test.Fixtures.Template.Module4
 
   describe "dom_ast/1" do
     test "build DOM AST from the given markup" do
@@ -207,6 +210,48 @@ defmodule Hologram.TemplateTest do
                text: "Remote function call result = ",
                expression: {:ok}
              ]
+    end
+  end
+
+  describe "trust_html/1" do
+    test "string" do
+      assert trust_html("<p>Hello</p>") == %TrustedHTML{html: "<p>Hello</p>"}
+    end
+
+    test "empty string" do
+      assert trust_html("") == %TrustedHTML{html: ""}
+    end
+
+    test "iolist" do
+      assert trust_html(["<p>", "Hello", "</p>"]) == %TrustedHTML{html: "<p>Hello</p>"}
+    end
+
+    test "nested iolist with bytes" do
+      assert trust_html(["<p>", [?H, "ello"], "</p>"]) == %TrustedHTML{html: "<p>Hello</p>"}
+    end
+
+    test "empty list" do
+      assert trust_html([]) == %TrustedHTML{html: ""}
+    end
+
+    test "neither a string nor iodata" do
+      assert_raise ArgumentError, "trust_html/1 takes a string or iodata, got: :abc", fn ->
+        trust_html(:abc)
+      end
+    end
+
+    test "list that isn't iodata" do
+      assert_raise ArgumentError, fn ->
+        trust_html([:abc])
+      end
+    end
+
+    test "imported into components" do
+      assert Module3.trusted_html() == %TrustedHTML{html: "<b>component</b>"}
+    end
+
+    test "imported into pages" do
+      assert Module4.trusted_html() == %TrustedHTML{html: "<b>page</b>"}
     end
   end
 end

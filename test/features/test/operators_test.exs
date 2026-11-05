@@ -366,6 +366,13 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> click(css("button[id='< (non-text binaries)']"))
       |> assert_text(css("#result"), inspect({false, true, false, true}))
     end
+
+    feature "< (atoms above U+FFFF)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='< (atoms above U+FFFF)']"))
+      |> assert_text(css("#result"), inspect({true, false, true, false}))
+    end
   end
 
   describe "custom and overriden operators" do

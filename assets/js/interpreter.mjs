@@ -9,6 +9,7 @@ import LiteralSet from "./literal_set.mjs";
 import NodeTable from "./erts/node_table.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import ScriptEvaluator from "./script_evaluator.mjs";
+import StringOrder from "./string_order.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -388,6 +389,8 @@ export default class Interpreter {
 
     switch (term1.type) {
       case "atom":
+        return StringOrder.compare(term1.value, term2.value);
+
       case "float":
       case "integer":
         return term1.value == term2.value

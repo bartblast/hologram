@@ -13,6 +13,7 @@ defmodule Hologram.Test.FeatureHelpers do
 
   alias Hologram.Router
   alias Hologram.Sync.Evaluators
+  alias Hologram.Test.BrowserSession
   alias Wallaby.Browser
   alias Wallaby.Feature.Utils
 
@@ -262,13 +263,23 @@ defmodule Hologram.Test.FeatureHelpers do
   The registered value is either a count or per-session options. Sessions carry
   the test's ownership metadata, so a session's requests reach the same
   checked-out state the test holds.
+
+  A session start that gets no answer is retried, and the test's exit waits for
+  Wallaby to end its sessions, restarting a session store stuck on a browser that
+  stopped answering, so it doesn't fail the tests after it.
   """
   @spec start_sessions(map) :: keyword
   def start_sessions(context) do
+    test_pid = self()
+    ExUnit.Callbacks.on_exit(fn -> BrowserSession.await_teardown(test_pid) end)
+
     metadata = Utils.maybe_checkout_repos(context[:async])
 
     start_session_opts =
-      Utils.put_create_session_fn([metadata: metadata], context[:create_session_fn])
+      Utils.put_create_session_fn(
+        [metadata: metadata],
+        context[:create_session_fn] || (&BrowserSession.create_session/2)
+      )
 
     context
     |> get_in([:registered, :sessions])

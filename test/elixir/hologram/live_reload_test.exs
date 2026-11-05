@@ -23,7 +23,9 @@ defmodule Hologram.LiveReloadTest do
   use_module_stub :query_cache
   use_module_stub :sync_page_windows
 
+  @asset_debounce_delay LiveReload.asset_debounce_delay()
   @debounce_delay LiveReload.debounce_delay()
+  @static_dir "/app/priv/static"
   @file_path Path.join([@fixtures_dir, "live_reload", "module_1.ex"])
 
   # Scheduling slack on top of the debounce delay. The timer cannot fire early,
@@ -31,11 +33,41 @@ defmodule Hologram.LiveReloadTest do
   # assert_receive returns as soon as the message arrives.
   @timer_slack 1_000
 
+  defp asset_event(file_path, state) do
+    LiveReload.handle_info({:file_event, self(), {file_path, [:modified]}}, state)
+  end
+
+  # Has the started live reload process see a CSS change, and waits for the tabs to be told.
+  defp change_css(pid) do
+    send(pid, {:file_event, self(), {"#{@static_dir}/assets/app.css", [:modified]}})
+    assert_receive :css_changed, @asset_debounce_delay + 500
+  end
+
+  # Has the started live reload process see a change to an asset other than CSS, and waits for the
+  # tabs to be told.
+  defp change_js(pid) do
+    send(pid, {:file_event, self(), {"#{@static_dir}/assets/app.js", [:modified]}})
+    assert_receive {:reload, :all}, @asset_debounce_delay + 500
+  end
+
+  defp static_dir_and_watched_dirs(project_dir) do
+    File.cd!(project_dir, fn ->
+      {LiveReload.watched_static_dir(), LiveReload.watcher_opts({:unix, :linux})[:dirs]}
+    end)
+  end
+
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
     :ok
+  end
+
+  test "asset_debounce_delay/0" do
+    result = LiveReload.asset_debounce_delay()
+
+    assert is_integer(result)
+    assert result > 0
   end
 
   test "debounce_delay/0" do
@@ -156,6 +188,159 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
+  describe "handle_info/2, asset file events" do
+    setup do
+      [state: LiveReload.initial_state(nil)]
+    end
+
+    test "a CSS file in priv/static starts the asset timer", %{state: state} do
+      assert {:noreply, new_state} = asset_event("#{@static_dir}/assets/app.css", state)
+
+      assert new_state.asset_change == :css
+      assert is_reference(new_state.asset_timer_ref)
+      assert new_state.timer_ref == nil
+    end
+
+    test "a CSS file right in priv/static counts too", %{state: state} do
+      assert {:noreply, new_state} = asset_event("#{@static_dir}/app.css", state)
+      assert new_state.asset_change == :css
+    end
+
+    test "other asset types in priv/static start the asset timer", %{state: state} do
+      for extension <- ~w(js png jpeg jpg gif svg) do
+        assert {:noreply, new_state} =
+                 asset_event("#{@static_dir}/assets/file.#{extension}", state)
+
+        assert new_state.asset_change == :other
+        assert is_reference(new_state.asset_timer_ref)
+      end
+    end
+
+    test "ignores Hologram's bundles", %{state: state} do
+      assert asset_event("#{@static_dir}/hologram/page-ABCDEFGH.js", state) == {:noreply, state}
+    end
+
+    test "ignores uploads", %{state: state} do
+      assert asset_event("#{@static_dir}/uploads/photo.png", state) == {:noreply, state}
+    end
+
+    test "ignores other file types in priv/static", %{state: state} do
+      for file_name <- ~w(app.js.map robots.txt cache_manifest.json app.css.gz) do
+        assert asset_event("#{@static_dir}/assets/#{file_name}", state) == {:noreply, state}
+      end
+    end
+
+    test "ignores asset types outside priv/static", %{state: state} do
+      assert asset_event("/app/assets/css/app.css", state) == {:noreply, state}
+      assert asset_event("/app/lib/app/static/app.js", state) == {:noreply, state}
+    end
+
+    test "goes by the last priv/static in the path", %{state: state} do
+      project_dir = "/srv/priv/static/app"
+
+      assert asset_event("#{project_dir}/priv/static/hologram/page-ABCDEFGH.js", state) ==
+               {:noreply, state}
+
+      assert {:noreply, %{asset_change: :css}} =
+               asset_event("#{project_dir}/priv/static/assets/app.css", state)
+    end
+
+    test "leaves a pending code reload alone", %{state: state} do
+      timer_ref = Process.send_after(self(), {:debounced_reload, @file_path}, @debounce_delay)
+      state = %{state | timer_ref: timer_ref}
+
+      assert {:noreply, new_state} = asset_event("#{@static_dir}/assets/app.css", state)
+
+      assert new_state.timer_ref == timer_ref
+      assert_receive {:debounced_reload, @file_path}, @debounce_delay + 100
+    end
+
+    test "a source file starts the code timer, not the asset timer", %{state: state} do
+      assert {:noreply, new_state} = asset_event(@file_path, state)
+
+      assert is_reference(new_state.timer_ref)
+      assert new_state.asset_timer_ref == nil
+      assert new_state.asset_change == nil
+    end
+
+    test "changes in quick succession make one", %{state: state_0} do
+      {:noreply, state_1} = asset_event("#{@static_dir}/assets/app.css", state_0)
+      {:noreply, state_2} = asset_event("#{@static_dir}/assets/admin.css", state_1)
+
+      assert state_2.asset_timer_ref == state_1.asset_timer_ref
+      assert state_2.asset_change == :css
+
+      assert_receive :debounced_asset_change, @asset_debounce_delay + 100
+      refute_receive :debounced_asset_change, 100
+    end
+
+    test "a change other than CSS outweighs a CSS one", %{state: state_0} do
+      {:noreply, state_1} = asset_event("#{@static_dir}/assets/app.css", state_0)
+      {:noreply, state_2} = asset_event("#{@static_dir}/assets/app.js", state_1)
+      {:noreply, state_3} = asset_event("#{@static_dir}/assets/app.css", state_2)
+
+      assert state_3.asset_change == :other
+    end
+  end
+
+  describe "handle_info/2, :debounced_asset_change" do
+    setup do
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
+
+      [state: LiveReload.initial_state(nil)]
+    end
+
+    test "a CSS change tells the tabs to swap their stylesheets", %{state: state} do
+      state = %{state | asset_change: :css, asset_timer_ref: make_ref()}
+
+      assert LiveReload.handle_info(:debounced_asset_change, state) ==
+               {:noreply, %{state | asset_change: nil, asset_timer_ref: nil, css_version: 2}}
+
+      assert_receive :css_changed
+      refute_receive {:reload, _pages}
+    end
+
+    test "any other change reloads every tab", %{state: state} do
+      state = %{state | asset_change: :other, asset_timer_ref: make_ref()}
+
+      assert LiveReload.handle_info(:debounced_asset_change, state) ==
+               {:noreply, %{state | asset_change: nil, asset_timer_ref: nil, reload_version: 1}}
+
+      assert_receive {:reload, :all}
+      refute_receive :css_changed
+    end
+
+    test "is independent of a live reload pass and a pending code reload", %{state: state} do
+      state = %{
+        state
+        | asset_change: :css,
+          asset_timer_ref: make_ref(),
+          outcome: :compiled,
+          pass: %{ref: make_ref(), registries_reloaded?: false},
+          timer_ref: make_ref()
+      }
+
+      assert LiveReload.handle_info(:debounced_asset_change, state) ==
+               {:noreply, %{state | asset_change: nil, asset_timer_ref: nil, css_version: 2}}
+
+      assert_receive :css_changed
+    end
+
+    test "a change after it starts a new batch", %{state: state_0} do
+      {:noreply, state_1} = asset_event("#{@static_dir}/assets/app.js", state_0)
+
+      assert_receive :debounced_asset_change, @asset_debounce_delay + 100
+      {:noreply, state_2} = LiveReload.handle_info(:debounced_asset_change, state_1)
+      assert_receive {:reload, :all}
+
+      {:noreply, state_3} = asset_event("#{@static_dir}/assets/app.css", state_2)
+
+      assert state_3.asset_change == :css
+      assert is_reference(state_3.asset_timer_ref)
+      assert state_3.asset_timer_ref != state_1.asset_timer_ref
+    end
+  end
+
   describe "open_pages/0" do
     setup do
       wait_for_process_cleanup(SubscriptionRegistry)
@@ -205,6 +390,46 @@ defmodule Hologram.LiveReloadTest do
       assert :sys.get_state(LiveReload).open_pages == %{}
     end
 
+    test "forgets the document of a tab it forgets" do
+      LiveReload.page_rendered("instance-1", Module1)
+      LiveReload.document_rendered("instance-1")
+      LiveReload.page_rendered("instance-2", Module2)
+      LiveReload.document_rendered("instance-2")
+
+      long_ago = System.monotonic_time(:millisecond) - 60_000
+
+      :sys.replace_state(LiveReload, fn state ->
+        put_in(state.open_pages["instance-1"], {Module1, long_ago})
+      end)
+
+      LiveReload.open_pages()
+
+      assert :sys.get_state(LiveReload).document_versions == %{"instance-2" => {1, 0}}
+    end
+
+    test "keeps the document of a tab first seen through its stream" do
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      LiveReload.open_pages()
+
+      assert :sys.get_state(LiveReload).document_versions == %{"instance-1" => {0, 0}}
+    end
+
+    test "a live reload batch forgets the document of a tab it forgets" do
+      long_ago = System.monotonic_time(:millisecond) - 60_000
+
+      state = %{
+        LiveReload.initial_state(nil)
+        | document_versions: %{"instance-1" => {1, 0}},
+          open_pages: %{"instance-1" => {Module1, long_ago}}
+      }
+
+      assert {:reply, [], new_state} =
+               LiveReload.handle_call({:next_batch, MapSet.new(), %{}}, self(), state)
+
+      assert new_state.document_versions == %{}
+    end
+
     test "a tab seen with its SSE connection again is no longer missing" do
       LiveReload.page_rendered("instance-1", Module1)
       LiveReload.open_pages()
@@ -213,6 +438,160 @@ defmodule Hologram.LiveReloadTest do
 
       assert LiveReload.open_pages() == %{"instance-1" => Module1}
       assert :sys.get_state(LiveReload).open_pages == %{"instance-1" => {Module1, nil}}
+    end
+  end
+
+  describe "document_rendered/1" do
+    test "does nothing when live reload is not running" do
+      wait_for_process_cleanup(LiveReload)
+
+      assert LiveReload.document_rendered("instance-1") == :ok
+    end
+  end
+
+  describe "replay_asset_change/2" do
+    test "does nothing when live reload is not running" do
+      wait_for_process_cleanup(LiveReload)
+
+      assert LiveReload.replay_asset_change(self(), "instance-1") == :ok
+    end
+  end
+
+  describe "asset change replay" do
+    setup do
+      wait_for_process_cleanup(LiveReload)
+      pid = start_supervised!({LiveReload, watch?: false})
+
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
+
+      [pid: pid]
+    end
+
+    test "a stream of a tab whose document rendered before a CSS change is sent it", %{pid: pid} do
+      LiveReload.document_rendered("instance-1")
+      change_css(pid)
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      assert_receive :css_changed
+    end
+
+    test "a stream of a tab whose document rendered after it is not", %{pid: pid} do
+      change_css(pid)
+      LiveReload.document_rendered("instance-1")
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      refute_receive :css_changed, 100
+    end
+
+    test "a stream of a tab rendered with no change since is not" do
+      LiveReload.document_rendered("instance-1")
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      refute_receive :css_changed, 100
+    end
+
+    test "a stream of a tab it knows nothing of is sent it, even with no change" do
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      assert_receive :css_changed
+    end
+
+    test "a change is sent again to the tab's next stream", %{pid: pid} do
+      LiveReload.document_rendered("instance-1")
+      change_css(pid)
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive :css_changed
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive :css_changed
+    end
+
+    test "a stream of a tab whose document rendered before a change other than CSS is sent a reload",
+         %{pid: pid} do
+      LiveReload.document_rendered("instance-1")
+      change_js(pid)
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      assert_receive {:reload, :all}
+    end
+
+    test "a reload is sent again to the tab's next stream", %{pid: pid} do
+      LiveReload.document_rendered("instance-1")
+      change_js(pid)
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive {:reload, :all}
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive {:reload, :all}
+    end
+
+    test "a stream of a tab whose document rendered after it is sent no reload", %{pid: pid} do
+      change_js(pid)
+      LiveReload.document_rendered("instance-1")
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      refute_receive {:reload, :all}, 100
+    end
+
+    test "a stream of a tab it knows nothing of is sent no reload", %{pid: pid} do
+      change_js(pid)
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      assert_receive :css_changed
+      refute_receive {:reload, :all}, 100
+    end
+
+    test "a tab it knows nothing of is sent the CSS change again by its next stream" do
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive :css_changed
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive :css_changed
+    end
+
+    test "a tab it knows nothing of is sent a reload it misses after its first stream", %{
+      pid: pid
+    } do
+      LiveReload.replay_asset_change(self(), "instance-1")
+      assert_receive :css_changed
+
+      change_js(pid)
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      assert_receive {:reload, :all}
+    end
+
+    test "a stream of a tab whose document rendered before a CSS change and another change is sent only a reload",
+         %{pid: pid} do
+      LiveReload.document_rendered("instance-1")
+      change_css(pid)
+      change_js(pid)
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      assert_receive {:reload, :all}
+      refute_receive :css_changed, 100
+    end
+
+    test "a stream of a tab whose document rendered between a change other than CSS and a CSS change is sent only the CSS change",
+         %{pid: pid} do
+      change_js(pid)
+      LiveReload.document_rendered("instance-1")
+      change_css(pid)
+
+      LiveReload.replay_asset_change(self(), "instance-1")
+
+      assert_receive :css_changed
+      refute_receive {:reload, :all}, 100
     end
   end
 
@@ -360,6 +739,44 @@ defmodule Hologram.LiveReloadTest do
       # Should not have macOS-specific options
       refute Keyword.has_key?(result, :latency)
       refute Keyword.has_key?(result, :no_defer)
+    end
+  end
+
+  describe "watched_static_dir/0" do
+    test "the priv/static dir in the project's dir" do
+      assert LiveReload.watched_static_dir() == Path.join(File.cwd!(), "priv/static")
+    end
+  end
+
+  describe "watcher_opts/1, the static dir" do
+    setup do
+      project_dir =
+        Path.join([
+          System.tmp_dir!(),
+          "hologram_live_reload_test",
+          to_string(System.unique_integer([:positive]))
+        ])
+
+      File.mkdir_p!(project_dir)
+      on_exit(fn -> File.rm_rf!(project_dir) end)
+
+      [project_dir: project_dir]
+    end
+
+    test "watched when it exists", %{project_dir: project_dir} do
+      project_dir
+      |> Path.join("priv/static")
+      |> File.mkdir_p!()
+
+      {static_dir, dirs} = static_dir_and_watched_dirs(project_dir)
+
+      assert static_dir in dirs
+    end
+
+    test "left out when it doesn't exist", %{project_dir: project_dir} do
+      {static_dir, dirs} = static_dir_and_watched_dirs(project_dir)
+
+      refute static_dir in dirs
     end
   end
 
