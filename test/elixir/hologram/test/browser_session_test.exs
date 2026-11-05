@@ -429,10 +429,11 @@ defmodule Hologram.Test.BrowserSessionTest do
         |> Path.join("hangs.txt")
         |> File.read!()
 
-      assert hangs == """
-             Chrome session didn't start within 50 ms (attempt 1 of 3), retrying
-             Chrome session didn't start within 50 ms (attempt 2 of 3), retrying
-             """
+      assert hangs ==
+               normalize_newlines("""
+               Chrome session didn't start within 50 ms (attempt 1 of 3), retrying
+               Chrome session didn't start within 50 ms (attempt 2 of 3), retrying
+               """)
     end
 
     @tag :tmp_dir
@@ -458,10 +459,11 @@ defmodule Hologram.Test.BrowserSessionTest do
         |> Path.join("hangs.txt")
         |> File.read!()
 
-      assert hangs == """
-             Chrome session didn't start within 50 ms (attempt 1 of 2), retrying
-             #{message}
-             """
+      assert hangs ==
+               normalize_newlines("""
+               Chrome session didn't start within 50 ms (attempt 1 of 2), retrying
+               #{message}
+               """)
     end
 
     test "raises what an attempt raises, without retrying" do
@@ -661,10 +663,11 @@ defmodule Hologram.Test.BrowserSessionTest do
         |> Path.join("hangs.txt")
         |> File.read!()
 
-      assert hangs == """
-             ChromeDriver didn't get ready (attempt 1 of 2), restarting Wallaby
-             ChromeDriver didn't get ready after 2 attempts
-             """
+      assert hangs ==
+               normalize_newlines("""
+               ChromeDriver didn't get ready (attempt 1 of 2), restarting Wallaby
+               ChromeDriver didn't get ready after 2 attempts
+               """)
     end
   end
 end
