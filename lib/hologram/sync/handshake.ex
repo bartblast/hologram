@@ -33,8 +33,12 @@ defmodule Hologram.Sync.Handshake do
   The cursor passes through unread, and is nil for a client arriving for the first time. Whether
   the place it names can still be reached is a question about the log, and this is about the
   bundle.
+
+  Answers `:held` for a greeting arriving while the data model is under a hold (see
+  `Hologram.Entity.Model.hold/0`): neither the model nor its hash can be read until it is released,
+  so whether the client can be served is not known yet.
   """
-  @spec check(map) :: {:sync, module, String.t() | nil} | {:reload, atom} | :no_sync
+  @spec check(map) :: {:sync, module, String.t() | nil} | {:reload, atom} | :held | :no_sync
   def check(greeting) do
     case greeting do
       %{model_hash: model_hash, page: page, protocol_version: protocol_version} ->
@@ -47,6 +51,7 @@ defmodule Hologram.Sync.Handshake do
 
   defp check_greeting(page, protocol_version, model_hash, cursor) do
     cond do
+      Model.held?() -> :held
       not Model.exists?() -> :no_sync
       protocol_version != Frame.protocol_version() -> {:reload, :protocol_version}
       model_hash != Model.hash() -> {:reload, :model_hash}

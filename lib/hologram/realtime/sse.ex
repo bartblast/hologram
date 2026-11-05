@@ -239,7 +239,7 @@ defmodule Hologram.Realtime.SSE do
   @doc false
   @spec process_message(Plug.Conn.t(), term | nil, term | nil, keyword) ::
           {:cont, Plug.Conn.t()}
-          | {:cont, Plug.Conn.t(), term | nil, term | nil, pid | nil}
+          | {:cont, Plug.Conn.t(), term | nil, term | nil, pid | {:held, boolean} | nil}
           | {:halt, Plug.Conn.t()}
   # credo:disable-for-next-line Credo.Check.Refactor.CyclomaticComplexity
   def process_message(conn, session_id, user_id, opts \\ []) do
@@ -364,14 +364,19 @@ defmodule Hologram.Realtime.SSE do
         end
 
       # A live reload compiled. Forwarded to every tab: one showing a compilation error
-      # takes it down, whether or not the live reload rebuilt its page.
+      # takes it down, whether or not the live reload rebuilt its page. A stream that connected
+      # while the data model was held asks again now, and starts syncing if the hold is gone (see
+      # start_syncing/3).
       :compiled ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = encode_compiled_envelope(id)
 
         case Plug.Conn.chunk(conn, chunk_data) do
-          {:ok, conn} -> {:cont, conn}
-          {:error, _reason} -> {:halt, conn}
+          {:ok, conn} ->
+            maybe_start_held_sync(conn, session_id, user_id, Keyword.get(opts, :sync_session))
+
+          {:error, _reason} ->
+            {:halt, conn}
         end
 
       # The app's CSS changed. Forwarded to every tab, which swaps its stylesheets in place.
@@ -839,6 +844,15 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
+  # The session ids are handed back unchanged: only the sync session moves.
+  defp maybe_start_held_sync(conn, session_id, user_id, {:held, resume?}) do
+    {conn, sync_session} = start_syncing(conn, user_id, resume?)
+
+    {:cont, conn, session_id, user_id, sync_session}
+  end
+
+  defp maybe_start_held_sync(conn, _session_id, _user_id, _sync_session), do: {:cont, conn}
+
   # Live reload runs in dev only, so nothing publishes on the topic elsewhere except a test,
   # which is why test streams listen too: the feature tests reload tabs this way.
   #
@@ -988,6 +1002,13 @@ defmodule Hologram.Realtime.SSE do
 
         {conn, nil}
 
+      # The data model is under a hold, so whether this client can be served isn't known yet.
+      # Kept in place of a session, with whether it resumes, and asked again on each live reload
+      # that compiles. Raising here instead would end the stream before it forwards the live reload
+      # outcome it asked for (see maybe_subscribe_to_live_reload/1).
+      :held ->
+        {conn, {:held, resume?}}
+
       :no_sync ->
         {conn, nil}
     end
@@ -999,6 +1020,13 @@ defmodule Hologram.Realtime.SSE do
   # is now. Told to drop BEFORE the new one begins filling, since a self-send is ahead of anything
   # the new session will queue behind it.
   defp restart_syncing(conn, nil, _new_user_id), do: {conn, nil}
+
+  # Nothing to stop yet, but the client may hold rows from before the hold as who it was.
+  defp restart_syncing(conn, {:held, _resume?}, new_user_id) do
+    send(self(), {:sync_resync, :identity})
+
+    start_syncing(conn, new_user_id, false)
+  end
 
   defp restart_syncing(conn, session, new_user_id) do
     send(self(), {:sync_resync, :identity})
