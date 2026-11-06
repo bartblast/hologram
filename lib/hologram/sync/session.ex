@@ -611,12 +611,14 @@ defmodule Hologram.Sync.Session do
         _earlier_batch -> MapSet.new()
       end
 
-    changed_types =
-      transactions
-      |> Enum.flat_map(fn {_tx, events} -> events end)
-      |> MapSet.new(& &1.type)
+    events = Enum.flat_map(transactions, fn {_tx, events} -> events end)
+    changed_types = MapSet.new(events, & &1.type)
+    # The rows whose own values or pairs moved, a pair naming a row on each side.
+    moved_ids =
+      events
+      |> Enum.flat_map(&gap_ids/1)
+      |> MapSet.new()
 
-    patched_ids = MapSet.new(deltas.patched, fn {row, _changes} -> row.id end)
     unchecked = Enum.reject(deltas.held, &MapSet.member?(checked, &1.id))
 
     stale =
@@ -625,7 +627,7 @@ defmodule Hologram.Sync.Session do
         state.told_verdicts,
         state.actor_user_id,
         changed_types,
-        patched_ids
+        moved_ids
       )
 
     patches = Verdicts.patches(deltas.patched, stale)

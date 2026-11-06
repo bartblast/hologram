@@ -71,10 +71,10 @@ defmodule Hologram.Sync.Verdicts do
 
   Only rows of a type with a deciding quantifier are worked out again: every one of them when the
   given changed types meet a type such a quantifier reads through a relationship (see
-  `Hologram.Policy.verdict_related_reads/2`), and otherwise only the rows whose own values moved,
-  among the given patched ids, since a quantifier may read the row it decides about. Given `:all`,
-  every row of such a type is worked out - what a client resuming with verdicts it was told before
-  this session is owed.
+  `Hologram.Policy.verdict_related_reads/2`), and otherwise only the rows among the given moved
+  ids - those whose own values or pairs moved - since a quantifier may read the row it decides
+  about, and the pairs of a to-many stored on it. Given `:all`, every row of such a type is worked
+  out - what a client resuming with verdicts it was told before this session is owed.
   """
   @spec stale(
           list(struct),
@@ -83,7 +83,7 @@ defmodule Hologram.Sync.Verdicts do
           MapSet.t(module) | :all,
           MapSet.t(String.t())
         ) :: list({struct, map})
-  def stale(rows, told, actor_user_id, changed_types, patched_ids \\ MapSet.new()) do
+  def stale(rows, told, actor_user_id, changed_types, moved_ids \\ MapSet.new()) do
     worked_out =
       rows
       |> MapSet.new(& &1.__struct__)
@@ -93,7 +93,7 @@ defmodule Hologram.Sync.Verdicts do
     |> Enum.filter(fn row ->
       case Map.fetch!(worked_out, row.__struct__) do
         :every_row -> true
-        :patched_rows -> MapSet.member?(patched_ids, row.id)
+        :moved_rows -> MapSet.member?(moved_ids, row.id)
         :none -> false
       end
     end)
@@ -120,7 +120,7 @@ defmodule Hologram.Sync.Verdicts do
         :every_row
 
       true ->
-        :patched_rows
+        :moved_rows
     end
   end
 end

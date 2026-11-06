@@ -137,12 +137,12 @@ defmodule Hologram.Sync.VerdictsTest do
              ]
     end
 
-    test "returns a patched row when the round touched only the rule's own type" do
+    test "returns a moved row when the round touched only the rule's own type" do
       row = task()
       changed_types = MapSet.new([VerdictTask])
-      patched_ids = MapSet.new([row.id])
+      moved_ids = MapSet.new([row.id])
 
-      assert stale([row], %{}, Entity.generate_id(), changed_types, patched_ids) == [
+      assert stale([row], %{}, Entity.generate_id(), changed_types, moved_ids) == [
                {row, %{delete_key() => true}}
              ]
     end
