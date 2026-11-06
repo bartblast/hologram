@@ -813,13 +813,12 @@ export default class Model {
   // Always six fractional digits, whatever precision the value was written at: the wire carries
   // one spelling per time of day, which is what lets these compare as plain strings at all. A
   // value written with fewer digits and left that way would sort before a time it comes after,
-  // and would not equal the same time read back from a column, which is always all six.
+  // and would not equal the same time read back from a column, which is always all six. The
+  // amount is in microseconds whatever the precision, as Elixir keeps it - half a second is
+  // {500000, 1} - so the precision only says how many of the digits were written.
   static #unboxTime(value) {
     const microsecond = Model.#field(value, "microsecond");
-    const [amount, precision] = microsecond.data.map((part) =>
-      Number(part.value),
-    );
-    const fraction = amount * 10 ** (6 - precision);
+    const fraction = Number(microsecond.data[0].value);
 
     const hour = Model.#pad(Model.#field(value, "hour").value, 2);
     const minute = Model.#pad(Model.#field(value, "minute").value, 2);
