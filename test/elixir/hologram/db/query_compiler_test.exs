@@ -3103,6 +3103,194 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
   end
 
+  describe "compile/2 - quantifiers in policy rules" do
+    defmodule RuleMessage do
+      use Hologram.Entity
+
+      attribute :body, :string
+
+      relationship :author, Module14, optional: true
+      relationship :channel, Hologram.DB.QueryCompilerTest.RuleChannel, optional: true
+      relationship :reactions, [Hologram.DB.QueryCompilerTest.RuleReaction], inverse: message
+      relationship :thread, Hologram.DB.QueryCompilerTest.RuleThread, optional: true
+
+      allow :read, when: body != "hidden"
+    end
+
+    defmodule RuleReaction do
+      use Hologram.Entity
+
+      attribute :kind, :string
+
+      relationship :message, RuleMessage, optional: true
+
+      allow :read
+    end
+
+    defmodule RuleChannel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :messages, [RuleMessage], inverse: channel
+      relationship :org, Hologram.DB.QueryCompilerTest.RuleOrg, optional: true
+
+      allow :read, when: ^[any: {[:messages], [body: {:==, {:attribute, {:outer, 1, :name}}}]}]
+    end
+
+    defmodule RuleOrg do
+      use Hologram.Entity
+
+      relationship :channels, [RuleChannel], inverse: org
+      relationship :threads, [Hologram.DB.QueryCompilerTest.RuleThread], inverse: org
+
+      allow :read
+    end
+
+    defmodule RuleThread do
+      use Hologram.Entity
+
+      relationship :messages, [RuleMessage], inverse: thread
+      relationship :org, RuleOrg, optional: true
+
+      allow :read, when: ^[any: {[:messages, :reactions], [kind: "x"]}]
+    end
+
+    defmodule RulePost do
+      use Hologram.Entity
+
+      relationship :channel, RuleChannel, optional: true
+
+      allow :read, via: channel
+    end
+
+    defp rule_mapping do
+      path_mapping([
+        Module14,
+        RuleChannel,
+        RuleMessage,
+        RuleOrg,
+        RulePost,
+        RuleReaction,
+        RuleThread
+      ])
+    end
+
+    defp rules(predicates) do
+      [%{predicates: Stage.predicate_triples!(RuleChannel, predicates), to: nil, via: nil}]
+    end
+
+    # A policy decides by the rows as stored, so the set a rule's quantifier reads applies no read
+    # policy even inside a policied statement - the hidden message counts.
+    test "reads the set of a rule's quantifier raw" do
+      term = Stage.normalize(RuleChannel)
+      policy = %{rules: rules(any: {[:messages], [body: "x"]})}
+
+      assert %{params: [{:value, "x"}], sql: sql} = compile(term, rule_mapping(), policy)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(RuleMessage)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."channel_id" = "#{Mapper.table_name(RuleChannel)}"."id" | <>
+                 ~s|AND "body" = $1) ORDER BY|
+             )
+    end
+
+    test "compiles none and all in a rule" do
+      term = Stage.normalize(RuleChannel)
+      none_policy = %{rules: rules(none: {[:messages], [body: "x"]})}
+      all_policy = %{rules: rules(all: {[:messages], [body: "x"]})}
+
+      messages =
+        ~s|SELECT 1 FROM #{table(RuleMessage)} AS "$q1" | <>
+          ~s|WHERE "$q1"."channel_id" = "#{Mapper.table_name(RuleChannel)}"."id"|
+
+      assert %{params: [{:value, "x"}], sql: none_sql} =
+               compile(term, rule_mapping(), none_policy)
+
+      assert %{params: [{:value, "x"}], sql: all_sql} = compile(term, rule_mapping(), all_policy)
+
+      assert String.contains?(
+               none_sql,
+               ~s| WHERE NOT EXISTS (#{messages} AND "body" = $1) ORDER BY|
+             )
+
+      assert String.contains?(
+               all_sql,
+               ~s| WHERE NOT EXISTS (#{messages} AND ("body" = $1) IS NOT TRUE) ORDER BY|
+             )
+    end
+
+    test "binds the actor slot inside a rule's quantifier" do
+      term = Stage.normalize(RuleChannel)
+      policy = %{rules: rules(any: {[:messages], [author_id: {:actor}]})}
+
+      assert %{params: [:actor], sql: sql} = compile(term, rule_mapping(), policy)
+      assert String.contains?(sql, ~s|AND "author_id" = $1) ORDER BY|)
+    end
+
+    test "reads the rule's row from inside its quantifier" do
+      term = Stage.normalize(RuleChannel)
+      policy = %{rules: Policy.build(RuleChannel)[:read]}
+
+      assert %{params: [], sql: sql} = compile(term, rule_mapping(), policy)
+
+      assert String.contains?(
+               sql,
+               ~s|"$q1"."channel_id" = "#{Mapper.table_name(RuleChannel)}"."id" | <>
+                 ~s|AND "body" IS NOT DISTINCT FROM "#{Mapper.table_name(RuleChannel)}"."name") ORDER BY|
+             )
+    end
+
+    test "reads the delegation's row from inside the delegated rule's quantifier" do
+      term = Stage.normalize(RulePost)
+      policy = %{rules: Policy.build(RulePost)[:read]}
+
+      assert %{params: [], sql: sql} = compile(term, rule_mapping(), policy)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "$d1"."id" = "#{Mapper.table_name(RulePost)}"."channel_id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM #{table(RuleMessage)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."channel_id" = "$d1"."id" AND "body" IS NOT DISTINCT FROM "$d1"."name"))|
+             )
+    end
+
+    # The channel's read rule is read inside the authored quantifier's subquery, on its row "$q1" -
+    # so the rule's own quantifier takes the next alias, or it would read its own row where it means
+    # the channel.
+    test "nests a quantified read policy past the quantifier it is read inside" do
+      term = path_term(RuleOrg, any: {[:channels], []})
+      policy = %{rules: Policy.build(RuleOrg)[:read]}
+
+      assert %{params: [], sql: sql} = compile(term, rule_mapping(), policy)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "$q1"."org_id" = "#{Mapper.table_name(RuleOrg)}"."id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM #{table(RuleMessage)} AS "$q2" | <>
+                 ~s|WHERE "$q2"."channel_id" = "$q1"."id" AND "body" IS NOT DISTINCT FROM "$q1"."name"))|
+             )
+    end
+
+    # The thread's read rule is read on the first row of the authored set's chain, "$s1_1" - so the
+    # rule's own chain takes the next source alias, or it would read its own link row where it means
+    # the thread.
+    test "nests a read policy's set chain past the chain it is read on" do
+      term = path_term(RuleOrg, any: {[:threads, :messages], []})
+      policy = %{rules: Policy.build(RuleOrg)[:read]}
+
+      assert %{sql: sql} = compile(term, rule_mapping(), policy)
+
+      assert String.contains?(
+               sql,
+               ~s|EXISTS (SELECT 1 FROM #{table(RuleMessage)} AS "$s2_1" | <>
+                 ~s|WHERE "$s2_1"."thread_id" = "$s1_1"."id" | <>
+                 ~s|AND "$q1"."message_id" = "$s2_1"."id")|
+             )
+    end
+  end
+
   describe "compile/2 - searches" do
     test "compiles a loose search to a LIKE over the search key, or the sort key without one" do
       mapping = Mapper.derive!([Module2], [])
