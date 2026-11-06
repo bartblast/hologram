@@ -83,7 +83,9 @@ defmodule Hologram.Query.Window do
 
   A client that checks permissions answers each rule over what it holds too, and a rule can read
   rows other than the one it decides about - the row a `via:` leads to, the rows before the last
-  relationship of a `to:` reference, the rows along a `when:` path. So when the build has a page
+  relationship of a `to:` reference, the rows along a `when:` path, the sets a quantifier reads.
+  A set is embedded whole, whatever narrowing the query's own quantifiers or includes give it: the
+  rule may be answered by any of its rows the reader may read. So when the build has a page
   checking permissions on the client, the chains the rules of the type a query returns read (see
   `Hologram.Policy.related_chains/1`) are embedded the way a path's relationships are, and so are
   those of every type it includes, under that include. A row embedded for a path or for a rule
@@ -579,7 +581,7 @@ defmodule Hologram.Query.Window do
     root
     |> Entity.path_target(chain)
     |> Policy.related_chains()
-    |> Enum.reduce(include, &put_path_include(&2, root, chain ++ &1))
+    |> Enum.reduce(include, &put_rule_include(&2, root, chain, &1))
   end
 
   # The set at the end of a chain, embedded with the given narrowing - nil for the whole set - and
@@ -617,6 +619,21 @@ defmodule Hologram.Query.Window do
     |> put_sets(include, term.entity, permission_checking?)
   end
 
+  # A rule's chain is embedded the way a path's is, except that a set along it is embedded whole: the
+  # client answers the rule over the rows it holds, and a narrowing another quantifier or the query
+  # itself gave the set leaves out rows the rule may be answered by. The chain before the rule's own
+  # - the include it is read under - stays as it is.
+  defp put_rule_include(include, root, [], rule_chain),
+    do: put_whole_sets(include, root, rule_chain)
+
+  defp put_rule_include(include, entity_type, [name | later_names], rule_chain) do
+    target_type = Entity.related_type(entity_type, name)
+    included = Map.get(include, name, %Query{entity: target_type})
+    nested = put_rule_include(included.include, target_type, later_names, rule_chain)
+
+    Map.put(include, name, %{included | include: nested})
+  end
+
   defp put_sets(sets, include, entity_type, _permission_checking?) do
     sets
     |> Enum.group_by(fn {chain, _narrowing} -> chain end, fn {_chain, narrowing} -> narrowing end)
@@ -628,8 +645,6 @@ defmodule Hologram.Query.Window do
     end)
   end
 
-  # A derived field's source reads every row along its chain: a set before its last one is the
-  # rows every path reaches, flattened, so it is downloaded whole whatever else narrows it.
   defp put_source_set(include, entity_type, [name], narrowing),
     do: put_quantified_set(include, entity_type, [name], narrowing)
 
@@ -664,6 +679,20 @@ defmodule Hologram.Query.Window do
     |> put_included_terms(term.entity, [], derived_includes, permission_checking?)
   end
 
+  # Every set along the given chain embedded whole, and every to-one as it is.
+  defp put_whole_sets(include, _entity_type, []), do: include
+
+  defp put_whole_sets(include, entity_type, [name | later_names]) do
+    target_type = Entity.related_type(entity_type, name)
+    included = Map.get(include, name, %Query{entity: target_type})
+    whole = if set_hop?(entity_type, name), do: %{included | filter: []}, else: included
+    nested = put_whole_sets(whole.include, target_type, later_names)
+
+    Map.put(include, name, %{whole | include: nested})
+  end
+
+  # A derived field's source reads every row along its chain: a set before its last one is the
+  # rows every path reaches, flattened, so it is downloaded whole whatever else narrows it.
   # Each quantifier's set as the chain of relationships to it from the queried row, paired with what
   # narrows it - nil for the whole set.
   #

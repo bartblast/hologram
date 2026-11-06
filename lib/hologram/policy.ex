@@ -449,11 +449,13 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the chains of to-one relationship names whose rows the given entity type's rules read,
-  across every operation, sorted: every row along a path in a condition, the rows before the last
+  Returns the chains of relationship names whose rows the given entity type's rules read, across
+  every operation, sorted: every row along a path in a condition, every set a quantifier reads and
+  the rows along its source - a to-many or an inverse holding them all - the rows before the last
   relationship of a role reference - its last reference id is read off the row before it - and the
   row a delegation leads to, with everything the delegated operation's rules read through it,
-  prefixed with the delegation's chain.
+  prefixed with the delegation's chain. A set a derived field holds is left out, since the browser
+  answers a quantifier over one from the server's verdict.
 
   A chain is followed hop by hop, so the rows these chains lead to are what a client needs beside a
   row it holds to answer the type's rules over it. Rules reading only the row itself, the grant
@@ -473,8 +475,8 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the chains of to-one relationship names whose rows the given entity type's rules for the
-  given operation read, sorted - the chains `related_chains/1` returns, for one operation. A
+  Returns the chains of relationship names whose rows the given entity type's rules for the given
+  operation read, sorted - the chains `related_chains/1` returns, for one operation. A
   delegation's chains are those of the operation it asks the related row, whatever operation
   delegates. An operation with no rules gives none.
 
@@ -791,17 +793,32 @@ defmodule Hologram.Policy do
     |> Enum.sort()
   end
 
-  # Every path a condition reads, the compared name and an attribute operand alike.
-  # A derived field reads what its definition reads, written in place.
+  # Every path a condition reads, the compared name and an attribute operand alike, and every set a
+  # quantifier reads, whether or not its condition reads anything on it. A derived field reads what
+  # its definition reads, written in place. A set a derived field holds is left out: the browser
+  # answers a quantifier over one from the server's verdict, never from rows it holds.
   defp predicate_chains(entity_type, predicates) do
-    references = Stage.predicate_references(predicates)
+    references =
+      predicates
+      |> Stage.predicate_references()
+      |> Enum.reject(fn {relationship_names, _name} ->
+        through_derived_set?(entity_type, relationship_names)
+      end)
 
-    entity_type
-    |> Derived.expanded_references(references)
-    |> Enum.flat_map(fn
-      {[], _name} -> []
-      {relationship_names, _name} -> [relationship_names]
-    end)
+    read_chains =
+      entity_type
+      |> Derived.expanded_references(references)
+      |> Enum.flat_map(fn
+        {[], _name} -> []
+        {relationship_names, _name} -> [relationship_names]
+      end)
+
+    source_chains =
+      predicates
+      |> Stage.relationship_chains()
+      |> Enum.reject(&through_derived_set?(entity_type, &1))
+
+    read_chains ++ source_chains
   end
 
   # The bare key answers whether the acting user may grant (or revoke) some role: every per-role
@@ -928,6 +945,17 @@ defmodule Hologram.Policy do
   defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}) do
     predicate_chains(entity_type, predicates) ++
       reference_chains(to) ++ delegation_chains(entity_type, via)
+  end
+
+  # Whether a chain of relationships goes through a set a derived field holds.
+  defp through_derived_set?(entity_type, relationship_names) do
+    relationship_names
+    |> Enum.reduce_while(entity_type, fn name, type ->
+      if Derived.declared?(type, name),
+        do: {:halt, :derived},
+        else: {:cont, Entity.related_type(type, name)}
+    end)
+    |> Kernel.==(:derived)
   end
 
   defp unknown_operation_message(entity_type, operation) do

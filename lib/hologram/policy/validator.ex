@@ -77,10 +77,11 @@ defmodule Hologram.Policy.Validator do
     hops_from_start ++ hops_before_start
   end
 
-  # The type each relationship of a chain leads to, in order, with its position.
+  # The type each relationship of a chain leads to, in order, with its position - a set's rows for a
+  # to-many or an inverse.
   defp chain_hop_types(entity_type, chain) do
     chain
-    |> Enum.scan(entity_type, &Entity.relationship_target(&2, &1))
+    |> Enum.scan(entity_type, &Entity.related_type(&2, &1))
     |> Enum.with_index()
   end
 

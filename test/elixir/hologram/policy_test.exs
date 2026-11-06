@@ -928,6 +928,90 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "related_chains/1 - quantifiers" do
+    defmodule ChainProject do
+      use Hologram.Entity
+
+      relationship :labels, [Hologram.PolicyTest.ChainLabel]
+      relationship :members, [Hologram.PolicyTest.ChainMember], inverse: project
+
+      derived :first_members, [Hologram.PolicyTest.ChainMember], fn members ->
+        take(members, 2)
+      end
+
+      allow :read, when: ^[any: {[:members], [seat: "full"]}]
+      allow :update, when: ^[any: {[:labels], []}]
+      allow :archive, when: ^[any: {[:first_members], [seat: "full"]}]
+    end
+
+    defmodule ChainBoard do
+      use Hologram.Entity
+
+      attribute :public, :boolean
+
+      relationship :projects, [ChainProject]
+
+      allow :read, when: ^[or: [[public: true], [any: {[:projects], [any: {[:labels], []}]}]]]
+    end
+
+    defmodule ChainMember do
+      use Hologram.Entity
+
+      attribute :seat, :string
+
+      relationship :project, ChainProject, optional: true
+      relationship :user, Module14, optional: true
+
+      allow :read
+    end
+
+    defmodule ChainLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
+    defmodule ChainTask do
+      use Hologram.Entity
+
+      relationship :project, ChainProject, optional: true
+
+      allow :read, when: ^[any: {[:project, :members], [{[:user, :email], "a"}]}]
+      allow :update, via: project
+    end
+
+    # The labels are read for whether the project has any, so the set comes along though the
+    # condition reads nothing on it.
+    test "returns the sets a quantifier reads, with a condition and without one" do
+      assert related_chains(ChainProject, :read) == [[:members]]
+      assert related_chains(ChainProject, :update) == [[:labels]]
+    end
+
+    # The browser answers a quantifier over a derived set from the server's verdict, so none of its
+    # rows are needed.
+    test "leaves out a set a derived field holds" do
+      assert related_chains(ChainProject, :archive) == []
+    end
+
+    test "returns the sets of a quantifier in an alternative and of one nested in its condition" do
+      assert related_chains(ChainBoard) == [[:projects], [:projects, :labels]]
+    end
+
+    # A chain is followed hop by hop, so the project along the way comes with the members.
+    test "returns the rows along a quantifier's source and a path from the set's rows" do
+      assert related_chains(ChainTask, :read) == [
+               [:project, :members],
+               [:project, :members, :user]
+             ]
+    end
+
+    test "returns a delegated rule's sets prefixed with the delegation's chain" do
+      assert related_chains(ChainTask, :update) == [[:project], [:project, :labels]]
+    end
+  end
+
   describe "related_chains/2" do
     test "returns the rows the given operation's rules read" do
       assert related_chains(Policy.Module12, :delete) == [[:parent, :parent]]
