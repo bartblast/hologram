@@ -8,6 +8,12 @@ defmodule Hologram.Policy.EvaluatorTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module24
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
+  alias Hologram.Test.Fixtures.Entity.Module31
+  alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy.Module1
@@ -843,6 +849,229 @@ defmodule Hologram.Policy.EvaluatorTest do
       checker = fn {:via, :read, [:parent]}, _entity, actor_user_id -> is_nil(actor_user_id) end
 
       assert rule_matches?(rule(via: {:read, [:parent]}), %Module1{}, nil, checker)
+    end
+  end
+
+  describe "rule_matches?/4 - quantifiers" do
+    defp messages_checker(messages) do
+      fn {:set, [:messages]}, %Module26{}, _actor_user_id -> messages end
+    end
+
+    defp quantified_rule(predicates), do: rule(predicates: predicates)
+
+    test "answers any, none and all over the rows of the set" do
+      channel = %Module26{name: "general"}
+      checker = messages_checker([%Module28{body: "hi"}, %Module28{body: "bye"}])
+
+      assert rule_matches?(
+               quantified_rule(any: {[:messages], [{:body, :==, "hi"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      refute rule_matches?(
+               quantified_rule(any: {[:messages], [{:body, :==, "ciao"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      assert rule_matches?(
+               quantified_rule(none: {[:messages], [{:body, :==, "ciao"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      refute rule_matches?(
+               quantified_rule(none: {[:messages], [{:body, :==, "hi"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      assert rule_matches?(
+               quantified_rule(all: {[:messages], [{:body, :!=, "ciao"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      refute rule_matches?(
+               quantified_rule(all: {[:messages], [{:body, :==, "hi"}]}),
+               channel,
+               nil,
+               checker
+             )
+    end
+
+    test "fails any and holds none and all over an empty set" do
+      channel = %Module26{name: "general"}
+      checker = messages_checker([])
+
+      refute rule_matches?(quantified_rule(any: {[:messages], []}), channel, nil, checker)
+      assert rule_matches?(quantified_rule(none: {[:messages], []}), channel, nil, checker)
+
+      assert rule_matches?(
+               quantified_rule(all: {[:messages], [{:body, :==, "hi"}]}),
+               channel,
+               nil,
+               checker
+             )
+    end
+
+    test "compares a related row with the row the quantifier is about" do
+      checker = messages_checker([%Module28{body: "general"}])
+      rule = quantified_rule(any: {[:messages], [{:body, :==, {:attribute, {:outer, 1, :name}}}]})
+
+      assert rule_matches?(rule, %Module26{name: "general"}, nil, checker)
+      refute rule_matches?(rule, %Module26{name: "random"}, nil, checker)
+    end
+
+    # The comparison's own name is the row's above, so its enum compares by that row's declared
+    # order: by atom order :high would not reach :medium, and an item has no floor at all.
+    test "compares an enum of the row the quantifier is about by its declared order" do
+      checker = fn {:set, [:items]}, %Module31{}, _actor_user_id -> [%Module17{label: "a"}] end
+      rule = quantified_rule(any: {[:items], [{{:outer, 1, :floor}, :>=, :medium}]})
+
+      assert rule_matches?(rule, %Module31{floor: :high}, nil, checker)
+      refute rule_matches?(rule, %Module31{floor: :low}, nil, checker)
+    end
+
+    test "compares an enum of a related row by its declared order" do
+      checker = fn {:set, [:items]}, %Module31{}, _actor_user_id ->
+        [%Module17{priority: :high}]
+      end
+
+      rule = quantified_rule(any: {[:items], [{:priority, :>=, :medium}]})
+
+      assert rule_matches?(rule, %Module31{}, nil, checker)
+    end
+
+    # The inner quantifier's condition reads the channel two quantifiers out.
+    test "reads the rows above a nested quantifier" do
+      first = %Module28{body: "first"}
+      second = %Module28{body: "second"}
+
+      checker = fn
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> [first, second]
+        {:set, [:labels]}, ^first, _actor_user_id -> [%Module29{name: "other"}]
+        {:set, [:labels]}, ^second, _actor_user_id -> [%Module29{name: "general"}]
+      end
+
+      rule =
+        quantified_rule(
+          any: {[:messages], [any: {[:labels], [{:name, :==, {:attribute, {:outer, 2, :name}}}]}]}
+        )
+
+      assert rule_matches?(rule, %Module26{name: "general"}, nil, checker)
+      refute rule_matches?(rule, %Module26{name: "random"}, nil, checker)
+    end
+
+    # The inner set is the channel's own, read on the row one quantifier out - so the rule asks
+    # whether some message has another one after it.
+    test "reads a source on a row above" do
+      checker = messages_checker([%Module28{position: 1}, %Module28{position: 2}])
+
+      inner = {{:outer, 1, [:messages]}, [{:position, :>, {:attribute, {:outer, 1, :position}}}]}
+      rule = quantified_rule(any: {[:messages], [any: inner]})
+
+      single_checker = messages_checker([%Module28{position: 1}])
+
+      assert rule_matches?(rule, %Module26{}, nil, checker)
+      refute rule_matches?(rule, %Module26{}, nil, single_checker)
+    end
+
+    test "reads a path off a related row" do
+      message = %Module28{body: "hi"}
+
+      checker = fn
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> [message]
+        {:related, [:channel]}, ^message, _actor_user_id -> %Module26{name: "general"}
+      end
+
+      rule = quantified_rule(any: {[:messages], [{[:channel, :name], :==, "general"}]})
+
+      assert rule_matches?(rule, %Module26{}, nil, checker)
+    end
+
+    test "reads a path off the row the quantifier is about" do
+      member = %Module39{score: 1}
+
+      checker = fn
+        {:set, [:mentors]}, ^member, _actor_user_id -> [%Module34{nickname: "ana"}]
+        {:related, [:member]}, ^member, _actor_user_id -> %Module34{nickname: "ana"}
+      end
+
+      rule =
+        quantified_rule(
+          any: {[:mentors], [{:nickname, :==, {:attribute, {:outer, 1, [:member, :nickname]}}}]}
+        )
+
+      assert rule_matches?(rule, member, nil, checker)
+    end
+
+    test "computes a derived field of a related row on that row" do
+      checker = fn {:set, [:mentors]}, %Module39{}, _actor_user_id ->
+        [%Module34{nickname: "lead", score: 0}]
+      end
+
+      featured_rule = quantified_rule(any: {[:mentors], [{:featured, :==, true}]})
+      active_rule = quantified_rule(any: {[:mentors], [{:active, :==, true}]})
+
+      assert rule_matches?(featured_rule, %Module39{}, nil, checker)
+      refute rule_matches?(active_rule, %Module39{}, nil, checker)
+    end
+
+    test "compares a related row with the actor" do
+      checker = messages_checker([%Module28{channel_id: "u1"}])
+      rule = quantified_rule(any: {[:messages], [{:channel_id, :==, {:actor}}]})
+
+      assert rule_matches?(rule, %Module26{}, "u1", checker)
+      refute rule_matches?(rule, %Module26{}, "u2", checker)
+    end
+
+    # Nobody is not a missing reference, so the message with none matches nobody.
+    test "matches no related row with an anonymous session's actor" do
+      checker = messages_checker([%Module28{channel_id: nil}])
+      rule = quantified_rule(any: {[:messages], [{:channel_id, :==, {:actor}}]})
+
+      refute rule_matches?(rule, %Module26{}, nil, checker)
+    end
+
+    test "answers an anonymous any through what is left of its condition" do
+      checker = messages_checker([%Module28{body: "hi", channel_id: "u1"}])
+      condition = [or: [[{:channel_id, :==, {:actor}}], [{:body, :==, "hi"}]]]
+
+      assert rule_matches?(
+               quantified_rule(any: {[:messages], condition}),
+               %Module26{},
+               nil,
+               checker
+             )
+    end
+
+    # Each would hold were the predicate naming the actor alone false: no message is nobody's, and
+    # every message says hi. But each asks about nobody, which grants nothing.
+    test "refuses an anonymous none or all naming the actor" do
+      checker = messages_checker([%Module28{body: "hi", channel_id: "u1"}])
+      none_rule = quantified_rule(none: {[:messages], [{:channel_id, :==, {:actor}}]})
+
+      all_rule =
+        quantified_rule(
+          all: {[:messages], [or: [[{:channel_id, :==, {:actor}}], [{:body, :==, "hi"}]]]}
+        )
+
+      refute rule_matches?(none_rule, %Module26{}, nil, checker)
+      refute rule_matches?(all_rule, %Module26{}, nil, checker)
+    end
+
+    test "answers an anonymous none naming no actor" do
+      checker = messages_checker([%Module28{body: "hi"}])
+      rule = quantified_rule(none: {[:messages], [{:body, :==, "bye"}]})
+
+      assert rule_matches?(rule, %Module26{}, nil, checker)
     end
   end
 end

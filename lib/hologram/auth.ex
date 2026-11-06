@@ -97,10 +97,11 @@ defmodule Hologram.Auth do
   # ask about.
   #
   # :held reads the store and share-locks the grant rows the answer rests on, and the related rows
-  # `via:` delegations, grant references through relationships and paths in conditions read - every
-  # row along a path included - until the enclosing transaction ends. It is what a write under an
-  # acting user asks: a revocation of the authority the write rests on, or a change to a row a
-  # rule read, then lands after the write, never between its evaluation and its commit.
+  # `via:` delegations, grant references through relationships, paths in conditions and the sets of
+  # quantifiers read - every row along a path or a set's chain included, a join table's pairs too -
+  # until the enclosing transaction ends. It is what a write under an acting user asks: a revocation
+  # of the authority the write rests on, or a change to a row a rule read, then lands after the
+  # write, never between its evaluation and its commit.
   # Outside a transaction the lock ends with the statement, so it holds nothing there.
   @doc false
   @spec can?(struct | String.t() | nil, atom | {atom, atom}, struct, list(struct) | :held) ::
@@ -532,6 +533,19 @@ defmodule Hologram.Auth do
     chain_row(entity, relationship_names, delegation_read_opts(source))
   end
 
+  # The rows of the set a quantifier's source leads to - each to-one followed to its row, each set
+  # read whole, a set before the last relationship making the rows every path reaches one set, each
+  # once - read raw, the way a delegation reads its target, and held under a write.
+  defp check_requirement({:set, relationship_names}, entity, _actor_user_id, source) do
+    read_opts = delegation_read_opts(source)
+
+    Enum.reduce(relationship_names, [entity], fn relationship_name, rows ->
+      rows
+      |> Enum.flat_map(&linked_rows(&1, relationship_name, read_opts))
+      |> Enum.uniq_by(& &1.id)
+    end)
+  end
+
   # The grant store's own policy: a role held on the entity this grant row names.
   defp check_requirement(
          {:named, target_type, role_names},
@@ -815,6 +829,27 @@ defmodule Hologram.Auth do
     |> Map.fetch!(:fk_constraint)
   end
 
+  # The rows one relationship of a row leads to: a stored to-one's row, or nothing when its reference
+  # is empty or names a row that is gone, and the rows of a set - a to-many or an inverse, which may
+  # hold one row. A row not created yet - a create asks about one - has no id, so nothing is in any
+  # set of its.
+  defp linked_rows(row, relationship_name, read_opts) do
+    entity_type = row.__struct__
+
+    cond do
+      to_one?(entity_type, relationship_name) ->
+        row
+        |> chain_row([relationship_name], read_opts)
+        |> List.wrap()
+
+      row.id == nil ->
+        []
+
+      true ->
+        EntityOperations.related_rows(entity_type, row.id, relationship_name, read_opts)
+    end
+  end
+
   # Enum params are cast to their column's type in SQL rather than the columns to text, so
   # grant lookups keep using the store's unique index.
   defp qualified_enum_type(column_name) do
@@ -924,6 +959,13 @@ defmodule Hologram.Auth do
 
   defp scope_condition(:global) do
     {~s|"entity_type" IS NULL AND "entity_id" IS NULL|, []}
+  end
+
+  # A stored to-one holds its reference on the row - every other relationship, an inverse holding
+  # one row included, is read from the other side.
+  defp to_one?(entity_type, relationship_name) do
+    Entity.inverse_relationship(entity_type, relationship_name) == nil and
+      is_atom(relationship_target(entity_type, relationship_name))
   end
 
   defp undo_grant_effect(%{op: :put_entity, entity_id: id}, grants) do

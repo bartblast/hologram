@@ -9,6 +9,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.Entity.Derived
   alias Hologram.Policy
   alias Hologram.Query
+  alias Hologram.Query.Stage
 
   @quantifiers [:all, :any, :none]
 
@@ -231,7 +232,7 @@ defmodule Hologram.DB.QueryCompiler do
   # folded alone its condition would come out false and turn the quantifier true.
   defp anonymous_clause({quantifier, {_source, clauses}} = clause)
        when quantifier in [:all, :none] do
-    if names_actor?(clauses), do: :never, else: {:ok, [clause]}
+    if Stage.names_actor?(clauses), do: :never, else: {:ok, [clause]}
   end
 
   defp anonymous_clause({:any, {source, clauses}}) do
@@ -1836,16 +1837,6 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp maybe_require_value(condition_sql, _subject_sql, _column), do: condition_sql
-
-  # Whether the given clauses name the acting user anywhere - inside a disjunction's alternatives
-  # and a nested quantifier's condition included.
-  defp names_actor?(clauses) do
-    Enum.any?(clauses, fn
-      {:or, alternatives} -> Enum.any?(alternatives, &names_actor?/1)
-      {quantifier, {_source, inner}} when quantifier in @quantifiers -> names_actor?(inner)
-      {_name, _operator, value} -> value == {:actor}
-    end)
-  end
 
   defp null_inclusive(condition_sql, subject_sql, %{null: true}) do
     "(#{condition_sql} OR #{subject_sql} IS NULL)"

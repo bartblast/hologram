@@ -19,6 +19,8 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module4
@@ -1127,6 +1129,92 @@ defmodule Hologram.DB.EntityOperationsTest do
       set_revisions(Module2, created_entity.id, %{"gone" => 1})
 
       assert get(Module2, created_entity.id).__meta__.revisions == %{}
+    end
+  end
+
+  describe "related_rows/4" do
+    defp create_message(channel, body, position) do
+      {:ok, message} =
+        %{body: body, channel_id: channel && channel.id, position: position}
+        |> Module28.new()
+        |> create()
+
+      message
+    end
+
+    # The positions run against the ids, so the order the relationship declares would differ.
+    test "reads an inverse of a to-one through the reference its rows hold, in id order" do
+      {:ok, general} = create(Module26.new(name: "general"))
+      {:ok, random} = create(Module26.new(name: "random"))
+      first = create_message(general, "first", 2)
+      second = create_message(general, "second", 1)
+      _other = create_message(random, "other", 3)
+
+      assert related_rows(Module26, general.id, :messages) ==
+               Enum.sort_by([first, second], & &1.id)
+    end
+
+    test "reads a to-many through its join table, in id order" do
+      {:ok, urgent} = create(Module29.new(name: "urgent"))
+      {:ok, later} = create(Module29.new(name: "later"))
+      {:ok, _unused} = create(Module29.new(name: "unused"))
+      message = create_message(nil, "hi", 1)
+      :ok = add_relationship(Module28, message.id, :labels, later.id)
+      :ok = add_relationship(Module28, message.id, :labels, urgent.id)
+
+      assert related_rows(Module28, message.id, :labels) == Enum.sort_by([urgent, later], & &1.id)
+    end
+
+    test "reads an inverse of a to-many through the join table it reverses, in id order" do
+      {:ok, urgent} = create(Module29.new(name: "urgent"))
+      first = create_message(nil, "first", 1)
+      second = create_message(nil, "second", 2)
+      _untagged = create_message(nil, "untagged", 3)
+      :ok = add_relationship(Module28, second.id, :labels, urgent.id)
+      :ok = add_relationship(Module28, first.id, :labels, urgent.id)
+
+      assert related_rows(Module29, urgent.id, :messages) ==
+               Enum.sort_by([first, second], & &1.id)
+    end
+
+    test "reads an inverse holding one row" do
+      {:ok, general} = create(Module26.new(name: "general"))
+
+      {:ok, topic} =
+        %{channel_id: general.id, summary: "news"}
+        |> Module27.new()
+        |> create()
+
+      assert related_rows(Module26, general.id, :topic) == [topic]
+    end
+
+    test "locks the rows and a to-many's pairs for share with lock: :share" do
+      {:ok, urgent} = create(Module29.new(name: "urgent"))
+      message = create_message(nil, "hi", 1)
+      :ok = add_relationship(Module28, message.id, :labels, urgent.id)
+
+      assert related_rows(Module28, message.id, :labels, lock: :share) == [urgent]
+      assert "RowShareLock" in relation_lock_modes(Module29)
+      assert "RowShareLock" in relation_lock_modes("test_fixtures_entity_module28_labels_$join")
+    end
+
+    test "locks the rows and the reversed to-many's pairs for share with lock: :share" do
+      {:ok, urgent} = create(Module29.new(name: "urgent"))
+      message = create_message(nil, "hi", 1)
+      :ok = add_relationship(Module28, message.id, :labels, urgent.id)
+
+      assert related_rows(Module29, urgent.id, :messages, lock: :share) == [message]
+      assert "RowShareLock" in relation_lock_modes(Module28)
+      assert "RowShareLock" in relation_lock_modes("test_fixtures_entity_module28_labels_$join")
+    end
+
+    test "takes no row lock without the option" do
+      {:ok, general} = create(Module26.new(name: "general"))
+      _message = create_message(general, "hi", 1)
+
+      related_rows(Module26, general.id, :messages)
+
+      refute "RowShareLock" in relation_lock_modes(Module28)
     end
   end
 

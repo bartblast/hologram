@@ -186,6 +186,18 @@ defmodule Hologram.Query.Stage do
 
   def inspect_name(name), do: inspect(name)
 
+  # Returns whether the given filter clauses name the acting user anywhere - inside a disjunction's
+  # alternatives and a quantifier's condition included.
+  @doc false
+  @spec names_actor?(list(Query.clause())) :: boolean
+  def names_actor?(clauses) do
+    Enum.any?(clauses, fn
+      {:or, alternatives} -> Enum.any?(alternatives, &names_actor?/1)
+      {quantifier, {_source, inner}} when quantifier in @quantifiers -> names_actor?(inner)
+      {_name, _operator, value} -> value == {:actor}
+    end)
+  end
+
   # Returns the canonical form of the given query - the form executors run literally
   # and the registry hashes. Normalization: sorts filter clauses into canonical order,
   # disjunctions all the way down, gives every set-returning shape a total
