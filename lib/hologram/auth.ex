@@ -12,6 +12,7 @@ defmodule Hologram.Auth do
   alias Hologram.DB.Mapper
   alias Hologram.DB.Oplog
   alias Hologram.DB.QueryRunner
+  alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator
@@ -537,13 +538,14 @@ defmodule Hologram.Auth do
   # read whole, a set before the last relationship making the rows every path reaches one set, each
   # once - read raw, the way a delegation reads its target, and held under a write.
   defp check_requirement({:set, relationship_names}, entity, _actor_user_id, source) do
-    read_opts = delegation_read_opts(source)
+    set_rows(entity, relationship_names, delegation_read_opts(source), false)
+  end
 
-    Enum.reduce(relationship_names, [entity], fn relationship_name, rows ->
-      rows
-      |> Enum.flat_map(&linked_rows(&1, relationship_name, read_opts))
-      |> Enum.uniq_by(& &1.id)
-    end)
+  # A write resting on the whole set also keeps rows from joining it until it commits - see
+  # Hologram.DB.SetLock. A render, the sync and a check against a supplied grants list take no such
+  # lock, as they take no row locks.
+  defp check_requirement({:set, relationship_names, :whole}, entity, _actor_user_id, source) do
+    set_rows(entity, relationship_names, delegation_read_opts(source), source == :held)
   end
 
   # The grant store's own policy: a role held on the entity this grant row names.
@@ -833,7 +835,7 @@ defmodule Hologram.Auth do
   # is empty or names a row that is gone, and the rows of a set - a to-many or an inverse, which may
   # hold one row. A row not created yet - a create asks about one - has no id, so nothing is in any
   # set of its.
-  defp linked_rows(row, relationship_name, read_opts) do
+  defp linked_rows(row, relationship_name, read_opts, hold_set?) do
     entity_type = row.__struct__
 
     cond do
@@ -846,6 +848,8 @@ defmodule Hologram.Auth do
         []
 
       true ->
+        if hold_set?, do: SetLock.hold!(entity_type, row.id)
+
         EntityOperations.related_rows(entity_type, row.id, relationship_name, read_opts)
     end
   end
@@ -959,6 +963,15 @@ defmodule Hologram.Auth do
 
   defp scope_condition(:global) do
     {~s|"entity_type" IS NULL AND "entity_id" IS NULL|, []}
+  end
+
+  # The rows of the set a chain of relationships leads to from the given row, each once.
+  defp set_rows(entity, relationship_names, read_opts, hold_set?) do
+    Enum.reduce(relationship_names, [entity], fn relationship_name, rows ->
+      rows
+      |> Enum.flat_map(&linked_rows(&1, relationship_name, read_opts, hold_set?))
+      |> Enum.uniq_by(& &1.id)
+    end)
   end
 
   # A stored to-one holds its reference on the row - every other relationship, an inverse holding

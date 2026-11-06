@@ -261,6 +261,18 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "condition_polarity/2" do
+    test "turns the polarity around inside a none" do
+      assert condition_polarity(:none, :positive) == :negative
+      assert condition_polarity(:none, :negative) == :positive
+    end
+
+    test "keeps the polarity inside an any and an all" do
+      assert condition_polarity(:any, :negative) == :negative
+      assert condition_polarity(:all, :positive) == :positive
+    end
+  end
+
   describe "count/1" do
     test "composes with other stages" do
       query =
@@ -2674,6 +2686,38 @@ defmodule Hologram.Query.StageTest do
     test "spells a name of a row above as the name it carries" do
       assert inspect_name({:outer, 1, :archived}) == ":archived"
       assert inspect_name({:outer, 2, [:channel, :name]}) == "channel.name"
+    end
+  end
+
+  describe "joining_row_refuses?/2" do
+    test "holds for a none and an all whose truth helps" do
+      assert joining_row_refuses?(:none, :positive)
+      assert joining_row_refuses?(:all, :positive)
+    end
+
+    test "holds for an any whose truth hurts" do
+      assert joining_row_refuses?(:any, :negative)
+    end
+
+    test "fails for an any whose truth helps, and a none or an all whose truth hurts" do
+      refute joining_row_refuses?(:any, :positive)
+      refute joining_row_refuses?(:none, :negative)
+      refute joining_row_refuses?(:all, :negative)
+    end
+  end
+
+  describe "names_actor?/1" do
+    test "holds for a predicate compared with the actor" do
+      assert names_actor?([{:a, :==, 1}, {:owner_id, :!=, {:actor}}])
+    end
+
+    test "holds for the actor in an alternative and in a quantifier's condition" do
+      assert names_actor?([{:or, [[{:a, :==, 1}], [{:owner_id, :==, {:actor}}]]}])
+      assert names_actor?([{:any, {[:messages], [{:author_id, :==, {:actor}}]}}])
+    end
+
+    test "fails for clauses naming no actor" do
+      refute names_actor?([{:a, :==, 1}, {:any, {[:messages], [{:b, :==, 2}]}}])
     end
   end
 

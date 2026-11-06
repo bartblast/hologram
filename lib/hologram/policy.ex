@@ -64,7 +64,11 @@ defmodule Hologram.Policy do
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
+  @locked_set_links_key {__MODULE__, :locked_set_links}
+
   @model_facts_key {__MODULE__, :model_facts}
+
+  @quantifiers [:all, :any, :none]
 
   # The operations the framework itself asks about: the four verbs' own and the three gates.
   # Always askable on every entity type, declared or not - default deny answers false.
@@ -343,6 +347,49 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the set links of the project's compiled data model a row joining could turn some rule's
+  grant into a refusal through - read by a none or an all whose truth helps the rule, or by an any
+  whose truth hurts it, inside a none (see `Hologram.Query.Stage.joining_row_refuses?/2`) - each as
+  how a row joins the set: `{:reference, entity type, reference field, owner type}` for a row of the
+  entity type whose reference field names the owner row, and `{:edge, entity type, relationship,
+  side, owner type}` for a pair added to the entity type's to-many relationship, whose `:source` or
+  `:target` id names the owner row.
+
+  Cached for the lifetime of the runtime and derived on the first call, like the model facts. Raises
+  while the data model is under a hold, as `build/1` does.
+  """
+  @spec locked_set_links() :: MapSet.t()
+  def locked_set_links do
+    Model.ensure_released!()
+
+    case :persistent_term.get(@locked_set_links_key, nil) do
+      nil ->
+        links = locked_set_links(Model.entity_types())
+
+        :persistent_term.put(@locked_set_links_key, links)
+
+        links
+
+      links ->
+        links
+    end
+  end
+
+  @doc """
+  Returns the set links of the given entity types' rules as `locked_set_links/0` does.
+  """
+  @spec locked_set_links(list(module)) :: MapSet.t()
+  def locked_set_links(entity_types) do
+    for entity_type <- entity_types,
+        {_operation, rules} <- build(entity_type),
+        rule <- rules,
+        clause <- quantifier_clauses(rule.predicates),
+        link <- quantifier_links(clause, [entity_type], :positive),
+        into: MapSet.new(),
+        do: link
+  end
+
+  @doc """
   Returns the key the given entity operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation as the two names joined by a colon, which no role name can contain.
 
   The client builds the same key in operationKey in assets/js/elixir/hologram/auth.mjs - a hand-ported pair, so a change here is a change there.
@@ -446,6 +493,7 @@ defmodule Hologram.Policy do
   @doc false
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
+    :persistent_term.erase(@locked_set_links_key)
     :persistent_term.erase(@model_facts_key)
 
     :ok
@@ -643,6 +691,24 @@ defmodule Hologram.Policy do
     end
   end
 
+  # How a row joins the set a relationship of the given type holds: through the reference field its
+  # rows hold for an inverse of a to-one, through a pair of the join table for a to-many or an
+  # inverse of one - none for a to-one, which reads the row its own reference names.
+  defp link_entries(entity_type, relationship_name) do
+    case Entity.inverse_relationship(entity_type, relationship_name) do
+      %{reference?: true, forward: forward, target: target_type} ->
+        [{:reference, target_type, String.to_existing_atom("#{forward}_id"), entity_type}]
+
+      %{forward: forward, target: target_type} ->
+        [{:edge, target_type, forward, :target, entity_type}]
+
+      nil ->
+        if is_list(Entity.relationship_target(entity_type, relationship_name)),
+          do: [{:edge, entity_type, relationship_name, :source, entity_type}],
+          else: []
+    end
+  end
+
   # Both facts are derived from the model cache (see Hologram.Entity.Model), and policies are built
   # on the request path - per policied query, per delegation hop and per can? call - so they are
   # derived once and kept, like the physical name mapping. The compiler and the application boot
@@ -758,6 +824,43 @@ defmodule Hologram.Policy do
         Map.put(acc, operation, union)
       end
     end)
+  end
+
+  # The quantifier clauses among the given ones, those in a disjunction's alternatives included.
+  defp quantifier_clauses(clauses) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} -> Enum.flat_map(alternatives, &quantifier_clauses/1)
+      {quantifier, {_source, _inner}} = clause when quantifier in @quantifiers -> [clause]
+      _triple -> []
+    end)
+  end
+
+  # The set links a quantifier's source follows, from the row it is read on - the row the
+  # quantifier is about, or one above it - when a row joining one can refuse what the rule granted,
+  # and those of the quantifiers in its condition, read on the set's rows at the condition's
+  # polarity. The types are those of the rows each name is read on, nearest first.
+  defp quantifier_links({quantifier, {source, clauses}}, types, polarity) do
+    {start_type, relationship_names} =
+      case source do
+        {:outer, levels, names} -> {Enum.at(types, levels), names}
+        names -> {hd(types), names}
+      end
+
+    {set_type, links} =
+      Enum.reduce(relationship_names, {start_type, []}, fn name, {type, acc} ->
+        {Entity.related_type(type, name), acc ++ link_entries(type, name)}
+      end)
+
+    condition_polarity = Stage.condition_polarity(quantifier, polarity)
+
+    nested_links =
+      clauses
+      |> quantifier_clauses()
+      |> Enum.flat_map(&quantifier_links(&1, [set_type | types], condition_polarity))
+
+    if Stage.joining_row_refuses?(quantifier, polarity),
+      do: links ++ nested_links,
+      else: nested_links
   end
 
   defp reference_chains(nil), do: []

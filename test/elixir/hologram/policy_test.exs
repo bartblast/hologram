@@ -11,6 +11,7 @@ defmodule Hologram.PolicyTest do
       framework_operations: 0,
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
+      locked_set_links: 1,
       operation_key: 1,
       operations: 1,
       read_roles_qualifying_role_modules: 1,
@@ -669,6 +670,124 @@ defmodule Hologram.PolicyTest do
 
     test "returns empty list when no rule covers the given role" do
       assert grant_role_qualifying_roles(Policy.Module1, :viewer) == []
+    end
+  end
+
+  describe "locked_set_links/1" do
+    defmodule LockedProject do
+      use Hologram.Entity
+
+      relationship :labels, [Hologram.PolicyTest.LockedLabel]
+      relationship :members, [Hologram.PolicyTest.LockedMember], inverse: project
+
+      allow :delete, when: ^[none: {[:members], []}]
+      allow :update, when: ^[all: {[:labels], [name: "ok"]}]
+    end
+
+    defmodule LockedMember do
+      use Hologram.Entity
+
+      relationship :project, LockedProject, optional: true
+
+      allow :read
+    end
+
+    defmodule LockedLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :projects, [LockedProject], inverse: labels
+
+      allow :delete, when: ^[none: {[:projects], []}]
+    end
+
+    defmodule LockedTask do
+      use Hologram.Entity
+
+      attribute :title, :string
+
+      relationship :project, LockedProject, optional: true
+
+      allow :update,
+        when:
+          ^[
+            or: [
+              [title: "draft"],
+              [any: {[:project, :labels], [none: {{:outer, 1, [:project, :members]}, []}]}]
+            ]
+          ]
+    end
+
+    defmodule AnyInNoneTask do
+      use Hologram.Entity
+
+      relationship :project, LockedProject, optional: true
+
+      allow :update,
+        when: ^[none: {[:project, :labels], [any: {{:outer, 1, [:project, :members]}, []}]}]
+    end
+
+    defmodule NoneInNoneTask do
+      use Hologram.Entity
+
+      relationship :project, LockedProject, optional: true
+
+      allow :update, when: ^[none: {[:project, :labels], [none: {[:projects], []}]}]
+    end
+
+    defmodule AnyProject do
+      use Hologram.Entity
+
+      relationship :members, [Hologram.PolicyTest.AnyMember], inverse: project
+
+      allow :read, when: ^[any: {[:members], []}]
+    end
+
+    defmodule AnyMember do
+      use Hologram.Entity
+
+      relationship :project, AnyProject, optional: true
+
+      allow :read
+    end
+
+    test "names how a row joins a set a none or an all reads" do
+      assert locked_set_links([LockedProject, LockedMember, LockedLabel]) ==
+               MapSet.new([
+                 {:edge, LockedProject, :labels, :source, LockedProject},
+                 {:edge, LockedProject, :labels, :target, LockedLabel},
+                 {:reference, LockedMember, :project_id, LockedProject}
+               ])
+    end
+
+    # A label joining the project can only make the any true, which never refuses what it granted,
+    # but a member joining the set the none reads on the task's project can make the none false. A
+    # label has no project of its own, so the none's source is read on the task.
+    test "names the set of a none inside an any's condition, in an alternative, through a relationship" do
+      assert locked_set_links([LockedTask]) ==
+               MapSet.new([{:reference, LockedMember, :project_id, LockedProject}])
+    end
+
+    # Inside the none the any's truth hurts, so a member joining the set it reads on the task's
+    # project can refuse, as a label joining the none's own set can.
+    test "names the set of an any inside a none" do
+      assert locked_set_links([AnyInNoneTask]) ==
+               MapSet.new([
+                 {:edge, LockedProject, :labels, :source, LockedProject},
+                 {:reference, LockedMember, :project_id, LockedProject}
+               ])
+    end
+
+    # The inner none's truth hurts the outer one, so a project joining a label's set can only make
+    # the inner none false and the outer none truer.
+    test "leaves out the set of a none inside a none" do
+      assert locked_set_links([NoneInNoneTask]) ==
+               MapSet.new([{:edge, LockedProject, :labels, :source, LockedProject}])
+    end
+
+    test "leaves out a set read by an any alone" do
+      assert locked_set_links([AnyProject, AnyMember]) == MapSet.new()
     end
   end
 

@@ -16,11 +16,13 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Oplog
+  alias Hologram.DB.SetLock
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
+  alias Hologram.Policy
 
   @doc false
   @spec add_relationship(module, String.t(), atom, String.t()) :: :ok
@@ -44,6 +46,12 @@ defmodule Hologram.DB.EntityOperations do
 
     {:ok, :ok} =
       Connection.transaction(fn ->
+        target_type = Entity.related_type(entity_type, relationship_name)
+
+        Policy.locked_set_links()
+        |> SetLock.edge_owners(entity_type, id, relationship_name, target_id)
+        |> SetLock.enter!([{entity_type, id}, {target_type, target_id}])
+
         run_edge_change!(statement, [encoded_id, encoded_target_id], effect)
       end)
 
@@ -375,6 +383,8 @@ defmodule Hologram.DB.EntityOperations do
           # The transaction's reason is whatever refused the write, the way create/1's is - a
           # refusal rolls the update back rather than raising.
           Connection.transaction(fn ->
+            enter_sets!(entity_type, id, changes_map)
+
             run_update!(statement, params, entity_type, id, data, set_columns, delta_columns)
           end)
 
@@ -650,6 +660,26 @@ defmodule Hologram.DB.EntityOperations do
     |> Codec.encode(column.type)
   end
 
+  # An update enters the locked sets its changed references name - see Hologram.DB.SetLock. A
+  # reference set to the value the row already holds enters nothing, as its foreign key check takes
+  # nothing, so the row is read to tell the two apart, only when some set would be entered.
+  defp enter_sets!(entity_type, id, changes) do
+    links = Policy.locked_set_links()
+
+    if SetLock.row_owners(links, entity_type, changes) != [] do
+      current = get(entity_type, id) || %{}
+
+      changed =
+        Map.filter(changes, fn {name, value} -> Map.get(current, name, :absent) != value end)
+
+      links
+      |> SetLock.row_owners(entity_type, changed)
+      |> SetLock.enter!(reference_targets(entity_type, changed))
+    end
+
+    :ok
+  end
+
   defp fetch_join_table!(entity_type, relationship_name) do
     %{join_tables: join_tables} = Map.fetch!(DB.mapping(), entity_type)
 
@@ -701,6 +731,14 @@ defmodule Hologram.DB.EntityOperations do
 
     column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
     placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
+
+    # A row naming an owner whose set a write rests on whole waits for that write - see
+    # Hologram.DB.SetLock.
+    values = Map.from_struct(entity)
+
+    Policy.locked_set_links()
+    |> SetLock.row_owners(entity_type, values)
+    |> SetLock.enter!(reference_targets(entity_type, values))
 
     statement =
       "INSERT INTO #{qualified_table(table)} (#{column_list}) " <>
@@ -858,6 +896,21 @@ defmodule Hologram.DB.EntityOperations do
       {:ok, %Postgrex.Result{rows: [[exists?]]}} -> exists?
       {:error, error} -> raise error
     end
+  end
+
+  # The rows the reference fields among the given values name - what the statement writing them has
+  # its foreign key checks lock.
+  defp reference_targets(entity_type, values) do
+    Enum.flat_map(entity_type.__relationships__(), fn
+      {name, target_type, _opts} when is_atom(target_type) ->
+        case Map.get(values, String.to_existing_atom("#{name}_id")) do
+          nil -> []
+          target_id -> [{target_type, target_id}]
+        end
+
+      _to_many ->
+        []
+    end)
   end
 
   # A to-one reference column carries the foreign key constraint that names it back, so a target

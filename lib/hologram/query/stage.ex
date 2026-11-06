@@ -51,6 +51,17 @@ defmodule Hologram.Query.Stage do
     raise ArgumentError, message: "authorize takes an operation atom, got: #{inspect(operation)}"
   end
 
+  # Returns the polarity of a quantifier's condition, given the quantifier's own: whether the
+  # condition holding for a related row helps the answer it stands in (:positive) or hurts it
+  # (:negative). A none's condition counts against it, so it turns the polarity around.
+  @doc false
+  @spec condition_polarity(:all | :any | :none, :negative | :positive) :: :negative | :positive
+  def condition_polarity(:none, :positive), do: :negative
+
+  def condition_polarity(:none, :negative), do: :positive
+
+  def condition_polarity(_quantifier, polarity), do: polarity
+
   @doc false
   @spec count(module | Query.t()) :: Query.t()
   def count(query) do
@@ -185,6 +196,16 @@ defmodule Hologram.Query.Stage do
   def inspect_name(path) when is_list(path), do: Enum.join(path, ".")
 
   def inspect_name(name), do: inspect(name)
+
+  # Returns whether a row joining the set a quantifier of the given kind reads can turn a granted
+  # answer into a refusal, the quantifier standing at the given polarity: a joining row can only make
+  # an any true and a none or an all false, so that is an any whose truth hurts and a none or an all
+  # whose truth helps.
+  @doc false
+  @spec joining_row_refuses?(:all | :any | :none, :negative | :positive) :: boolean
+  def joining_row_refuses?(:any, polarity), do: polarity == :negative
+
+  def joining_row_refuses?(_quantifier, polarity), do: polarity == :positive
 
   # Returns whether the given filter clauses name the acting user anywhere - inside a disjunction's
   # alternatives and a quantifier's condition included.

@@ -853,8 +853,12 @@ defmodule Hologram.Policy.EvaluatorTest do
   end
 
   describe "rule_matches?/4 - quantifiers" do
+    # A none or an all asks for the set whole, an any alone for its rows - the same rows here.
     defp messages_checker(messages) do
-      fn {:set, [:messages]}, %Module26{}, _actor_user_id -> messages end
+      fn
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> messages
+        {:set, [:messages], :whole}, %Module26{}, _actor_user_id -> messages
+      end
     end
 
     defp quantified_rule(predicates), do: rule(predicates: predicates)
@@ -1065,6 +1069,54 @@ defmodule Hologram.Policy.EvaluatorTest do
 
       refute rule_matches?(none_rule, %Module26{}, nil, checker)
       refute rule_matches?(all_rule, %Module26{}, nil, checker)
+    end
+
+    # A none rests on every message, so it asks for them as a whole set - a message joining the set
+    # could change its answer - where an any alone can only gain a match from one.
+    test "asks a none for its set whole and an any alone for its rows" do
+      checker = fn
+        {:set, [:messages], :whole}, %Module26{}, _actor_user_id -> []
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> [%Module28{body: "hi"}]
+      end
+
+      assert rule_matches?(quantified_rule(none: {[:messages], []}), %Module26{}, nil, checker)
+      assert rule_matches?(quantified_rule(any: {[:messages], []}), %Module26{}, nil, checker)
+    end
+
+    # A message joining can only make the any true, while a label joining can make the none false.
+    test "asks a none inside an any for its set whole and the any for its rows" do
+      message = %Module28{body: "hi"}
+
+      checker = fn
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> [message]
+        {:set, [:labels], :whole}, ^message, _actor_user_id -> []
+      end
+
+      rule = quantified_rule(any: {[:messages], [none: {[:labels], []}]})
+
+      assert rule_matches?(rule, %Module26{}, nil, checker)
+    end
+
+    # Inside the none the any's truth hurts, so a label joining can refuse, and the none inside the
+    # other none hurts the outer one, so a label joining it can only help.
+    test "turns the asks around inside a none" do
+      message = %Module28{body: "hi"}
+
+      any_checker = fn
+        {:set, [:messages], :whole}, %Module26{}, _actor_user_id -> [message]
+        {:set, [:labels], :whole}, ^message, _actor_user_id -> []
+      end
+
+      none_checker = fn
+        {:set, [:messages], :whole}, %Module26{}, _actor_user_id -> [message]
+        {:set, [:labels]}, ^message, _actor_user_id -> []
+      end
+
+      any_rule = quantified_rule(none: {[:messages], [any: {[:labels], []}]})
+      none_rule = quantified_rule(none: {[:messages], [none: {[:labels], []}]})
+
+      assert rule_matches?(any_rule, %Module26{}, nil, any_checker)
+      refute rule_matches?(none_rule, %Module26{}, nil, none_checker)
     end
 
     test "answers an anonymous none naming no actor" do

@@ -73,38 +73,41 @@ defmodule Hologram.Policy.Evaluator do
   or a {:via, operation, chain} tuple - the chain of to-one relationships followed to the related
   row - it returns a boolean. For a {:related, relationship names} tuple it returns the row those
   relationships lead to, or nil when one of them is empty or names a row that is gone. For a
-  {:set, relationship names} tuple it returns the rows of the set they lead to, each once.
+  {:set, relationship names} tuple it returns the rows of the set they lead to, each once - asked
+  as {:set, relationship names, :whole} when a row joining the set could turn the grant into a
+  refusal: a none or an all whose truth helps the rule, an any whose truth hurts it.
   """
   @spec rule_matches?(map, struct, String.t() | nil, fun) :: boolean
   def rule_matches?(rule, entity, actor_user_id, checker) do
-    predicates_hold?(rule.predicates, [entity], actor_user_id, checker) and
+    predicates_hold?(rule.predicates, [entity], actor_user_id, checker, :positive) and
       to_holds?(rule.to, entity, actor_user_id, checker) and
       via_holds?(rule.via, entity, actor_user_id, checker)
   end
 
   # The rows a clause is read on: the row it is about first, then each row above it, nearest first
-  # - the rule's row alone outside any quantifier.
-  defp clause_holds?({:or, alternatives}, rows, actor_user_id, checker) do
-    Enum.any?(alternatives, &predicates_hold?(&1, rows, actor_user_id, checker))
+  # - the rule's row alone outside any quantifier. The polarity says whether the clause holding
+  # helps the rule (:positive) or hurts it (:negative), inside a none.
+  defp clause_holds?({:or, alternatives}, rows, actor_user_id, checker, polarity) do
+    Enum.any?(alternatives, &predicates_hold?(&1, rows, actor_user_id, checker, polarity))
   end
 
   # A none or an all asking about the actor of an anonymous session asks about nobody as a whole,
   # which grants nothing - its condition alone would come out false and turn it true.
-  defp clause_holds?({quantifier, {source, clauses}}, rows, nil, checker)
+  defp clause_holds?({quantifier, {source, clauses}}, rows, nil, checker, polarity)
        when quantifier in [:all, :none] do
     if Stage.names_actor?(clauses) do
       false
     else
-      quantifier_holds?(quantifier, source, clauses, rows, nil, checker)
+      quantifier_holds?({quantifier, source, clauses}, rows, nil, checker, polarity)
     end
   end
 
-  defp clause_holds?({quantifier, {source, clauses}}, rows, actor_user_id, checker)
+  defp clause_holds?({quantifier, {source, clauses}}, rows, actor_user_id, checker, polarity)
        when quantifier in @quantifiers do
-    quantifier_holds?(quantifier, source, clauses, rows, actor_user_id, checker)
+    quantifier_holds?({quantifier, source, clauses}, rows, actor_user_id, checker, polarity)
   end
 
-  defp clause_holds?(triple, rows, actor_user_id, checker) do
+  defp clause_holds?(triple, rows, actor_user_id, checker, _polarity) do
     predicate_holds?(triple, rows, actor_user_id, checker)
   end
 
@@ -187,11 +190,11 @@ defmodule Hologram.Policy.Evaluator do
   end
 
   defp evaluated({:condition, clauses}, rows, actor_user_id, checker) do
-    predicates_hold?(clauses, rows, actor_user_id, checker)
+    predicates_hold?(clauses, rows, actor_user_id, checker, :positive)
   end
 
   defp evaluated({:if, clauses, then_value, else_value}, rows, actor_user_id, checker) do
-    if predicates_hold?(clauses, rows, actor_user_id, checker) do
+    if predicates_hold?(clauses, rows, actor_user_id, checker, :positive) do
       evaluated(then_value, rows, actor_user_id, checker)
     else
       evaluated(else_value, rows, actor_user_id, checker)
@@ -277,21 +280,30 @@ defmodule Hologram.Policy.Evaluator do
     |> holds?(operator, resolve_value(value, actor_user_id), ranks)
   end
 
-  defp predicates_hold?(clauses, rows, actor_user_id, checker) do
-    Enum.all?(clauses, &clause_holds?(&1, rows, actor_user_id, checker))
+  defp predicates_hold?(clauses, rows, actor_user_id, checker, polarity) do
+    Enum.all?(clauses, &clause_holds?(&1, rows, actor_user_id, checker, polarity))
   end
 
   # Whether the condition holds for any, none or every row of the set the source leads to, read on
   # the row the quantifier is about or on the row above it the source names. Each related row is
   # matched with the rows above it, so its condition reads them by how many quantifiers out they are.
-  defp quantifier_holds?(quantifier, source, clauses, rows, actor_user_id, checker) do
+  #
+  # The set is asked for whole - {:set, relationship names, :whole} - when a row joining it could
+  # turn the rule's grant into a refusal, which a write resting on the answer has to keep out.
+  defp quantifier_holds?({quantifier, source, clauses}, rows, actor_user_id, checker, polarity) do
     {[source_row | _outer_rows], relationship_names} = source_rows(rows, source)
+    condition_polarity = Stage.condition_polarity(quantifier, polarity)
 
     matches? = fn related_row ->
-      predicates_hold?(clauses, [related_row | rows], actor_user_id, checker)
+      predicates_hold?(clauses, [related_row | rows], actor_user_id, checker, condition_polarity)
     end
 
-    related_rows = checker.({:set, relationship_names}, source_row, actor_user_id)
+    requirement =
+      if Stage.joining_row_refuses?(quantifier, polarity),
+        do: {:set, relationship_names, :whole},
+        else: {:set, relationship_names}
+
+    related_rows = checker.(requirement, source_row, actor_user_id)
 
     case quantifier do
       :all -> Enum.all?(related_rows, matches?)
