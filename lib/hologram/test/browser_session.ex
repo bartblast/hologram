@@ -7,12 +7,18 @@ defmodule Hologram.Test.BrowserSession do
   # Wallaby is not a Hologram dependency - client apps that use these helpers
   # bring their own. This lets the module compile without Wallaby present.
   @compile {:no_warn_undefined,
-            [Wallaby.Chrome, Wallaby.Chrome.Chromedriver.Server, Wallaby.WebdriverClient]}
+            [
+              Wallaby,
+              Wallaby.Chrome,
+              Wallaby.Chrome.Chromedriver.Server,
+              Wallaby.WebdriverClient
+            ]}
 
   alias Wallaby.Chrome.Chromedriver.Server
   alias Wallaby.WebdriverClient
 
-  # Tunable policy, not derived. A normal session start takes about a second.
+  # Tunable policy, not derived. A normal session start takes about a second. The
+  # run's first one, which can take far longer on a fresh machine, is start_wallaby/1's.
   # The real bound is ExUnit's 60 s test timeout, which also covers setup, where
   # a test may start several sessions. Anything from about 5 s to 15 s per attempt
   # behaves the same.
@@ -32,6 +38,13 @@ defmodule Hologram.Test.BrowserSession do
   # real bound is the on_exit callback's own timeout, which is the test timeout
   # (60 s), minus the store's 5 s shutdown wait on a restart.
   @default_teardown_timeout 10_000
+
+  # Tunable policy, not derived. The first Chrome start on a fresh CI runner took
+  # 36 s with three Chromes starting at once, and earlier hangs suggest it can take
+  # over a minute. It's spent once per run, before any test, so a generous budget
+  # costs nothing when Chrome answers. Anything from about 2 to 5 minutes behaves
+  # the same.
+  @default_warm_up_timeout 180_000
 
   @doc """
   Waits until Wallaby's session store has ended the browser sessions of the given
@@ -133,6 +146,13 @@ defmodule Hologram.Test.BrowserSession do
   can go down when they aren't ready in time, failing every test of the run, so
   Wallaby is restarted when one isn't, up to the attempt count.
 
+  Last, it warms Chrome up: it starts one browser session and ends it. Chrome's
+  first start on a fresh machine can outlast the attempts `create_session/3`
+  makes, so it's paid here, before the suite runs, where no test timeout bounds
+  it. It's a single attempt, so no second Chrome starts next to the slow one.
+  Meanwhile Wallaby's HTTP requests get no receive timeout, since Wallaby sends a
+  request again when one runs out.
+
   ## Options
 
     * `:attempts` - how many times Wallaby is started before raising
@@ -140,11 +160,21 @@ defmodule Hologram.Test.BrowserSession do
       servers, defaults to `Wallaby.Chromedrivers`
     * `:chromedriver_path` - the ChromeDriver the wrapper runs, defaults to the
       one Wallaby would run
+    * `:create_fn` - creates the warm-up session, defaults to
+      `&Wallaby.WebdriverClient.create_session/2`
+    * `:delete_fn` - deletes a warm-up session created after its attempt was
+      abandoned, given the base URL and the session id
+    * `:end_session_fn` - ends the warm-up session, defaults to
+      `&Wallaby.end_session/1`
     * `:log_dir` - defaults to `tmp/chromedriver` in the current dir
     * `:put_env_fn` - sets an app env key, defaults to `&Application.put_env/3`
     * `:ready_timeout` - how long to wait for each ChromeDriver, in ms
     * `:start_fn` - starts Wallaby
+    * `:start_session_fn` - starts the warm-up session, given Wallaby's session
+      opts, defaults to `&Wallaby.start_session/1`
     * `:stop_fn` - stops Wallaby
+    * `:teardown_timeout` - how long ending the warm-up session may take, in ms
+    * `:warm_up_timeout` - how long starting the warm-up session may take, in ms
   """
   @spec start_wallaby(keyword) :: :ok
   def start_wallaby(opts \\ []) do
@@ -178,12 +208,20 @@ defmodule Hologram.Test.BrowserSession do
       opts
       |> Keyword.put_new(:attempts, @default_start_attempts)
       |> Keyword.put_new(:chromedrivers, Wallaby.Chromedrivers)
+      |> Keyword.put_new(:create_fn, &WebdriverClient.create_session/2)
+      |> Keyword.put_new(:delete_fn, &delete_session/2)
+      |> Keyword.put_new(:end_session_fn, &Wallaby.end_session/1)
       |> Keyword.put_new(:ready_timeout, @default_ready_timeout)
+      |> Keyword.put_new(:start_session_fn, &Wallaby.start_session/1)
+      |> Keyword.put_new(:teardown_timeout, @default_teardown_timeout)
+      |> Keyword.put_new(:warm_up_timeout, @default_warm_up_timeout)
       |> Keyword.put(:log_dir, log_dir)
       |> Keyword.put(:start_fn, start_fn)
       |> Keyword.put(:stop_fn, stop_fn)
 
-    start_wallaby(1, opts)
+    :ok = start_wallaby(1, opts)
+
+    warm_up(opts)
   end
 
   defp await_exit(pid) do
@@ -271,6 +309,23 @@ defmodule Hologram.Test.BrowserSession do
     Wallaby.Session
     |> struct(id: session_id, session_url: session_url, url: session_url)
     |> WebdriverClient.delete_session()
+  end
+
+  # Wallaby.end_session/1 takes the session out of the store before its DELETE, so
+  # the store is clean whatever the DELETE does. A Chrome that stays hung fails the
+  # tests on their own attempts.
+  defp end_first_session(session, opts) do
+    timeout = opts[:teardown_timeout]
+    attempt_opts = Keyword.put(opts, :attempt_timeout, timeout)
+    end_fn = fn -> opts[:end_session_fn].(session) end
+
+    case run_attempt(end_fn, nil, attempt_opts) do
+      {:ok, _result} ->
+        :ok
+
+      :abandoned ->
+        report_hang("Chrome didn't end its first browser session within #{timeout} ms", opts)
+    end
   end
 
   defp ensure_wallaby_started do
@@ -398,6 +453,35 @@ defmodule Hologram.Test.BrowserSession do
     "'" <> String.replace(string, "'", "'\\''") <> "'"
   end
 
+  defp start_first_session(opts) do
+    timeout = opts[:warm_up_timeout]
+    attempt_opts = Keyword.put(opts, :attempt_timeout, timeout)
+
+    create_session_fn = fn base_url, capabilities ->
+      create_fn = fn -> opts[:create_fn].(base_url, capabilities) end
+
+      case run_attempt(create_fn, base_url, attempt_opts) do
+        {:ok, result} ->
+          result
+
+        :abandoned ->
+          message = "Chrome didn't start its first browser session within #{timeout} ms"
+          report_hang(message, opts)
+          raise message
+      end
+    end
+
+    start_fn = fn -> opts[:start_session_fn].(create_session_fn: create_session_fn) end
+
+    case without_recv_timeout(start_fn) do
+      {:ok, session} ->
+        session
+
+      {:error, reason} ->
+        raise "Chrome didn't start its first browser session: #{inspect(reason)}"
+    end
+  end
+
   defp start_wallaby(attempt, opts) do
     attempts = opts[:attempts]
 
@@ -432,6 +516,41 @@ defmodule Hologram.Test.BrowserSession do
       Process.info(self(), :current_stacktrace)
 
     :erlang.raise(kind, reason, stacktrace ++ caller_stacktrace)
+  end
+
+  defp warm_up(opts) do
+    opts
+    |> start_first_session()
+    |> end_first_session(opts)
+  end
+
+  # Wallaby's HTTP client sends a request again when hackney's receive timeout runs
+  # out, and a second session request would start a second Chrome next to the slow
+  # one, so the warm-up's own timeout is the only bound. Wallaby's default applies
+  # when the key is unset.
+  defp without_recv_timeout(fun) do
+    original = Application.fetch_env(:wallaby, :hackney_options)
+
+    hackney_options =
+      case original do
+        {:ok, options} -> options
+        :error -> [hackney: [pool: :wallaby_pool]]
+      end
+
+    Application.put_env(
+      :wallaby,
+      :hackney_options,
+      Keyword.put(hackney_options, :recv_timeout, :infinity)
+    )
+
+    try do
+      fun.()
+    after
+      case original do
+        {:ok, options} -> Application.put_env(:wallaby, :hackney_options, options)
+        :error -> Application.delete_env(:wallaby, :hackney_options)
+      end
+    end
   end
 
   # The log flags go after Wallaby's args, since ChromeDriver takes the last of
