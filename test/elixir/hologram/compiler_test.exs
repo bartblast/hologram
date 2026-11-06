@@ -3045,6 +3045,61 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "build_runtime_js/7" do
+    defmodule BakedProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :starts_at, :datetime
+
+      relationship :members, [Hologram.CompilerTest.BakedMember], inverse: project
+
+      allow :read, when: any(member <- members, member.user_id == user_id())
+      allow :update, when: any(member <- members, any(label <- member.labels, label.name == name))
+
+      allow :archive,
+        when:
+          none(
+            member <- members,
+            member.seat == :full and member.joined_at > ^~U[2026-01-01 00:00:00Z]
+          )
+
+      allow :publish,
+        when:
+          any(
+            member <- members,
+            starts_at > ^~U[2026-01-01 00:00:00Z] and
+              member.user.created_at > ^~U[2026-01-01 00:00:00Z]
+          )
+
+      allow :close,
+        when:
+          any(
+            member <- members,
+            any(other <- members, other.joined_at > ^~U[2026-01-01 00:00:00Z])
+          )
+    end
+
+    defmodule BakedMember do
+      use Hologram.Entity
+
+      attribute :joined_at, :datetime
+      attribute :seat, :enum, values: [:viewer, :full]
+
+      relationship :labels, [Hologram.CompilerTest.BakedLabel]
+      relationship :project, BakedProject, optional: true
+      relationship :user, Hologram.Test.Fixtures.Entity.Module14, optional: true
+
+      allow :read
+    end
+
+    defmodule BakedLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
     setup do
       on_exit(fn ->
         Application.delete_env(:hologram, :client_error_overlay)
@@ -4242,6 +4297,99 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"read":[{"predicates":[{"or":[[["author_id","==",{"actor":true}]],[["shared","==",true]]]}],"to":null,"via":null}]/
+             )
+    end
+
+    test "bakes quantified conditions in the shape the query kernel's filters take", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types =
+        MapSet.new([
+          BakedProject,
+          BakedMember,
+          BakedLabel,
+          Hologram.Test.Fixtures.Entity.Module14,
+          RoleGrant
+        ])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["user_id","==",{"actor":true}]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[{"filter":[{"filter":[["name","==",{"attribute":{"name":"name","outer":2}}]],"quantifier":"any","source":["labels"]}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+    end
+
+    # Each time is spelled by the type of the attribute it is compared with, on the row that
+    # attribute is read on: the members' join time, the project's start through an outer name, the
+    # user's creation through a path from a member, and the join time inside a quantifier whose set
+    # is read on the row above. Spelled as an id, a time would lose its microseconds.
+    test "bakes a value inside a quantifier spelled by the type of the row it is read on", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types =
+        MapSet.new([
+          BakedProject,
+          BakedMember,
+          BakedLabel,
+          Hologram.Test.Fixtures.Entity.Module14,
+          RoleGrant
+        ])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[{"filter":[[{"name":"starts_at","outer":1},">","2026-01-01T00:00:00.000000Z"],[["user","created_at"],">","2026-01-01T00:00:00.000000Z"]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"close":[{"predicates":[{"filter":[{"filter":[["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"any","source":{"name":["members"],"outer":1}}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
              )
     end
 
