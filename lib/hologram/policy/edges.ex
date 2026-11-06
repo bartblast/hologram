@@ -31,6 +31,13 @@ defmodule Hologram.Policy.Edges do
     * `{:relationship_attributes, chain, entity_type, names}` - attributes of the related
       row reached by following the chain: what a path in a condition reads, a reference field a
       longer path is followed through, or what a delegated predicate reads.
+    * `{:set_attributes, chain, entity_type, names}` - attributes of the rows of the set the
+      chain reaches through a to-many or an inverse relationship: what a quantifier's condition
+      reads on them, a reference field followed further from them, or the reference field an
+      inverse of a to-one reads its rows by, which a row joining or leaving the set changes.
+    * `{:set_edges, chain, entity_type, relationship_names}` - pairs of these to-many
+      relationships stored on the entity type, which put rows into the set the chain reaches -
+      the owner's to-many, or the to-many an inverse of one reverses.
     * `{:named_grants, entity_type, role_names}` - grants of these roles held on the
       entity a grant-store row names, deciding that row's visibility.
 
@@ -143,6 +150,11 @@ defmodule Hologram.Policy.Edges do
     {:relationship_grants, relationship_names ++ chain, chain_target, role_names}
   end
 
+  defp lift_edge({kind, chain, chain_target, names}, relationship_names, _target)
+       when kind in [:set_attributes, :set_edges] do
+    {kind, relationship_names ++ chain, chain_target, names}
+  end
+
   defp lift_edge(edge, _relationship_names, _target_type), do: edge
 
   # Edges sharing a kind, target, and chain merge by unioning their name lists, so each
@@ -171,7 +183,9 @@ defmodule Hologram.Policy.Edges do
   # A disjunction reads the row's own attributes like any other condition, and so does a comparison
   # between two of them, so neither adds an edge kind - their attributes join the rule's. A path
   # reads the attribute of the row its relationships lead to, and the reference fields it is
-  # followed through. A derived field reads what its definition reads, written in place.
+  # followed through. A derived field reads what its definition reads, written in place. A
+  # quantifier reads the attributes its condition names on the rows of its set, and the rows its
+  # source follows to get there, whether or not its condition reads any.
   defp predicate_edges(entity_type, predicates) do
     references = Stage.predicate_references(predicates)
 
@@ -189,14 +203,22 @@ defmodule Hologram.Policy.Edges do
     path_edges =
       Enum.flat_map(path_references, fn {relationship_names, name} ->
         target_type = Entity.path_target(entity_type, relationship_names)
+        {walked_edges, through_set?} = walked_edges(entity_type, relationship_names)
+        kind = if through_set?, do: :set_attributes, else: :relationship_attributes
 
-        [
-          {:relationship_attributes, relationship_names, target_type, [name]}
-          | chain_edges(entity_type, relationship_names)
-        ]
+        [{kind, relationship_names, target_type, [name]} | walked_edges]
       end)
 
-    own_edges ++ path_edges
+    source_edges =
+      predicates
+      |> Stage.relationship_chains()
+      |> Enum.flat_map(fn chain ->
+        {walked_edges, _through_set?} = walked_edges(entity_type, chain)
+
+        walked_edges
+      end)
+
+    own_edges ++ path_edges ++ source_edges
   end
 
   defp reference_edges(_entity_type, nil), do: []
@@ -263,5 +285,51 @@ defmodule Hologram.Policy.Edges do
       |> Enum.map(&lift_edge(&1, relationship_names, target_type))
 
     chain_edges(entity_type, relationship_names) ++ lifted_edges
+  end
+
+  defp walked_edge(type, name, chain, link_chain, through_set?) do
+    case Entity.inverse_relationship(type, name) do
+      %{reference?: true, forward: forward, target: target_type} ->
+        {{:set_attributes, link_chain, target_type, [reference_field_name(forward)]}, true}
+
+      %{forward: forward, target: target_type} ->
+        {{:set_edges, link_chain, target_type, [forward]}, true}
+
+      nil ->
+        cond do
+          is_list(Entity.relationship_target(type, name)) ->
+            {{:set_edges, link_chain, type, [name]}, true}
+
+          through_set? ->
+            {{:set_attributes, chain, type, [reference_field_name(name)]}, false}
+
+          chain == [] ->
+            {{:attributes, [reference_field_name(name)]}, false}
+
+          true ->
+            {{:relationship_attributes, chain, type, [reference_field_name(name)]}, false}
+        end
+    end
+  end
+
+  # What following each relationship of a chain from the given type reads, and whether the chain
+  # went through a set: a stored to-one its reference field, on the row itself for the first one and
+  # on the row the relationships before it lead to after that - on the rows of a set once one is
+  # behind - an inverse of a to-one the reference field its rows are read by, and a to-many or an
+  # inverse of one the pairs that hold its rows.
+  defp walked_edges(entity_type, relationship_names) do
+    {edges, _type, through_set?} =
+      relationship_names
+      |> Enum.with_index()
+      |> Enum.reduce({[], entity_type, false}, fn {name, index}, {acc, type, through_set?} ->
+        chain = Enum.take(relationship_names, index)
+        link_chain = Enum.take(relationship_names, index + 1)
+
+        {edge, set_link?} = walked_edge(type, name, chain, link_chain, through_set?)
+
+        {[edge | acc], Entity.related_type(type, name), through_set? or set_link?}
+      end)
+
+    {Enum.reverse(edges), through_set?}
   end
 end

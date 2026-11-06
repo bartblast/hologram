@@ -270,6 +270,171 @@ defmodule Hologram.Policy.EdgesTest do
     end
   end
 
+  describe "derive/1 - quantifiers" do
+    defmodule EdgeProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :labels, [Hologram.Policy.EdgesTest.EdgeLabel]
+      relationship :members, [Hologram.Policy.EdgesTest.EdgeMember], inverse: project
+
+      allow :read, when: ^[any: {[:members], [seat: "full"]}]
+      allow :update, when: ^[any: {[:members], []}]
+      allow :delete, when: ^[none: {[:labels], [name: "x"]}]
+      allow :archive, when: ^[any: {[:labels], []}]
+    end
+
+    defmodule EdgeMember do
+      use Hologram.Entity
+
+      attribute :first, :string
+      attribute :last, :string
+      attribute :seat, :string
+
+      relationship :project, EdgeProject, optional: true
+      relationship :user, Module14, optional: true
+
+      derived :full, :string, fn first, last -> first <> last end
+
+      allow :read
+    end
+
+    defmodule EdgeLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :projects, [EdgeProject], inverse: labels
+
+      allow :read, when: ^[any: {[:projects], [name: "x"]}]
+    end
+
+    defmodule EdgeTask do
+      use Hologram.Entity
+
+      relationship :project, EdgeProject, optional: true
+
+      allow :read, when: ^[any: {[:project, :members], [user_id: {:actor}]}]
+      allow :update, when: ^[any: {[:project, :members], [{[:user, :email], "a"}]}]
+      allow :delete, when: ^[any: {[:project, :labels], [any: {[:projects], [name: "y"]}]}]
+    end
+
+    defmodule EdgeSeat do
+      use Hologram.Entity
+
+      attribute :seat, :string
+
+      relationship :project, EdgeProject, optional: true
+
+      allow :read,
+        when:
+          ^[
+            or: [
+              [seat: "a"],
+              [any: {[:project, :members], [full: {:attribute, {:outer, 1, :seat}}]}]
+            ]
+          ]
+
+      allow :update,
+        when:
+          ^[any: {[:project, :members], [any: {{:outer, 1, [:project, :labels]}, [name: "x"]}]}]
+    end
+
+    defmodule EdgeNote do
+      use Hologram.Entity
+
+      relationship :task, EdgeTask, optional: true
+
+      allow :read, via: task
+    end
+
+    # A member joins or leaves the project's set by its reference field, which its edge names beside
+    # what the condition reads.
+    test "derives the edges of an inverse set of a to-one with a condition and without one" do
+      edges = derive([EdgeProject])
+
+      assert edges[{EdgeProject, :read}] == [
+               {:set_attributes, [:members], EdgeMember, [:project_id, :seat]}
+             ]
+
+      assert edges[{EdgeProject, :update}] == [
+               {:set_attributes, [:members], EdgeMember, [:project_id]}
+             ]
+    end
+
+    test "derives the edges of a to-many set" do
+      assert derive([EdgeProject])[{EdgeProject, :delete}] == [
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], EdgeProject, [:labels]}
+             ]
+    end
+
+    # The labels are never read, but a pair added to the project's to-many puts one into the set.
+    test "derives the edges of a to-many set its condition reads nothing on" do
+      assert derive([EdgeProject])[{EdgeProject, :archive}] == [
+               {:set_edges, [:labels], EdgeProject, [:labels]}
+             ]
+    end
+
+    test "derives the edges of an inverse set of a to-many" do
+      assert derive([EdgeLabel])[{EdgeLabel, :read}] == [
+               {:set_attributes, [:projects], EdgeProject, [:name]},
+               {:set_edges, [:projects], EdgeProject, [:labels]}
+             ]
+    end
+
+    test "derives the edges of a set reached through a relationship" do
+      assert derive([EdgeTask])[{EdgeTask, :read}] == [
+               {:attributes, [:project_id]},
+               {:set_attributes, [:project, :members], EdgeMember, [:project_id, :user_id]}
+             ]
+    end
+
+    test "derives the edges of a path followed from the rows of a set" do
+      assert derive([EdgeTask])[{EdgeTask, :update}] == [
+               {:attributes, [:project_id]},
+               {:set_attributes, [:project, :members], EdgeMember, [:project_id, :user_id]},
+               {:set_attributes, [:project, :members, :user], Module14, [:email]}
+             ]
+    end
+
+    test "derives the edges of a quantifier nested in another's condition" do
+      assert derive([EdgeTask])[{EdgeTask, :delete}] == [
+               {:attributes, [:project_id]},
+               {:set_attributes, [:project, :labels, :projects], EdgeProject, [:name]},
+               {:set_edges, [:project, :labels], EdgeProject, [:labels]},
+               {:set_edges, [:project, :labels, :projects], EdgeProject, [:labels]}
+             ]
+    end
+
+    # The row's own seat is read inside the quantifier, beside the alternative reading it outside,
+    # and the derived field reads its definition's attributes on the set's rows.
+    test "derives the edges of a quantifier in an alternative reading the row it is about" do
+      assert derive([EdgeSeat])[{EdgeSeat, :read}] == [
+               {:attributes, [:project_id, :seat]},
+               {:set_attributes, [:project, :members], EdgeMember, [:first, :last, :project_id]}
+             ]
+    end
+
+    test "derives the edges of a set a nested quantifier reads on a row above" do
+      assert derive([EdgeSeat])[{EdgeSeat, :update}] == [
+               {:attributes, [:project_id]},
+               {:set_attributes, [:project, :labels], EdgeLabel, [:name]},
+               {:set_attributes, [:project, :members], EdgeMember, [:project_id]},
+               {:set_edges, [:project, :labels], EdgeProject, [:labels]}
+             ]
+    end
+
+    test "lifts a set's edges through a delegation" do
+      assert derive([EdgeNote])[{EdgeNote, :read}] == [
+               {:attributes, [:task_id]},
+               {:relationship_attributes, [:task], EdgeTask, [:project_id]},
+               {:set_attributes, [:task, :project, :members], EdgeMember, [:project_id, :user_id]}
+             ]
+    end
+  end
+
   # The cache is one term for the whole node, so these leave it empty, for the next read to derive
   # the project's real index.
   describe "index/0" do

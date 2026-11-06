@@ -2745,6 +2745,18 @@ defmodule Hologram.Compiler do
     |> then(&build_missing_ir!(ir_plt, &1))
   end
 
+  # The types the rows an edge names are of: a related row's, a set's rows, and for pairs both the
+  # type storing them and the rows they put into the set, the type the chain leads to.
+  defp edge_entity_types(checked_type, {:set_edges, chain, entity_type, _relationship_names}) do
+    [entity_type, Entity.path_target(checked_type, chain)]
+  end
+
+  defp edge_entity_types(_checked_type, {kind, _chain, entity_type, _names})
+       when kind in [:relationship_attributes, :relationship_grants, :set_attributes],
+       do: [entity_type]
+
+  defp edge_entity_types(_checked_type, _edge), do: []
+
   defp resolve_derived_definition(entity_type, name, ir_plt) do
     if name in entity_type.__derived_builder_calls__() do
       {definition, read_modules} = QueryExtractor.derived_definition(entity_type, name, ir_plt)
@@ -3683,17 +3695,16 @@ defmodule Hologram.Compiler do
   end
 
   # The types a checked rule reads rows of through relationships - a path in a condition, the chain
-  # of a delegation or of a grant reference - whose model a client needs to follow them, whether or
-  # not they declare a rule or a role of their own. The dependency edges name every one.
+  # of a delegation or of a grant reference, the set of a quantifier - whose model a client needs to
+  # follow them, whether or not they declare a rule or a role of their own. The dependency edges
+  # name every one, a set's rows by the chain its pairs are named with when the condition reads
+  # nothing on them.
   defp related_checked_entity_types(checked_types) do
     checked_types
     |> Enum.to_list()
     |> Edges.derive()
-    |> Enum.flat_map(fn {_key, edges} -> edges end)
-    |> Enum.flat_map(fn
-      {:relationship_attributes, _chain, entity_type, _names} -> [entity_type]
-      {:relationship_grants, _chain, entity_type, _role_names} -> [entity_type]
-      _edge -> []
+    |> Enum.flat_map(fn {{checked_type, _operation}, edges} ->
+      Enum.flat_map(edges, &edge_entity_types(checked_type, &1))
     end)
     |> MapSet.new()
   end

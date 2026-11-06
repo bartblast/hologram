@@ -124,6 +124,25 @@ defmodule Hologram.Sync.ScoperTest do
       assert affected(events([PolicyModule1]), windows, edges) == [:board]
     end
 
+    test "includes a window whose policy reads the rows of a set when their type changes" do
+      edges = %{
+        {Module26, :read} => [{:set_attributes, [:messages], Module28, [:body, :channel_id]}]
+      }
+
+      windows = [{:channel, term(Module26)}]
+
+      assert affected(events([Module28]), windows, edges) == [:channel]
+    end
+
+    # A pair added to or removed from the to-many is an effect on the type storing it, which puts a
+    # row into the set or takes it out.
+    test "includes a window whose policy reads a set the pairs of another type hold when that type changes" do
+      edges = %{{Module2, :read} => [{:set_edges, [:items], Module3, [:a]}]}
+      windows = [{:board, term(Module2)}]
+
+      assert affected(events([Module3]), windows, edges) == [:board]
+    end
+
     # The row in between holds the reference the path is followed through, so a change to it can
     # move where the path ends.
     test "includes a window whose policy reads an intermediate row of a path when that type changes" do
