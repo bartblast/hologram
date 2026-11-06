@@ -17,7 +17,6 @@ defmodule Hologram.Entity.DerivedTest do
   alias Hologram.Test.Fixtures.Entity.Module34
   alias Hologram.Test.Fixtures.Entity.Module37
   alias Hologram.Test.Fixtures.Entity.Module38
-  alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module40
   alias Hologram.Test.Fixtures.Entity.Module41
 
