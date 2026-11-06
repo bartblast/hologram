@@ -201,10 +201,18 @@ defmodule Hologram.Entity do
       with no project. A condition that wants the related row there says so,
       `project.id != nil and project.archived != true`. A condition built from data goes in pinned,
       `when: ^predicates`, as a list of predicates pairing names with values, where an `or:` entry
-      holding two or more predicate lists is a disjunction. A derived field holding a value compares
-      like an attribute, `when: display_name == "ann"`, and the condition reads what its definition
-      reads, related rows as stored. One reading a related set, through a count or a query builder,
-      fails the build.
+      holding two or more predicate lists is a disjunction. A related set is read through `any`,
+      `none` and `all`, as in a filter:
+      `when: any(member <- project.members, member.user_id == user_id())` holds when some member
+      of the row's project is the acting user, `when: none(tasks)` while the row has no task, and
+      `when: all(seat <- seats, seat.paid == true)` while every seat is paid for, a row with no
+      seat included. Quantifiers nest, a source runs through to-one relationships and sets
+      (`tasks.tags`) and may end at a derived set, and the rows of the set are read as stored. For
+      a session with no user, a `none` or an `all` whose condition names `user_id()` anywhere is
+      false. A derived field holding a value compares like an attribute,
+      `when: display_name == "ann"`, and the condition reads what its definition reads, related
+      rows as stored. A derived value reading a related set, through a count or a query builder,
+      stands only inside a quantifier's condition, and fails the build anywhere else.
 
   The options on one line must all hold at once, and several lines for one operation are
   alternatives.
@@ -212,14 +220,22 @@ defmodule Hologram.Entity do
 
   A client that checks permissions holds the related rows its checks read - the row a `via:` leads
   to and the rows the rules it asks read through it, the rows before the last relationship of a
-  `to:` reference, the rows along a `when:` path - beside the rows it holds, read under the session
-  user's own read rules and kept current. A row the user may not read is missing there and compares
-  as nil, and a change to a related row answers the check again.
+  `to:` reference, the rows along a `when:` path, the rows of the sets an `any` reads - beside the
+  rows it holds, read under the session user's own read rules and kept current. A row the user may
+  not read is missing there and compares as nil, and a change to a related row answers the check
+  again. Some quantifiers need more than the rows a client holds - a `none`, an `all`, one over a
+  derived set, and one whose condition nests one of those or reads a derived value reading a
+  related set - so the server answers them for each row it sends and keeps that answer current.
+  Over a stored set, a row the client holds that settles one answers it first: a task added in the
+  browser makes `none(tasks)` false at once. While a write naming a type the quantifier reads is
+  pending, the quantifier is undecided, and the rule it stands in grants nothing until the server
+  answers again.
 
   So a rule that reads a related row through an entity type with no read rules fails the build: no
   client ever holds such a row, and the browser would answer no where the server may answer yes. A
   rule for `:read` itself is exempt, since a row reaches a client only once the server's read rules
-  admitted it, and a client never decides them.
+  admitted it, and a client never decides them. A quantifier the server answers is exempt too,
+  since its answer stands in for the rows it reads.
   """
   @spec allow(operation, T.opts()) :: Macro.t()
   defmacro allow(operation, spec \\ []) do
