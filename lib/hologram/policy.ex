@@ -55,6 +55,7 @@ defmodule Hologram.Policy do
   """
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Entity
   alias Hologram.Entity.Derived
@@ -64,11 +65,15 @@ defmodule Hologram.Policy do
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
+  @deciding_quantifiers_key {__MODULE__, :deciding_quantifiers}
+
   @locked_set_links_key {__MODULE__, :locked_set_links}
 
   @model_facts_key {__MODULE__, :model_facts}
 
   @quantifiers [:all, :any, :none]
+
+  @verdict_digest_bytes 8
 
   # The operations the framework itself asks about: the four verbs' own and the three gates.
   # Always askable on every entity type, declared or not - default deny answers false.
@@ -271,6 +276,57 @@ defmodule Hologram.Policy do
     entity_types
     |> Enum.filter(&(&1 != RoleGrant and &1.__policies__() == []))
     |> Enum.sort_by(&inspect/1)
+  end
+
+  @doc """
+  Returns whether the given clause of a rule is a deciding quantifier: a quantifier whose clause
+  tree holds a `none` or an `all` - itself, or one in its condition at any depth. A client answers
+  such a clause from the server's verdict (see `Hologram.Auth.verdicts/2`), since the rows it holds
+  of a set can't decide one for certain.
+  """
+  @spec deciding_quantifier?(tuple) :: boolean
+  def deciding_quantifier?({quantifier, {_source, _clauses}}) when quantifier in [:all, :none],
+    do: true
+
+  def deciding_quantifier?({:any, {_source, clauses}}) do
+    clauses
+    |> quantifier_clauses()
+    |> Enum.any?(&deciding_quantifier?/1)
+  end
+
+  def deciding_quantifier?(_clause), do: false
+
+  @doc """
+  Returns the deciding quantifiers of the given entity type's rules, across every operation, as
+  `{key, clause}` pairs sorted by key: every quantifier clause standing in a rule's predicates - at
+  the top or in a disjunction's alternatives, not inside another quantifier - that is a deciding
+  one (see `deciding_quantifier?/1`), keyed by `verdict_key/3`. A clause written the same way twice
+  in one operation is one pair.
+
+  Cached, with the model facts, for the types of the project's compiled data model - a row's
+  verdicts are worked out for every row a client is sent.
+  """
+  @spec deciding_quantifiers(module) :: list({String.t(), tuple})
+  def deciding_quantifiers(entity_type) do
+    Model.ensure_released!()
+
+    cache =
+      case :persistent_term.get(@deciding_quantifiers_key, nil) do
+        nil ->
+          cache = Map.new(Model.entity_types(), &{&1, derived_deciding_quantifiers(&1)})
+
+          :persistent_term.put(@deciding_quantifiers_key, cache)
+
+          cache
+
+        cache ->
+          cache
+      end
+
+    case Map.fetch(cache, entity_type) do
+      {:ok, pairs} -> pairs
+      :error -> derived_deciding_quantifiers(entity_type)
+    end
   end
 
   @doc """
@@ -495,6 +551,7 @@ defmodule Hologram.Policy do
   @doc false
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
+    :persistent_term.erase(@deciding_quantifiers_key)
     :persistent_term.erase(@locked_set_links_key)
     :persistent_term.erase(@model_facts_key)
 
@@ -570,6 +627,57 @@ defmodule Hologram.Policy do
         "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role}"
   end
 
+  @doc """
+  Returns the key the server's verdict on the given deciding quantifier of a rule of the given
+  entity type and operation is sent under, and the client finds it by: the operation's key, a colon,
+  and a short digest of the clause with the definitions of the derived fields it reads. A changed
+  clause, or a changed definition it reads, gets a new key, so a client holding a verdict on what a
+  rule used to mean never reads it for what the rule means now - a deploy changing only policies or
+  derived fields reloads no bundle. The digest's encoding is pinned, so a build and the node running
+  it agree across OTP releases.
+  """
+  @spec verdict_key(module, Entity.operation(), tuple) :: String.t()
+  def verdict_key(entity_type, operation, clause) do
+    definitions =
+      entity_type
+      |> Derived.expanded_fields(Stage.predicate_references([clause]))
+      |> Enum.map(fn {type, name} -> {name, Derived.resolve(type, name)} end)
+
+    digest =
+      {clause, definitions}
+      |> :erlang.term_to_binary([:deterministic, minor_version: 2])
+      |> CryptographicUtils.short_digest(@verdict_digest_bytes)
+
+    "#{operation_key(operation)}:#{digest}"
+  end
+
+  @doc """
+  Returns the entity types the given deciding quantifier of a rule of the given entity type reads,
+  sorted: the rule's own, and every type along its sets' sources and its paths, and through the
+  derived fields it reads, nested quantifiers included. A client takes the server's verdict on the
+  clause as current only while none of its own unanswered writes names one of them.
+  """
+  @spec verdict_reads(module, tuple) :: list(module)
+  def verdict_reads(entity_type, clause) do
+    clauses = [clause]
+
+    references =
+      entity_type
+      |> Derived.expanded_references(Stage.predicate_references(clauses))
+      |> Enum.map(fn {relationship_names, _name} -> relationship_names end)
+
+    chains = references ++ Stage.relationship_chains(clauses)
+
+    types =
+      for chain <- chains,
+          length <- 0..length(chain),
+          do: Entity.path_target(entity_type, Enum.take(chain, length))
+
+    [entity_type | types]
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   defp build_global_reference([]), do: []
 
   defp build_global_reference(role_modules) do
@@ -629,6 +737,19 @@ defmodule Hologram.Policy do
 
   defp declared_roles_description(declared_names) do
     "declared roles are: #{Enum.map_join(declared_names, ", ", &inspect/1)}"
+  end
+
+  defp derived_deciding_quantifiers(entity_type) do
+    entity_type
+    |> build()
+    |> Enum.flat_map(fn {operation, rules} ->
+      for rule <- rules,
+          clause <- quantifier_clauses(rule.predicates),
+          deciding_quantifier?(clause),
+          do: {verdict_key(entity_type, operation, clause), clause}
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   defp delegation_chains(_entity_type, nil), do: []

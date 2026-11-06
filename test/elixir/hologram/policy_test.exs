@@ -5,6 +5,8 @@ defmodule Hologram.PolicyTest do
     only: [
       build: 1,
       dead_entity_types: 1,
+      deciding_quantifier?: 1,
+      deciding_quantifiers: 1,
       delegation: 2,
       expand_global_role: 1,
       expand_global_role: 2,
@@ -20,7 +22,9 @@ defmodule Hologram.PolicyTest do
       related_chains: 2,
       revoke_role_qualifying_roles: 1,
       revoke_role_qualifying_roles: 2,
-      validate_operation!: 2
+      validate_operation!: 2,
+      verdict_key: 3,
+      verdict_reads: 2
     ]
 
   alias Hologram.Auth.RoleGrant
@@ -619,6 +623,80 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "deciding_quantifier?/1" do
+    test "holds for a none and an all" do
+      assert deciding_quantifier?({:none, {[:members], []}})
+      assert deciding_quantifier?({:all, {[:members], [{:seat, :==, "full"}]}})
+    end
+
+    test "holds for an any holding a none in an alternative of its condition" do
+      inner = [{:or, [[{:seat, :==, "full"}], [{:none, {[:labels], []}}]]}]
+
+      assert deciding_quantifier?({:any, {[:members], inner}})
+    end
+
+    test "fails for an any alone and for a predicate" do
+      refute deciding_quantifier?({:any, {[:members], [{:seat, :==, "full"}]}})
+      refute deciding_quantifier?({:seat, :==, "full"})
+    end
+  end
+
+  describe "deciding_quantifiers/1" do
+    defmodule VerdictProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :labels, [Hologram.PolicyTest.VerdictLabel]
+      relationship :members, [Hologram.PolicyTest.VerdictMember], inverse: project
+
+      allow :read, when: any(member <- members, member.user_id == user_id())
+      allow :update, when: name == "open" or all(member <- members, member.seat == "full")
+      allow :delete, when: none(labels)
+      allow :archive, when: none(labels)
+
+      allow :close,
+        when: any(member <- members, none(label <- member.project.labels, label.name == "x"))
+    end
+
+    defmodule VerdictMember do
+      use Hologram.Entity
+
+      attribute :seat, :string
+
+      relationship :project, VerdictProject, optional: true
+      relationship :user, Module14, optional: true
+
+      allow :read
+    end
+
+    defmodule VerdictLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
+    # The read rule's any reads no none or all, so the browser answers it from the rows it holds -
+    # the others are keyed by their operation and clause.
+    test "returns the deciding quantifiers of every operation, keyed" do
+      update_clause = {:all, {[:members], [{:seat, :==, "full"}]}}
+      none_clause = {:none, {[:labels], []}}
+
+      close_clause =
+        {:any, {[:members], [{:none, {[:project, :labels], [{:name, :==, "x"}]}}]}}
+
+      assert deciding_quantifiers(VerdictProject) ==
+               Enum.sort([
+                 {verdict_key(VerdictProject, :archive, none_clause), none_clause},
+                 {verdict_key(VerdictProject, :close, close_clause), close_clause},
+                 {verdict_key(VerdictProject, :delete, none_clause), none_clause},
+                 {verdict_key(VerdictProject, :update, update_clause), update_clause}
+               ])
+    end
+  end
+
   describe "delegation/2" do
     test "returns nil for a line that delegates nothing" do
       assert delegation(:read, nil) == nil
@@ -1159,6 +1237,111 @@ defmodule Hologram.PolicyTest do
       assert_error ArgumentError, expected_msg, fn ->
         validate_operation!(Policy.Module1, wrap_term("read"))
       end
+    end
+  end
+
+  describe "verdict_key/3" do
+    defmodule KeyedProject do
+      use Hologram.Entity
+
+      attribute :title, :string
+
+      relationship :members, [Hologram.PolicyTest.KeyedMember], inverse: project
+
+      allow :read
+    end
+
+    defmodule KeyedMember do
+      use Hologram.Entity
+
+      attribute :first, :string
+      attribute :seat, :string
+
+      relationship :project, KeyedProject, optional: true
+
+      derived :label, :string, fn first -> first <> "!" end
+
+      allow :read
+    end
+
+    defmodule RekeyedMember do
+      use Hologram.Entity
+
+      attribute :first, :string
+
+      derived :label, :string, fn first -> first <> "?" end
+
+      allow :read
+    end
+
+    # Verdicts are stored with the rows a client holds, so the key a clause gets is pinned - a
+    # change to how keys are made would leave every stored verdict unread.
+    test "keys a clause by its operation and a digest of it" do
+      assert verdict_key(KeyedProject, :delete, {:none, {[:members], []}}) ==
+               "delete:bb12cc9173b5a038"
+    end
+
+    test "gives a changed clause a new key and another operation another one" do
+      key = verdict_key(KeyedProject, :delete, {:none, {[:members], []}})
+
+      assert verdict_key(KeyedProject, :delete, {:all, {[:members], [{:seat, :==, "x"}]}}) != key
+      assert verdict_key(KeyedProject, :archive, {:none, {[:members], []}}) != key
+    end
+
+    # The two types declare the same label computed two ways, so the same clause over it means two
+    # things - while over an attribute it means one.
+    test "gives a clause reading a derived field a new key when the field's definition changes" do
+      assert verdict_key(KeyedMember, :delete, {:label, :==, "x"}) !=
+               verdict_key(RekeyedMember, :delete, {:label, :==, "x"})
+
+      assert verdict_key(KeyedMember, :delete, {:first, :==, "x"}) ==
+               verdict_key(RekeyedMember, :delete, {:first, :==, "x"})
+    end
+
+    test "keys a per-role operation the way the client spells it" do
+      assert "grant_role:editor:" <> _digest =
+               verdict_key(KeyedProject, {:grant_role, :editor}, {:none, {[:members], []}})
+    end
+  end
+
+  describe "verdict_reads/2" do
+    test "returns the rule's type and every type along the clause's sets and paths" do
+      clause =
+        {:any,
+         {[:members],
+          [{:none, {[:project, :labels], [{:name, :==, "x"}]}}, {[:user, :email], :==, "a"}]}}
+
+      assert verdict_reads(Hologram.PolicyTest.VerdictProject, clause) ==
+               Enum.sort([
+                 Module14,
+                 Hologram.PolicyTest.VerdictLabel,
+                 Hologram.PolicyTest.VerdictMember,
+                 Hologram.PolicyTest.VerdictProject
+               ])
+    end
+
+    test "returns the types a derived field in the condition reads" do
+      clause = {:none, {[:members], [{:label, :==, "x"}]}}
+
+      assert verdict_reads(Hologram.PolicyTest.KeyedProject, clause) ==
+               Enum.sort([Hologram.PolicyTest.KeyedMember, Hologram.PolicyTest.KeyedProject])
+    end
+
+    test "returns the types of a nested quantifier's set read on a row above" do
+      clause =
+        {:any, {[:members], [{:none, {{:outer, 1, [:labels]}, []}}]}}
+
+      assert verdict_reads(Hologram.PolicyTest.VerdictProject, clause) ==
+               Enum.sort([
+                 Hologram.PolicyTest.VerdictLabel,
+                 Hologram.PolicyTest.VerdictMember,
+                 Hologram.PolicyTest.VerdictProject
+               ])
+    end
+
+    test "returns the types along a set its condition reads nothing on" do
+      assert verdict_reads(Hologram.PolicyTest.VerdictProject, {:none, {[:labels], []}}) ==
+               Enum.sort([Hologram.PolicyTest.VerdictLabel, Hologram.PolicyTest.VerdictProject])
     end
   end
 end

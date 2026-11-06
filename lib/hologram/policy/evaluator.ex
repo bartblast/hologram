@@ -18,6 +18,16 @@ defmodule Hologram.Policy.Evaluator do
   @search_operators [:contains, :contains_exact, :starts_with, :starts_with_exact]
 
   @doc """
+  Returns true when the given clause of a compiled rule holds for the given entity struct, or false
+  otherwise - evaluated as it is inside the rule, a clause standing in a rule's predicates. The
+  checker is the one `rule_matches?/4` takes.
+  """
+  @spec clause_holds?(tuple, struct, String.t() | nil, fun) :: boolean
+  def clause_holds?(clause, entity, actor_user_id, checker) do
+    clause_holds?(clause, [entity], actor_user_id, checker, :positive)
+  end
+
+  @doc """
   Returns true when the given operation's compiled policy grants it for the given entity struct, or false otherwise.
 
   An operation with no rules grants nothing, which is what makes the default deny.

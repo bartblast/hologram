@@ -13,6 +13,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Sync.Carry
@@ -2280,6 +2281,59 @@ defmodule Hologram.AuthTest do
 
     test "returns nil for an anonymous session" do
       assert user_id() == nil
+    end
+  end
+
+  # A row not created yet has nothing in any set of its, so its verdicts are answered without a
+  # read - the sets of a row as stored are read through the same checker can?/3 uses.
+  describe "verdicts/2" do
+    defmodule VerdictBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.AuthTest.VerdictCard], inverse: board
+
+      allow :read
+      allow :delete, when: none(cards)
+      allow :archive, when: none(card <- cards, card.author_id == user_id())
+      allow :update, when: any(card <- cards, card.author_id == user_id())
+    end
+
+    defmodule VerdictCard do
+      use Hologram.Entity
+
+      relationship :author, Module14, optional: true
+      relationship :board, VerdictBoard, optional: true
+
+      allow :read
+    end
+
+    defp verdict_key(operation, clause), do: Policy.verdict_key(VerdictBoard, operation, clause)
+
+    defp archive_key,
+      do: verdict_key(:archive, {:none, {[:cards], [{:author_id, :==, {:actor}}]}})
+
+    defp delete_key, do: verdict_key(:delete, {:none, {[:cards], []}})
+
+    test "answers each deciding quantifier of the row's type for the user" do
+      user_id = Entity.generate_id()
+
+      assert verdicts(user_id, %VerdictBoard{}) == %{
+               archive_key() => true,
+               delete_key() => true
+             }
+    end
+
+    # Nobody wrote no card on an empty board, but the archive rule asks about nobody, which grants
+    # nothing.
+    test "answers a visitor's none naming the actor false" do
+      assert verdicts(nil, %VerdictBoard{}) == %{
+               archive_key() => false,
+               delete_key() => true
+             }
+    end
+
+    test "answers nothing for a type with no deciding quantifier" do
+      assert verdicts(nil, %Module14{}) == %{}
     end
   end
 end

@@ -101,6 +101,20 @@ defmodule Hologram.Entity.Derived do
   end
 
   @doc """
+  Returns the derived fields holding a value that the given references read on a row of the given
+  entity type, each as `{entity type, name}` once, sorted: every one named among them, and every
+  one their definitions read in turn, on the rows they are read on. A field reached again inside
+  its own reads adds nothing.
+  """
+  @spec expanded_fields(module, list({list(atom), atom})) :: list({module, atom})
+  def expanded_fields(entity_type, references) do
+    entity_type
+    |> expanded_fields(references, [])
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns the stand-in for the given path of fields of a row of the given owning entity type, read
   by a derived field's function: a query over the set a path ends at - a relationship's or a derived
   field's - a row field for one ending at an attribute, a reference field or a derived field holding
@@ -338,6 +352,24 @@ defmodule Hologram.Entity.Derived do
 
   defp derived_kind({_name, type, _opts}) do
     if Reflection.alias?(type), do: :derived_row, else: :value
+  end
+
+  defp expanded_fields(entity_type, references, visited) do
+    Enum.flat_map(references, fn {relationship_names, name} ->
+      read_type = Entity.path_target(entity_type, relationship_names)
+      field = {read_type, name}
+
+      if value_field?(read_type, name) and field not in visited do
+        read_references =
+          read_type
+          |> resolve(name)
+          |> definition_references()
+
+        [field | expanded_fields(read_type, read_references, [field | visited])]
+      else
+        []
+      end
+    end)
   end
 
   defp expanded_references(entity_type, references, visited) do

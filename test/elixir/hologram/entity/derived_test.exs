@@ -17,6 +17,7 @@ defmodule Hologram.Entity.DerivedTest do
   alias Hologram.Test.Fixtures.Entity.Module34
   alias Hologram.Test.Fixtures.Entity.Module37
   alias Hologram.Test.Fixtures.Entity.Module38
+  alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module40
   alias Hologram.Test.Fixtures.Entity.Module41
 
@@ -66,6 +67,27 @@ defmodule Hologram.Entity.DerivedTest do
         "no definition for Hologram.Test.Fixtures.Entity.Module33.unknown - the Hologram compile resolves derived fields"
 
       assert_error ArgumentError, expected_msg, fn -> definition(Module33, :unknown) end
+    end
+  end
+
+  describe "expanded_fields/2" do
+    # The member name reads the member's display name, which reads the channel's name - an
+    # attribute, so the walk ends there.
+    test "returns every derived field a reference reads, through the fields it reads" do
+      assert expanded_fields(Module39, [{[], :member_name}]) == [
+               {Module34, :display_name},
+               {Module39, :member_name}
+             ]
+    end
+
+    test "returns a derived field a path reads on the row it leads to" do
+      assert expanded_fields(Module39, [{[:member], :display_name}]) == [
+               {Module34, :display_name}
+             ]
+    end
+
+    test "returns nothing for an attribute" do
+      assert expanded_fields(Module39, [{[], :score}]) == []
     end
   end
 

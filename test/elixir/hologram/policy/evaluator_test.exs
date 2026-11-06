@@ -27,6 +27,28 @@ defmodule Hologram.Policy.EvaluatorTest do
     Enum.into(fields, %{predicates: [], to: nil, via: nil})
   end
 
+  describe "clause_holds?/4" do
+    test "answers a clause of a rule for the given row" do
+      checker = fn {:set, [:messages], :whole}, %Module26{}, _actor_user_id ->
+        [%Module28{body: "hi"}]
+      end
+
+      assert clause_holds?(
+               {:none, {[:messages], [{:body, :==, "bye"}]}},
+               %Module26{},
+               nil,
+               checker
+             )
+
+      refute clause_holds?(
+               {:none, {[:messages], [{:body, :==, "hi"}]}},
+               %Module26{},
+               nil,
+               checker
+             )
+    end
+  end
+
   describe "grants?/5" do
     test "returns false for an operation with no rules" do
       entity = %Module1{public: true}

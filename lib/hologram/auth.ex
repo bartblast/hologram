@@ -420,6 +420,29 @@ defmodule Hologram.Auth do
   @spec user_id() :: String.t() | nil
   defdelegate user_id, to: Context, as: :actor_user_id
 
+  @doc """
+  Returns the server's verdict on each deciding quantifier of the given row's type (see
+  `Hologram.Policy.deciding_quantifiers/1`) for the given user, keyed by its verdict key: whether
+  the clause holds for the row, read as stored - what a client answers such a clause by, since the
+  rows it holds of a set can't decide one for certain. Empty for a type with none. Takes nil for an
+  anonymous session. A clause several keys share - one written for several operations, or a grant
+  lifecycle line expanded per role - is answered once.
+  """
+  @spec verdicts(String.t() | nil, struct) :: %{String.t() => boolean}
+  def verdicts(actor_user_id, %entity_type{} = row) do
+    checker = &check_requirement(&1, &2, &3, :stored)
+
+    entity_type
+    |> Policy.deciding_quantifiers()
+    |> Enum.group_by(fn {_key, clause} -> clause end, fn {key, _clause} -> key end)
+    |> Enum.flat_map(fn {clause, keys} ->
+      holds? = Evaluator.clause_holds?(clause, row, actor_user_id, checker)
+
+      Enum.map(keys, &{&1, holds?})
+    end)
+    |> Map.new()
+  end
+
   defp actor_user_id(%{id: id}), do: id
 
   defp actor_user_id(user_id), do: user_id

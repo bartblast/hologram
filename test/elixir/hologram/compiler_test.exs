@@ -3077,6 +3077,9 @@ defmodule Hologram.CompilerTest do
             member <- members,
             any(other <- members, other.joined_at > ^~U[2026-01-01 00:00:00Z])
           )
+
+      allow :delete, when: name == "draft" or none(members)
+      allow :share, when: any(member <- members, none(label <- member.labels, label.name == "x"))
     end
 
     defmodule BakedMember do
@@ -3098,6 +3101,12 @@ defmodule Hologram.CompilerTest do
       attribute :name, :string
 
       allow :read
+    end
+
+    defp archive_key do
+      [%{predicates: [clause]}] = Hologram.Policy.build(BakedProject).archive
+
+      Hologram.Policy.verdict_key(BakedProject, :archive, clause)
     end
 
     setup do
@@ -4342,6 +4351,72 @@ defmodule Hologram.CompilerTest do
              )
     end
 
+    # A deciding clause is answered from the server's verdict, so it carries the key the verdict is
+    # sent under and the types whose unanswered writes make the verdict stale - in an alternative
+    # too, and only the outer one when it holds a none inside. The any alone reads no none or all.
+    test "bakes a deciding quantifier's verdict key and the types it reads", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types =
+        MapSet.new([
+          BakedProject,
+          BakedMember,
+          BakedLabel,
+          Hologram.Test.Fixtures.Entity.Module14,
+          RoleGrant
+        ])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      [%{predicates: [archive_clause]}] = Hologram.Policy.build(BakedProject).archive
+      key = Hologram.Policy.verdict_key(BakedProject, :archive, archive_clause)
+
+      assert String.contains?(
+               js,
+               ~s/"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{key}"}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["user_id","==",{"actor":true}]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      [%{predicates: [{:or, [_name, [delete_clause]]}]}] =
+        Hologram.Policy.build(BakedProject).delete
+
+      delete_key = Hologram.Policy.verdict_key(BakedProject, :delete, delete_clause)
+
+      assert String.contains?(
+               js,
+               ~s/[{"filter":[],"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{delete_key}"}]/
+             )
+
+      [%{predicates: [share_clause]}] = Hologram.Policy.build(BakedProject).share
+      share_key = Hologram.Policy.verdict_key(BakedProject, :share, share_clause)
+
+      assert String.contains?(
+               js,
+               ~s/"share":[{"predicates":[{"filter":[{"filter":[["name","==","x"]],"quantifier":"none","source":["labels"]}],"quantifier":"any","reads":["Hologram.CompilerTest.BakedLabel","Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{share_key}"}],"to":null,"via":null}]/
+             )
+    end
+
     # Each time is spelled by the type of the attribute it is compared with, on the row that
     # attribute is read on: the members' join time, the project's start through an outer name, the
     # user's creation through a path from a member, and the join time inside a quantifier whose set
@@ -4379,7 +4454,7 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","source":["members"]}],"to":null,"via":null}]/
+               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{archive_key()}"}],"to":null,"via":null}]/
              )
 
       assert String.contains?(

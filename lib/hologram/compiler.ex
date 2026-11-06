@@ -2768,6 +2768,29 @@ defmodule Hologram.Compiler do
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
 
+  # The verdict key and the read types of a deciding quantifier standing in a rule's predicates, as
+  # members of its object - none for any other clause.
+  defp render_verdict_members(clause, {entity_type, operation}) do
+    if Policy.deciding_quantifier?(clause) do
+      reads_js =
+        entity_type
+        |> Policy.verdict_reads(clause)
+        |> Enum.map_join(",", &render_entity_type_label/1)
+        |> then(&"[#{&1}]")
+
+      verdict_js =
+        entity_type
+        |> Policy.verdict_key(operation, clause)
+        |> Jason.encode!()
+
+      [{"reads", reads_js}, {"verdict", verdict_js}]
+    else
+      []
+    end
+  end
+
+  defp render_verdict_members(_clause, nil), do: []
+
   defp resolve_derived_definition(entity_type, name, ir_plt) do
     if name in entity_type.__derived_builder_calls__() do
       {definition, read_modules} = QueryExtractor.derived_definition(entity_type, name, ir_plt)
@@ -4330,20 +4353,22 @@ defmodule Hologram.Compiler do
     entity_type
     |> Policy.build()
     |> Enum.map(fn {operation, rules} ->
-      {Policy.operation_key(operation), render_policy_rules(entity_type, rules)}
+      {Policy.operation_key(operation), render_policy_rules(entity_type, operation, rules)}
     end)
     |> render_json_object()
   end
 
-  defp render_policy_rules(entity_type, rules) do
+  defp render_policy_rules(entity_type, operation, rules) do
     rules
-    |> Enum.map_join(",", &render_policy_rule(entity_type, &1))
+    |> Enum.map_join(",", &render_policy_rule(entity_type, operation, &1))
     |> then(&"[#{&1}]")
   end
 
-  defp render_policy_rule(entity_type, rule) do
+  defp render_policy_rule(entity_type, operation, rule) do
+    verdict_context = {entity_type, operation}
+
     render_json_object([
-      {"predicates", render_policy_predicates([entity_type], rule.predicates)},
+      {"predicates", render_policy_predicates([entity_type], rule.predicates, verdict_context)},
       {"to", render_policy_references(entity_type, rule.to)},
       {"via", render_policy_delegation(rule.via)}
     ])
@@ -4351,19 +4376,20 @@ defmodule Hologram.Compiler do
 
   # Triples, the same shape the client's query filters take - name, operator, value - so one
   # reader spells both. The types are those of the rows the clauses are read on, nearest first: the
-  # rule's own row alone outside any quantifier.
-  defp render_policy_predicates(types, predicates) do
+  # rule's own row alone outside any quantifier. The verdict context is the rule's type and
+  # operation for the clauses standing in its predicates, and nil inside a quantifier.
+  defp render_policy_predicates(types, predicates, verdict_context \\ nil) do
     predicates
-    |> Enum.map_join(",", &render_policy_clause(types, &1))
+    |> Enum.map_join(",", &render_policy_clause(types, &1, verdict_context))
     |> then(&"[#{&1}]")
   end
 
   # A disjunction is an object beside the triple arrays, holding its alternatives - the shape the
   # query kernel's filters take, so one reader tells the two apart by whether a clause is an array.
-  defp render_policy_clause(types, {:or, alternatives}) do
+  defp render_policy_clause(types, {:or, alternatives}, verdict_context) do
     alternatives_js =
       alternatives
-      |> Enum.map_join(",", &render_policy_predicates(types, &1))
+      |> Enum.map_join(",", &render_policy_predicates(types, &1, verdict_context))
       |> then(&"[#{&1}]")
 
     render_json_object([{"or", alternatives_js}])
@@ -4371,8 +4397,10 @@ defmodule Hologram.Compiler do
 
   # A quantifier is an object too, in the shape the kernel's filters take it: the set its source
   # leads to, read on the row it is about or on one above it, and the condition each of the set's
-  # rows is matched with, read on that row with the rows above it.
-  defp render_policy_clause(types, {quantifier, {source, clauses}})
+  # rows is matched with, read on that row with the rows above it. A deciding one standing in a
+  # rule's predicates carries the key the server's verdict on it is sent under and the types it
+  # reads, whose unanswered writes by the client make the verdict stale.
+  defp render_policy_clause(types, {quantifier, {source, clauses}} = clause, verdict_context)
        when quantifier in [:all, :any, :none] do
     related_type = quantified_type(source, types)
 
@@ -4381,14 +4409,16 @@ defmodule Hologram.Compiler do
       |> Atom.to_string()
       |> Jason.encode!()
 
-    render_json_object([
+    members = [
       {"filter", render_policy_predicates([related_type | types], clauses)},
       {"quantifier", quantifier_js},
       {"source", render_derived_name(source)}
-    ])
+    ]
+
+    render_json_object(members ++ render_verdict_members(clause, verdict_context))
   end
 
-  defp render_policy_clause(types, {name, operator, value}) do
+  defp render_policy_clause(types, {name, operator, value}, _verdict_context) do
     name_js = render_derived_name(name)
 
     operator_js =
