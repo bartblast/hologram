@@ -222,14 +222,15 @@ defmodule Hologram.Entity do
   to and the rows the rules it asks read through it, the rows before the last relationship of a
   `to:` reference, the rows along a `when:` path, the rows of the sets an `any` reads - beside the
   rows it holds, read under the session user's own read rules and kept current. A row the user may
-  not read is missing there and compares as nil, and a change to a related row answers the check
-  again. Some quantifiers need more than the rows a client holds - a `none`, an `all`, one over a
-  derived set, and one whose condition nests one of those or reads a derived value reading a
-  related set - so the server answers them for each row it sends and keeps that answer current.
-  Over a stored set, a row the client holds that settles one answers it first: a task added in the
-  browser makes `none(tasks)` false at once. While a write naming a type the quantifier reads is
-  pending, the quantifier is undecided, and the rule it stands in grants nothing until the server
-  answers again.
+  not read is missing there, so a path through a row the client doesn't hold is undecided rather
+  than nil: the rule it stands in grants nothing, though another alternative of an `or` still can. A
+  change to a related row answers the check again. Some quantifiers need more than the rows a client
+  holds - a `none`, an `all`, one over a derived set, and one whose condition nests one of those or
+  reads a derived value reading a related set - so the server answers them for each row it sends and
+  keeps that answer current. Over a stored set, a row the client holds that settles one answers it
+  first: a task added in the browser makes `none(tasks)` false at once. While a write naming a type
+  the quantifier reads is pending, the quantifier is undecided, and the rule it stands in grants
+  nothing until the server answers again.
 
   So a rule that reads a related row through an entity type with no read rules fails the build: no
   client ever holds such a row, and the browser would answer no where the server may answer yes. A
