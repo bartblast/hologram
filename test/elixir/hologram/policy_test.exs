@@ -1510,6 +1510,8 @@ defmodule Hologram.PolicyTest do
     end
 
     test "returns the types a derived field in the condition reads" do
+      put_derived_definitions([Hologram.PolicyTest.KeyedMember])
+
       clause = {:none, {[:members], [{:label, :==, "x"}]}}
 
       assert verdict_reads(Hologram.PolicyTest.KeyedProject, clause) ==
@@ -1526,6 +1528,17 @@ defmodule Hologram.PolicyTest do
                  Hologram.PolicyTest.VerdictMember,
                  Hologram.PolicyTest.VerdictProject
                ])
+    end
+
+    test "returns the types a derived set's definition reads" do
+      board = Hologram.PolicyTest.LockedBoard
+
+      put_derived_definitions([board, Hologram.PolicyTest.LockedCard])
+
+      clause = {:none, {[:busy_cards], [{:rank, :==, 1}]}}
+
+      assert verdict_reads(board, clause) ==
+               Enum.sort([board, Hologram.PolicyTest.LockedCard, Hologram.PolicyTest.LockedTag])
     end
 
     test "returns the types along a set its condition reads nothing on" do

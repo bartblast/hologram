@@ -5,7 +5,6 @@ defmodule Hologram.Policy.Edges do
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
   alias Hologram.Policy
-  alias Hologram.Query.Stage
 
   @index_key {__MODULE__, :index}
 
@@ -196,9 +195,11 @@ defmodule Hologram.Policy.Edges do
   # reads the attribute of the row its relationships lead to, and the reference fields it is
   # followed through. A derived field reads what its definition reads, written in place. A
   # quantifier reads the attributes its condition names on the rows of its set, and the rows its
-  # source follows to get there, whether or not its condition reads any.
+  # source follows to get there, whether or not its condition reads any - through a derived set,
+  # the rows its definition reads and what it reads on them (see
+  # Hologram.Entity.Derived.set_reads/2).
   defp predicate_edges(entity_type, predicates) do
-    references = Stage.predicate_references(predicates)
+    {references, chains} = Derived.set_reads(entity_type, predicates)
 
     {own_references, path_references} =
       entity_type
@@ -221,9 +222,7 @@ defmodule Hologram.Policy.Edges do
       end)
 
     source_edges =
-      predicates
-      |> Stage.relationship_chains()
-      |> Enum.flat_map(fn chain ->
+      Enum.flat_map(chains, fn chain ->
         {walked_edges, _through_set?} = walked_edges(entity_type, chain)
 
         walked_edges

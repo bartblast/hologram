@@ -655,8 +655,9 @@ defmodule Hologram.Policy do
   @doc """
   Returns the entity types the given deciding quantifier of a rule of the given entity type reads,
   sorted: the rule's own, and every type along its sets' sources and its paths, and through the
-  derived fields it reads, nested quantifiers included. A client takes the server's verdict on the
-  clause as current only while none of its own unanswered writes names one of them.
+  derived fields it reads, nested quantifiers included - a derived set's own reads among them. A
+  client takes the server's verdict on the clause as current only while none of its own unanswered
+  writes names one of them.
   """
   @spec verdict_reads(module, tuple) :: list(module)
   def verdict_reads(entity_type, clause) do
@@ -674,12 +675,14 @@ defmodule Hologram.Policy do
   def verdict_related_reads(entity_type, clause) do
     clauses = [clause]
 
+    {set_references, set_chains} = Derived.set_reads(entity_type, clauses)
+
     references =
       entity_type
-      |> Derived.expanded_references(Stage.predicate_references(clauses))
+      |> Derived.expanded_references(set_references)
       |> Enum.map(fn {relationship_names, _name} -> relationship_names end)
 
-    chains = references ++ Stage.relationship_chains(clauses)
+    chains = references ++ set_chains
 
     types =
       for chain <- chains,

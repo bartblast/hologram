@@ -343,6 +343,46 @@ defmodule Hologram.Policy.EdgesTest do
       allow :read, via: task
     end
 
+    defmodule EdgeBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.Policy.EdgesTest.EdgeCard], inverse: board
+
+      derived :busy_cards, [Hologram.Policy.EdgesTest.EdgeCard], fn cards ->
+        filter(cards, tag_count > 1)
+      end
+
+      derived :top_cards, [Hologram.Policy.EdgesTest.EdgeCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+
+      allow :read, when: any(card <- top_cards, card.rank == 1)
+      allow :update, when: any(card <- busy_cards, card.rank == 1)
+    end
+
+    defmodule EdgeCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      relationship :board, EdgeBoard, optional: true
+      relationship :tags, [Hologram.Policy.EdgesTest.EdgeTag]
+
+      derived :tag_count, :integer, fn tags -> count(tags) end
+    end
+
+    defmodule EdgeTag do
+      use Hologram.Entity
+
+      attribute :name, :string
+    end
+
+    setup do
+      put_derived_definitions([EdgeBoard, EdgeCard, EdgeMember])
+    end
+
     # A member joins or leaves the project's set by its reference field, which its edge names beside
     # what the condition reads.
     test "derives the edges of an inverse set of a to-one with a condition and without one" do
@@ -354,6 +394,22 @@ defmodule Hologram.Policy.EdgesTest do
 
       assert edges[{EdgeProject, :update}] == [
                {:set_attributes, [:members], EdgeMember, [:project_id]}
+             ]
+    end
+
+    # The bound is taken by rank among the board's cards, so a card's rank moving or a card joining
+    # can change the set. A normalized query is ordered by its id last.
+    test "derives the edges of the set a derived set reads, with its sort keys" do
+      assert derive([EdgeBoard])[{EdgeBoard, :read}] == [
+               {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]}
+             ]
+    end
+
+    # A tag joining a card moves the count the derived set's filter reads.
+    test "derives the edges of the set a count in a derived set's filter counts" do
+      assert derive([EdgeBoard])[{EdgeBoard, :update}] == [
+               {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]},
+               {:set_edges, [:cards, :tags], EdgeCard, [:tags]}
              ]
     end
 
