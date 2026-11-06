@@ -71,6 +71,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module19, as: LabelPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module24, as: ShelfPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
@@ -2069,6 +2071,26 @@ defmodule Hologram.CompilerTest do
 
       assert MapSet.member?(sync_constants.entity_types, PolicyEntity)
       refute MapSet.member?(sync_constants.entity_types, Entity4)
+    end
+
+    # Labels declare nothing, but a project's rule reads its labels, and a client answering the rule
+    # holds the labels it reads.
+    test "names the type of a set a checked rule reads when a page checks permissions on the client",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert MapSet.member?(sync_constants.entity_types, LabelPolicyEntity)
+    end
+
+    # Shelves declare nothing, but a task's rule reads a shelf's cards, and a client follows the
+    # rule's source through the shelf.
+    test "names a type a checked rule's set is read through when a page checks permissions on the client",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert MapSet.member?(sync_constants.entity_types, ShelfPolicyEntity)
     end
 
     test "leaves unqueried policied types out when no page checks permissions on the client", %{
