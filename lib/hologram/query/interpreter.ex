@@ -18,6 +18,7 @@ defmodule Hologram.Query.Interpreter do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Query
+  alias Hologram.Query.Ordering
 
   @quantifiers [:all, :any, :none]
 
@@ -93,7 +94,7 @@ defmodule Hologram.Query.Interpreter do
 
   defp arrange(rows, term, scope) do
     rows
-    |> sort(term.sort, term.entity, scope)
+    |> Ordering.sort(term.sort, term.entity, &read(&1, &2, scope))
     |> bound(term)
   end
 
@@ -111,67 +112,6 @@ defmodule Hologram.Query.Interpreter do
       |> Enum.flat_map(&link_rows(&1, name, scope))
       |> Enum.uniq_by(& &1.id)
     end)
-  end
-
-  # Values of one kind, compared the way that kind is ordered rather than the way its
-  # representation happens to sort: two dates are two maps to a term comparison, which would
-  # read their days before their years.
-  defp compare_values(%Date{} = left, %Date{} = right), do: Date.compare(left, right)
-
-  defp compare_values(%DateTime{} = left, %DateTime{} = right) do
-    DateTime.compare(left, right)
-  end
-
-  defp compare_values(%Time{} = left, %Time{} = right), do: Time.compare(left, right)
-
-  defp compare_values(left, right) when left < right, do: :lt
-
-  defp compare_values(left, right) when left > right, do: :gt
-
-  defp compare_values(_left, _right), do: :eq
-
-  # Missing values are placed the way the database places them - last when ascending, first when
-  # descending - so a page reading its own rows shows them where the server put them.
-  defp compare_keys(nil, nil, _direction, _ranks), do: :eq
-
-  defp compare_keys(nil, _right, :asc, _ranks), do: :gt
-
-  defp compare_keys(_left, nil, :asc, _ranks), do: :lt
-
-  defp compare_keys(nil, _right, :desc, _ranks), do: :lt
-
-  defp compare_keys(_left, nil, :desc, _ranks), do: :gt
-
-  defp compare_keys(left, right, direction, ranks) do
-    result = compare_ordering_values(left, right, ranks)
-
-    if direction == :desc do
-      flip(result)
-    else
-      result
-    end
-  end
-
-  # Strings order by the key derived from them and then by themselves, which is the pair of
-  # columns the database orders them by - the key carries the practical order, and the value
-  # behind it settles what the key cannot, since the key is a bounded prefix of it.
-  defp compare_ordering_values(left, right) when is_binary(left) and is_binary(right) do
-    case compare_values(SortKey.compute(left), SortKey.compute(right)) do
-      :eq -> compare_values(left, right)
-      result -> result
-    end
-  end
-
-  defp compare_ordering_values(left, right), do: compare_values(left, right)
-
-  defp compare_ordering_values(left, right, nil), do: compare_ordering_values(left, right)
-
-  # An enum value orders by its position in the declared list, which is the order the database
-  # holds the type in - so what compares is the pair of positions rather than the labels. A value
-  # the list does not hold is a bug surfacing rather than a case to place: the database refuses
-  # to store one, and the lookup raises on it here.
-  defp compare_ordering_values(left, right, ranks) do
-    compare_values(Map.fetch!(ranks, left), Map.fetch!(ranks, right))
   end
 
   # The rows a definition of a derived field holding rows holds for the row: a query's rows in its
@@ -317,25 +257,6 @@ defmodule Hologram.Query.Interpreter do
     %{database: database, opts: opts, outer: [], ranks: %{}, types: [row.__struct__]}
   end
 
-  # What an enum compares by: each declared value against its position in the list the entity
-  # declares, built per clause list and only for the names that need it - the ordering keys and the
-  # filtered attributes alike, a derived enum's declared values among them. A name of any other type
-  # is absent, and its comparison is the ordinary one.
-  defp enum_ranks(entity_type, names) do
-    entity_type.__attributes__()
-    |> Enum.concat(entity_type.__derived__())
-    |> Enum.filter(fn {name, type, _opts} -> type == :enum and name in names end)
-    |> Map.new(fn {name, _type, opts} ->
-      ranks =
-        opts
-        |> Keyword.fetch!(:values)
-        |> Enum.with_index()
-        |> Map.new()
-
-      {name, ranks}
-    end)
-  end
-
   defp equal?(%Date{} = left, %Date{} = right), do: Date.compare(left, right) == :eq
 
   defp equal?(%DateTime{} = left, %DateTime{} = right) do
@@ -376,12 +297,6 @@ defmodule Hologram.Query.Interpreter do
   end
 
   defp evaluated({:value, value}, _row, _scope), do: value
-
-  defp flip(:eq), do: :eq
-
-  defp flip(:gt), do: :lt
-
-  defp flip(:lt), do: :gt
 
   defp inverse_rows(row, %{reference?: true} = inverse, database) do
     reference_field = reference_field(inverse.forward)
@@ -519,23 +434,6 @@ defmodule Hologram.Query.Interpreter do
     |> Enum.reject(&is_nil/1)
   end
 
-  # Every key of the order is spent before two rows are called equal, and the last of them is
-  # always the id, so no two rows ever are.
-  defp precedes?(_left_values, _right_values, [], _ranks), do: false
-
-  defp precedes?(
-         [left_value | left_rest],
-         [right_value | right_rest],
-         [{name, direction} | rest],
-         ranks
-       ) do
-    case compare_keys(left_value, right_value, direction, Map.get(ranks, name)) do
-      :eq -> precedes?(left_rest, right_rest, rest, ranks)
-      :lt -> true
-      :gt -> false
-    end
-  end
-
   # The ranks a clause list's own predicates compare by, keyed by the name each predicate is written
   # with - an attribute or a path, whose ranks are those of the attribute it ends at, on the row the
   # name is read on - the ones inside a disjunction's alternatives included. A quantifier's
@@ -548,7 +446,7 @@ defmodule Hologram.Query.Interpreter do
       {subject_type, subject_name} = subject(types, name)
 
       subject_type
-      |> enum_ranks([subject_name])
+      |> Ordering.enum_ranks([subject_name])
       |> Enum.map(fn {_subject_name, ranks} -> {name, ranks} end)
     end)
     |> Map.new()
@@ -642,19 +540,19 @@ defmodule Hologram.Query.Interpreter do
   defp satisfies?(:starts_with_exact, value, term, _ranks), do: String.starts_with?(value, term)
 
   defp satisfies?(:<, value, operand, ranks) do
-    compare_ordering_values(value, operand, ranks) == :lt
+    Ordering.compare(value, operand, ranks) == :lt
   end
 
   defp satisfies?(:<=, value, operand, ranks) do
-    compare_ordering_values(value, operand, ranks) in [:eq, :lt]
+    Ordering.compare(value, operand, ranks) in [:eq, :lt]
   end
 
   defp satisfies?(:>, value, operand, ranks) do
-    compare_ordering_values(value, operand, ranks) == :gt
+    Ordering.compare(value, operand, ranks) == :gt
   end
 
   defp satisfies?(:>=, value, operand, ranks) do
-    compare_ordering_values(value, operand, ranks) in [:eq, :gt]
+    Ordering.compare(value, operand, ranks) in [:eq, :gt]
   end
 
   # The rows of a set - a to-many's pairs, an inverse set's related rows, or the rows a derived field
@@ -673,19 +571,6 @@ defmodule Hologram.Query.Interpreter do
           paired_rows(row, name, Entity.related_type(entity_type, name), scope.database)
       end
     end
-  end
-
-  # Each row's keys are read once - a derived one is computed - and the rows ordered by them.
-  defp sort(rows, keys, entity_type, scope) do
-    names = Enum.map(keys, fn {name, _direction} -> name end)
-    ranks = enum_ranks(entity_type, names)
-
-    rows
-    |> Enum.map(fn row -> {row, Enum.map(names, &read(row, &1, scope))} end)
-    |> Enum.sort(fn {_left, left_values}, {_right, right_values} ->
-      precedes?(left_values, right_values, keys, ranks)
-    end)
-    |> Enum.map(fn {row, _values} -> row end)
   end
 
   # The reference field's atom is one the entity's own struct defines, so it is always there to
