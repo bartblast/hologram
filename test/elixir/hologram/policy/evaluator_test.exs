@@ -111,6 +111,10 @@ defmodule Hologram.Policy.EvaluatorTest do
   end
 
   describe "rule_matches?/4" do
+    setup do
+      put_derived_definitions([Module42])
+    end
+
     # The row the note relationship leads to, as the checker reads it for a path.
     defp note_checker(note) do
       fn {:related, [:note]}, _entity, _actor_user_id -> note end
@@ -875,6 +879,10 @@ defmodule Hologram.Policy.EvaluatorTest do
   end
 
   describe "rule_matches?/4 - quantifiers" do
+    setup do
+      put_derived_definitions([Module34, Module39])
+    end
+
     # A none or an all asks for the set whole, an any alone for its rows - the same rows here.
     defp messages_checker(messages) do
       fn
@@ -1146,6 +1154,205 @@ defmodule Hologram.Policy.EvaluatorTest do
       rule = quantified_rule(none: {[:messages], [{:body, :==, "bye"}]})
 
       assert rule_matches?(rule, %Module26{}, nil, checker)
+    end
+  end
+
+  describe "rule_matches?/4 - quantifiers over derived sets" do
+    defmodule DerivedBoard do
+      use Hologram.Entity
+
+      attribute :min_rank, :integer
+      attribute :name, :string
+
+      relationship :cards, [Hologram.Policy.EvaluatorTest.DerivedCard], inverse: board, sort: rank
+
+      derived :busy_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        filter(cards, tag_count > 1)
+      end
+
+      derived :flag_tag_count, :integer, fn cards -> count(cards.flag_tags) end
+
+      derived :flagged_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        filter(cards, any(tag <- tags, tag.name == "flag"))
+      end
+
+      derived :later_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        skip(cards, 1)
+      end
+
+      derived :low_top_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn top_cards ->
+        filter(top_cards, rank < 3)
+      end
+
+      derived :maybe_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards, name ->
+        if name == "none", do: nil, else: cards
+      end
+
+      derived :most_tagged_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        cards
+        |> sort(tag_count: :desc)
+        |> take(1)
+      end
+
+      derived :named_tag_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards, name ->
+        filter(cards, any(tag <- tags, tag.name == ^name))
+      end
+
+      derived :picked_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards, name ->
+        if name == "top", do: take(cards, 1), else: cards
+      end
+
+      derived :ranked_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards, min_rank ->
+        filter(cards, rank >= ^min_rank)
+      end
+
+      derived :top_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+    end
+
+    defmodule DerivedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      relationship :board, DerivedBoard, optional: true
+      relationship :tags, [Hologram.Policy.EvaluatorTest.DerivedTag]
+
+      derived :flag_tags, [Hologram.Policy.EvaluatorTest.DerivedTag], fn tags ->
+        filter(tags, name == "flag")
+      end
+
+      derived :tag_count, :integer, fn tags -> count(tags) end
+    end
+
+    defmodule DerivedTag do
+      use Hologram.Entity
+
+      attribute :name, :string
+    end
+
+    setup do
+      put_derived_definitions([DerivedBoard, DerivedCard])
+    end
+
+    defp card(rank, tags \\ []) do
+      %DerivedCard{id: Hologram.Entity.generate_id(), rank: rank, tags: tags}
+    end
+
+    # The board's cards are its stored set, a card's tags the ones it was built with.
+    defp board_checker(cards) do
+      fn
+        {:set, [:cards]}, %DerivedBoard{}, _actor_user_id -> cards
+        {:set, [:tags]}, %DerivedCard{tags: tags}, _actor_user_id -> tags
+      end
+    end
+
+    defp any_rank(source, rank), do: rule(predicates: [any: {source, [{:rank, :==, rank}]}])
+
+    defp tag(name), do: %DerivedTag{id: Hologram.Entity.generate_id(), name: name}
+
+    test "reads only the rows within a derived set's bound" do
+      checker = board_checker([card(1), card(2), card(3)])
+
+      refute rule_matches?(any_rank([:top_cards], 1), %DerivedBoard{}, nil, checker)
+      assert rule_matches?(any_rank([:top_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads a derived set's filter pinned to a field of the row it belongs to" do
+      checker = board_checker([card(1), card(3)])
+
+      refute rule_matches?(any_rank([:ranked_cards], 1), %DerivedBoard{min_rank: 2}, nil, checker)
+      assert rule_matches?(any_rank([:ranked_cards], 1), %DerivedBoard{min_rank: 1}, nil, checker)
+    end
+
+    test "reads the query a derived set's if picks for the row it belongs to" do
+      checker = board_checker([card(1), card(2)])
+
+      refute rule_matches?(any_rank([:picked_cards], 2), %DerivedBoard{name: "top"}, nil, checker)
+      assert rule_matches?(any_rank([:picked_cards], 2), %DerivedBoard{name: "all"}, nil, checker)
+    end
+
+    test "reads a quantifier inside a derived set's filter" do
+      checker = board_checker([card(1, [tag("flag")]), card(2)])
+
+      assert rule_matches?(any_rank([:flagged_cards], 1), %DerivedBoard{}, nil, checker)
+      refute rule_matches?(any_rank([:flagged_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads a count inside a derived set's filter" do
+      checker = board_checker([card(1, [tag("a"), tag("b")]), card(2, [tag("a")])])
+
+      assert rule_matches?(any_rank([:busy_cards], 1), %DerivedBoard{}, nil, checker)
+      refute rule_matches?(any_rank([:busy_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads a derived set ordered by a derived field" do
+      checker = board_checker([card(1, [tag("a")]), card(2, [tag("a"), tag("b")])])
+
+      refute rule_matches?(any_rank([:most_tagged_cards], 1), %DerivedBoard{}, nil, checker)
+      assert rule_matches?(any_rank([:most_tagged_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads a derived set past the rows it skips" do
+      checker = board_checker([card(1), card(2)])
+
+      refute rule_matches?(any_rank([:later_cards], 1), %DerivedBoard{}, nil, checker)
+      assert rule_matches?(any_rank([:later_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads no rows of a derived set whose if picks nil" do
+      checker = board_checker([card(1)])
+
+      refute rule_matches?(any_rank([:maybe_cards], 1), %DerivedBoard{name: "none"}, nil, checker)
+      assert rule_matches?(any_rank([:maybe_cards], 1), %DerivedBoard{name: "all"}, nil, checker)
+    end
+
+    # The tag's name is compared with the board's, two quantifiers out of the tag.
+    test "reads a pin inside a quantifier in a derived set's filter" do
+      checker = board_checker([card(1, [tag("flag")]), card(2, [tag("other")])])
+      board = %DerivedBoard{name: "flag"}
+
+      assert rule_matches?(any_rank([:named_tag_cards], 1), board, nil, checker)
+      refute rule_matches?(any_rank([:named_tag_cards], 2), board, nil, checker)
+    end
+
+    # Both cards hold the one flag tag, which the set holds once.
+    test "counts a row several rows lead to once" do
+      shared = tag("flag")
+      checker = board_checker([card(1, [shared]), card(2, [shared])])
+
+      assert rule_matches?(
+               rule(predicates: [{:flag_tag_count, :==, 1}]),
+               %DerivedBoard{},
+               nil,
+               checker
+             )
+    end
+
+    # The bound of the set it is built on drops the lowest card before its own filter is read.
+    test "reads a derived set built on another one" do
+      checker = board_checker([card(1), card(2), card(3)])
+
+      refute rule_matches?(any_rank([:low_top_cards], 1), %DerivedBoard{}, nil, checker)
+      assert rule_matches?(any_rank([:low_top_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    # The relationships before a derived set are one stretch, read off the row the quantifier is
+    # about, and the set's own relationships another, read off each row the stretch reaches.
+    test "asks the checker for each stretch of relationships around a derived set" do
+      board = %DerivedBoard{id: Hologram.Entity.generate_id()}
+
+      checker = fn
+        {:set, [:board], :whole}, %DerivedCard{}, _actor_user_id -> [board]
+        {:set, [:cards]}, %DerivedBoard{}, _actor_user_id -> [card(1), card(2), card(3)]
+      end
+
+      rule = rule(predicates: [none: {[:board, :top_cards], [{:rank, :==, 1}]}])
+
+      assert rule_matches?(rule, card(1), nil, checker)
     end
   end
 end

@@ -3135,6 +3135,8 @@ defmodule Hologram.DB.QueryCompilerTest do
       relationship :messages, [RuleMessage], inverse: channel
       relationship :org, Hologram.DB.QueryCompilerTest.RuleOrg, optional: true
 
+      derived :first_messages, [RuleMessage], fn messages -> take(messages, 1) end
+
       allow :read, when: any(message <- messages, message.body == name)
     end
 
@@ -3193,6 +3195,27 @@ defmodule Hologram.DB.QueryCompilerTest do
                ~s| WHERE EXISTS (SELECT 1 FROM #{table(RuleMessage)} AS "$q1" | <>
                  ~s|WHERE "$q1"."channel_id" = "#{Mapper.table_name(RuleChannel)}"."id" | <>
                  ~s|AND "body" = $1) ORDER BY|
+             )
+    end
+
+    # The hidden message counts inside a derived set as well.
+    test "reads a derived set of a rule's quantifier raw" do
+      put_derived_definitions([RuleChannel])
+
+      term = Stage.normalize(RuleChannel)
+      policy = %{rules: rules(any: {[:first_messages], [body: "x"]})}
+
+      first_messages =
+        ~s|SELECT "$s2"."id" FROM #{table(RuleMessage)} AS "$s2" | <>
+          ~s|WHERE "$s2"."channel_id" = "#{Mapper.table_name(RuleChannel)}"."id" | <>
+          ~s|ORDER BY "id" ASC LIMIT 1|
+
+      assert %{params: [{:value, "x"}], sql: sql} = compile(term, rule_mapping(), policy)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(RuleMessage)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."id" IN (#{first_messages}) AND "body" = $1) ORDER BY|
              )
     end
 
