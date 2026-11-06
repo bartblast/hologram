@@ -7,6 +7,7 @@ defmodule Hologram.Test.BrowserSessionTest do
 
   @base_url "http://localhost:9515/"
   @capabilities %{browserName: "chrome"}
+  @warm_up_messages [{:session_started, "warm-up"}, {:session_ended, "warm-up"}]
 
   defmodule StandInChromedriver do
     use GenServer
@@ -42,7 +43,7 @@ defmodule Hologram.Test.BrowserSessionTest do
     spawn(fn -> Process.sleep(:infinity) end)
   end
 
-  defp assert_restarted_once(log_dir) do
+  defp assert_restarted_once(log_dir, messages_after_start) do
     wrapper_path = Path.join(log_dir, "chromedriver")
 
     assert Process.info(self(), :messages) ==
@@ -54,7 +55,7 @@ defmodule Hologram.Test.BrowserSessionTest do
                 :started,
                 :stopped,
                 :started
-              ]}
+              ] ++ messages_after_start}
   end
 
   defp blocking_create_fn(test_pid, session_id) do
@@ -518,9 +519,14 @@ defmodule Hologram.Test.BrowserSessionTest do
       answers = Map.get(context, :chromedriver_answers, %{})
       starts = start_chromedrivers(&Map.get(answers, &1, :ready))
 
+      # The warm-up session ends in a worker, so its stand-in sends to the test.
+      test_pid = self()
+
       opts = [
         chromedriver_path: chromedriver_path,
         chromedrivers: :browser_session_test_chromedrivers,
+        create_fn: fn _base_url, _capabilities -> {:ok, %{"sessionId" => "warm-up"}} end,
+        end_session_fn: fn session -> send(test_pid, {:session_ended, session}) end,
         log_dir: log_dir,
         put_env_fn: fn app, key, value -> send(self(), {:put_env, app, key, value}) end,
         ready_timeout: 5_000,
@@ -528,13 +534,21 @@ defmodule Hologram.Test.BrowserSessionTest do
           :counters.add(starts, 1, 1)
           send(self(), :started)
         end,
+        # Like Wallaby.start_session/1, it answers what the create fn answers.
+        start_session_fn: fn session_opts ->
+          with {:ok, %{"sessionId" => session}} <-
+                 session_opts[:create_session_fn].(@base_url, @capabilities) do
+            send(test_pid, {:session_started, session})
+            {:ok, session}
+          end
+        end,
         stop_fn: fn -> send(self(), :stopped) end
       ]
 
       [args_path: args_path, log_dir: log_dir, opts: opts]
     end
 
-    test "stops Wallaby, points it at a ChromeDriver wrapper and sets the log dir, then starts it",
+    test "stops Wallaby, points it at a ChromeDriver wrapper and sets the log dir, starts it, then starts and ends a browser session",
          %{
            log_dir: log_dir,
            opts: opts
@@ -550,6 +564,7 @@ defmodule Hologram.Test.BrowserSessionTest do
                   {:put_env, :wallaby, :chromedriver, [path: wrapper_path]},
                   {:put_env, :hologram, :__browser_session_log_dir__, log_dir},
                   :started
+                  | @warm_up_messages
                 ]}
     end
 
@@ -618,7 +633,7 @@ defmodule Hologram.Test.BrowserSessionTest do
         assert start_wallaby(Keyword.merge(opts, attempts: 3, ready_timeout: 50)) == :ok
       end)
 
-      assert_restarted_once(log_dir)
+      assert_restarted_once(log_dir, @warm_up_messages)
 
       hangs =
         log_dir
@@ -634,7 +649,7 @@ defmodule Hologram.Test.BrowserSessionTest do
         capture_io(fn -> assert start_wallaby(opts) == :ok end)
       end)
 
-      assert_restarted_once(log_dir)
+      assert_restarted_once(log_dir, @warm_up_messages)
     end
 
     test "empties a log dir left by an earlier run", %{log_dir: log_dir, opts: opts} do
@@ -659,7 +674,7 @@ defmodule Hologram.Test.BrowserSessionTest do
         end
       end)
 
-      assert_restarted_once(log_dir)
+      assert_restarted_once(log_dir, [])
 
       hangs =
         log_dir
@@ -671,6 +686,151 @@ defmodule Hologram.Test.BrowserSessionTest do
                ChromeDriver didn't get ready (attempt 1 of 2), restarting Wallaby
                ChromeDriver didn't get ready after 2 attempts
                """)
+    end
+
+    test "lets Wallaby's HTTP requests wait while the browser session starts, then unsets the config again",
+         %{opts: opts} do
+      test_pid = self()
+
+      create_fn = fn _base_url, _capabilities ->
+        send(test_pid, {:hackney_options, Application.get_env(:wallaby, :hackney_options)})
+        {:ok, %{"sessionId" => "warm-up"}}
+      end
+
+      assert start_wallaby(Keyword.put(opts, :create_fn, create_fn)) == :ok
+
+      assert_received {:hackney_options,
+                       [recv_timeout: :infinity, hackney: [pool: :wallaby_pool]]}
+
+      assert Application.fetch_env(:wallaby, :hackney_options) == :error
+    end
+
+    test "lets Wallaby's HTTP requests wait while the browser session starts, then puts the config back before ending it",
+         %{opts: opts} do
+      # No other test reads it, and tests within a module run one at a time.
+      Application.put_env(:wallaby, :hackney_options, timeout: 60_000, recv_timeout: 60_000)
+      on_exit(fn -> Application.delete_env(:wallaby, :hackney_options) end)
+
+      test_pid = self()
+
+      create_fn = fn _base_url, _capabilities ->
+        send(test_pid, {:hackney_options, Application.get_env(:wallaby, :hackney_options)})
+        {:ok, %{"sessionId" => "warm-up"}}
+      end
+
+      end_session_fn = fn _session ->
+        send(test_pid, {:ending_hackney_options, Application.get_env(:wallaby, :hackney_options)})
+      end
+
+      assert start_wallaby(
+               Keyword.merge(opts, create_fn: create_fn, end_session_fn: end_session_fn)
+             ) == :ok
+
+      assert_received {:hackney_options, [recv_timeout: :infinity, timeout: 60_000]}
+      assert_received {:ending_hackney_options, [timeout: 60_000, recv_timeout: 60_000]}
+
+      assert Application.fetch_env(:wallaby, :hackney_options) ==
+               {:ok, [timeout: 60_000, recv_timeout: 60_000]}
+    end
+
+    test "raises when the browser session doesn't start in time, and reports it", %{
+      log_dir: log_dir,
+      opts: opts
+    } do
+      create_fn = fn _base_url, _capabilities -> Process.sleep(:infinity) end
+      message = "Chrome didn't start its first browser session within 50 ms"
+
+      capture_io(fn ->
+        assert_error RuntimeError, message, fn ->
+          start_wallaby(Keyword.merge(opts, create_fn: create_fn, warm_up_timeout: 50))
+        end
+      end)
+
+      hangs =
+        log_dir
+        |> Path.join("hangs.txt")
+        |> File.read!()
+
+      assert hangs == message <> "\n"
+      assert Application.fetch_env(:wallaby, :hackney_options) == :error
+    end
+
+    test "deletes the browser session that starts after it was given up on", %{opts: opts} do
+      opts =
+        Keyword.merge(opts,
+          create_fn: blocking_create_fn(self(), "warm-up"),
+          delete_fn: deleting_fn(self()),
+          warm_up_timeout: 50
+        )
+
+      capture_io(fn ->
+        assert_error RuntimeError,
+                     "Chrome didn't start its first browser session within 50 ms",
+                     fn -> start_wallaby(opts) end
+      end)
+
+      assert_receive {:attempt_started, worker}
+      refute_received {:deleted, _base_url, _session_id}
+
+      send(worker, :release)
+
+      assert_receive {:deleted, @base_url, "warm-up"}
+    end
+
+    test "raises when the browser session start answers with an error, without reporting it", %{
+      log_dir: log_dir,
+      opts: opts
+    } do
+      create_fn = fn _base_url, _capabilities -> {:error, :invalid} end
+
+      assert_error RuntimeError, "Chrome didn't start its first browser session: :invalid", fn ->
+        start_wallaby(Keyword.put(opts, :create_fn, create_fn))
+      end
+
+      refute log_dir
+             |> Path.join("hangs.txt")
+             |> File.exists?()
+    end
+
+    test "raises what the browser session start raises, without reporting it", %{
+      log_dir: log_dir,
+      opts: opts
+    } do
+      create_fn = fn _base_url, _capabilities -> raise "boom" end
+
+      assert_error RuntimeError, "boom", fn ->
+        start_wallaby(Keyword.put(opts, :create_fn, create_fn))
+      end
+
+      refute log_dir
+             |> Path.join("hangs.txt")
+             |> File.exists?()
+    end
+
+    test "exits with what the browser session start exits with", %{opts: opts} do
+      create_fn = fn _base_url, _capabilities -> exit(:gone) end
+
+      assert catch_exit(start_wallaby(Keyword.put(opts, :create_fn, create_fn))) == :gone
+    end
+
+    test "reports a browser session that doesn't end in time, and returns :ok", %{
+      log_dir: log_dir,
+      opts: opts
+    } do
+      end_session_fn = fn _session -> Process.sleep(:infinity) end
+
+      capture_io(fn ->
+        assert start_wallaby(
+                 Keyword.merge(opts, end_session_fn: end_session_fn, teardown_timeout: 50)
+               ) == :ok
+      end)
+
+      hangs =
+        log_dir
+        |> Path.join("hangs.txt")
+        |> File.read!()
+
+      assert hangs == "Chrome didn't end its first browser session within 50 ms\n"
     end
   end
 end
