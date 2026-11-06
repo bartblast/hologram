@@ -39,8 +39,8 @@ defmodule Hologram.Query.WindowTest do
       relationship :members, [Hologram.Query.WindowTest.WindowMember], inverse: project
 
       allow :read
-      allow :update, when: ^[any: {[:members], [seat: "full"]}]
-      allow :archive, when: ^[none: {[:labels], []}]
+      allow :update, when: any(member <- members, member.seat == "full")
+      allow :archive, when: none(labels)
     end
 
     defmodule WindowMember do

@@ -20,21 +20,25 @@ defmodule Hologram.Query.Expression do
     kind: :condition,
     operand: "a literal, an attribute, a path, user_id() or a pinned expression",
     row: "the entity",
+    runtime: "a condition built at runtime goes whole into when: ^predicates",
     shapes:
-      "a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
-    subject: "a condition"
+      "a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), or a pinned list of predicates",
+    subject: "a condition",
+    user_value: "user_id()"
   }
 
   # The bindings are the rows the quantifiers around a condition bound, nearest first - none at the
-  # top of a filter, so their count is how deep the condition is nested.
+  # top of a filter or a policy condition, so their count is how deep the condition is nested.
   @filter_names %{
     bindings: [],
     kind: :filter,
     operand: "a literal, an attribute, a path or a pinned expression",
     row: "the queried entity",
+    runtime: "a filter built at runtime goes whole into filter(^predicates)",
     shapes:
       "a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), a keyword list of equalities, or a pinned list of predicates",
-    subject: "a filter"
+    subject: "a filter",
+    user_value: "^user_id"
   }
 
   @inclusion_names %{stage: "include", names: "a relationship", spelled: "a bare name or a path"}
@@ -106,13 +110,15 @@ defmodule Hologram.Query.Expression do
   operand on the right. A search - `starts_with(name, term)` or `contains(name, term)`, its term
   an operand like a comparison's, optionally with `mode: :exact` - lowers to a
   `{name, {operator, term}}` entry, the operator `:starts_with` or `:contains` for the default
-  loose match and `:starts_with_exact` or `:contains_exact` for an exact one.
+  loose match and `:starts_with_exact` or `:contains_exact` for an exact one. A quantifier -
+  `any`, `none` or `all` over a relationship's rows - lowers as it does in a filter (see
+  `predicates/2`), and its condition may name `user_id()` too.
 
   Raises Hologram.CompileError, located at the offending node, on a keyword list (naming the
   expression to write when it holds equalities only), on a pinned list as one side of `and` or
-  `or`, on a search with an option other than `mode: :loose` or `mode: :exact` or with a pinned
-  option, on `String.starts_with?/2` and `String.contains?/2` (naming the search operator), and on
-  anything else.
+  `or`, on a quantifier refused as a filter refuses it, on a search with an option other than
+  `mode: :loose` or `mode: :exact` or with a pinned option, on `String.starts_with?/2` and
+  `String.contains?/2` (naming the search operator), and on anything else.
   """
   @spec condition(Macro.t(), Macro.Env.t()) :: Macro.t()
   def condition({:^, _meta, [expr]}, _env), do: expr
@@ -804,7 +810,7 @@ defmodule Hologram.Query.Expression do
     [{attribute!(left, names, env), {operator, comparison_operand!(right, names, env)}}]
   end
 
-  defp predicate_list!({quantifier, _meta, args} = ast, %{kind: :filter} = names, env)
+  defp predicate_list!({quantifier, _meta, args} = ast, names, env)
        when quantifier in @quantifiers and is_list(args) do
     [{quantifier, quantified!(ast, names, env)}]
   end
@@ -876,7 +882,7 @@ defmodule Hologram.Query.Expression do
 
       _args ->
         compile_error!(
-          "#{quantifier} takes a relationship, or a row bound to one and a condition - #{quantifier}(messages), #{quantifier}(message <- messages, message.author_id == ^user_id) - got: #{Macro.to_string(ast)}",
+          "#{quantifier} takes a relationship, or a row bound to one and a condition - #{quantifier}(messages), #{quantifier}(message <- messages, message.author_id == #{names.user_value}) - got: #{Macro.to_string(ast)}",
           ast,
           env
         )
@@ -884,23 +890,23 @@ defmodule Hologram.Query.Expression do
   end
 
   # A condition reads the row its quantifier bound, which a list of predicates has no spelling for -
-  # one built at runtime is a whole filter in the data form. A list literal carries no line, so the
-  # refusal is located at the quantifier.
-  defp quantifier_condition!(condition, _names, env, quantifier_ast) when is_list(condition) do
-    quantifier_condition_error!(condition, quantifier_ast, env)
+  # one built at runtime is a whole filter or policy condition in the data form. A list literal
+  # carries no line, so the refusal is located at the quantifier.
+  defp quantifier_condition!(condition, names, env, quantifier_ast) when is_list(condition) do
+    quantifier_condition_error!(condition, quantifier_ast, names, env)
   end
 
-  defp quantifier_condition!({:^, _meta, [_expr]} = condition, _names, env, _quantifier_ast) do
-    quantifier_condition_error!(condition, condition, env)
+  defp quantifier_condition!({:^, _meta, [_expr]} = condition, names, env, _quantifier_ast) do
+    quantifier_condition_error!(condition, condition, names, env)
   end
 
   defp quantifier_condition!(condition, names, env, _quantifier_ast),
     do: predicate_list!(condition, names, env)
 
-  @spec quantifier_condition_error!(Macro.t(), Macro.t(), Macro.Env.t()) :: no_return
-  defp quantifier_condition_error!(ast, location_ast, env) do
+  @spec quantifier_condition_error!(Macro.t(), Macro.t(), map, Macro.Env.t()) :: no_return
+  defp quantifier_condition_error!(ast, location_ast, names, env) do
     compile_error!(
-      "a quantifier's condition is an expression, got: #{Macro.to_string(ast)} - a filter built at runtime goes whole into filter(^predicates)",
+      "a quantifier's condition is an expression, got: #{Macro.to_string(ast)} - #{names.runtime}",
       location_ast,
       env
     )
@@ -1014,13 +1020,14 @@ defmodule Hologram.Query.Expression do
   # A keyword list and a pinned list are each a whole filter, so neither is one side of an and or
   # an or - the stage it would be joined to is a second filter call, and a disjunction holding one
   # is written in the data form whole. A condition takes no keyword list at all, so there one is
-  # refused as the old spelling. Inside a quantifier's condition either is refused as its condition.
+  # refused as the old spelling. Inside a quantifier's condition either is refused as its condition,
+  # in a policy condition too - an equality hint there would name the row the quantifier is about.
+  defp side!(ast, _operator, %{bindings: [_binding | _bindings]} = names, env)
+       when is_list(ast) or (is_tuple(ast) and elem(ast, 0) == :^),
+       do: quantifier_condition_error!(ast, ast, names, env)
+
   defp side!(ast, _operator, %{kind: :condition}, env) when is_list(ast),
     do: keyword_list_error!(ast, env)
-
-  defp side!(ast, _operator, %{bindings: [_binding | _bindings]}, env)
-       when is_list(ast) or (is_tuple(ast) and elem(ast, 0) == :^),
-       do: quantifier_condition_error!(ast, ast, env)
 
   defp side!(ast, operator, names, env) when is_list(ast),
     do: whole_side!(ast, operator, names, env)

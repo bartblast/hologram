@@ -3135,7 +3135,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       relationship :messages, [RuleMessage], inverse: channel
       relationship :org, Hologram.DB.QueryCompilerTest.RuleOrg, optional: true
 
-      allow :read, when: ^[any: {[:messages], [body: {:==, {:attribute, {:outer, 1, :name}}}]}]
+      allow :read, when: any(message <- messages, message.body == name)
     end
 
     defmodule RuleOrg do
@@ -3153,7 +3153,7 @@ defmodule Hologram.DB.QueryCompilerTest do
       relationship :messages, [RuleMessage], inverse: thread
       relationship :org, RuleOrg, optional: true
 
-      allow :read, when: ^[any: {[:messages, :reactions], [kind: "x"]}]
+      allow :read, when: any(reaction <- messages.reactions, reaction.kind == "x")
     end
 
     defmodule RulePost do

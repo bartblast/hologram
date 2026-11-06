@@ -355,6 +355,35 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "build/1" do
+    defmodule BuildProject do
+      use Hologram.Entity
+
+      relationship :members, [Hologram.PolicyTest.BuildMember], inverse: project
+
+      allow :read, when: any(member <- members, member.user_id == user_id())
+    end
+
+    defmodule BuildMember do
+      use Hologram.Entity
+
+      relationship :project, BuildProject, optional: true
+      relationship :user, Module14, optional: true
+
+      allow :read
+    end
+
+    test "builds a quantifier written in a condition" do
+      assert build(BuildProject) == %{
+               read: [
+                 %{
+                   predicates: [{:any, {[:members], [{:user_id, :==, {:actor}}]}}],
+                   to: nil,
+                   via: nil
+                 }
+               ]
+             }
+    end
+
     test "returns empty map for entity type without policy declarations" do
       assert build(Module1) == %{}
     end
@@ -680,8 +709,8 @@ defmodule Hologram.PolicyTest do
       relationship :labels, [Hologram.PolicyTest.LockedLabel]
       relationship :members, [Hologram.PolicyTest.LockedMember], inverse: project
 
-      allow :delete, when: ^[none: {[:members], []}]
-      allow :update, when: ^[all: {[:labels], [name: "ok"]}]
+      allow :delete, when: none(members)
+      allow :update, when: all(label <- labels, label.name == "ok")
     end
 
     defmodule LockedMember do
@@ -699,7 +728,7 @@ defmodule Hologram.PolicyTest do
 
       relationship :projects, [LockedProject], inverse: labels
 
-      allow :delete, when: ^[none: {[:projects], []}]
+      allow :delete, when: none(projects)
     end
 
     defmodule LockedTask do
@@ -710,13 +739,7 @@ defmodule Hologram.PolicyTest do
       relationship :project, LockedProject, optional: true
 
       allow :update,
-        when:
-          ^[
-            or: [
-              [title: "draft"],
-              [any: {[:project, :labels], [none: {{:outer, 1, [:project, :members]}, []}]}]
-            ]
-          ]
+        when: title == "draft" or any(label <- project.labels, none(project.members))
     end
 
     defmodule AnyInNoneTask do
@@ -725,7 +748,7 @@ defmodule Hologram.PolicyTest do
       relationship :project, LockedProject, optional: true
 
       allow :update,
-        when: ^[none: {[:project, :labels], [any: {{:outer, 1, [:project, :members]}, []}]}]
+        when: none(label <- project.labels, any(project.members))
     end
 
     defmodule NoneInNoneTask do
@@ -733,7 +756,7 @@ defmodule Hologram.PolicyTest do
 
       relationship :project, LockedProject, optional: true
 
-      allow :update, when: ^[none: {[:project, :labels], [none: {[:projects], []}]}]
+      allow :update, when: none(label <- project.labels, none(label.projects))
     end
 
     defmodule AnyProject do
@@ -741,7 +764,7 @@ defmodule Hologram.PolicyTest do
 
       relationship :members, [Hologram.PolicyTest.AnyMember], inverse: project
 
-      allow :read, when: ^[any: {[:members], []}]
+      allow :read, when: any(members)
     end
 
     defmodule AnyMember do
@@ -939,9 +962,9 @@ defmodule Hologram.PolicyTest do
         take(members, 2)
       end
 
-      allow :read, when: ^[any: {[:members], [seat: "full"]}]
-      allow :update, when: ^[any: {[:labels], []}]
-      allow :archive, when: ^[any: {[:first_members], [seat: "full"]}]
+      allow :read, when: any(member <- members, member.seat == "full")
+      allow :update, when: any(labels)
+      allow :archive, when: any(member <- first_members, member.seat == "full")
     end
 
     defmodule ChainBoard do
@@ -951,7 +974,7 @@ defmodule Hologram.PolicyTest do
 
       relationship :projects, [ChainProject]
 
-      allow :read, when: ^[or: [[public: true], [any: {[:projects], [any: {[:labels], []}]}]]]
+      allow :read, when: public == true or any(project <- projects, any(project.labels))
     end
 
     defmodule ChainMember do
@@ -978,7 +1001,7 @@ defmodule Hologram.PolicyTest do
 
       relationship :project, ChainProject, optional: true
 
-      allow :read, when: ^[any: {[:project, :members], [{[:user, :email], "a"}]}]
+      allow :read, when: any(member <- project.members, member.user.email == "a")
       allow :update, via: project
     end
 

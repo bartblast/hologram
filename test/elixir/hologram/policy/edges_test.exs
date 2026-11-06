@@ -279,10 +279,10 @@ defmodule Hologram.Policy.EdgesTest do
       relationship :labels, [Hologram.Policy.EdgesTest.EdgeLabel]
       relationship :members, [Hologram.Policy.EdgesTest.EdgeMember], inverse: project
 
-      allow :read, when: ^[any: {[:members], [seat: "full"]}]
-      allow :update, when: ^[any: {[:members], []}]
-      allow :delete, when: ^[none: {[:labels], [name: "x"]}]
-      allow :archive, when: ^[any: {[:labels], []}]
+      allow :read, when: any(member <- members, member.seat == "full")
+      allow :update, when: any(members)
+      allow :delete, when: none(label <- labels, label.name == "x")
+      allow :archive, when: any(labels)
     end
 
     defmodule EdgeMember do
@@ -307,7 +307,7 @@ defmodule Hologram.Policy.EdgesTest do
 
       relationship :projects, [EdgeProject], inverse: labels
 
-      allow :read, when: ^[any: {[:projects], [name: "x"]}]
+      allow :read, when: any(project <- projects, project.name == "x")
     end
 
     defmodule EdgeTask do
@@ -315,9 +315,11 @@ defmodule Hologram.Policy.EdgesTest do
 
       relationship :project, EdgeProject, optional: true
 
-      allow :read, when: ^[any: {[:project, :members], [user_id: {:actor}]}]
-      allow :update, when: ^[any: {[:project, :members], [{[:user, :email], "a"}]}]
-      allow :delete, when: ^[any: {[:project, :labels], [any: {[:projects], [name: "y"]}]}]
+      allow :read, when: any(member <- project.members, member.user_id == user_id())
+      allow :update, when: any(member <- project.members, member.user.email == "a")
+
+      allow :delete,
+        when: any(label <- project.labels, any(project <- label.projects, project.name == "y"))
     end
 
     defmodule EdgeSeat do
@@ -327,18 +329,10 @@ defmodule Hologram.Policy.EdgesTest do
 
       relationship :project, EdgeProject, optional: true
 
-      allow :read,
-        when:
-          ^[
-            or: [
-              [seat: "a"],
-              [any: {[:project, :members], [full: {:attribute, {:outer, 1, :seat}}]}]
-            ]
-          ]
+      allow :read, when: seat == "a" or any(member <- project.members, member.full == seat)
 
       allow :update,
-        when:
-          ^[any: {[:project, :members], [any: {{:outer, 1, [:project, :labels]}, [name: "x"]}]}]
+        when: any(member <- project.members, any(label <- project.labels, label.name == "x"))
     end
 
     defmodule EdgeNote do
