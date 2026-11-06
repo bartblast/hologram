@@ -992,6 +992,144 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    test "rejects a non-read rule's any over a set of a type nobody may read" do
+      defmodule InlinePolicyFixture104 do
+        use Hologram.Entity
+
+        attribute :taken, :boolean
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture105 do
+        use Hologram.Entity
+
+        relationship :seats, [Hologram.Policy.ValidatorTest.InlinePolicyFixture104]
+
+        allow :update, when: any(seat <- seats, seat.taken == true)
+      end
+
+      expected_msg =
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture105 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture104 through seats, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture104, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture104, InlinePolicyFixture105], [])
+      end
+    end
+
+    # A row reaches the browser only once the server's read rules admitted it.
+    test "accepts a read rule's any over a set of a type nobody may read" do
+      defmodule InlinePolicyFixture111 do
+        use Hologram.Entity
+
+        attribute :taken, :boolean
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture106 do
+        use Hologram.Entity
+
+        relationship :seats, [Hologram.Policy.ValidatorTest.InlinePolicyFixture111]
+
+        allow :read, when: any(seat <- seats, seat.taken == true)
+      end
+
+      assert validate_model!([InlinePolicyFixture111, InlinePolicyFixture106], []) == :ok
+    end
+
+    # The server's verdict answers a none over the rows as stored, so no browser reads them.
+    test "accepts a non-read rule's none over a set of a type nobody may read" do
+      defmodule InlinePolicyFixture112 do
+        use Hologram.Entity
+
+        attribute :taken, :boolean
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture107 do
+        use Hologram.Entity
+
+        relationship :seats, [Hologram.Policy.ValidatorTest.InlinePolicyFixture112]
+
+        allow :update, when: none(seat <- seats, seat.taken == true)
+      end
+
+      assert validate_model!([InlinePolicyFixture112, InlinePolicyFixture107], []) == :ok
+    end
+
+    test "accepts a non-read rule's none through a row of a type nobody may read" do
+      defmodule InlinePolicyFixture113 do
+        use Hologram.Entity
+
+        attribute :taken, :boolean
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture114 do
+        use Hologram.Entity
+
+        relationship :seats, [Hologram.Policy.ValidatorTest.InlinePolicyFixture113]
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture108 do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Policy.ValidatorTest.InlinePolicyFixture114
+
+        allow :delete, when: none(seat <- parent.seats, seat.taken == true)
+      end
+
+      assert validate_model!(
+               [InlinePolicyFixture113, InlinePolicyFixture114, InlinePolicyFixture108],
+               []
+             ) == :ok
+    end
+
+    # The path reads the parent in the browser, whatever the none beside it reads.
+    test "rejects a row of a type nobody may read that a path reads beside a deciding quantifier" do
+      defmodule InlinePolicyFixture119 do
+        use Hologram.Entity
+
+        attribute :taken, :boolean
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture120 do
+        use Hologram.Entity
+
+        attribute :name, :string
+
+        relationship :seats, [Hologram.Policy.ValidatorTest.InlinePolicyFixture119]
+
+        allow :create
+      end
+
+      defmodule InlinePolicyFixture121 do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Policy.ValidatorTest.InlinePolicyFixture120
+
+        allow :update,
+          when: parent.name == "x" and none(seat <- parent.seats, seat.taken == true)
+      end
+
+      expected_msg =
+        "allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture121 reads Hologram.Policy.ValidatorTest.InlinePolicyFixture120 through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.InlinePolicyFixture120, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!(
+          [InlinePolicyFixture119, InlinePolicyFixture120, InlinePolicyFixture121],
+          []
+        )
+      end
+    end
+
     # Delegating to a read rule is not a read rule: the browser decides it by running the related
     # type's read rules over the related row, which it has to hold.
     test "rejects a delegation to a read rule through a type nobody may read" do
@@ -1096,7 +1234,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
-    test "rejects a quantifier in a pinned condition" do
+    test "accepts a quantifier in a pinned condition" do
       defmodule InlinePolicyFixture82 do
         use Hologram.Entity
 
@@ -1105,15 +1243,10 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :read, when: ^[any: {[:items], []}]
       end
 
-      expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture82 - a policy condition takes no quantifier (any, none, all)"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture82], [])
-      end
+      assert validate_model!([InlinePolicyFixture82], []) == :ok
     end
 
-    test "rejects a quantifier inside an alternative of a pinned condition" do
+    test "accepts a quantifier inside an alternative of a pinned condition" do
       defmodule InlinePolicyFixture83 do
         use Hologram.Entity
 
@@ -1124,12 +1257,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :read, when: ^[or: [[title: "a"], [any: {[:items], []}]]]
       end
 
-      expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture83 - a policy condition takes no quantifier (any, none, all)"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture83], [])
-      end
+      assert validate_model!([InlinePolicyFixture83], []) == :ok
     end
 
     test "accepts a condition comparing a derived field that reads no related set" do
@@ -1172,7 +1300,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture92 - channel.message_count counts messages - a policy condition reads no related set yet"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture92 - channel.message_count counts messages - a policy condition reads a related set only through any, none or all"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture92], [])
@@ -1250,7 +1378,43 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
-    test "rejects a quantifier over a derived set in a pinned condition" do
+    # The browser never answers it over rows it holds, so nothing a row hides misleads it.
+    test "accepts a non-read rule's any over a derived set with a condition" do
+      defmodule InlinePolicyFixture115 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+
+        relationship :channel, Module32
+
+        allow :update, when: any(message <- channel.recent_messages, message.position == 1)
+      end
+
+      assert validate_model!([InlinePolicyFixture115], []) == :ok
+    end
+
+    test "rejects a derived field holding a value as a quantifier's source" do
+      defmodule InlinePolicyFixture116 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :messages, [Module33]
+
+        derived :message_total, :integer, fn messages -> count(messages) end
+
+        allow :update, when: ^[any: {[:message_total], [position: 1]}]
+      end
+
+      expected_msg =
+        "invalid predicate for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture116 - :message_total is a derived field holding a :integer value in Hologram.Policy.ValidatorTest.InlinePolicyFixture116 - any, none and all ask about the rows of a set"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture116], [])
+      end
+    end
+
+    test "accepts a quantifier over a derived set in a pinned condition" do
       defmodule InlinePolicyFixture95 do
         use Hologram.Entity
 
@@ -1261,12 +1425,7 @@ defmodule Hologram.Policy.ValidatorTest do
         allow :read, when: ^[any: {[:channel, :recent_messages], []}]
       end
 
-      expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture95 - a policy condition takes no quantifier (any, none, all)"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_model!([InlinePolicyFixture95], [])
-      end
+      assert validate_model!([InlinePolicyFixture95], []) == :ok
     end
 
     test "accepts a condition comparing a concatenation over a to-one path" do
@@ -1329,7 +1488,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture101 - member.unread_count calls a query builder - a policy condition reads no related set yet"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture101 - member.unread_count calls a query builder - a policy condition reads a related set only through any, none or all"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture101], [])
@@ -1348,7 +1507,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture102 - room.busy reads :pinned_count, which counts messages - a policy condition reads no related set yet"
+        "invalid predicate for allow :read in Hologram.Policy.ValidatorTest.InlinePolicyFixture102 - room.busy reads :pinned_count, which counts messages - a policy condition reads a related set only through any, none or all"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture102], [])
@@ -1519,6 +1678,58 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture33], [])
+      end
+    end
+
+    test "rejects a non-read quantifier's condition over a server-only attribute of the set's rows" do
+      defmodule InlinePolicyFixture109 do
+        use Hologram.Entity
+
+        attribute :code, :string, server_only: true
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture110 do
+        use Hologram.Entity
+
+        relationship :seats, [Hologram.Policy.ValidatorTest.InlinePolicyFixture109]
+
+        allow :update, when: any(seat <- seats, seat.code == "x")
+      end
+
+      expected_msg =
+        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture110 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture109, InlinePolicyFixture110], [])
+      end
+    end
+
+    # The browser checks a none over the rows it holds before the verdict, and those hold no value
+    # for the attribute.
+    test "rejects a non-read none's condition over a server-only attribute of the set's rows" do
+      defmodule InlinePolicyFixture117 do
+        use Hologram.Entity
+
+        attribute :code, :string, server_only: true
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture118 do
+        use Hologram.Entity
+
+        relationship :seats, [Hologram.Policy.ValidatorTest.InlinePolicyFixture117]
+
+        allow :update, when: none(seat <- seats, seat.code == "x")
+      end
+
+      expected_msg =
+        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture118 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture117, InlinePolicyFixture118], [])
       end
     end
 

@@ -394,18 +394,6 @@ defmodule Hologram.Query.Stage do
     put_attribute(entity, [{name, value}])
   end
 
-  # Returns whether the given filter clauses hold a quantifier, in a disjunction's alternatives
-  # included.
-  @doc false
-  @spec quantified?(list(Query.clause())) :: boolean
-  def quantified?(clauses) do
-    Enum.any?(clauses, fn
-      {:or, alternatives} -> Enum.any?(alternatives, &quantified?/1)
-      {quantifier, {_source, _clauses}} when quantifier in @quantifiers -> true
-      _triple -> false
-    end)
-  end
-
   # Returns every chain of relationships the given filter clauses follow from the queried row, each
   # once, in the order first met: the relationships of a path, and the source of a quantifier - its
   # relationships after those leading to the row it is read on - with what its condition follows

@@ -350,6 +350,13 @@ defmodule Hologram.Entity.Derived do
   end
 
   @doc """
+  Returns whether the given relationship names, read from a row of the given entity type, run
+  through a derived field holding rows.
+  """
+  @spec through_set?(module, list(atom)) :: boolean
+  def through_set?(entity_type, names), do: derived_split(entity_type, names) != nil
+
+  @doc """
   Returns whether the given name is a derived field of the given entity type holding a value.
   """
   @spec value_field?(module, atom) :: boolean

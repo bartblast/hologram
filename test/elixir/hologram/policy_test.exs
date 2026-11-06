@@ -13,6 +13,7 @@ defmodule Hologram.PolicyTest do
       framework_operations: 0,
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
+      held_chains: 2,
       locked_set_links: 1,
       operation_key: 1,
       operations: 1,
@@ -826,6 +827,83 @@ defmodule Hologram.PolicyTest do
 
     test "returns empty list when no rule covers the given role" do
       assert grant_role_qualifying_roles(Policy.Module1, :viewer) == []
+    end
+  end
+
+  describe "held_chains/2" do
+    defmodule HeldTask do
+      use Hologram.Entity
+
+      relationship :project, Hologram.PolicyTest.VerdictProject, optional: true
+
+      allow :update, via: project
+    end
+
+    test "returns the chains an any reads" do
+      assert held_chains(Hologram.PolicyTest.VerdictProject, :read) == [[:members]]
+    end
+
+    # The server's verdict answers the all over the members as stored.
+    test "leaves out the chains a deciding quantifier in an alternative reads" do
+      assert held_chains(Hologram.PolicyTest.VerdictProject, :update) == []
+    end
+
+    test "returns a delegation's chain without the chains its deciding quantifiers read" do
+      assert held_chains(HeldTask, :update) == [[:project]]
+    end
+
+    defmodule HeldOwner do
+      use Hologram.Entity
+
+      attribute :name, :string
+    end
+
+    defmodule HeldSeat do
+      use Hologram.Entity
+
+      attribute :taken, :boolean
+
+      relationship :tags, [Hologram.PolicyTest.HeldOwner]
+    end
+
+    defmodule HeldBoard do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :owner, HeldOwner, optional: true
+      relationship :seats, [HeldSeat]
+
+      allow :update, when: owner.name == "x" or all(seat <- seats, seat.taken == true)
+
+      allow :delete,
+        when: none(seat <- seats, seat.taken == true) and any(seat <- seats, seat.taken == false)
+
+      allow :archive, when: any(seat <- seats, none(tag <- seat.tags, tag.name == "x"))
+    end
+
+    defmodule HeldRoom do
+      use Hologram.Entity
+
+      relationship :board, HeldBoard, optional: true
+
+      allow :update, when: board.name == "x" and none(seat <- board.seats, seat.taken == true)
+    end
+
+    test "returns the chain another alternative reads beside a deciding quantifier's" do
+      assert held_chains(HeldBoard, :update) == [[:owner]]
+    end
+
+    test "returns a set a deciding quantifier reads that an any beside it reads too" do
+      assert held_chains(HeldBoard, :delete) == [[:seats]]
+    end
+
+    test "leaves out the chains of an any holding a none" do
+      assert held_chains(HeldBoard, :archive) == []
+    end
+
+    test "returns a row a path reads that a deciding quantifier reads a set through too" do
+      assert held_chains(HeldRoom, :update) == [[:board]]
     end
   end
 

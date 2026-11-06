@@ -399,6 +399,25 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the chains `related_chains/2` returns for the given operation of the given entity type
+  that a client answers from the rows it holds, sorted: those its rules read outside any deciding
+  quantifier (see `deciding_quantifier?/2`), whose sets and the rows on the way to them the server's
+  verdict answers over the rows as stored. A delegation's are those of the operation it asks the
+  related row, the delegation's own chain among them.
+
+  Takes a validated data model, for the reason `related_chains/1` does.
+  """
+  @spec held_chains(module, Entity.operation()) :: list(list(atom))
+  def held_chains(entity_type, operation) do
+    entity_type
+    |> build()
+    |> Map.get(operation, [])
+    |> Enum.flat_map(&rule_chains(entity_type, &1, :held))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns the set links of the project's compiled data model a row joining could turn some rule's
   grant into a refusal through - read by a none or an all whose truth helps the rule, or by an any
   whose truth hurts it, inside a none (see `Hologram.Query.Stage.joining_row_refuses?/2`) - each as
@@ -540,7 +559,7 @@ defmodule Hologram.Policy do
     entity_type
     |> build()
     |> Map.get(operation, [])
-    |> Enum.flat_map(&rule_chains(entity_type, &1))
+    |> Enum.flat_map(&rule_chains(entity_type, &1, :all))
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -787,7 +806,7 @@ defmodule Hologram.Policy do
 
     set_type = Derived.path_target(start_type, relationship_names)
 
-    quantifier in [:all, :none] or through_derived_set?(start_type, relationship_names) or
+    quantifier in [:all, :none] or Derived.through_set?(start_type, relationship_names) or
       clauses
       |> quantifier_clauses()
       |> Enum.any?(&deciding_clause?(&1, [set_type | types]))
@@ -862,17 +881,20 @@ defmodule Hologram.Policy do
     end
   end
 
-  defp delegation_chains(_entity_type, nil), do: []
+  defp delegation_chains(_entity_type, nil, _reads), do: []
 
   # The row a delegation leads to, and every row the delegated operation's rules read through it -
   # the target's own chains, followed from the row the delegation reaches.
-  defp delegation_chains(entity_type, {operation, relationship_names}) do
+  defp delegation_chains(entity_type, {operation, relationship_names}, reads) do
     target_type = Entity.path_target(entity_type, relationship_names)
 
-    lifted_chains =
-      target_type
-      |> related_chains(operation)
-      |> Enum.map(&(relationship_names ++ &1))
+    target_chains =
+      case reads do
+        :all -> related_chains(target_type, operation)
+        :held -> held_chains(target_type, operation)
+      end
+
+    lifted_chains = Enum.map(target_chains, &(relationship_names ++ &1))
 
     [relationship_names | lifted_chains]
   end
@@ -1043,7 +1065,7 @@ defmodule Hologram.Policy do
       predicates
       |> Stage.predicate_references()
       |> Enum.reject(fn {relationship_names, _name} ->
-        through_derived_set?(entity_type, relationship_names)
+        Derived.through_set?(entity_type, relationship_names)
       end)
 
     read_chains =
@@ -1057,7 +1079,7 @@ defmodule Hologram.Policy do
     source_chains =
       predicates
       |> Stage.relationship_chains()
-      |> Enum.reject(&through_derived_set?(entity_type, &1))
+      |> Enum.reject(&Derived.through_set?(entity_type, &1))
 
     read_chains ++ source_chains
   end
@@ -1198,9 +1220,16 @@ defmodule Hologram.Policy do
     }
   end
 
-  defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}) do
-    predicate_chains(entity_type, predicates) ++
-      reference_chains(to) ++ delegation_chains(entity_type, via)
+  # The chains a rule reads - all of them, or those a client answers from the rows it holds.
+  defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}, reads) do
+    read_predicates =
+      case reads do
+        :all -> predicates
+        :held -> undecided_predicates(entity_type, predicates)
+      end
+
+    predicate_chains(entity_type, read_predicates) ++
+      reference_chains(to) ++ delegation_chains(entity_type, via, reads)
   end
 
   # The set links a rule's condition reads: those of its quantifiers, and those of the derived
@@ -1220,15 +1249,15 @@ defmodule Hologram.Policy do
     quantifier_links ++ field_links
   end
 
-  # Whether a chain of relationships goes through a set a derived field holds.
-  defp through_derived_set?(entity_type, relationship_names) do
-    relationship_names
-    |> Enum.reduce_while(entity_type, fn name, type ->
-      if Derived.declared?(type, name),
-        do: {:halt, :derived},
-        else: {:cont, Entity.related_type(type, name)}
+  # The given predicates without their deciding quantifiers - in a disjunction's alternatives too.
+  defp undecided_predicates(entity_type, predicates) do
+    Enum.flat_map(predicates, fn
+      {:or, alternatives} ->
+        [{:or, Enum.map(alternatives, &undecided_predicates(entity_type, &1))}]
+
+      clause ->
+        if deciding_quantifier?(entity_type, clause), do: [], else: [clause]
     end)
-    |> Kernel.==(:derived)
   end
 
   defp unknown_operation_message(entity_type, operation) do

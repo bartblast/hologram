@@ -304,6 +304,25 @@ defmodule Hologram.Policy.Validator do
     all_to_one?
   end
 
+  # The given data-form predicates without their quantifiers, in a disjunction's alternatives too -
+  # a quantifier's source and condition are judged when the predicates are read as a filter.
+  defp unquantified_predicates(predicates) do
+    Enum.flat_map(predicates, fn
+      {:or, alternatives} when is_list(alternatives) ->
+        if Enum.all?(alternatives, &is_list/1),
+          do: [{:or, Enum.map(alternatives, &unquantified_predicates/1)}],
+          else: [{:or, alternatives}]
+
+      {quantifier, {source, inner}}
+      when quantifier in [:all, :any, :none] and is_list(inner) and
+             (is_list(source) or (is_tuple(source) and elem(source, 0) == :outer)) ->
+        []
+
+      entry ->
+        [entry]
+    end)
+  end
+
   # Follows a relationship, or each relationship of a path, from the given type and returns the type
   # it leads to. Every hop is a to-one relationship of the type the hops before it lead to, and a
   # refusal past the first hop names that type, so the message says where along the path it broke.
@@ -492,15 +511,11 @@ defmodule Hologram.Policy.Validator do
 
   defp validate_predicates!(entity_type, operation, predicates, location) do
     predicates
+    |> unquantified_predicates()
     |> Stage.written_names()
     |> Enum.each(&validate_set_free_name!(entity_type, &1))
 
     clauses = Stage.predicate_triples!(entity_type, predicates)
-
-    # TODO: lift once policy conditions take quantifiers.
-    if Stage.quantified?(clauses) do
-      raise ArgumentError, message: "a policy condition takes no quantifier (any, none, all)"
-    end
 
     validate_server_only_predicates!(entity_type, operation, clauses, location)
 
@@ -518,12 +533,14 @@ defmodule Hologram.Policy.Validator do
   # client-locality defect validate_server_only_predicates!/4 refuses for a value, one relationship
   # away. A type's own read rules are left out for the same reason they are there: a row reaches
   # the browser only once the server's read rules admitted it, so the browser never decides them.
-  # A rule delegating to a read rule is not a read rule, and its chains stay checked.
+  # A rule delegating to a read rule is not a read rule, and its chains stay checked. So are the
+  # chains a deciding quantifier reads only, which the server's verdict answers over the rows as
+  # stored (see Hologram.Policy.held_chains/2).
   defp validate_readable_chains!(entity_types) do
     unreadable_hops =
       for entity_type <- Enum.sort(entity_types),
           operation <- related_chain_operations(entity_type),
-          chain <- Policy.related_chains(entity_type, operation),
+          chain <- Policy.held_chains(entity_type, operation),
           {hop_type, index} <- chain_hop_types(entity_type, chain),
           not readable_type?(hop_type) do
         {entity_type, operation, Enum.take(chain, index + 1), hop_type}
@@ -613,10 +630,14 @@ defmodule Hologram.Policy.Validator do
   defp validate_server_only_predicates!(_entity_type, :read, _clauses, _location), do: :ok
 
   # A derived field reads what its definition reads, written in place, so the refusal names the field
-  # the condition wrote and the attribute it reads.
+  # the condition wrote and the attribute it reads. A quantifier over a derived set is answered from
+  # the server's verdict alone, never over rows a client holds, so what it reads there is left out.
   defp validate_server_only_predicates!(entity_type, operation, clauses, location) do
     clauses
     |> Stage.predicate_references()
+    |> Enum.reject(fn {written_names, _name} ->
+      Derived.through_set?(entity_type, written_names)
+    end)
     |> Enum.each(fn {written_names, written_name} = written ->
       written_spelled = server_only_spelling(List.insert_at(written_names, -1, written_name))
 
@@ -672,7 +693,7 @@ defmodule Hologram.Policy.Validator do
            reading when is_binary(reading) <- Derived.set_reading(read_type, name) do
         raise ArgumentError,
           message:
-            "#{server_only_spelling(path)} #{reading} - a policy condition reads no related set yet"
+            "#{server_only_spelling(path)} #{reading} - a policy condition reads a related set only through any, none or all"
       end
     end
 

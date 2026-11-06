@@ -3432,24 +3432,6 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
-  describe "quantified?/1" do
-    test "holds for a quantifier" do
-      assert quantified?([{:any, {[:messages], []}}])
-    end
-
-    test "holds for a quantifier inside an alternative" do
-      assert quantified?([{:or, [[{:a, :==, 1}], [{:none, {[:messages], []}}]]}])
-    end
-
-    test "fails for predicates and disjunctions alone" do
-      refute quantified?([{:a, :==, 1}, {:or, [[{:b, :==, 2}], [{:c, :==, 3}]]}])
-    end
-
-    test "fails for an attribute named like a quantifier" do
-      refute quantified?([{:any, :==, true}])
-    end
-  end
-
   describe "relationship_chains/1" do
     test "returns a quantifier's relationship" do
       assert relationship_chains([{:any, {[:messages], []}}]) == [[:messages]]
