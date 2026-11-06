@@ -880,6 +880,21 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Truncates the tables of the given entity types in one statement - PostgreSQL refuses to truncate a
+  table another one references without it.
+  """
+  def truncate_entity_tables(entity_types) do
+    tables =
+      Enum.map_join(entity_types, ", ", fn entity_type ->
+        ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
+      end)
+
+    {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
+
+    :ok
+  end
+
+  @doc """
   Truncates every entity table of the app, the join table behind a message's labels among them,
   in one statement - PostgreSQL refuses to truncate a table another one references without it.
 
