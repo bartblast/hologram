@@ -134,6 +134,16 @@ defmodule Hologram.Sync.ScoperTest do
       assert affected(events([Module28]), windows, edges) == [:channel]
     end
 
+    test "includes a window whose rows' verdicts read a type when that type changes" do
+      edges = %{
+        {Module26, :verdicts} => [{:set_attributes, [:messages], Module28, [:body, :channel_id]}]
+      }
+
+      windows = [{:channel, term(Module26)}]
+
+      assert affected(events([Module28]), windows, edges) == [:channel]
+    end
+
     # A pair added to or removed from the to-many is an effect on the type storing it, which puts a
     # row into the set or takes it out.
     test "includes a window whose policy reads a set the pairs of another type hold when that type changes" do

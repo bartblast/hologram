@@ -41,6 +41,10 @@ defmodule Hologram.Policy.Edges do
     * `{:named_grants, entity_type, role_names}` - grants of these roles held on the
       entity a grant-store row names, deciding that row's visibility.
 
+  Beside the operations, `{entity type, :verdicts}` names the edges of the type's deciding
+  quantifiers, when it has any (see `Hologram.Policy.deciding_quantifiers/1`): what the server's
+  verdicts sent with its rows read, whichever operation they decide.
+
   Delegations expand transitively: a via chain contributes the target policy's edges for the
   operation each delegation names, with the chain prefixed, so every pair's list is complete on
   its own. Edges may over-approximate the affected data - re-checking everything an edge names
@@ -55,11 +59,18 @@ defmodule Hologram.Policy.Edges do
   """
   @spec derive(list(module)) :: %{{module, Entity.operation()} => list(tuple)}
   def derive(entity_types) do
-    for entity_type <- entity_types,
-        {operation, rules} <- Policy.build(entity_type),
-        into: %{} do
-      {{entity_type, operation}, operation_edges(entity_type, rules)}
-    end
+    operation_pairs =
+      for entity_type <- entity_types,
+          {operation, rules} <- Policy.build(entity_type),
+          do: {{entity_type, operation}, operation_edges(entity_type, rules)}
+
+    verdict_pairs =
+      for entity_type <- entity_types,
+          deciding = Policy.deciding_quantifiers(entity_type),
+          deciding != [],
+          do: {{entity_type, :verdicts}, verdict_edges(entity_type, deciding)}
+
+    Map.new(operation_pairs ++ verdict_pairs)
   end
 
   @doc """
@@ -264,6 +275,13 @@ defmodule Hologram.Policy.Edges do
     predicate_edges(entity_type, predicates) ++
       reference_edges(entity_type, to) ++
       via_edges(entity_type, via)
+  end
+
+  # What the deciding quantifiers read, as one rule's predicates read it.
+  defp verdict_edges(entity_type, deciding) do
+    deciding
+    |> Enum.flat_map(fn {_key, clause} -> predicate_edges(entity_type, [clause]) end)
+    |> merge_edges()
   end
 
   defp via_edges(_entity_type, nil), do: []

@@ -420,6 +420,21 @@ defmodule Hologram.Policy.EdgesTest do
              ]
     end
 
+    # The delete rule's none is answered from the server's verdict, sent with every project, so what
+    # it reads is named apart from the operations - beside the operation's own edges.
+    test "names what the deciding quantifiers read under :verdicts" do
+      assert derive([EdgeProject])[{EdgeProject, :verdicts}] == [
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], EdgeProject, [:labels]}
+             ]
+    end
+
+    test "names no :verdicts edges for a type with no deciding quantifier" do
+      refute [EdgeLabel]
+             |> derive()
+             |> Map.has_key?({EdgeLabel, :verdicts})
+    end
+
     test "lifts a set's edges through a delegation" do
       assert derive([EdgeNote])[{EdgeNote, :read}] == [
                {:attributes, [:task_id]},

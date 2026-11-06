@@ -49,6 +49,9 @@ defmodule Hologram.Sync.Diff do
 
   Vanishing is reported per window. Whether the client is told to drop the row depends on the
   rest of what it holds, which only the session knows.
+
+  The rows the client held and may still see come back too, as `held`, whatever moved on them -
+  what the session works their verdicts out again over (see `Hologram.Sync.Verdicts`).
   """
   @spec deltas(
           %{ids: MapSet.t(), rows: map},
@@ -59,6 +62,7 @@ defmodule Hologram.Sync.Diff do
           %{
             appeared: list(struct),
             edges: list(map),
+            held: list(struct),
             patched: list({struct, map}),
             vanished: list(String.t())
           }
@@ -86,9 +90,15 @@ defmodule Hologram.Sync.Diff do
       |> patched(held_visible_ids, changed_attributes(transactions))
       |> Enum.map(fn {row, patch} -> {scrub(row, visible_ids), patch} end)
 
+    held =
+      held_visible_ids
+      |> Enum.sort()
+      |> Enum.map(&Map.fetch!(visible, &1))
+
     %{
       appeared: appeared,
       edges: edges(visible, visible_ids, transactions),
+      held: held,
       patched: patched,
       vanished: vanished(held_ids, visible_ids)
     }

@@ -659,6 +659,18 @@ defmodule Hologram.Policy do
   """
   @spec verdict_reads(module, tuple) :: list(module)
   def verdict_reads(entity_type, clause) do
+    [entity_type | verdict_related_reads(entity_type, clause)]
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Returns the entity types the given deciding quantifier reads through relationships, sorted - those
+  of `verdict_reads/2` but the rule's own type, which is among them only when a relationship leads
+  to a row of it, a set of rows of the type itself.
+  """
+  @spec verdict_related_reads(module, tuple) :: list(module)
+  def verdict_related_reads(entity_type, clause) do
     clauses = [clause]
 
     references =
@@ -670,10 +682,10 @@ defmodule Hologram.Policy do
 
     types =
       for chain <- chains,
-          length <- 0..length(chain),
+          length <- 1..length(chain)//1,
           do: Entity.path_target(entity_type, Enum.take(chain, length))
 
-    [entity_type | types]
+    types
     |> Enum.uniq()
     |> Enum.sort()
   end

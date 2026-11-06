@@ -371,6 +371,39 @@ defmodule Hologram.Sync.DiffTest do
     end
   end
 
+  describe "deltas/4 - held" do
+    test "returns the rows the client holds and may still see, whatever moved on them" do
+      kept = row("kept")
+      gone = row("gone")
+      arrived = row("arrived")
+
+      deltas = deltas(result([kept, arrived]), MapSet.new([kept.id, gone.id]), nil, [])
+
+      assert deltas.held == [kept]
+    end
+
+    test "returns a held row a round patched" do
+      task = row("current value")
+
+      deltas = deltas(result([task]), MapSet.new([task.id]), nil, events(task.id, ["c"]))
+
+      assert deltas.held == [task]
+    end
+
+    test "leaves out a held row the client may no longer see" do
+      user =
+        %{email: "reader@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      hidden = DB.create!(PolicyModule1.new())
+
+      deltas = deltas(result([hidden]), MapSet.new([hidden.id]), user.id, [])
+
+      assert deltas.held == []
+    end
+  end
+
   describe "deltas/4 - inverses" do
     setup do
       channel =

@@ -24,7 +24,8 @@ defmodule Hologram.PolicyTest do
       revoke_role_qualifying_roles: 2,
       validate_operation!: 2,
       verdict_key: 3,
-      verdict_reads: 2
+      verdict_reads: 2,
+      verdict_related_reads: 2
     ]
 
   alias Hologram.Auth.RoleGrant
@@ -1342,6 +1343,24 @@ defmodule Hologram.PolicyTest do
     test "returns the types along a set its condition reads nothing on" do
       assert verdict_reads(Hologram.PolicyTest.VerdictProject, {:none, {[:labels], []}}) ==
                Enum.sort([Hologram.PolicyTest.VerdictLabel, Hologram.PolicyTest.VerdictProject])
+    end
+  end
+
+  describe "verdict_related_reads/2" do
+    test "returns the types the clause reaches through a relationship, leaving out the rule's own type" do
+      assert verdict_related_reads(Hologram.PolicyTest.VerdictProject, {:none, {[:labels], []}}) ==
+               [Hologram.PolicyTest.VerdictLabel]
+    end
+
+    test "returns the rule's own type when a relationship leads to a row of it" do
+      clause = {:any, {[:members], [{:none, {[:project, :labels], [{:name, :==, "x"}]}}]}}
+
+      assert verdict_related_reads(Hologram.PolicyTest.VerdictProject, clause) ==
+               Enum.sort([
+                 Hologram.PolicyTest.VerdictLabel,
+                 Hologram.PolicyTest.VerdictMember,
+                 Hologram.PolicyTest.VerdictProject
+               ])
     end
   end
 end

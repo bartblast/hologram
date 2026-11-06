@@ -24,7 +24,8 @@ defmodule Hologram.Sync.Frame do
 
   A row that appeared travels whole, because a client that did not have it needs all of it, with
   the server's verdicts for the given user (see `put_entity/2`). A row that changed travels as the
-  attributes that moved. A row that left travels as its id, and an
+  attributes that moved, each patch given as `{row, changes, verdicts}` - the verdicts that moved
+  beside them, or nil when none did. A row that left travels as its id, and an
   edge as the pair it joined or parted.
 
   Every delta names its own type: an arrived row carries it, an edge carries the type of the row
@@ -36,7 +37,7 @@ defmodule Hologram.Sync.Frame do
   def deltas(news, actor_user_id) do
     Enum.concat([
       Enum.map(news.appeared, &put_entity(&1, row_verdicts(actor_user_id, &1))),
-      Enum.map(news.patched, fn {row, patch} -> patch_entity(row, patch) end),
+      Enum.map(news.patched, fn {row, patch, verdicts} -> patch_entity(row, patch, verdicts) end),
       Enum.map(news.unsynced, fn {id, entity_type} -> unsync_entity(id, entity_type) end),
       Enum.map(news.edges, &relationship/1)
     ])
@@ -225,12 +226,17 @@ defmodule Hologram.Sync.Frame do
   # than against the changes: a change to a server-only column reaches here (the log stopped
   # dropping it) and is gone from the data, so taking from the data is what keeps a client from
   # being told that a column it may not have has moved.
-  defp patch_entity(row, patch) do
+  #
+  # Verdicts that moved ride the patch as `$verdicts`, replacing what the client holds - nil when
+  # they did not move, which leaves them out. A row whose verdicts moved while none of its values
+  # did is a patch naming no value.
+  defp patch_entity(row, patch, verdicts) do
     data = WireData.patch(row.__struct__, patch)
     revisions = Map.take(row.__meta__.revisions, Map.keys(data))
+    told = Map.put(data, :"$revisions", revisions)
 
     %{
-      data: Map.put(data, :"$revisions", revisions),
+      data: if(verdicts == nil, do: told, else: Map.put(told, :"$verdicts", verdicts)),
       id: row.id,
       op: :patch_entity,
       type: type_of(row)

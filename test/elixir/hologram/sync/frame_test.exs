@@ -69,6 +69,35 @@ defmodule Hologram.Sync.FrameTest do
       Map.merge(%{appeared: [], edges: [], patched: [], unsynced: []}, overrides)
     end
 
+    test "sends a patch with the verdicts that moved beside the values" do
+      row = %{
+        Module2.new(a: true, c: "after")
+        | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
+      }
+
+      assert [%{data: data, op: :patch_entity}] =
+               deltas(news(%{patched: [{row, %{c: "after"}, %{"delete:abc" => false}}]}), nil)
+
+      assert data == %{
+               "$revisions": %{c: 5},
+               "$verdicts": %{"delete:abc" => false},
+               c: "after"
+             }
+    end
+
+    test "sends a patch naming no value for a row whose verdicts alone moved" do
+      row = Module2.new(a: true, c: "after")
+
+      assert deltas(news(%{patched: [{row, %{}, %{"delete:abc" => false}}]}), nil) == [
+               %{
+                 data: %{"$revisions": %{}, "$verdicts": %{"delete:abc" => false}},
+                 id: row.id,
+                 op: :patch_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               }
+             ]
+    end
+
     test "sends a row that appeared with the user's verdicts" do
       check_permissions()
 
@@ -99,7 +128,7 @@ defmodule Hologram.Sync.FrameTest do
         | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
       }
 
-      assert deltas(news(%{patched: [{row, %{c: "after"}}]}), nil) == [
+      assert deltas(news(%{patched: [{row, %{c: "after"}, nil}]}), nil) == [
                %{
                  data: %{:c => "after", :"$revisions" => %{c: 5}},
                  id: row.id,
@@ -115,7 +144,7 @@ defmodule Hologram.Sync.FrameTest do
         | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
       }
 
-      assert [%{data: data}] = deltas(news(%{patched: [{row, %{a: true, c: "after"}}]}), nil)
+      assert [%{data: data}] = deltas(news(%{patched: [{row, %{a: true, c: "after"}, nil}]}), nil)
       assert data[:"$revisions"] == %{a: 1, c: 5}
     end
 
@@ -130,7 +159,7 @@ defmodule Hologram.Sync.FrameTest do
 
       moved = %{email: "user@test.com", password_hash: "hashed_secret_v5"}
 
-      assert [%{data: data}] = deltas(news(%{patched: [{row, moved}]}), nil)
+      assert [%{data: data}] = deltas(news(%{patched: [{row, moved, nil}]}), nil)
       assert data[:"$revisions"] == %{email: 3}
       refute Map.has_key?(data, :password_hash)
     end
@@ -141,7 +170,7 @@ defmodule Hologram.Sync.FrameTest do
       row = Module2.new(a: true, c: "after")
       moved = %{c: "after", updated_at: ~U[2026-08-16 16:20:00.000000Z]}
 
-      assert [%{data: data}] = deltas(news(%{patched: [{row, moved}]}), nil)
+      assert [%{data: data}] = deltas(news(%{patched: [{row, moved, nil}]}), nil)
 
       assert data == %{
                :c => "after",
@@ -296,7 +325,11 @@ defmodule Hologram.Sync.FrameTest do
       }
 
       news =
-        news(%{edges: [edge], patched: [{row, %{c: "after"}}], unsynced: [{gone_id, Module2}]})
+        news(%{
+          edges: [edge],
+          patched: [{row, %{c: "after"}, nil}],
+          unsynced: [{gone_id, Module2}]
+        })
 
       envelope = encode_deltas_envelope(42, @cursor, deltas(news, nil), nil)
 
