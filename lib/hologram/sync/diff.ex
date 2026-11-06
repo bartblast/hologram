@@ -10,6 +10,8 @@ defmodule Hologram.Sync.Diff do
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
 
+  @pair_ops [:add_relationship, :del_relationship]
+
   @doc """
   Returns what changed for a client between the ids it holds and the round it is being told
   about: the rows that appeared, the rows whose values moved, and the ids that went away.
@@ -119,6 +121,11 @@ defmodule Hologram.Sync.Diff do
   about which columns moved and counts as all of them, erring towards including the way every rule
   on this path does.
 
+  A rule reading a set - a quantifier's - leans on many rows, and the gap names which rows moved,
+  never which set they were in, so a set is not followed row by row: every row whose rule reads it
+  is judged afresh once the gap names a row of the set's type that moved on a column the rule
+  reads, or a pair of the relationship holding the set.
+
   Rows reached only through an include are members in their own right and are judged the same way,
   and what appears is scrubbed against what the client may see NOW, so no id list names a row it
   was not given.
@@ -128,13 +135,20 @@ defmodule Hologram.Sync.Diff do
         }) :: %{appeared: list(struct), vanished: list(struct)}
   def reach(result, actor_user_id, named, edges) do
     members = members(result.rows)
-    moved = moved_by_id(named)
-    named_types = MapSet.new(named, & &1.type)
+
+    {pair_effects, row_effects} = Enum.split_with(named, &(&1.op in @pair_ops))
+
+    gap = %{
+      moved: moved_by(named, & &1.entity_id),
+      moved_by_type: moved_by(row_effects, & &1.type),
+      named_types: MapSet.new(named, & &1.type),
+      pairs: pairs(pair_effects)
+    }
 
     visible = Map.filter(members, fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
     visible_ids = member_ids(visible)
 
-    reached = Map.filter(members, fn {_id, row} -> reached?(row, edges, named_types, moved) end)
+    reached = Map.filter(members, fn {_id, row} -> reached?(row, edges, gap) end)
 
     {visible_reached, hidden_reached} =
       Map.split_with(reached, fn {id, _row} -> MapSet.member?(visible_ids, id) end)
@@ -261,27 +275,37 @@ defmodule Hologram.Sync.Diff do
 
   # A row is reached through an edge when the gap names a row of the type the edge points at, the
   # chain leads to that very row, and the columns it moved on include one the rule reads.
-  defp edge_reaches?(
-         {:relationship_attributes, chain, target_type, names},
-         row,
-         named_types,
-         moved
-       ) do
-    if MapSet.member?(named_types, target_type) do
+  defp edge_reaches?({:relationship_attributes, chain, target_type, names}, row, gap) do
+    if MapSet.member?(gap.named_types, target_type) do
       target_id = Auth.chain_target_id(row, chain)
 
-      moved_meets?(Map.get(moved, target_id), target_type, names)
+      moved_meets?(Map.get(gap.moved, target_id), target_type, names)
     else
       false
     end
   end
 
-  defp edge_reaches?(_edge, _row, _named_types, _moved), do: false
+  # A set's rows are not one row the chain can be followed to, and the gap names which rows moved,
+  # never which set they were in - a resume reads the log without the values a write left, so a
+  # member that left the set, moved away or was deleted names no owner. So a set edge reaches every
+  # row it hangs off once the gap names a row of the set's type that moved on a column the rule
+  # reads, or a pair of the relationship holding the set - a pair moves no column, so it counts only
+  # there. Reaching too many costs puts and unsyncs that change nothing, never a check - every row
+  # is judged afresh anyway.
+  defp edge_reaches?({:set_attributes, _chain, target_type, names}, _row, gap) do
+    moved_meets?(Map.get(gap.moved_by_type, target_type), target_type, names)
+  end
+
+  defp edge_reaches?({:set_edges, _chain, entity_type, relationship_names}, _row, gap) do
+    Enum.any?(relationship_names, &MapSet.member?(gap.pairs, {entity_type, Atom.to_string(&1)}))
+  end
+
+  defp edge_reaches?(_edge, _row, _gap), do: false
 
   defp edges(visible, visible_ids, transactions) do
     transactions
     |> Enum.flat_map(fn {_tx, events} -> events end)
-    |> Enum.filter(&(&1.op in [:add_relationship, :del_relationship]))
+    |> Enum.filter(&(&1.op in @pair_ops))
     |> Enum.flat_map(&(edge(&1, visible) ++ reverse_edges(&1, visible)))
     |> Enum.reject(&hidden_target?(&1, visible_ids))
     |> Enum.uniq()
@@ -326,13 +350,14 @@ defmodule Hologram.Sync.Diff do
     Enum.reduce(rows, %{}, fn {_id, row}, members -> collect(row, members) end)
   end
 
-  # What the gap says about each row it names: the row's type, and the columns that moved on it.
-  # One row touched several times moves on the union of what its effects say.
-  defp moved_by_id(named) do
+  # What the gap says about each row it names, or each type - keyed by the given function: the
+  # type, and the columns that moved on it. One row touched several times moves on the union of
+  # what its effects say.
+  defp moved_by(named, key_fun) do
     Enum.reduce(named, %{}, fn effect, moved ->
       entry = {effect.type, revision_names(effect)}
 
-      Map.update(moved, effect.entity_id, entry, fn {type, names} ->
+      Map.update(moved, key_fun.(effect), entry, fn {type, names} ->
         {type, union_moved(names, revision_names(effect))}
       end)
     end)
@@ -347,6 +372,17 @@ defmodule Hologram.Sync.Diff do
   end
 
   defp moved_meets?(_entry, _target_type, _names), do: false
+
+  # The relationships the gap names a pair of, by the type each is stored on - spelled as the log
+  # spells them, so nothing this node never compiled becomes an atom.
+  defp pairs(pair_effects) do
+    pair_effects
+    |> Enum.flat_map(fn
+      %{data: %{"relationship" => name}, type: type} -> [{type, name}]
+      _effect -> []
+    end)
+    |> MapSet.new()
+  end
 
   # Names arrive as they were written rather than as atoms, so they are matched against the row's
   # own fields - which never invents an atom for something this node has never compiled.
@@ -363,10 +399,10 @@ defmodule Hologram.Sync.Diff do
     |> Enum.reject(fn {_row, patch} -> patch == %{} end)
   end
 
-  defp reached?(row, edges, named_types, moved) do
+  defp reached?(row, edges, gap) do
     edges
     |> Map.get({row.__struct__, :read}, [])
-    |> Enum.any?(&edge_reaches?(&1, row, named_types, moved))
+    |> Enum.any?(&edge_reaches?(&1, row, gap))
   end
 
   defp reverse_edge(row, name, source_id) do
