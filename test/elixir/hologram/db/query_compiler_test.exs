@@ -3273,6 +3273,107 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
+    # Nobody is the actor, so nobody wrote any message - the rule admits no row.
+    test "drops an anonymous rule whose any names the actor" do
+      term = Stage.normalize(RuleChannel)
+      policy = %{anonymous?: true, rules: rules(any: {[:messages], [author_id: {:actor}]})}
+
+      assert %{params: [], sql: sql} = compile(term, rule_mapping(), policy)
+      assert String.contains?(sql, ~s| WHERE FALSE ORDER BY|)
+    end
+
+    test "keeps the alternative of an anonymous any's condition that names no actor" do
+      term = Stage.normalize(RuleChannel)
+
+      predicates = [any: {[:messages], [or: [[author_id: {:actor}], [body: "x"]]]}]
+      policy = %{anonymous?: true, rules: rules(predicates)}
+
+      assert %{params: [{:value, "x"}], sql: sql} = compile(term, rule_mapping(), policy)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(RuleMessage)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."channel_id" = "#{Mapper.table_name(RuleChannel)}"."id" | <>
+                 ~s|AND "body" = $1) ORDER BY|
+             )
+    end
+
+    # A none or an all asking about the actor asks about nobody, which grants nothing - even when
+    # only one alternative of its condition names the actor.
+    test "drops an anonymous rule whose none or all names the actor" do
+      term = Stage.normalize(RuleChannel)
+      condition = [or: [[author_id: {:actor}], [body: "x"]]]
+      none_policy = %{anonymous?: true, rules: rules(none: {[:messages], condition})}
+      all_policy = %{anonymous?: true, rules: rules(all: {[:messages], condition})}
+
+      assert %{params: [], sql: none_sql} = compile(term, rule_mapping(), none_policy)
+      assert %{params: [], sql: all_sql} = compile(term, rule_mapping(), all_policy)
+
+      assert String.contains?(none_sql, ~s| WHERE FALSE ORDER BY|)
+      assert String.contains?(all_sql, ~s| WHERE FALSE ORDER BY|)
+    end
+
+    # The nested none asks about nobody, so its alternative is false and the other one answers.
+    test "folds an anonymous none nested in an any's alternative" do
+      term = Stage.normalize(RuleChannel)
+
+      predicates = [
+        any: {[:messages], [or: [[none: {[:reactions], [message_id: {:actor}]}], [body: "x"]]]}
+      ]
+
+      policy = %{anonymous?: true, rules: rules(predicates)}
+
+      assert %{params: [{:value, "x"}], sql: sql} = compile(term, rule_mapping(), policy)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE EXISTS (SELECT 1 FROM #{table(RuleMessage)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."channel_id" = "#{Mapper.table_name(RuleChannel)}"."id" | <>
+                 ~s|AND "body" = $1) ORDER BY|
+             )
+    end
+
+    # The nested any names the actor in one alternative of the none's condition, so the none asks
+    # about nobody whatever its other alternative says.
+    test "drops an anonymous rule whose none names the actor in a nested quantifier" do
+      term = Stage.normalize(RuleChannel)
+
+      predicates = [
+        none: {[:messages], [or: [[any: {[:reactions], [message_id: {:actor}]}], [body: "x"]]]}
+      ]
+
+      policy = %{anonymous?: true, rules: rules(predicates)}
+
+      assert %{params: [], sql: sql} = compile(term, rule_mapping(), policy)
+      assert String.contains?(sql, ~s| WHERE FALSE ORDER BY|)
+    end
+
+    test "keeps the alternative of an anonymous rule beside a none naming the actor" do
+      term = Stage.normalize(RuleChannel)
+
+      policy = %{
+        anonymous?: true,
+        rules: rules(or: [[none: {[:messages], [author_id: {:actor}]}], [name: "x"]])
+      }
+
+      assert %{params: [{:value, "x"}], sql: sql} = compile(term, rule_mapping(), policy)
+      assert String.contains?(sql, ~s| WHERE "name" = $1 ORDER BY|)
+    end
+
+    test "keeps an anonymous none naming no actor" do
+      term = Stage.normalize(RuleChannel)
+      policy = %{anonymous?: true, rules: rules(none: {[:messages], [body: "x"]})}
+
+      assert %{params: [{:value, "x"}], sql: sql} = compile(term, rule_mapping(), policy)
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE NOT EXISTS (SELECT 1 FROM #{table(RuleMessage)} AS "$q1" | <>
+                 ~s|WHERE "$q1"."channel_id" = "#{Mapper.table_name(RuleChannel)}"."id" | <>
+                 ~s|AND "body" = $1) ORDER BY|
+             )
+    end
+
     # The thread's read rule is read on the first row of the authored set's chain, "$s1_1" - so the
     # rule's own chain takes the next source alias, or it would read its own link row where it means
     # the thread.

@@ -76,7 +76,10 @@ defmodule Hologram.DB.QueryCompiler do
   whichever way it points, and a grant reference is held by nobody, so those are folded away
   before rendering: a rule with grant references is dropped, a conjunction naming the actor is
   dropped, and a disjunction keeps its alternatives that name nobody - so
-  `author_id == user_id() or shared == true` still admits a visitor to the shared rows.
+  `author_id == user_id() or shared == true` still admits a visitor to the shared rows. An `any`
+  folds its condition the same way, and is dropped when nothing of it is left. A `none` or an `all`
+  whose condition names the actor anywhere is dropped whole, since it asks about nobody - folding
+  only its condition would leave it true for every visitor.
 
   Includes are policied too, at every nesting level: an include subquery ANDs the included
   type's :read policy - fixed at :read whatever rules the statement's own policy holds - keyed
@@ -219,6 +222,22 @@ defmodule Hologram.DB.QueryCompiler do
       [] -> :never
       [clauses] -> {:ok, clauses}
       several -> {:ok, [{:or, several}]}
+    end
+  end
+
+  # A quantifier's condition folds the same way, inside it - nobody's absence from a related row
+  # removes matches, so an any whose condition folds to :never matches no row. A none or an all
+  # whose condition names the actor anywhere asks about nobody as a whole, which grants nothing:
+  # folded alone its condition would come out false and turn the quantifier true.
+  defp anonymous_clause({quantifier, {_source, clauses}} = clause)
+       when quantifier in [:all, :none] do
+    if names_actor?(clauses), do: :never, else: {:ok, [clause]}
+  end
+
+  defp anonymous_clause({:any, {source, clauses}}) do
+    case anonymous_clauses(clauses) do
+      :never -> :never
+      {:ok, folded} -> {:ok, [{:any, {source, folded}}]}
     end
   end
 
@@ -1817,6 +1836,16 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp maybe_require_value(condition_sql, _subject_sql, _column), do: condition_sql
+
+  # Whether the given clauses name the acting user anywhere - inside a disjunction's alternatives
+  # and a nested quantifier's condition included.
+  defp names_actor?(clauses) do
+    Enum.any?(clauses, fn
+      {:or, alternatives} -> Enum.any?(alternatives, &names_actor?/1)
+      {quantifier, {_source, inner}} when quantifier in @quantifiers -> names_actor?(inner)
+      {_name, _operator, value} -> value == {:actor}
+    end)
+  end
 
   defp null_inclusive(condition_sql, subject_sql, %{null: true}) do
     "(#{condition_sql} OR #{subject_sql} IS NULL)"
