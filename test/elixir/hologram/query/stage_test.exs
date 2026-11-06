@@ -271,6 +271,12 @@ defmodule Hologram.Query.StageTest do
       assert condition_polarity(:any, :negative) == :negative
       assert condition_polarity(:all, :positive) == :positive
     end
+
+    test "keeps a polarity that may go either way inside every quantifier" do
+      assert condition_polarity(:none, :both) == :both
+      assert condition_polarity(:any, :both) == :both
+      assert condition_polarity(:all, :both) == :both
+    end
   end
 
   describe "count/1" do
@@ -2697,6 +2703,12 @@ defmodule Hologram.Query.StageTest do
 
     test "holds for an any whose truth hurts" do
       assert joining_row_refuses?(:any, :negative)
+    end
+
+    test "holds for every quantifier at a polarity that may go either way" do
+      assert joining_row_refuses?(:any, :both)
+      assert joining_row_refuses?(:none, :both)
+      assert joining_row_refuses?(:all, :both)
     end
 
     test "fails for an any whose truth helps, and a none or an all whose truth hurts" do

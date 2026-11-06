@@ -409,7 +409,9 @@ defmodule Hologram.Policy do
   how a row joins the set: `{:reference, entity type, reference field, owner type}` for a row of the
   entity type whose reference field names the owner row, and `{:edge, entity type, relationship,
   side, owner type}` for a pair added to the entity type's to-many relationship, whose `:source` or
-  `:target` id names the owner row.
+  `:target` id names the owner row. A source ending at a derived set names its links whatever the
+  quantifier, and so does every set its definition reads, through its queries' chains, the
+  quantifiers in its conditions and filters and the derived fields those read, at both polarities.
 
   Cached for the lifetime of the runtime and derived on the first call, like the model facts. Raises
   while the data model is under a hold, as `build/1` does.
@@ -439,8 +441,7 @@ defmodule Hologram.Policy do
     for entity_type <- entity_types,
         {_operation, rules} <- build(entity_type),
         rule <- rules,
-        clause <- quantifier_clauses(rule.predicates),
-        link <- quantifier_links(clause, [entity_type], :positive),
+        link <- rule_links(entity_type, rule.predicates),
         into: MapSet.new(),
         do: link
   end
@@ -745,11 +746,80 @@ defmodule Hologram.Policy do
 
   defp chain(relationship_name), do: [relationship_name]
 
+  # The set links a chain of relationships, perhaps ending at a derived set, follows from a row of
+  # the given type, with the type it leads to and whether it ends at a derived set - whose links are
+  # those its definition reads.
+  defp chain_links(entity_type, relationship_names, walked) do
+    Enum.reduce(relationship_names, {entity_type, [], false}, fn name, {type, links, derived?} ->
+      if Derived.declared?(type, name) do
+        {Derived.related_type(type, name), links ++ derived_links(type, name, walked), true}
+      else
+        {Entity.related_type(type, name), links ++ link_entries(type, name), derived?}
+      end
+    end)
+  end
+
+  # The set links the given clauses read on a row of the first of the given types, with the rows of
+  # the others above it, every quantifier among them at both polarities, and those of the derived
+  # fields they read - their names resolved through the given prefixes, the relationships from a row
+  # of the last type to each of those rows.
+  defp clause_links(clauses, types, prefixes, walked) do
+    quantifier_links =
+      clauses
+      |> quantifier_clauses()
+      |> Enum.flat_map(&quantifier_links(&1, types, :both, walked))
+
+    field_links =
+      clauses
+      |> Stage.predicate_references(prefixes)
+      |> Enum.flat_map(&field_links(List.last(types), &1, walked))
+
+    quantifier_links ++ field_links
+  end
+
   defp declared_roles_description([]), do: "it declares no role"
 
   defp declared_roles_description(declared_names) do
     "declared roles are: #{Enum.map_join(declared_names, ", ", &inspect/1)}"
   end
+
+  # The set links a derived field's definition reads off a row of the given type: its queries'
+  # chains, the sets its conditions and filters read and those of the derived fields they read, each
+  # at both polarities, since a derived value can be compared either way. A query's filter and sort
+  # are read on the set's rows, with the row the field belongs to above them.
+  defp definition_links({:concat, operands}, entity_type, walked),
+    do: Enum.flat_map(operands, &definition_links(&1, entity_type, walked))
+
+  defp definition_links({:condition, clauses}, entity_type, walked),
+    do: clause_links(clauses, [entity_type], [[]], walked)
+
+  defp definition_links({:if, clauses, then_value, else_value}, entity_type, walked) do
+    clause_links(clauses, [entity_type], [[]], walked) ++
+      definition_links(then_value, entity_type, walked) ++
+      definition_links(else_value, entity_type, walked)
+  end
+
+  defp definition_links({:name, path}, entity_type, walked) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    field_links(entity_type, {relationship_names, name}, walked)
+  end
+
+  defp definition_links({:name, name}, entity_type, walked),
+    do: field_links(entity_type, {[], name}, walked)
+
+  defp definition_links({:query, %{source: {_owner_type, chain}} = term}, entity_type, walked) do
+    {set_type, links, _derived?} = chain_links(entity_type, chain, walked)
+
+    sort_links =
+      Enum.flat_map(term.sort, fn {name, _direction} ->
+        field_links(set_type, {[], name}, walked)
+      end)
+
+    links ++ clause_links(term.filter, [set_type, entity_type], [chain, []], walked) ++ sort_links
+  end
+
+  defp definition_links({:value, _value}, _entity_type, _walked), do: []
 
   defp derived_deciding_quantifiers(entity_type) do
     entity_type
@@ -762,6 +832,16 @@ defmodule Hologram.Policy do
     end)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  defp derived_links(entity_type, name, walked) do
+    if {entity_type, name} in walked do
+      []
+    else
+      entity_type
+      |> Derived.definition(name)
+      |> definition_links(entity_type, [{entity_type, name} | walked])
+    end
   end
 
   defp delegation_chains(_entity_type, nil), do: []
@@ -824,6 +904,16 @@ defmodule Hologram.Policy do
     else
       expand_global_role_modules(expanded, extends_by_module)
     end
+  end
+
+  # The set links a derived field holding a value reads, given a reference to it on a row of the
+  # given type - none for any other name.
+  defp field_links(entity_type, {relationship_names, name}, walked) do
+    type = Derived.path_target(entity_type, relationship_names)
+
+    if Derived.value_field?(type, name),
+      do: derived_links(type, name, walked),
+      else: []
   end
 
   # How a row joins the set a relationship of the given type holds: through the reference field its
@@ -989,26 +1079,27 @@ defmodule Hologram.Policy do
   # quantifier is about, or one above it - when a row joining one can refuse what the rule granted,
   # and those of the quantifiers in its condition, read on the set's rows at the condition's
   # polarity. The types are those of the rows each name is read on, nearest first.
-  defp quantifier_links({quantifier, {source, clauses}}, types, polarity) do
+  #
+  # A source ending at a derived set is held whole whatever the quantifier - a row joining can push
+  # another out of its bound, and a row changing can move in or out of its filter - and so is
+  # everything its definition reads.
+  # The derived fields already being walked are given, so one reached again adds nothing.
+  defp quantifier_links({quantifier, {source, clauses}}, types, polarity, walked) do
     {start_type, relationship_names} =
       case source do
         {:outer, levels, names} -> {Enum.at(types, levels), names}
         names -> {hd(types), names}
       end
 
-    {set_type, links} =
-      Enum.reduce(relationship_names, {start_type, []}, fn name, {type, acc} ->
-        {Entity.related_type(type, name), acc ++ link_entries(type, name)}
-      end)
-
+    {set_type, links, derived?} = chain_links(start_type, relationship_names, walked)
     condition_polarity = Stage.condition_polarity(quantifier, polarity)
 
     nested_links =
       clauses
       |> quantifier_clauses()
-      |> Enum.flat_map(&quantifier_links(&1, [set_type | types], condition_polarity))
+      |> Enum.flat_map(&quantifier_links(&1, [set_type | types], condition_polarity, walked))
 
-    if Stage.joining_row_refuses?(quantifier, polarity),
+    if derived? or Stage.joining_row_refuses?(quantifier, polarity),
       do: links ++ nested_links,
       else: nested_links
   end
@@ -1078,6 +1169,23 @@ defmodule Hologram.Policy do
   defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}) do
     predicate_chains(entity_type, predicates) ++
       reference_chains(to) ++ delegation_chains(entity_type, via)
+  end
+
+  # The set links a rule's condition reads: those of its quantifiers, and those of the derived
+  # fields their conditions name - a derived value is read at both polarities, since it can be
+  # compared either way. One the rule's own predicates name reads no set, which the build refuses.
+  defp rule_links(entity_type, predicates) do
+    quantifiers = quantifier_clauses(predicates)
+
+    quantifier_links =
+      Enum.flat_map(quantifiers, &quantifier_links(&1, [entity_type], :positive, []))
+
+    field_links =
+      quantifiers
+      |> Stage.predicate_references()
+      |> Enum.flat_map(&field_links(entity_type, &1, []))
+
+    quantifier_links ++ field_links
   end
 
   # Whether a chain of relationships goes through a set a derived field holds.

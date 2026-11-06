@@ -1242,11 +1242,12 @@ defmodule Hologram.Policy.EvaluatorTest do
       %DerivedCard{id: Hologram.Entity.generate_id(), rank: rank, tags: tags}
     end
 
-    # The board's cards are its stored set, a card's tags the ones it was built with.
+    # The board's cards are its stored set, a card's tags the ones it was built with - each asked for
+    # whole, as every set a derived field's definition reads is.
     defp board_checker(cards) do
       fn
-        {:set, [:cards]}, %DerivedBoard{}, _actor_user_id -> cards
-        {:set, [:tags]}, %DerivedCard{tags: tags}, _actor_user_id -> tags
+        {:set, [:cards], :whole}, %DerivedBoard{}, _actor_user_id -> cards
+        {:set, [:tags], :whole}, %DerivedCard{tags: tags}, _actor_user_id -> tags
       end
     end
 
@@ -1347,10 +1348,25 @@ defmodule Hologram.Policy.EvaluatorTest do
 
       checker = fn
         {:set, [:board], :whole}, %DerivedCard{}, _actor_user_id -> [board]
-        {:set, [:cards]}, %DerivedBoard{}, _actor_user_id -> [card(1), card(2), card(3)]
+        {:set, [:cards], :whole}, %DerivedBoard{}, _actor_user_id -> [card(1), card(2), card(3)]
       end
 
       rule = rule(predicates: [none: {[:board, :top_cards], [{:rank, :==, 1}]}])
+
+      assert rule_matches?(rule, card(1), nil, checker)
+    end
+
+    # A row joining the board's cards can push one out of the bound, so an any over the set can turn
+    # false as well.
+    test "asks for the relationships before a derived set whole under an any" do
+      board = %DerivedBoard{id: Hologram.Entity.generate_id()}
+
+      checker = fn
+        {:set, [:board], :whole}, %DerivedCard{}, _actor_user_id -> [board]
+        {:set, [:cards], :whole}, %DerivedBoard{}, _actor_user_id -> [card(1), card(2), card(3)]
+      end
+
+      rule = rule(predicates: [any: {[:board, :top_cards], [{:rank, :==, 3}]}])
 
       assert rule_matches?(rule, card(1), nil, checker)
     end

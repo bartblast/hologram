@@ -891,6 +891,194 @@ defmodule Hologram.PolicyTest do
     test "leaves out a set read by an any alone" do
       assert locked_set_links([AnyProject, AnyMember]) == MapSet.new()
     end
+
+    defmodule LockedBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.PolicyTest.LockedCard], inverse: board
+      relationship :labels, [Hologram.PolicyTest.LockedTag]
+      relationship :team, Hologram.PolicyTest.LockedTeam, optional: true
+
+      derived :busy_cards, [Hologram.PolicyTest.LockedCard], fn cards ->
+        filter(cards, tag_count > 1)
+      end
+
+      derived :flagged_cards, [Hologram.PolicyTest.LockedCard], fn cards ->
+        filter(cards, any(tag <- tags, tag.name == "flag"))
+      end
+
+      derived :label_count, :integer, fn labels -> count(labels) end
+
+      derived :low_top_cards, [Hologram.PolicyTest.LockedCard], fn top_cards ->
+        filter(top_cards, rank < 3)
+      end
+
+      derived :most_tagged_cards, [Hologram.PolicyTest.LockedCard], fn cards ->
+        cards
+        |> sort(tag_count: :desc)
+        |> take(1)
+      end
+
+      derived :picked_cards, [Hologram.PolicyTest.LockedCard], fn cards, label_count ->
+        if label_count > 1, do: take(cards, 1), else: cards
+      end
+
+      derived :top_cards, [Hologram.PolicyTest.LockedCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+    end
+
+    defmodule LockedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      relationship :board, LockedBoard, optional: true
+      relationship :tags, [Hologram.PolicyTest.LockedTag]
+
+      derived :tag_count, :integer, fn tags -> count(tags) end
+    end
+
+    defmodule LockedTag do
+      use Hologram.Entity
+
+      attribute :name, :string
+    end
+
+    defmodule LockedTeam do
+      use Hologram.Entity
+
+      relationship :boards, [LockedBoard], inverse: team
+
+      allow :update, when: any(card <- boards.top_cards, card.rank == 1)
+    end
+
+    defmodule BusyCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.busy_cards, card.rank == 1)
+    end
+
+    defmodule CountedTagsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.cards, card.tag_count < 2)
+    end
+
+    defmodule FlaggedCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.flagged_cards, card.rank == 1)
+    end
+
+    defmodule LowTopCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.low_top_cards, card.rank == 1)
+    end
+
+    defmodule MostTaggedCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.most_tagged_cards, card.rank == 1)
+    end
+
+    defmodule PickedCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.picked_cards, card.rank == 1)
+    end
+
+    defmodule TopCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.top_cards, card.rank == 1)
+    end
+
+    setup do
+      put_derived_definitions([LockedBoard, LockedCard])
+    end
+
+    # A card joining the board can push another out of its bound, so even an any over the set can
+    # turn false.
+    test "names how a row joins the set a derived set reads, under an any" do
+      assert locked_set_links([TopCardsRule]) ==
+               MapSet.new([{:reference, LockedCard, :board_id, LockedBoard}])
+    end
+
+    test "names how a row joins the set a derived set built on another one reads" do
+      assert locked_set_links([LowTopCardsRule]) ==
+               MapSet.new([{:reference, LockedCard, :board_id, LockedBoard}])
+    end
+
+    # A board joining the team brings its cards into the set the quantifier reads.
+    test "names how a row joins a set the relationships before a derived set read" do
+      assert locked_set_links([LockedTeam]) ==
+               MapSet.new([
+                 {:reference, LockedBoard, :team_id, LockedTeam},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # A tag joining a card can take it into the set or out of it, whichever way the filter's any
+    # points.
+    test "names the set a quantifier in a derived set's filter reads" do
+      assert locked_set_links([FlaggedCardsRule]) ==
+               MapSet.new([
+                 {:edge, LockedCard, :tags, :source, LockedCard},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # A tag joining a card moves its count, which takes it into the set or out of it.
+    test "names the set a derived field read in a derived set's filter reads" do
+      assert locked_set_links([BusyCardsRule]) ==
+               MapSet.new([
+                 {:edge, LockedCard, :tags, :source, LockedCard},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # A tag joining a card moves its count, which reorders the set the bound is taken from.
+    test "names the set a derived sort key reads" do
+      assert locked_set_links([MostTaggedCardsRule]) ==
+               MapSet.new([
+                 {:edge, LockedCard, :tags, :source, LockedCard},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # A label joining the board can flip which query the if picks.
+    test "names the set a derived set's if condition reads" do
+      assert locked_set_links([PickedCardsRule]) ==
+               MapSet.new([
+                 {:edge, LockedBoard, :labels, :source, LockedBoard},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # The any over the board's own cards names nothing, but the count a card's condition compares
+    # can be compared either way.
+    test "names the set a derived field in a quantifier's condition reads" do
+      assert locked_set_links([CountedTagsRule]) ==
+               MapSet.new([{:edge, LockedCard, :tags, :source, LockedCard}])
+    end
   end
 
   describe "operation_key/1" do

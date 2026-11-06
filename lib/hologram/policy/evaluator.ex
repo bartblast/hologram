@@ -73,8 +73,7 @@ defmodule Hologram.Policy.Evaluator do
   field holding rows, which holds its definition's rows for each row the relationships before it
   reach, read raw as relationships are: its query's rows off that row, matched with that row above
   them, in its order with its bounds applied, the rows of the query an if picks, or none for nil. A
-  derived field such a query reads is computed as a rule's own is. Inside a definition its own
-  relationships are asked for their rows alone and its filter is read as a rule's own predicates are.
+  derived field such a query reads is computed as a rule's own is.
 
   For an anonymous session a user_id() predicate is false, whichever way it points, and a grant
   reference is held by nobody - the actor is nobody rather than nil, since a nil actor would make
@@ -92,9 +91,9 @@ defmodule Hologram.Policy.Evaluator do
   relationships lead to, or nil when one of them is empty or names a row that is gone. For a
   {:set, relationship names} tuple it returns the rows of the set they lead to, each once - the
   relationships before a derived field, to-ones alone among them, never the derived field itself -
-  asked
-  as {:set, relationship names, :whole} when a row joining the set could turn the grant into a
-  refusal: a none or an all whose truth helps the rule, an any whose truth hurts it.
+  asked as {:set, relationship names, :whole} when a row joining the set could turn the grant into
+  a refusal: a none or an all whose truth helps the rule, an any whose truth hurts it, any of them
+  over a derived set, and every set a derived field's definition reads.
   """
   @spec rule_matches?(map, struct, String.t() | nil, fun) :: boolean
   def rule_matches?(rule, entity, actor_user_id, checker) do
@@ -168,7 +167,7 @@ defmodule Hologram.Policy.Evaluator do
   # bounds applied, the rows of the branch an if takes, or none for nil.
   defp definition_rows({:if, clauses, then_rows, else_rows}, row, actor_user_id, checker) do
     branch =
-      if predicates_hold?(clauses, [row], actor_user_id, checker, :positive),
+      if predicates_hold?(clauses, [row], actor_user_id, checker, :both),
         do: then_rows,
         else: else_rows
 
@@ -198,6 +197,12 @@ defmodule Hologram.Policy.Evaluator do
     rows
     |> Enum.flat_map(read)
     |> Enum.uniq_by(& &1.id)
+  end
+
+  defp ends_at_derived_set?(entity_type, names) do
+    {_stretch, rest} = stored_stretch(entity_type, names)
+
+    rest != []
   end
 
   # What an enum predicate compares by, or nil for an attribute of any other type - a name
@@ -244,11 +249,11 @@ defmodule Hologram.Policy.Evaluator do
   end
 
   defp evaluated({:condition, clauses}, rows, actor_user_id, checker) do
-    predicates_hold?(clauses, rows, actor_user_id, checker, :positive)
+    predicates_hold?(clauses, rows, actor_user_id, checker, :both)
   end
 
   defp evaluated({:if, clauses, then_value, else_value}, rows, actor_user_id, checker) do
-    if predicates_hold?(clauses, rows, actor_user_id, checker, :positive) do
+    if predicates_hold?(clauses, rows, actor_user_id, checker, :both) do
       evaluated(then_value, rows, actor_user_id, checker)
     else
       evaluated(else_value, rows, actor_user_id, checker)
@@ -360,7 +365,10 @@ defmodule Hologram.Policy.Evaluator do
   # matched with the rows above it, so its condition reads them by how many quantifiers out they are.
   #
   # The set is asked for whole - {:set, relationship names, :whole} - when a row joining it could
-  # turn the rule's grant into a refusal, which a write resting on the answer has to keep out.
+  # turn the rule's grant into a refusal, which a write resting on the answer has to keep out. A row
+  # joining a derived set's base can push another out of its bound, and a row changing can move in
+  # or out of its filter, so a source ending at one is always asked for whole, and so is every set
+  # its definition reads, at both polarities.
   defp quantifier_holds?({quantifier, source, clauses}, rows, actor_user_id, checker, polarity) do
     {[source_row | _outer_rows], relationship_names} = source_rows(rows, source)
     condition_polarity = Stage.condition_polarity(quantifier, polarity)
@@ -369,7 +377,10 @@ defmodule Hologram.Policy.Evaluator do
       predicates_hold?(clauses, [related_row | rows], actor_user_id, checker, condition_polarity)
     end
 
-    whole? = Stage.joining_row_refuses?(quantifier, polarity)
+    whole? =
+      Stage.joining_row_refuses?(quantifier, polarity) or
+        ends_at_derived_set?(source_row.__struct__, relationship_names)
+
     related_rows = chain_rows([source_row], relationship_names, whole?, actor_user_id, checker)
 
     case quantifier do
@@ -423,11 +434,11 @@ defmodule Hologram.Policy.Evaluator do
   defp source_rows(rows, relationship_names), do: {rows, relationship_names}
 
   # The rows a derived field's query reads off the owner row, matched to its clauses with the owner
-  # as the row above them.
+  # as the row above them - every set read whole, as what a definition reads always is.
   defp sourced_rows(owner, %{source: {_owner_type, chain}} = term, actor_user_id, checker) do
     [owner]
-    |> chain_rows(chain, false, actor_user_id, checker)
-    |> Enum.filter(&predicates_hold?(term.filter, [&1, owner], actor_user_id, checker, :positive))
+    |> chain_rows(chain, true, actor_user_id, checker)
+    |> Enum.filter(&predicates_hold?(term.filter, [&1, owner], actor_user_id, checker, :both))
   end
 
   # The relationships a chain starts with, up to a derived field holding rows, and the names from

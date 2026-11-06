@@ -52,10 +52,15 @@ defmodule Hologram.Query.Stage do
   end
 
   # Returns the polarity of a quantifier's condition, given the quantifier's own: whether the
-  # condition holding for a related row helps the answer it stands in (:positive) or hurts it
-  # (:negative). A none's condition counts against it, so it turns the polarity around.
+  # condition holding for a related row helps the answer it stands in (:positive), hurts it
+  # (:negative) or may do either (:both) - what a derived field's definition reads, since a derived
+  # value can be compared either way and a derived set's bound turns a row joining it into one
+  # leaving. A none's condition counts against it, so it turns the polarity around.
   @doc false
-  @spec condition_polarity(:all | :any | :none, :negative | :positive) :: :negative | :positive
+  @spec condition_polarity(:all | :any | :none, polarity) :: polarity
+        when polarity: :both | :negative | :positive
+  def condition_polarity(_quantifier, :both), do: :both
+
   def condition_polarity(:none, :positive), do: :negative
 
   def condition_polarity(:none, :negative), do: :positive
@@ -200,9 +205,11 @@ defmodule Hologram.Query.Stage do
   # Returns whether a row joining the set a quantifier of the given kind reads can turn a granted
   # answer into a refusal, the quantifier standing at the given polarity: a joining row can only make
   # an any true and a none or an all false, so that is an any whose truth hurts and a none or an all
-  # whose truth helps.
+  # whose truth helps - and any of them at a polarity that may go either way.
   @doc false
-  @spec joining_row_refuses?(:all | :any | :none, :negative | :positive) :: boolean
+  @spec joining_row_refuses?(:all | :any | :none, :both | :negative | :positive) :: boolean
+  def joining_row_refuses?(_quantifier, :both), do: true
+
   def joining_row_refuses?(:any, polarity), do: polarity == :negative
 
   def joining_row_refuses?(_quantifier, polarity), do: polarity == :positive
