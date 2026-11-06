@@ -10,8 +10,11 @@ defmodule Hologram.Sync.Frame do
   # holds values a database stores, and paying ten times the bytes to say so, on the payload a
   # whole-app fill is mostly made of, buys nothing.
 
+  alias Hologram.Auth
   alias Hologram.DB.Codec
+  alias Hologram.DB.QueryCache
   alias Hologram.Entity.Model
+  alias Hologram.Policy
   alias Hologram.Sync.WireData
 
   @protocol_version 1
@@ -19,8 +22,9 @@ defmodule Hologram.Sync.Frame do
   @doc """
   Turns what a session worked out for one client into the deltas a frame carries.
 
-  A row that appeared travels whole, because a client that did not have it needs all of it. A row
-  that changed travels as the attributes that moved. A row that left travels as its id, and an
+  A row that appeared travels whole, because a client that did not have it needs all of it, with
+  the server's verdicts for the given user (see `put_entity/2`). A row that changed travels as the
+  attributes that moved. A row that left travels as its id, and an
   edge as the pair it joined or parted.
 
   Every delta names its own type: an arrived row carries it, an edge carries the type of the row
@@ -28,10 +32,10 @@ defmodule Hologram.Sync.Frame do
   was held under - a row no longer there to be asked is named by the bookkeeping that watched it
   arrive.
   """
-  @spec deltas(map) :: list(map)
-  def deltas(news) do
+  @spec deltas(map, String.t() | nil) :: list(map)
+  def deltas(news, actor_user_id) do
     Enum.concat([
-      Enum.map(news.appeared, &put_entity/1),
+      Enum.map(news.appeared, &put_entity(&1, row_verdicts(actor_user_id, &1))),
       Enum.map(news.patched, fn {row, patch} -> patch_entity(row, patch) end),
       Enum.map(news.unsynced, fn {id, entity_type} -> unsync_entity(id, entity_type) end),
       Enum.map(news.edges, &relationship/1)
@@ -160,11 +164,33 @@ defmodule Hologram.Sync.Frame do
 
   @doc """
   Returns the delta handing a client a whole row, which is what a client that does not have it
-  needs.
+  needs, with the server's verdicts on the row's deciding quantifiers for the client's user (see
+  `row_verdicts/2`).
+
+  The verdicts travel beside the row's data as `$verdicts`, a name no attribute can have, the way
+  its revisions travel as `$revisions` - and only when there are some, so a row of a type with no
+  deciding quantifier is spelled as it always was.
   """
-  @spec put_entity(struct) :: map
-  def put_entity(row) do
-    %{data: WireData.row(row), id: row.id, op: :put_entity, type: type_of(row)}
+  @spec put_entity(struct, %{String.t() => boolean}) :: map
+  def put_entity(row, verdicts) do
+    row_data = WireData.row(row)
+    data = if verdicts == %{}, do: row_data, else: Map.put(row_data, :"$verdicts", verdicts)
+
+    %{data: data, id: row.id, op: :put_entity, type: type_of(row)}
+  end
+
+  @doc """
+  Returns the server's verdicts on the given row's deciding quantifiers for the given user, as a
+  put carries them (see `Hologram.Auth.verdicts/2`) - none when the build has no client checking
+  permissions, which never reads one, or the row's type has no deciding quantifier.
+  """
+  @spec row_verdicts(String.t() | nil, struct) :: %{String.t() => boolean}
+  def row_verdicts(actor_user_id, %entity_type{} = row) do
+    if Policy.deciding_quantifiers(entity_type) != [] and QueryCache.permission_checking?() do
+      Auth.verdicts(actor_user_id, row)
+    else
+      %{}
+    end
   end
 
   @doc """

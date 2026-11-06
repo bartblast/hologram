@@ -443,7 +443,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
     end
 
     defp carried_titles do
-      %{put_entity: rows} = Carry.take()
+      %{put_entity: rows} = Carry.take(nil)
 
       rows
       |> Map.get("Hologram.Test.Fixtures.Entity.Module13", [])

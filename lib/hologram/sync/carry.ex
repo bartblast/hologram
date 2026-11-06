@@ -22,7 +22,7 @@ defmodule Hologram.Sync.Carry do
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
-  alias Hologram.Sync.WireData
+  alias Hologram.Sync.Frame
 
   @key {__MODULE__, :entities}
   @counts_key {__MODULE__, :counts}
@@ -118,10 +118,12 @@ defmodule Hologram.Sync.Carry do
   type - and clears what was gathered.
 
   Nothing gathered answers with an empty map rather than an empty put, since a page whose props
-  read no rows has nothing to say rather than something empty to say.
+  read no rows has nothing to say rather than something empty to say. Each row carries the server's
+  verdicts for the given user, the render's, as a frame's put does (see
+  `Hologram.Sync.Frame.row_verdicts/2`).
   """
-  @spec take() :: %{optional(:put_entity) => %{String.t() => list(map)}}
-  def take do
+  @spec take(String.t() | nil) :: %{optional(:put_entity) => %{String.t() => list(map)}}
+  def take(actor_user_id) do
     entities = Map.values(gathered())
 
     Process.delete(@key)
@@ -129,7 +131,7 @@ defmodule Hologram.Sync.Carry do
     if entities == [] do
       %{}
     else
-      %{put_entity: group(entities)}
+      %{put_entity: group(entities, actor_user_id)}
     end
   end
 
@@ -184,14 +186,14 @@ defmodule Hologram.Sync.Carry do
 
   # Ordered by id within each type, so that one render's rows are spelled the same way twice -
   # what a map hands its values over in follows the hashes of the keys.
-  defp group(entities) do
+  defp group(entities, actor_user_id) do
     entities
     |> Enum.group_by(&Codec.encode_enum_value(&1.__struct__))
     |> Map.new(fn {type_name, rows} ->
       {type_name,
        rows
        |> Enum.sort_by(& &1.id)
-       |> Enum.map(&WireData.row/1)}
+       |> Enum.map(&Frame.put_entity(&1, Frame.row_verdicts(actor_user_id, &1)).data)}
     end)
   end
 

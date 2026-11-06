@@ -547,7 +547,7 @@ defmodule Hologram.Realtime.SSETest do
 
       # Built through the frame rather than by hand: a delta holds a row already written the way
       # the wire carries it, and JSON refuses to guess at a struct rather than encoding one badly.
-      deltas = [Frame.put_entity(row)]
+      deltas = [Frame.put_entity(row, %{})]
 
       send(self(), {:sync_deltas, "g8uxAAAAZQ", deltas, nil})
 

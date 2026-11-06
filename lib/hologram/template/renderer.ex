@@ -463,7 +463,7 @@ defmodule Hologram.Template.Renderer do
       page_module: page_module,
       page_params: params,
       sync_counts: Carry.take_counts(),
-      sync_rows: Carry.take()
+      sync_rows: Carry.take(server_struct.user_id)
     }
 
     %{

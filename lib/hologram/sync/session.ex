@@ -273,7 +273,7 @@ defmodule Hologram.Sync.Session do
     puts =
       state.shift.appeared
       |> shift_rows(named)
-      |> Enum.map(&Frame.put_entity/1)
+      |> Enum.map(&Frame.put_entity(&1, Frame.row_verdicts(state.actor_user_id, &1)))
 
     unsyncs =
       state.shift.vanished
@@ -342,7 +342,7 @@ defmodule Hologram.Sync.Session do
   # place of a batch's last effect is a place everything before it has been applied to.
   defp tell_batch(state, effects) do
     updated = remember_applied(state, effects)
-    deltas = Catchup.deltas(effects, updated.touched)
+    deltas = Catchup.deltas(effects, updated.touched, updated.actor_user_id)
 
     if deltas != [] do
       send(
@@ -529,7 +529,7 @@ defmodule Hologram.Sync.Session do
     |> Enum.each(fn part ->
       send(
         state.client,
-        {:sync_deltas, cursor(state), Frame.deltas(part), state.applied_seq}
+        {:sync_deltas, cursor(state), Frame.deltas(part, state.actor_user_id), state.applied_seq}
       )
     end)
 

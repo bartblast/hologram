@@ -2,10 +2,13 @@ defmodule Hologram.Sync.CarryTest do
   use Hologram.Test.BasicCase, async: true
 
   import Hologram.Sync.Carry
+  import Hologram.Test.Stubs
+  import Mox
 
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
+  alias Hologram.Policy
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -18,9 +21,57 @@ defmodule Hologram.Sync.CarryTest do
   @module_2_type "Hologram.Test.Fixtures.Entity.Module2"
   @module_3_type "Hologram.Test.Fixtures.Entity.Module3"
 
+  use_module_stub :query_cache
+
+  # A task may be deleted while its board holds no card by the user - read through the task's
+  # board, so a task with no board has an empty set, answered without reading the database: yes for
+  # a user, and no for a visitor, since the rule asks about the actor.
+  defmodule VerdictBoard do
+    use Hologram.Entity
+
+    relationship :cards, [__MODULE__.Card], inverse: board
+
+    allow :read
+
+    defmodule Card do
+      use Hologram.Entity
+
+      relationship :author, Hologram.Test.Fixtures.Entity.Module14, optional: true
+      relationship :board, Hologram.Sync.CarryTest.VerdictBoard, optional: true
+
+      allow :read
+    end
+  end
+
+  defmodule VerdictTask do
+    use Hologram.Entity
+
+    relationship :board, VerdictBoard, optional: true
+
+    allow :read
+    allow :delete, when: none(card <- board.cards, card.author_id == user_id())
+  end
+
+  defp delete_key do
+    Policy.verdict_key(
+      VerdictTask,
+      :delete,
+      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
+    )
+  end
+
+  # A build with a page checking permissions on the client - the only kind whose rows carry
+  # verdicts.
+  defp check_permissions do
+    stub_with(QueryCacheMock, QueryCacheStub)
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{permission_checking?: true})
+
+    on_exit(fn -> :persistent_term.erase(QueryCacheStub.persistent_term_key()) end)
+  end
+
   setup do
     on_exit(fn ->
-      take()
+      take(nil)
       take_counts()
       take_grant_scopes()
     end)
@@ -49,7 +100,7 @@ defmodule Hologram.Sync.CarryTest do
 
       collect([first, second])
 
-      assert %{put_entity: %{@module_2_type => rows}} = take()
+      assert %{put_entity: %{@module_2_type => rows}} = take(nil)
       titles = Enum.map(rows, & &1.c)
 
       assert Enum.sort(titles) == ["first", "second"]
@@ -58,14 +109,14 @@ defmodule Hologram.Sync.CarryTest do
     test "records the row of a single-result query" do
       collect(module_2(c: "the only one"))
 
-      assert %{put_entity: %{@module_2_type => [row]}} = take()
+      assert %{put_entity: %{@module_2_type => [row]}} = take(nil)
       assert row.c == "the only one"
     end
 
     test "records nothing for a query matching no row" do
       collect(nil)
 
-      assert take() == %{}
+      assert take(nil) == %{}
     end
 
     # A count holds no row - what the client needs of one is the number, which travels its own
@@ -73,7 +124,7 @@ defmodule Hologram.Sync.CarryTest do
     test "records nothing for a counting query" do
       collect(7)
 
-      assert take() == %{}
+      assert take(nil) == %{}
     end
 
     test "records what a result embeds, and the row embedding it" do
@@ -82,7 +133,7 @@ defmodule Hologram.Sync.CarryTest do
 
       collect([source])
 
-      carried = take()
+      carried = take(nil)
 
       assert %{@module_2_type => [embedded], @module_3_type => [row]} = carried.put_entity
       assert embedded.c == "embedded"
@@ -96,7 +147,7 @@ defmodule Hologram.Sync.CarryTest do
 
       collect([outer])
 
-      carried = take()
+      carried = take(nil)
 
       assert Enum.map(carried.put_entity[@module_2_type], & &1.c) == ["two levels down"]
       assert length(carried.put_entity[@module_3_type]) == 2
@@ -109,7 +160,7 @@ defmodule Hologram.Sync.CarryTest do
 
       collect([first, second])
 
-      carried = take()
+      carried = take(nil)
 
       assert length(carried.put_entity[@module_2_type]) == 1
       assert length(carried.put_entity[@module_3_type]) == 2
@@ -126,7 +177,7 @@ defmodule Hologram.Sync.CarryTest do
 
       collect([%{first_label | messages: [tagged]}, %{second_label | messages: [message]}])
 
-      carried = take()
+      carried = take(nil)
 
       assert carried.put_entity["Hologram.Test.Fixtures.Entity.Module29"]
              |> Enum.find(&(&1.id == second_label.id))
@@ -152,7 +203,7 @@ defmodule Hologram.Sync.CarryTest do
 
       collect([%{parent | children: [child]}, %{child | children: [grandchild]}])
 
-      carried = take()
+      carried = take(nil)
 
       assert carried.put_entity[inspect(FolderEntityFixture)]
              |> Enum.find(&(&1.id == child.id))
@@ -163,7 +214,7 @@ defmodule Hologram.Sync.CarryTest do
       collect([module_2(c: "from the first prop")])
       collect([module_2(c: "from the second prop")])
 
-      assert %{put_entity: %{@module_2_type => rows}} = take()
+      assert %{put_entity: %{@module_2_type => rows}} = take(nil)
 
       assert rows
              |> Enum.map(& &1.c)
@@ -177,7 +228,7 @@ defmodule Hologram.Sync.CarryTest do
 
       collect([%{channel | messages: [message], topic: topic}])
 
-      carried = take()
+      carried = take(nil)
 
       assert [%{body: "hi"}] = carried.put_entity["Hologram.Test.Fixtures.Entity.Module28"]
       assert [%{id: topic_id}] = carried.put_entity["Hologram.Test.Fixtures.Entity.Module27"]
@@ -187,7 +238,7 @@ defmodule Hologram.Sync.CarryTest do
     test "passes over a relationship the query did not ask for" do
       collect([module_3(%{a: %NotIncluded{relationship: :a}})])
 
-      assert %{put_entity: %{@module_3_type => [_row]}} = take()
+      assert %{put_entity: %{@module_3_type => [_row]}} = take(nil)
     end
 
     # Rows travel the way a frame spells them: flat, with a to-many naming the ids it holds
@@ -198,7 +249,7 @@ defmodule Hologram.Sync.CarryTest do
 
       collect([source])
 
-      %{put_entity: %{@module_3_type => [row]}} = take()
+      %{put_entity: %{@module_3_type => [row]}} = take(nil)
 
       assert row.a == [target.id]
       refute Map.has_key?(row, :b)
@@ -213,7 +264,7 @@ defmodule Hologram.Sync.CarryTest do
 
       collect([user])
 
-      carried = take()
+      carried = take(nil)
       [row] = carried.put_entity["Hologram.Test.Fixtures.Entity.Module14"]
 
       assert row.email == "user@test.com"
@@ -224,7 +275,7 @@ defmodule Hologram.Sync.CarryTest do
       collect([module_2(c: "a task")])
       collect([Module1.new()])
 
-      carried = take()
+      carried = take(nil)
 
       assert Map.keys(carried.put_entity) == [
                "Hologram.Test.Fixtures.Entity.Module1",
@@ -344,9 +395,23 @@ defmodule Hologram.Sync.CarryTest do
     end
   end
 
-  describe "take/0" do
+  describe "take/1" do
+    test "carries each row with the given user's verdicts" do
+      check_permissions()
+
+      row = %{VerdictTask.new() | id: Entity.generate_id()}
+
+      start()
+      collect(row)
+
+      assert %{put_entity: %{"Hologram.Sync.CarryTest.VerdictTask" => [carried]}} =
+               take(Entity.generate_id())
+
+      assert carried[:"$verdicts"] == %{delete_key() => true}
+    end
+
     test "returns nothing when no result was collected" do
-      assert take() == %{}
+      assert take(nil) == %{}
     end
 
     # What a render gathered belongs to that render: a second page rendered in the same process
@@ -354,9 +419,9 @@ defmodule Hologram.Sync.CarryTest do
     test "leaves nothing behind for the next render" do
       collect([module_2()])
 
-      take()
+      take(nil)
 
-      assert take() == %{}
+      assert take(nil) == %{}
     end
   end
 

@@ -94,9 +94,12 @@ defmodule Hologram.Sync.Catchup do
 
   Nothing is said about a type this build has never compiled: a peer running a newer model can
   write names this build has never heard of, and a client of this build has nowhere to put them.
+
+  A row handed over carries the server's verdicts for the given user (see
+  `Hologram.Sync.Frame.row_verdicts/2`), as every put does.
   """
-  @spec deltas(list(map), map) :: list(map)
-  def deltas(effects, pot) do
+  @spec deltas(list(map), map, String.t() | nil) :: list(map)
+  def deltas(effects, pot, actor_user_id) do
     known = Enum.filter(effects, &is_atom(&1.type))
 
     named = Enum.uniq_by(known, & &1.entity_id)
@@ -109,8 +112,8 @@ defmodule Hologram.Sync.Catchup do
       |> Enum.reject(&MapSet.member?(named_ids, &1.id))
 
     named
-    |> Enum.map(&delta(&1, pot))
-    |> Enum.concat(Enum.map(targets, &Frame.put_entity/1))
+    |> Enum.map(&delta(&1, pot, actor_user_id))
+    |> Enum.concat(Enum.map(targets, &put_entity(&1, actor_user_id)))
   end
 
   @doc """
@@ -202,9 +205,9 @@ defmodule Hologram.Sync.Catchup do
   # TODO: offline mutations need the distinction (a queued write against a deleted row is a
   # rejection, against an unsynced one it is fine) - it arrives with them, from the effect's own op
   # rather than from an existence check.
-  defp delta(effect, pot) do
+  defp delta(effect, pot, actor_user_id) do
     case Map.fetch(pot, effect.entity_id) do
-      {:ok, row} -> Frame.put_entity(row)
+      {:ok, row} -> put_entity(row, actor_user_id)
       :error -> Frame.unsync_entity(effect.entity_id, effect.type)
     end
   end
@@ -227,5 +230,9 @@ defmodule Hologram.Sync.Catchup do
       {:ok, tx, seq} -> {:ok, tx, seq}
       :error -> {:full_resync, :cursor}
     end
+  end
+
+  defp put_entity(row, actor_user_id) do
+    Frame.put_entity(row, Frame.row_verdicts(actor_user_id, row))
   end
 end
