@@ -1190,6 +1190,46 @@ defmodule Hologram.AuthContentionTest do
     assert {:ok, :ok} = Task.await(holder)
   end
 
+  test "an update moving a row back into a set it left meanwhile waits for a write resting on that set",
+       %{scratch: scratch, scratch_opts: scratch_opts} do
+    first = create_space(scratch)
+    second = create_space(scratch)
+    comment = create_comment(scratch, %{space_id: first.id})
+
+    holder = start_holder(scratch_opts, fn -> SetLock.hold!(Module26, first.id) end, self())
+    assert_receive :holding, 5_000
+
+    # A second session is moving the comment out of the first space when the update asks to put it
+    # there - as it stands when the update reads it, it is already there.
+    mover =
+      start_holder(
+        scratch_opts,
+        fn -> DB.update(Module27, comment.id, space_id: second.id) end,
+        self()
+      )
+
+    assert_receive :holding, 5_000
+
+    updating =
+      start_entering_write(scratch_opts, fn ->
+        DB.update(Module27, comment.id, space_id: first.id)
+      end)
+
+    wait_for_lock_waits(scratch_opts, ["transactionid"])
+
+    send(mover.pid, :release)
+    assert {:ok, :ok} = Task.await(mover)
+
+    # Moved out by the time the update writes, the comment enters the first space again.
+    wait_for_lock_waits(scratch_opts, ["advisory"])
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+    assert Task.await(updating) == :ok
+
+    assert route(scratch, fn -> DB.read(Module27, comment.id) end).space_id == first.id
+  end
+
   test "a create entering a set doesn't wait for a write resting on it through an any alone",
        %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
     space = create_space(scratch)

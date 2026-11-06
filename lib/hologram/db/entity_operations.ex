@@ -662,12 +662,15 @@ defmodule Hologram.DB.EntityOperations do
 
   # An update enters the locked sets its changed references name - see Hologram.DB.SetLock. A
   # reference set to the value the row already holds enters nothing, as its foreign key check takes
-  # nothing, so the row is read to tell the two apart, only when some set would be entered.
+  # nothing, so the row is read to tell the two apart, only when some set would be entered. It is
+  # read FOR UPDATE, the lock the update takes anyway: read plainly, a move committed between the
+  # read and the update would leave the update taking the row back into a set it read the row in,
+  # without that set's lock.
   defp enter_sets!(entity_type, id, changes) do
     links = Policy.locked_set_links()
 
     if SetLock.row_owners(links, entity_type, changes) != [] do
-      current = get(entity_type, id) || %{}
+      current = get(entity_type, id, lock: :update) || %{}
 
       changed =
         Map.filter(changes, fn {name, value} -> Map.get(current, name, :absent) != value end)
