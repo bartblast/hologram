@@ -39,6 +39,7 @@ describe("Elixir_Hologram_Auth", () => {
   const FOLDER = "MyApp.Folder";
   const GRANT = "Hologram.Auth.RoleGrant";
   const SUPPORT = "MyApp.Roles.Support";
+  const TAG = "MyApp.Tag";
   const USER = "MyApp.User";
 
   const ALICE = "018f4571-a1b2-7c3d-8e4f-000000000001";
@@ -46,6 +47,8 @@ describe("Elixir_Hologram_Auth", () => {
   const DOC = "018f4571-a1b2-7c3d-8e4f-00000000000a";
   const FOLDER_ID = "018f4571-a1b2-7c3d-8e4f-00000000000b";
   const PARENT_ID = "018f4571-a1b2-7c3d-8e4f-00000000000c";
+  const OTHER_DOC = "018f4571-a1b2-7c3d-8e4f-00000000000d";
+  const TAG_ID = "018f4571-a1b2-7c3d-8e4f-00000000000e";
 
   const can = Elixir_Hologram_Auth["can?/3"];
 
@@ -84,7 +87,12 @@ describe("Elixir_Hologram_Auth", () => {
     ...overrides,
   });
 
-  const defineModel = (policy = {}, folderPolicy = {}, globalRoles = {}) => {
+  const defineModel = (
+    policy = {},
+    folderPolicy = {},
+    globalRoles = {},
+    tagPolicy = {},
+  ) => {
     globalThis.Hologram.sync = {
       expandedRoles: globalRoles,
       model: {
@@ -217,7 +225,10 @@ describe("Elixir_Hologram_Auth", () => {
             "update",
           ],
           policy: policy,
-          relationships: {folder: {toMany: false, type: FOLDER}},
+          relationships: {
+            folder: {toMany: false, type: FOLDER},
+            tags: {toMany: true, type: TAG},
+          },
           roles: ["editor", "owner", "viewer"],
           serverOnly: [],
         },
@@ -246,8 +257,32 @@ describe("Elixir_Hologram_Auth", () => {
           },
           enumValues: {kind: ["low", "medium", "high"]},
           expandedRoles: {},
+          inverses: {
+            documents: {
+              forward: "folder",
+              reference: true,
+              toMany: true,
+              type: DOCUMENT,
+            },
+          },
           policy: folderPolicy,
           relationships: {parent: {toMany: false, type: FOLDER}},
+          roles: [],
+          serverOnly: [],
+        },
+        [TAG]: {
+          attributes: {id: "uuid", name: "string"},
+          expandedRoles: {},
+          inverses: {
+            documents: {
+              forward: "tags",
+              reference: false,
+              toMany: true,
+              type: DOCUMENT,
+            },
+          },
+          policy: tagPolicy,
+          relationships: {},
           roles: [],
           serverOnly: [],
         },
@@ -1948,6 +1983,309 @@ describe("Elixir_Hologram_Auth", () => {
           document({folder_id: FOLDER_ID, title: "public"}),
         ),
         Type.boolean(false),
+      );
+    });
+  });
+
+  // The client holds some of a set's rows, never knowingly all of them, so a held row decides only
+  // what one row can - and nothing else grants.
+  describe("quantifiers over pot rows", () => {
+    const folder = (overrides = {}) =>
+      Model.box(FOLDER, {
+        archived: false,
+        id: FOLDER_ID,
+        kind: null,
+        name: null,
+        parent_id: null,
+        ...overrides,
+      });
+
+    const tag = () => Model.box(TAG, {id: TAG_ID, name: "urgent"});
+
+    const folderReads = (predicates, userOrId = Type.nil()) => {
+      defineModel({}, {read: [rule({predicates})]});
+
+      return can(userOrId, Type.atom("read"), folder());
+    };
+
+    const putDocument = (overrides) =>
+      LocalDatabase.putRow(DOCUMENT, {
+        author_id: null,
+        folder_id: FOLDER_ID,
+        id: DOC,
+        public: false,
+        title: null,
+        ...overrides,
+      });
+
+    const authoredByActor = {
+      filter: [["author_id", "==", {actor: true}]],
+      quantifier: "any",
+      source: ["documents"],
+    };
+
+    it("grants an any once a held row of the set matches", () => {
+      putDocument({author_id: ALICE});
+
+      assert.deepStrictEqual(
+        folderReads([authoredByActor], Type.bitstring(ALICE)),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        folderReads([authoredByActor], Type.bitstring(BOB)),
+        Type.boolean(false),
+      );
+    });
+
+    // Nobody wrote any document, whatever rows the client holds.
+    it("grants a visitor nothing on an any naming the actor", () => {
+      putDocument({author_id: null});
+
+      assert.deepStrictEqual(
+        folderReads([authoredByActor]),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants nothing on a none, with a held matching row or without one", () => {
+      const none = {...authoredByActor, quantifier: "none"};
+
+      putDocument({author_id: ALICE});
+
+      assert.deepStrictEqual(
+        folderReads([none], Type.bitstring(ALICE)),
+        Type.boolean(false),
+      );
+      assert.deepStrictEqual(
+        folderReads([none], Type.bitstring(BOB)),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants nothing on an all, with a held failing row or without one", () => {
+      const all = {
+        filter: [["public", "==", true]],
+        quantifier: "all",
+        source: ["documents"],
+      };
+
+      putDocument({public: false});
+
+      assert.deepStrictEqual(folderReads([all]), Type.boolean(false));
+
+      putDocument({public: true});
+
+      assert.deepStrictEqual(folderReads([all]), Type.boolean(false));
+    });
+
+    // The none grants nothing, so the alternative decides.
+    it("grants a rule holding a none or an all through an alternative that holds", () => {
+      const none = {...authoredByActor, quantifier: "none"};
+      const predicates = [{or: [[none], [["name", "==", "open"]]]}];
+
+      putDocument({author_id: ALICE});
+      defineModel({}, {read: [rule({predicates})]});
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("read"), folder({name: "open"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("read"), folder({name: "shut"})),
+        Type.boolean(false),
+      );
+    });
+
+    it("reads a path off a held row of the set", () => {
+      const predicates = [
+        {
+          filter: [[["folder", "archived"], "==", false]],
+          quantifier: "any",
+          source: ["documents"],
+        },
+      ];
+
+      putDocument({});
+      LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
+
+      assert.deepStrictEqual(folderReads(predicates), Type.boolean(true));
+    });
+
+    it("compares a held row of the set with the row the quantifier is about", () => {
+      const predicates = [
+        {
+          filter: [["title", "==", {attribute: {name: "name", outer: 1}}]],
+          quantifier: "any",
+          source: ["documents"],
+        },
+      ];
+
+      putDocument({title: "Plans"});
+      defineModel({}, {read: [rule({predicates})]});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), folder({name: "Plans"})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), folder({name: "Notes"})),
+        Type.boolean(false),
+      );
+    });
+
+    // The inner set is the folder's own, read on the row one quantifier out - so the rule asks
+    // whether some document has another one beside it.
+    it("reads a nested quantifier's set on a row above", () => {
+      const predicates = [
+        {
+          filter: [
+            {
+              filter: [["id", "!=", {attribute: {name: "id", outer: 1}}]],
+              quantifier: "any",
+              source: {name: ["documents"], outer: 1},
+            },
+          ],
+          quantifier: "any",
+          source: ["documents"],
+        },
+      ];
+
+      putDocument({});
+
+      assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+
+      putDocument({id: OTHER_DOC});
+
+      assert.deepStrictEqual(folderReads(predicates), Type.boolean(true));
+    });
+
+    it("reads a set through a relationship", () => {
+      const predicates = [
+        {
+          filter: [["public", "==", true]],
+          quantifier: "any",
+          source: ["folder", "documents"],
+        },
+      ];
+
+      defineModel({read: [rule({predicates})]});
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID});
+      putDocument({id: OTHER_DOC, public: true});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({folder_id: FOLDER_ID})),
+        Type.boolean(true),
+      );
+    });
+
+    it("grants nothing on a set through a relationship to a row the database does not hold", () => {
+      const predicates = [
+        {
+          filter: [["public", "==", true]],
+          quantifier: "any",
+          source: ["folder", "documents"],
+        },
+      ];
+
+      defineModel({read: [rule({predicates})]});
+      putDocument({id: OTHER_DOC, public: true});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({folder_id: FOLDER_ID})),
+        Type.boolean(false),
+      );
+    });
+
+    it("reads a set through two sets, each row once", () => {
+      const predicates = [
+        {
+          filter: [["name", "==", "urgent"]],
+          quantifier: "any",
+          source: ["documents", "tags"],
+        },
+      ];
+
+      putDocument({});
+      LocalDatabase.putRow(TAG, {id: TAG_ID, name: "urgent"});
+
+      assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+
+      LocalDatabase.replaceFacts(DOCUMENT, "tags", DOC, [TAG_ID]);
+
+      assert.deepStrictEqual(folderReads(predicates), Type.boolean(true));
+    });
+
+    // A row not created yet has nothing in any set of its, as the server reads it - not every held
+    // row whose reference is empty too.
+    it("reads no set off a row with no id", () => {
+      const predicates = [
+        {
+          filter: [["public", "==", true]],
+          quantifier: "any",
+          source: ["documents"],
+        },
+      ];
+
+      putDocument({folder_id: null, public: true});
+      defineModel({}, {read: [rule({predicates})]});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), folder({id: null})),
+        Type.boolean(false),
+      );
+    });
+
+    it("reads a to-many's set through its held pairs", () => {
+      const predicates = [
+        {
+          filter: [["name", "==", "urgent"]],
+          quantifier: "any",
+          source: ["tags"],
+        },
+      ];
+
+      defineModel({read: [rule({predicates})]});
+      LocalDatabase.putRow(TAG, {id: TAG_ID, name: "urgent"});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document()),
+        Type.boolean(false),
+      );
+
+      LocalDatabase.replaceFacts(DOCUMENT, "tags", DOC, [TAG_ID]);
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document()),
+        Type.boolean(true),
+      );
+    });
+
+    // A client files the pairs of an inverse of a to-many under the row it reverses them for.
+    it("reads an inverse of a to-many's set through the pairs filed for it", () => {
+      const predicates = [
+        {
+          filter: [["title", "==", "Plans"]],
+          quantifier: "any",
+          source: ["documents"],
+        },
+      ];
+
+      defineModel({}, {}, {}, {read: [rule({predicates})]});
+      putDocument({title: "Plans"});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), tag()),
+        Type.boolean(false),
+      );
+
+      LocalDatabase.replaceFacts(TAG, "documents", TAG_ID, [DOC]);
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), tag()),
+        Type.boolean(true),
       );
     });
   });

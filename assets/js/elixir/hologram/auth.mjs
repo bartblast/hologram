@@ -6,6 +6,7 @@ import {currentBatch} from "./db.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
+import QueryKernel from "../../query_kernel.mjs";
 import Sha1 from "../../sha1.mjs";
 import SortKey from "../../sort_key.mjs";
 import StringOrder from "../../string_order.mjs";
@@ -165,24 +166,46 @@ function isActorValue(value) {
   );
 }
 
-// Another attribute of the same row, or of the row a path leads to, which the rule names rather
-// than carries.
+// Another attribute of the same row, of the row a path leads to, or of a row above inside a
+// quantifier, which the rule names rather than carries.
 function isAttributeValue(value) {
   return (
     value !== null &&
     typeof value === "object" &&
     !Array.isArray(value) &&
-    (typeof value.attribute === "string" || Array.isArray(value.attribute))
+    Object.hasOwn(value, "attribute")
+  );
+}
+
+// A name of the row a given number of quantifiers out, as the rules spell one.
+function isOuterName(name) {
+  return (
+    name !== null &&
+    typeof name === "object" &&
+    !Array.isArray(name) &&
+    Object.hasOwn(name, "outer")
   );
 }
 
 // Whether some alternative of a disjunction holds: true when one does, UNKNOWN when none does
 // but one may, false when none can.
-function alternativesHold(entityType, entity, alternatives, actorUserId) {
+function alternativesHold(
+  entityType,
+  entity,
+  alternatives,
+  actorUserId,
+  outer,
+) {
   let result = false;
 
   for (const alternative of alternatives) {
-    const holds = predicatesHold(entityType, entity, alternative, actorUserId);
+    const holds = predicatesHold(
+      entityType,
+      entity,
+      alternative,
+      actorUserId,
+      outer,
+    );
 
     if (holds === true) {
       return true;
@@ -194,6 +217,18 @@ function alternativesHold(entityType, entity, alternatives, actorUserId) {
   }
 
   return result;
+}
+
+function clauseHolds(entityType, entity, clause, actorUserId, outer) {
+  if (Array.isArray(clause)) {
+    return predicateHolds(entityType, entity, clause, actorUserId, outer);
+  }
+
+  if (Object.hasOwn(clause, "or")) {
+    return alternativesHold(entityType, entity, clause.or, actorUserId, outer);
+  }
+
+  return quantifierHolds(entityType, entity, clause, actorUserId, outer);
 }
 
 // The row a chain of to-one relationships leads to, with its type, null at the first reference
@@ -342,6 +377,22 @@ function linkedRow(entityType, targetId, relationshipName, laterNames) {
   return row === null ? UNKNOWN : chainRowFrom(type, row, laterNames);
 }
 
+// Whether the given clauses name the acting user anywhere - inside a disjunction's alternatives
+// and a quantifier's condition included.
+function namesActor(clauses) {
+  return clauses.some((clause) => {
+    if (Array.isArray(clause)) {
+      return isActorValue(clause[2]);
+    }
+
+    if (Object.hasOwn(clause, "or")) {
+      return clause.or.some(namesActor);
+    }
+
+    return namesActor(clause.filter);
+  });
+}
+
 // The type an attribute is declared on and its name - the entity's own for a bare name, and for a
 // path the type its relationships lead to, which decides how the path's value compares.
 function nameEnd(entityType, name) {
@@ -379,14 +430,17 @@ function predicateHolds(
   entity,
   [name, operator, value],
   actorUserId,
+  outer,
 ) {
   if (isActorValue(value) && actorUserId === null) {
     return false;
   }
 
-  const end = nameEnd(entityType, name);
-  const subject = nameValue(entityType, entity, name);
-  const operand = operandValue(entityType, entity, value, actorUserId);
+  const scoped = scopedName(entityType, entity, outer, name);
+  const end = nameEnd(scoped.entityType, scoped.name);
+  const subject = nameValue(scoped.entityType, scoped.entity, scoped.name);
+
+  const operand = operandValue(entityType, entity, value, actorUserId, outer);
 
   if (subject === UNKNOWN || operand === UNKNOWN) {
     return UNKNOWN;
@@ -404,28 +458,30 @@ function predicateHolds(
 // What a rule's operand stands for on this row: the acting user, another attribute of the row read
 // off it or of the row a path leads to, or the value itself. An attribute operand compares by the
 // predicate's attribute's ranks, since two enums compare only when they declare the same list.
-function operandValue(entityType, entity, value, actorUserId) {
+function operandValue(entityType, entity, value, actorUserId, outer) {
   if (isActorValue(value)) {
     return actorUserId;
   }
 
   if (isAttributeValue(value)) {
-    return nameValue(entityType, entity, value.attribute);
+    const scoped = scopedName(entityType, entity, outer, value.attribute);
+
+    return nameValue(scoped.entityType, scoped.entity, scoped.name);
   }
 
   return value;
 }
 
-// A clause is a triple array, or a disjunction object holding alternatives that are clause lists
-// themselves - every clause has to hold, and a disjunction holds when one of its alternatives does.
-// False when a clause does not hold, UNKNOWN when none fails but one may, true when all hold.
-function predicatesHold(entityType, entity, clauses, actorUserId) {
+// A clause is a triple array, a disjunction object holding alternatives that are clause lists
+// themselves, or a quantifier object - every clause has to hold, a disjunction holds when one of
+// its alternatives does. False when a clause does not hold, UNKNOWN when none fails but one may,
+// true when all hold. The outer rows are the rows above the entity inside a quantifier, nearest
+// first, each with its type - none at the top of a rule.
+function predicatesHold(entityType, entity, clauses, actorUserId, outer = []) {
   let result = true;
 
   for (const clause of clauses) {
-    const holds = Array.isArray(clause)
-      ? predicateHolds(entityType, entity, clause, actorUserId)
-      : alternativesHold(entityType, entity, clause.or, actorUserId);
+    const holds = clauseHolds(entityType, entity, clause, actorUserId, outer);
 
     if (holds === false) {
       return false;
@@ -437,6 +493,71 @@ function predicatesHold(entityType, entity, clauses, actorUserId) {
   }
 
   return result;
+}
+
+// A quantifier answered over the rows this client holds of the set its source leads to, read on
+// the row it is about or on the row above it the source names - a subset of the set the server
+// reads, so a held row decides only what one row can: any is true once a held row matches, none
+// false once one matches, all false once one fails. Anything else is UNKNOWN, since a row this
+// client does not hold may decide it. A none or an all asking about a visitor asks about nobody,
+// which grants nothing.
+function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
+  if (
+    actorUserId === null &&
+    clause.quantifier !== "any" &&
+    namesActor(clause.filter)
+  ) {
+    return false;
+  }
+
+  const start = Array.isArray(clause.source)
+    ? {entity, entityType, hops: clause.source}
+    : {...outer[clause.source.outer - 1], hops: clause.source.name};
+
+  const relatedType = Model.pathTarget(start.entityType, start.hops);
+  const innerOuter = [{entity, entityType}, ...outer];
+
+  const related = QueryKernel.chainRows(
+    referenceRow(start.entityType, start.entity),
+    start.entityType,
+    start.hops,
+  );
+
+  const answers = related.map((row) =>
+    predicatesHold(
+      relatedType,
+      Model.box(relatedType, row),
+      clause.filter,
+      actorUserId,
+      innerOuter,
+    ),
+  );
+
+  switch (clause.quantifier) {
+    case "any":
+      return answers.includes(true) ? true : UNKNOWN;
+
+    case "none":
+      return answers.includes(true) ? false : UNKNOWN;
+
+    default:
+      return answers.includes(false) ? false : UNKNOWN;
+  }
+}
+
+// The boxed entity's id and reference fields as a held row spells them - what a set's rows are
+// read from it by.
+function referenceRow(entityType, entity) {
+  const names = Object.entries(Model.relationships(entityType))
+    .filter(([_name, relationship]) => !relationship.toMany)
+    .map(([name]) => `${name}_id`);
+
+  return Object.fromEntries(
+    ["id", ...names].map((name) => [
+      name,
+      storedValue(entityType, entity, name),
+    ]),
+  );
 }
 
 // Where a role must be held for a reference to be satisfied. Each shape names a scope the grant
@@ -513,6 +634,16 @@ function ruleMatches(rule, entityType, entity, actorUserId) {
   }
 
   return rule.via === null || viaHolds(rule, entityType, entity, actorUserId);
+}
+
+// The row a name is read on and the name itself: the entity's own for a name of its row, and that
+// row's for a name of a row above.
+function scopedName(entityType, entity, outer, name) {
+  if (!isOuterName(name)) {
+    return {entity, entityType, name};
+  }
+
+  return {...outer[name.outer - 1], name: name.name};
 }
 
 // A stored field's value off the boxed entity, as the wire spells it - an attribute by its declared
