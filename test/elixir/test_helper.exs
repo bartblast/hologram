@@ -55,7 +55,11 @@ PLT.stop(module_info_plt)
 # build puts them, and the query cache at boot. A support fixture whose rule reads a derived set has
 # every write, frame and edges index read that set's definition, so each such fixture's are put for
 # the whole run - one added later belongs in this list.
-Hologram.Test.Helpers.put_derived_definitions([Hologram.Test.Fixtures.Policy.Module22])
+Hologram.Test.Helpers.put_derived_definitions([
+  Hologram.Test.Fixtures.Policy.Module22,
+  Hologram.Test.Fixtures.Policy.Module30,
+  Hologram.Test.Fixtures.Policy.Module31
+])
 
 # What the command line excludes, read before ExUnit.start/1 replaces the list with the
 # suite's own below. Mix merges the two again once this file has run.

@@ -65,6 +65,9 @@ defmodule Hologram.AuthContentionTest do
   alias Hologram.Test.Fixtures.Policy.Module26
   alias Hologram.Test.Fixtures.Policy.Module27
   alias Hologram.Test.Fixtures.Policy.Module28
+  alias Hologram.Test.Fixtures.Policy.Module30
+  alias Hologram.Test.Fixtures.Policy.Module31
+  alias Hologram.Test.Fixtures.Policy.Module32
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
 
@@ -81,12 +84,33 @@ defmodule Hologram.AuthContentionTest do
     }
   end
 
+  defp create_card(scratch, values) do
+    route(scratch, fn ->
+      values
+      |> Module31.new()
+      |> DB.create!()
+    end)
+  end
+
   defp create_comment(scratch, values) do
     route(scratch, fn ->
       values
       |> Module27.new()
       |> DB.create!()
     end)
+  end
+
+  # A deck whose hot cards - its two highest-ranked open cards with a tag - are a plain card and,
+  # below it, a flagged one: a card's update rests on the flagged one staying among them.
+  defp create_deck(scratch) do
+    deck = route(scratch, fn -> DB.create!(Module30.new()) end)
+    tag = route(scratch, fn -> DB.create!(Module32.new()) end)
+    flagged = create_card(scratch, %{deck_id: deck.id, flagged: true, open: true, rank: 1})
+    plain = create_card(scratch, %{deck_id: deck.id, open: true, rank: 2})
+
+    Enum.each([flagged, plain], &tag_card(scratch, &1, tag))
+
+    %{deck: deck, flagged: flagged, plain: plain, tag: tag}
   end
 
   defp create_space(scratch) do
@@ -178,6 +202,16 @@ defmodule Hologram.AuthContentionTest do
       receive do
         :release -> :ok
       end
+    end
+  end
+
+  # A card's update, which Module31's :update lets through while a flagged card is among its deck's
+  # hot cards.
+  defp note_update(card) do
+    fn ->
+      card
+      |> put_attribute(:note, "seen")
+      |> DB.update()
     end
   end
 
@@ -369,6 +403,11 @@ defmodule Hologram.AuthContentionTest do
   end
 
   defp stringify_keys(map), do: Map.new(map, fn {key, value} -> {Atom.to_string(key), value} end)
+
+  defp tag_card(scratch, card, tag) do
+    :ok =
+      route(scratch, fn -> EntityOperations.add_relationship(Module31, card.id, :tags, tag.id) end)
+  end
 
   # A browser's update of the given row, as the wire carries it: based on the stored revision of
   # each field it writes.
@@ -1181,5 +1220,120 @@ defmodule Hologram.AuthContentionTest do
 
     send(resting.pid, :release)
     assert Task.await(resting) == {:ok, :ok}
+  end
+
+  test "a write resting on an any over a bounded derived set holds the owner's set and the sets the definition reads",
+       %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
+    %{deck: deck, flagged: flagged, plain: plain} = create_deck(scratch)
+    closed = create_card(scratch, %{deck_id: deck.id, rank: 9})
+
+    resting = start_resting_write(scratch_opts, alice, note_update(flagged), self())
+    assert_receive {:resting, :ok}, 5_000
+
+    # Which cards are hot shifts with any card joining the deck, and with the tags of each open card
+    # - the filter counts them. A closed card's tags are never counted, and the card stays closed
+    # while the write holds its row FOR SHARE, which the last test shows.
+    assert set_locks(scratch_opts, Module30, deck.id) == [{"ExclusiveLock", true}]
+
+    assert Enum.map([closed, flagged, plain], &set_locks(scratch_opts, Module31, &1.id)) == [
+             [],
+             [{"ExclusiveLock", true}],
+             [{"ExclusiveLock", true}]
+           ]
+
+    send(resting.pid, :release)
+    assert Task.await(resting) == {:ok, :ok}
+  end
+
+  test "a card joining a deck waits for a write resting on its bounded derived set until that write commits",
+       %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
+    %{deck: deck, flagged: flagged} = create_deck(scratch)
+
+    resting = start_resting_write(scratch_opts, alice, note_update(flagged), self())
+    assert_receive {:resting, :ok}, 5_000
+
+    # The deck's cards are held whole: a joining card waits whether or not it would count, since what
+    # it will hold is known only once it lands.
+    entering =
+      start_entering_write(scratch_opts, fn ->
+        %{deck_id: deck.id, open: true, rank: 9}
+        |> Module31.new()
+        |> DB.create()
+      end)
+
+    wait_for_lock_waits(scratch_opts, ["advisory"])
+
+    assert set_locks(scratch_opts, Module30, deck.id) == [
+             {"ExclusiveLock", true},
+             {"ShareLock", false}
+           ]
+
+    send(resting.pid, :release)
+    assert Task.await(resting) == {:ok, :ok}
+    assert {:ok, %Module31{rank: 9}} = Task.await(entering)
+  end
+
+  test "a card ranked into the bound of a derived set waits on its row for a write resting on that set",
+       %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
+    %{deck: deck, flagged: flagged, tag: tag} = create_deck(scratch)
+    low = create_card(scratch, %{deck_id: deck.id, open: true, rank: 0})
+    tag_card(scratch, low, tag)
+
+    resting = start_resting_write(scratch_opts, alice, note_update(flagged), self())
+    assert_receive {:resting, :ok}, 5_000
+
+    # Ranked above the plain card, the low one would push the flagged one out of the hot cards.
+    ranking = start_entering_write(scratch_opts, fn -> DB.update(Module31, low.id, rank: 5) end)
+    wait_for_lock_waits(scratch_opts, ["transactionid"])
+
+    send(resting.pid, :release)
+    assert Task.await(resting) == {:ok, :ok}
+    assert Task.await(ranking) == :ok
+  end
+
+  test "a tag added to a card a derived filter counts waits for a write resting on that set",
+       %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
+    %{deck: deck, flagged: flagged, tag: tag} = create_deck(scratch)
+    untagged = create_card(scratch, %{deck_id: deck.id, open: true, rank: 9})
+
+    resting = start_resting_write(scratch_opts, alice, note_update(flagged), self())
+    assert_receive {:resting, :ok}, 5_000
+
+    # Tagged, the top-ranked card would pass the filter and push the flagged one out.
+    tagging =
+      start_entering_write(scratch_opts, fn ->
+        EntityOperations.add_relationship(Module31, untagged.id, :tags, tag.id)
+      end)
+
+    wait_for_lock_waits(scratch_opts, ["advisory"])
+
+    assert set_locks(scratch_opts, Module31, untagged.id) == [
+             {"ExclusiveLock", true},
+             {"ShareLock", false}
+           ]
+
+    send(resting.pid, :release)
+    assert Task.await(resting) == {:ok, :ok}
+    assert Task.await(tagging) == :ok
+  end
+
+  test "a card a derived filter leaves out, changed to pass it, waits on its row for a write resting on that set",
+       %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
+    %{deck: deck, flagged: flagged, tag: tag} = create_deck(scratch)
+    closed = create_card(scratch, %{deck_id: deck.id, rank: 9})
+    tag_card(scratch, closed, tag)
+
+    resting = start_resting_write(scratch_opts, alice, note_update(flagged), self())
+    assert_receive {:resting, :ok}, 5_000
+
+    # Opened, the top-ranked card would pass the filter and push the flagged one out.
+    opening =
+      start_entering_write(scratch_opts, fn -> DB.update(Module31, closed.id, open: true) end)
+
+    wait_for_lock_waits(scratch_opts, ["transactionid"])
+
+    send(resting.pid, :release)
+    assert Task.await(resting) == {:ok, :ok}
+    assert Task.await(opening) == :ok
   end
 end
