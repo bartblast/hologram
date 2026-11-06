@@ -107,10 +107,41 @@ describe("Elixir_Hologram_Auth", () => {
           // Module42's derived fields, renamed onto this model, read in a rule as the reference
           // reads them - late is this side's own, for a string ordered inside a definition.
           derived: {
+            either: {
+              definition: {
+                condition: [
+                  {
+                    or: [
+                      [["title", "==", "public"]],
+                      [[["folder", "archived"], "==", false]],
+                    ],
+                  },
+                ],
+              },
+              kind: "scalar",
+              type: "boolean",
+              values: null,
+            },
             folder_hidden: {
               definition: {condition: [[["folder", "archived"], "==", true]]},
               kind: "scalar",
               type: "boolean",
+              values: null,
+            },
+            folder_pick: {
+              definition: {
+                else: {value: "open"},
+                if: [[["folder", "archived"], "==", true]],
+                then: {value: "closed"},
+              },
+              kind: "scalar",
+              type: "string",
+              values: null,
+            },
+            folder_label: {
+              definition: {concat: [{name: ["folder", "name"]}, {value: "!"}]},
+              kind: "scalar",
+              type: "string",
               values: null,
             },
             label: {
@@ -123,6 +154,24 @@ describe("Elixir_Hologram_Auth", () => {
               definition: {condition: [["title", ">", "Banana"]]},
               kind: "scalar",
               type: "boolean",
+              values: null,
+            },
+            named_like_folder: {
+              definition: {
+                condition: [["title", "==", {attribute: ["folder", "name"]}]],
+              },
+              kind: "scalar",
+              type: "boolean",
+              values: null,
+            },
+            pick: {
+              definition: {
+                else: {name: ["folder", "name"]},
+                if: [["title", "==", "public"]],
+                then: {value: "a"},
+              },
+              kind: "scalar",
+              type: "string",
               values: null,
             },
             rank: {
@@ -139,6 +188,12 @@ describe("Elixir_Hologram_Auth", () => {
               definition: {concat: [{name: "label"}, {value: "!"}]},
               kind: "scalar",
               type: "string",
+              values: null,
+            },
+            visible: {
+              definition: {condition: [["folder_hidden", "==", false]]},
+              kind: "scalar",
+              type: "boolean",
               values: null,
             },
           },
@@ -1710,9 +1765,9 @@ describe("Elixir_Hologram_Auth", () => {
       return can(Type.nil(), Type.atom("read"), entity);
     };
 
-    // A row the client does not hold reads the way a missing one does - the query kernel's rule
-    // for a filter path, so a filter and a permission check over one path agree.
-    it("reads a path through a row the database does not hold as nil", () => {
+    // The server reads the row as stored, so the client cannot tell what it holds - taking it for a
+    // missing row would grant `!= true` where the server may refuse. Nothing is granted on it.
+    it("grants nothing on a path through a row the database does not hold", () => {
       const path = ["folder", "parent", "archived"];
       const entity = document({folder_id: FOLDER_ID});
 
@@ -1720,11 +1775,178 @@ describe("Elixir_Hologram_Auth", () => {
 
       assert.deepStrictEqual(
         reads([rule({predicates: [[path, "!=", true]]})], entity),
-        Type.boolean(true),
+        Type.boolean(false),
       );
 
       assert.deepStrictEqual(
         reads([rule({predicates: [[path, "==", false]]})], entity),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [[path, "==", null]]})], entity),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants nothing on an attribute operand read through a row the database does not hold", () => {
+      const predicates = [["title", "!=", {attribute: ["folder", "name"]}]];
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates})],
+          document({folder_id: FOLDER_ID, title: "draft"}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants nothing on a derived field reading a row the database does not hold", () => {
+      const rules = [rule({predicates: [["folder_hidden", "==", false]]})];
+      const entity = document({folder_id: FOLDER_ID});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(false));
+
+      LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(true));
+    });
+
+    // An empty reference reads nil inside a definition as it does in a rule, so the folder is not
+    // archived when there is no folder.
+    it("reads an empty reference inside a derived field's definition as nil", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["folder_hidden", "==", false]]})],
+          document(),
+        ),
+        Type.boolean(true),
+      );
+    });
+
+    it("grants nothing on a derived field reading another that reads a row the database does not hold", () => {
+      const rules = [rule({predicates: [["visible", "==", true]]})];
+      const entity = document({folder_id: FOLDER_ID});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(false));
+
+      LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(true));
+    });
+
+    it("takes the branch a derived if's condition decides, whatever the other branch reads", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["pick", "==", "a"]]})],
+          document({folder_id: FOLDER_ID, title: "public"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["pick", "!=", "a"]]})],
+          document({folder_id: FOLDER_ID, title: "draft"}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants nothing on a derived if whose condition reads a row the database does not hold", () => {
+      const rules = [rule({predicates: [["folder_pick", "==", "open"]]})];
+      const entity = document({folder_id: FOLDER_ID});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(false));
+
+      LocalDatabase.putRow(FOLDER, {archived: false, id: FOLDER_ID});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(true));
+    });
+
+    it("answers a derived condition's alternative that holds beside one reading a row the database does not hold", () => {
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["either", "==", true]]})],
+          document({folder_id: FOLDER_ID, title: "public"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates: [["either", "==", false]]})],
+          document({folder_id: FOLDER_ID, title: "draft"}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants nothing on a derived concatenation reading a row the database does not hold", () => {
+      const entity = document({folder_id: FOLDER_ID});
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [["folder_label", "!=", "x!"]]})], entity),
+        Type.boolean(false),
+      );
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, name: "Plans"});
+
+      assert.deepStrictEqual(
+        reads([rule({predicates: [["folder_label", "==", "Plans!"]]})], entity),
+        Type.boolean(true),
+      );
+    });
+
+    it("grants nothing on a derived condition's attribute operand read through a row the database does not hold", () => {
+      const rules = [rule({predicates: [["named_like_folder", "==", false]]})];
+      const entity = document({folder_id: FOLDER_ID, title: "draft"});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(false));
+
+      LocalDatabase.putRow(FOLDER, {id: FOLDER_ID, name: "Plans"});
+
+      assert.deepStrictEqual(reads(rules, entity), Type.boolean(true));
+    });
+
+    it("grants through an alternative that holds beside one reading a row the database does not hold", () => {
+      const predicates = [
+        {
+          or: [
+            [[["folder", "archived"], "!=", true]],
+            [["title", "==", "public"]],
+          ],
+        },
+      ];
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates})],
+          document({folder_id: FOLDER_ID, title: "public"}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates})],
+          document({folder_id: FOLDER_ID, title: "draft"}),
+        ),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants nothing on a conjunction one side of which reads a row the database does not hold", () => {
+      const predicates = [
+        [["folder", "archived"], "!=", true],
+        ["title", "==", "public"],
+      ];
+
+      assert.deepStrictEqual(
+        reads(
+          [rule({predicates})],
+          document({folder_id: FOLDER_ID, title: "public"}),
+        ),
         Type.boolean(false),
       );
     });
