@@ -2290,6 +2290,274 @@ describe("Elixir_Hologram_Auth", () => {
     });
   });
 
+  // Cases this side alone has: a none or an all the held rows leave open is answered by the
+  // server's verdict, carried on the row's last frame, while nothing this client wrote since may
+  // have moved it.
+  describe("verdicts", () => {
+    const KEY = "read:00112233aabbccdd";
+
+    const folder = (overrides = {}) =>
+      Model.box(FOLDER, {
+        archived: false,
+        id: FOLDER_ID,
+        kind: null,
+        name: null,
+        parent_id: null,
+        ...overrides,
+      });
+
+    const putFolder = (verdicts) =>
+      LocalDatabase.putRow(FOLDER, {
+        archived: false,
+        id: FOLDER_ID,
+        kind: null,
+        name: null,
+        parent_id: null,
+        ...(verdicts === undefined ? {} : {$verdicts: verdicts}),
+      });
+
+    const putDocument = (overrides) =>
+      LocalDatabase.putRow(DOCUMENT, {
+        author_id: null,
+        folder_id: FOLDER_ID,
+        id: DOC,
+        public: false,
+        title: null,
+        ...overrides,
+      });
+
+    const deciding = (clause) => ({
+      ...clause,
+      reads: [DOCUMENT, FOLDER],
+      verdict: KEY,
+    });
+
+    const noPublic = deciding({
+      filter: [["public", "==", true]],
+      quantifier: "none",
+      source: ["documents"],
+    });
+
+    const allPublic = deciding({
+      filter: [["public", "==", true]],
+      quantifier: "all",
+      source: ["documents"],
+    });
+
+    const folderReads = (
+      predicates,
+      userOrId = Type.nil(),
+      entity = folder(),
+    ) => {
+      defineModel({}, {read: [rule({predicates})]});
+
+      return can(userOrId, Type.atom("read"), entity);
+    };
+
+    const pendingWrite = (type, id) => {
+      const batch = Batches.open("verdicts");
+
+      batch.append({
+        data: {title: "Moved"},
+        id,
+        op: "update",
+        stamp: 1,
+        type,
+      });
+
+      return batch;
+    };
+
+    afterEach(() => {
+      Batches.reset();
+      LocalDatabase.actorUserId = null;
+    });
+
+    it("grants on a true verdict", () => {
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(true));
+    });
+
+    it("grants nothing on a false verdict", () => {
+      putFolder({[KEY]: false});
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(false));
+    });
+
+    it("grants nothing on a row the server has not sent", () => {
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(false));
+    });
+
+    it("grants nothing on a row the server sent with no verdicts", () => {
+      putFolder();
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(false));
+    });
+
+    it("grants nothing on a verdict while a pending write names a type it reads", () => {
+      putFolder({[KEY]: true});
+      pendingWrite(DOCUMENT, OTHER_DOC);
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(false));
+    });
+
+    // The frame of a landed write may be on its way, but the server has not said the batch stood.
+    it("grants nothing on a verdict while a landed write the server has not answered names a type it reads", () => {
+      putFolder({[KEY]: true});
+
+      pendingWrite(DOCUMENT, OTHER_DOC).land(
+        new Set([`${DOCUMENT} ${OTHER_DOC}`]),
+      );
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(false));
+    });
+
+    it("grants on a verdict while a pending write names only a type it does not read", () => {
+      putFolder({[KEY]: true});
+      pendingWrite(TAG, TAG_ID);
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(true));
+    });
+
+    it("grants on the session user's verdict asked about the session user", () => {
+      LocalDatabase.actorUserId = ALICE;
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(
+        folderReads([noPublic], Type.bitstring(ALICE)),
+        Type.boolean(true),
+      );
+    });
+
+    // The server worked the verdict out for the session's user, and another user's documents may
+    // be ones this client does not hold.
+    it("grants nothing on the session user's verdict asked about another user", () => {
+      LocalDatabase.actorUserId = ALICE;
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(
+        folderReads([noPublic], Type.bitstring(BOB)),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants nothing on the session user's verdict asked about a visitor", () => {
+      LocalDatabase.actorUserId = ALICE;
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(false));
+    });
+
+    // The server worked the verdict out over the row as stored, and a struct changed in an action
+    // may name another set.
+    it("grants nothing on a verdict asked about a struct whose stored fields differ from the row's", () => {
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(
+        folderReads([noPublic], Type.nil(), folder({parent_id: PARENT_ID})),
+        Type.boolean(false),
+      );
+    });
+
+    // A document that just landed beats a none the server answered before it.
+    it("grants nothing on a true none verdict a held matching row refutes", () => {
+      putFolder({[KEY]: true});
+      putDocument({public: true});
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(false));
+    });
+
+    it("grants nothing on a true all verdict a held failing row refutes", () => {
+      putFolder({[KEY]: true});
+      putDocument({public: false});
+
+      assert.deepStrictEqual(folderReads([allPublic]), Type.boolean(false));
+    });
+
+    it("grants on a true all verdict every held row agrees with", () => {
+      putFolder({[KEY]: true});
+      putDocument({public: true});
+
+      assert.deepStrictEqual(folderReads([allPublic]), Type.boolean(true));
+    });
+
+    it("answers a none over an any from a held row before the verdict", () => {
+      const predicates = [
+        deciding({
+          filter: [
+            {
+              filter: [["name", "==", "urgent"]],
+              quantifier: "any",
+              source: ["tags"],
+            },
+          ],
+          quantifier: "none",
+          source: ["documents"],
+        }),
+      ];
+
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(folderReads(predicates), Type.boolean(true));
+
+      putDocument({});
+      LocalDatabase.putRow(TAG, {id: TAG_ID, name: "urgent"});
+      LocalDatabase.replaceFacts(DOCUMENT, "tags", DOC, [TAG_ID]);
+
+      assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+    });
+
+    // A held row cannot show an inner none holds, so the verdict decides whatever is held.
+    it("answers an any over a none from the verdict", () => {
+      const predicates = [
+        deciding({
+          filter: [
+            {
+              filter: [["name", "==", "urgent"]],
+              quantifier: "none",
+              source: ["tags"],
+            },
+          ],
+          quantifier: "any",
+          source: ["documents"],
+        }),
+      ];
+
+      putDocument({});
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(folderReads(predicates), Type.boolean(true));
+
+      putFolder({[KEY]: false});
+
+      assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+    });
+
+    it("reads the verdict of the row a via: leads to", () => {
+      defineModel(
+        {read: [rule({via: ["read", ["folder"]]})]},
+        {read: [rule({predicates: [noPublic]})]},
+      );
+
+      const entity = document({folder_id: FOLDER_ID});
+
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), entity),
+        Type.boolean(true),
+      );
+
+      putFolder({[KEY]: false});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), entity),
+        Type.boolean(false),
+      );
+    });
+  });
+
   // Cases this side alone has: the server orders a string by its sort key wherever it compares one,
   // and a client orders a row's string by the key filed beside it.
   describe("derived fields over the entity's own fields", () => {

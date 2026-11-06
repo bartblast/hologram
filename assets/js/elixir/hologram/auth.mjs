@@ -6,6 +6,7 @@ import {currentBatch} from "./db.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
+import Overlay from "../../overlay.mjs";
 import QueryKernel from "../../query_kernel.mjs";
 import Sha1 from "../../sha1.mjs";
 import SortKey from "../../sort_key.mjs";
@@ -102,6 +103,20 @@ function grantExists(rows, userId, roles, entityType, entityIds) {
 
 function grantRows() {
   return Object.values(LocalDatabase.getTable(GRANT_TYPE));
+}
+
+// What the held rows of a set decide of a quantifier over it, given each one's answer.
+function heldAnswer(quantifier, answers) {
+  switch (quantifier) {
+    case "any":
+      return answers.includes(true) ? true : UNKNOWN;
+
+    case "none":
+      return answers.includes(true) ? false : UNKNOWN;
+
+    default:
+      return answers.includes(false) ? false : UNKNOWN;
+  }
 }
 
 function holds(fieldValue, operator, value, ranks, foldsKey = false) {
@@ -499,8 +514,9 @@ function predicatesHold(entityType, entity, clauses, actorUserId, outer = []) {
 // the row it is about or on the row above it the source names - a subset of the set the server
 // reads, so a held row decides only what one row can: any is true once a held row matches, none
 // false once one matches, all false once one fails. Anything else is UNKNOWN, since a row this
-// client does not hold may decide it. A none or an all asking about a visitor asks about nobody,
-// which grants nothing.
+// client does not hold may decide it - unless the quantifier is one the server sends its verdict
+// on, which then answers. A none or an all asking about a visitor asks about nobody, which grants
+// nothing.
 function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
   if (
     actorUserId === null &&
@@ -533,16 +549,11 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
     ),
   );
 
-  switch (clause.quantifier) {
-    case "any":
-      return answers.includes(true) ? true : UNKNOWN;
+  const held = heldAnswer(clause.quantifier, answers);
 
-    case "none":
-      return answers.includes(true) ? false : UNKNOWN;
-
-    default:
-      return answers.includes(false) ? false : UNKNOWN;
-  }
+  return held === UNKNOWN && Object.hasOwn(clause, "verdict")
+    ? verdictHolds(entityType, entity, clause, actorUserId)
+    : held;
 }
 
 // The boxed entity's id and reference fields as a held row spells them - what a set's rows are
@@ -646,6 +657,18 @@ function scopedName(entityType, entity, outer, name) {
   return {...outer[name.outer - 1], name: name.name};
 }
 
+// Whether the boxed entity holds what the given base row does in every stored field.
+function storedAsBase(entityType, entity, row) {
+  const names = [
+    ...Object.keys(Model.entry(entityType).attributes),
+    ...Object.keys(referenceRow(entityType, entity)),
+  ];
+
+  return names.every(
+    (name) => storedValue(entityType, entity, name) === (row[name] ?? null),
+  );
+}
+
 // A stored field's value off the boxed entity, as the wire spells it - an attribute by its declared
 // type, a reference field as the uuid it holds.
 function storedValue(entityType, entity, name) {
@@ -670,6 +693,38 @@ function unboxActorUserId(userOrId) {
   }
 
   return Model.unbox(userOrId, "uuid");
+}
+
+// The server's verdict on a quantifier the held rows leave open, as the row's last frame carried
+// it. The server works verdicts out for the session's user over the row as stored, so any other
+// question is UNKNOWN: one about another user or a visitor, one about a struct whose stored fields
+// differ from the row's - changed in an action and not written yet - and one asked while a write of
+// this client's that the server has not answered names a type the quantifier reads, since that
+// write may have moved the answer. So is one about a row that came with no verdict.
+//
+// An answer can settle a batch before the frame carrying its round arrives, and between the two
+// the verdict predates the write again. The window closes itself: a write moving a verdict re-runs
+// the windows over the row, whose frame brings the new one, and a write that moves none sends
+// none, since the verdict held stands. Held rows still refute it in between.
+function verdictHolds(entityType, entity, clause, actorUserId) {
+  if (actorUserId !== (LocalDatabase.actorUserId ?? null)) {
+    return UNKNOWN;
+  }
+
+  if (clause.reads.some((type) => Overlay.namesType(type))) {
+    return UNKNOWN;
+  }
+
+  const id = storedValue(entityType, entity, "id");
+  const row = id === null ? null : LocalDatabase.baseRow(entityType, id);
+
+  if (row === null || !storedAsBase(entityType, entity, row)) {
+    return UNKNOWN;
+  }
+
+  const verdict = row.$verdicts?.[clause.verdict];
+
+  return typeof verdict === "boolean" ? verdict : UNKNOWN;
 }
 
 // Delegation asks the RELATED entity's policy for the operation the rule names, of the row its

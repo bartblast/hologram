@@ -54,7 +54,7 @@ export default class Overlay {
   // exists to keep. Rebuilding costs a shallow copy of one table, and only while a write is
   // pending: with nothing pending the base is handed straight back, untouched and uncopied.
   static foldTable(type, base) {
-    if (!Overlay.#namesType(type)) {
+    if (!Overlay.namesType(type)) {
       return base;
     }
 
@@ -103,6 +103,14 @@ export default class Overlay {
     const key = `${type} ${id}`;
 
     return Overlay.#batches.some((batch) => batch.rowKeys().has(key));
+  }
+
+  // Whether any pending batch holds a write of this type - a write whose frame has come back
+  // included, as for names/2: the server has not answered its batch yet.
+  static namesType(type) {
+    return Overlay.#batches.some((batch) =>
+      batch.writes.some((write) => write.type === type),
+    );
   }
 
   // A confirmed batch's values ARE what the server stored, so they move out of the overlay and
@@ -317,7 +325,7 @@ export default class Overlay {
   }
 
   static #foldInverseIds(inverse, targetId, base) {
-    if (!Overlay.#namesType(inverse.type)) {
+    if (!Overlay.namesType(inverse.type)) {
       return base;
     }
 
@@ -363,12 +371,6 @@ export default class Overlay {
     const inverse = inverses[relationship];
 
     return inverse.reference ? null : inverse;
-  }
-
-  static #namesType(type) {
-    return Overlay.#batches.some((batch) =>
-      batch.writes.some((write) => write.type === type),
-    );
   }
 
   // A confirmed edge is the server's, so the inverses reading it hold it too - promoted into the
