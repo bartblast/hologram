@@ -2480,6 +2480,46 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // A server-only attribute reaches a struct as its sentinel and a base row as nothing at all, so
+    // the folder's secret says nothing about whether the struct is the row the verdict is about.
+    describe("on a type with a server-only attribute", () => {
+      const SECRET_KEY = Type.encodeMapKey(Type.atom("secret"));
+
+      const secretFolderReads = (entity) => {
+        defineModel({}, {read: [rule({predicates: [noPublic]})]});
+
+        const folderEntry = globalThis.Hologram.sync.model[FOLDER];
+        folderEntry.attributes.secret = "boolean";
+        folderEntry.serverOnly = ["secret"];
+        Model.reset();
+
+        putFolder({[KEY]: true});
+
+        return can(Type.nil(), Type.atom("read"), entity());
+      };
+
+      it("grants on a true verdict asked about a struct holding the sentinel", () => {
+        assert.deepStrictEqual(
+          secretFolderReads(() => folder()),
+          Type.boolean(true),
+        );
+      });
+
+      it("grants nothing on a verdict asked about a struct holding a value in its place", () => {
+        const withSecret = () => {
+          const entity = folder();
+          entity.data[SECRET_KEY] = [Type.atom("secret"), Type.boolean(true)];
+
+          return entity;
+        };
+
+        assert.deepStrictEqual(
+          secretFolderReads(withSecret),
+          Type.boolean(false),
+        );
+      });
+    });
+
     // A document that just landed beats a none the server answered before it.
     it("grants nothing on a true none verdict a held matching row refutes", () => {
       putFolder({[KEY]: true});

@@ -2,7 +2,7 @@
 
 import Bitstring from "../../bitstring.mjs";
 import Clock from "../../clock.mjs";
-import {currentBatch} from "./db.mjs";
+import {currentBatch, isServerOnlySentinel} from "./db.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
@@ -380,6 +380,14 @@ function fieldValue(entityType, row, name) {
   );
 }
 
+// Whether the boxed entity holds a server-only attribute's sentinel - what it arrived with, since
+// no client ever learns the stored value.
+function holdsServerOnlySentinel(entity, name) {
+  const entry = entity.data[Type.encodeMapKey(Type.atom(name))];
+
+  return entry !== undefined && isServerOnlySentinel(entry[1]);
+}
+
 // The row one to-one relationship's reference names, then the chain after it from there - null for
 // an empty reference, UNKNOWN for a row this client does not hold.
 function linkedRow(entityType, targetId, relationshipName, laterNames) {
@@ -666,15 +674,20 @@ function scopedName(entityType, entity, outer, name) {
   return {...outer[name.outer - 1], name: name.name};
 }
 
-// Whether the boxed entity holds what the given base row does in every stored field.
+// Whether the boxed entity holds what the given base row does in every stored field. A server-only
+// attribute is in no base row, so it counts as unchanged while the entity still holds its sentinel.
 function storedAsBase(entityType, entity, row) {
+  const entry = Model.entry(entityType);
+
   const names = [
-    ...Object.keys(Model.entry(entityType).attributes),
+    ...Object.keys(entry.attributes),
     ...Object.keys(referenceRow(entityType, entity)),
   ];
 
-  return names.every(
-    (name) => storedValue(entityType, entity, name) === (row[name] ?? null),
+  return names.every((name) =>
+    entry.serverOnly.has(name)
+      ? holdsServerOnlySentinel(entity, name)
+      : storedValue(entityType, entity, name) === (row[name] ?? null),
   );
 }
 
