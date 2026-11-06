@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.RoleChecksTest do
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Policies.Page4
   alias HologramFeatureTests.Roles.Admin
@@ -19,15 +20,19 @@ defmodule HologramFeatureTests.RoleChecksTest do
   # asserts on the same page load - so what is on screen is the browser's answer, not the server's
   # render.
   #
-  # The tables truncate in one statement: the memo, note and role grant tables' foreign keys to the
-  # user table make Postgres reject truncating the referenced table alone.
+  # The tables truncate in one statement: the memo, note, project member and role grant tables'
+  # foreign keys to the user table make Postgres reject truncating the referenced table alone.
   setup do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Document, Memo, Note, RoleGrant, User], ", ", fn entity_type ->
-        ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
-      end)
+      Enum.map_join(
+        [Document, Memo, Note, ProjectMember, RoleGrant, User],
+        ", ",
+        fn entity_type ->
+          ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
+        end
+      )
 
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 

@@ -14,20 +14,25 @@ defmodule HologramFeatureTests.MutationsTest do
   alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.MutationsPage
 
-  # Every table truncates in one statement: the memo, note and role grant tables' foreign keys to
-  # the user table and the job's to the item table make Postgres reject truncating a referenced
-  # table alone.
+  # Every table truncates in one statement: the memo, note, project member and role grant tables'
+  # foreign keys to the user table and the job's to the item table make Postgres reject truncating a
+  # referenced table alone.
   setup do
     await_evaluator_drain()
 
     tables =
-      Enum.map_join([Item, Memo, Note, RestockItem, RoleGrant, User], ", ", fn entity_type ->
-        ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
-      end)
+      Enum.map_join(
+        [Item, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
+        ", ",
+        fn entity_type ->
+          ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
+        end
+      )
 
     {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
 

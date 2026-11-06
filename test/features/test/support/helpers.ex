@@ -25,9 +25,12 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Membership
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Message
+  alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Post
   alias HologramFeatureTests.Entities.Product
+  alias HologramFeatureTests.Entities.Project
+  alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
@@ -898,9 +901,12 @@ defmodule HologramFeatureTests.Helpers do
         Membership,
         Memo,
         Message,
+        Milestone,
         Note,
         Post,
         Product,
+        Project,
+        ProjectMember,
         RestockItem,
         Review,
         RoleGrant,
