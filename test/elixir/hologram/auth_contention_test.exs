@@ -32,6 +32,13 @@ defmodule Hologram.AuthContentionTest do
   # the session under test is elected the victim through a shorter deadlock_timeout - and its verb,
   # run again, answers the way it would have a moment later.
   #
+  # A write let through by a none or an all rests on every row of a set, the rows not there yet included, so
+  # it holds the set by the name of its owner row (see Hologram.DB.SetLock), and a write entering
+  # the set waits for it. Such a resting write runs inside a transaction of the test's own, held
+  # open until the test lets it commit - so it parks past its write, and a deadlock it ran into
+  # fails the test rather than being run again. What an entering write waits on, the set or a row,
+  # is asserted in Postgres too.
+  #
   # async: false - the tier's modules run one at a time, since each opens raw sessions beside its
   # scratch connection.
   use Hologram.Test.ScratchDatabaseCase, async: false
@@ -46,6 +53,7 @@ defmodule Hologram.AuthContentionTest do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Mutation
@@ -54,8 +62,13 @@ defmodule Hologram.AuthContentionTest do
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Policy.Module26
+  alias Hologram.Test.Fixtures.Policy.Module27
+  alias Hologram.Test.Fixtures.Policy.Module28
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
+
+  @key_range 4_294_967_296
 
   # A browser's batch carrying the given writes, as the wire carries it.
   defp batch(writes) do
@@ -66,6 +79,26 @@ defmodule Hologram.AuthContentionTest do
       "seq" => 1,
       "writes" => writes
     }
+  end
+
+  defp create_comment(scratch, values) do
+    route(scratch, fn ->
+      values
+      |> Module27.new()
+      |> DB.create!()
+    end)
+  end
+
+  defp create_space(scratch) do
+    route(scratch, fn -> DB.create!(Module26.new()) end)
+  end
+
+  defp create_ticket(scratch, space) do
+    route(scratch, fn ->
+      %{space_id: space.id, subject: "open"}
+      |> Module28.new()
+      |> DB.create!()
+    end)
   end
 
   defp create_user(scratch, email) do
@@ -122,6 +155,18 @@ defmodule Hologram.AuthContentionTest do
     {:ok, _result} = Connection.query("SET deadlock_timeout = '100ms'")
 
     :ok
+  end
+
+  defp hold_resting_write(actor, write, test_pid) do
+    fn ->
+      result = Context.with_actor(actor.id, write)
+
+      send(test_pid, {:resting, result})
+
+      receive do
+        :release -> result
+      end
+    end
   end
 
   defp hold_write(write, test_pid) do
@@ -184,6 +229,33 @@ defmodule Hologram.AuthContentionTest do
     }
   end
 
+  # The advisory locks held or asked for on the set of the given owner row, by every session of this
+  # database, as {mode, granted}, sorted.
+  defp set_locks(scratch_opts, owner_type, owner_id) do
+    {:ok, observer} = Postgrex.start_link(scratch_opts)
+    keys = SetLock.keys(owner_type, owner_id)
+
+    statement = """
+    SELECT "classid", "objid", "mode", "granted" FROM pg_catalog.pg_locks
+    WHERE "locktype" = 'advisory' AND "objsubid" = 2
+      AND "database" = (SELECT "oid" FROM pg_catalog.pg_database WHERE "datname" = current_database())
+    """
+
+    %Postgrex.Result{rows: rows} = Postgrex.query!(observer, statement, [])
+
+    rows
+    |> Enum.filter(fn [classid, objid, _mode, _granted] ->
+      {signed(classid), signed(objid)} == keys
+    end)
+    |> Enum.map(fn [_classid, _objid, mode, granted] -> {mode, granted} end)
+    |> Enum.sort()
+  end
+
+  # PostgreSQL shows a two-key lock's keys as unsigned.
+  defp signed(key) when key >= div(@key_range, 2), do: key - @key_range
+
+  defp signed(key), do: key
+
   # A stamp above every revision the row holds - the applier refuses a stamp that is not above the
   # revisions its write was based on, and a row written this millisecond can already carry one above
   # the raw wall clock.
@@ -215,6 +287,12 @@ defmodule Hologram.AuthContentionTest do
     end)
   end
 
+  # Trusted code entering a set, on a session of its own - no evaluation, only the locks its write
+  # takes.
+  defp start_entering_write(scratch_opts, write) do
+    Task.async(fn -> on_own_session(scratch_opts, write) end)
+  end
+
   # The gated write under the acting user, on a session of its own and with no transaction but the
   # verb's - what is under test is the verb holding what its evaluation read, the grant rows and
   # the related rows its delegations read, until its write lands.
@@ -238,6 +316,17 @@ defmodule Hologram.AuthContentionTest do
   defp start_holder(scratch_opts, write, test_pid) do
     Task.async(fn ->
       on_own_session(scratch_opts, fn -> Connection.transaction(hold_write(write, test_pid)) end)
+    end)
+  end
+
+  # A write under the acting user resting on a set, on a session of its own and inside a transaction
+  # the test holds open: it sends {:resting, result} once the write has run, and commits when the
+  # test lets it, answering {:ok, result}.
+  defp start_resting_write(scratch_opts, actor, write, test_pid) do
+    Task.async(fn ->
+      on_own_session(scratch_opts, fn ->
+        Connection.transaction(hold_resting_write(actor, write, test_pid))
+      end)
     end)
   end
 
@@ -320,6 +409,26 @@ defmodule Hologram.AuthContentionTest do
       %Postgrex.Result{rows: [[blocked]]} = Postgrex.query!(observer, statement, [])
 
       blocked == count
+    end)
+  end
+
+  # Waits until the sessions of this database blocked on a lock wait on the given kinds of lock, as
+  # pg_stat_activity names them - "advisory" for a set's, "transactionid" for a row another
+  # transaction holds.
+  defp wait_for_lock_waits(scratch_opts, kinds) do
+    {:ok, observer} = Postgrex.start_link(scratch_opts)
+
+    statement = """
+    SELECT "wait_event" FROM pg_catalog.pg_stat_activity
+    WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'
+      AND "pid" <> pg_backend_pid()
+    ORDER BY "wait_event"
+    """
+
+    wait_until(fn ->
+      %Postgrex.Result{rows: rows} = Postgrex.query!(observer, statement, [])
+
+      List.flatten(rows) == kinds
     end)
   end
 
@@ -920,5 +1029,157 @@ defmodule Hologram.AuthContentionTest do
     stored = route(scratch, fn -> DB.read(Module1, resource.id) end)
     assert {stored.parent_id, stored.priority} == {parent.id, 9}
     assert route(scratch, fn -> DB.read(Module2, parent.id) end).public == true
+  end
+
+  test "a create entering a set waits for a write resting on it through a hop until that write commits",
+       %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
+    space = create_space(scratch)
+    ticket = create_ticket(scratch, space)
+
+    # Module28's :update holds while no comment in the ticket's space is flagged - reached through
+    # the ticket's space, a row the update only share-locks, so no foreign key check of the comment's
+    # waits on it.
+    update = fn ->
+      ticket
+      |> put_attribute(:subject, "renamed")
+      |> DB.update()
+    end
+
+    resting = start_resting_write(scratch_opts, alice, update, self())
+    assert_receive {:resting, :ok}, 5_000
+
+    # A flagged comment landing before the update commits would turn the update's answer around.
+    entering =
+      start_entering_write(scratch_opts, fn ->
+        %{flagged: true, space_id: space.id}
+        |> Module27.new()
+        |> DB.create()
+      end)
+
+    wait_for_lock_waits(scratch_opts, ["advisory"])
+
+    assert set_locks(scratch_opts, Module26, space.id) == [
+             {"ExclusiveLock", true},
+             {"ShareLock", false}
+           ]
+
+    send(resting.pid, :release)
+    assert Task.await(resting) == {:ok, :ok}
+    assert {:ok, %Module27{flagged: true}} = Task.await(entering)
+
+    assert route(scratch, fn -> DB.read(Module28, ticket.id) end).subject == "renamed"
+  end
+
+  test "a create entering a set whose owner a resting delete holds waits on the owner row, holding no lock on the set",
+       %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
+    space = create_space(scratch)
+
+    # Module26's :delete holds while none of its comments is flagged. The delete holds the space
+    # FOR UPDATE, and a comment's foreign key check waits on it - the comment takes the set's lock
+    # only after its row locks, which shows as the row wait, with no shared lock asked for.
+    resting = start_resting_write(scratch_opts, alice, fn -> DB.delete(space) end, self())
+    assert_receive {:resting, :ok}, 5_000
+
+    entering =
+      start_entering_write(scratch_opts, fn ->
+        %{flagged: true, space_id: space.id}
+        |> Module27.new()
+        |> DB.create()
+      end)
+
+    wait_for_lock_waits(scratch_opts, ["transactionid"])
+    assert set_locks(scratch_opts, Module26, space.id) == [{"ExclusiveLock", true}]
+
+    send(resting.pid, :release)
+    assert Task.await(resting) == {:ok, :ok}
+    assert Task.await(entering) == {:error, %{space_id: [:not_found]}}
+
+    assert route(scratch, fn -> DB.read(Module26, space.id) end) == nil
+  end
+
+  test "a create naming two rows waits on the one a resting write holds, holding no lock on the set",
+       %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
+    space = create_space(scratch)
+    ticket = create_ticket(scratch, space)
+
+    # The update holds the ticket FOR UPDATE and rests on the space's comments. A comment naming the
+    # ticket and the space waits on the ticket's foreign key check, and takes the set's lock only
+    # after that.
+    update = fn ->
+      ticket
+      |> put_attribute(:subject, "renamed")
+      |> DB.update()
+    end
+
+    resting = start_resting_write(scratch_opts, alice, update, self())
+    assert_receive {:resting, :ok}, 5_000
+
+    entering =
+      start_entering_write(scratch_opts, fn ->
+        %{space_id: space.id, ticket_id: ticket.id}
+        |> Module27.new()
+        |> DB.create()
+      end)
+
+    wait_for_lock_waits(scratch_opts, ["transactionid"])
+    assert set_locks(scratch_opts, Module26, space.id) == [{"ExclusiveLock", true}]
+
+    send(resting.pid, :release)
+    assert Task.await(resting) == {:ok, :ok}
+    ticket_id = ticket.id
+    assert {:ok, %Module27{ticket_id: ^ticket_id}} = Task.await(entering)
+  end
+
+  test "an update repeating a reference's current value doesn't wait for a write resting on that set",
+       %{scratch: scratch, scratch_opts: scratch_opts} do
+    space = create_space(scratch)
+    comment = create_comment(scratch, %{space_id: space.id})
+
+    # The holder takes the lock a write resting on the space's comments takes, and none of the row
+    # locks such a write's reads take.
+    holder = start_holder(scratch_opts, fn -> SetLock.hold!(Module26, space.id) end, self())
+    assert_receive :holding, 5_000
+
+    updating =
+      start_entering_write(scratch_opts, fn ->
+        DB.update(Module27, comment.id, flagged: true, space_id: space.id)
+      end)
+
+    assert Task.await(updating, 5_000) == :ok
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+  end
+
+  test "a create entering a set doesn't wait for a write resting on it through an any alone",
+       %{alice: alice, scratch: scratch, scratch_opts: scratch_opts} do
+    space = create_space(scratch)
+    ticket = create_ticket(scratch, space)
+    create_comment(scratch, %{flagged: true, space_id: space.id})
+
+    # Module28's :close holds while some comment in the ticket's space is flagged - a comment
+    # joining the space can't turn that answer around.
+    close = fn ->
+      ticket
+      |> put_attribute(:subject, "closed")
+      |> authorize(:close)
+      |> DB.update()
+    end
+
+    resting = start_resting_write(scratch_opts, alice, close, self())
+    assert_receive {:resting, :ok}, 5_000
+    assert set_locks(scratch_opts, Module26, space.id) == []
+
+    entering =
+      start_entering_write(scratch_opts, fn ->
+        %{space_id: space.id}
+        |> Module27.new()
+        |> DB.create()
+      end)
+
+    assert {:ok, %Module27{}} = Task.await(entering, 5_000)
+
+    send(resting.pid, :release)
+    assert Task.await(resting) == {:ok, :ok}
   end
 end

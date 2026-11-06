@@ -8,6 +8,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Test.Fixtures.Entity.Module1
@@ -25,7 +26,28 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
+  alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
+  alias Hologram.Test.Fixtures.Policy.Module26, as: PolicyModule26
+  alias Hologram.Test.Fixtures.Policy.Module27, as: PolicyModule27
+  alias Hologram.Test.Fixtures.Policy.Module29, as: PolicyModule29
   alias Hologram.Test.Fixtures.Role
+
+  @key_range 4_294_967_296
+
+  # The advisory locks the calling session holds on sets, by mode, under the keys they are named by.
+  defp advisory_locks do
+    statement = """
+    SELECT "classid", "objid", "mode" FROM pg_catalog.pg_locks
+    WHERE "locktype" = 'advisory' AND "objsubid" = 2 AND "pid" = pg_backend_pid()
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [])
+
+    rows
+    |> Enum.map(fn [classid, objid, mode] -> {mode, {signed(classid), signed(objid)}} end)
+    |> Enum.sort()
+  end
 
   defp count_edges(source_entity, target_entity) do
     count_sql =
@@ -68,6 +90,11 @@ defmodule Hologram.DB.EntityOperationsTest do
       }
     end)
   end
+
+  # PostgreSQL shows a two-key lock's keys as unsigned.
+  defp signed(key) when key >= div(@key_range, 2), do: key - @key_range
+
+  defp signed(key), do: key
 
   # The system clock can be coarser than a microsecond (Windows timer granularity reaches
   # ~16ms), making consecutive utc_now readings equal - wait until the clock has visibly
@@ -193,6 +220,26 @@ defmodule Hologram.DB.EntityOperationsTest do
         end
 
       assert error.postgres.code == :foreign_key_violation
+    end
+
+    # Module17's :archive holds while none of the project's labels is locked - a set stored on the
+    # project itself.
+    test "holds the shared lock of the owner row whose locked set a pair added from the owner's side enters" do
+      {:ok, project} = create(PolicyModule17.new())
+      {:ok, label} = create(PolicyModule19.new())
+
+      assert add_relationship(PolicyModule17, project.id, :labels, label.id) == :ok
+      assert advisory_locks() == [{"ShareLock", SetLock.keys(PolicyModule17, project.id)}]
+    end
+
+    # Module29's :update holds while none of its comments is flagged - the inverse of the comments'
+    # marks, so the pair is added from the comment's side.
+    test "holds the shared lock of the owner row whose locked set a pair added from the other side enters" do
+      {:ok, comment} = create(PolicyModule27.new())
+      {:ok, mark} = create(PolicyModule29.new())
+
+      assert add_relationship(PolicyModule27, comment.id, :marks, mark.id) == :ok
+      assert advisory_locks() == [{"ShareLock", SetLock.keys(PolicyModule29, mark.id)}]
     end
   end
 
@@ -642,6 +689,18 @@ defmodule Hologram.DB.EntityOperationsTest do
         end
 
       assert error.postgres.code == :unique_violation
+    end
+
+    # Module26's :delete holds while none of its comments is flagged.
+    test "holds the shared lock of the owner row whose locked set the row enters" do
+      {:ok, space} = create(PolicyModule26.new())
+
+      assert {:ok, _comment} =
+               %{space_id: space.id}
+               |> PolicyModule27.new()
+               |> create()
+
+      assert advisory_locks() == [{"ShareLock", SetLock.keys(PolicyModule26, space.id)}]
     end
   end
 
@@ -1914,6 +1973,15 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert_error ArgumentError, expected_msg, fn ->
         update(Module2, nonexistent_id, %{c: "some text"})
       end
+    end
+
+    # Module26's :delete holds while none of its comments is flagged.
+    test "holds the shared lock of the owner row whose locked set a moved reference enters" do
+      {:ok, space} = create(PolicyModule26.new())
+      {:ok, comment} = create(PolicyModule27.new())
+
+      assert update(PolicyModule27, comment.id, %{space_id: space.id}) == :ok
+      assert advisory_locks() == [{"ShareLock", SetLock.keys(PolicyModule26, space.id)}]
     end
   end
 end
