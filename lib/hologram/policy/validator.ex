@@ -285,77 +285,6 @@ defmodule Hologram.Policy.Validator do
 
   defp server_only_spelling(path), do: Stage.inspect_name(path)
 
-  # What makes a derived field holding a value read a related set, spelled for a refusal - a count
-  # its definition computes, a query builder it calls, another field it reads that does - or nil
-  # when it reads none. A field reached again inside its own reads is a cycle, refused at the build,
-  # and adds nothing here.
-  defp set_reading(entity_type, name, visited) do
-    field = {entity_type, name}
-
-    cond do
-      field in visited ->
-        nil
-
-      name in entity_type.__derived_builder_calls__() ->
-        "calls a query builder"
-
-      true ->
-        entity_type
-        |> Derived.resolve(name)
-        |> set_reading_of(entity_type, [field | visited])
-    end
-  end
-
-  defp set_reading_of({:concat, operands}, entity_type, visited) do
-    Enum.find_value(operands, &set_reading_of(&1, entity_type, visited))
-  end
-
-  defp set_reading_of({:condition, clauses}, entity_type, visited) do
-    clauses
-    |> Stage.predicate_references()
-    |> set_reading_through(entity_type, visited)
-  end
-
-  defp set_reading_of({:if, clauses, then_value, else_value}, entity_type, visited) do
-    references = Stage.predicate_references(clauses)
-
-    set_reading_through(references, entity_type, visited) ||
-      set_reading_of(then_value, entity_type, visited) ||
-      set_reading_of(else_value, entity_type, visited)
-  end
-
-  defp set_reading_of({:name, name}, entity_type, visited) do
-    {relationship_names, [read_name]} =
-      name
-      |> List.wrap()
-      |> Enum.split(-1)
-
-    set_reading_through([{relationship_names, read_name}], entity_type, visited)
-  end
-
-  defp set_reading_of({:query, %{source: {_owner, chain}}}, _entity_type, _visited) do
-    "counts #{Enum.join(chain, ".")}"
-  end
-
-  defp set_reading_of({:value, _value}, _entity_type, _visited), do: nil
-
-  # The first of the given references reaching a derived field that reads a related set, spelled.
-  defp set_reading_through(references, entity_type, visited) do
-    Enum.find_value(references, fn {relationship_names, name} ->
-      read_type = Entity.path_target(entity_type, relationship_names)
-
-      if Derived.value_field?(read_type, name) do
-        read_type
-        |> set_reading(name, visited)
-        |> spelled_reading(List.insert_at(relationship_names, -1, name))
-      end
-    end)
-  end
-
-  defp spelled_reading(nil, _path), do: nil
-
-  defp spelled_reading(reading, path), do: "reads #{server_only_spelling(path)}, which #{reading}"
-
   defp stored_to_one?(entity_type, name) do
     Enum.any?(entity_type.__relationships__(), fn {relationship_name, target, _opts} ->
       relationship_name == name and is_atom(target)
@@ -740,7 +669,7 @@ defmodule Hologram.Policy.Validator do
       read_type = Entity.path_target(entity_type, relationship_names)
 
       with true <- Derived.value_field?(read_type, name),
-           reading when is_binary(reading) <- set_reading(read_type, name, []) do
+           reading when is_binary(reading) <- Derived.set_reading(read_type, name) do
         raise ArgumentError,
           message:
             "#{server_only_spelling(path)} #{reading} - a policy condition reads no related set yet"

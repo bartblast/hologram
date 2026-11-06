@@ -326,7 +326,8 @@ function enumRanks(entityType, name) {
 // except that what reads a related row this client does not hold is UNKNOWN rather than nil:
 // strings joined, nil when one of them is and UNKNOWN when one may be; whether a condition holds;
 // the branch an if's condition decides, UNKNOWN when it cannot decide; a name read as a rule reads
-// it. A query never reaches here - a rule reads no derived field reading a related set.
+// it. A count reads a related set whole, which a client never holds for certain, so it is UNKNOWN -
+// the server's verdict answers a quantifier whose condition reads one.
 function evaluatedDefinition(entityType, entity, definition) {
   if ("concat" in definition) {
     const values = definition.concat.map((operand) =>
@@ -515,8 +516,8 @@ function predicatesHold(entityType, entity, clauses, actorUserId, outer = []) {
 // reads, so a held row decides only what one row can: any is true once a held row matches, none
 // false once one matches, all false once one fails. Anything else is UNKNOWN, since a row this
 // client does not hold may decide it - unless the quantifier is one the server sends its verdict
-// on, which then answers. A none or an all asking about a visitor asks about nobody, which grants
-// nothing.
+// on, which then answers. Over a derived set the held rows decide nothing. A none or an all asking
+// about a visitor asks about nobody, which grants nothing.
 function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
   if (
     actorUserId === null &&
@@ -529,6 +530,14 @@ function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
   const start = Array.isArray(clause.source)
     ? {entity, entityType, hops: clause.source}
     : {...outer[clause.source.outer - 1], hops: clause.source.name};
+
+  // A bounded or filtered set computed over the rows this client holds can hold rows the server's
+  // doesn't, so not even a held row decides a quantifier over one.
+  if (throughDerivedSet(start.entityType, start.hops)) {
+    return Object.hasOwn(clause, "verdict")
+      ? verdictHolds(entityType, entity, clause, actorUserId)
+      : UNKNOWN;
+  }
 
   const relatedType = Model.pathTarget(start.entityType, start.hops);
   const innerOuter = [{entity, entityType}, ...outer];
@@ -677,6 +686,22 @@ function storedValue(entityType, entity, name) {
   const entry = entity.data[key];
 
   return entry ? Model.unbox(entry[1], attributeType) : null;
+}
+
+// Whether a chain of relationships read from a row of the given type runs through a derived field
+// holding rows.
+function throughDerivedSet(entityType, names) {
+  let type = entityType;
+
+  for (const name of names) {
+    if (Model.derivedField(type, name) !== null) {
+      return true;
+    }
+
+    type = (Model.relationships(type)[name] ?? Model.inverses(type)[name]).type;
+  }
+
+  return false;
 }
 
 // The acting user, as a bare id: a check takes the user entity or the id itself, and nobody at

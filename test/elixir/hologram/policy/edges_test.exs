@@ -405,6 +405,15 @@ defmodule Hologram.Policy.EdgesTest do
              ]
     end
 
+    # Both rules' anys over a derived set are answered by the server's verdict, which reads what the
+    # two sets read.
+    test "derives the verdict edges of anys over derived sets" do
+      assert derive([EdgeBoard])[{EdgeBoard, :verdicts}] == [
+               {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]},
+               {:set_edges, [:cards, :tags], EdgeCard, [:tags]}
+             ]
+    end
+
     # A tag joining a card moves the count the derived set's filter reads.
     test "derives the edges of the set a count in a derived set's filter counts" do
       assert derive([EdgeBoard])[{EdgeBoard, :update}] == [

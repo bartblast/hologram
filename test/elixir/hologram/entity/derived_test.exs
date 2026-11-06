@@ -70,27 +70,6 @@ defmodule Hologram.Entity.DerivedTest do
     end
   end
 
-  describe "expanded_fields/2" do
-    # The member name reads the member's display name, which reads the channel's name - an
-    # attribute, so the walk ends there.
-    test "returns every derived field a reference reads, through the fields it reads" do
-      assert expanded_fields(Module39, [{[], :member_name}]) == [
-               {Module34, :display_name},
-               {Module39, :member_name}
-             ]
-    end
-
-    test "returns a derived field a path reads on the row it leads to" do
-      assert expanded_fields(Module39, [{[:member], :display_name}]) == [
-               {Module34, :display_name}
-             ]
-    end
-
-    test "returns nothing for an attribute" do
-      assert expanded_fields(Module39, [{[], :score}]) == []
-    end
-  end
-
   describe "field/2" do
     test "stands for an attribute of the row" do
       assert field(Module28, [:position]) == %RowField{owner: Module28, name: :position}
@@ -425,6 +404,43 @@ defmodule Hologram.Entity.DerivedTest do
       included_term = %Query{entity: Module33, include: %{channel: %Query{entity: Module32}}}
 
       assert rows_term(Module32, :messages, included_term) == included_term
+    end
+  end
+
+  describe "read_fields/2" do
+    alias Hologram.Entity.DerivedTest.ReadBoard
+    alias Hologram.Entity.DerivedTest.ReadCard
+
+    setup do
+      put_derived_definitions([ReadBoard, ReadCard])
+    end
+
+    test "returns a derived set a quantifier's source runs through" do
+      assert read_fields(ReadBoard, [{:any, {[:top_cards], []}}]) == [{ReadBoard, :top_cards}]
+    end
+
+    test "returns a derived field a derived set's filter reads" do
+      assert read_fields(ReadBoard, [{:any, {[:busy_cards], []}}]) == [
+               {ReadBoard, :busy_cards},
+               {ReadCard, :tag_count}
+             ]
+    end
+
+    test "returns the derived set a derived set is built on" do
+      assert read_fields(ReadBoard, [{:any, {[:low_top_cards], []}}]) == [
+               {ReadBoard, :low_top_cards},
+               {ReadBoard, :top_cards}
+             ]
+    end
+
+    test "returns a derived field named outside any quantifier" do
+      assert read_fields(ReadBoard, [{:label_count, :>, 1}]) == [{ReadBoard, :label_count}]
+    end
+
+    test "returns a field the clauses read twice once" do
+      clauses = [{:any, {[:top_cards], []}}, {:none, {[:top_cards], [{:rank, :==, 1}]}}]
+
+      assert read_fields(ReadBoard, clauses) == [{ReadBoard, :top_cards}]
     end
   end
 

@@ -103,20 +103,6 @@ defmodule Hologram.Entity.Derived do
   end
 
   @doc """
-  Returns the derived fields holding a value that the given references read on a row of the given
-  entity type, each as `{entity type, name}` once, sorted: every one named among them, and every
-  one their definitions read in turn, on the rows they are read on. A field reached again inside
-  its own reads adds nothing.
-  """
-  @spec expanded_fields(module, list({list(atom), atom})) :: list({module, atom})
-  def expanded_fields(entity_type, references) do
-    entity_type
-    |> expanded_fields(references, [])
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
-
-  @doc """
   Returns the stand-in for the given path of fields of a row of the given owning entity type, read
   by a derived field's function: a query over the set a path ends at - a relationship's or a derived
   field's - a row field for one ending at an attribute, a reference field or a derived field holding
@@ -244,6 +230,23 @@ defmodule Hologram.Entity.Derived do
   end
 
   @doc """
+  Returns the derived fields the given filter clauses read on a row of the given entity type, each
+  as `{entity type, name}` once, sorted: every derived field they name or run through, and every
+  one those fields' definitions read in turn, on the rows they are read on - each read through its
+  definition as the build resolved it, as `set_reads/2` reads a quantifier's condition.
+  """
+  @spec read_fields(module, list(Query.clause())) :: list({module, atom})
+  def read_fields(entity_type, clauses) do
+    references = Stage.predicate_references(clauses)
+    chains = Stage.relationship_chains(clauses)
+    {_references, _chains, fields} = reads(entity_type, references, chains, true, [])
+
+    fields
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns the type of the rows the given relationship or derived field holding rows leads to from a
   row of the given entity type - a relationship's target, a derived field's declared row type.
   """
@@ -315,6 +318,16 @@ defmodule Hologram.Entity.Derived do
   end
 
   @doc """
+  Returns what makes the given derived field holding a value of the given entity type read a
+  related set, spelled for a refusal - a count its definition computes, a query builder it calls,
+  another field it reads that does - or nil when it reads none. Its definition is resolved
+  natively, as `resolve/2` resolves it, so a build can ask before it resolves any. A field reached
+  again inside its own reads is a cycle, refused at the build, and adds nothing here.
+  """
+  @spec set_reading(module, atom) :: String.t() | nil
+  def set_reading(entity_type, name), do: set_reading(entity_type, name, [])
+
+  @doc """
   Returns the references - {relationship names, name} pairs - and the chains of relationships the
   given filter clauses read on a row of the given entity type (see
   `Hologram.Query.Stage.predicate_references/1` and `Hologram.Query.Stage.relationship_chains/1`),
@@ -331,21 +344,9 @@ defmodule Hologram.Entity.Derived do
   """
   @spec set_reads(module, list(Query.clause())) :: {list({list(atom), atom}), list(list(atom))}
   def set_reads(entity_type, clauses) do
-    quantified_references =
-      clauses
-      |> quantifier_clauses()
-      |> Stage.predicate_references()
+    {references, chains, _fields} = clause_walk(entity_type, clauses)
 
-    own_references = Stage.predicate_references(clauses) -- quantified_references
-    chains = Stage.relationship_chains(clauses)
-
-    {read_references, read_chains} =
-      joined_reads([
-        reads(entity_type, own_references, chains, false, []),
-        reads(entity_type, quantified_references, [], true, [])
-      ])
-
-    {Enum.uniq(read_references), Enum.uniq(read_chains)}
+    {Enum.uniq(references), Enum.uniq(chains)}
   end
 
   @doc """
@@ -362,17 +363,34 @@ defmodule Hologram.Entity.Derived do
   defp chain_reads(entity_type, chain, walked) do
     case derived_split(entity_type, chain) do
       nil ->
-        {[], [chain]}
+        {[], [chain], []}
 
       {before, owner_type, name, later_names} ->
         through_reads(entity_type, before, owner_type, name, walked, fn set_chain ->
-          {[], [set_chain ++ later_names]}
+          {[], [set_chain ++ later_names], []}
         end)
     end
   end
 
   defp clause_reads(clauses, prefixes) do
     {Stage.predicate_references(clauses, prefixes), Stage.relationship_chains(clauses, prefixes)}
+  end
+
+  # What filter clauses read through derived fields - references, chains and the derived fields
+  # walked - the names inside quantifiers read as a definition's are.
+  defp clause_walk(entity_type, clauses) do
+    quantified_references =
+      clauses
+      |> quantifier_clauses()
+      |> Stage.predicate_references()
+
+    own_references = Stage.predicate_references(clauses) -- quantified_references
+    chains = Stage.relationship_chains(clauses)
+
+    joined_walks([
+      reads(entity_type, own_references, chains, false, []),
+      reads(entity_type, quantified_references, [], true, [])
+    ])
   end
 
   defp definition_queries({:if, _clauses, then_value, else_value}) do
@@ -462,24 +480,6 @@ defmodule Hologram.Entity.Derived do
     end
   end
 
-  defp expanded_fields(entity_type, references, visited) do
-    Enum.flat_map(references, fn {relationship_names, name} ->
-      read_type = Entity.path_target(entity_type, relationship_names)
-      field = {read_type, name}
-
-      if value_field?(read_type, name) and field not in visited do
-        read_references =
-          read_type
-          |> resolve(name)
-          |> definition_references()
-
-        [field | expanded_fields(read_type, read_references, [field | visited])]
-      else
-        []
-      end
-    end)
-  end
-
   defp expanded_references(entity_type, references, visited) do
     Enum.flat_map(references, fn {relationship_names, name} = reference ->
       read_type = Entity.path_target(entity_type, relationship_names)
@@ -539,6 +539,13 @@ defmodule Hologram.Entity.Derived do
     end)
   end
 
+  defp joined_walks(walks) do
+    Enum.reduce(walks, {[], [], []}, fn {references, chains, fields},
+                                        {acc_refs, acc_chains, acc_fields} ->
+      {acc_refs ++ references, acc_chains ++ chains, acc_fields ++ fields}
+    end)
+  end
+
   defp merged_include(kept_include, other_include) do
     Map.merge(kept_include, other_include, fn
       _name, nil, nil ->
@@ -584,12 +591,13 @@ defmodule Hologram.Entity.Derived do
 
   # What the given references and chains read once every derived field holding rows they run
   # through is read through its definition, and - inside a quantifier's condition or a definition -
-  # every derived field holding a value they name is too. The fields being walked are given.
+  # every derived field holding a value they name is too, with the derived fields read so. The
+  # fields being walked are given.
   defp reads(entity_type, references, chains, inside?, walked) do
     reference_reads = Enum.map(references, &reference_reads(entity_type, &1, inside?, walked))
     chain_reads = Enum.map(chains, &chain_reads(entity_type, &1, walked))
 
-    joined_reads(reference_reads ++ chain_reads)
+    joined_walks(reference_reads ++ chain_reads)
   end
 
   defp reference(path) when is_list(path) do
@@ -612,14 +620,17 @@ defmodule Hologram.Entity.Derived do
             |> definition(name)
             |> definition_reads(relationship_names)
 
-          reads(entity_type, field_references, field_chains, true, [field | walked])
+          {references, chains, fields} =
+            reads(entity_type, field_references, field_chains, true, [field | walked])
+
+          {references, chains, [field | fields]}
         else
-          {[reference], []}
+          {[reference], [], []}
         end
 
       {before, owner_type, set_name, later_names} ->
         through_reads(entity_type, before, owner_type, set_name, walked, fn set_chain ->
-          {[{set_chain ++ later_names, name}], []}
+          {[{set_chain ++ later_names, name}], [], []}
         end)
     end
   end
@@ -636,6 +647,75 @@ defmodule Hologram.Entity.Derived do
     end
   end
 
+  defp set_reading(entity_type, name, visited) do
+    field = {entity_type, name}
+
+    cond do
+      field in visited ->
+        nil
+
+      name in entity_type.__derived_builder_calls__() ->
+        "calls a query builder"
+
+      true ->
+        entity_type
+        |> resolve(name)
+        |> set_reading_of(entity_type, [field | visited])
+    end
+  end
+
+  defp set_reading_of({:concat, operands}, entity_type, visited) do
+    Enum.find_value(operands, &set_reading_of(&1, entity_type, visited))
+  end
+
+  defp set_reading_of({:condition, clauses}, entity_type, visited) do
+    clauses
+    |> Stage.predicate_references()
+    |> set_reading_through(entity_type, visited)
+  end
+
+  defp set_reading_of({:if, clauses, then_value, else_value}, entity_type, visited) do
+    references = Stage.predicate_references(clauses)
+
+    set_reading_through(references, entity_type, visited) ||
+      set_reading_of(then_value, entity_type, visited) ||
+      set_reading_of(else_value, entity_type, visited)
+  end
+
+  defp set_reading_of({:name, name}, entity_type, visited) do
+    {relationship_names, [read_name]} =
+      name
+      |> List.wrap()
+      |> Enum.split(-1)
+
+    set_reading_through([{relationship_names, read_name}], entity_type, visited)
+  end
+
+  defp set_reading_of({:query, %{source: {_owner, chain}}}, _entity_type, _visited) do
+    "counts #{Enum.join(chain, ".")}"
+  end
+
+  defp set_reading_of({:value, _value}, _entity_type, _visited), do: nil
+
+  # The first of the given references reaching a derived field that reads a related set, spelled.
+  defp set_reading_through(references, entity_type, visited) do
+    Enum.find_value(references, fn {relationship_names, name} ->
+      read_type = Entity.path_target(entity_type, relationship_names)
+
+      if value_field?(read_type, name) do
+        read_type
+        |> set_reading(name, visited)
+        |> spelled_reading(List.insert_at(relationship_names, -1, name))
+      end
+    end)
+  end
+
+  defp spelled_reading(nil, _path), do: nil
+
+  defp spelled_reading(reading, [name]), do: "reads #{inspect(name)}, which #{reading}"
+
+  defp spelled_reading(reading, path), do: "reads #{Stage.inspect_name(path)}, which #{reading}"
+
   defp table_key(entity_type, name), do: {__MODULE__, entity_type, name}
 
   # What a read through the given derived field holding rows reads: the given read made of each
@@ -644,24 +724,27 @@ defmodule Hologram.Entity.Derived do
     field = {owner_type, name}
 
     if field in walked do
-      {[], []}
+      {[], [], []}
     else
       definition = definition(owner_type, name)
 
-      {through_refs, through_chains} =
+      {through_refs, through_chains, _fields} =
         definition
         |> definition_queries()
         |> Enum.map(fn %{source: {_owner_type, chain}} -> read_through.(before ++ chain) end)
-        |> joined_reads()
+        |> joined_walks()
 
       {definition_refs, definition_chains} = definition_reads(definition, before)
 
       # Past the field a chain can meet it again on other rows, which is no cycle - only what the
       # definition reads is walked inside it.
-      joined_reads([
-        reads(entity_type, through_refs, through_chains, true, walked),
-        reads(entity_type, definition_refs, definition_chains, true, [field | walked])
-      ])
+      {references, chains, fields} =
+        joined_walks([
+          reads(entity_type, through_refs, through_chains, true, walked),
+          reads(entity_type, definition_refs, definition_chains, true, [field | walked])
+        ])
+
+      {references, chains, [field | fields]}
     end
   end
 

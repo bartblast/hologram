@@ -279,28 +279,24 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns whether the given clause of a rule is a deciding quantifier: a quantifier whose clause
-  tree holds a `none` or an `all` - itself, or one in its condition at any depth. A client answers
-  such a clause from the server's verdict (see `Hologram.Auth.verdicts/2`), since the rows it holds
-  of a set can't decide one for certain.
+  Returns whether the given clause of a rule of the given entity type is a deciding quantifier: a
+  quantifier whose clause tree holds a `none`, an `all` or a quantifier whose source runs through a
+  derived field holding rows - itself, or one in its condition at any depth - or whose condition
+  reads a derived field holding a value that reads a related set. A client answers such a clause
+  from the server's verdict (see `Hologram.Auth.verdicts/2`), since the rows it holds of a set
+  can't decide one for certain - a bounded or filtered set computed over the rows it holds can hold
+  rows the server's doesn't, so not even an `any` over one, and a count it can't compute at all.
   """
-  @spec deciding_quantifier?(tuple) :: boolean
-  def deciding_quantifier?({quantifier, {_source, _clauses}}) when quantifier in [:all, :none],
-    do: true
-
-  def deciding_quantifier?({:any, {_source, clauses}}) do
-    clauses
-    |> quantifier_clauses()
-    |> Enum.any?(&deciding_quantifier?/1)
+  @spec deciding_quantifier?(module, tuple) :: boolean
+  def deciding_quantifier?(entity_type, clause) do
+    deciding_clause?(clause, [entity_type]) or reads_set_value?(entity_type, clause)
   end
-
-  def deciding_quantifier?(_clause), do: false
 
   @doc """
   Returns the deciding quantifiers of the given entity type's rules, across every operation, as
   `{key, clause}` pairs sorted by key: every quantifier clause standing in a rule's predicates - at
   the top or in a disjunction's alternatives, not inside another quantifier - that is a deciding
-  one (see `deciding_quantifier?/1`), keyed by `verdict_key/3`. A clause written the same way twice
+  one (see `deciding_quantifier?/2`), keyed by `verdict_key/3`. A clause written the same way twice
   in one operation is one pair.
 
   Cached, with the model facts, for the types of the project's compiled data model - a row's
@@ -641,8 +637,8 @@ defmodule Hologram.Policy do
   def verdict_key(entity_type, operation, clause) do
     definitions =
       entity_type
-      |> Derived.expanded_fields(Stage.predicate_references([clause]))
-      |> Enum.map(fn {type, name} -> {name, Derived.resolve(type, name)} end)
+      |> Derived.read_fields([clause])
+      |> Enum.map(fn {type, name} -> {name, Derived.definition(type, name)} end)
 
     digest =
       {clause, definitions}
@@ -780,6 +776,25 @@ defmodule Hologram.Policy do
     quantifier_links ++ field_links
   end
 
+  # Whether a clause read on a row of the first of the given types, with the rows of the others
+  # above it, is a deciding quantifier (see deciding_quantifier?/2).
+  defp deciding_clause?({quantifier, {source, clauses}}, types) when quantifier in @quantifiers do
+    {start_type, relationship_names} =
+      case source do
+        {:outer, levels, names} -> {Enum.at(types, levels), names}
+        names -> {hd(types), names}
+      end
+
+    set_type = Derived.path_target(start_type, relationship_names)
+
+    quantifier in [:all, :none] or through_derived_set?(start_type, relationship_names) or
+      clauses
+      |> quantifier_clauses()
+      |> Enum.any?(&deciding_clause?(&1, [set_type | types]))
+  end
+
+  defp deciding_clause?(_clause, _types), do: false
+
   defp declared_roles_description([]), do: "it declares no role"
 
   defp declared_roles_description(declared_names) do
@@ -830,7 +845,7 @@ defmodule Hologram.Policy do
     |> Enum.flat_map(fn {operation, rules} ->
       for rule <- rules,
           clause <- quantifier_clauses(rule.predicates),
-          deciding_quantifier?(clause),
+          deciding_quantifier?(entity_type, clause),
           do: {verdict_key(entity_type, operation, clause), clause}
     end)
     |> Enum.uniq()
@@ -1106,6 +1121,20 @@ defmodule Hologram.Policy do
       do: links ++ nested_links,
       else: nested_links
   end
+
+  # Whether a quantifier's condition reads a derived field holding a value that reads a related set.
+  defp reads_set_value?(entity_type, {quantifier, {_source, _clauses}} = clause)
+       when quantifier in @quantifiers do
+    [clause]
+    |> Stage.predicate_references()
+    |> Enum.any?(fn {relationship_names, name} ->
+      read_type = Derived.path_target(entity_type, relationship_names)
+
+      Derived.value_field?(read_type, name) and Derived.set_reading(read_type, name) != nil
+    end)
+  end
+
+  defp reads_set_value?(_entity_type, _clause), do: false
 
   defp reference_chains(nil), do: []
 

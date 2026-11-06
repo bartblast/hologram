@@ -5,7 +5,7 @@ defmodule Hologram.PolicyTest do
     only: [
       build: 1,
       dead_entity_types: 1,
-      deciding_quantifier?: 1,
+      deciding_quantifier?: 2,
       deciding_quantifiers: 1,
       delegation: 2,
       expand_global_role: 1,
@@ -29,6 +29,7 @@ defmodule Hologram.PolicyTest do
     ]
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Entity.Derived
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -624,21 +625,68 @@ defmodule Hologram.PolicyTest do
     end
   end
 
-  describe "deciding_quantifier?/1" do
+  describe "deciding_quantifier?/2" do
     test "holds for a none and an all" do
-      assert deciding_quantifier?({:none, {[:members], []}})
-      assert deciding_quantifier?({:all, {[:members], [{:seat, :==, "full"}]}})
+      project = Hologram.PolicyTest.VerdictProject
+
+      assert deciding_quantifier?(project, {:none, {[:members], []}})
+      assert deciding_quantifier?(project, {:all, {[:members], [{:seat, :==, "full"}]}})
     end
 
     test "holds for an any holding a none in an alternative of its condition" do
-      inner = [{:or, [[{:seat, :==, "full"}], [{:none, {[:labels], []}}]]}]
+      inner = [{:or, [[{:seat, :==, "full"}], [{:none, {{:outer, 1, [:labels]}, []}}]]}]
 
-      assert deciding_quantifier?({:any, {[:members], inner}})
+      assert deciding_quantifier?(Hologram.PolicyTest.VerdictProject, {:any, {[:members], inner}})
+    end
+
+    # A bounded set computed over the rows a client holds can hold rows the server's doesn't.
+    test "holds for an any over a derived set" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.LockedBoard,
+               {:any, {[:top_cards], [{:rank, :==, 1}]}}
+             )
+    end
+
+    test "holds for an any holding an any over a derived set" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.LockedTeam,
+               {:any, {[:boards], [{:any, {[:top_cards], []}}]}}
+             )
+    end
+
+    test "holds for an any over a derived set past a relationship to its owner" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.TopCardsRule,
+               {:any, {[:board, :top_cards], []}}
+             )
+    end
+
+    # The inner source is read on the board, one quantifier out, which holds the derived set.
+    test "holds for an any holding an any over a derived set read on the row above" do
+      clause = {:any, {[:cards], [{:any, {{:outer, 1, [:top_cards]}, []}}]}}
+
+      assert deciding_quantifier?(Hologram.PolicyTest.LockedBoard, clause)
+    end
+
+    test "fails for an any holding an any over a stored set read on the row above" do
+      clause = {:any, {[:cards], [{:any, {{:outer, 1, [:cards]}, []}}]}}
+
+      refute deciding_quantifier?(Hologram.PolicyTest.LockedBoard, clause)
+    end
+
+    # A client can't compute the count.
+    test "holds for an any whose condition reads a derived field counting a set" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.LockedBoard,
+               {:any, {[:cards], [{:tag_count, :<, 2}]}}
+             )
     end
 
     test "fails for an any alone and for a predicate" do
-      refute deciding_quantifier?({:any, {[:members], [{:seat, :==, "full"}]}})
-      refute deciding_quantifier?({:seat, :==, "full"})
+      project = Hologram.PolicyTest.VerdictProject
+
+      refute deciding_quantifier?(project, {:any, {[:members], [{:seat, :==, "full"}]}})
+      refute deciding_quantifier?(project, {:seat, :==, "full"})
     end
   end
 
@@ -1463,6 +1511,40 @@ defmodule Hologram.PolicyTest do
       allow :read
     end
 
+    defmodule KeyedBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.PolicyTest.KeyedCard]
+
+      derived :top_cards, [Hologram.PolicyTest.KeyedCard], fn cards -> take(cards, 2) end
+    end
+
+    defmodule KeyedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+    end
+
+    defmodule ScoredBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.PolicyTest.ScoredCard]
+
+      derived :top_cards, [Hologram.PolicyTest.ScoredCard], fn cards ->
+        cards
+        |> sort(score: :desc)
+        |> take(2)
+      end
+    end
+
+    defmodule ScoredCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      derived :score, :integer, fn rank -> rank end
+    end
+
     # Verdicts are stored with the rows a client holds, so the key a clause gets is pinned - a
     # change to how keys are made would leave every stored verdict unread.
     test "keys a clause by its operation and a digest of it" do
@@ -1480,11 +1562,37 @@ defmodule Hologram.PolicyTest do
     # The two types declare the same label computed two ways, so the same clause over it means two
     # things - while over an attribute it means one.
     test "gives a clause reading a derived field a new key when the field's definition changes" do
+      put_derived_definitions([KeyedMember, RekeyedMember])
+
       assert verdict_key(KeyedMember, :delete, {:label, :==, "x"}) !=
                verdict_key(RekeyedMember, :delete, {:label, :==, "x"})
 
       assert verdict_key(KeyedMember, :delete, {:first, :==, "x"}) ==
                verdict_key(RekeyedMember, :delete, {:first, :==, "x"})
+    end
+
+    # The key a verdict was told under is never read for what a changed set holds now.
+    test "gives a clause over a derived set a new key when the set's definition changes" do
+      put_derived_definitions([KeyedBoard])
+
+      clause = {:any, {[:top_cards], [{:rank, :==, 1}]}}
+      key = verdict_key(KeyedBoard, :delete, clause)
+      {:query, term} = Derived.definition(KeyedBoard, :top_cards)
+
+      Derived.put_definitions(%{{KeyedBoard, :top_cards} => {:query, %{term | take: 3}}})
+
+      assert verdict_key(KeyedBoard, :delete, clause) != key
+    end
+
+    test "gives a clause over a derived set a new key when a field its definition reads changes" do
+      put_derived_definitions([ScoredBoard, ScoredCard])
+
+      clause = {:any, {[:top_cards], [{:rank, :==, 1}]}}
+      key = verdict_key(ScoredBoard, :delete, clause)
+
+      Derived.put_definitions(%{{ScoredCard, :score} => {:value, 0}})
+
+      assert verdict_key(ScoredBoard, :delete, clause) != key
     end
 
     test "keys a per-role operation the way the client spells it" do

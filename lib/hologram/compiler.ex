@@ -2745,15 +2745,23 @@ defmodule Hologram.Compiler do
     |> then(&build_missing_ir!(ir_plt, &1))
   end
 
-  # The types the rows an edge names are of: a related row's, a set's rows, and for pairs both the
-  # type storing them and the rows they put into the set, the type the chain leads to.
-  defp edge_entity_types(checked_type, {:set_edges, chain, entity_type, _relationship_names}) do
-    [entity_type, Entity.path_target(checked_type, chain)]
+  # The type of each row a chain of relationships from a row of the given type passes through, its
+  # end included.
+  defp chain_types(entity_type, chain) do
+    for length <- 1..length(chain)//1,
+        do: Entity.path_target(entity_type, Enum.take(chain, length))
   end
 
-  defp edge_entity_types(_checked_type, {kind, _chain, entity_type, _names})
+  # The types the rows an edge names are of: a related row's, a set's rows, and for pairs both the
+  # type storing them and the rows they put into the set, the type the chain leads to - and every
+  # row the chain passes through, which a client follows it through.
+  defp edge_entity_types(checked_type, {:set_edges, chain, entity_type, _relationship_names}) do
+    [entity_type | chain_types(checked_type, chain)]
+  end
+
+  defp edge_entity_types(checked_type, {kind, chain, entity_type, _names})
        when kind in [:relationship_attributes, :relationship_grants, :set_attributes],
-       do: [entity_type]
+       do: [entity_type | chain_types(checked_type, chain)]
 
   defp edge_entity_types(_checked_type, _edge), do: []
 
@@ -2771,7 +2779,7 @@ defmodule Hologram.Compiler do
   # The verdict key and the read types of a deciding quantifier standing in a rule's predicates, as
   # members of its object - none for any other clause.
   defp render_verdict_members(clause, {entity_type, operation}) do
-    if Policy.deciding_quantifier?(clause) do
+    if Policy.deciding_quantifier?(entity_type, clause) do
       reads_js =
         entity_type
         |> Policy.verdict_reads(clause)

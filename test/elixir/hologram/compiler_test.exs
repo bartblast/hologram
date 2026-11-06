@@ -3045,6 +3045,30 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "build_runtime_js/7" do
+    defmodule BakedBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.CompilerTest.BakedCard], inverse: board
+
+      derived :top_cards, [Hologram.CompilerTest.BakedCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+
+      allow :read, when: any(card <- top_cards, card.rank == 1)
+    end
+
+    defmodule BakedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      relationship :board, BakedBoard, optional: true
+
+      allow :read
+    end
+
     defmodule BakedProject do
       use Hologram.Entity
 
@@ -4414,6 +4438,41 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"share":[{"predicates":[{"filter":[{"filter":[["name","==","x"]],"quantifier":"none","source":["labels"]}],"quantifier":"any","reads":["Hologram.CompilerTest.BakedLabel","Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{share_key}"}],"to":null,"via":null}]/
+             )
+    end
+
+    # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
+    # any over one is answered from the verdict too, which reads the rows the set is taken from.
+    test "bakes the verdict key and the types read of an any over a derived set", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      put_derived_definitions([BakedBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedBoard, BakedCard, RoleGrant]),
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      [%{predicates: [clause]}] = Hologram.Policy.build(BakedBoard).read
+      key = Hologram.Policy.verdict_key(BakedBoard, :read, clause)
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["rank","==",1]],"quantifier":"any","reads":["Hologram.CompilerTest.BakedBoard","Hologram.CompilerTest.BakedCard"],"source":["top_cards"],"verdict":"#{key}"}],"to":null,"via":null}]/
              )
     end
 

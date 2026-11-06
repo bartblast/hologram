@@ -240,13 +240,33 @@ describe("Elixir_Hologram_Auth", () => {
             name: "string",
           },
           // Shout stands in for Module42's origin row, the server's path end, and late is this side's
-          // own, for a string ordered inside a delegated row's definition.
+          // own, for a string ordered inside a delegated row's definition. Recent documents is a
+          // bounded set, which only the server's verdict answers a quantifier over.
           derived: {
             late: {
               definition: {condition: [["name", ">", "Banana"]]},
               kind: "scalar",
               type: "boolean",
               values: null,
+            },
+            recent_documents: {
+              definition: {
+                query: {
+                  cardinality: "set",
+                  entity: DOCUMENT,
+                  filter: [],
+                  include: {},
+                  skip: null,
+                  sort: [
+                    ["title", "desc"],
+                    ["id", "asc"],
+                  ],
+                  source: {chain: ["documents"], owner: FOLDER},
+                  take: 2,
+                },
+              },
+              entity: DOCUMENT,
+              kind: "set",
             },
             shout: {
               definition: {concat: [{name: "name"}, {value: "!!"}]},
@@ -2532,6 +2552,96 @@ describe("Elixir_Hologram_Auth", () => {
       putFolder({[KEY]: false});
 
       assert.deepStrictEqual(folderReads(predicates), Type.boolean(false));
+    });
+
+    // The inner set is the folder's recent documents, read on the folder one quantifier out - and the
+    // held document may be one the server's bound leaves out.
+    const anyRecentPublic = {
+      filter: [
+        {
+          filter: [["public", "==", true]],
+          quantifier: "any",
+          source: {name: ["recent_documents"], outer: 1},
+        },
+      ],
+      quantifier: "any",
+      source: ["documents"],
+    };
+
+    it("grants nothing on an any over a derived set inside another quantifier a held row matches", () => {
+      putFolder();
+      putDocument({public: true});
+
+      assert.deepStrictEqual(
+        folderReads([anyRecentPublic]),
+        Type.boolean(false),
+      );
+    });
+
+    it("grants on a true verdict on a quantifier holding an any over a derived set", () => {
+      putFolder({[KEY]: true});
+      putDocument({public: true});
+
+      assert.deepStrictEqual(
+        folderReads([deciding(anyRecentPublic)]),
+        Type.boolean(true),
+      );
+    });
+
+    // A held public document may be one the server's bound leaves out, so it refutes nothing.
+    it("grants on a true verdict on a none over a derived set a held row matches", () => {
+      const recent = deciding({
+        filter: [["public", "==", true]],
+        quantifier: "none",
+        source: ["recent_documents"],
+      });
+
+      putFolder({[KEY]: true});
+      putDocument({public: true});
+
+      assert.deepStrictEqual(folderReads([recent]), Type.boolean(true));
+    });
+
+    it("reads the verdict on an any over a derived set past a relationship to its owner", () => {
+      const recent = deciding({
+        filter: [["public", "==", true]],
+        quantifier: "any",
+        source: ["folder", "recent_documents"],
+      });
+
+      defineModel({read: [rule({predicates: [recent]})]});
+      putFolder();
+      putDocument({$verdicts: {[KEY]: true}});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({folder_id: FOLDER_ID})),
+        Type.boolean(true),
+      );
+    });
+
+    it("grants on a true verdict on an any over a derived set", () => {
+      const recent = deciding({
+        filter: [["public", "==", true]],
+        quantifier: "any",
+        source: ["recent_documents"],
+      });
+
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(folderReads([recent]), Type.boolean(true));
+    });
+
+    it("grants nothing on a false verdict on an any over a derived set a held row matches", () => {
+      const recent = deciding({
+        filter: [["public", "==", true]],
+        quantifier: "any",
+        source: ["recent_documents"],
+      });
+
+      putFolder({[KEY]: false});
+      putDocument({public: true});
+
+      assert.deepStrictEqual(folderReads([recent]), Type.boolean(false));
     });
 
     it("reads the verdict of the row a via: leads to", () => {
