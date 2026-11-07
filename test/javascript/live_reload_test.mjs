@@ -7,6 +7,7 @@ import {
   sinon,
 } from "./support/helpers.mjs";
 
+import AssetPathRegistry from "../../assets/js/asset_path_registry.mjs";
 import ErrorOverlay from "../../assets/js/error_overlay.mjs";
 import LiveReload from "../../assets/js/live_reload.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -534,6 +535,268 @@ describe("LiveReload", () => {
 
       assert.equal(first, recreatedLink);
       assert.match(recreatedCopy.href, /_hologram_css=/);
+    });
+
+    describe("with the app's asset paths", () => {
+      const copyPath = (copy) => new URL(copy.href).pathname;
+
+      beforeEach(() => {
+        AssetPathRegistry.populate({
+          "assets/app.css": "/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css",
+          "assets/admin.css": "/assets/admin.css",
+          "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
+        });
+      });
+
+      afterEach(() => {
+        AssetPathRegistry.entries = null;
+        AssetPathRegistry.manifest = null;
+        delete globalThis.Hologram.assetManifest;
+      });
+
+      it("swaps a stylesheet whose asset path changed to the new path", () => {
+        useDocument(
+          '<link rel="stylesheet" href="/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css">',
+        );
+
+        LiveReload.swapStylesheets({
+          "assets/app.css": "/assets/app.css",
+          "assets/admin.css": "/assets/admin.css",
+        });
+
+        const [, copy] = links();
+
+        assert.match(
+          copy.href,
+          /^http:\/\/localhost:4000\/assets\/app\.css\?_hologram_css=1000-\d+$/,
+        );
+      });
+
+      it("keeps the path of a stylesheet whose asset path didn't change", () => {
+        useDocument('<link rel="stylesheet" href="/assets/admin.css">');
+
+        LiveReload.swapStylesheets({
+          "assets/app.css": "/assets/app.css",
+          "assets/admin.css": "/assets/admin.css",
+        });
+
+        const [, copy] = links();
+
+        assert.equal(copyPath(copy), "/assets/admin.css");
+      });
+
+      it("gives the asset path registry the app's new asset paths and keeps Hologram's bundles", () => {
+        useDocument("");
+
+        LiveReload.swapStylesheets({
+          "assets/app.css": "/assets/app.css",
+          "assets/new.css": "/assets/new.css",
+        });
+
+        assert.deepStrictEqual(AssetPathRegistry.manifest, {
+          "assets/app.css": "/assets/app.css",
+          "assets/new.css": "/assets/new.css",
+          "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
+        });
+
+        assert.deepStrictEqual(
+          AssetPathRegistry.lookup(Type.bitstring("assets/app.css")),
+          Type.bitstring("/assets/app.css"),
+        );
+      });
+
+      it("swaps again to the new path when the path changes while a swap runs", () => {
+        useDocument(
+          '<link rel="stylesheet" href="/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css">',
+        );
+
+        LiveReload.swapStylesheets({
+          "assets/app.css": "/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css",
+        });
+
+        const [link, firstCopy] = links();
+
+        LiveReload.swapStylesheets({"assets/app.css": "/assets/app.css"});
+
+        load(firstCopy);
+        load(link);
+
+        const [, secondCopy] = links();
+
+        assert.equal(
+          copyPath(firstCopy),
+          "/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css",
+        );
+        assert.equal(copyPath(secondCopy), "/assets/app.css");
+      });
+
+      it("swaps a stylesheet still linked by an older path to the newest one", () => {
+        useDocument(
+          '<link rel="stylesheet" href="/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css">',
+        );
+
+        LiveReload.swapStylesheets({
+          "assets/app.css": "/assets/app-96c15c2bb2921193bf290df8cd85e2ba.css",
+        });
+
+        const [link, firstCopy] = links();
+        fail(firstCopy);
+
+        LiveReload.swapStylesheets({"assets/app.css": "/assets/app.css"});
+
+        const [, secondCopy] = links();
+
+        assert.equal(
+          link.getAttribute("href"),
+          "/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css",
+        );
+
+        assert.equal(copyPath(secondCopy), "/assets/app.css");
+      });
+
+      it("populates the asset path registry from the document's manifest first when it hasn't been", () => {
+        AssetPathRegistry.entries = null;
+        AssetPathRegistry.manifest = null;
+
+        globalThis.Hologram.assetManifest = {
+          "assets/app.css": "/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css",
+          "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
+        };
+
+        useDocument(
+          '<link rel="stylesheet" href="/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css">',
+        );
+
+        LiveReload.swapStylesheets({"assets/app.css": "/assets/app.css"});
+
+        const [, copy] = links();
+
+        assert.equal(copyPath(copy), "/assets/app.css");
+
+        assert.deepStrictEqual(AssetPathRegistry.manifest, {
+          "assets/app.css": "/assets/app.css",
+          "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
+        });
+      });
+
+      it("leaves the document's manifest as it is", () => {
+        const assetManifest = {
+          "assets/app.css": "/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css",
+          "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
+        };
+
+        globalThis.Hologram.assetManifest = assetManifest;
+        AssetPathRegistry.populate(assetManifest);
+        useDocument("");
+
+        LiveReload.swapStylesheets({"assets/app.css": "/assets/app.css"});
+
+        assert.deepStrictEqual(globalThis.Hologram.assetManifest, {
+          "assets/app.css": "/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css",
+          "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
+        });
+      });
+
+      it("swaps a stylesheet linked by a path the asset path registry no longer holds to the one it holds", () => {
+        AssetPathRegistry.populate({"assets/app.css": "/assets/app.css"});
+
+        useDocument(
+          '<link rel="stylesheet" href="/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css">',
+        );
+
+        LiveReload.swapStylesheets({"assets/app.css": "/assets/app.css"});
+
+        const [, copy] = links();
+
+        assert.equal(copyPath(copy), "/assets/app.css");
+      });
+
+      it("leaves the asset path registry as it is with no asset paths given", () => {
+        useDocument(
+          '<link rel="stylesheet" href="/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css">',
+        );
+
+        LiveReload.swapStylesheets();
+
+        const [, copy] = links();
+
+        assert.equal(
+          copyPath(copy),
+          "/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css",
+        );
+
+        assert.deepStrictEqual(AssetPathRegistry.manifest, {
+          "assets/app.css": "/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css",
+          "assets/admin.css": "/assets/admin.css",
+          "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
+        });
+      });
+
+      it("reads a path with encoded characters", () => {
+        useDocument(
+          '<link rel="stylesheet" href="/assets/my%20app-0f5f13cf0b14c88bd431ef163b63d68d.css">',
+        );
+
+        LiveReload.swapStylesheets({"assets/my app.css": "/assets/my app.css"});
+
+        const [, copy] = links();
+
+        assert.equal(copyPath(copy), "/assets/my%20app.css");
+      });
+
+      it("leaves a stylesheet whose path can't be decoded at its path", () => {
+        useDocument('<link rel="stylesheet" href="/assets/app%zz.css">');
+
+        LiveReload.swapStylesheets({"assets/app.css": "/assets/app.css"});
+
+        const [, copy] = links();
+
+        assert.equal(copyPath(copy), "/assets/app%zz.css");
+      });
+
+      it("keeps the URL's other query params when it swaps to the new path", () => {
+        useDocument(
+          '<link rel="stylesheet" href="/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css?v=2">',
+        );
+
+        LiveReload.swapStylesheets({"assets/app.css": "/assets/app.css"});
+
+        const [, copy] = links();
+        const url = new URL(copy.href);
+
+        assert.equal(url.pathname, "/assets/app.css");
+        assert.equal(url.searchParams.get("v"), "2");
+      });
+
+      it("gives a disabled stylesheet the new path right away", () => {
+        useDocument(
+          '<link rel="stylesheet" href="/assets/app-0f5f13cf0b14c88bd431ef163b63d68d.css" disabled>',
+        );
+
+        const [link] = links();
+
+        LiveReload.swapStylesheets({"assets/app.css": "/assets/app.css"});
+
+        assert.equal(new URL(link.href).pathname, "/assets/app.css");
+      });
+
+      it("leaves a copy served under its own name, with no asset of its own name in the registry, at its path", () => {
+        useDocument(
+          '<link rel="stylesheet" href="/assets/gone-0f5f13cf0b14c88bd431ef163b63d68d.css">',
+        );
+
+        LiveReload.swapStylesheets({
+          "assets/gone-0f5f13cf0b14c88bd431ef163b63d68d.css":
+            "/assets/gone-0f5f13cf0b14c88bd431ef163b63d68d.css",
+        });
+
+        const [, copy] = links();
+
+        assert.equal(
+          copyPath(copy),
+          "/assets/gone-0f5f13cf0b14c88bd431ef163b63d68d.css",
+        );
+      });
     });
   });
 });
