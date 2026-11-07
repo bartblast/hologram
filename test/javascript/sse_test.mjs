@@ -785,15 +785,19 @@ describe("Sse", () => {
   });
 
   describe("css_changed event", () => {
-    it("swaps the page's stylesheets", async () => {
+    it("swaps the page's stylesheets with the app's asset paths it carries", async () => {
       stubHandshakeResponse();
       const swapStub = sinon.stub(LiveReload, "swapStylesheets");
 
       await Sse.connect();
 
-      Sse.eventSource.listeners.css_changed({data: ""});
+      Sse.eventSource.listeners.css_changed({
+        data: '{"assets/app.css":"/assets/app.css"}',
+      });
 
-      sinon.assert.calledOnceWithExactly(swapStub);
+      sinon.assert.calledOnceWithExactly(swapStub, {
+        "assets/app.css": "/assets/app.css",
+      });
     });
   });
 
