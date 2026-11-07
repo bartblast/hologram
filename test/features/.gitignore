@@ -45,3 +45,6 @@ hologram_feature_tests-*.tar
 
 # Written by test/live_reload_test.exs - a stylesheet it rewrites.
 /priv/static/assets/live_reload.css
+
+# Written by test/live_reload_test.exs - a stylesheet it writes next to a digested copy of it.
+/priv/static/assets/live_reload_digest.css
