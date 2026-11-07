@@ -1702,6 +1702,34 @@ defmodule Hologram.Sync.SessionTest do
       assert verdict_deltas == [verdicts_patch(project, true)]
     end
 
+    # The silent window keeps the client being caught up while the public window loses the project,
+    # which the other window still holds.
+    test "tells a returning client the verdicts of a row one window lost while another holds it",
+         %{
+           project: project
+         } do
+      window_ids = [@public_project_window, @project_window]
+      windows(%{@page => [@public_project_window, @project_window, @other_window]})
+      hold_windows(window_ids)
+
+      Enum.each(window_ids, &Evaluator.round(&1, []))
+      wait_until(fn -> Enum.all?(window_ids, &(ResultStore.versions(&1) != [])) end)
+
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [])
+
+      DB.update(PolicyProject, project.id, %{public: false})
+      Evaluator.round(@public_project_window, project_patch_transactions(project))
+      settle([@public_project_window], session)
+
+      ResultStore.put(@other_window, 1, [])
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert_receive {:sync_deltas, nil, deltas, _applied_seq}
+      assert deltas == [verdicts_patch(project, true)]
+    end
+
     test "tells a returning client that missed nothing the verdicts of the rows it holds", %{
       project: project
     } do
@@ -1862,6 +1890,21 @@ defmodule Hologram.Sync.SessionTest do
   end
 
   # The project's archive rule asks that none of its labels is locked - true until one is.
+  defp project_patch_transactions(project) do
+    [
+      {200,
+       [
+         %{
+           data: %{"public" => "whatever the log said"},
+           entity_id: project.id,
+           mutation_ref: nil,
+           op: :patch_entity,
+           type: PolicyProject
+         }
+       ]}
+    ]
+  end
+
   defp project_verdicts(archivable?) do
     Map.new([:archive, :feature, :publish], fn operation ->
       [%{predicates: [clause]}] = Policy.build(PolicyProject)[operation]
@@ -1922,6 +1965,7 @@ defmodule Hologram.Sync.SessionTest do
       prop_params: %{},
       windows: %{
         @project_window => Stage.normalize(PolicyProject),
+        @other_window => Stage.normalize(PolicyModule1),
         @public_project_window =>
           PolicyProject
           |> Query.filter(public: true)

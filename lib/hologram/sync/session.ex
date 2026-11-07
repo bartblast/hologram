@@ -510,8 +510,9 @@ defmodule Hologram.Sync.Session do
   end
 
   # While a client is being caught up, the rows it may see whose type has a deciding quantifier are
-  # kept, so the verdicts it holds from before this session can be told again once it is.
-  defp remember_verdict_rows(state, deltas) do
+  # kept, so the verdicts it holds from before this session can be told again once it is. A row
+  # one window lost is kept while another still holds it.
+  defp remember_verdict_rows(state, window_id, deltas) do
     rows =
       deltas.appeared
       |> Enum.concat(deltas.held)
@@ -521,7 +522,7 @@ defmodule Hologram.Sync.Session do
     verdict_rows =
       state.verdict_rows
       |> Map.merge(rows)
-      |> Map.drop(deltas.vanished)
+      |> Map.drop(left_the_pot(state, window_id, deltas.vanished))
 
     %{state | verdict_rows: verdict_rows}
   end
@@ -566,7 +567,7 @@ defmodule Hologram.Sync.Session do
     if replaying?(state) do
       state
       |> remember_touched(deltas)
-      |> remember_verdict_rows(deltas)
+      |> remember_verdict_rows(window_id, deltas)
     else
       tell(state, window_id, deltas, transactions)
     end
