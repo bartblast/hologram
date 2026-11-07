@@ -15,6 +15,7 @@ defmodule Hologram.Sync.Session do
   use GenServer, restart: :temporary
 
   alias Hologram.Entity
+  alias Hologram.Policy
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Diff
@@ -23,6 +24,7 @@ defmodule Hologram.Sync.Session do
   alias Hologram.Sync.Frame
   alias Hologram.Sync.PageWindows
   alias Hologram.Sync.ResultStore
+  alias Hologram.Sync.Verdicts
 
   @doc """
   Starts a session for a client on the given `:page`, telling `:client` what changes for it.
@@ -100,7 +102,10 @@ defmodule Hologram.Sync.Session do
       replica_id: Keyword.get(opts, :replica_id),
       resuming: gap != nil,
       shift: %{appeared: %{}, vanished: %{}},
-      touched: %{}
+      told_verdicts: %{},
+      touched: %{},
+      verdict_rows: %{},
+      verdicts_checked: nil
     }
 
     {:ok, state, {:continue, :subscribe}}
@@ -180,7 +185,7 @@ defmodule Hologram.Sync.Session do
         deltas = Diff.deltas(result, held_ids, state.actor_user_id, transactions)
 
         state
-        |> send_deltas(window_id, deltas)
+        |> send_deltas(window_id, deltas, transactions)
         |> remember(window_id, held, deltas)
         |> remember_shift(result)
         |> remember_reach(result)
@@ -257,8 +262,15 @@ defmodule Hologram.Sync.Session do
       |> Enum.chunk_every(Catchup.rows_per_frame())
       |> Enum.reduce(state, &tell_batch(&2, &1))
       |> tell_shift()
+      |> tell_verdicts()
 
-    %{caught_up | gap: nil, shift: %{appeared: %{}, vanished: %{}}, touched: %{}}
+    %{
+      caught_up
+      | gap: nil,
+        shift: %{appeared: %{}, vanished: %{}},
+        touched: %{},
+        verdict_rows: %{}
+    }
   end
 
   # What a grant change decided differently, told after the rows the gap named and before the
@@ -273,7 +285,7 @@ defmodule Hologram.Sync.Session do
     puts =
       state.shift.appeared
       |> shift_rows(named)
-      |> Enum.map(&Frame.put_entity/1)
+      |> Enum.map(&Frame.put_entity(&1, Frame.row_verdicts(state.actor_user_id, &1)))
 
     unsyncs =
       state.shift.vanished
@@ -283,14 +295,33 @@ defmodule Hologram.Sync.Session do
     puts
     |> Enum.concat(unsyncs)
     |> Enum.chunk_every(Catchup.rows_per_frame())
-    |> Enum.each(fn deltas ->
-      send(
-        state.client,
-        {:sync_deltas, batch_cursor(state, state.gap), deltas, state.applied_seq}
-      )
-    end)
+    |> Enum.reduce(state, fn deltas, acc ->
+      send(acc.client, {:sync_deltas, batch_cursor(acc, acc.gap), deltas, acc.applied_seq})
 
-    state
+      remember_verdicts(acc, deltas)
+    end)
+  end
+
+  # A returning client holds verdicts it was told before this session began, on rows the gap may
+  # never name - and a deploy may have changed what they decide, since policies reach no model hash
+  # and a changed clause is a new key. So every row of a type with a deciding quantifier that the
+  # catch-up did not already hand over with its verdicts is told them, after the rows themselves.
+  defp tell_verdicts(state) do
+    state.verdict_rows
+    |> Map.drop(Map.keys(state.told_verdicts))
+    |> Map.values()
+    |> Enum.sort_by(& &1.id)
+    |> Verdicts.stale(state.told_verdicts, state.actor_user_id, :all)
+    |> Enum.map(fn {row, verdicts} -> {row, %{}, verdicts} end)
+    |> Enum.chunk_every(Catchup.rows_per_frame())
+    |> Enum.reduce(state, fn patched, acc ->
+      news = %{appeared: [], edges: [], patched: patched, unsynced: []}
+      deltas = Frame.deltas(news, acc.actor_user_id)
+
+      send(acc.client, {:sync_deltas, batch_cursor(acc, acc.gap), deltas, acc.applied_seq})
+
+      remember_verdicts(acc, deltas)
+    end)
   end
 
   defp shift_rows(rows, named) do
@@ -342,7 +373,7 @@ defmodule Hologram.Sync.Session do
   # place of a batch's last effect is a place everything before it has been applied to.
   defp tell_batch(state, effects) do
     updated = remember_applied(state, effects)
-    deltas = Catchup.deltas(effects, updated.touched)
+    deltas = Catchup.deltas(effects, updated.touched, updated.actor_user_id)
 
     if deltas != [] do
       send(
@@ -351,8 +382,12 @@ defmodule Hologram.Sync.Session do
       )
     end
 
-    updated
+    remember_verdicts(updated, deltas)
   end
+
+  # A gap of nothing dates nothing - the client keeps the place it came back from, as a frame
+  # mid-fill leaves it.
+  defp batch_cursor(_state, []), do: nil
 
   defp batch_cursor(state, effects) do
     if holds_a_whole_pot?(state) do
@@ -469,6 +504,29 @@ defmodule Hologram.Sync.Session do
     %{state | held: Map.put(state.held, window_id, window_held)}
   end
 
+  # What a frame told of the server's verdicts, kept so a later round tells only what moved.
+  defp remember_verdicts(state, frame_deltas) do
+    %{state | told_verdicts: Verdicts.remember(state.told_verdicts, frame_deltas)}
+  end
+
+  # While a client is being caught up, the rows it may see whose type has a deciding quantifier are
+  # kept, so the verdicts it holds from before this session can be told again once it is. A row
+  # one window lost is kept while another still holds it.
+  defp remember_verdict_rows(state, window_id, deltas) do
+    rows =
+      deltas.appeared
+      |> Enum.concat(deltas.held)
+      |> Enum.filter(&(Policy.deciding_quantifiers(&1.__struct__) != []))
+      |> Map.new(&{&1.id, &1})
+
+    verdict_rows =
+      state.verdict_rows
+      |> Map.merge(rows)
+      |> Map.drop(left_the_pot(state, window_id, deltas.vanished))
+
+    %{state | verdict_rows: verdict_rows}
+  end
+
   defp replaying?(state), do: state.gap != nil
 
   # While a client is being caught up nothing goes out, so the gap cannot be undone by a round
@@ -505,35 +563,78 @@ defmodule Hologram.Sync.Session do
 
   defp gap_ids(effect), do: [effect.entity_id]
 
-  defp send_deltas(state, window_id, deltas) do
+  defp send_deltas(state, window_id, deltas, transactions) do
     if replaying?(state) do
-      remember_touched(state, deltas)
+      state
+      |> remember_touched(deltas)
+      |> remember_verdict_rows(window_id, deltas)
     else
-      tell(state, window_id, deltas)
+      tell(state, window_id, deltas, transactions)
     end
   end
 
-  defp tell(state, window_id, deltas) do
+  # The rows a round patches carry the verdicts that moved for them, and a row whose verdicts moved
+  # while none of its values did is patched with those alone - worked out again only for the rows
+  # whose deciding quantifiers read a type the round touched.
+  defp tell(state, window_id, deltas, transactions) do
     held = Map.get(state.held, window_id, %{})
     unsynced = left_the_pot(state, window_id, deltas.vanished)
+
+    {patched, checked_state} = patched_with_verdicts(state, deltas, transactions)
 
     news = %{
       appeared: deltas.appeared,
       edges: deltas.edges,
-      patched: deltas.patched,
+      patched: patched,
       unsynced: Enum.map(unsynced, &{&1, Map.fetch!(held, &1)})
     }
 
     news
     |> split_news()
-    |> Enum.each(fn part ->
-      send(
-        state.client,
-        {:sync_deltas, cursor(state), Frame.deltas(part), state.applied_seq}
-      )
-    end)
+    |> Enum.reduce(checked_state, fn part, acc ->
+      frame_deltas = Frame.deltas(part, acc.actor_user_id)
 
-    state
+      send(acc.client, {:sync_deltas, cursor(acc), frame_deltas, acc.applied_seq})
+
+      remember_verdicts(acc, frame_deltas)
+    end)
+  end
+
+  # One batch of transactions reaches every window it touched as a round of its own, so a row
+  # several windows hold is worked out once per batch - the first of its windows to report
+  # answers for the rest.
+  defp patched_with_verdicts(state, deltas, transactions) do
+    batch = Enum.map(transactions, fn {tx, _events} -> tx end)
+
+    checked =
+      case state.verdicts_checked do
+        {^batch, ids} -> ids
+        _earlier_batch -> MapSet.new()
+      end
+
+    events = Enum.flat_map(transactions, fn {_tx, events} -> events end)
+    changed_types = MapSet.new(events, & &1.type)
+    # The rows whose own values or pairs moved, a pair naming a row on each side.
+    moved_ids =
+      events
+      |> Enum.flat_map(&gap_ids/1)
+      |> MapSet.new()
+
+    unchecked = Enum.reject(deltas.held, &MapSet.member?(checked, &1.id))
+
+    stale =
+      Verdicts.stale(
+        unchecked,
+        state.told_verdicts,
+        state.actor_user_id,
+        changed_types,
+        moved_ids
+      )
+
+    patches = Verdicts.patches(deltas.patched, stale)
+    now_checked = Enum.reduce(unchecked, checked, &MapSet.put(&2, &1.id))
+
+    {patches, %{state | verdicts_checked: {batch, now_checked}}}
   end
 
   # A window's first round hands over every row the client may see of it, and a whole window in one

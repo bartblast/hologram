@@ -16,11 +16,13 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
   alias Hologram.DB.Oplog
+  alias Hologram.DB.SetLock
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
+  alias Hologram.Policy
 
   @doc false
   @spec add_relationship(module, String.t(), atom, String.t()) :: :ok
@@ -44,6 +46,12 @@ defmodule Hologram.DB.EntityOperations do
 
     {:ok, :ok} =
       Connection.transaction(fn ->
+        target_type = Entity.related_type(entity_type, relationship_name)
+
+        Policy.locked_set_links()
+        |> SetLock.edge_owners(entity_type, id, relationship_name, target_id)
+        |> SetLock.enter!([{entity_type, id}, {target_type, target_id}])
+
         run_edge_change!(statement, [encoded_id, encoded_target_id], effect)
       end)
 
@@ -246,6 +254,37 @@ defmodule Hologram.DB.EntityOperations do
     Enum.reject(columns, &Mapper.derived?/1)
   end
 
+  # The rows of a set relationship of the row with the given id, as stored and in id order: an
+  # inverse of a to-one by the reference its rows hold, a to-many by its join table, an inverse of a
+  # to-many by the join table of the relationship it reverses, read the other way. With lock: :share
+  # the rows are read FOR SHARE, and so are the pairs of a join table - a pair removed takes a row
+  # out of the set as surely as the row's own change does.
+  @doc false
+  @spec related_rows(module, String.t(), atom, keyword) :: list(struct)
+  # sobelow_skip ["SQL.Query"]
+  def related_rows(entity_type, id, relationship_name, opts \\ []) do
+    validate_id!(id)
+
+    target_type = Entity.related_type(entity_type, relationship_name)
+    %{table: target_table} = Map.fetch!(DB.mapping(), target_type)
+
+    column_list =
+      target_type
+      |> persisted_columns()
+      |> Enum.map_join(", ", &~s|"$r".#{Mapper.quote_identifier(&1.name)}|)
+
+    from_sql =
+      related_rows_from_sql(entity_type, relationship_name, qualified_table(target_table))
+
+    statement =
+      ~s|SELECT #{column_list} FROM #{from_sql} ORDER BY "$r"."id"#{lock_clause(opts[:lock])}|
+
+    case Connection.query(statement, [Codec.encode(id, :uuid)]) do
+      {:ok, %Postgrex.Result{rows: rows}} -> Enum.map(rows, &decode_row(target_type, &1))
+      {:error, error} -> raise error
+    end
+  end
+
   @doc false
   @spec update(module, String.t(), map | keyword, keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
@@ -344,6 +383,8 @@ defmodule Hologram.DB.EntityOperations do
           # The transaction's reason is whatever refused the write, the way create/1's is - a
           # refusal rolls the update back rather than raising.
           Connection.transaction(fn ->
+            enter_sets!(entity_type, id, changes_map)
+
             run_update!(statement, params, entity_type, id, data, set_columns, delta_columns)
           end)
 
@@ -619,6 +660,29 @@ defmodule Hologram.DB.EntityOperations do
     |> Codec.encode(column.type)
   end
 
+  # An update enters the locked sets its changed references name - see Hologram.DB.SetLock. A
+  # reference set to the value the row already holds enters nothing, as its foreign key check takes
+  # nothing, so the row is read to tell the two apart, only when some set would be entered. It is
+  # read FOR UPDATE, the lock the update takes anyway: read plainly, a move committed between the
+  # read and the update would leave the update taking the row back into a set it read the row in,
+  # without that set's lock.
+  defp enter_sets!(entity_type, id, changes) do
+    links = Policy.locked_set_links()
+
+    if SetLock.row_owners(links, entity_type, changes) != [] do
+      current = get(entity_type, id, lock: :update) || %{}
+
+      changed =
+        Map.filter(changes, fn {name, value} -> Map.get(current, name, :absent) != value end)
+
+      links
+      |> SetLock.row_owners(entity_type, changed)
+      |> SetLock.enter!(reference_targets(entity_type, changed))
+    end
+
+    :ok
+  end
+
   defp fetch_join_table!(entity_type, relationship_name) do
     %{join_tables: join_tables} = Map.fetch!(DB.mapping(), entity_type)
 
@@ -670,6 +734,14 @@ defmodule Hologram.DB.EntityOperations do
 
     column_list = Enum.map_join(columns, ", ", &Mapper.quote_identifier(&1.name))
     placeholder_list = Enum.map_join(1..length(columns), ", ", &"$#{&1}")
+
+    # A row naming an owner whose set a write rests on whole waits for that write - see
+    # Hologram.DB.SetLock.
+    values = Map.from_struct(entity)
+
+    Policy.locked_set_links()
+    |> SetLock.row_owners(entity_type, values)
+    |> SetLock.enter!(reference_targets(entity_type, values))
 
     statement =
       "INSERT INTO #{qualified_table(table)} (#{column_list}) " <>
@@ -829,6 +901,21 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # The rows the reference fields among the given values name - what the statement writing them has
+  # its foreign key checks lock.
+  defp reference_targets(entity_type, values) do
+    Enum.flat_map(entity_type.__relationships__(), fn
+      {name, target_type, _opts} when is_atom(target_type) ->
+        case Map.get(values, String.to_existing_atom("#{name}_id")) do
+          nil -> []
+          target_id -> [{target_type, target_id}]
+        end
+
+      _to_many ->
+        []
+    end)
+  end
+
   # A to-one reference column carries the foreign key constraint that names it back, so a target
   # row that is gone is answered the way a value violation is - by field, in Entity.validate/1's
   # shape. Existence is state rather than a value, which is why the validator never reports it.
@@ -844,6 +931,30 @@ defmodule Hologram.DB.EntityOperations do
   end
 
   defp reference_violations(_entity_type, _error), do: nil
+
+  # Where the rows of a set come from, aliased "$r" - and through a join table aliased "$rj" - with
+  # the owner row's id as the only parameter.
+  defp related_rows_from_sql(entity_type, relationship_name, quoted_target_table) do
+    case Entity.inverse_relationship(entity_type, relationship_name) do
+      %{reference?: true, forward: forward, target: target_type} ->
+        %{columns: columns} = Map.fetch!(DB.mapping(), target_type)
+        column = Enum.find(columns, &(&1.source == {:relationship, forward}))
+
+        ~s|#{quoted_target_table} AS "$r" WHERE "$r".#{Mapper.quote_identifier(column.name)} = $1|
+
+      %{forward: forward, target: target_type} ->
+        join_table = fetch_join_table!(target_type, forward)
+
+        ~s|#{qualified_table(join_table.name)} AS "$rj" JOIN #{quoted_target_table} AS "$r" | <>
+          ~s|ON "$r"."id" = "$rj"."source_id" WHERE "$rj"."target_id" = $1|
+
+      nil ->
+        join_table = fetch_join_table!(entity_type, relationship_name)
+
+        ~s|#{qualified_table(join_table.name)} AS "$rj" JOIN #{quoted_target_table} AS "$r" | <>
+          ~s|ON "$r"."id" = "$rj"."target_id" WHERE "$rj"."source_id" = $1|
+    end
+  end
 
   # The stored map is keyed by COLUMN name, so it is read back through the columns rather than by
   # making atoms of its keys. A key naming no current column belonged to a declaration that has

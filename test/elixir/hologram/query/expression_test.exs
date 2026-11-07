@@ -115,6 +115,17 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_condition("status not in [:done]") == [status: {:not_in, [:done]}]
     end
 
+    test "lowers a nested quantifier reading the rule's row two quantifiers out" do
+      assert lower_condition(
+               "any(member <- members, any(label <- member.labels, label.name == name))"
+             ) ==
+               [
+                 any:
+                   {[:members],
+                    [any: {[:labels], [name: {:==, {:attribute, {:outer, 2, :name}}}]}]}
+               ]
+    end
+
     test "lowers a path compared with user_id()" do
       assert lower_condition("project.owner_id == user_id()") ==
                [{[:project, :owner_id], {:==, {:actor}}}]
@@ -124,9 +135,48 @@ defmodule Hologram.Query.ExpressionTest do
       assert lower_condition("priority < ^max", max: 3) == [priority: {:<, 3}]
     end
 
+    test "lowers a pinned value inside a quantifier's condition" do
+      assert lower_condition("any(member <- members, member.seat == ^seat)", seat: "full") ==
+               [any: {[:members], [seat: {:==, "full"}]}]
+    end
+
+    test "lowers a quantifier as an alternative beside user_id()" do
+      assert lower_condition(
+               "owner_id == user_id() or any(member <- members, member.user_id == user_id())"
+             ) ==
+               [
+                 or: [
+                   [owner_id: {:==, {:actor}}],
+                   [any: {[:members], [user_id: {:==, {:actor}}]}]
+                 ]
+               ]
+    end
+
+    test "lowers a quantifier comparing a related row with user_id()" do
+      assert lower_condition("any(member <- members, member.user_id == user_id())") ==
+               [any: {[:members], [user_id: {:==, {:actor}}]}]
+    end
+
+    test "lowers a quantifier over a path's relationship with no condition" do
+      assert lower_condition("none(project.members)") == [none: {[:project, :members], []}]
+    end
+
+    test "lowers a quantifier's relationship read on the rule's row inside another quantifier" do
+      assert lower_condition("none(label <- project.labels, any(project.members))") ==
+               [none: {[:project, :labels], [any: {{:outer, 1, [:project, :members]}, []}]}]
+    end
+
     test "lowers a search" do
       assert lower_condition(~s|starts_with(path, "public/", mode: :exact)|) ==
                [path: {:starts_with_exact, "public/"}]
+    end
+
+    test "lowers all and none with a condition" do
+      assert lower_condition("all(task <- tasks, task.done == true)") ==
+               [all: {[:tasks], [done: {:==, true}]}]
+
+      assert lower_condition("none(task <- tasks, task.done == false)") ==
+               [none: {[:tasks], [done: {:==, false}]}]
     end
 
     test "lowers an inequality with user_id()" do
@@ -159,7 +209,7 @@ defmodule Hologram.Query.ExpressionTest do
 
     test "raises on a bare name alone" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a condition: done - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:12: unsupported expression in a condition: done - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), or a pinned list of predicates",
                    fn -> lower_condition("done") end
     end
 
@@ -175,10 +225,24 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_condition("[shared: true]") end
     end
 
+    test "raises on a keyword list as a quantifier's condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a quantifier's condition is an expression, got: [user_id: 1] - a condition built at runtime goes whole into when: ^predicates",
+                   fn -> lower_condition("any(member <- members, user_id: 1)") end
+    end
+
     test "raises on a keyword list as a side of and" do
       assert_error Hologram.CompileError,
                    "lib/my_app/queries.ex:7: a condition is an expression, got: [a: 1] - write it as an expression: a == 1",
                    fn -> lower_condition("[a: 1] and b == 2") end
+    end
+
+    test "raises on a keyword list as a side of and inside a quantifier's condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a quantifier's condition is an expression, got: [seat: \"full\"] - a condition built at runtime goes whole into when: ^predicates",
+                   fn ->
+                     lower_condition("any(member <- members, member.a == 1 and [seat: \"full\"])")
+                   end
     end
 
     test "raises on a keyword list as a side of or" do
@@ -223,17 +287,27 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_condition("^base or b == 2") end
     end
 
-    test "raises on a quantifier" do
+    test "raises on a pinned quantifier's condition" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: unsupported expression in a condition: any(member <- members, member.user_id == user_id()) - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
-                   fn ->
-                     lower_condition("any(member <- members, member.user_id == user_id())")
-                   end
+                   "lib/my_app/queries.ex:12: a quantifier's condition is an expression, got: ^predicates - a condition built at runtime goes whole into when: ^predicates",
+                   fn -> lower_condition("any(member <- members, ^predicates)") end
+    end
+
+    test "raises on a quantifier with too many arguments, naming user_id()" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: any takes a relationship, or a row bound to one and a condition - any(messages), any(message <- messages, message.author_id == user_id()) - got: any(member <- members, member.a == 1, 2)",
+                   fn -> lower_condition("any(member <- members, member.a == 1, 2)") end
+    end
+
+    test "raises on all with no condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: all takes a condition - all over no condition says nothing, got: all(members) - write all(row <- members, row.<attribute> == ...)",
+                   fn -> lower_condition("all(members)") end
     end
 
     test "raises on nil" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: unsupported expression in a condition: nil - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:7: unsupported expression in a condition: nil - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), or a pinned list of predicates",
                    fn -> lower_condition("nil") end
     end
 
@@ -243,9 +317,15 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_condition("owner_id == user_id") end
     end
 
+    test "raises on paren-less user_id inside a quantifier's condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: paren-less user_id - did you mean user_id()?",
+                   fn -> lower_condition("any(member <- members, member.user_id == user_id)") end
+    end
+
     test "raises on true" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:7: unsupported expression in a condition: true - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, or a pinned list of predicates",
+                   "lib/my_app/queries.ex:7: unsupported expression in a condition: true - a condition is a comparison (==, !=, <, <=, >, >=, in, not in), a search (starts_with, contains), comparisons joined with and, alternatives joined with or, a quantifier over a relationship's rows (any, none, all), or a pinned list of predicates",
                    fn -> lower_condition("true") end
     end
 

@@ -13,6 +13,7 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias HologramFeatureTests.Entities.Leg
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Stop
   alias HologramFeatureTests.Entities.Trip
@@ -25,13 +26,28 @@ defmodule HologramFeatureTests.PoliciesTest do
   alias HologramFeatureTests.PoliciesPage
   alias HologramFeatureTests.Roles.Admin
 
-  # The tables truncate in one statement: the memo, note and role grant tables' foreign keys to the
-  # user table, the stop table's to the trip table, the leg table's to the stop table and the cabin
-  # table's to the ship table make Postgres reject truncating the referenced table alone.
+  # The tables truncate in one statement: the memo, note, project member and role grant tables'
+  # foreign keys to the user table, the stop table's to the trip table, the leg table's to the stop
+  # table and the cabin table's to the ship table make Postgres reject truncating the referenced
+  # table alone.
   setup do
     tables =
       Enum.map_join(
-        [Booking, Cabin, Document, Folder, Leg, Memo, Note, RoleGrant, Ship, Stop, Trip, User],
+        [
+          Booking,
+          Cabin,
+          Document,
+          Folder,
+          Leg,
+          Memo,
+          Note,
+          ProjectMember,
+          RoleGrant,
+          Ship,
+          Stop,
+          Trip,
+          User
+        ],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")

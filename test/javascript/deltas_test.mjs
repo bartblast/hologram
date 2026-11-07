@@ -337,6 +337,33 @@ describe("Deltas", () => {
       });
     });
 
+    it("replaces the row's verdicts with a patch's and keeps its revisions", () => {
+      Deltas.apply({
+        put_entity: {
+          [TASK]: [
+            {
+              done: false,
+              id: "t1",
+              title: "Draft copy",
+              $revisions: {done: 1, title: 1},
+              $verdicts: {"delete:aa": true, "update:bb": true},
+            },
+          ],
+        },
+      });
+
+      Deltas.apply({
+        patch_entity: {
+          [TASK]: [{id: "t1", $revisions: {}, $verdicts: {"delete:aa": false}}],
+        },
+      });
+
+      const row = LocalDatabase.getRow(TASK, "t1");
+
+      assert.deepEqual(row.$verdicts, {"delete:aa": false});
+      assert.deepEqual(row.$revisions, {done: 1, title: 1});
+    });
+
     it("leaves the map alone for a patch carrying no revisions", () => {
       Deltas.apply({
         put_entity: {

@@ -413,7 +413,7 @@ export function writeRefusal(entityType, violations, values) {
   return refusalLines(entityType, violations, values);
 }
 
-export {currentBatch, raiseWriteError, structValues};
+export {currentBatch, isServerOnlySentinel, raiseWriteError, structValues};
 
 function raiseWriteError(message, reason) {
   Erlang["error/1"](

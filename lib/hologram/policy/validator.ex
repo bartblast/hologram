@@ -77,10 +77,11 @@ defmodule Hologram.Policy.Validator do
     hops_from_start ++ hops_before_start
   end
 
-  # The type each relationship of a chain leads to, in order, with its position.
+  # The type each relationship of a chain leads to, in order, with its position - a set's rows for a
+  # to-many or an inverse.
   defp chain_hop_types(entity_type, chain) do
     chain
-    |> Enum.scan(entity_type, &Entity.relationship_target(&2, &1))
+    |> Enum.scan(entity_type, &Entity.related_type(&2, &1))
     |> Enum.with_index()
   end
 
@@ -284,77 +285,6 @@ defmodule Hologram.Policy.Validator do
 
   defp server_only_spelling(path), do: Stage.inspect_name(path)
 
-  # What makes a derived field holding a value read a related set, spelled for a refusal - a count
-  # its definition computes, a query builder it calls, another field it reads that does - or nil
-  # when it reads none. A field reached again inside its own reads is a cycle, refused at the build,
-  # and adds nothing here.
-  defp set_reading(entity_type, name, visited) do
-    field = {entity_type, name}
-
-    cond do
-      field in visited ->
-        nil
-
-      name in entity_type.__derived_builder_calls__() ->
-        "calls a query builder"
-
-      true ->
-        entity_type
-        |> Derived.resolve(name)
-        |> set_reading_of(entity_type, [field | visited])
-    end
-  end
-
-  defp set_reading_of({:concat, operands}, entity_type, visited) do
-    Enum.find_value(operands, &set_reading_of(&1, entity_type, visited))
-  end
-
-  defp set_reading_of({:condition, clauses}, entity_type, visited) do
-    clauses
-    |> Stage.predicate_references()
-    |> set_reading_through(entity_type, visited)
-  end
-
-  defp set_reading_of({:if, clauses, then_value, else_value}, entity_type, visited) do
-    references = Stage.predicate_references(clauses)
-
-    set_reading_through(references, entity_type, visited) ||
-      set_reading_of(then_value, entity_type, visited) ||
-      set_reading_of(else_value, entity_type, visited)
-  end
-
-  defp set_reading_of({:name, name}, entity_type, visited) do
-    {relationship_names, [read_name]} =
-      name
-      |> List.wrap()
-      |> Enum.split(-1)
-
-    set_reading_through([{relationship_names, read_name}], entity_type, visited)
-  end
-
-  defp set_reading_of({:query, %{source: {_owner, chain}}}, _entity_type, _visited) do
-    "counts #{Enum.join(chain, ".")}"
-  end
-
-  defp set_reading_of({:value, _value}, _entity_type, _visited), do: nil
-
-  # The first of the given references reaching a derived field that reads a related set, spelled.
-  defp set_reading_through(references, entity_type, visited) do
-    Enum.find_value(references, fn {relationship_names, name} ->
-      read_type = Entity.path_target(entity_type, relationship_names)
-
-      if Derived.value_field?(read_type, name) do
-        read_type
-        |> set_reading(name, visited)
-        |> spelled_reading(List.insert_at(relationship_names, -1, name))
-      end
-    end)
-  end
-
-  defp spelled_reading(nil, _path), do: nil
-
-  defp spelled_reading(reading, path), do: "reads #{server_only_spelling(path)}, which #{reading}"
-
   defp stored_to_one?(entity_type, name) do
     Enum.any?(entity_type.__relationships__(), fn {relationship_name, target, _opts} ->
       relationship_name == name and is_atom(target)
@@ -372,6 +302,25 @@ defmodule Hologram.Policy.Validator do
       end)
 
     all_to_one?
+  end
+
+  # The given data-form predicates without their quantifiers, in a disjunction's alternatives too -
+  # a quantifier's source and condition are judged when the predicates are read as a filter.
+  defp unquantified_predicates(predicates) do
+    Enum.flat_map(predicates, fn
+      {:or, alternatives} when is_list(alternatives) ->
+        if Enum.all?(alternatives, &is_list/1),
+          do: [{:or, Enum.map(alternatives, &unquantified_predicates/1)}],
+          else: [{:or, alternatives}]
+
+      {quantifier, {source, inner}}
+      when quantifier in [:all, :any, :none] and is_list(inner) and
+             (is_list(source) or (is_tuple(source) and elem(source, 0) == :outer)) ->
+        []
+
+      entry ->
+        [entry]
+    end)
   end
 
   # Follows a relationship, or each relationship of a path, from the given type and returns the type
@@ -562,15 +511,11 @@ defmodule Hologram.Policy.Validator do
 
   defp validate_predicates!(entity_type, operation, predicates, location) do
     predicates
+    |> unquantified_predicates()
     |> Stage.written_names()
     |> Enum.each(&validate_set_free_name!(entity_type, &1))
 
     clauses = Stage.predicate_triples!(entity_type, predicates)
-
-    # TODO: lift once policy conditions take quantifiers.
-    if Stage.quantified?(clauses) do
-      raise ArgumentError, message: "a policy condition takes no quantifier (any, none, all)"
-    end
 
     validate_server_only_predicates!(entity_type, operation, clauses, location)
 
@@ -588,12 +533,14 @@ defmodule Hologram.Policy.Validator do
   # client-locality defect validate_server_only_predicates!/4 refuses for a value, one relationship
   # away. A type's own read rules are left out for the same reason they are there: a row reaches
   # the browser only once the server's read rules admitted it, so the browser never decides them.
-  # A rule delegating to a read rule is not a read rule, and its chains stay checked.
+  # A rule delegating to a read rule is not a read rule, and its chains stay checked. So are the
+  # chains a deciding quantifier reads only, which the server's verdict answers over the rows as
+  # stored (see Hologram.Policy.held_chains/2).
   defp validate_readable_chains!(entity_types) do
     unreadable_hops =
       for entity_type <- Enum.sort(entity_types),
           operation <- related_chain_operations(entity_type),
-          chain <- Policy.related_chains(entity_type, operation),
+          chain <- Policy.held_chains(entity_type, operation),
           {hop_type, index} <- chain_hop_types(entity_type, chain),
           not readable_type?(hop_type) do
         {entity_type, operation, Enum.take(chain, index + 1), hop_type}
@@ -683,10 +630,14 @@ defmodule Hologram.Policy.Validator do
   defp validate_server_only_predicates!(_entity_type, :read, _clauses, _location), do: :ok
 
   # A derived field reads what its definition reads, written in place, so the refusal names the field
-  # the condition wrote and the attribute it reads.
+  # the condition wrote and the attribute it reads. A quantifier over a derived set is answered from
+  # the server's verdict alone, never over rows a client holds, so what it reads there is left out.
   defp validate_server_only_predicates!(entity_type, operation, clauses, location) do
     clauses
     |> Stage.predicate_references()
+    |> Enum.reject(fn {written_names, _name} ->
+      Derived.through_set?(entity_type, written_names)
+    end)
     |> Enum.each(fn {written_names, written_name} = written ->
       written_spelled = server_only_spelling(List.insert_at(written_names, -1, written_name))
 
@@ -739,10 +690,10 @@ defmodule Hologram.Policy.Validator do
       read_type = Entity.path_target(entity_type, relationship_names)
 
       with true <- Derived.value_field?(read_type, name),
-           reading when is_binary(reading) <- set_reading(read_type, name, []) do
+           reading when is_binary(reading) <- Derived.set_reading(read_type, name) do
         raise ArgumentError,
           message:
-            "#{server_only_spelling(path)} #{reading} - a policy condition reads no related set yet"
+            "#{server_only_spelling(path)} #{reading} - a policy condition reads a related set only through any, none or all"
       end
     end
 

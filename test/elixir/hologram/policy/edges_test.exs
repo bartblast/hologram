@@ -270,6 +270,245 @@ defmodule Hologram.Policy.EdgesTest do
     end
   end
 
+  describe "derive/1 - quantifiers" do
+    defmodule EdgeProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :labels, [Hologram.Policy.EdgesTest.EdgeLabel]
+      relationship :members, [Hologram.Policy.EdgesTest.EdgeMember], inverse: project
+
+      allow :read, when: any(member <- members, member.seat == "full")
+      allow :update, when: any(members)
+      allow :delete, when: none(label <- labels, label.name == "x")
+      allow :archive, when: any(labels)
+    end
+
+    defmodule EdgeMember do
+      use Hologram.Entity
+
+      attribute :first, :string
+      attribute :last, :string
+      attribute :seat, :string
+
+      relationship :project, EdgeProject, optional: true
+      relationship :user, Module14, optional: true
+
+      derived :full, :string, fn first, last -> first <> last end
+
+      allow :read
+    end
+
+    defmodule EdgeLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :projects, [EdgeProject], inverse: labels
+
+      allow :read, when: any(project <- projects, project.name == "x")
+    end
+
+    defmodule EdgeTask do
+      use Hologram.Entity
+
+      relationship :project, EdgeProject, optional: true
+
+      allow :read, when: any(member <- project.members, member.user_id == user_id())
+      allow :update, when: any(member <- project.members, member.user.email == "a")
+
+      allow :delete,
+        when: any(label <- project.labels, any(project <- label.projects, project.name == "y"))
+    end
+
+    defmodule EdgeSeat do
+      use Hologram.Entity
+
+      attribute :seat, :string
+
+      relationship :project, EdgeProject, optional: true
+
+      allow :read, when: seat == "a" or any(member <- project.members, member.full == seat)
+
+      allow :update,
+        when: any(member <- project.members, any(label <- project.labels, label.name == "x"))
+    end
+
+    defmodule EdgeNote do
+      use Hologram.Entity
+
+      relationship :task, EdgeTask, optional: true
+
+      allow :read, via: task
+    end
+
+    defmodule EdgeBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.Policy.EdgesTest.EdgeCard], inverse: board
+
+      derived :busy_cards, [Hologram.Policy.EdgesTest.EdgeCard], fn cards ->
+        filter(cards, tag_count > 1)
+      end
+
+      derived :top_cards, [Hologram.Policy.EdgesTest.EdgeCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+
+      allow :read, when: any(card <- top_cards, card.rank == 1)
+      allow :update, when: any(card <- busy_cards, card.rank == 1)
+    end
+
+    defmodule EdgeCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      relationship :board, EdgeBoard, optional: true
+      relationship :tags, [Hologram.Policy.EdgesTest.EdgeTag]
+
+      derived :tag_count, :integer, fn tags -> count(tags) end
+    end
+
+    defmodule EdgeTag do
+      use Hologram.Entity
+
+      attribute :name, :string
+    end
+
+    setup do
+      put_derived_definitions([EdgeBoard, EdgeCard, EdgeMember])
+    end
+
+    # A member joins or leaves the project's set by its reference field, which its edge names beside
+    # what the condition reads.
+    test "derives the edges of an inverse set of a to-one with a condition and without one" do
+      edges = derive([EdgeProject])
+
+      assert edges[{EdgeProject, :read}] == [
+               {:set_attributes, [:members], EdgeMember, [:project_id, :seat]}
+             ]
+
+      assert edges[{EdgeProject, :update}] == [
+               {:set_attributes, [:members], EdgeMember, [:project_id]}
+             ]
+    end
+
+    # The bound is taken by rank among the board's cards, so a card's rank moving or a card joining
+    # can change the set. A normalized query is ordered by its id last.
+    test "derives the edges of the set a derived set reads, with its sort keys" do
+      assert derive([EdgeBoard])[{EdgeBoard, :read}] == [
+               {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]}
+             ]
+    end
+
+    # Both rules' anys over a derived set are answered by the server's verdict, which reads what the
+    # two sets read.
+    test "derives the verdict edges of anys over derived sets" do
+      assert derive([EdgeBoard])[{EdgeBoard, :verdicts}] == [
+               {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]},
+               {:set_edges, [:cards, :tags], EdgeCard, [:tags]}
+             ]
+    end
+
+    # A tag joining a card moves the count the derived set's filter reads.
+    test "derives the edges of the set a count in a derived set's filter counts" do
+      assert derive([EdgeBoard])[{EdgeBoard, :update}] == [
+               {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]},
+               {:set_edges, [:cards, :tags], EdgeCard, [:tags]}
+             ]
+    end
+
+    test "derives the edges of a to-many set" do
+      assert derive([EdgeProject])[{EdgeProject, :delete}] == [
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], EdgeProject, [:labels]}
+             ]
+    end
+
+    # The labels are never read, but a pair added to the project's to-many puts one into the set.
+    test "derives the edges of a to-many set its condition reads nothing on" do
+      assert derive([EdgeProject])[{EdgeProject, :archive}] == [
+               {:set_edges, [:labels], EdgeProject, [:labels]}
+             ]
+    end
+
+    test "derives the edges of an inverse set of a to-many" do
+      assert derive([EdgeLabel])[{EdgeLabel, :read}] == [
+               {:set_attributes, [:projects], EdgeProject, [:name]},
+               {:set_edges, [:projects], EdgeProject, [:labels]}
+             ]
+    end
+
+    test "derives the edges of a set reached through a relationship" do
+      assert derive([EdgeTask])[{EdgeTask, :read}] == [
+               {:attributes, [:project_id]},
+               {:set_attributes, [:project, :members], EdgeMember, [:project_id, :user_id]}
+             ]
+    end
+
+    test "derives the edges of a path followed from the rows of a set" do
+      assert derive([EdgeTask])[{EdgeTask, :update}] == [
+               {:attributes, [:project_id]},
+               {:set_attributes, [:project, :members], EdgeMember, [:project_id, :user_id]},
+               {:set_attributes, [:project, :members, :user], Module14, [:email]}
+             ]
+    end
+
+    test "derives the edges of a quantifier nested in another's condition" do
+      assert derive([EdgeTask])[{EdgeTask, :delete}] == [
+               {:attributes, [:project_id]},
+               {:set_attributes, [:project, :labels, :projects], EdgeProject, [:name]},
+               {:set_edges, [:project, :labels], EdgeProject, [:labels]},
+               {:set_edges, [:project, :labels, :projects], EdgeProject, [:labels]}
+             ]
+    end
+
+    # The row's own seat is read inside the quantifier, beside the alternative reading it outside,
+    # and the derived field reads its definition's attributes on the set's rows.
+    test "derives the edges of a quantifier in an alternative reading the row it is about" do
+      assert derive([EdgeSeat])[{EdgeSeat, :read}] == [
+               {:attributes, [:project_id, :seat]},
+               {:set_attributes, [:project, :members], EdgeMember, [:first, :last, :project_id]}
+             ]
+    end
+
+    test "derives the edges of a set a nested quantifier reads on a row above" do
+      assert derive([EdgeSeat])[{EdgeSeat, :update}] == [
+               {:attributes, [:project_id]},
+               {:set_attributes, [:project, :labels], EdgeLabel, [:name]},
+               {:set_attributes, [:project, :members], EdgeMember, [:project_id]},
+               {:set_edges, [:project, :labels], EdgeProject, [:labels]}
+             ]
+    end
+
+    # The delete rule's none is answered from the server's verdict, sent with every project, so what
+    # it reads is named apart from the operations - beside the operation's own edges.
+    test "names what the deciding quantifiers read under :verdicts" do
+      assert derive([EdgeProject])[{EdgeProject, :verdicts}] == [
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], EdgeProject, [:labels]}
+             ]
+    end
+
+    test "names no :verdicts edges for a type with no deciding quantifier" do
+      refute [EdgeLabel]
+             |> derive()
+             |> Map.has_key?({EdgeLabel, :verdicts})
+    end
+
+    test "lifts a set's edges through a delegation" do
+      assert derive([EdgeNote])[{EdgeNote, :read}] == [
+               {:attributes, [:task_id]},
+               {:relationship_attributes, [:task], EdgeTask, [:project_id]},
+               {:set_attributes, [:task, :project, :members], EdgeMember, [:project_id, :user_id]}
+             ]
+    end
+  end
+
   # The cache is one term for the whole node, so these leave it empty, for the next read to derive
   # the project's real index.
   describe "index/0" do

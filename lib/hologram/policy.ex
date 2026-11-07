@@ -55,6 +55,7 @@ defmodule Hologram.Policy do
   """
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Entity
   alias Hologram.Entity.Derived
@@ -64,7 +65,15 @@ defmodule Hologram.Policy do
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
+  @deciding_quantifiers_key {__MODULE__, :deciding_quantifiers}
+
+  @locked_set_links_key {__MODULE__, :locked_set_links}
+
   @model_facts_key {__MODULE__, :model_facts}
+
+  @quantifiers [:all, :any, :none]
+
+  @verdict_digest_bytes 8
 
   # The operations the framework itself asks about: the four verbs' own and the three gates.
   # Always askable on every entity type, declared or not - default deny answers false.
@@ -270,6 +279,53 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns whether the given clause of a rule of the given entity type is a deciding quantifier: a
+  quantifier whose clause tree holds a `none`, an `all` or a quantifier whose source runs through a
+  derived field holding rows - itself, or one in its condition at any depth - or whose condition
+  reads a derived field holding a value that reads a related set. A client answers such a clause
+  from the server's verdict (see `Hologram.Auth.verdicts/2`), since the rows it holds of a set
+  can't decide one for certain - a bounded or filtered set computed over the rows it holds can hold
+  rows the server's doesn't, so not even an `any` over one, and a count it can't compute at all.
+  """
+  @spec deciding_quantifier?(module, tuple) :: boolean
+  def deciding_quantifier?(entity_type, clause) do
+    deciding_clause?(clause, [entity_type]) or reads_set_value?(entity_type, clause)
+  end
+
+  @doc """
+  Returns the deciding quantifiers of the given entity type's rules, across every operation, as
+  `{key, clause}` pairs sorted by key: every quantifier clause standing in a rule's predicates - at
+  the top or in a disjunction's alternatives, not inside another quantifier - that is a deciding
+  one (see `deciding_quantifier?/2`), keyed by `verdict_key/3`. A clause written the same way twice
+  in one operation is one pair.
+
+  Cached, with the model facts, for the types of the project's compiled data model - a row's
+  verdicts are worked out for every row a client is sent.
+  """
+  @spec deciding_quantifiers(module) :: list({String.t(), tuple})
+  def deciding_quantifiers(entity_type) do
+    Model.ensure_released!()
+
+    cache =
+      case :persistent_term.get(@deciding_quantifiers_key, nil) do
+        nil ->
+          cache = Map.new(Model.entity_types(), &{&1, derived_deciding_quantifiers(&1)})
+
+          :persistent_term.put(@deciding_quantifiers_key, cache)
+
+          cache
+
+        cache ->
+          cache
+      end
+
+    case Map.fetch(cache, entity_type) do
+      {:ok, pairs} -> pairs
+      :error -> derived_deciding_quantifiers(entity_type)
+    end
+  end
+
+  @doc """
   Returns what the given via option of an allow line for the given operation delegates, as
   {operation, chain}: the chain is the to-one relationships followed to the related row, in order -
   one for a relationship, several for a path. A relationship or a path asks the related row the
@@ -343,6 +399,69 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the chains `related_chains/2` returns for the given operation of the given entity type
+  that a client answers from the rows it holds, sorted: those its rules read outside any deciding
+  quantifier (see `deciding_quantifier?/2`), whose sets and the rows on the way to them the server's
+  verdict answers over the rows as stored. A delegation's are those of the operation it asks the
+  related row, the delegation's own chain among them.
+
+  Takes a validated data model, for the reason `related_chains/1` does.
+  """
+  @spec held_chains(module, Entity.operation()) :: list(list(atom))
+  def held_chains(entity_type, operation) do
+    entity_type
+    |> build()
+    |> Map.get(operation, [])
+    |> Enum.flat_map(&rule_chains(entity_type, &1, :held))
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Returns the set links of the project's compiled data model a row joining could turn some rule's
+  grant into a refusal through - read by a none or an all whose truth helps the rule, or by an any
+  whose truth hurts it, inside a none (see `Hologram.Query.Stage.joining_row_refuses?/2`) - each as
+  how a row joins the set: `{:reference, entity type, reference field, owner type}` for a row of the
+  entity type whose reference field names the owner row, and `{:edge, entity type, relationship,
+  side, owner type}` for a pair added to the entity type's to-many relationship, whose `:source` or
+  `:target` id names the owner row. A source ending at a derived set names its links whatever the
+  quantifier, and so does every set its definition reads, through its queries' chains, the
+  quantifiers in its conditions and filters and the derived fields those read, at both polarities.
+
+  Cached for the lifetime of the runtime and derived on the first call, like the model facts. Raises
+  while the data model is under a hold, as `build/1` does.
+  """
+  @spec locked_set_links() :: MapSet.t()
+  def locked_set_links do
+    Model.ensure_released!()
+
+    case :persistent_term.get(@locked_set_links_key, nil) do
+      nil ->
+        links = locked_set_links(Model.entity_types())
+
+        :persistent_term.put(@locked_set_links_key, links)
+
+        links
+
+      links ->
+        links
+    end
+  end
+
+  @doc """
+  Returns the set links of the given entity types' rules as `locked_set_links/0` does.
+  """
+  @spec locked_set_links(list(module)) :: MapSet.t()
+  def locked_set_links(entity_types) do
+    for entity_type <- entity_types,
+        {_operation, rules} <- build(entity_type),
+        rule <- rules,
+        link <- rule_links(entity_type, rule.predicates),
+        into: MapSet.new(),
+        do: link
+  end
+
+  @doc """
   Returns the key the given entity operation is baked under for the client: an atom as its name, and a per-role grant lifecycle operation as the two names joined by a colon, which no role name can contain.
 
   The client builds the same key in operationKey in assets/js/elixir/hologram/auth.mjs - a hand-ported pair, so a change here is a change there.
@@ -402,11 +521,13 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the chains of to-one relationship names whose rows the given entity type's rules read,
-  across every operation, sorted: every row along a path in a condition, the rows before the last
+  Returns the chains of relationship names whose rows the given entity type's rules read, across
+  every operation, sorted: every row along a path in a condition, every set a quantifier reads and
+  the rows along its source - a to-many or an inverse holding them all - the rows before the last
   relationship of a role reference - its last reference id is read off the row before it - and the
   row a delegation leads to, with everything the delegated operation's rules read through it,
-  prefixed with the delegation's chain.
+  prefixed with the delegation's chain. A set a derived field holds is left out, since the browser
+  answers a quantifier over one from the server's verdict.
 
   A chain is followed hop by hop, so the rows these chains lead to are what a client needs beside a
   row it holds to answer the type's rules over it. Rules reading only the row itself, the grant
@@ -426,8 +547,8 @@ defmodule Hologram.Policy do
   end
 
   @doc """
-  Returns the chains of to-one relationship names whose rows the given entity type's rules for the
-  given operation read, sorted - the chains `related_chains/1` returns, for one operation. A
+  Returns the chains of relationship names whose rows the given entity type's rules for the given
+  operation read, sorted - the chains `related_chains/1` returns, for one operation. A
   delegation's chains are those of the operation it asks the related row, whatever operation
   delegates. An operation with no rules gives none.
 
@@ -438,7 +559,7 @@ defmodule Hologram.Policy do
     entity_type
     |> build()
     |> Map.get(operation, [])
-    |> Enum.flat_map(&rule_chains(entity_type, &1))
+    |> Enum.flat_map(&rule_chains(entity_type, &1, :all))
     |> Enum.uniq()
     |> Enum.sort()
   end
@@ -446,6 +567,8 @@ defmodule Hologram.Policy do
   @doc false
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
+    :persistent_term.erase(@deciding_quantifiers_key)
+    :persistent_term.erase(@locked_set_links_key)
     :persistent_term.erase(@model_facts_key)
 
     :ok
@@ -520,6 +643,72 @@ defmodule Hologram.Policy do
         "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role}"
   end
 
+  @doc """
+  Returns the key the server's verdict on the given deciding quantifier of a rule of the given
+  entity type and operation is sent under, and the client finds it by: the operation's key, a colon,
+  and a short digest of the clause with the definitions of the derived fields it reads. A changed
+  clause, or a changed definition it reads, gets a new key, so a client holding a verdict on what a
+  rule used to mean never reads it for what the rule means now - a deploy changing only policies or
+  derived fields reloads no bundle. The digest's encoding is pinned, so a build and the node running
+  it agree across OTP releases.
+  """
+  @spec verdict_key(module, Entity.operation(), tuple) :: String.t()
+  def verdict_key(entity_type, operation, clause) do
+    definitions =
+      entity_type
+      |> Derived.read_fields([clause])
+      |> Enum.map(fn {type, name} -> {name, Derived.definition(type, name)} end)
+
+    digest =
+      {clause, definitions}
+      |> :erlang.term_to_binary([:deterministic, minor_version: 2])
+      |> CryptographicUtils.short_digest(@verdict_digest_bytes)
+
+    "#{operation_key(operation)}:#{digest}"
+  end
+
+  @doc """
+  Returns the entity types the given deciding quantifier of a rule of the given entity type reads,
+  sorted: the rule's own, and every type along its sets' sources and its paths, and through the
+  derived fields it reads, nested quantifiers included - a derived set's own reads among them. A
+  client takes the server's verdict on the clause as current only while none of its own unanswered
+  writes names one of them.
+  """
+  @spec verdict_reads(module, tuple) :: list(module)
+  def verdict_reads(entity_type, clause) do
+    [entity_type | verdict_related_reads(entity_type, clause)]
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Returns the entity types the given deciding quantifier reads through relationships, sorted - those
+  of `verdict_reads/2` but the rule's own type, which is among them only when a relationship leads
+  to a row of it, a set of rows of the type itself.
+  """
+  @spec verdict_related_reads(module, tuple) :: list(module)
+  def verdict_related_reads(entity_type, clause) do
+    clauses = [clause]
+
+    {set_references, set_chains} = Derived.set_reads(entity_type, clauses)
+
+    references =
+      entity_type
+      |> Derived.expanded_references(set_references)
+      |> Enum.map(fn {relationship_names, _name} -> relationship_names end)
+
+    chains = references ++ set_chains
+
+    types =
+      for chain <- chains,
+          length <- 1..length(chain)//1,
+          do: Entity.path_target(entity_type, Enum.take(chain, length))
+
+    types
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
   defp build_global_reference([]), do: []
 
   defp build_global_reference(role_modules) do
@@ -575,23 +764,137 @@ defmodule Hologram.Policy do
 
   defp chain(relationship_name), do: [relationship_name]
 
+  # The set links a chain of relationships, perhaps ending at a derived set, follows from a row of
+  # the given type, with the type it leads to and whether it ends at a derived set - whose links are
+  # those its definition reads.
+  defp chain_links(entity_type, relationship_names, walked) do
+    Enum.reduce(relationship_names, {entity_type, [], false}, fn name, {type, links, derived?} ->
+      if Derived.declared?(type, name) do
+        {Derived.related_type(type, name), links ++ derived_links(type, name, walked), true}
+      else
+        {Entity.related_type(type, name), links ++ link_entries(type, name), derived?}
+      end
+    end)
+  end
+
+  # The set links the given clauses read on a row of the first of the given types, with the rows of
+  # the others above it, every quantifier among them at both polarities, and those of the derived
+  # fields they read - their names resolved through the given prefixes, the relationships from a row
+  # of the last type to each of those rows.
+  defp clause_links(clauses, types, prefixes, walked) do
+    quantifier_links =
+      clauses
+      |> quantifier_clauses()
+      |> Enum.flat_map(&quantifier_links(&1, types, :both, walked))
+
+    field_links =
+      clauses
+      |> Stage.predicate_references(prefixes)
+      |> Enum.flat_map(&field_links(List.last(types), &1, walked))
+
+    quantifier_links ++ field_links
+  end
+
+  # Whether a clause read on a row of the first of the given types, with the rows of the others
+  # above it, is a deciding quantifier (see deciding_quantifier?/2).
+  defp deciding_clause?({quantifier, {source, clauses}}, types) when quantifier in @quantifiers do
+    {start_type, relationship_names} =
+      case source do
+        {:outer, levels, names} -> {Enum.at(types, levels), names}
+        names -> {hd(types), names}
+      end
+
+    set_type = Derived.path_target(start_type, relationship_names)
+
+    quantifier in [:all, :none] or Derived.through_set?(start_type, relationship_names) or
+      clauses
+      |> quantifier_clauses()
+      |> Enum.any?(&deciding_clause?(&1, [set_type | types]))
+  end
+
+  defp deciding_clause?(_clause, _types), do: false
+
   defp declared_roles_description([]), do: "it declares no role"
 
   defp declared_roles_description(declared_names) do
     "declared roles are: #{Enum.map_join(declared_names, ", ", &inspect/1)}"
   end
 
-  defp delegation_chains(_entity_type, nil), do: []
+  # The set links a derived field's definition reads off a row of the given type: its queries'
+  # chains, the sets its conditions and filters read and those of the derived fields they read, each
+  # at both polarities, since a derived value can be compared either way. A query's filter and sort
+  # are read on the set's rows, with the row the field belongs to above them.
+  defp definition_links({:concat, operands}, entity_type, walked),
+    do: Enum.flat_map(operands, &definition_links(&1, entity_type, walked))
+
+  defp definition_links({:condition, clauses}, entity_type, walked),
+    do: clause_links(clauses, [entity_type], [[]], walked)
+
+  defp definition_links({:if, clauses, then_value, else_value}, entity_type, walked) do
+    clause_links(clauses, [entity_type], [[]], walked) ++
+      definition_links(then_value, entity_type, walked) ++
+      definition_links(else_value, entity_type, walked)
+  end
+
+  defp definition_links({:name, path}, entity_type, walked) when is_list(path) do
+    {relationship_names, [name]} = Enum.split(path, -1)
+
+    field_links(entity_type, {relationship_names, name}, walked)
+  end
+
+  defp definition_links({:name, name}, entity_type, walked),
+    do: field_links(entity_type, {[], name}, walked)
+
+  defp definition_links({:query, %{source: {_owner_type, chain}} = term}, entity_type, walked) do
+    {set_type, links, _derived?} = chain_links(entity_type, chain, walked)
+
+    sort_links =
+      Enum.flat_map(term.sort, fn {name, _direction} ->
+        field_links(set_type, {[], name}, walked)
+      end)
+
+    links ++ clause_links(term.filter, [set_type, entity_type], [chain, []], walked) ++ sort_links
+  end
+
+  defp definition_links({:value, _value}, _entity_type, _walked), do: []
+
+  defp derived_deciding_quantifiers(entity_type) do
+    entity_type
+    |> build()
+    |> Enum.flat_map(fn {operation, rules} ->
+      for rule <- rules,
+          clause <- quantifier_clauses(rule.predicates),
+          deciding_quantifier?(entity_type, clause),
+          do: {verdict_key(entity_type, operation, clause), clause}
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  defp derived_links(entity_type, name, walked) do
+    if {entity_type, name} in walked do
+      []
+    else
+      entity_type
+      |> Derived.definition(name)
+      |> definition_links(entity_type, [{entity_type, name} | walked])
+    end
+  end
+
+  defp delegation_chains(_entity_type, nil, _reads), do: []
 
   # The row a delegation leads to, and every row the delegated operation's rules read through it -
   # the target's own chains, followed from the row the delegation reaches.
-  defp delegation_chains(entity_type, {operation, relationship_names}) do
+  defp delegation_chains(entity_type, {operation, relationship_names}, reads) do
     target_type = Entity.path_target(entity_type, relationship_names)
 
-    lifted_chains =
-      target_type
-      |> related_chains(operation)
-      |> Enum.map(&(relationship_names ++ &1))
+    target_chains =
+      case reads do
+        :all -> related_chains(target_type, operation)
+        :held -> held_chains(target_type, operation)
+      end
+
+    lifted_chains = Enum.map(target_chains, &(relationship_names ++ &1))
 
     [relationship_names | lifted_chains]
   end
@@ -640,6 +943,34 @@ defmodule Hologram.Policy do
       Enum.sort(expanded)
     else
       expand_global_role_modules(expanded, extends_by_module)
+    end
+  end
+
+  # The set links a derived field holding a value reads, given a reference to it on a row of the
+  # given type - none for any other name.
+  defp field_links(entity_type, {relationship_names, name}, walked) do
+    type = Derived.path_target(entity_type, relationship_names)
+
+    if Derived.value_field?(type, name),
+      do: derived_links(type, name, walked),
+      else: []
+  end
+
+  # How a row joins the set a relationship of the given type holds: through the reference field its
+  # rows hold for an inverse of a to-one, through a pair of the join table for a to-many or an
+  # inverse of one - none for a to-one, which reads the row its own reference names.
+  defp link_entries(entity_type, relationship_name) do
+    case Entity.inverse_relationship(entity_type, relationship_name) do
+      %{reference?: true, forward: forward, target: target_type} ->
+        [{:reference, target_type, String.to_existing_atom("#{forward}_id"), entity_type}]
+
+      %{forward: forward, target: target_type} ->
+        [{:edge, target_type, forward, :target, entity_type}]
+
+      nil ->
+        if is_list(Entity.relationship_target(entity_type, relationship_name)),
+          do: [{:edge, entity_type, relationship_name, :source, entity_type}],
+          else: []
     end
   end
 
@@ -725,17 +1056,32 @@ defmodule Hologram.Policy do
     |> Enum.sort()
   end
 
-  # Every path a condition reads, the compared name and an attribute operand alike.
-  # A derived field reads what its definition reads, written in place.
+  # Every path a condition reads, the compared name and an attribute operand alike, and every set a
+  # quantifier reads, whether or not its condition reads anything on it. A derived field reads what
+  # its definition reads, written in place. A set a derived field holds is left out: the browser
+  # answers a quantifier over one from the server's verdict, never from rows it holds.
   defp predicate_chains(entity_type, predicates) do
-    references = Stage.predicate_references(predicates)
+    references =
+      predicates
+      |> Stage.predicate_references()
+      |> Enum.reject(fn {relationship_names, _name} ->
+        Derived.through_set?(entity_type, relationship_names)
+      end)
 
-    entity_type
-    |> Derived.expanded_references(references)
-    |> Enum.flat_map(fn
-      {[], _name} -> []
-      {relationship_names, _name} -> [relationship_names]
-    end)
+    read_chains =
+      entity_type
+      |> Derived.expanded_references(references)
+      |> Enum.flat_map(fn
+        {[], _name} -> []
+        {relationship_names, _name} -> [relationship_names]
+      end)
+
+    source_chains =
+      predicates
+      |> Stage.relationship_chains()
+      |> Enum.reject(&Derived.through_set?(entity_type, &1))
+
+    read_chains ++ source_chains
   end
 
   # The bare key answers whether the acting user may grant (or revoke) some role: every per-role
@@ -759,6 +1105,58 @@ defmodule Hologram.Policy do
       end
     end)
   end
+
+  # The quantifier clauses among the given ones, those in a disjunction's alternatives included.
+  defp quantifier_clauses(clauses) do
+    Enum.flat_map(clauses, fn
+      {:or, alternatives} -> Enum.flat_map(alternatives, &quantifier_clauses/1)
+      {quantifier, {_source, _inner}} = clause when quantifier in @quantifiers -> [clause]
+      _triple -> []
+    end)
+  end
+
+  # The set links a quantifier's source follows, from the row it is read on - the row the
+  # quantifier is about, or one above it - when a row joining one can refuse what the rule granted,
+  # and those of the quantifiers in its condition, read on the set's rows at the condition's
+  # polarity. The types are those of the rows each name is read on, nearest first.
+  #
+  # A source ending at a derived set is held whole whatever the quantifier - a row joining can push
+  # another out of its bound, and a row changing can move in or out of its filter - and so is
+  # everything its definition reads.
+  # The derived fields already being walked are given, so one reached again adds nothing.
+  defp quantifier_links({quantifier, {source, clauses}}, types, polarity, walked) do
+    {start_type, relationship_names} =
+      case source do
+        {:outer, levels, names} -> {Enum.at(types, levels), names}
+        names -> {hd(types), names}
+      end
+
+    {set_type, links, derived?} = chain_links(start_type, relationship_names, walked)
+    condition_polarity = Stage.condition_polarity(quantifier, polarity)
+
+    nested_links =
+      clauses
+      |> quantifier_clauses()
+      |> Enum.flat_map(&quantifier_links(&1, [set_type | types], condition_polarity, walked))
+
+    if derived? or Stage.joining_row_refuses?(quantifier, polarity),
+      do: links ++ nested_links,
+      else: nested_links
+  end
+
+  # Whether a quantifier's condition reads a derived field holding a value that reads a related set.
+  defp reads_set_value?(entity_type, {quantifier, {_source, _clauses}} = clause)
+       when quantifier in @quantifiers do
+    [clause]
+    |> Stage.predicate_references()
+    |> Enum.any?(fn {relationship_names, name} ->
+      read_type = Derived.path_target(entity_type, relationship_names)
+
+      Derived.value_field?(read_type, name) and Derived.set_reading(read_type, name) != nil
+    end)
+  end
+
+  defp reads_set_value?(_entity_type, _clause), do: false
 
   defp reference_chains(nil), do: []
 
@@ -822,9 +1220,44 @@ defmodule Hologram.Policy do
     }
   end
 
-  defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}) do
-    predicate_chains(entity_type, predicates) ++
-      reference_chains(to) ++ delegation_chains(entity_type, via)
+  # The chains a rule reads - all of them, or those a client answers from the rows it holds.
+  defp rule_chains(entity_type, %{predicates: predicates, to: to, via: via}, reads) do
+    read_predicates =
+      case reads do
+        :all -> predicates
+        :held -> undecided_predicates(entity_type, predicates)
+      end
+
+    predicate_chains(entity_type, read_predicates) ++
+      reference_chains(to) ++ delegation_chains(entity_type, via, reads)
+  end
+
+  # The set links a rule's condition reads: those of its quantifiers, and those of the derived
+  # fields their conditions name - a derived value is read at both polarities, since it can be
+  # compared either way. One the rule's own predicates name reads no set, which the build refuses.
+  defp rule_links(entity_type, predicates) do
+    quantifiers = quantifier_clauses(predicates)
+
+    quantifier_links =
+      Enum.flat_map(quantifiers, &quantifier_links(&1, [entity_type], :positive, []))
+
+    field_links =
+      quantifiers
+      |> Stage.predicate_references()
+      |> Enum.flat_map(&field_links(entity_type, &1, []))
+
+    quantifier_links ++ field_links
+  end
+
+  # The given predicates without their deciding quantifiers - in a disjunction's alternatives too.
+  defp undecided_predicates(entity_type, predicates) do
+    Enum.flat_map(predicates, fn
+      {:or, alternatives} ->
+        [{:or, Enum.map(alternatives, &undecided_predicates(entity_type, &1))}]
+
+      clause ->
+        if deciding_quantifier?(entity_type, clause), do: [], else: [clause]
+    end)
   end
 
   defp unknown_operation_message(entity_type, operation) do

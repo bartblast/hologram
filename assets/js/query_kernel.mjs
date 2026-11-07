@@ -85,6 +85,15 @@ export default class QueryKernel {
     }
   }
 
+  // The held rows of the set a chain of relationships reaches from the given row, each once, read
+  // the way a quantifier's source reads them - for a reader answering a quantifier over
+  // relationships outside a run, like a permission check.
+  static chainRows(row, entityType, chain) {
+    const context = QueryKernel.#withMemo({});
+
+    return QueryKernel.#chainRows(row, entityType, chain, context);
+  }
+
   // The value of the derived field of the given name on the row, computed from its definition the
   // way a run reads it - for a reader holding a row outside a run, like a permission check. A
   // definition reads no placeholder and no acting user, so it is computed with no context.
@@ -833,7 +842,13 @@ export default class QueryKernel {
   // The rows of a set - an inverse of a to-one read off the related table by the reference field,
   // so a pending move is already folded in, an inverse of a to-many and a stored to-many read off
   // the ids filed for the row.
+  // A row not created yet has no id, so nothing is in any set of its - rather than every row whose
+  // reference is empty too.
   static #relatedRows(row, entityType, name) {
+    if (row.id === null || row.id === undefined) {
+      return [];
+    }
+
     const inverses = Model.inverses(entityType);
 
     if (Object.hasOwn(inverses, name)) {

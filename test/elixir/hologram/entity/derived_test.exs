@@ -15,6 +15,7 @@ defmodule Hologram.Entity.DerivedTest do
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module36
   alias Hologram.Test.Fixtures.Entity.Module37
   alias Hologram.Test.Fixtures.Entity.Module38
   alias Hologram.Test.Fixtures.Entity.Module40
@@ -66,6 +67,15 @@ defmodule Hologram.Entity.DerivedTest do
         "no definition for Hologram.Test.Fixtures.Entity.Module33.unknown - the Hologram compile resolves derived fields"
 
       assert_error ArgumentError, expected_msg, fn -> definition(Module33, :unknown) end
+    end
+  end
+
+  describe "expanded_references/2" do
+    # A query builder runs only in the build, over stand-ins of its own.
+    test "reads nothing through a derived value calling a query builder" do
+      assert expanded_references(Module36, [{[], :unread_count}, {[], :last_read_at}]) == [
+               {[], :last_read_at}
+             ]
     end
   end
 
@@ -403,6 +413,183 @@ defmodule Hologram.Entity.DerivedTest do
       included_term = %Query{entity: Module33, include: %{channel: %Query{entity: Module32}}}
 
       assert rows_term(Module32, :messages, included_term) == included_term
+    end
+  end
+
+  describe "read_fields/2" do
+    alias Hologram.Entity.DerivedTest.ReadBoard
+    alias Hologram.Entity.DerivedTest.ReadCard
+
+    setup do
+      put_derived_definitions([ReadBoard, ReadCard])
+    end
+
+    test "returns a derived set a quantifier's source runs through" do
+      assert read_fields(ReadBoard, [{:any, {[:top_cards], []}}]) == [{ReadBoard, :top_cards}]
+    end
+
+    test "returns a derived field a derived set's filter reads" do
+      assert read_fields(ReadBoard, [{:any, {[:busy_cards], []}}]) == [
+               {ReadBoard, :busy_cards},
+               {ReadCard, :tag_count}
+             ]
+    end
+
+    test "returns the derived set a derived set is built on" do
+      assert read_fields(ReadBoard, [{:any, {[:low_top_cards], []}}]) == [
+               {ReadBoard, :low_top_cards},
+               {ReadBoard, :top_cards}
+             ]
+    end
+
+    test "returns a derived field named outside any quantifier" do
+      assert read_fields(ReadBoard, [{:label_count, :>, 1}]) == [{ReadBoard, :label_count}]
+    end
+
+    test "returns a field the clauses read twice once" do
+      clauses = [{:any, {[:top_cards], []}}, {:none, {[:top_cards], [{:rank, :==, 1}]}}]
+
+      assert read_fields(ReadBoard, clauses) == [{ReadBoard, :top_cards}]
+    end
+  end
+
+  describe "set_reads/2" do
+    defmodule ReadBoard do
+      use Hologram.Entity
+
+      attribute :min_rank, :integer
+      attribute :name, :string
+
+      relationship :cards, [Hologram.Entity.DerivedTest.ReadCard], inverse: board
+      relationship :labels, [Hologram.Entity.DerivedTest.ReadTag]
+      relationship :pinned_cards, [Hologram.Entity.DerivedTest.ReadCard]
+
+      derived :busy_cards, [Hologram.Entity.DerivedTest.ReadCard], fn cards ->
+        filter(cards, tag_count > 1)
+      end
+
+      derived :label_count, :integer, fn labels -> count(labels) end
+
+      derived :low_top_cards, [Hologram.Entity.DerivedTest.ReadCard], fn top_cards ->
+        filter(top_cards, rank < 3)
+      end
+
+      derived :named_cards, [Hologram.Entity.DerivedTest.ReadCard], fn cards, name ->
+        filter(cards, any(tag <- tags, tag.name == ^name))
+      end
+
+      derived :picked_cards, [Hologram.Entity.DerivedTest.ReadCard], fn cards,
+                                                                        label_count,
+                                                                        pinned_cards ->
+        if label_count > 1, do: take(cards, 1), else: pinned_cards
+      end
+
+      derived :ranked_cards, [Hologram.Entity.DerivedTest.ReadCard], fn cards, min_rank ->
+        filter(cards, rank >= ^min_rank)
+      end
+
+      derived :top_cards, [Hologram.Entity.DerivedTest.ReadCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+    end
+
+    defmodule ReadCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+      attribute :title, :string
+
+      relationship :board, ReadBoard, optional: true
+      relationship :tags, [Hologram.Entity.DerivedTest.ReadTag]
+
+      derived :tag_count, :integer, fn tags -> count(tags) end
+
+      derived :title_tag, :string, fn title -> title <> "!" end
+    end
+
+    defmodule ReadTag do
+      use Hologram.Entity
+
+      attribute :name, :string
+    end
+
+    setup do
+      put_derived_definitions([ReadBoard, ReadCard])
+    end
+
+    defp any_rank(source), do: [{:any, {source, [{:rank, :==, 1}]}}]
+
+    # A normalized query is ordered by its id last.
+    test "reads a derived set through its query's chain, with its sort keys" do
+      assert set_reads(ReadBoard, any_rank([:top_cards])) ==
+               {[{[:cards], :rank}, {[:cards], :id}], [[:cards]]}
+    end
+
+    test "reads a derived set past the relationships before it, its filter's pin on its owner" do
+      assert set_reads(ReadCard, any_rank([:board, :ranked_cards])) ==
+               {[{[:board, :cards], :rank}, {[:board], :min_rank}, {[:board, :cards], :id}],
+                [[:board, :cards], [:board]]}
+    end
+
+    test "reads the set a count in a derived set's filter counts" do
+      assert set_reads(ReadBoard, any_rank([:busy_cards])) ==
+               {[{[:cards], :id}, {[:cards], :rank}], [[:cards], [:cards, :tags]]}
+    end
+
+    test "reads the chain of each query a derived set's if picks from, and what its condition counts" do
+      assert set_reads(ReadBoard, any_rank([:picked_cards])) ==
+               {[
+                  {[:cards], :id},
+                  {[:pinned_cards], :id},
+                  {[:cards], :rank},
+                  {[:pinned_cards], :rank}
+                ], [[:cards], [:pinned_cards], [:labels]]}
+    end
+
+    test "reads a derived set built on another one through the other one's reads" do
+      assert set_reads(ReadBoard, any_rank([:low_top_cards])) ==
+               {[{[:cards], :rank}, {[:cards], :id}], [[:cards]]}
+    end
+
+    # The tag's name is compared with the board's, two quantifiers out of the tag.
+    test "reads a quantifier in a derived set's filter, its pin on the owner" do
+      assert set_reads(ReadBoard, any_rank([:named_cards])) ==
+               {[{[:cards, :tags], :name}, {[], :name}, {[:cards], :id}, {[:cards], :rank}],
+                [[:cards], [:cards, :tags]]}
+    end
+
+    test "reads a derived value a quantifier's condition reads on the set's rows" do
+      assert set_reads(ReadBoard, [{:any, {[:cards], [{:title_tag, :==, "x!"}]}}]) ==
+               {[{[:cards], :title}], [[:cards]]}
+    end
+
+    # The second top_cards is read off every card's board, which is no cycle.
+    test "reads a derived set met again further along a chain" do
+      clauses = [
+        {:any, {[:top_cards], [{:any, {[:board, :top_cards], [{:title, :==, "x"}]}}]}}
+      ]
+
+      assert set_reads(ReadBoard, clauses) ==
+               {[
+                  {[:cards], :rank},
+                  {[:cards], :id},
+                  {[:cards, :board, :cards], :rank},
+                  {[:cards, :board, :cards], :id},
+                  {[:cards, :board, :cards], :title}
+                ], [[:cards], [:cards, :board, :cards]]}
+    end
+
+    test "reads the set a count on the row a quantifier's condition pins counts" do
+      clauses = [{:none, {[:cards], [{:rank, :>, {:attribute, {:outer, 1, :label_count}}}]}}]
+
+      assert set_reads(ReadBoard, clauses) == {[{[:cards], :rank}], [[:cards], [:labels]]}
+    end
+
+    test "keeps the names read outside any quantifier" do
+      assert set_reads(ReadBoard, [{:min_rank, :==, 1}, {:label_count, :>, 1}]) ==
+               {[{[], :min_rank}, {[], :label_count}], []}
     end
   end
 end

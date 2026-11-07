@@ -42,7 +42,15 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.Test.Fixtures.Entity.Module8
   alias Hologram.Test.Fixtures.Entity.Module9
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
+  alias Hologram.Test.Fixtures.Policy.Module18, as: PolicyModule18
+  alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module20, as: PolicyModule20
+  alias Hologram.Test.Fixtures.Policy.Module21, as: PolicyModule21
+  alias Hologram.Test.Fixtures.Policy.Module22, as: PolicyModule22
+  alias Hologram.Test.Fixtures.Policy.Module23, as: PolicyModule23
+  alias Hologram.Test.Fixtures.Policy.Module24, as: PolicyModule24
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module6, as: PolicyModule6
   alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
@@ -461,6 +469,75 @@ defmodule Hologram.DB.QueryRunnerTest do
         |> Enum.sort()
 
       assert ids == Enum.sort([public_entity.id, private_entity.id])
+    end
+  end
+
+  describe "run_policied/4 for quantified rules" do
+    defp quantified_mapping do
+      Mapper.derive!(
+        [
+          Module14,
+          PolicyModule17,
+          PolicyModule18,
+          PolicyModule19,
+          PolicyModule20,
+          PolicyModule21,
+          PolicyModule22,
+          PolicyModule23,
+          PolicyModule24
+        ],
+        []
+      )
+    end
+
+    setup do
+      member_user =
+        %{email: "member@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      outsider =
+        %{email: "outsider@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      closed =
+        %{name: "closed"}
+        |> PolicyModule17.new()
+        |> DB.create!()
+
+      open =
+        %{name: "open", public: true}
+        |> PolicyModule17.new()
+        |> DB.create!()
+
+      %{project_id: closed.id, user_id: member_user.id}
+      |> PolicyModule18.new()
+      |> DB.create!()
+
+      %{closed: closed, member_user: member_user, open: open, outsider: outsider}
+    end
+
+    # A project reads when public, or for the user of one of its members - read raw, since a member
+    # with no full seat is one nobody may read.
+    defp readable_project_names(actor_user_id) do
+      PolicyModule17
+      |> Stage.normalize()
+      |> run_policied(quantified_mapping(), actor_user_id)
+      |> Enum.map(& &1.name)
+      |> Enum.sort()
+    end
+
+    test "reads a project a member of it reads", %{member_user: member_user} do
+      assert readable_project_names(member_user.id) == ["closed", "open"]
+    end
+
+    test "reads only the public project for an outsider", %{outsider: outsider} do
+      assert readable_project_names(outsider.id) == ["open"]
+    end
+
+    test "reads only the public project for a visitor" do
+      assert readable_project_names(nil) == ["open"]
     end
   end
 

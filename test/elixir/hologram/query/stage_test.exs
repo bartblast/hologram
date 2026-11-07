@@ -261,6 +261,24 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "condition_polarity/2" do
+    test "turns the polarity around inside a none" do
+      assert condition_polarity(:none, :positive) == :negative
+      assert condition_polarity(:none, :negative) == :positive
+    end
+
+    test "keeps the polarity inside an any and an all" do
+      assert condition_polarity(:any, :negative) == :negative
+      assert condition_polarity(:all, :positive) == :positive
+    end
+
+    test "keeps a polarity that may go either way inside every quantifier" do
+      assert condition_polarity(:none, :both) == :both
+      assert condition_polarity(:any, :both) == :both
+      assert condition_polarity(:all, :both) == :both
+    end
+  end
+
   describe "count/1" do
     test "composes with other stages" do
       query =
@@ -2677,6 +2695,44 @@ defmodule Hologram.Query.StageTest do
     end
   end
 
+  describe "joining_row_refuses?/2" do
+    test "holds for a none and an all whose truth helps" do
+      assert joining_row_refuses?(:none, :positive)
+      assert joining_row_refuses?(:all, :positive)
+    end
+
+    test "holds for an any whose truth hurts" do
+      assert joining_row_refuses?(:any, :negative)
+    end
+
+    test "holds for every quantifier at a polarity that may go either way" do
+      assert joining_row_refuses?(:any, :both)
+      assert joining_row_refuses?(:none, :both)
+      assert joining_row_refuses?(:all, :both)
+    end
+
+    test "fails for an any whose truth helps, and a none or an all whose truth hurts" do
+      refute joining_row_refuses?(:any, :positive)
+      refute joining_row_refuses?(:none, :negative)
+      refute joining_row_refuses?(:all, :negative)
+    end
+  end
+
+  describe "names_actor?/1" do
+    test "holds for a predicate compared with the actor" do
+      assert names_actor?([{:a, :==, 1}, {:owner_id, :!=, {:actor}}])
+    end
+
+    test "holds for the actor in an alternative and in a quantifier's condition" do
+      assert names_actor?([{:or, [[{:a, :==, 1}], [{:owner_id, :==, {:actor}}]]}])
+      assert names_actor?([{:any, {[:messages], [{:author_id, :==, {:actor}}]}}])
+    end
+
+    test "fails for clauses naming no actor" do
+      refute names_actor?([{:a, :==, 1}, {:any, {[:messages], [{:b, :==, 2}]}}])
+    end
+  end
+
   describe "normalize/1" do
     test "keeps a sourced term's source and orders it by id" do
       query =
@@ -3373,24 +3429,6 @@ defmodule Hologram.Query.StageTest do
       assert_error ArgumentError, expected_msg, fn ->
         put_attribute(Module32.new(), :message_count, 3)
       end
-    end
-  end
-
-  describe "quantified?/1" do
-    test "holds for a quantifier" do
-      assert quantified?([{:any, {[:messages], []}}])
-    end
-
-    test "holds for a quantifier inside an alternative" do
-      assert quantified?([{:or, [[{:a, :==, 1}], [{:none, {[:messages], []}}]]}])
-    end
-
-    test "fails for predicates and disjunctions alone" do
-      refute quantified?([{:a, :==, 1}, {:or, [[{:b, :==, 2}], [{:c, :==, 3}]]}])
-    end
-
-    test "fails for an attribute named like a quantifier" do
-      refute quantified?([{:any, :==, true}])
     end
   end
 

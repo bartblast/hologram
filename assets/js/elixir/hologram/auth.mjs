@@ -2,10 +2,11 @@
 
 import Bitstring from "../../bitstring.mjs";
 import Clock from "../../clock.mjs";
-import {currentBatch} from "./db.mjs";
+import {currentBatch, isServerOnlySentinel} from "./db.mjs";
 import Interpreter from "../../interpreter.mjs";
 import LocalDatabase from "../../local_database.mjs";
 import Model from "../../model.mjs";
+import Overlay from "../../overlay.mjs";
 import QueryKernel from "../../query_kernel.mjs";
 import Sha1 from "../../sha1.mjs";
 import SortKey from "../../sort_key.mjs";
@@ -24,6 +25,13 @@ import Type from "../../type.mjs";
 // synced rows, and a page that checks permissions hands over the ones its own checks asked
 // about, so the first render answers what the server answered.
 const GRANT_TYPE = "Hologram.Auth.RoleGrant";
+
+// What a condition holds as when this client cannot tell: a related row it would read is one it
+// does not hold - the server reads the row as stored, so taking it for a missing one could grant
+// what the server refuses (`project.status != :archived` over a project nobody synced). A rule
+// grants only on a definite yes, and `and` and `or` keep what they can still decide: false and
+// unknown are false, true or unknown is true.
+const UNKNOWN = Symbol("unknown");
 
 // The sixteen bytes Hologram.Auth.RoleGrant derives every grant id under - drawn once, on
 // 2026-09-02, and fixed: change them and every grant in every store is renamed.
@@ -97,6 +105,20 @@ function grantRows() {
   return Object.values(LocalDatabase.getTable(GRANT_TYPE));
 }
 
+// What the held rows of a set decide of a quantifier over it, given each one's answer.
+function heldAnswer(quantifier, answers) {
+  switch (quantifier) {
+    case "any":
+      return answers.includes(true) ? true : UNKNOWN;
+
+    case "none":
+      return answers.includes(true) ? false : UNKNOWN;
+
+    default:
+      return answers.includes(false) ? false : UNKNOWN;
+  }
+}
+
 function holds(fieldValue, operator, value, ranks, foldsKey = false) {
   if (operator === "==") {
     return equal(fieldValue, value);
@@ -159,46 +181,91 @@ function isActorValue(value) {
   );
 }
 
-// Another attribute of the same row, or of the row a path leads to, which the rule names rather
-// than carries.
+// Another attribute of the same row, of the row a path leads to, or of a row above inside a
+// quantifier, which the rule names rather than carries.
 function isAttributeValue(value) {
   return (
     value !== null &&
     typeof value === "object" &&
     !Array.isArray(value) &&
-    (typeof value.attribute === "string" || Array.isArray(value.attribute))
+    Object.hasOwn(value, "attribute")
   );
 }
 
-// The row a chain of to-one relationships leads to, with its type, or null at the first reference
-// that is empty or names a row this client does not hold - a row it does not hold reads the way a
-// missing one does, the query kernel's rule for a filter path. The first reference is read off the
-// boxed entity, the later ones off the plain rows before them.
-function chainRow(entityType, entity, relationshipNames) {
-  let type = entityType;
-  let row = null;
+// A name of the row a given number of quantifiers out, as the rules spell one.
+function isOuterName(name) {
+  return (
+    name !== null &&
+    typeof name === "object" &&
+    !Array.isArray(name) &&
+    Object.hasOwn(name, "outer")
+  );
+}
 
-  for (const [index, relationshipName] of relationshipNames.entries()) {
-    const referenceField = `${relationshipName}_id`;
+// Whether some alternative of a disjunction holds: true when one does, UNKNOWN when none does
+// but one may, false when none can.
+function alternativesHold(
+  entityType,
+  entity,
+  alternatives,
+  actorUserId,
+  outer,
+) {
+  let result = false;
 
-    const targetId =
-      index === 0
-        ? entityValue(entityType, entity, referenceField)
-        : (row[referenceField] ?? null);
+  for (const alternative of alternatives) {
+    const holds = predicatesHold(
+      entityType,
+      entity,
+      alternative,
+      actorUserId,
+      outer,
+    );
 
-    if (targetId === null) {
-      return null;
+    if (holds === true) {
+      return true;
     }
 
-    type = Model.relationships(type)[relationshipName].type;
-    row = LocalDatabase.getRow(type, targetId);
-
-    if (row === null) {
-      return null;
+    if (holds === UNKNOWN) {
+      result = UNKNOWN;
     }
   }
 
-  return {row, type};
+  return result;
+}
+
+function clauseHolds(entityType, entity, clause, actorUserId, outer) {
+  if (Array.isArray(clause)) {
+    return predicateHolds(entityType, entity, clause, actorUserId, outer);
+  }
+
+  if (Object.hasOwn(clause, "or")) {
+    return alternativesHold(entityType, entity, clause.or, actorUserId, outer);
+  }
+
+  return quantifierHolds(entityType, entity, clause, actorUserId, outer);
+}
+
+// The row a chain of to-one relationships leads to, with its type, null at the first reference
+// that is empty, or UNKNOWN at the first one naming a row this client does not hold. The first
+// reference is read off the boxed entity, the later ones off the plain rows before them.
+function chainRow(entityType, entity, relationshipNames) {
+  const [relationshipName, ...laterNames] = relationshipNames;
+  const targetId = entityValue(entityType, entity, `${relationshipName}_id`);
+
+  return linkedRow(entityType, targetId, relationshipName, laterNames);
+}
+
+// The chain followed from a plain held row, as chainRow/3 follows it from a boxed entity.
+function chainRowFrom(entityType, row, relationshipNames) {
+  if (relationshipNames.length === 0) {
+    return {row, type: entityType};
+  }
+
+  const [relationshipName, ...laterNames] = relationshipNames;
+  const targetId = row[`${relationshipName}_id`] ?? null;
+
+  return linkedRow(entityType, targetId, relationshipName, laterNames);
 }
 
 // The id the last reference of a chain holds, read off the row the relationships before it lead
@@ -212,7 +279,9 @@ function chainTargetId(entityType, entity, relationshipNames) {
 
   const end = chainRow(entityType, entity, relationshipNames.slice(0, -1));
 
-  return end === null ? null : (end.row[referenceField] ?? null);
+  return end === null || end === UNKNOWN
+    ? null
+    : (end.row[referenceField] ?? null);
 }
 
 // The type a name is declared with - an attribute's, or a derived field's holding a value - or
@@ -228,12 +297,10 @@ function declaredType(entityType, name) {
 // field is computed from its definition over the row the entity holds, the way the query kernel
 // computes it, whatever the struct carries under its name - the reference computes it too.
 function entityValue(entityType, entity, name) {
-  if (Model.derivedField(entityType, name)) {
-    return QueryKernel.derivedValue(
-      plainRow(entityType, entity),
-      entityType,
-      name,
-    );
+  const derived = Model.derivedField(entityType, name);
+
+  if (derived) {
+    return evaluatedDefinition(entityType, entity, derived.definition);
   }
 
   return storedValue(entityType, entity, name);
@@ -255,11 +322,99 @@ function enumRanks(entityType, name) {
   return values && new Map(values.map((label, index) => [label, index]));
 }
 
-// A field's value off a held row as the wire spells it - a derived field computed on the row.
+// A derived field's definition computed over a boxed entity, the way the query kernel computes it,
+// except that what reads a related row this client does not hold is UNKNOWN rather than nil:
+// strings joined, nil when one of them is and UNKNOWN when one may be; whether a condition holds;
+// the branch an if's condition decides, UNKNOWN when it cannot decide; a name read as a rule reads
+// it. A count reads a related set whole, which a client never holds for certain, so it is UNKNOWN -
+// the server's verdict answers a quantifier whose condition reads one.
+function evaluatedDefinition(entityType, entity, definition) {
+  if ("concat" in definition) {
+    const values = definition.concat.map((operand) =>
+      evaluatedDefinition(entityType, entity, operand),
+    );
+
+    if (values.includes(null)) {
+      return null;
+    }
+
+    return values.includes(UNKNOWN) ? UNKNOWN : values.join("");
+  }
+
+  if ("condition" in definition) {
+    return predicatesHold(entityType, entity, definition.condition, null);
+  }
+
+  if ("if" in definition) {
+    const holds = predicatesHold(entityType, entity, definition.if, null);
+
+    if (holds === UNKNOWN) {
+      return UNKNOWN;
+    }
+
+    const branch = holds ? definition.then : definition.else;
+
+    return evaluatedDefinition(entityType, entity, branch);
+  }
+
+  if ("name" in definition) {
+    return nameValue(entityType, entity, definition.name);
+  }
+
+  return "value" in definition ? definition.value : UNKNOWN;
+}
+
+// A field's value off a held row as the wire spells it - a derived field computed on the row, as a
+// boxed entity of it.
 function fieldValue(entityType, row, name) {
-  return Model.derivedField(entityType, name)
-    ? QueryKernel.derivedValue(row, entityType, name)
-    : (row[name] ?? null);
+  const derived = Model.derivedField(entityType, name);
+
+  if (derived === null) {
+    return row[name] ?? null;
+  }
+
+  return evaluatedDefinition(
+    entityType,
+    Model.box(entityType, row),
+    derived.definition,
+  );
+}
+
+// Whether the boxed entity holds a server-only attribute's sentinel - what it arrived with, since
+// no client ever learns the stored value.
+function holdsServerOnlySentinel(entity, name) {
+  const entry = entity.data[Type.encodeMapKey(Type.atom(name))];
+
+  return entry !== undefined && isServerOnlySentinel(entry[1]);
+}
+
+// The row one to-one relationship's reference names, then the chain after it from there - null for
+// an empty reference, UNKNOWN for a row this client does not hold.
+function linkedRow(entityType, targetId, relationshipName, laterNames) {
+  if (targetId === null) {
+    return null;
+  }
+
+  const type = Model.relationships(entityType)[relationshipName].type;
+  const row = LocalDatabase.getRow(type, targetId);
+
+  return row === null ? UNKNOWN : chainRowFrom(type, row, laterNames);
+}
+
+// Whether the given clauses name the acting user anywhere - inside a disjunction's alternatives
+// and a quantifier's condition included.
+function namesActor(clauses) {
+  return clauses.some((clause) => {
+    if (Array.isArray(clause)) {
+      return isActorValue(clause[2]);
+    }
+
+    if (Object.hasOwn(clause, "or")) {
+      return clause.or.some(namesActor);
+    }
+
+    return namesActor(clause.filter);
+  });
 }
 
 // The type an attribute is declared on and its name - the entity's own for a bare name, and for a
@@ -284,7 +439,11 @@ function nameValue(entityType, entity, name) {
 
   const end = chainRow(entityType, entity, name.slice(0, -1));
 
-  return end === null ? null : fieldValue(end.type, end.row, name.at(-1));
+  if (end === null || end === UNKNOWN) {
+    return end;
+  }
+
+  return fieldValue(end.type, end.row, name.at(-1));
 }
 
 // The actor of a visitor is nobody rather than null - null would equal a missing reference and
@@ -295,17 +454,26 @@ function predicateHolds(
   entity,
   [name, operator, value],
   actorUserId,
+  outer,
 ) {
   if (isActorValue(value) && actorUserId === null) {
     return false;
   }
 
-  const end = nameEnd(entityType, name);
+  const scoped = scopedName(entityType, entity, outer, name);
+  const end = nameEnd(scoped.entityType, scoped.name);
+  const subject = nameValue(scoped.entityType, scoped.entity, scoped.name);
+
+  const operand = operandValue(entityType, entity, value, actorUserId, outer);
+
+  if (subject === UNKNOWN || operand === UNKNOWN) {
+    return UNKNOWN;
+  }
 
   return holds(
-    nameValue(entityType, entity, name),
+    subject,
     operator,
-    operandValue(entityType, entity, value, actorUserId),
+    operand,
     enumRanks(end.type, end.name),
     declaredType(end.type, end.name) === "string",
   );
@@ -314,50 +482,109 @@ function predicateHolds(
 // What a rule's operand stands for on this row: the acting user, another attribute of the row read
 // off it or of the row a path leads to, or the value itself. An attribute operand compares by the
 // predicate's attribute's ranks, since two enums compare only when they declare the same list.
-function operandValue(entityType, entity, value, actorUserId) {
+function operandValue(entityType, entity, value, actorUserId, outer) {
   if (isActorValue(value)) {
     return actorUserId;
   }
 
   if (isAttributeValue(value)) {
-    return nameValue(entityType, entity, value.attribute);
+    const scoped = scopedName(entityType, entity, outer, value.attribute);
+
+    return nameValue(scoped.entityType, scoped.entity, scoped.name);
   }
 
   return value;
 }
 
-// The boxed entity as a held row of it reads: every attribute the client may hold and every
-// reference field, wire-spelled, with the sort key each string carries - what a derived field's
-// definition is computed over, ordering a string by its key the way the server's compare does.
-function plainRow(entityType, entity) {
-  const entry = Model.entry(entityType);
+// A clause is a triple array, a disjunction object holding alternatives that are clause lists
+// themselves, or a quantifier object - every clause has to hold, a disjunction holds when one of
+// its alternatives does. False when a clause does not hold, UNKNOWN when none fails but one may,
+// true when all hold. The outer rows are the rows above the entity inside a quantifier, nearest
+// first, each with its type - none at the top of a rule.
+function predicatesHold(entityType, entity, clauses, actorUserId, outer = []) {
+  let result = true;
 
-  const attributes = Object.keys(entry.attributes).filter(
-    (name) => !entry.serverOnly.has(name),
+  for (const clause of clauses) {
+    const holds = clauseHolds(entityType, entity, clause, actorUserId, outer);
+
+    if (holds === false) {
+      return false;
+    }
+
+    if (holds === UNKNOWN) {
+      result = UNKNOWN;
+    }
+  }
+
+  return result;
+}
+
+// A quantifier answered over the rows this client holds of the set its source leads to, read on
+// the row it is about or on the row above it the source names - a subset of the set the server
+// reads, so a held row decides only what one row can: any is true once a held row matches, none
+// false once one matches, all false once one fails. Anything else is UNKNOWN, since a row this
+// client does not hold may decide it - unless the quantifier is one the server sends its verdict
+// on, which then answers. Over a derived set the held rows decide nothing. A none or an all asking
+// about a visitor asks about nobody, which grants nothing.
+function quantifierHolds(entityType, entity, clause, actorUserId, outer) {
+  if (
+    actorUserId === null &&
+    clause.quantifier !== "any" &&
+    namesActor(clause.filter)
+  ) {
+    return false;
+  }
+
+  const start = Array.isArray(clause.source)
+    ? {entity, entityType, hops: clause.source}
+    : {...outer[clause.source.outer - 1], hops: clause.source.name};
+
+  // A bounded or filtered set computed over the rows this client holds can hold rows the server's
+  // doesn't, so not even a held row decides a quantifier over one.
+  if (throughDerivedSet(start.entityType, start.hops)) {
+    return Object.hasOwn(clause, "verdict")
+      ? verdictHolds(entityType, entity, clause, actorUserId)
+      : UNKNOWN;
+  }
+
+  const relatedType = Model.pathTarget(start.entityType, start.hops);
+  const innerOuter = [{entity, entityType}, ...outer];
+
+  const related = QueryKernel.chainRows(
+    referenceRow(start.entityType, start.entity),
+    start.entityType,
+    start.hops,
   );
 
-  const references = Object.entries(entry.relationships)
+  const answers = related.map((row) =>
+    predicatesHold(
+      relatedType,
+      Model.box(relatedType, row),
+      clause.filter,
+      actorUserId,
+      innerOuter,
+    ),
+  );
+
+  const held = heldAnswer(clause.quantifier, answers);
+
+  return held === UNKNOWN && Object.hasOwn(clause, "verdict")
+    ? verdictHolds(entityType, entity, clause, actorUserId)
+    : held;
+}
+
+// The boxed entity's id and reference fields as a held row spells them - what a set's rows are
+// read from it by.
+function referenceRow(entityType, entity) {
+  const names = Object.entries(Model.relationships(entityType))
     .filter(([_name, relationship]) => !relationship.toMany)
     .map(([name]) => `${name}_id`);
 
-  const row = Object.fromEntries(
-    attributes
-      .concat(references)
-      .map((name) => [name, storedValue(entityType, entity, name)]),
-  );
-
-  return Model.computeSortKeys(entityType, row);
-}
-
-// A clause is a triple array, or a disjunction object holding alternatives that are clause lists
-// themselves - every clause has to hold, and a disjunction holds when one of its alternatives does.
-function predicatesHold(entityType, entity, clauses, actorUserId) {
-  return clauses.every((clause) =>
-    Array.isArray(clause)
-      ? predicateHolds(entityType, entity, clause, actorUserId)
-      : clause.or.some((alternative) =>
-          predicatesHold(entityType, entity, alternative, actorUserId),
-        ),
+  return Object.fromEntries(
+    ["id", ...names].map((name) => [
+      name,
+      storedValue(entityType, entity, name),
+    ]),
   );
 }
 
@@ -418,7 +645,9 @@ function referenceHolds(reference, entityType, entity, actorUserId) {
 // grant rows are not read. A delegating rule is evaluated as any other, because the type it
 // delegates to answers its own actor-referencing rules the same way.
 function ruleMatches(rule, entityType, entity, actorUserId) {
-  if (!predicatesHold(entityType, entity, rule.predicates, actorUserId)) {
+  if (
+    predicatesHold(entityType, entity, rule.predicates, actorUserId) !== true
+  ) {
     return false;
   }
 
@@ -435,6 +664,33 @@ function ruleMatches(rule, entityType, entity, actorUserId) {
   return rule.via === null || viaHolds(rule, entityType, entity, actorUserId);
 }
 
+// The row a name is read on and the name itself: the entity's own for a name of its row, and that
+// row's for a name of a row above.
+function scopedName(entityType, entity, outer, name) {
+  if (!isOuterName(name)) {
+    return {entity, entityType, name};
+  }
+
+  return {...outer[name.outer - 1], name: name.name};
+}
+
+// Whether the boxed entity holds what the given base row does in every stored field. A server-only
+// attribute is in no base row, so it counts as unchanged while the entity still holds its sentinel.
+function storedAsBase(entityType, entity, row) {
+  const entry = Model.entry(entityType);
+
+  const names = [
+    ...Object.keys(entry.attributes),
+    ...Object.keys(referenceRow(entityType, entity)),
+  ];
+
+  return names.every((name) =>
+    entry.serverOnly.has(name)
+      ? holdsServerOnlySentinel(entity, name)
+      : storedValue(entityType, entity, name) === (row[name] ?? null),
+  );
+}
+
 // A stored field's value off the boxed entity, as the wire spells it - an attribute by its declared
 // type, a reference field as the uuid it holds.
 function storedValue(entityType, entity, name) {
@@ -443,6 +699,22 @@ function storedValue(entityType, entity, name) {
   const entry = entity.data[key];
 
   return entry ? Model.unbox(entry[1], attributeType) : null;
+}
+
+// Whether a chain of relationships read from a row of the given type runs through a derived field
+// holding rows.
+function throughDerivedSet(entityType, names) {
+  let type = entityType;
+
+  for (const name of names) {
+    if (Model.derivedField(type, name) !== null) {
+      return true;
+    }
+
+    type = (Model.relationships(type)[name] ?? Model.inverses(type)[name]).type;
+  }
+
+  return false;
 }
 
 // The acting user, as a bare id: a check takes the user entity or the id itself, and nobody at
@@ -461,6 +733,38 @@ function unboxActorUserId(userOrId) {
   return Model.unbox(userOrId, "uuid");
 }
 
+// The server's verdict on a quantifier the held rows leave open, as the row's last frame carried
+// it. The server works verdicts out for the session's user over the row as stored, so any other
+// question is UNKNOWN: one about another user or a visitor, one about a struct whose stored fields
+// differ from the row's - changed in an action and not written yet - and one asked while a write of
+// this client's that the server has not answered names a type the quantifier reads, since that
+// write may have moved the answer. So is one about a row that came with no verdict.
+//
+// An answer can settle a batch before the frame carrying its round arrives, and between the two
+// the verdict predates the write again. The window closes itself: a write moving a verdict re-runs
+// the windows over the row, whose frame brings the new one, and a write that moves none sends
+// none, since the verdict held stands. Held rows still refute it in between.
+function verdictHolds(entityType, entity, clause, actorUserId) {
+  if (actorUserId !== (LocalDatabase.actorUserId ?? null)) {
+    return UNKNOWN;
+  }
+
+  if (clause.reads.some((type) => Overlay.namesType(type))) {
+    return UNKNOWN;
+  }
+
+  const id = storedValue(entityType, entity, "id");
+  const row = id === null ? null : LocalDatabase.baseRow(entityType, id);
+
+  if (row === null || !storedAsBase(entityType, entity, row)) {
+    return UNKNOWN;
+  }
+
+  const verdict = row.$verdicts?.[clause.verdict];
+
+  return typeof verdict === "boolean" ? verdict : UNKNOWN;
+}
+
 // Delegation asks the RELATED entity's policy for the operation the rule names, of the row its
 // chain of relationships leads to, so it needs that row and its rules. A client holds neither for
 // a type its build never syncs, and cannot ask the server mid-render - so the answer is no, the
@@ -469,7 +773,11 @@ function viaHolds(rule, entityType, entity, actorUserId) {
   const [operation, relationshipNames] = rule.via;
   const end = chainRow(entityType, entity, relationshipNames);
 
-  return end !== null && grants(end.type, end.row, operation, actorUserId);
+  return (
+    end !== null &&
+    end !== UNKNOWN &&
+    grants(end.type, end.row, operation, actorUserId)
+  );
 }
 
 function grants(entityType, row, operation, actorUserId) {

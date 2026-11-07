@@ -371,6 +371,39 @@ defmodule Hologram.Sync.DiffTest do
     end
   end
 
+  describe "deltas/4 - held" do
+    test "returns the rows the client holds and may still see, whatever moved on them" do
+      kept = row("kept")
+      gone = row("gone")
+      arrived = row("arrived")
+
+      deltas = deltas(result([kept, arrived]), MapSet.new([kept.id, gone.id]), nil, [])
+
+      assert deltas.held == [kept]
+    end
+
+    test "returns a held row a round patched" do
+      task = row("current value")
+
+      deltas = deltas(result([task]), MapSet.new([task.id]), nil, events(task.id, ["c"]))
+
+      assert deltas.held == [task]
+    end
+
+    test "leaves out a held row the client may no longer see" do
+      user =
+        %{email: "reader@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      hidden = DB.create!(PolicyModule1.new())
+
+      deltas = deltas(result([hidden]), MapSet.new([hidden.id]), user.id, [])
+
+      assert deltas.held == []
+    end
+  end
+
   describe "deltas/4 - inverses" do
     setup do
       channel =
@@ -915,7 +948,9 @@ defmodule Hologram.Sync.DiffTest do
   # only relationship_attributes edge is {[:parent], PolicyModule1, [:public]}, a ONE-hop chain.
   # No two-hop test lives here: `Auth.chain_target_id/2` is tested to two hops in auth_test.exs,
   # and reach/4 hands the chain through untouched. No scrub test either - `scrub/2` belongs to
-  # deltas/4 and is tested there, and nothing embeds a Module5.
+  # deltas/4 and is tested there, and nothing embeds a Module5. The set edges are written by hand
+  # over channels and messages, whose read rules are plain, since no support fixture's rule holds a
+  # quantifier yet.
   describe "reach/4" do
     setup do
       user =
@@ -926,10 +961,47 @@ defmodule Hologram.Sync.DiffTest do
       %{edges: Edges.derive([PolicyModule5]), user: user}
     end
 
-    # The three fields reach/4 reads off a gap entry. Nil revisions is what a delete or a
-    # relationship edge leaves behind, and it stands for every column.
+    # The fields reach/4 reads off a gap entry that names a row. Nil revisions is what a delete
+    # leaves behind, and it stands for every column.
+    defp named_effect(entity_id, type, nil) do
+      %{entity_id: entity_id, op: :del_entity, revisions: nil, type: type}
+    end
+
     defp named_effect(entity_id, type, revisions) do
-      %{entity_id: entity_id, revisions: revisions, type: type}
+      %{entity_id: entity_id, op: :patch_entity, revisions: revisions, type: type}
+    end
+
+    defp create_channel(name) do
+      %{name: name}
+      |> Module26.new()
+      |> DB.create!()
+    end
+
+    defp create_message(values) do
+      values
+      |> Map.put(:position, 1)
+      |> Module28.new()
+      |> DB.create!()
+    end
+
+    # A gap entry naming a created row, whose revisions name every column the create set.
+    defp named_create(entity) do
+      revisions =
+        Map.new(entity.__meta__.revisions, fn {name, stamp} -> {Atom.to_string(name), stamp} end)
+
+      %{entity_id: entity.id, op: :put_entity, revisions: revisions, type: entity.__struct__}
+    end
+
+    # A gap entry naming a pair added to a to-many: the log keeps the relationship and the target
+    # beside the row the pair is stored on, and no revisions.
+    defp named_pair(entity_id, type, relationship_name) do
+      %{
+        data: %{"relationship" => relationship_name, "target_id" => Entity.generate_id()},
+        entity_id: entity_id,
+        op: :add_relationship,
+        revisions: nil,
+        type: type
+      }
     end
 
     defp child_of(parent) do
@@ -1039,6 +1111,102 @@ defmodule Hologram.Sync.DiffTest do
       named = [named_effect(child.id, PolicyModule5, %{"public" => 1})]
 
       assert reach(result([child]), user.id, named, edges) == %{appeared: [], vanished: []}
+    end
+
+    # The member that moved may have left this channel or another one - the gap does not say which
+    # - so every channel whose rule reads the set is judged afresh.
+    test "lists every row whose rule reads a set when a row of the set's type moved", %{
+      user: user
+    } do
+      edges = %{{Module26, :read} => [{:set_attributes, [:messages], Module28, [:body]}]}
+      channel = create_channel("general")
+      other_channel = create_channel("random")
+      named = [named_effect(@first_id, Module28, %{"body" => 1})]
+
+      reach = reach(result([channel, other_channel]), user.id, named, edges)
+
+      assert %{reach | appeared: Enum.sort_by(reach.appeared, & &1.id)} == %{
+               appeared: Enum.sort_by([channel, other_channel], & &1.id),
+               vanished: []
+             }
+    end
+
+    test "lists a row whose rule reads a set a created row joined", %{user: user} do
+      edges = %{{Module26, :read} => [{:set_attributes, [:messages], Module28, [:channel_id]}]}
+      channel = create_channel("general")
+      message = create_message(%{body: "hi", channel_id: channel.id})
+
+      assert reach(result([channel]), user.id, [named_create(message)], edges) == %{
+               appeared: [channel],
+               vanished: []
+             }
+    end
+
+    test "lists a row whose rule reads a set a deleted row left", %{user: user} do
+      edges = %{{Module26, :read} => [{:set_attributes, [:messages], Module28, [:body]}]}
+      channel = create_channel("general")
+      named = [named_effect(@first_id, Module28, nil)]
+
+      assert reach(result([channel]), user.id, named, edges) == %{
+               appeared: [channel],
+               vanished: []
+             }
+    end
+
+    test "lists nothing when a row of the set's type moved on a column the rule does not read", %{
+      user: user
+    } do
+      edges = %{{Module26, :read} => [{:set_attributes, [:messages], Module28, [:body]}]}
+      channel = create_channel("general")
+      named = [named_effect(@first_id, Module28, %{"position" => 1})]
+
+      assert reach(result([channel]), user.id, named, edges) == %{appeared: [], vanished: []}
+    end
+
+    # A pair moves no column, so it reaches through the relationship holding the set alone.
+    test "lists nothing through the set's rows when only a pair of theirs moved", %{user: user} do
+      edges = %{{Module26, :read} => [{:set_attributes, [:messages], Module28, [:body]}]}
+      channel = create_channel("general")
+      named = [named_pair(@first_id, Module28, "labels")]
+
+      assert reach(result([channel]), user.id, named, edges) == %{appeared: [], vanished: []}
+    end
+
+    # The set is the labels of the channel's messages, held in pairs stored on the messages - a type
+    # other than the row reached.
+    test "lists a row whose rule reads a set a pair of the relationship holding it moved", %{
+      user: user
+    } do
+      edges = %{{Module26, :read} => [{:set_edges, [:messages, :labels], Module28, [:labels]}]}
+      channel = create_channel("general")
+      named = [named_pair(@first_id, Module28, "labels")]
+
+      assert reach(result([channel]), user.id, named, edges) == %{
+               appeared: [channel],
+               vanished: []
+             }
+    end
+
+    test "lists nothing when a pair of a relationship of that name on another type moved", %{
+      user: user
+    } do
+      edges = %{{Module26, :read} => [{:set_edges, [:messages, :labels], Module28, [:labels]}]}
+      channel = create_channel("general")
+      named = [named_pair(@first_id, Module3, "labels")]
+
+      assert reach(result([channel]), user.id, named, edges) == %{appeared: [], vanished: []}
+    end
+
+    test "lists a row the client may not see when a pair of the relationship holding its set moved",
+         %{user: user} do
+      edges = %{{Module28, :read} => [{:set_edges, [:labels], Module28, [:labels]}]}
+      hidden_message = create_message(%{body: "hidden"})
+      named = [named_pair(@first_id, Module28, "labels")]
+
+      assert reach(result([hidden_message]), user.id, named, edges) == %{
+               appeared: [],
+               vanished: [hidden_message]
+             }
     end
   end
 end

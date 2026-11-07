@@ -7,14 +7,15 @@ defmodule HologramFeatureTests.WriteClaimsTest do
   alias Hologram.DB.Mapper
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Note
+  alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.WriteClaimsPage
 
-  # All the tables truncate in one statement: the memo, note and role grant tables' foreign keys to
-  # the user table make Postgres reject truncating the referenced table alone.
+  # All the tables truncate in one statement: the memo, note, project member and role grant tables'
+  # foreign keys to the user table make Postgres reject truncating the referenced table alone.
   setup do
     tables =
-      Enum.map_join([Memo, Note, RoleGrant, User], ", ", fn entity_type ->
+      Enum.map_join([Memo, Note, ProjectMember, RoleGrant, User], ", ", fn entity_type ->
         ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
       end)
 

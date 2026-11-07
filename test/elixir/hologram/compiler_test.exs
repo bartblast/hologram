@@ -71,6 +71,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module19, as: LabelPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module24, as: ShelfPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
@@ -2071,6 +2073,26 @@ defmodule Hologram.CompilerTest do
       refute MapSet.member?(sync_constants.entity_types, Entity4)
     end
 
+    # Labels declare nothing, but a project's rule reads its labels, and a client answering the rule
+    # holds the labels it reads.
+    test "names the type of a set a checked rule reads when a page checks permissions on the client",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert MapSet.member?(sync_constants.entity_types, LabelPolicyEntity)
+    end
+
+    # Shelves declare nothing, but a task's rule reads a shelf's cards, and a client follows the
+    # rule's source through the shelf.
+    test "names a type a checked rule's set is read through when a page checks permissions on the client",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants =
+        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+
+      assert MapSet.member?(sync_constants.entity_types, ShelfPolicyEntity)
+    end
+
     test "leaves unqueried policied types out when no page checks permissions on the client", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
@@ -3045,6 +3067,94 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "build_runtime_js/7" do
+    defmodule BakedBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.CompilerTest.BakedCard], inverse: board
+
+      derived :top_cards, [Hologram.CompilerTest.BakedCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+
+      allow :read, when: any(card <- top_cards, card.rank == 1)
+    end
+
+    defmodule BakedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      relationship :board, BakedBoard, optional: true
+
+      allow :read
+    end
+
+    defmodule BakedProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+      attribute :starts_at, :datetime
+
+      relationship :members, [Hologram.CompilerTest.BakedMember], inverse: project
+
+      allow :read, when: any(member <- members, member.user_id == user_id())
+      allow :update, when: any(member <- members, any(label <- member.labels, label.name == name))
+
+      allow :archive,
+        when:
+          none(
+            member <- members,
+            member.seat == :full and member.joined_at > ^~U[2026-01-01 00:00:00Z]
+          )
+
+      allow :publish,
+        when:
+          any(
+            member <- members,
+            starts_at > ^~U[2026-01-01 00:00:00Z] and
+              member.user.created_at > ^~U[2026-01-01 00:00:00Z]
+          )
+
+      allow :close,
+        when:
+          any(
+            member <- members,
+            any(other <- members, other.joined_at > ^~U[2026-01-01 00:00:00Z])
+          )
+
+      allow :delete, when: name == "draft" or none(members)
+      allow :share, when: any(member <- members, none(label <- member.labels, label.name == "x"))
+    end
+
+    defmodule BakedMember do
+      use Hologram.Entity
+
+      attribute :joined_at, :datetime
+      attribute :seat, :enum, values: [:viewer, :full]
+
+      relationship :labels, [Hologram.CompilerTest.BakedLabel]
+      relationship :project, BakedProject, optional: true
+      relationship :user, Hologram.Test.Fixtures.Entity.Module14, optional: true
+
+      allow :read
+    end
+
+    defmodule BakedLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
+    defp archive_key do
+      [%{predicates: [clause]}] = Hologram.Policy.build(BakedProject).archive
+
+      Hologram.Policy.verdict_key(BakedProject, :archive, clause)
+    end
+
     setup do
       on_exit(fn ->
         Application.delete_env(:hologram, :client_error_overlay)
@@ -4242,6 +4352,200 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"read":[{"predicates":[{"or":[[["author_id","==",{"actor":true}]],[["shared","==",true]]]}],"to":null,"via":null}]/
+             )
+    end
+
+    test "bakes quantified conditions in the shape the query kernel's filters take", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types =
+        MapSet.new([
+          BakedProject,
+          BakedMember,
+          BakedLabel,
+          Hologram.Test.Fixtures.Entity.Module14,
+          RoleGrant
+        ])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["user_id","==",{"actor":true}]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"update":[{"predicates":[{"filter":[{"filter":[["name","==",{"attribute":{"name":"name","outer":2}}]],"quantifier":"any","source":["labels"]}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+    end
+
+    # A deciding clause is answered from the server's verdict, so it carries the key the verdict is
+    # sent under and the types whose unanswered writes make the verdict stale - in an alternative
+    # too, and only the outer one when it holds a none inside. The any alone reads no none or all.
+    test "bakes a deciding quantifier's verdict key and the types it reads", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types =
+        MapSet.new([
+          BakedProject,
+          BakedMember,
+          BakedLabel,
+          Hologram.Test.Fixtures.Entity.Module14,
+          RoleGrant
+        ])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      [%{predicates: [archive_clause]}] = Hologram.Policy.build(BakedProject).archive
+      key = Hologram.Policy.verdict_key(BakedProject, :archive, archive_clause)
+
+      assert String.contains?(
+               js,
+               ~s/"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{key}"}/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["user_id","==",{"actor":true}]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      [%{predicates: [{:or, [_name, [delete_clause]]}]}] =
+        Hologram.Policy.build(BakedProject).delete
+
+      delete_key = Hologram.Policy.verdict_key(BakedProject, :delete, delete_clause)
+
+      assert String.contains?(
+               js,
+               ~s/[{"filter":[],"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{delete_key}"}]/
+             )
+
+      [%{predicates: [share_clause]}] = Hologram.Policy.build(BakedProject).share
+      share_key = Hologram.Policy.verdict_key(BakedProject, :share, share_clause)
+
+      assert String.contains?(
+               js,
+               ~s/"share":[{"predicates":[{"filter":[{"filter":[["name","==","x"]],"quantifier":"none","source":["labels"]}],"quantifier":"any","reads":["Hologram.CompilerTest.BakedLabel","Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{share_key}"}],"to":null,"via":null}]/
+             )
+    end
+
+    # A bounded set computed over the rows a client holds can hold rows the server's doesn't, so an
+    # any over one is answered from the verdict too, which reads the rows the set is taken from.
+    test "bakes the verdict key and the types read of an any over a derived set", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      put_derived_definitions([BakedBoard])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedBoard, BakedCard, RoleGrant]),
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      [%{predicates: [clause]}] = Hologram.Policy.build(BakedBoard).read
+      key = Hologram.Policy.verdict_key(BakedBoard, :read, clause)
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"filter":[["rank","==",1]],"quantifier":"any","reads":["Hologram.CompilerTest.BakedBoard","Hologram.CompilerTest.BakedCard"],"source":["top_cards"],"verdict":"#{key}"}],"to":null,"via":null}]/
+             )
+    end
+
+    # Each time is spelled by the type of the attribute it is compared with, on the row that
+    # attribute is read on: the members' join time, the project's start through an outer name, the
+    # user's creation through a path from a member, and the join time inside a quantifier whose set
+    # is read on the row above. Spelled as an id, a time would lose its microseconds.
+    test "bakes a value inside a quantifier spelled by the type of the row it is read on", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      entity_types =
+        MapSet.new([
+          BakedProject,
+          BakedMember,
+          BakedLabel,
+          Hologram.Test.Fixtures.Entity.Module14,
+          RoleGrant
+        ])
+
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: entity_types,
+          permission_checking?: true
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"archive":[{"predicates":[{"filter":[["seat","==","full"],["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"none","reads":["Hologram.CompilerTest.BakedMember","Hologram.CompilerTest.BakedProject"],"source":["members"],"verdict":"#{archive_key()}"}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"publish":[{"predicates":[{"filter":[[{"name":"starts_at","outer":1},">","2026-01-01T00:00:00.000000Z"],[["user","created_at"],">","2026-01-01T00:00:00.000000Z"]],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"close":[{"predicates":[{"filter":[{"filter":[["joined_at",">","2026-01-01T00:00:00.000000Z"]],"quantifier":"any","source":{"name":["members"],"outer":1}}],"quantifier":"any","source":["members"]}],"to":null,"via":null}]/
              )
     end
 

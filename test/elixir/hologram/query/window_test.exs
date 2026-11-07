@@ -32,6 +32,33 @@ defmodule Hologram.Query.WindowTest do
   end
 
   describe "derive/2" do
+    defmodule WindowProject do
+      use Hologram.Entity
+
+      relationship :labels, [Hologram.Query.WindowTest.WindowLabel]
+      relationship :members, [Hologram.Query.WindowTest.WindowMember], inverse: project
+
+      allow :read
+      allow :update, when: any(member <- members, member.seat == "full")
+      allow :archive, when: none(labels)
+    end
+
+    defmodule WindowMember do
+      use Hologram.Entity
+
+      attribute :seat, :string
+
+      relationship :project, WindowProject, optional: true
+
+      allow :read
+    end
+
+    defmodule WindowLabel do
+      use Hologram.Entity
+
+      allow :read
+    end
+
     test "downloads the type the query reads" do
       assert derive(Stage.normalize(Module2), false).entity == Module2
     end
@@ -358,6 +385,26 @@ defmodule Hologram.Query.WindowTest do
                  }
                }
              }
+    end
+
+    test "embeds the sets the type's rules read when a client checks permissions" do
+      window = derive(Stage.normalize(WindowProject), true)
+
+      assert window.include == %{
+               labels: %Query{entity: WindowLabel},
+               members: %Query{entity: WindowMember}
+             }
+    end
+
+    # The query's own quantifier narrows the members to the full seats, and the rule asks about the
+    # part ones, so the rule's set comes whole.
+    test "embeds a rule's set whole beside a quantifier narrowing it" do
+      term =
+        WindowProject
+        |> Stage.filter(any: {[:members], [seat: "full"]})
+        |> Stage.normalize()
+
+      assert derive(term, true).include.members == %Query{entity: WindowMember}
     end
 
     test "embeds no rule's rows when no client checks permissions" do

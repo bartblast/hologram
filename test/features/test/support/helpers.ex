@@ -25,9 +25,12 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Membership
   alias HologramFeatureTests.Entities.Memo
   alias HologramFeatureTests.Entities.Message
+  alias HologramFeatureTests.Entities.Milestone
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.Post
   alias HologramFeatureTests.Entities.Product
+  alias HologramFeatureTests.Entities.Project
+  alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
@@ -877,6 +880,21 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Truncates the tables of the given entity types in one statement - PostgreSQL refuses to truncate a
+  table another one references without it.
+  """
+  def truncate_entity_tables(entity_types) do
+    tables =
+      Enum.map_join(entity_types, ", ", fn entity_type ->
+        ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
+      end)
+
+    {:ok, _result} = Connection.query("TRUNCATE #{tables}", [])
+
+    :ok
+  end
+
+  @doc """
   Truncates every entity table of the app, the join table behind a message's labels among them,
   in one statement - PostgreSQL refuses to truncate a table another one references without it.
 
@@ -898,9 +916,12 @@ defmodule HologramFeatureTests.Helpers do
         Membership,
         Memo,
         Message,
+        Milestone,
         Note,
         Post,
         Product,
+        Project,
+        ProjectMember,
         RestockItem,
         Review,
         RoleGrant,

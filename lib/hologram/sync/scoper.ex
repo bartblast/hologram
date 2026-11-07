@@ -22,7 +22,9 @@ defmodule Hologram.Sync.Scoper do
   A window depends on the entity types its query reads, its own and through everything it
   includes - the relationships a filter's paths go through among them - and on the types its
   policies consult to decide who sees those rows: the grant store, for any rule granting by role,
-  and a related type whose attributes a delegated rule reads.
+  a related type whose attributes a path or a delegated rule reads, the type of the rows of a set a
+  quantifier reads, and the type storing the pairs that put rows into such a set - those of the
+  read rules, and those of the deciding quantifiers whose verdicts a client is sent beside the rows.
 
   Attribute names on the edges are deliberately not used to narrow further. A query result is
   whole entities, so a client holding a row wants any change to it - which makes an attribute
@@ -45,7 +47,8 @@ defmodule Hologram.Sync.Scoper do
 
   defp add_edge_types({:attributes, _names}, types), do: types
 
-  defp add_edge_types({:relationship_attributes, _chain, entity_type, _names}, types) do
+  defp add_edge_types({kind, _chain, entity_type, _names}, types)
+       when kind in [:relationship_attributes, :set_attributes, :set_edges] do
     MapSet.put(types, entity_type)
   end
 
@@ -63,8 +66,8 @@ defmodule Hologram.Sync.Scoper do
     read_types = Registry.entity_types(term)
 
     Enum.reduce(read_types, read_types, fn entity_type, types ->
-      edges
-      |> Map.get({entity_type, :read}, [])
+      [:read, :verdicts]
+      |> Enum.flat_map(&Map.get(edges, {entity_type, &1}, []))
       |> Enum.reduce(types, &add_edge_types/2)
     end)
   end

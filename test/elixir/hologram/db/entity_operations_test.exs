@@ -8,6 +8,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.DB.Clock
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
+  alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Test.Fixtures.Entity.Module1
@@ -19,11 +20,34 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module20
   alias Hologram.Test.Fixtures.Entity.Module26
   alias Hologram.Test.Fixtures.Entity.Module27
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
+  alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
+  alias Hologram.Test.Fixtures.Policy.Module26, as: PolicyModule26
+  alias Hologram.Test.Fixtures.Policy.Module27, as: PolicyModule27
+  alias Hologram.Test.Fixtures.Policy.Module29, as: PolicyModule29
   alias Hologram.Test.Fixtures.Role
+
+  @key_range 4_294_967_296
+
+  # The advisory locks the calling session holds on sets, by mode, under the keys they are named by.
+  defp advisory_locks do
+    statement = """
+    SELECT "classid", "objid", "mode" FROM pg_catalog.pg_locks
+    WHERE "locktype" = 'advisory' AND "objsubid" = 2 AND "pid" = pg_backend_pid()
+    """
+
+    {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [])
+
+    rows
+    |> Enum.map(fn [classid, objid, mode] -> {mode, {signed(classid), signed(objid)}} end)
+    |> Enum.sort()
+  end
 
   defp count_edges(source_entity, target_entity) do
     count_sql =
@@ -66,6 +90,11 @@ defmodule Hologram.DB.EntityOperationsTest do
       }
     end)
   end
+
+  # PostgreSQL shows a two-key lock's keys as unsigned.
+  defp signed(key) when key >= div(@key_range, 2), do: key - @key_range
+
+  defp signed(key), do: key
 
   # The system clock can be coarser than a microsecond (Windows timer granularity reaches
   # ~16ms), making consecutive utc_now readings equal - wait until the clock has visibly
@@ -191,6 +220,26 @@ defmodule Hologram.DB.EntityOperationsTest do
         end
 
       assert error.postgres.code == :foreign_key_violation
+    end
+
+    # Module17's :archive holds while none of the project's labels is locked - a set stored on the
+    # project itself.
+    test "holds the shared lock of the owner row whose locked set a pair added from the owner's side enters" do
+      {:ok, project} = create(PolicyModule17.new())
+      {:ok, label} = create(PolicyModule19.new())
+
+      assert add_relationship(PolicyModule17, project.id, :labels, label.id) == :ok
+      assert advisory_locks() == [{"ShareLock", SetLock.keys(PolicyModule17, project.id)}]
+    end
+
+    # Module29's :update holds while none of its comments is flagged - the inverse of the comments'
+    # marks, so the pair is added from the comment's side.
+    test "holds the shared lock of the owner row whose locked set a pair added from the other side enters" do
+      {:ok, comment} = create(PolicyModule27.new())
+      {:ok, mark} = create(PolicyModule29.new())
+
+      assert add_relationship(PolicyModule27, comment.id, :marks, mark.id) == :ok
+      assert advisory_locks() == [{"ShareLock", SetLock.keys(PolicyModule29, mark.id)}]
     end
   end
 
@@ -640,6 +689,18 @@ defmodule Hologram.DB.EntityOperationsTest do
         end
 
       assert error.postgres.code == :unique_violation
+    end
+
+    # Module26's :delete holds while none of its comments is flagged.
+    test "holds the shared lock of the owner row whose locked set the row enters" do
+      {:ok, space} = create(PolicyModule26.new())
+
+      assert {:ok, _comment} =
+               %{space_id: space.id}
+               |> PolicyModule27.new()
+               |> create()
+
+      assert advisory_locks() == [{"ShareLock", SetLock.keys(PolicyModule26, space.id)}]
     end
   end
 
@@ -1127,6 +1188,92 @@ defmodule Hologram.DB.EntityOperationsTest do
       set_revisions(Module2, created_entity.id, %{"gone" => 1})
 
       assert get(Module2, created_entity.id).__meta__.revisions == %{}
+    end
+  end
+
+  describe "related_rows/4" do
+    defp create_message(channel, body, position) do
+      {:ok, message} =
+        %{body: body, channel_id: channel && channel.id, position: position}
+        |> Module28.new()
+        |> create()
+
+      message
+    end
+
+    # The positions run against the ids, so the order the relationship declares would differ.
+    test "reads an inverse of a to-one through the reference its rows hold, in id order" do
+      {:ok, general} = create(Module26.new(name: "general"))
+      {:ok, random} = create(Module26.new(name: "random"))
+      first = create_message(general, "first", 2)
+      second = create_message(general, "second", 1)
+      _other = create_message(random, "other", 3)
+
+      assert related_rows(Module26, general.id, :messages) ==
+               Enum.sort_by([first, second], & &1.id)
+    end
+
+    test "reads a to-many through its join table, in id order" do
+      {:ok, urgent} = create(Module29.new(name: "urgent"))
+      {:ok, later} = create(Module29.new(name: "later"))
+      {:ok, _unused} = create(Module29.new(name: "unused"))
+      message = create_message(nil, "hi", 1)
+      :ok = add_relationship(Module28, message.id, :labels, later.id)
+      :ok = add_relationship(Module28, message.id, :labels, urgent.id)
+
+      assert related_rows(Module28, message.id, :labels) == Enum.sort_by([urgent, later], & &1.id)
+    end
+
+    test "reads an inverse of a to-many through the join table it reverses, in id order" do
+      {:ok, urgent} = create(Module29.new(name: "urgent"))
+      first = create_message(nil, "first", 1)
+      second = create_message(nil, "second", 2)
+      _untagged = create_message(nil, "untagged", 3)
+      :ok = add_relationship(Module28, second.id, :labels, urgent.id)
+      :ok = add_relationship(Module28, first.id, :labels, urgent.id)
+
+      assert related_rows(Module29, urgent.id, :messages) ==
+               Enum.sort_by([first, second], & &1.id)
+    end
+
+    test "reads an inverse holding one row" do
+      {:ok, general} = create(Module26.new(name: "general"))
+
+      {:ok, topic} =
+        %{channel_id: general.id, summary: "news"}
+        |> Module27.new()
+        |> create()
+
+      assert related_rows(Module26, general.id, :topic) == [topic]
+    end
+
+    test "locks the rows and a to-many's pairs for share with lock: :share" do
+      {:ok, urgent} = create(Module29.new(name: "urgent"))
+      message = create_message(nil, "hi", 1)
+      :ok = add_relationship(Module28, message.id, :labels, urgent.id)
+
+      assert related_rows(Module28, message.id, :labels, lock: :share) == [urgent]
+      assert "RowShareLock" in relation_lock_modes(Module29)
+      assert "RowShareLock" in relation_lock_modes("test_fixtures_entity_module28_labels_$join")
+    end
+
+    test "locks the rows and the reversed to-many's pairs for share with lock: :share" do
+      {:ok, urgent} = create(Module29.new(name: "urgent"))
+      message = create_message(nil, "hi", 1)
+      :ok = add_relationship(Module28, message.id, :labels, urgent.id)
+
+      assert related_rows(Module29, urgent.id, :messages, lock: :share) == [message]
+      assert "RowShareLock" in relation_lock_modes(Module28)
+      assert "RowShareLock" in relation_lock_modes("test_fixtures_entity_module28_labels_$join")
+    end
+
+    test "takes no row lock without the option" do
+      {:ok, general} = create(Module26.new(name: "general"))
+      _message = create_message(general, "hi", 1)
+
+      related_rows(Module26, general.id, :messages)
+
+      refute "RowShareLock" in relation_lock_modes(Module28)
     end
   end
 
@@ -1826,6 +1973,15 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert_error ArgumentError, expected_msg, fn ->
         update(Module2, nonexistent_id, %{c: "some text"})
       end
+    end
+
+    # Module26's :delete holds while none of its comments is flagged.
+    test "holds the shared lock of the owner row whose locked set a moved reference enters" do
+      {:ok, space} = create(PolicyModule26.new())
+      {:ok, comment} = create(PolicyModule27.new())
+
+      assert update(PolicyModule27, comment.id, %{space_id: space.id}) == :ok
+      assert advisory_locks() == [{"ShareLock", SetLock.keys(PolicyModule26, space.id)}]
     end
   end
 end

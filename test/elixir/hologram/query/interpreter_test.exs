@@ -531,6 +531,18 @@ defmodule Hologram.Query.InterpreterTest do
       assert names(agreed(sort(Module10, priority: :desc))) == ["cleo", "bob", "ada"]
     end
 
+    # Two rows missing the key tie on it, so the next key decides between them.
+    test "orders rows missing a key by the next key" do
+      module_10(count: 1, username: "eve")
+
+      query =
+        Module10
+        |> filter(priority: nil)
+        |> sort([priority, username])
+
+      assert names(agreed(query)) == ["cleo", "eve"]
+    end
+
     test "orders strings" do
       assert names(agreed(sort(Module10, username))) == ["ada", "bob", "cleo"]
     end

@@ -2,6 +2,8 @@ defmodule Hologram.Sync.CatchupTest do
   use Hologram.Test.DatabaseCase, async: true
 
   import Hologram.Sync.Catchup
+  import Hologram.Test.Stubs
+  import Mox
 
   require Hologram.Query
 
@@ -11,7 +13,9 @@ defmodule Hologram.Sync.CatchupTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.QueryRunner
+  alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Sync.Catchup
@@ -26,6 +30,54 @@ defmodule Hologram.Sync.CatchupTest do
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
+
+  use_module_stub :query_cache
+
+  # A task may be deleted while its board holds no card by the user - read through the task's
+  # board, so a task with no board has an empty set, answered without reading the database: yes for
+  # a user, and no for a visitor, since the rule asks about the actor.
+  defmodule VerdictBoard do
+    use Hologram.Entity
+
+    relationship :cards, [__MODULE__.Card], inverse: board
+
+    allow :read
+
+    defmodule Card do
+      use Hologram.Entity
+
+      relationship :author, Hologram.Test.Fixtures.Entity.Module14, optional: true
+      relationship :board, Hologram.Sync.CatchupTest.VerdictBoard, optional: true
+
+      allow :read
+    end
+  end
+
+  defmodule VerdictTask do
+    use Hologram.Entity
+
+    relationship :board, VerdictBoard, optional: true
+
+    allow :read
+    allow :delete, when: none(card <- board.cards, card.author_id == user_id())
+  end
+
+  defp delete_key do
+    Policy.verdict_key(
+      VerdictTask,
+      :delete,
+      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
+    )
+  end
+
+  # A build with a page checking permissions on the client - the only kind whose rows carry
+  # verdicts.
+  defp check_permissions do
+    stub_with(QueryCacheMock, QueryCacheStub)
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{permission_checking?: true})
+
+    on_exit(fn -> :persistent_term.erase(QueryCacheStub.persistent_term_key()) end)
+  end
 
   defp effect(entity_type, entity_id) do
     %{entity_id: entity_id, op: :patch_entity, type: entity_type}
@@ -123,11 +175,26 @@ defmodule Hologram.Sync.CatchupTest do
     |> DB.create!()
   end
 
-  describe "deltas/2" do
+  describe "deltas/3" do
+    test "hands a row over with the given user's verdicts" do
+      check_permissions()
+
+      row = %{VerdictTask.new() | id: @entity_id}
+
+      assert [%{data: %{"$verdicts": verdicts}, op: :put_entity}] =
+               deltas(
+                 [effect(VerdictTask, @entity_id)],
+                 %{@entity_id => row},
+                 Entity.generate_id()
+               )
+
+      assert verdicts == %{delete_key() => true}
+    end
+
     test "hands over a row the gap touched as it now stands" do
       row = %Module2{a: true, c: "as it now stands", id: @entity_id}
 
-      assert deltas([effect(Module2, @entity_id)], %{@entity_id => row}) == [
+      assert deltas([effect(Module2, @entity_id)], %{@entity_id => row}, nil) == [
                %{
                  data: WireData.row(row),
                  id: @entity_id,
@@ -138,7 +205,7 @@ defmodule Hologram.Sync.CatchupTest do
     end
 
     test "tells the client to drop a row the gap touched that it may no longer see" do
-      assert deltas([effect(Module2, @entity_id)], %{}) == [
+      assert deltas([effect(Module2, @entity_id)], %{}, nil) == [
                %{
                  id: @entity_id,
                  op: :unsync_entity,
@@ -151,7 +218,7 @@ defmodule Hologram.Sync.CatchupTest do
       row = %Module2{a: true, c: "moved three times", id: @entity_id}
       effects = [effect(Module2, @entity_id), effect(Module2, @entity_id)]
 
-      assert [%{data: data, op: :put_entity}] = deltas(effects, %{@entity_id => row})
+      assert [%{data: data, op: :put_entity}] = deltas(effects, %{@entity_id => row}, nil)
       assert data.c == "moved three times"
     end
 
@@ -163,7 +230,7 @@ defmodule Hologram.Sync.CatchupTest do
       effects = [edge_effect(:add_relationship, Module28, @entity_id, "labels", @target_id)]
 
       assert [%{id: @entity_id, op: :put_entity}, %{data: data, id: @target_id, op: :put_entity}] =
-               deltas(effects, %{@entity_id => message, @target_id => label})
+               deltas(effects, %{@entity_id => message, @target_id => label}, nil)
 
       assert data.messages == [@entity_id]
     end
@@ -179,7 +246,7 @@ defmodule Hologram.Sync.CatchupTest do
 
       targets =
         effects
-        |> deltas(%{@target_id => label})
+        |> deltas(%{@target_id => label}, nil)
         |> Enum.filter(&(&1.id == @target_id))
 
       assert length(targets) == 1
@@ -195,7 +262,7 @@ defmodule Hologram.Sync.CatchupTest do
 
       targets =
         effects
-        |> deltas(%{@target_id => label})
+        |> deltas(%{@target_id => label}, nil)
         |> Enum.filter(&(&1.id == @target_id))
 
       assert length(targets) == 1
@@ -205,14 +272,14 @@ defmodule Hologram.Sync.CatchupTest do
       message = %Module28{body: "tagged", id: @entity_id}
       effects = [edge_effect(:add_relationship, Module28, @entity_id, "labels", @target_id)]
 
-      assert [%{id: @entity_id, op: :put_entity}] = deltas(effects, %{@entity_id => message})
+      assert [%{id: @entity_id, op: :put_entity}] = deltas(effects, %{@entity_id => message}, nil)
     end
 
     test "says nothing more about the target of an edge whose type declares no inverse of it" do
       target = %Module2{a: true, c: "a target", id: @target_id}
       effects = [edge_effect(:add_relationship, Module3, @entity_id, "a", @target_id)]
 
-      assert deltas(effects, %{@target_id => target}) == [
+      assert deltas(effects, %{@target_id => target}, nil) == [
                %{
                  id: @entity_id,
                  op: :unsync_entity,
@@ -222,11 +289,11 @@ defmodule Hologram.Sync.CatchupTest do
     end
 
     test "says nothing about a type this build has never compiled" do
-      assert deltas([effect("MyApp.TypeOnlyThisTestNames", @entity_id)], %{}) == []
+      assert deltas([effect("MyApp.TypeOnlyThisTestNames", @entity_id)], %{}, nil) == []
     end
 
     test "says nothing about a gap that touched nothing" do
-      assert deltas([], %{}) == []
+      assert deltas([], %{}, nil) == []
     end
   end
 

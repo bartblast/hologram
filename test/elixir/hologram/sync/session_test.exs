@@ -14,7 +14,9 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.PLT
   alias Hologram.DB
+  alias Hologram.DB.EntityOperations
   alias Hologram.Entity
+  alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Query.Stage
@@ -33,6 +35,8 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyProject
+  alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyLabel
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
   use_module_stub :query_cache
@@ -50,6 +54,8 @@ defmodule Hologram.Sync.SessionTest do
   @other_page MyApp.SettingsPage
   @other_window "w_other"
   @page MyApp.BoardPage
+  @project_window "w_project"
+  @public_project_window "w_public_project"
   @reach_window "w_reach"
   @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
 
@@ -1591,6 +1597,152 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
+  describe "handle :round - verdicts" do
+    setup :verdict_rows
+
+    # The pair moves no value of the project, but the set its archive rule reads.
+    test "sends the verdicts a round moved on a held row in a patch naming no value", %{
+      locked: locked,
+      project: project
+    } do
+      windows(%{@page => [@project_window]})
+      hold_windows([@project_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, _cursor, _first_deltas, _applied_seq}
+
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
+      Evaluator.round(@project_window, label_pair_transactions(project, locked))
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert deltas == [verdicts_patch(project, false)]
+    end
+
+    # The label the project holds moves, which no value of the project does.
+    test "sends the verdicts a round moved through a related row", %{project: project} do
+      loose = verdict_label("loose")
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, loose.id)
+
+      windows(%{@page => [@project_window]})
+      hold_windows([@project_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, _cursor, _first_deltas, _applied_seq}
+
+      DB.update!(PolicyLabel, loose.id, name: "locked")
+      Evaluator.round(@project_window, label_patch_transactions(loose))
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert deltas == [verdicts_patch(project, false)]
+    end
+
+    test "sends nothing when a round moves what a held row's verdicts read and not the verdicts",
+         %{project: project} do
+      loose = verdict_label("loose")
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, loose.id)
+
+      windows(%{@page => [@project_window]})
+      hold_windows([@project_window])
+
+      session = start_session!([])
+      assert_receive {:sync_deltas, _cursor, _first_deltas, _applied_seq}
+
+      DB.update!(PolicyLabel, loose.id, name: "free")
+      Evaluator.round(@project_window, label_patch_transactions(loose))
+      settle([@project_window], session)
+
+      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
+    end
+
+    # The verdicts are the row's, whichever window holds it.
+    test "sends the verdicts a round moved on a row two windows hold once", %{
+      locked: locked,
+      project: project
+    } do
+      window_ids = [@project_window, @public_project_window]
+      windows(%{@page => window_ids})
+      hold_windows(window_ids)
+
+      session = start_session!([])
+      assert_receive {:sync_synced, :all, _cursor}
+      flush_messages()
+
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
+      transactions = label_pair_transactions(project, locked)
+      Enum.each(window_ids, &Evaluator.round(&1, transactions))
+      settle(window_ids, session)
+
+      assert_received {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert deltas == [verdicts_patch(project, false)]
+      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
+    end
+  end
+
+  describe "start_link/1 - coming back to verdicts" do
+    setup :verdict_rows
+
+    # The client may hold verdicts from before this session, under keys a deploy changed since.
+    test "tells a returning client the verdicts of a row the gap never named", %{
+      project: project
+    } do
+      windows(%{@page => [@project_window]})
+      hold_windows([@project_window])
+
+      gone_id = Entity.generate_id()
+
+      start_session!(gap: [gap_effect(gone_id)])
+
+      assert_receive {:sync_deltas, _cursor, gap_deltas, _applied_seq}
+
+      assert gap_deltas == [
+               %{id: gone_id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Entity.Module2"}
+             ]
+
+      assert_receive {:sync_deltas, _cursor, verdict_deltas, _applied_seq}
+      assert verdict_deltas == [verdicts_patch(project, true)]
+    end
+
+    # The silent window keeps the client being caught up while the public window loses the project,
+    # which the other window still holds.
+    test "tells a returning client the verdicts of a row one window lost while another holds it",
+         %{
+           project: project
+         } do
+      window_ids = [@public_project_window, @project_window]
+      windows(%{@page => [@public_project_window, @project_window, @other_window]})
+      hold_windows(window_ids)
+
+      Enum.each(window_ids, &Evaluator.round(&1, []))
+      wait_until(fn -> Enum.all?(window_ids, &(ResultStore.versions(&1) != [])) end)
+
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [])
+
+      DB.update(PolicyProject, project.id, %{public: false})
+      Evaluator.round(@public_project_window, project_patch_transactions(project))
+      settle([@public_project_window], session)
+
+      ResultStore.put(@other_window, 1, [])
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert_receive {:sync_deltas, nil, deltas, _applied_seq}
+      assert deltas == [verdicts_patch(project, true)]
+    end
+
+    test "tells a returning client that missed nothing the verdicts of the rows it holds", %{
+      project: project
+    } do
+      windows(%{@page => [@project_window]})
+      hold_windows([@project_window])
+
+      start_session!(gap: [])
+
+      assert_receive {:sync_deltas, nil, deltas, _applied_seq}
+      assert deltas == [verdicts_patch(project, true)]
+    end
+  end
+
   defp silence do
     receive do
       {:"$gen_call", from, {:subscribe, _subscriber}} ->
@@ -1600,6 +1752,15 @@ defmodule Hologram.Sync.SessionTest do
 
       _round ->
         silence()
+    end
+  end
+
+  # Drops what the session sent so far, so a test reads only what follows.
+  defp flush_messages do
+    receive do
+      _message -> flush_messages()
+    after
+      0 -> :ok
     end
   end
 
@@ -1668,6 +1829,36 @@ defmodule Hologram.Sync.SessionTest do
     |> Stage.normalize()
   end
 
+  defp label_pair_transactions(project, label) do
+    [
+      {200,
+       [
+         %{
+           data: %{"relationship" => "labels", "target_id" => label.id},
+           entity_id: project.id,
+           mutation_ref: nil,
+           op: :add_relationship,
+           type: PolicyProject
+         }
+       ]}
+    ]
+  end
+
+  defp label_patch_transactions(label) do
+    [
+      {200,
+       [
+         %{
+           data: %{"name" => "whatever the log said"},
+           entity_id: label.id,
+           mutation_ref: nil,
+           op: :patch_entity,
+           type: PolicyLabel
+         }
+       ]}
+    ]
+  end
+
   defp label_window_term do
     Module29
     |> Query.include(messages)
@@ -1698,6 +1889,44 @@ defmodule Hologram.Sync.SessionTest do
     |> Stage.normalize()
   end
 
+  # The project's archive rule asks that none of its labels is locked - true until one is.
+  defp project_patch_transactions(project) do
+    [
+      {200,
+       [
+         %{
+           data: %{"public" => "whatever the log said"},
+           entity_id: project.id,
+           mutation_ref: nil,
+           op: :patch_entity,
+           type: PolicyProject
+         }
+       ]}
+    ]
+  end
+
+  defp project_verdicts(archivable?) do
+    Map.new([:archive, :feature, :publish], fn operation ->
+      [%{predicates: [clause]}] = Policy.build(PolicyProject)[operation]
+
+      {Policy.verdict_key(PolicyProject, operation, clause), operation != :archive or archivable?}
+    end)
+  end
+
+  # Waits until each given window's evaluator has handled what it was sent, and the session what
+  # they sent it - so a test can say nothing came, rather than that nothing came yet.
+  defp settle(window_ids, session) do
+    Enum.each(window_ids, fn window_id ->
+      [{evaluator, _value}] = Registry.lookup(Evaluator.registry(), window_id)
+
+      :sys.get_state(evaluator)
+    end)
+
+    :sys.get_state(session)
+
+    :ok
+  end
+
   defp transactions(entity_id, names, mutation_ref \\ nil) do
     data = Map.new(names, &{&1, "whatever the log said"})
 
@@ -1719,5 +1948,45 @@ defmodule Hologram.Sync.SessionTest do
   # a jsonb column.
   defp ref(replica_id, seq) do
     %{"replica_id" => replica_id, "seq" => seq}
+  end
+
+  defp verdict_label(name) do
+    %{name: name}
+    |> PolicyLabel.new()
+    |> DB.create!()
+  end
+
+  # A public project every client may read, its windows checking permissions, and a locked label it
+  # does not hold yet.
+  defp verdict_rows(_context) do
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+      entries: %{},
+      permission_checking?: true,
+      prop_params: %{},
+      windows: %{
+        @project_window => Stage.normalize(PolicyProject),
+        @other_window => Stage.normalize(PolicyModule1),
+        @public_project_window =>
+          PolicyProject
+          |> Query.filter(public: true)
+          |> Stage.normalize()
+      }
+    })
+
+    project =
+      %{public: true}
+      |> PolicyProject.new()
+      |> DB.create!()
+
+    %{locked: verdict_label("locked"), project: project}
+  end
+
+  defp verdicts_patch(project, archivable?) do
+    %{
+      data: %{"$revisions": %{}, "$verdicts": project_verdicts(archivable?)},
+      id: project.id,
+      op: :patch_entity,
+      type: "Hologram.Test.Fixtures.Policy.Module17"
+    }
   end
 end

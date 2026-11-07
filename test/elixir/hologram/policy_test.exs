@@ -5,12 +5,16 @@ defmodule Hologram.PolicyTest do
     only: [
       build: 1,
       dead_entity_types: 1,
+      deciding_quantifier?: 2,
+      deciding_quantifiers: 1,
       delegation: 2,
       expand_global_role: 1,
       expand_global_role: 2,
       framework_operations: 0,
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
+      held_chains: 2,
+      locked_set_links: 1,
       operation_key: 1,
       operations: 1,
       read_roles_qualifying_role_modules: 1,
@@ -19,10 +23,14 @@ defmodule Hologram.PolicyTest do
       related_chains: 2,
       revoke_role_qualifying_roles: 1,
       revoke_role_qualifying_roles: 2,
-      validate_operation!: 2
+      validate_operation!: 2,
+      verdict_key: 3,
+      verdict_reads: 2,
+      verdict_related_reads: 2
     ]
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Entity.Derived
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -354,6 +362,35 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "build/1" do
+    defmodule BuildProject do
+      use Hologram.Entity
+
+      relationship :members, [Hologram.PolicyTest.BuildMember], inverse: project
+
+      allow :read, when: any(member <- members, member.user_id == user_id())
+    end
+
+    defmodule BuildMember do
+      use Hologram.Entity
+
+      relationship :project, BuildProject, optional: true
+      relationship :user, Module14, optional: true
+
+      allow :read
+    end
+
+    test "builds a quantifier written in a condition" do
+      assert build(BuildProject) == %{
+               read: [
+                 %{
+                   predicates: [{:any, {[:members], [{:user_id, :==, {:actor}}]}}],
+                   to: nil,
+                   via: nil
+                 }
+               ]
+             }
+    end
+
     test "returns empty map for entity type without policy declarations" do
       assert build(Module1) == %{}
     end
@@ -589,6 +626,127 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "deciding_quantifier?/2" do
+    test "holds for a none and an all" do
+      project = Hologram.PolicyTest.VerdictProject
+
+      assert deciding_quantifier?(project, {:none, {[:members], []}})
+      assert deciding_quantifier?(project, {:all, {[:members], [{:seat, :==, "full"}]}})
+    end
+
+    test "holds for an any holding a none in an alternative of its condition" do
+      inner = [{:or, [[{:seat, :==, "full"}], [{:none, {{:outer, 1, [:labels]}, []}}]]}]
+
+      assert deciding_quantifier?(Hologram.PolicyTest.VerdictProject, {:any, {[:members], inner}})
+    end
+
+    # A bounded set computed over the rows a client holds can hold rows the server's doesn't.
+    test "holds for an any over a derived set" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.LockedBoard,
+               {:any, {[:top_cards], [{:rank, :==, 1}]}}
+             )
+    end
+
+    test "holds for an any holding an any over a derived set" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.LockedTeam,
+               {:any, {[:boards], [{:any, {[:top_cards], []}}]}}
+             )
+    end
+
+    test "holds for an any over a derived set past a relationship to its owner" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.TopCardsRule,
+               {:any, {[:board, :top_cards], []}}
+             )
+    end
+
+    # The inner source is read on the board, one quantifier out, which holds the derived set.
+    test "holds for an any holding an any over a derived set read on the row above" do
+      clause = {:any, {[:cards], [{:any, {{:outer, 1, [:top_cards]}, []}}]}}
+
+      assert deciding_quantifier?(Hologram.PolicyTest.LockedBoard, clause)
+    end
+
+    test "fails for an any holding an any over a stored set read on the row above" do
+      clause = {:any, {[:cards], [{:any, {{:outer, 1, [:cards]}, []}}]}}
+
+      refute deciding_quantifier?(Hologram.PolicyTest.LockedBoard, clause)
+    end
+
+    # A client can't compute the count.
+    test "holds for an any whose condition reads a derived field counting a set" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.LockedBoard,
+               {:any, {[:cards], [{:tag_count, :<, 2}]}}
+             )
+    end
+
+    test "fails for an any alone and for a predicate" do
+      project = Hologram.PolicyTest.VerdictProject
+
+      refute deciding_quantifier?(project, {:any, {[:members], [{:seat, :==, "full"}]}})
+      refute deciding_quantifier?(project, {:seat, :==, "full"})
+    end
+  end
+
+  describe "deciding_quantifiers/1" do
+    defmodule VerdictProject do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :labels, [Hologram.PolicyTest.VerdictLabel]
+      relationship :members, [Hologram.PolicyTest.VerdictMember], inverse: project
+
+      allow :read, when: any(member <- members, member.user_id == user_id())
+      allow :update, when: name == "open" or all(member <- members, member.seat == "full")
+      allow :delete, when: none(labels)
+      allow :archive, when: none(labels)
+
+      allow :close,
+        when: any(member <- members, none(label <- member.project.labels, label.name == "x"))
+    end
+
+    defmodule VerdictMember do
+      use Hologram.Entity
+
+      attribute :seat, :string
+
+      relationship :project, VerdictProject, optional: true
+      relationship :user, Module14, optional: true
+
+      allow :read
+    end
+
+    defmodule VerdictLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
+    # The read rule's any reads no none or all, so the browser answers it from the rows it holds -
+    # the others are keyed by their operation and clause.
+    test "returns the deciding quantifiers of every operation, keyed" do
+      update_clause = {:all, {[:members], [{:seat, :==, "full"}]}}
+      none_clause = {:none, {[:labels], []}}
+
+      close_clause =
+        {:any, {[:members], [{:none, {[:project, :labels], [{:name, :==, "x"}]}}]}}
+
+      assert deciding_quantifiers(VerdictProject) ==
+               Enum.sort([
+                 {verdict_key(VerdictProject, :archive, none_clause), none_clause},
+                 {verdict_key(VerdictProject, :close, close_clause), close_clause},
+                 {verdict_key(VerdictProject, :delete, none_clause), none_clause},
+                 {verdict_key(VerdictProject, :update, update_clause), update_clause}
+               ])
+    end
+  end
+
   describe "delegation/2" do
     test "returns nil for a line that delegates nothing" do
       assert delegation(:read, nil) == nil
@@ -669,6 +827,383 @@ defmodule Hologram.PolicyTest do
 
     test "returns empty list when no rule covers the given role" do
       assert grant_role_qualifying_roles(Policy.Module1, :viewer) == []
+    end
+  end
+
+  describe "held_chains/2" do
+    defmodule HeldTask do
+      use Hologram.Entity
+
+      relationship :project, Hologram.PolicyTest.VerdictProject, optional: true
+
+      allow :update, via: project
+    end
+
+    test "returns the chains an any reads" do
+      assert held_chains(Hologram.PolicyTest.VerdictProject, :read) == [[:members]]
+    end
+
+    # The server's verdict answers the all over the members as stored.
+    test "leaves out the chains a deciding quantifier in an alternative reads" do
+      assert held_chains(Hologram.PolicyTest.VerdictProject, :update) == []
+    end
+
+    test "returns a delegation's chain without the chains its deciding quantifiers read" do
+      assert held_chains(HeldTask, :update) == [[:project]]
+    end
+
+    defmodule HeldOwner do
+      use Hologram.Entity
+
+      attribute :name, :string
+    end
+
+    defmodule HeldSeat do
+      use Hologram.Entity
+
+      attribute :taken, :boolean
+
+      relationship :tags, [Hologram.PolicyTest.HeldOwner]
+    end
+
+    defmodule HeldBoard do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :owner, HeldOwner, optional: true
+      relationship :seats, [HeldSeat]
+
+      allow :update, when: owner.name == "x" or all(seat <- seats, seat.taken == true)
+
+      allow :delete,
+        when: none(seat <- seats, seat.taken == true) and any(seat <- seats, seat.taken == false)
+
+      allow :archive, when: any(seat <- seats, none(tag <- seat.tags, tag.name == "x"))
+    end
+
+    defmodule HeldRoom do
+      use Hologram.Entity
+
+      relationship :board, HeldBoard, optional: true
+
+      allow :update, when: board.name == "x" and none(seat <- board.seats, seat.taken == true)
+    end
+
+    test "returns the chain another alternative reads beside a deciding quantifier's" do
+      assert held_chains(HeldBoard, :update) == [[:owner]]
+    end
+
+    test "returns a set a deciding quantifier reads that an any beside it reads too" do
+      assert held_chains(HeldBoard, :delete) == [[:seats]]
+    end
+
+    test "leaves out the chains of an any holding a none" do
+      assert held_chains(HeldBoard, :archive) == []
+    end
+
+    test "returns a row a path reads that a deciding quantifier reads a set through too" do
+      assert held_chains(HeldRoom, :update) == [[:board]]
+    end
+  end
+
+  describe "locked_set_links/1" do
+    defmodule LockedProject do
+      use Hologram.Entity
+
+      relationship :labels, [Hologram.PolicyTest.LockedLabel]
+      relationship :members, [Hologram.PolicyTest.LockedMember], inverse: project
+
+      allow :delete, when: none(members)
+      allow :update, when: all(label <- labels, label.name == "ok")
+    end
+
+    defmodule LockedMember do
+      use Hologram.Entity
+
+      relationship :project, LockedProject, optional: true
+
+      allow :read
+    end
+
+    defmodule LockedLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      relationship :projects, [LockedProject], inverse: labels
+
+      allow :delete, when: none(projects)
+    end
+
+    defmodule LockedTask do
+      use Hologram.Entity
+
+      attribute :title, :string
+
+      relationship :project, LockedProject, optional: true
+
+      allow :update,
+        when: title == "draft" or any(label <- project.labels, none(project.members))
+    end
+
+    defmodule AnyInNoneTask do
+      use Hologram.Entity
+
+      relationship :project, LockedProject, optional: true
+
+      allow :update,
+        when: none(label <- project.labels, any(project.members))
+    end
+
+    defmodule NoneInNoneTask do
+      use Hologram.Entity
+
+      relationship :project, LockedProject, optional: true
+
+      allow :update, when: none(label <- project.labels, none(label.projects))
+    end
+
+    defmodule AnyProject do
+      use Hologram.Entity
+
+      relationship :members, [Hologram.PolicyTest.AnyMember], inverse: project
+
+      allow :read, when: any(members)
+    end
+
+    defmodule AnyMember do
+      use Hologram.Entity
+
+      relationship :project, AnyProject, optional: true
+
+      allow :read
+    end
+
+    test "names how a row joins a set a none or an all reads" do
+      assert locked_set_links([LockedProject, LockedMember, LockedLabel]) ==
+               MapSet.new([
+                 {:edge, LockedProject, :labels, :source, LockedProject},
+                 {:edge, LockedProject, :labels, :target, LockedLabel},
+                 {:reference, LockedMember, :project_id, LockedProject}
+               ])
+    end
+
+    # A label joining the project can only make the any true, which never refuses what it granted,
+    # but a member joining the set the none reads on the task's project can make the none false. A
+    # label has no project of its own, so the none's source is read on the task.
+    test "names the set of a none inside an any's condition, in an alternative, through a relationship" do
+      assert locked_set_links([LockedTask]) ==
+               MapSet.new([{:reference, LockedMember, :project_id, LockedProject}])
+    end
+
+    # Inside the none the any's truth hurts, so a member joining the set it reads on the task's
+    # project can refuse, as a label joining the none's own set can.
+    test "names the set of an any inside a none" do
+      assert locked_set_links([AnyInNoneTask]) ==
+               MapSet.new([
+                 {:edge, LockedProject, :labels, :source, LockedProject},
+                 {:reference, LockedMember, :project_id, LockedProject}
+               ])
+    end
+
+    # The inner none's truth hurts the outer one, so a project joining a label's set can only make
+    # the inner none false and the outer none truer.
+    test "leaves out the set of a none inside a none" do
+      assert locked_set_links([NoneInNoneTask]) ==
+               MapSet.new([{:edge, LockedProject, :labels, :source, LockedProject}])
+    end
+
+    test "leaves out a set read by an any alone" do
+      assert locked_set_links([AnyProject, AnyMember]) == MapSet.new()
+    end
+
+    defmodule LockedBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.PolicyTest.LockedCard], inverse: board
+      relationship :labels, [Hologram.PolicyTest.LockedTag]
+      relationship :team, Hologram.PolicyTest.LockedTeam, optional: true
+
+      derived :busy_cards, [Hologram.PolicyTest.LockedCard], fn cards ->
+        filter(cards, tag_count > 1)
+      end
+
+      derived :flagged_cards, [Hologram.PolicyTest.LockedCard], fn cards ->
+        filter(cards, any(tag <- tags, tag.name == "flag"))
+      end
+
+      derived :label_count, :integer, fn labels -> count(labels) end
+
+      derived :low_top_cards, [Hologram.PolicyTest.LockedCard], fn top_cards ->
+        filter(top_cards, rank < 3)
+      end
+
+      derived :most_tagged_cards, [Hologram.PolicyTest.LockedCard], fn cards ->
+        cards
+        |> sort(tag_count: :desc)
+        |> take(1)
+      end
+
+      derived :picked_cards, [Hologram.PolicyTest.LockedCard], fn cards, label_count ->
+        if label_count > 1, do: take(cards, 1), else: cards
+      end
+
+      derived :top_cards, [Hologram.PolicyTest.LockedCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+    end
+
+    defmodule LockedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      relationship :board, LockedBoard, optional: true
+      relationship :tags, [Hologram.PolicyTest.LockedTag]
+
+      derived :tag_count, :integer, fn tags -> count(tags) end
+    end
+
+    defmodule LockedTag do
+      use Hologram.Entity
+
+      attribute :name, :string
+    end
+
+    defmodule LockedTeam do
+      use Hologram.Entity
+
+      relationship :boards, [LockedBoard], inverse: team
+
+      allow :update, when: any(card <- boards.top_cards, card.rank == 1)
+    end
+
+    defmodule BusyCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.busy_cards, card.rank == 1)
+    end
+
+    defmodule CountedTagsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.cards, card.tag_count < 2)
+    end
+
+    defmodule FlaggedCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.flagged_cards, card.rank == 1)
+    end
+
+    defmodule LowTopCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.low_top_cards, card.rank == 1)
+    end
+
+    defmodule MostTaggedCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.most_tagged_cards, card.rank == 1)
+    end
+
+    defmodule PickedCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.picked_cards, card.rank == 1)
+    end
+
+    defmodule TopCardsRule do
+      use Hologram.Entity
+
+      relationship :board, LockedBoard, optional: true
+
+      allow :update, when: any(card <- board.top_cards, card.rank == 1)
+    end
+
+    setup do
+      put_derived_definitions([LockedBoard, LockedCard])
+    end
+
+    # A card joining the board can push another out of its bound, so even an any over the set can
+    # turn false.
+    test "names how a row joins the set a derived set reads, under an any" do
+      assert locked_set_links([TopCardsRule]) ==
+               MapSet.new([{:reference, LockedCard, :board_id, LockedBoard}])
+    end
+
+    test "names how a row joins the set a derived set built on another one reads" do
+      assert locked_set_links([LowTopCardsRule]) ==
+               MapSet.new([{:reference, LockedCard, :board_id, LockedBoard}])
+    end
+
+    # A board joining the team brings its cards into the set the quantifier reads.
+    test "names how a row joins a set the relationships before a derived set read" do
+      assert locked_set_links([LockedTeam]) ==
+               MapSet.new([
+                 {:reference, LockedBoard, :team_id, LockedTeam},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # A tag joining a card can take it into the set or out of it, whichever way the filter's any
+    # points.
+    test "names the set a quantifier in a derived set's filter reads" do
+      assert locked_set_links([FlaggedCardsRule]) ==
+               MapSet.new([
+                 {:edge, LockedCard, :tags, :source, LockedCard},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # A tag joining a card moves its count, which takes it into the set or out of it.
+    test "names the set a derived field read in a derived set's filter reads" do
+      assert locked_set_links([BusyCardsRule]) ==
+               MapSet.new([
+                 {:edge, LockedCard, :tags, :source, LockedCard},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # A tag joining a card moves its count, which reorders the set the bound is taken from.
+    test "names the set a derived sort key reads" do
+      assert locked_set_links([MostTaggedCardsRule]) ==
+               MapSet.new([
+                 {:edge, LockedCard, :tags, :source, LockedCard},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # A label joining the board can flip which query the if picks.
+    test "names the set a derived set's if condition reads" do
+      assert locked_set_links([PickedCardsRule]) ==
+               MapSet.new([
+                 {:edge, LockedBoard, :labels, :source, LockedBoard},
+                 {:reference, LockedCard, :board_id, LockedBoard}
+               ])
+    end
+
+    # The any over the board's own cards names nothing, but the count a card's condition compares
+    # can be compared either way.
+    test "names the set a derived field in a quantifier's condition reads" do
+      assert locked_set_links([CountedTagsRule]) ==
+               MapSet.new([{:edge, LockedCard, :tags, :source, LockedCard}])
     end
   end
 
@@ -809,7 +1344,101 @@ defmodule Hologram.PolicyTest do
     end
   end
 
+  describe "related_chains/1 - quantifiers" do
+    defmodule ChainProject do
+      use Hologram.Entity
+
+      relationship :labels, [Hologram.PolicyTest.ChainLabel]
+      relationship :members, [Hologram.PolicyTest.ChainMember], inverse: project
+
+      derived :first_members, [Hologram.PolicyTest.ChainMember], fn members ->
+        take(members, 2)
+      end
+
+      allow :read, when: any(member <- members, member.seat == "full")
+      allow :update, when: any(labels)
+      allow :archive, when: any(member <- first_members, member.seat == "full")
+    end
+
+    defmodule ChainBoard do
+      use Hologram.Entity
+
+      attribute :public, :boolean
+
+      relationship :projects, [ChainProject]
+
+      allow :read, when: public == true or any(project <- projects, any(project.labels))
+    end
+
+    defmodule ChainMember do
+      use Hologram.Entity
+
+      attribute :seat, :string
+
+      relationship :project, ChainProject, optional: true
+      relationship :user, Module14, optional: true
+
+      allow :read
+    end
+
+    defmodule ChainLabel do
+      use Hologram.Entity
+
+      attribute :name, :string
+
+      allow :read
+    end
+
+    defmodule ChainTask do
+      use Hologram.Entity
+
+      relationship :project, ChainProject, optional: true
+
+      allow :read, when: any(member <- project.members, member.user.email == "a")
+      allow :update, via: project
+    end
+
+    # The labels are read for whether the project has any, so the set comes along though the
+    # condition reads nothing on it.
+    test "returns the sets a quantifier reads, with a condition and without one" do
+      assert related_chains(ChainProject, :read) == [[:members]]
+      assert related_chains(ChainProject, :update) == [[:labels]]
+    end
+
+    # The browser answers a quantifier over a derived set from the server's verdict, so none of its
+    # rows are needed.
+    test "leaves out a set a derived field holds" do
+      assert related_chains(ChainProject, :archive) == []
+    end
+
+    test "returns the sets of a quantifier in an alternative and of one nested in its condition" do
+      assert related_chains(ChainBoard) == [[:projects], [:projects, :labels]]
+    end
+
+    # A chain is followed hop by hop, so the project along the way comes with the members.
+    test "returns the rows along a quantifier's source and a path from the set's rows" do
+      assert related_chains(ChainTask, :read) == [
+               [:project, :members],
+               [:project, :members, :user]
+             ]
+    end
+
+    test "returns a delegated rule's sets prefixed with the delegation's chain" do
+      assert related_chains(ChainTask, :update) == [[:project], [:project, :labels]]
+    end
+  end
+
   describe "related_chains/2" do
+    defmodule BuilderOwner do
+      use Hologram.Entity
+
+      alias Hologram.Test.Fixtures.Entity.Module36
+
+      relationship :memberships, [Module36]
+
+      allow :update, when: any(membership <- memberships, membership.unread_count > 0)
+    end
+
     test "returns the rows the given operation's rules read" do
       assert related_chains(Policy.Module12, :delete) == [[:parent, :parent]]
     end
@@ -824,6 +1453,11 @@ defmodule Hologram.PolicyTest do
 
     test "returns no chains for an operation with no rules" do
       assert related_chains(Policy.Module12, :create) == []
+    end
+
+    # The server's verdict answers the any, and the builder reads a set the browser never holds.
+    test "returns a quantifier's set and nothing through a derived value calling a query builder" do
+      assert related_chains(BuilderOwner, :update) == [[:memberships]]
     end
   end
 
@@ -933,6 +1567,202 @@ defmodule Hologram.PolicyTest do
       assert_error ArgumentError, expected_msg, fn ->
         validate_operation!(Policy.Module1, wrap_term("read"))
       end
+    end
+  end
+
+  describe "verdict_key/3" do
+    defmodule KeyedProject do
+      use Hologram.Entity
+
+      attribute :title, :string
+
+      relationship :members, [Hologram.PolicyTest.KeyedMember], inverse: project
+
+      allow :read
+    end
+
+    defmodule KeyedMember do
+      use Hologram.Entity
+
+      attribute :first, :string
+      attribute :seat, :string
+
+      relationship :project, KeyedProject, optional: true
+
+      derived :label, :string, fn first -> first <> "!" end
+
+      allow :read
+    end
+
+    defmodule RekeyedMember do
+      use Hologram.Entity
+
+      attribute :first, :string
+
+      derived :label, :string, fn first -> first <> "?" end
+
+      allow :read
+    end
+
+    defmodule KeyedBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.PolicyTest.KeyedCard]
+
+      derived :top_cards, [Hologram.PolicyTest.KeyedCard], fn cards -> take(cards, 2) end
+    end
+
+    defmodule KeyedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+    end
+
+    defmodule ScoredBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.PolicyTest.ScoredCard]
+
+      derived :top_cards, [Hologram.PolicyTest.ScoredCard], fn cards ->
+        cards
+        |> sort(score: :desc)
+        |> take(2)
+      end
+    end
+
+    defmodule ScoredCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      derived :score, :integer, fn rank -> rank end
+    end
+
+    # Verdicts are stored with the rows a client holds, so the key a clause gets is pinned - a
+    # change to how keys are made would leave every stored verdict unread.
+    test "keys a clause by its operation and a digest of it" do
+      assert verdict_key(KeyedProject, :delete, {:none, {[:members], []}}) ==
+               "delete:bb12cc9173b5a038"
+    end
+
+    test "gives a changed clause a new key and another operation another one" do
+      key = verdict_key(KeyedProject, :delete, {:none, {[:members], []}})
+
+      assert verdict_key(KeyedProject, :delete, {:all, {[:members], [{:seat, :==, "x"}]}}) != key
+      assert verdict_key(KeyedProject, :archive, {:none, {[:members], []}}) != key
+    end
+
+    # The two types declare the same label computed two ways, so the same clause over it means two
+    # things - while over an attribute it means one.
+    test "gives a clause reading a derived field a new key when the field's definition changes" do
+      put_derived_definitions([KeyedMember, RekeyedMember])
+
+      assert verdict_key(KeyedMember, :delete, {:label, :==, "x"}) !=
+               verdict_key(RekeyedMember, :delete, {:label, :==, "x"})
+
+      assert verdict_key(KeyedMember, :delete, {:first, :==, "x"}) ==
+               verdict_key(RekeyedMember, :delete, {:first, :==, "x"})
+    end
+
+    # The key a verdict was told under is never read for what a changed set holds now.
+    test "gives a clause over a derived set a new key when the set's definition changes" do
+      put_derived_definitions([KeyedBoard])
+
+      clause = {:any, {[:top_cards], [{:rank, :==, 1}]}}
+      key = verdict_key(KeyedBoard, :delete, clause)
+      {:query, term} = Derived.definition(KeyedBoard, :top_cards)
+
+      Derived.put_definitions(%{{KeyedBoard, :top_cards} => {:query, %{term | take: 3}}})
+
+      assert verdict_key(KeyedBoard, :delete, clause) != key
+    end
+
+    test "gives a clause over a derived set a new key when a field its definition reads changes" do
+      put_derived_definitions([ScoredBoard, ScoredCard])
+
+      clause = {:any, {[:top_cards], [{:rank, :==, 1}]}}
+      key = verdict_key(ScoredBoard, :delete, clause)
+
+      Derived.put_definitions(%{{ScoredCard, :score} => {:value, 0}})
+
+      assert verdict_key(ScoredBoard, :delete, clause) != key
+    end
+
+    test "keys a per-role operation the way the client spells it" do
+      assert "grant_role:editor:" <> _digest =
+               verdict_key(KeyedProject, {:grant_role, :editor}, {:none, {[:members], []}})
+    end
+  end
+
+  describe "verdict_reads/2" do
+    test "returns the rule's type and every type along the clause's sets and paths" do
+      clause =
+        {:any,
+         {[:members],
+          [{:none, {[:project, :labels], [{:name, :==, "x"}]}}, {[:user, :email], :==, "a"}]}}
+
+      assert verdict_reads(Hologram.PolicyTest.VerdictProject, clause) ==
+               Enum.sort([
+                 Module14,
+                 Hologram.PolicyTest.VerdictLabel,
+                 Hologram.PolicyTest.VerdictMember,
+                 Hologram.PolicyTest.VerdictProject
+               ])
+    end
+
+    test "returns the types a derived field in the condition reads" do
+      put_derived_definitions([Hologram.PolicyTest.KeyedMember])
+
+      clause = {:none, {[:members], [{:label, :==, "x"}]}}
+
+      assert verdict_reads(Hologram.PolicyTest.KeyedProject, clause) ==
+               Enum.sort([Hologram.PolicyTest.KeyedMember, Hologram.PolicyTest.KeyedProject])
+    end
+
+    test "returns the types of a nested quantifier's set read on a row above" do
+      clause =
+        {:any, {[:members], [{:none, {{:outer, 1, [:labels]}, []}}]}}
+
+      assert verdict_reads(Hologram.PolicyTest.VerdictProject, clause) ==
+               Enum.sort([
+                 Hologram.PolicyTest.VerdictLabel,
+                 Hologram.PolicyTest.VerdictMember,
+                 Hologram.PolicyTest.VerdictProject
+               ])
+    end
+
+    test "returns the types a derived set's definition reads" do
+      board = Hologram.PolicyTest.LockedBoard
+
+      put_derived_definitions([board, Hologram.PolicyTest.LockedCard])
+
+      clause = {:none, {[:busy_cards], [{:rank, :==, 1}]}}
+
+      assert verdict_reads(board, clause) ==
+               Enum.sort([board, Hologram.PolicyTest.LockedCard, Hologram.PolicyTest.LockedTag])
+    end
+
+    test "returns the types along a set its condition reads nothing on" do
+      assert verdict_reads(Hologram.PolicyTest.VerdictProject, {:none, {[:labels], []}}) ==
+               Enum.sort([Hologram.PolicyTest.VerdictLabel, Hologram.PolicyTest.VerdictProject])
+    end
+  end
+
+  describe "verdict_related_reads/2" do
+    test "returns the types the clause reaches through a relationship, leaving out the rule's own type" do
+      assert verdict_related_reads(Hologram.PolicyTest.VerdictProject, {:none, {[:labels], []}}) ==
+               [Hologram.PolicyTest.VerdictLabel]
+    end
+
+    test "returns the rule's own type when a relationship leads to a row of it" do
+      clause = {:any, {[:members], [{:none, {[:project, :labels], [{:name, :==, "x"}]}}]}}
+
+      assert verdict_related_reads(Hologram.PolicyTest.VerdictProject, clause) ==
+               Enum.sort([
+                 Hologram.PolicyTest.VerdictLabel,
+                 Hologram.PolicyTest.VerdictMember,
+                 Hologram.PolicyTest.VerdictProject
+               ])
     end
   end
 end

@@ -9,10 +9,24 @@ defmodule Hologram.Policy.Evaluator do
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Derived
+  alias Hologram.Query.Ordering
+  alias Hologram.Query.Stage
 
   @ordering_operators [:<, :<=, :>, :>=]
 
+  @quantifiers [:all, :any, :none]
+
   @search_operators [:contains, :contains_exact, :starts_with, :starts_with_exact]
+
+  @doc """
+  Returns true when the given clause of a compiled rule holds for the given entity struct, or false
+  otherwise - evaluated as it is inside the rule, a clause standing in a rule's predicates. The
+  checker is the one `rule_matches?/4` takes.
+  """
+  @spec clause_holds?(tuple, struct, String.t() | nil, fun) :: boolean
+  def clause_holds?(clause, entity, actor_user_id, checker) do
+    clause_holds?(clause, [entity], actor_user_id, checker, :positive)
+  end
 
   @doc """
   Returns true when the given operation's compiled policy grants it for the given entity struct, or false otherwise.
@@ -47,79 +61,157 @@ defmodule Hologram.Policy.Evaluator do
   A derived field is its definition written in place, computed over the row it is read on - the
   rule's row, or the row a path leads to - its paths read the way the rule's own are: `<>` is nil
   when an operand is, an `if` takes its else branch when its condition does not hold, a condition
-  is true or false, never nil. A derived enum
-  compares by its value's position among the declared ones. A policy condition reads no derived
-  field reading a related set, which the build refuses.
+  is true or false, never nil, and a count counts the rows its query reads off the row, its bounds
+  applied. A derived enum compares by its value's position among the declared ones. A rule's own
+  condition reads no derived field reading a related set, which the build refuses - a derived set's
+  query may.
+
+  A quantifier holds when its condition holds for any, none or every row of the set its source
+  leads to - all and none hold over an empty set, any does not. Each related row is matched with the
+  rows above it, so a name of a row above, `{:outer, levels, name}`, reads the row that many
+  quantifiers out, and a source read on a row above starts there. A source may end at a derived
+  field holding rows, which holds its definition's rows for each row the relationships before it
+  reach, read raw as relationships are: its query's rows off that row, matched with that row above
+  them, in its order with its bounds applied, the rows of the query an if picks, or none for nil. A
+  derived field such a query reads is computed as a rule's own is.
 
   For an anonymous session a user_id() predicate is false, whichever way it points, and a grant
   reference is held by nobody - the actor is nobody rather than nil, since a nil actor would make
   rows with a missing reference match everyone. So a conjunction naming the actor fails, and a
   disjunction answers through its other alternatives: `author_id == user_id() or shared == true`
-  still grants a visitor the shared rows. A delegating rule is evaluated as any other, because the
-  entity type it delegates to answers its own actor-referencing rules the same way.
+  still grants a visitor the shared rows. An any naming the actor answers through what is left of
+  its condition, and a none or an all whose condition names the actor anywhere is false, since it
+  asks about nobody. A delegating rule is evaluated as any other, because the entity type it
+  delegates to answers its own actor-referencing rules the same way.
 
   Grant references, delegations and the rows a path reads are resolved by the given checker
   function, called as checker.(requirement, entity, actor user id). For the rule's grant reference
   or a {:via, operation, chain} tuple - the chain of to-one relationships followed to the related
   row - it returns a boolean. For a {:related, relationship names} tuple it returns the row those
-  relationships lead to, or nil when one of them is empty or names a row that is gone.
+  relationships lead to, or nil when one of them is empty or names a row that is gone. For a
+  {:set, relationship names} tuple it returns the rows of the set they lead to, each once - the
+  relationships before a derived field, to-ones alone among them, never the derived field itself -
+  asked as {:set, relationship names, :whole} when a row joining the set could turn the grant into
+  a refusal: a none or an all whose truth helps the rule, an any whose truth hurts it, any of them
+  over a derived set, and every set a derived field's definition reads.
   """
   @spec rule_matches?(map, struct, String.t() | nil, fun) :: boolean
   def rule_matches?(rule, entity, actor_user_id, checker) do
-    predicates_hold?(rule.predicates, entity, actor_user_id, checker) and
+    predicates_hold?(rule.predicates, [entity], actor_user_id, checker, :positive) and
       to_holds?(rule.to, entity, actor_user_id, checker) and
       via_holds?(rule.via, entity, actor_user_id, checker)
   end
 
-  defp clause_holds?({:or, alternatives}, entity, actor_user_id, checker) do
-    Enum.any?(alternatives, &predicates_hold?(&1, entity, actor_user_id, checker))
+  defp bound(rows, term) do
+    rows
+    |> Enum.drop(term.skip || 0)
+    |> take(term.take)
   end
 
-  defp clause_holds?(triple, entity, actor_user_id, checker) do
-    predicate_holds?(triple, entity, actor_user_id, checker)
-  end
+  # The rows a chain of relationships, perhaps ending at a derived field holding rows, leads to from
+  # the given rows, each once - the relationships read by the checker off each row they start on,
+  # the derived field's rows computed from its definition on each row they reach.
+  defp chain_rows(rows, [], _whole?, _actor_user_id, _checker), do: rows
 
-  defp compare(%Date{} = left, %Date{} = right), do: Date.compare(left, right)
+  defp chain_rows([], _names, _whole?, _actor_user_id, _checker), do: []
 
-  defp compare(%DateTime{} = left, %DateTime{} = right), do: DateTime.compare(left, right)
+  defp chain_rows(
+         [%entity_type{} | _same_type_rows] = rows,
+         [name | later_names] = names,
+         whole?,
+         actor_user_id,
+         checker
+       ) do
+    if Derived.declared?(entity_type, name) do
+      rows
+      |> each_once(&derived_rows(&1, name, actor_user_id, checker))
+      |> chain_rows(later_names, whole?, actor_user_id, checker)
+    else
+      {stretch, rest} = stored_stretch(entity_type, names)
+      requirement = if whole?, do: {:set, stretch, :whole}, else: {:set, stretch}
 
-  defp compare(%Time{} = left, %Time{} = right), do: Time.compare(left, right)
-
-  # A policy compares a string the way a query does - by the key derived from it, then by the
-  # value behind it - so a rule and the filter mirroring it admit the same rows. The key is a
-  # bounded prefix, which is what leaves the value something to settle.
-  defp compare(left, right) when is_binary(left) and is_binary(right) do
-    case plain_compare(SortKey.compute(left), SortKey.compute(right)) do
-      :eq -> plain_compare(left, right)
-      result -> result
+      rows
+      |> each_once(&checker.(requirement, &1, actor_user_id))
+      |> chain_rows(rest, whole?, actor_user_id, checker)
     end
   end
 
-  defp compare(left, right) when left < right, do: :lt
+  # The rows a clause is read on: the row it is about first, then each row above it, nearest first
+  # - the rule's row alone outside any quantifier. The polarity says whether the clause holding
+  # helps the rule (:positive) or hurts it (:negative), inside a none.
+  defp clause_holds?({:or, alternatives}, rows, actor_user_id, checker, polarity) do
+    Enum.any?(alternatives, &predicates_hold?(&1, rows, actor_user_id, checker, polarity))
+  end
 
-  defp compare(left, right) when left > right, do: :gt
+  # A none or an all asking about the actor of an anonymous session asks about nobody as a whole,
+  # which grants nothing - its condition alone would come out false and turn it true.
+  defp clause_holds?({quantifier, {source, clauses}}, rows, nil, checker, polarity)
+       when quantifier in [:all, :none] do
+    if Stage.names_actor?(clauses) do
+      false
+    else
+      quantifier_holds?({quantifier, source, clauses}, rows, nil, checker, polarity)
+    end
+  end
 
-  defp compare(_left, _right), do: :eq
+  defp clause_holds?({quantifier, {source, clauses}}, rows, actor_user_id, checker, polarity)
+       when quantifier in @quantifiers do
+    quantifier_holds?({quantifier, source, clauses}, rows, actor_user_id, checker, polarity)
+  end
 
-  defp plain_compare(left, right) when left < right, do: :lt
+  defp clause_holds?(triple, rows, actor_user_id, checker, _polarity) do
+    predicate_holds?(triple, rows, actor_user_id, checker)
+  end
 
-  defp plain_compare(left, right) when left > right, do: :gt
+  # The rows a derived field holding rows holds for the row: its query's rows in its order with its
+  # bounds applied, the rows of the branch an if takes, or none for nil.
+  defp definition_rows({:if, clauses, then_rows, else_rows}, row, actor_user_id, checker) do
+    branch =
+      if predicates_hold?(clauses, [row], actor_user_id, checker, :both),
+        do: then_rows,
+        else: else_rows
 
-  defp plain_compare(_left, _right), do: :eq
+    definition_rows(branch, row, actor_user_id, checker)
+  end
 
-  # An enum value compares by its position in the list the entity declares, which is the order
-  # the database holds the type in and the order a query compares it by - so a rule and the
-  # filter mirroring it admit the same rows. A value the list does not hold is a bug surfacing
-  # rather than a case to place.
-  defp compare(left, right, nil), do: compare(left, right)
+  defp definition_rows({:query, term}, row, actor_user_id, checker) do
+    row
+    |> sourced_rows(term, actor_user_id, checker)
+    |> Ordering.sort(term.sort, term.entity, &read_value([&1], &2, actor_user_id, checker))
+    |> bound(term)
+  end
 
-  defp compare(left, right, ranks) do
-    compare(Map.fetch!(ranks, left), Map.fetch!(ranks, right))
+  defp definition_rows({:value, nil}, _row, _actor_user_id, _checker), do: []
+
+  defp derived_rows(%entity_type{} = row, name, actor_user_id, checker) do
+    entity_type
+    |> Derived.definition(name)
+    |> definition_rows(row, actor_user_id, checker)
+  end
+
+  # The rows the given function reads off each of the given rows, each once however many of them
+  # lead to it - one row's are each once already.
+  defp each_once([row], read), do: read.(row)
+
+  defp each_once(rows, read) do
+    rows
+    |> Enum.flat_map(read)
+    |> Enum.uniq_by(& &1.id)
+  end
+
+  defp ends_at_derived_set?(entity_type, names) do
+    {_stretch, rest} = stored_stretch(entity_type, names)
+
+    rest != []
   end
 
   # What an enum predicate compares by, or nil for an attribute of any other type - a name
   # matching no attribute definition is a reference field, which carries an entity id. A path's
-  # ranks are those of the attribute it ends at.
+  # ranks are those of the attribute it ends at, and a name of a row above those of that row's type.
+  defp enum_ranks(rows, {:outer, levels, name}), do: enum_ranks(Enum.drop(rows, levels), name)
+
+  defp enum_ranks([%entity_type{} | _outer_rows], name), do: enum_ranks(entity_type, name)
+
   defp enum_ranks(entity_type, [_hop | _later_names] = path) do
     {relationship_names, [name]} = Enum.split(path, -1)
 
@@ -143,33 +235,49 @@ defmodule Hologram.Policy.Evaluator do
     end
   end
 
-  defp equal?(left, right), do: compare(left, right) == :eq
+  # A policy compares the way a query does - a string by the key derived from it, an enum by its
+  # declared position - so a rule and the filter mirroring it admit the same rows.
+  defp equal?(left, right), do: Ordering.compare(left, right) == :eq
 
   # A derived field's definition on the row - strings joined, nil when one of them is, an if's
-  # branch, whether a condition holds, a name read the way a rule reads it, or a value.
-  defp evaluated({:concat, operands}, entity, actor_user_id, checker) do
-    values = Enum.map(operands, &evaluated(&1, entity, actor_user_id, checker))
+  # branch, whether a condition holds, a name read the way a rule reads it, the number of rows a
+  # count reads, or a value.
+  defp evaluated({:concat, operands}, rows, actor_user_id, checker) do
+    values = Enum.map(operands, &evaluated(&1, rows, actor_user_id, checker))
 
     if Enum.any?(values, &is_nil/1), do: nil, else: Enum.join(values)
   end
 
-  defp evaluated({:condition, clauses}, entity, actor_user_id, checker) do
-    predicates_hold?(clauses, entity, actor_user_id, checker)
+  defp evaluated({:condition, clauses}, rows, actor_user_id, checker) do
+    predicates_hold?(clauses, rows, actor_user_id, checker, :both)
   end
 
-  defp evaluated({:if, clauses, then_value, else_value}, entity, actor_user_id, checker) do
-    if predicates_hold?(clauses, entity, actor_user_id, checker) do
-      evaluated(then_value, entity, actor_user_id, checker)
+  defp evaluated({:if, clauses, then_value, else_value}, rows, actor_user_id, checker) do
+    if predicates_hold?(clauses, rows, actor_user_id, checker, :both) do
+      evaluated(then_value, rows, actor_user_id, checker)
     else
-      evaluated(else_value, entity, actor_user_id, checker)
+      evaluated(else_value, rows, actor_user_id, checker)
     end
   end
 
-  defp evaluated({:name, name}, entity, actor_user_id, checker) do
-    read_value(entity, name, actor_user_id, checker)
+  defp evaluated({:name, name}, rows, actor_user_id, checker) do
+    read_value(rows, name, actor_user_id, checker)
   end
 
-  defp evaluated({:value, value}, _entity, _actor_user_id, _checker), do: value
+  # A count counts the rows its query reads off the row, its bounds applied.
+  defp evaluated(
+         {:query, %{cardinality: :count} = term},
+         [row | _outer_rows],
+         actor_user_id,
+         checker
+       ) do
+    row
+    |> sourced_rows(term, actor_user_id, checker)
+    |> bound(term)
+    |> length()
+  end
+
+  defp evaluated({:value, value}, _rows, _actor_user_id, _checker), do: value
 
   defp holds?(field_value, :==, value, _ranks), do: equal?(field_value, value)
 
@@ -213,69 +321,146 @@ defmodule Hologram.Policy.Evaluator do
   defp holds?(field_value, :starts_with_exact, value, _ranks),
     do: String.starts_with?(field_value, value)
 
-  defp holds?(field_value, :<, value, ranks), do: compare(field_value, value, ranks) == :lt
+  defp holds?(field_value, :<, value, ranks),
+    do: Ordering.compare(field_value, value, ranks) == :lt
 
-  defp holds?(field_value, :<=, value, ranks), do: compare(field_value, value, ranks) != :gt
+  defp holds?(field_value, :<=, value, ranks),
+    do: Ordering.compare(field_value, value, ranks) != :gt
 
-  defp holds?(field_value, :>, value, ranks), do: compare(field_value, value, ranks) == :gt
+  defp holds?(field_value, :>, value, ranks),
+    do: Ordering.compare(field_value, value, ranks) == :gt
 
-  defp holds?(field_value, :>=, value, ranks), do: compare(field_value, value, ranks) != :lt
+  defp holds?(field_value, :>=, value, ranks),
+    do: Ordering.compare(field_value, value, ranks) != :lt
 
   # Nobody is equal to no attribute and unequal to none - asking about the actor of an anonymous
   # session is asking about nobody, which no row answers.
-  defp predicate_holds?({_name, _operator, {:actor}}, _entity, nil, _checker), do: false
+  defp predicate_holds?({_name, _operator, {:actor}}, _rows, nil, _checker), do: false
 
   # Another attribute of the row, compared the way a literal is - by the predicate's attribute's
   # ranks, since two enums compare only when they declare the same list.
-  defp predicate_holds?({name, operator, {:attribute, other}}, entity, actor_user_id, checker) do
-    ranks = enum_ranks(entity.__struct__, name)
-    other_value = read_value(entity, other, actor_user_id, checker)
+  defp predicate_holds?({name, operator, {:attribute, other}}, rows, actor_user_id, checker) do
+    ranks = enum_ranks(rows, name)
+    other_value = read_value(rows, other, actor_user_id, checker)
 
-    entity
+    rows
     |> read_value(name, actor_user_id, checker)
     |> holds?(operator, other_value, ranks)
   end
 
-  defp predicate_holds?({name, operator, value}, entity, actor_user_id, checker) do
-    ranks = enum_ranks(entity.__struct__, name)
+  defp predicate_holds?({name, operator, value}, rows, actor_user_id, checker) do
+    ranks = enum_ranks(rows, name)
 
-    entity
+    rows
     |> read_value(name, actor_user_id, checker)
     |> holds?(operator, resolve_value(value, actor_user_id), ranks)
   end
 
-  defp predicates_hold?(clauses, entity, actor_user_id, checker) do
-    Enum.all?(clauses, &clause_holds?(&1, entity, actor_user_id, checker))
+  defp predicates_hold?(clauses, rows, actor_user_id, checker, polarity) do
+    Enum.all?(clauses, &clause_holds?(&1, rows, actor_user_id, checker, polarity))
+  end
+
+  # Whether the condition holds for any, none or every row of the set the source leads to, read on
+  # the row the quantifier is about or on the row above it the source names. Each related row is
+  # matched with the rows above it, so its condition reads them by how many quantifiers out they are.
+  #
+  # The set is asked for whole - {:set, relationship names, :whole} - when a row joining it could
+  # turn the rule's grant into a refusal, which a write resting on the answer has to keep out. A row
+  # joining a derived set's base can push another out of its bound, and a row changing can move in
+  # or out of its filter, so a source ending at one is always asked for whole, and so is every set
+  # its definition reads, at both polarities.
+  defp quantifier_holds?({quantifier, source, clauses}, rows, actor_user_id, checker, polarity) do
+    {[source_row | _outer_rows], relationship_names} = source_rows(rows, source)
+    condition_polarity = Stage.condition_polarity(quantifier, polarity)
+
+    matches? = fn related_row ->
+      predicates_hold?(clauses, [related_row | rows], actor_user_id, checker, condition_polarity)
+    end
+
+    whole? =
+      Stage.joining_row_refuses?(quantifier, polarity) or
+        ends_at_derived_set?(source_row.__struct__, relationship_names)
+
+    related_rows = chain_rows([source_row], relationship_names, whole?, actor_user_id, checker)
+
+    case quantifier do
+      :all -> Enum.all?(related_rows, matches?)
+      :any -> Enum.any?(related_rows, matches?)
+      :none -> not Enum.any?(related_rows, matches?)
+    end
+  end
+
+  # A name of a row above is read on that row.
+  defp read_value(rows, {:outer, levels, name}, actor_user_id, checker) do
+    rows
+    |> Enum.drop(levels)
+    |> read_value(name, actor_user_id, checker)
   end
 
   # A path's value is its last name read off the row the relationships before it lead to, and nil
   # when they lead nowhere.
-  defp read_value(entity, [_hop | _later_names] = path, actor_user_id, checker) do
+  defp read_value([row | _outer_rows], [_hop | _later_names] = path, actor_user_id, checker) do
     {relationship_names, [name]} = Enum.split(path, -1)
 
-    case checker.({:related, relationship_names}, entity, actor_user_id) do
+    case checker.({:related, relationship_names}, row, actor_user_id) do
       nil -> nil
-      row -> read_value(row, name, actor_user_id, checker)
+      related_row -> read_value([related_row], name, actor_user_id, checker)
     end
   end
 
-  # A derived field is computed from its definition, resolved natively - one a condition reads calls
-  # no query builder. An integer a float field reads compares equal to its float, so it stays as is.
-  defp read_value(%entity_type{} = entity, name, actor_user_id, checker) do
+  # A derived field is computed from its definition as the build resolved it, on the row it is read
+  # on alone. An integer a float field reads compares equal to its float, so it stays as is.
+  defp read_value([%entity_type{} = row | _outer_rows], name, actor_user_id, checker) do
     case List.keyfind(entity_type.__derived__(), name, 0) do
       {_name, _type, _opts} ->
         entity_type
-        |> Derived.resolve(name)
-        |> evaluated(entity, actor_user_id, checker)
+        |> Derived.definition(name)
+        |> evaluated([row], actor_user_id, checker)
 
       nil ->
-        Map.fetch!(entity, name)
+        Map.fetch!(row, name)
     end
   end
 
   defp resolve_value({:actor}, actor_user_id), do: actor_user_id
 
   defp resolve_value(value, _actor_user_id), do: value
+
+  # The rows a source is read on: the row the quantifier is about and the rows above it, or - for a
+  # source read on a row above - that row and the rows above it.
+  defp source_rows(rows, {:outer, levels, relationship_names}),
+    do: {Enum.drop(rows, levels), relationship_names}
+
+  defp source_rows(rows, relationship_names), do: {rows, relationship_names}
+
+  # The rows a derived field's query reads off the owner row, matched to its clauses with the owner
+  # as the row above them - every set read whole, as what a definition reads always is.
+  defp sourced_rows(owner, %{source: {_owner_type, chain}} = term, actor_user_id, checker) do
+    [owner]
+    |> chain_rows(chain, true, actor_user_id, checker)
+    |> Enum.filter(&predicates_hold?(term.filter, [&1, owner], actor_user_id, checker, :both))
+  end
+
+  # The relationships a chain starts with, up to a derived field holding rows, and the names from
+  # there on.
+  defp stored_stretch(_entity_type, []), do: {[], []}
+
+  defp stored_stretch(entity_type, [name | later_names] = names) do
+    if Derived.declared?(entity_type, name) do
+      {[], names}
+    else
+      {stretch, rest} =
+        entity_type
+        |> Entity.related_type(name)
+        |> stored_stretch(later_names)
+
+      {[name | stretch], rest}
+    end
+  end
+
+  defp take(rows, nil), do: rows
+
+  defp take(rows, count), do: Enum.take(rows, count)
 
   defp to_holds?(nil, _entity, _actor_user_id, _checker), do: true
 

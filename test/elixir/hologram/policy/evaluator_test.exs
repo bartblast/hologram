@@ -8,6 +8,12 @@ defmodule Hologram.Policy.EvaluatorTest do
   alias Hologram.Test.Fixtures.Entity.Module2
   alias Hologram.Test.Fixtures.Entity.Module22
   alias Hologram.Test.Fixtures.Entity.Module24
+  alias Hologram.Test.Fixtures.Entity.Module26
+  alias Hologram.Test.Fixtures.Entity.Module28
+  alias Hologram.Test.Fixtures.Entity.Module29
+  alias Hologram.Test.Fixtures.Entity.Module31
+  alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module39
   alias Hologram.Test.Fixtures.Entity.Module41
   alias Hologram.Test.Fixtures.Entity.Module42
   alias Hologram.Test.Fixtures.Policy.Module1
@@ -19,6 +25,28 @@ defmodule Hologram.Policy.EvaluatorTest do
 
   defp rule(fields) do
     Enum.into(fields, %{predicates: [], to: nil, via: nil})
+  end
+
+  describe "clause_holds?/4" do
+    test "answers a clause of a rule for the given row" do
+      checker = fn {:set, [:messages], :whole}, %Module26{}, _actor_user_id ->
+        [%Module28{body: "hi"}]
+      end
+
+      assert clause_holds?(
+               {:none, {[:messages], [{:body, :==, "bye"}]}},
+               %Module26{},
+               nil,
+               checker
+             )
+
+      refute clause_holds?(
+               {:none, {[:messages], [{:body, :==, "hi"}]}},
+               %Module26{},
+               nil,
+               checker
+             )
+    end
   end
 
   describe "grants?/5" do
@@ -83,6 +111,10 @@ defmodule Hologram.Policy.EvaluatorTest do
   end
 
   describe "rule_matches?/4" do
+    setup do
+      put_derived_definitions([Module42])
+    end
+
     # The row the note relationship leads to, as the checker reads it for a path.
     defp note_checker(note) do
       fn {:related, [:note]}, _entity, _actor_user_id -> note end
@@ -843,6 +875,500 @@ defmodule Hologram.Policy.EvaluatorTest do
       checker = fn {:via, :read, [:parent]}, _entity, actor_user_id -> is_nil(actor_user_id) end
 
       assert rule_matches?(rule(via: {:read, [:parent]}), %Module1{}, nil, checker)
+    end
+  end
+
+  describe "rule_matches?/4 - quantifiers" do
+    setup do
+      put_derived_definitions([Module34, Module39])
+    end
+
+    # A none or an all asks for the set whole, an any alone for its rows - the same rows here.
+    defp messages_checker(messages) do
+      fn
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> messages
+        {:set, [:messages], :whole}, %Module26{}, _actor_user_id -> messages
+      end
+    end
+
+    defp quantified_rule(predicates), do: rule(predicates: predicates)
+
+    test "answers any, none and all over the rows of the set" do
+      channel = %Module26{name: "general"}
+      checker = messages_checker([%Module28{body: "hi"}, %Module28{body: "bye"}])
+
+      assert rule_matches?(
+               quantified_rule(any: {[:messages], [{:body, :==, "hi"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      refute rule_matches?(
+               quantified_rule(any: {[:messages], [{:body, :==, "ciao"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      assert rule_matches?(
+               quantified_rule(none: {[:messages], [{:body, :==, "ciao"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      refute rule_matches?(
+               quantified_rule(none: {[:messages], [{:body, :==, "hi"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      assert rule_matches?(
+               quantified_rule(all: {[:messages], [{:body, :!=, "ciao"}]}),
+               channel,
+               nil,
+               checker
+             )
+
+      refute rule_matches?(
+               quantified_rule(all: {[:messages], [{:body, :==, "hi"}]}),
+               channel,
+               nil,
+               checker
+             )
+    end
+
+    test "fails any and holds none and all over an empty set" do
+      channel = %Module26{name: "general"}
+      checker = messages_checker([])
+
+      refute rule_matches?(quantified_rule(any: {[:messages], []}), channel, nil, checker)
+      assert rule_matches?(quantified_rule(none: {[:messages], []}), channel, nil, checker)
+
+      assert rule_matches?(
+               quantified_rule(all: {[:messages], [{:body, :==, "hi"}]}),
+               channel,
+               nil,
+               checker
+             )
+    end
+
+    test "compares a related row with the row the quantifier is about" do
+      checker = messages_checker([%Module28{body: "general"}])
+      rule = quantified_rule(any: {[:messages], [{:body, :==, {:attribute, {:outer, 1, :name}}}]})
+
+      assert rule_matches?(rule, %Module26{name: "general"}, nil, checker)
+      refute rule_matches?(rule, %Module26{name: "random"}, nil, checker)
+    end
+
+    # The comparison's own name is the row's above, so its enum compares by that row's declared
+    # order: by atom order :high would not reach :medium, and an item has no floor at all.
+    test "compares an enum of the row the quantifier is about by its declared order" do
+      checker = fn {:set, [:items]}, %Module31{}, _actor_user_id -> [%Module17{label: "a"}] end
+      rule = quantified_rule(any: {[:items], [{{:outer, 1, :floor}, :>=, :medium}]})
+
+      assert rule_matches?(rule, %Module31{floor: :high}, nil, checker)
+      refute rule_matches?(rule, %Module31{floor: :low}, nil, checker)
+    end
+
+    test "compares an enum of a related row by its declared order" do
+      checker = fn {:set, [:items]}, %Module31{}, _actor_user_id ->
+        [%Module17{priority: :high}]
+      end
+
+      rule = quantified_rule(any: {[:items], [{:priority, :>=, :medium}]})
+
+      assert rule_matches?(rule, %Module31{}, nil, checker)
+    end
+
+    # The inner quantifier's condition reads the channel two quantifiers out.
+    test "reads the rows above a nested quantifier" do
+      first = %Module28{body: "first"}
+      second = %Module28{body: "second"}
+
+      checker = fn
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> [first, second]
+        {:set, [:labels]}, ^first, _actor_user_id -> [%Module29{name: "other"}]
+        {:set, [:labels]}, ^second, _actor_user_id -> [%Module29{name: "general"}]
+      end
+
+      rule =
+        quantified_rule(
+          any: {[:messages], [any: {[:labels], [{:name, :==, {:attribute, {:outer, 2, :name}}}]}]}
+        )
+
+      assert rule_matches?(rule, %Module26{name: "general"}, nil, checker)
+      refute rule_matches?(rule, %Module26{name: "random"}, nil, checker)
+    end
+
+    # The inner set is the channel's own, read on the row one quantifier out - so the rule asks
+    # whether some message has another one after it.
+    test "reads a source on a row above" do
+      checker = messages_checker([%Module28{position: 1}, %Module28{position: 2}])
+
+      inner = {{:outer, 1, [:messages]}, [{:position, :>, {:attribute, {:outer, 1, :position}}}]}
+      rule = quantified_rule(any: {[:messages], [any: inner]})
+
+      single_checker = messages_checker([%Module28{position: 1}])
+
+      assert rule_matches?(rule, %Module26{}, nil, checker)
+      refute rule_matches?(rule, %Module26{}, nil, single_checker)
+    end
+
+    test "reads a path off a related row" do
+      message = %Module28{body: "hi"}
+
+      checker = fn
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> [message]
+        {:related, [:channel]}, ^message, _actor_user_id -> %Module26{name: "general"}
+      end
+
+      rule = quantified_rule(any: {[:messages], [{[:channel, :name], :==, "general"}]})
+
+      assert rule_matches?(rule, %Module26{}, nil, checker)
+    end
+
+    test "reads a path off the row the quantifier is about" do
+      member = %Module39{score: 1}
+
+      checker = fn
+        {:set, [:mentors]}, ^member, _actor_user_id -> [%Module34{nickname: "ana"}]
+        {:related, [:member]}, ^member, _actor_user_id -> %Module34{nickname: "ana"}
+      end
+
+      rule =
+        quantified_rule(
+          any: {[:mentors], [{:nickname, :==, {:attribute, {:outer, 1, [:member, :nickname]}}}]}
+        )
+
+      assert rule_matches?(rule, member, nil, checker)
+    end
+
+    test "computes a derived field of a related row on that row" do
+      checker = fn {:set, [:mentors]}, %Module39{}, _actor_user_id ->
+        [%Module34{nickname: "lead", score: 0}]
+      end
+
+      featured_rule = quantified_rule(any: {[:mentors], [{:featured, :==, true}]})
+      active_rule = quantified_rule(any: {[:mentors], [{:active, :==, true}]})
+
+      assert rule_matches?(featured_rule, %Module39{}, nil, checker)
+      refute rule_matches?(active_rule, %Module39{}, nil, checker)
+    end
+
+    test "compares a related row with the actor" do
+      checker = messages_checker([%Module28{channel_id: "u1"}])
+      rule = quantified_rule(any: {[:messages], [{:channel_id, :==, {:actor}}]})
+
+      assert rule_matches?(rule, %Module26{}, "u1", checker)
+      refute rule_matches?(rule, %Module26{}, "u2", checker)
+    end
+
+    # Nobody is not a missing reference, so the message with none matches nobody.
+    test "matches no related row with an anonymous session's actor" do
+      checker = messages_checker([%Module28{channel_id: nil}])
+      rule = quantified_rule(any: {[:messages], [{:channel_id, :==, {:actor}}]})
+
+      refute rule_matches?(rule, %Module26{}, nil, checker)
+    end
+
+    test "answers an anonymous any through what is left of its condition" do
+      checker = messages_checker([%Module28{body: "hi", channel_id: "u1"}])
+      condition = [or: [[{:channel_id, :==, {:actor}}], [{:body, :==, "hi"}]]]
+
+      assert rule_matches?(
+               quantified_rule(any: {[:messages], condition}),
+               %Module26{},
+               nil,
+               checker
+             )
+    end
+
+    # Each would hold were the predicate naming the actor alone false: no message is nobody's, and
+    # every message says hi. But each asks about nobody, which grants nothing.
+    test "refuses an anonymous none or all naming the actor" do
+      checker = messages_checker([%Module28{body: "hi", channel_id: "u1"}])
+      none_rule = quantified_rule(none: {[:messages], [{:channel_id, :==, {:actor}}]})
+
+      all_rule =
+        quantified_rule(
+          all: {[:messages], [or: [[{:channel_id, :==, {:actor}}], [{:body, :==, "hi"}]]]}
+        )
+
+      refute rule_matches?(none_rule, %Module26{}, nil, checker)
+      refute rule_matches?(all_rule, %Module26{}, nil, checker)
+    end
+
+    # A none rests on every message, so it asks for them as a whole set - a message joining the set
+    # could change its answer - where an any alone can only gain a match from one.
+    test "asks a none for its set whole and an any alone for its rows" do
+      checker = fn
+        {:set, [:messages], :whole}, %Module26{}, _actor_user_id -> []
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> [%Module28{body: "hi"}]
+      end
+
+      assert rule_matches?(quantified_rule(none: {[:messages], []}), %Module26{}, nil, checker)
+      assert rule_matches?(quantified_rule(any: {[:messages], []}), %Module26{}, nil, checker)
+    end
+
+    # A message joining can only make the any true, while a label joining can make the none false.
+    test "asks a none inside an any for its set whole and the any for its rows" do
+      message = %Module28{body: "hi"}
+
+      checker = fn
+        {:set, [:messages]}, %Module26{}, _actor_user_id -> [message]
+        {:set, [:labels], :whole}, ^message, _actor_user_id -> []
+      end
+
+      rule = quantified_rule(any: {[:messages], [none: {[:labels], []}]})
+
+      assert rule_matches?(rule, %Module26{}, nil, checker)
+    end
+
+    # Inside the none the any's truth hurts, so a label joining can refuse, and the none inside the
+    # other none hurts the outer one, so a label joining it can only help.
+    test "turns the asks around inside a none" do
+      message = %Module28{body: "hi"}
+
+      any_checker = fn
+        {:set, [:messages], :whole}, %Module26{}, _actor_user_id -> [message]
+        {:set, [:labels], :whole}, ^message, _actor_user_id -> []
+      end
+
+      none_checker = fn
+        {:set, [:messages], :whole}, %Module26{}, _actor_user_id -> [message]
+        {:set, [:labels]}, ^message, _actor_user_id -> []
+      end
+
+      any_rule = quantified_rule(none: {[:messages], [any: {[:labels], []}]})
+      none_rule = quantified_rule(none: {[:messages], [none: {[:labels], []}]})
+
+      assert rule_matches?(any_rule, %Module26{}, nil, any_checker)
+      refute rule_matches?(none_rule, %Module26{}, nil, none_checker)
+    end
+
+    test "answers an anonymous none naming no actor" do
+      checker = messages_checker([%Module28{body: "hi"}])
+      rule = quantified_rule(none: {[:messages], [{:body, :==, "bye"}]})
+
+      assert rule_matches?(rule, %Module26{}, nil, checker)
+    end
+  end
+
+  describe "rule_matches?/4 - quantifiers over derived sets" do
+    defmodule DerivedBoard do
+      use Hologram.Entity
+
+      attribute :min_rank, :integer
+      attribute :name, :string
+
+      relationship :cards, [Hologram.Policy.EvaluatorTest.DerivedCard], inverse: board, sort: rank
+
+      derived :busy_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        filter(cards, tag_count > 1)
+      end
+
+      derived :flag_tag_count, :integer, fn cards -> count(cards.flag_tags) end
+
+      derived :flagged_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        filter(cards, any(tag <- tags, tag.name == "flag"))
+      end
+
+      derived :later_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        skip(cards, 1)
+      end
+
+      derived :low_top_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn top_cards ->
+        filter(top_cards, rank < 3)
+      end
+
+      derived :maybe_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards, name ->
+        if name == "none", do: nil, else: cards
+      end
+
+      derived :most_tagged_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        cards
+        |> sort(tag_count: :desc)
+        |> take(1)
+      end
+
+      derived :named_tag_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards, name ->
+        filter(cards, any(tag <- tags, tag.name == ^name))
+      end
+
+      derived :picked_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards, name ->
+        if name == "top", do: take(cards, 1), else: cards
+      end
+
+      derived :ranked_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards, min_rank ->
+        filter(cards, rank >= ^min_rank)
+      end
+
+      derived :top_cards, [Hologram.Policy.EvaluatorTest.DerivedCard], fn cards ->
+        cards
+        |> sort(rank: :desc)
+        |> take(2)
+      end
+    end
+
+    defmodule DerivedCard do
+      use Hologram.Entity
+
+      attribute :rank, :integer
+
+      relationship :board, DerivedBoard, optional: true
+      relationship :tags, [Hologram.Policy.EvaluatorTest.DerivedTag]
+
+      derived :flag_tags, [Hologram.Policy.EvaluatorTest.DerivedTag], fn tags ->
+        filter(tags, name == "flag")
+      end
+
+      derived :tag_count, :integer, fn tags -> count(tags) end
+    end
+
+    defmodule DerivedTag do
+      use Hologram.Entity
+
+      attribute :name, :string
+    end
+
+    setup do
+      put_derived_definitions([DerivedBoard, DerivedCard])
+    end
+
+    defp card(rank, tags \\ []) do
+      %DerivedCard{id: Hologram.Entity.generate_id(), rank: rank, tags: tags}
+    end
+
+    # The board's cards are its stored set, a card's tags the ones it was built with - each asked for
+    # whole, as every set a derived field's definition reads is.
+    defp board_checker(cards) do
+      fn
+        {:set, [:cards], :whole}, %DerivedBoard{}, _actor_user_id -> cards
+        {:set, [:tags], :whole}, %DerivedCard{tags: tags}, _actor_user_id -> tags
+      end
+    end
+
+    defp any_rank(source, rank), do: rule(predicates: [any: {source, [{:rank, :==, rank}]}])
+
+    defp tag(name), do: %DerivedTag{id: Hologram.Entity.generate_id(), name: name}
+
+    test "reads only the rows within a derived set's bound" do
+      checker = board_checker([card(1), card(2), card(3)])
+
+      refute rule_matches?(any_rank([:top_cards], 1), %DerivedBoard{}, nil, checker)
+      assert rule_matches?(any_rank([:top_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads a derived set's filter pinned to a field of the row it belongs to" do
+      checker = board_checker([card(1), card(3)])
+
+      refute rule_matches?(any_rank([:ranked_cards], 1), %DerivedBoard{min_rank: 2}, nil, checker)
+      assert rule_matches?(any_rank([:ranked_cards], 1), %DerivedBoard{min_rank: 1}, nil, checker)
+    end
+
+    test "reads the query a derived set's if picks for the row it belongs to" do
+      checker = board_checker([card(1), card(2)])
+
+      refute rule_matches?(any_rank([:picked_cards], 2), %DerivedBoard{name: "top"}, nil, checker)
+      assert rule_matches?(any_rank([:picked_cards], 2), %DerivedBoard{name: "all"}, nil, checker)
+    end
+
+    test "reads a quantifier inside a derived set's filter" do
+      checker = board_checker([card(1, [tag("flag")]), card(2)])
+
+      assert rule_matches?(any_rank([:flagged_cards], 1), %DerivedBoard{}, nil, checker)
+      refute rule_matches?(any_rank([:flagged_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads a count inside a derived set's filter" do
+      checker = board_checker([card(1, [tag("a"), tag("b")]), card(2, [tag("a")])])
+
+      assert rule_matches?(any_rank([:busy_cards], 1), %DerivedBoard{}, nil, checker)
+      refute rule_matches?(any_rank([:busy_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads a derived set ordered by a derived field" do
+      checker = board_checker([card(1, [tag("a")]), card(2, [tag("a"), tag("b")])])
+
+      refute rule_matches?(any_rank([:most_tagged_cards], 1), %DerivedBoard{}, nil, checker)
+      assert rule_matches?(any_rank([:most_tagged_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads a derived set past the rows it skips" do
+      checker = board_checker([card(1), card(2)])
+
+      refute rule_matches?(any_rank([:later_cards], 1), %DerivedBoard{}, nil, checker)
+      assert rule_matches?(any_rank([:later_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    test "reads no rows of a derived set whose if picks nil" do
+      checker = board_checker([card(1)])
+
+      refute rule_matches?(any_rank([:maybe_cards], 1), %DerivedBoard{name: "none"}, nil, checker)
+      assert rule_matches?(any_rank([:maybe_cards], 1), %DerivedBoard{name: "all"}, nil, checker)
+    end
+
+    # The tag's name is compared with the board's, two quantifiers out of the tag.
+    test "reads a pin inside a quantifier in a derived set's filter" do
+      checker = board_checker([card(1, [tag("flag")]), card(2, [tag("other")])])
+      board = %DerivedBoard{name: "flag"}
+
+      assert rule_matches?(any_rank([:named_tag_cards], 1), board, nil, checker)
+      refute rule_matches?(any_rank([:named_tag_cards], 2), board, nil, checker)
+    end
+
+    # Both cards hold the one flag tag, which the set holds once.
+    test "counts a row several rows lead to once" do
+      shared = tag("flag")
+      checker = board_checker([card(1, [shared]), card(2, [shared])])
+
+      assert rule_matches?(
+               rule(predicates: [{:flag_tag_count, :==, 1}]),
+               %DerivedBoard{},
+               nil,
+               checker
+             )
+    end
+
+    # The bound of the set it is built on drops the lowest card before its own filter is read.
+    test "reads a derived set built on another one" do
+      checker = board_checker([card(1), card(2), card(3)])
+
+      refute rule_matches?(any_rank([:low_top_cards], 1), %DerivedBoard{}, nil, checker)
+      assert rule_matches?(any_rank([:low_top_cards], 2), %DerivedBoard{}, nil, checker)
+    end
+
+    # The relationships before a derived set are one stretch, read off the row the quantifier is
+    # about, and the set's own relationships another, read off each row the stretch reaches.
+    test "asks the checker for each stretch of relationships around a derived set" do
+      board = %DerivedBoard{id: Hologram.Entity.generate_id()}
+
+      checker = fn
+        {:set, [:board], :whole}, %DerivedCard{}, _actor_user_id -> [board]
+        {:set, [:cards], :whole}, %DerivedBoard{}, _actor_user_id -> [card(1), card(2), card(3)]
+      end
+
+      rule = rule(predicates: [none: {[:board, :top_cards], [{:rank, :==, 1}]}])
+
+      assert rule_matches?(rule, card(1), nil, checker)
+    end
+
+    # A row joining the board's cards can push one out of the bound, so an any over the set can turn
+    # false as well.
+    test "asks for the relationships before a derived set whole under an any" do
+      board = %DerivedBoard{id: Hologram.Entity.generate_id()}
+
+      checker = fn
+        {:set, [:board], :whole}, %DerivedCard{}, _actor_user_id -> [board]
+        {:set, [:cards], :whole}, %DerivedBoard{}, _actor_user_id -> [card(1), card(2), card(3)]
+      end
+
+      rule = rule(predicates: [any: {[:board, :top_cards], [{:rank, :==, 3}]}])
+
+      assert rule_matches?(rule, card(1), nil, checker)
     end
   end
 end

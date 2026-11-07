@@ -2,10 +2,13 @@ defmodule Hologram.Sync.FrameTest do
   use Hologram.Test.BasicCase, async: false
 
   import Hologram.Sync.Frame
+  import Hologram.Test.Stubs
+  import Mox
 
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Model
+  alias Hologram.Policy
   alias Hologram.Sync.WireData
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -13,15 +16,103 @@ defmodule Hologram.Sync.FrameTest do
 
   @cursor "g8uxAAAAZQ"
 
-  describe "deltas/1" do
+  use_module_stub :query_cache
+
+  # A task may be deleted while its board holds no card by the user - read through the task's
+  # board, so a task with no board has an empty set, answered without reading the database: yes for
+  # a user, and no for a visitor, since the rule asks about the actor.
+  defmodule VerdictBoard do
+    use Hologram.Entity
+
+    relationship :cards, [__MODULE__.Card], inverse: board
+
+    allow :read
+
+    defmodule Card do
+      use Hologram.Entity
+
+      relationship :author, Hologram.Test.Fixtures.Entity.Module14, optional: true
+      relationship :board, Hologram.Sync.FrameTest.VerdictBoard, optional: true
+
+      allow :read
+    end
+  end
+
+  defmodule VerdictTask do
+    use Hologram.Entity
+
+    relationship :board, VerdictBoard, optional: true
+
+    allow :read
+    allow :delete, when: none(card <- board.cards, card.author_id == user_id())
+  end
+
+  defp delete_key do
+    Policy.verdict_key(
+      VerdictTask,
+      :delete,
+      {:none, {[:board, :cards], [{:author_id, :==, {:actor}}]}}
+    )
+  end
+
+  # A build with a page checking permissions on the client - the only kind whose rows carry
+  # verdicts.
+  defp check_permissions do
+    stub_with(QueryCacheMock, QueryCacheStub)
+    :persistent_term.put(QueryCacheStub.persistent_term_key(), %{permission_checking?: true})
+
+    on_exit(fn -> :persistent_term.erase(QueryCacheStub.persistent_term_key()) end)
+  end
+
+  describe "deltas/2" do
     defp news(overrides) do
       Map.merge(%{appeared: [], edges: [], patched: [], unsynced: []}, overrides)
+    end
+
+    test "sends a patch with the verdicts that moved beside the values" do
+      row = %{
+        Module2.new(a: true, c: "after")
+        | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
+      }
+
+      assert [%{data: data, op: :patch_entity}] =
+               deltas(news(%{patched: [{row, %{c: "after"}, %{"delete:abc" => false}}]}), nil)
+
+      assert data == %{
+               "$revisions": %{c: 5},
+               "$verdicts": %{"delete:abc" => false},
+               c: "after"
+             }
+    end
+
+    test "sends a patch naming no value for a row whose verdicts alone moved" do
+      row = Module2.new(a: true, c: "after")
+
+      assert deltas(news(%{patched: [{row, %{}, %{"delete:abc" => false}}]}), nil) == [
+               %{
+                 data: %{"$revisions": %{}, "$verdicts": %{"delete:abc" => false}},
+                 id: row.id,
+                 op: :patch_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               }
+             ]
+    end
+
+    test "sends a row that appeared with the user's verdicts" do
+      check_permissions()
+
+      row = VerdictTask.new()
+
+      assert [%{data: %{"$verdicts": verdicts}, op: :put_entity}] =
+               deltas(news(%{appeared: [row]}), Entity.generate_id())
+
+      assert verdicts == %{delete_key() => true}
     end
 
     test "sends a row that appeared whole" do
       row = Module2.new(a: true, c: "first")
 
-      assert deltas(news(%{appeared: [row]})) == [
+      assert deltas(news(%{appeared: [row]}), nil) == [
                %{
                  data: WireData.row(row),
                  id: row.id,
@@ -37,7 +128,7 @@ defmodule Hologram.Sync.FrameTest do
         | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
       }
 
-      assert deltas(news(%{patched: [{row, %{c: "after"}}]})) == [
+      assert deltas(news(%{patched: [{row, %{c: "after"}, nil}]}), nil) == [
                %{
                  data: %{:c => "after", :"$revisions" => %{c: 5}},
                  id: row.id,
@@ -53,7 +144,7 @@ defmodule Hologram.Sync.FrameTest do
         | __meta__: %Metadata{revisions: %{a: 1, c: 5}}
       }
 
-      assert [%{data: data}] = deltas(news(%{patched: [{row, %{a: true, c: "after"}}]}))
+      assert [%{data: data}] = deltas(news(%{patched: [{row, %{a: true, c: "after"}, nil}]}), nil)
       assert data[:"$revisions"] == %{a: 1, c: 5}
     end
 
@@ -68,7 +159,7 @@ defmodule Hologram.Sync.FrameTest do
 
       moved = %{email: "user@test.com", password_hash: "hashed_secret_v5"}
 
-      assert [%{data: data}] = deltas(news(%{patched: [{row, moved}]}))
+      assert [%{data: data}] = deltas(news(%{patched: [{row, moved, nil}]}), nil)
       assert data[:"$revisions"] == %{email: 3}
       refute Map.has_key?(data, :password_hash)
     end
@@ -79,7 +170,7 @@ defmodule Hologram.Sync.FrameTest do
       row = Module2.new(a: true, c: "after")
       moved = %{c: "after", updated_at: ~U[2026-08-16 16:20:00.000000Z]}
 
-      assert [%{data: data}] = deltas(news(%{patched: [{row, moved}]}))
+      assert [%{data: data}] = deltas(news(%{patched: [{row, moved, nil}]}), nil)
 
       assert data == %{
                :c => "after",
@@ -91,7 +182,7 @@ defmodule Hologram.Sync.FrameTest do
     test "sends a row that left as its id, under the type it was held under" do
       id = Entity.generate_id()
 
-      assert deltas(news(%{unsynced: [{id, Module2}]})) == [
+      assert deltas(news(%{unsynced: [{id, Module2}]}), nil) == [
                %{id: id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Entity.Module2"}
              ]
     end
@@ -108,7 +199,7 @@ defmodule Hologram.Sync.FrameTest do
         type: Module3
       }
 
-      assert deltas(news(%{edges: [edge]})) == [
+      assert deltas(news(%{edges: [edge]}), nil) == [
                %{
                  data: %{relationship: "a", target_id: target_id},
                  id: source_id,
@@ -127,22 +218,36 @@ defmodule Hologram.Sync.FrameTest do
         type: Module2
       }
 
-      assert [%{op: :del_relationship}] = deltas(news(%{edges: [edge]}))
+      assert [%{op: :del_relationship}] = deltas(news(%{edges: [edge]}), nil)
     end
 
     test "takes the type of an arrived row from the row itself" do
       row = Module14.new(email: "user@test.com")
 
       assert [%{type: "Hologram.Test.Fixtures.Entity.Module14"}] =
-               deltas(news(%{appeared: [row]}))
+               deltas(news(%{appeared: [row]}), nil)
     end
 
     test "sends nothing for news holding nothing" do
-      assert deltas(news(%{})) == []
+      assert deltas(news(%{}), nil) == []
     end
   end
 
   describe "encode_deltas_envelope/4" do
+    test "spells a put's verdicts as a $verdicts object beside the row's values" do
+      row = Module2.new(a: true, c: "first")
+
+      envelope =
+        encode_deltas_envelope(42, @cursor, [put_entity(row, %{"delete:abc" => true})], nil)
+
+      [_event, _id, "data: " <> json, _blank, _end] = String.split(envelope, "\n")
+
+      %{"deltas" => %{"put_entity" => %{"Hologram.Test.Fixtures.Entity.Module2" => [data]}}} =
+        Jason.decode!(json)
+
+      assert data["$verdicts"] == %{"delete:abc" => true}
+    end
+
     defp decoded_deltas(envelope) do
       "event: sync_deltas\nid: 42\ndata: " <> json = String.trim_trailing(envelope, "\n")
 
@@ -162,7 +267,7 @@ defmodule Hologram.Sync.FrameTest do
 
       encoded = Jason.encode!(payload)
 
-      assert encode_deltas_envelope(42, @cursor, [put_entity(row)], nil) ==
+      assert encode_deltas_envelope(42, @cursor, [put_entity(row, %{})], nil) ==
                "event: sync_deltas\nid: 42\ndata: #{encoded}\n\n"
     end
 
@@ -176,7 +281,7 @@ defmodule Hologram.Sync.FrameTest do
       embedded_parent = %{parent | a: [child]}
 
       news = news(%{appeared: [embedded_parent, child]})
-      envelope = encode_deltas_envelope(42, @cursor, deltas(news), nil)
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news, nil), nil)
 
       assert decoded_deltas(envelope) == %{
                "put_entity" => %{
@@ -220,9 +325,13 @@ defmodule Hologram.Sync.FrameTest do
       }
 
       news =
-        news(%{edges: [edge], patched: [{row, %{c: "after"}}], unsynced: [{gone_id, Module2}]})
+        news(%{
+          edges: [edge],
+          patched: [{row, %{c: "after"}, nil}],
+          unsynced: [{gone_id, Module2}]
+        })
 
-      envelope = encode_deltas_envelope(42, @cursor, deltas(news), nil)
+      envelope = encode_deltas_envelope(42, @cursor, deltas(news, nil), nil)
 
       assert decoded_deltas(envelope) == %{
                "patch_entity" => %{
@@ -281,7 +390,7 @@ defmodule Hologram.Sync.FrameTest do
     test "never carries the value of a server-only attribute" do
       row = Module14.new(email: "user@test.com", password_hash: "hashed_secret_v3")
 
-      envelope = encode_deltas_envelope(42, @cursor, [put_entity(row)], nil)
+      envelope = encode_deltas_envelope(42, @cursor, [put_entity(row, %{})], nil)
 
       assert String.contains?(envelope, ~s["email":"user@test.com"])
 
@@ -360,16 +469,55 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
-  describe "put_entity/1" do
+  describe "put_entity/2" do
     test "hands over the whole row, under the type the row itself names" do
       row = Module2.new(a: true, c: "first")
 
-      assert put_entity(row) == %{
+      assert put_entity(row, %{}) == %{
                data: WireData.row(row),
                id: row.id,
                op: :put_entity,
                type: "Hologram.Test.Fixtures.Entity.Module2"
              }
+    end
+
+    test "carries the verdicts beside the row's data" do
+      row = VerdictTask.new()
+
+      assert put_entity(row, %{"delete:abc" => true}).data ==
+               row
+               |> WireData.row()
+               |> Map.put(:"$verdicts", %{"delete:abc" => true})
+    end
+
+    test "carries no verdicts key when there are none" do
+      row = Module2.new(a: true)
+
+      assert put_entity(row, %{}).data == WireData.row(row)
+    end
+  end
+
+  describe "row_verdicts/2" do
+    test "answers the row's deciding quantifiers for the user when a client checks permissions" do
+      check_permissions()
+
+      assert row_verdicts(Entity.generate_id(), VerdictTask.new()) == %{delete_key() => true}
+      assert row_verdicts(nil, VerdictTask.new()) == %{delete_key() => false}
+    end
+
+    test "answers nothing when no client checks permissions" do
+      stub_with(QueryCacheMock, QueryCacheStub)
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{permission_checking?: false})
+
+      on_exit(fn -> :persistent_term.erase(QueryCacheStub.persistent_term_key()) end)
+
+      assert row_verdicts(Entity.generate_id(), VerdictTask.new()) == %{}
+    end
+
+    # Nothing to answer, so whether a client checks permissions is never asked - the query cache is
+    # not stubbed here.
+    test "answers nothing for a type with no deciding quantifier" do
+      assert row_verdicts(nil, Module2.new(a: true)) == %{}
     end
   end
 

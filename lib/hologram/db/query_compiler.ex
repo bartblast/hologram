@@ -9,6 +9,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.Entity.Derived
   alias Hologram.Policy
   alias Hologram.Query
+  alias Hologram.Query.Stage
 
   @quantifiers [:all, :any, :none]
 
@@ -76,7 +77,10 @@ defmodule Hologram.DB.QueryCompiler do
   whichever way it points, and a grant reference is held by nobody, so those are folded away
   before rendering: a rule with grant references is dropped, a conjunction naming the actor is
   dropped, and a disjunction keeps its alternatives that name nobody - so
-  `author_id == user_id() or shared == true` still admits a visitor to the shared rows.
+  `author_id == user_id() or shared == true` still admits a visitor to the shared rows. An `any`
+  folds its condition the same way, and is dropped when nothing of it is left. A `none` or an `all`
+  whose condition names the actor anywhere is dropped whole, since it asks about nobody - folding
+  only its condition would leave it true for every visitor.
 
   Includes are policied too, at every nesting level: an include subquery ANDs the included
   type's :read policy - fixed at :read whatever rules the statement's own policy holds - keyed
@@ -219,6 +223,22 @@ defmodule Hologram.DB.QueryCompiler do
       [] -> :never
       [clauses] -> {:ok, clauses}
       several -> {:ok, [{:or, several}]}
+    end
+  end
+
+  # A quantifier's condition folds the same way, inside it - nobody's absence from a related row
+  # removes matches, so an any whose condition folds to :never matches no row. A none or an all
+  # whose condition names the actor anywhere asks about nobody as a whole, which grants nothing:
+  # folded alone its condition would come out false and turn the quantifier true.
+  defp anonymous_clause({quantifier, {_source, clauses}} = clause)
+       when quantifier in [:all, :none] do
+    if Stage.names_actor?(clauses), do: :never, else: {:ok, [clause]}
+  end
+
+  defp anonymous_clause({:any, {source, clauses}}) do
+    case anonymous_clauses(clauses) do
+      :never -> :never
+      {:ok, folded} -> {:ok, [{:any, {source, folded}}]}
     end
   end
 
@@ -416,9 +436,11 @@ defmodule Hologram.DB.QueryCompiler do
         source_depth: scope.source_depth
       })
 
+    # The related type's read policy is read inside this subquery, so a quantifier of its own nests
+    # past this one.
     {policy_conditions, params_after_policy} =
       path_policy_conditions(
-        scope,
+        %{scope | quantifier_depth: depth},
         target_type,
         quoted_alias,
         scope.path_depth,
@@ -854,7 +876,7 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   # The hop type's read policy, keyed on the hop's alias, nested paths numbered past it and a nested
-  # delegation past the enclosing ones.
+  # delegation, quantifier or derived field's rows past the enclosing ones.
   defp path_policy_conditions(%{policy: nil}, _hop_type, _quoted_alias, _number, reversed_params),
     do: {[], reversed_params}
 
@@ -864,7 +886,12 @@ defmodule Hologram.DB.QueryCompiler do
     hop_context =
       hop_type
       |> policy_context(scope.mapping, hop_policy, quoted_alias)
-      |> Map.merge(%{delegation_depth: scope.delegation_depth, path_depth: number})
+      |> Map.merge(%{
+        delegation_depth: scope.delegation_depth,
+        path_depth: number,
+        quantifier_depth: scope.quantifier_depth,
+        source_depth: scope.source_depth
+      })
 
     policy_conditions(hop_policy, hop_context, reversed_params)
   end
@@ -889,7 +916,11 @@ defmodule Hologram.DB.QueryCompiler do
   # table name at statement level, and the subquery's alias inside an include or a delegation -
   # where the table name would resolve to the outer row for a relationship back to its own type.
   # The delegation depth counts the delegations the policy is nested in, naming each one's alias,
-  # and the path depth the path hops, so a path inside it takes aliases no enclosing hop has.
+  # the path depth the path hops, and the quantifier and source depths the quantifiers and the rows
+  # along a set's chain or a derived field's. An alias only has to differ from the rows its subquery
+  # reads, but a policy composed on an enclosing quantifier's or source's row reads that row by its
+  # alias - so what its rules nest is numbered past the enclosing ones, or a rule would read its own
+  # nested row where it means that one.
   # Every alias the compiler gives a table begins with a $, which no derived table name begins
   # with, so an alias never names a table the statement also reads.
   defp policy_context(entity_type, mapping, policy, quoted_row_prefix \\ nil)
@@ -906,7 +937,9 @@ defmodule Hologram.DB.QueryCompiler do
       entity_type: entity_type,
       mapping: mapping,
       path_depth: 0,
-      row_prefix: quoted_row_prefix || Mapper.quote_identifier(entity_mapping.table)
+      quantifier_depth: 0,
+      row_prefix: quoted_row_prefix || Mapper.quote_identifier(entity_mapping.table),
+      source_depth: 0
     }
   end
 
@@ -1068,7 +1101,12 @@ defmodule Hologram.DB.QueryCompiler do
     target_context =
       target_type
       |> policy_context(context.mapping, target_policy, quoted_alias)
-      |> Map.merge(%{delegation_depth: depth, path_depth: context.path_depth})
+      |> Map.merge(%{
+        delegation_depth: depth,
+        path_depth: context.path_depth,
+        quantifier_depth: context.quantifier_depth,
+        source_depth: context.source_depth
+      })
 
     {target_conditions, new_params} =
       policy_conditions(target_policy, target_context, params_after_chain)
@@ -1089,14 +1127,18 @@ defmodule Hologram.DB.QueryCompiler do
   # reach that rule again.
   defp rule_condition(rule, context, reversed_params) do
     scope =
-      condition_scope(
-        context.entity_type,
+      context.entity_type
+      |> condition_scope(
         context.mapping,
         context.row_prefix,
         nil,
         context.path_depth,
         context.delegation_depth
       )
+      |> Map.merge(%{
+        quantifier_depth: context.quantifier_depth,
+        source_depth: context.source_depth
+      })
 
     {predicate_conditions, params_after_predicates} =
       conditions(rule.predicates, scope, reversed_params)
@@ -1396,9 +1438,11 @@ defmodule Hologram.DB.QueryCompiler do
       |> Map.merge(%{qualified: true, source_depth: depth})
       |> source_membership_sql(chain, quoted_alias, reversed_params)
 
+    # The read policy of the rows is read inside this subquery, so a derived field's rows of its own
+    # nest past these.
     {policy_conditions, params_after_policy} =
       path_policy_conditions(
-        owner_scope,
+        %{owner_scope | source_depth: depth},
         term.entity,
         quoted_alias,
         owner_scope.path_depth,

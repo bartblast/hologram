@@ -13,6 +13,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Sync.Carry
@@ -21,7 +22,16 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module10
   alias Hologram.Test.Fixtures.Policy.Module11
   alias Hologram.Test.Fixtures.Policy.Module12
+  alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyProject
+  alias Hologram.Test.Fixtures.Policy.Module18, as: PolicyMember
+  alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyLabel
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Policy.Module20, as: PolicyTask
+  alias Hologram.Test.Fixtures.Policy.Module21, as: PolicyTag
+  alias Hologram.Test.Fixtures.Policy.Module22, as: PolicyBoard
+  alias Hologram.Test.Fixtures.Policy.Module23, as: PolicyCard
+  alias Hologram.Test.Fixtures.Policy.Module24, as: PolicyShelf
+  alias Hologram.Test.Fixtures.Policy.Module25, as: PolicyProfile
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
@@ -1033,6 +1043,184 @@ defmodule Hologram.AuthTest do
 
     test "with :held answers false for an anonymous session" do
       refute can?(nil, :update, %Module1{id: Entity.generate_id(), priority: 5}, :held)
+    end
+  end
+
+  describe "can?/4 for quantified rules over stored rows" do
+    defp create_project(values \\ %{}) do
+      values
+      |> PolicyProject.new()
+      |> DB.create!()
+    end
+
+    defp create_member(project, seat) do
+      %{project_id: project.id, seat: seat}
+      |> PolicyMember.new()
+      |> DB.create!()
+    end
+
+    defp create_label(name) do
+      %{name: name}
+      |> PolicyLabel.new()
+      |> DB.create!()
+    end
+
+    defp create_task(values) do
+      values
+      |> PolicyTask.new()
+      |> DB.create!()
+    end
+
+    defp create_tag(name) do
+      %{name: name}
+      |> PolicyTag.new()
+      |> DB.create!()
+    end
+
+    defp create_card(values) do
+      values
+      |> PolicyCard.new()
+      |> DB.create!()
+    end
+
+    test "answers an any over an inverse set of a to-one" do
+      project = create_project()
+      create_member(project, "half")
+
+      refute can?(nil, :update, project, :stored)
+
+      create_member(project, "full")
+
+      assert can?(nil, :update, project, :stored)
+    end
+
+    test "answers a none over a stored to-many" do
+      project = create_project()
+      locked = create_label("locked")
+
+      assert can?(nil, :archive, project, :stored)
+
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
+
+      refute can?(nil, :archive, project, :stored)
+    end
+
+    test "answers an any over an inverse of a to-many" do
+      tag = create_tag("x")
+      task = create_task(%{subject: "open"})
+
+      refute can?(nil, :read, tag, :stored)
+
+      :ok = EntityOperations.add_relationship(PolicyTask, task.id, :tags, tag.id)
+
+      assert can?(nil, :read, tag, :stored)
+    end
+
+    test "answers a none over a set read through a to-one" do
+      project = create_project()
+      task = create_task(%{project_id: project.id})
+      locked = create_label("locked")
+
+      assert can?(nil, :update, task, :stored)
+
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
+
+      refute can?(nil, :update, task, :stored)
+    end
+
+    # Only the second task holds the tag, so every task's set is read, not the first one's alone.
+    test "answers an any over a set read through another set" do
+      project = create_project()
+      create_task(%{project_id: project.id})
+      second_task = create_task(%{project_id: project.id})
+      done = create_tag("done")
+
+      refute can?(nil, :close, project, :stored)
+
+      :ok = EntityOperations.add_relationship(PolicyTask, second_task.id, :tags, done.id)
+
+      assert can?(nil, :close, project, :stored)
+    end
+
+    # Every task's shelf is followed to its cards, the second task's among them.
+    test "answers a none over a set read through a set and a to-one" do
+      project = create_project()
+      shelf = DB.create!(PolicyShelf.new())
+      create_task(%{project_id: project.id})
+      create_task(%{project_id: project.id, shelf_id: shelf.id})
+
+      assert can?(nil, :publish, project, :stored)
+
+      create_card(%{flagged: true, shelf_id: shelf.id})
+
+      refute can?(nil, :publish, project, :stored)
+    end
+
+    # The profile is an inverse holding one row, read on the way to its badges.
+    test "answers a none over a set read through an inverse holding one row" do
+      project = create_project()
+
+      profile =
+        %{project_id: project.id}
+        |> PolicyProfile.new()
+        |> DB.create!()
+
+      banned = create_label("banned")
+
+      assert can?(nil, :feature, project, :stored)
+
+      :ok = EntityOperations.add_relationship(PolicyProfile, profile.id, :badges, banned.id)
+
+      refute can?(nil, :feature, project, :stored)
+    end
+
+    test "answers an any over a set a row moved out of" do
+      project = create_project()
+      member = create_member(project, "full")
+      other_project = create_project()
+
+      assert can?(nil, :update, project, :stored)
+
+      DB.update!(PolicyMember, member.id, project_id: other_project.id)
+
+      refute can?(nil, :update, project, :stored)
+    end
+
+    # A none rests on the whole set, so :held holds it and share-locks the rows it reads.
+    test "answers a none over a stored to-many under :held" do
+      project = create_project()
+      locked = create_label("locked")
+
+      assert can?(nil, :archive, project, :held)
+
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
+
+      refute can?(nil, :archive, project, :held)
+    end
+
+    # A row not created yet has nothing in any set of its.
+    test "answers an any asked of a row not created yet false" do
+      refute can?(nil, :update, %{PolicyProject.new() | id: nil}, :stored)
+    end
+
+    test "answers a none asked of a row not created yet true" do
+      assert can?(nil, :archive, %{PolicyProject.new() | id: nil}, :stored)
+    end
+
+    # The board's top two cards by rank leave the flagged one out until it ranks among them.
+    test "answers an any over a bounded derived set" do
+      board = DB.create!(PolicyBoard.new())
+      flagged = create_card(%{board_id: board.id, flagged: true, rank: 1})
+
+      for rank <- [2, 3] do
+        create_card(%{board_id: board.id, rank: rank})
+      end
+
+      refute can?(nil, :read, board, :stored)
+
+      DB.update!(PolicyCard, flagged.id, rank: 4)
+
+      assert can?(nil, :read, board, :stored)
     end
   end
 
@@ -2280,6 +2468,90 @@ defmodule Hologram.AuthTest do
 
     test "returns nil for an anonymous session" do
       assert user_id() == nil
+    end
+  end
+
+  # A row not created yet has nothing in any set of its, so its verdicts are answered without a
+  # read - the sets of a row as stored are read through the same checker can?/3 uses.
+  describe "verdicts/2" do
+    defmodule VerdictBoard do
+      use Hologram.Entity
+
+      relationship :cards, [Hologram.AuthTest.VerdictCard], inverse: board
+
+      allow :read
+      allow :delete, when: none(cards)
+      allow :archive, when: none(card <- cards, card.author_id == user_id())
+      allow :update, when: any(card <- cards, card.author_id == user_id())
+    end
+
+    defmodule VerdictCard do
+      use Hologram.Entity
+
+      relationship :author, Module14, optional: true
+      relationship :board, VerdictBoard, optional: true
+
+      allow :read
+    end
+
+    defp verdict_key(operation, clause), do: Policy.verdict_key(VerdictBoard, operation, clause)
+
+    defp archive_key,
+      do: verdict_key(:archive, {:none, {[:cards], [{:author_id, :==, {:actor}}]}})
+
+    defp delete_key, do: verdict_key(:delete, {:none, {[:cards], []}})
+
+    test "answers each deciding quantifier of the row's type for the user" do
+      user_id = Entity.generate_id()
+
+      assert verdicts(user_id, %VerdictBoard{}) == %{
+               archive_key() => true,
+               delete_key() => true
+             }
+    end
+
+    # Nobody wrote no card on an empty board, but the archive rule asks about nobody, which grants
+    # nothing.
+    test "answers a visitor's none naming the actor false" do
+      assert verdicts(nil, %VerdictBoard{}) == %{
+               archive_key() => false,
+               delete_key() => true
+             }
+    end
+
+    test "answers nothing for a type with no deciding quantifier" do
+      assert verdicts(nil, %Module14{}) == %{}
+    end
+  end
+
+  describe "verdicts/2 for stored rows" do
+    defp policy_verdict_key(operation) do
+      [%{predicates: [clause]}] = Policy.build(PolicyProject)[operation]
+
+      Policy.verdict_key(PolicyProject, operation, clause)
+    end
+
+    test "answers each deciding quantifier over the rows as stored" do
+      project = DB.create!(PolicyProject.new())
+
+      locked =
+        %{name: "locked"}
+        |> PolicyLabel.new()
+        |> DB.create!()
+
+      assert verdicts(nil, project) == %{
+               policy_verdict_key(:archive) => true,
+               policy_verdict_key(:feature) => true,
+               policy_verdict_key(:publish) => true
+             }
+
+      :ok = EntityOperations.add_relationship(PolicyProject, project.id, :labels, locked.id)
+
+      assert verdicts(nil, project) == %{
+               policy_verdict_key(:archive) => false,
+               policy_verdict_key(:feature) => true,
+               policy_verdict_key(:publish) => true
+             }
     end
   end
 end

@@ -51,6 +51,22 @@ defmodule Hologram.Query.Stage do
     raise ArgumentError, message: "authorize takes an operation atom, got: #{inspect(operation)}"
   end
 
+  # Returns the polarity of a quantifier's condition, given the quantifier's own: whether the
+  # condition holding for a related row helps the answer it stands in (:positive), hurts it
+  # (:negative) or may do either (:both) - what a derived field's definition reads, since a derived
+  # value can be compared either way and a derived set's bound turns a row joining it into one
+  # leaving. A none's condition counts against it, so it turns the polarity around.
+  @doc false
+  @spec condition_polarity(:all | :any | :none, polarity) :: polarity
+        when polarity: :both | :negative | :positive
+  def condition_polarity(_quantifier, :both), do: :both
+
+  def condition_polarity(:none, :positive), do: :negative
+
+  def condition_polarity(:none, :negative), do: :positive
+
+  def condition_polarity(_quantifier, polarity), do: polarity
+
   @doc false
   @spec count(module | Query.t()) :: Query.t()
   def count(query) do
@@ -185,6 +201,30 @@ defmodule Hologram.Query.Stage do
   def inspect_name(path) when is_list(path), do: Enum.join(path, ".")
 
   def inspect_name(name), do: inspect(name)
+
+  # Returns whether a row joining the set a quantifier of the given kind reads can turn a granted
+  # answer into a refusal, the quantifier standing at the given polarity: a joining row can only make
+  # an any true and a none or an all false, so that is an any whose truth hurts and a none or an all
+  # whose truth helps - and any of them at a polarity that may go either way.
+  @doc false
+  @spec joining_row_refuses?(:all | :any | :none, :both | :negative | :positive) :: boolean
+  def joining_row_refuses?(_quantifier, :both), do: true
+
+  def joining_row_refuses?(:any, polarity), do: polarity == :negative
+
+  def joining_row_refuses?(_quantifier, polarity), do: polarity == :positive
+
+  # Returns whether the given filter clauses name the acting user anywhere - inside a disjunction's
+  # alternatives and a quantifier's condition included.
+  @doc false
+  @spec names_actor?(list(Query.clause())) :: boolean
+  def names_actor?(clauses) do
+    Enum.any?(clauses, fn
+      {:or, alternatives} -> Enum.any?(alternatives, &names_actor?/1)
+      {quantifier, {_source, inner}} when quantifier in @quantifiers -> names_actor?(inner)
+      {_name, _operator, value} -> value == {:actor}
+    end)
+  end
 
   # Returns the canonical form of the given query - the form executors run literally
   # and the registry hashes. Normalization: sorts filter clauses into canonical order,
@@ -352,18 +392,6 @@ defmodule Hologram.Query.Stage do
   @spec put_attribute(Entity.t(), atom, any) :: Entity.t()
   def put_attribute(entity, name, value) do
     put_attribute(entity, [{name, value}])
-  end
-
-  # Returns whether the given filter clauses hold a quantifier, in a disjunction's alternatives
-  # included.
-  @doc false
-  @spec quantified?(list(Query.clause())) :: boolean
-  def quantified?(clauses) do
-    Enum.any?(clauses, fn
-      {:or, alternatives} -> Enum.any?(alternatives, &quantified?/1)
-      {quantifier, {_source, _clauses}} when quantifier in @quantifiers -> true
-      _triple -> false
-    end)
   end
 
   # Returns every chain of relationships the given filter clauses follow from the queried row, each

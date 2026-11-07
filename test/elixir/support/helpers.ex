@@ -344,22 +344,29 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Returns the lock modes the calling session holds on the given entity type's table.
+  Returns the lock modes the calling session holds on the given entity type's table, or on the
+  given table of the data schema.
 
   A locking read - FOR UPDATE or FOR SHARE - holds RowShareLock on the relation, a plain read only
   AccessShareLock. Row locks themselves show here only when contended, so inside one session this
   tells a locking read from a plain one, never one lock mode from another.
   """
-  @spec relation_lock_modes(module) :: list(String.t())
-  def relation_lock_modes(entity_type) do
+  @spec relation_lock_modes(module | String.t()) :: list(String.t())
+  def relation_lock_modes(table) when is_binary(table) do
     statement =
       "SELECT mode FROM pg_locks WHERE relation = $1::text::regclass AND pid = pg_backend_pid()"
 
-    relation = ~s|"hologram_data"."#{Mapper.table_name(entity_type)}"|
+    relation = ~s|"hologram_data"."#{table}"|
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement, [relation])
 
     Enum.map(rows, fn [mode] -> mode end)
+  end
+
+  def relation_lock_modes(entity_type) do
+    entity_type
+    |> Mapper.table_name()
+    |> relation_lock_modes()
   end
 
   @doc """

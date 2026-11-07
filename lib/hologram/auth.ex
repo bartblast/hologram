@@ -12,6 +12,7 @@ defmodule Hologram.Auth do
   alias Hologram.DB.Mapper
   alias Hologram.DB.Oplog
   alias Hologram.DB.QueryRunner
+  alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator
@@ -97,10 +98,11 @@ defmodule Hologram.Auth do
   # ask about.
   #
   # :held reads the store and share-locks the grant rows the answer rests on, and the related rows
-  # `via:` delegations, grant references through relationships and paths in conditions read - every
-  # row along a path included - until the enclosing transaction ends. It is what a write under an
-  # acting user asks: a revocation of the authority the write rests on, or a change to a row a
-  # rule read, then lands after the write, never between its evaluation and its commit.
+  # `via:` delegations, grant references through relationships, paths in conditions and the sets of
+  # quantifiers read - every row along a path or a set's chain included, a join table's pairs too -
+  # until the enclosing transaction ends. It is what a write under an acting user asks: a revocation
+  # of the authority the write rests on, or a change to a row a rule read, then lands after the
+  # write, never between its evaluation and its commit.
   # Outside a transaction the lock ends with the statement, so it holds nothing there.
   @doc false
   @spec can?(struct | String.t() | nil, atom | {atom, atom}, struct, list(struct) | :held) ::
@@ -418,6 +420,29 @@ defmodule Hologram.Auth do
   @spec user_id() :: String.t() | nil
   defdelegate user_id, to: Context, as: :actor_user_id
 
+  @doc """
+  Returns the server's verdict on each deciding quantifier of the given row's type (see
+  `Hologram.Policy.deciding_quantifiers/1`) for the given user, keyed by its verdict key: whether
+  the clause holds for the row, read as stored - what a client answers such a clause by, since the
+  rows it holds of a set can't decide one for certain. Empty for a type with none. Takes nil for an
+  anonymous session. A clause several keys share - one written for several operations, or a grant
+  lifecycle line expanded per role - is answered once.
+  """
+  @spec verdicts(String.t() | nil, struct) :: %{String.t() => boolean}
+  def verdicts(actor_user_id, %entity_type{} = row) do
+    checker = &check_requirement(&1, &2, &3, :stored)
+
+    entity_type
+    |> Policy.deciding_quantifiers()
+    |> Enum.group_by(fn {_key, clause} -> clause end, fn {key, _clause} -> key end)
+    |> Enum.flat_map(fn {clause, keys} ->
+      holds? = Evaluator.clause_holds?(clause, row, actor_user_id, checker)
+
+      Enum.map(keys, &{&1, holds?})
+    end)
+    |> Map.new()
+  end
+
   defp actor_user_id(%{id: id}), do: id
 
   defp actor_user_id(user_id), do: user_id
@@ -530,6 +555,20 @@ defmodule Hologram.Auth do
   # delegation reads its target, held under a write.
   defp check_requirement({:related, relationship_names}, entity, _actor_user_id, source) do
     chain_row(entity, relationship_names, delegation_read_opts(source))
+  end
+
+  # The rows of the set a quantifier's source leads to - each to-one followed to its row, each set
+  # read whole, a set before the last relationship making the rows every path reaches one set, each
+  # once - read raw, the way a delegation reads its target, and held under a write.
+  defp check_requirement({:set, relationship_names}, entity, _actor_user_id, source) do
+    set_rows(entity, relationship_names, delegation_read_opts(source), false)
+  end
+
+  # A write resting on the whole set also keeps rows from joining it until it commits - see
+  # Hologram.DB.SetLock. A render, the sync and a check against a supplied grants list take no such
+  # lock, as they take no row locks.
+  defp check_requirement({:set, relationship_names, :whole}, entity, _actor_user_id, source) do
+    set_rows(entity, relationship_names, delegation_read_opts(source), source == :held)
   end
 
   # The grant store's own policy: a role held on the entity this grant row names.
@@ -815,6 +854,29 @@ defmodule Hologram.Auth do
     |> Map.fetch!(:fk_constraint)
   end
 
+  # The rows one relationship of a row leads to: a stored to-one's row, or nothing when its reference
+  # is empty or names a row that is gone, and the rows of a set - a to-many or an inverse, which may
+  # hold one row. A row not created yet - a create asks about one - has no id, so nothing is in any
+  # set of its.
+  defp linked_rows(row, relationship_name, read_opts, hold_set?) do
+    entity_type = row.__struct__
+
+    cond do
+      to_one?(entity_type, relationship_name) ->
+        row
+        |> chain_row([relationship_name], read_opts)
+        |> List.wrap()
+
+      row.id == nil ->
+        []
+
+      true ->
+        if hold_set?, do: SetLock.hold!(entity_type, row.id)
+
+        EntityOperations.related_rows(entity_type, row.id, relationship_name, read_opts)
+    end
+  end
+
   # Enum params are cast to their column's type in SQL rather than the columns to text, so
   # grant lookups keep using the store's unique index.
   defp qualified_enum_type(column_name) do
@@ -924,6 +986,22 @@ defmodule Hologram.Auth do
 
   defp scope_condition(:global) do
     {~s|"entity_type" IS NULL AND "entity_id" IS NULL|, []}
+  end
+
+  # The rows of the set a chain of relationships leads to from the given row, each once.
+  defp set_rows(entity, relationship_names, read_opts, hold_set?) do
+    Enum.reduce(relationship_names, [entity], fn relationship_name, rows ->
+      rows
+      |> Enum.flat_map(&linked_rows(&1, relationship_name, read_opts, hold_set?))
+      |> Enum.uniq_by(& &1.id)
+    end)
+  end
+
+  # A stored to-one holds its reference on the row - every other relationship, an inverse holding
+  # one row included, is read from the other side.
+  defp to_one?(entity_type, relationship_name) do
+    Entity.inverse_relationship(entity_type, relationship_name) == nil and
+      is_atom(relationship_target(entity_type, relationship_name))
   end
 
   defp undo_grant_effect(%{op: :put_entity, entity_id: id}, grants) do

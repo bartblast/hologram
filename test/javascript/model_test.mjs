@@ -1015,8 +1015,12 @@ describe("Model", () => {
         "2026-08-16T15:18:13.000000Z",
       );
       assert.equal(
-        Model.unbox(datetime(5, 1), "datetime"),
+        Model.unbox(datetime(500000, 1), "datetime"),
         "2026-08-16T15:18:13.500000Z",
+      );
+      assert.equal(
+        Model.unbox(datetime(42000, 3), "datetime"),
+        "2026-08-16T15:18:13.042000Z",
       );
     });
 
@@ -1037,7 +1041,8 @@ describe("Model", () => {
     it("unboxes a time at the precision the wire carries", () => {
       assert.equal(Model.unbox(time(22508, 6), "time"), "11:00:00.022508");
       assert.equal(Model.unbox(time(0, 0), "time"), "11:00:00.000000");
-      assert.equal(Model.unbox(time(5, 1), "time"), "11:00:00.500000");
+      assert.equal(Model.unbox(time(500000, 1), "time"), "11:00:00.500000");
+      assert.equal(Model.unbox(time(5000, 3), "time"), "11:00:00.005000");
     });
 
     // What leaves here goes back through boxing when a result is read, so the pair has to be a
