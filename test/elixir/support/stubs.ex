@@ -27,6 +27,14 @@ defmodule Hologram.Test.Stubs do
   def setup_asset_manifest_cache(stub, start_link \\ true) do
     stub_with(AssetManifestCacheMock, stub)
 
+    process_name = stub.process_name()
+
+    if ProcessUtils.running?(process_name) do
+      process_name
+      |> Process.whereis()
+      |> Process.exit(:kill)
+    end
+
     :persistent_term.erase(stub.persistent_term_key())
 
     if start_link do
@@ -125,6 +133,8 @@ defmodule Hologram.Test.Stubs do
         @behaviour AssetManifestCache
 
         def persistent_term_key, do: unquote(random_atom())
+
+        def process_name, do: unquote(random_atom())
       end
 
       alias alias!(unquote(random_module).AssetManifestCacheStub)

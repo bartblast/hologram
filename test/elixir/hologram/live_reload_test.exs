@@ -11,6 +11,8 @@ defmodule Hologram.LiveReloadTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.LiveReload
   alias Hologram.Realtime.SubscriptionRegistry
@@ -191,12 +193,15 @@ defmodule Hologram.LiveReloadTest do
 
       assert new_state.asset_change == :css
       assert is_reference(new_state.asset_timer_ref)
+      assert new_state.changed_static_paths == MapSet.new(["assets/app.css"])
       assert new_state.timer_ref == nil
     end
 
     test "a CSS file right in priv/static counts too", %{state: state} do
       assert {:noreply, new_state} = asset_event("#{@static_dir}/app.css", state)
+
       assert new_state.asset_change == :css
+      assert new_state.changed_static_paths == MapSet.new(["app.css"])
     end
 
     test "other asset types in priv/static start the asset timer", %{state: state} do
@@ -206,6 +211,7 @@ defmodule Hologram.LiveReloadTest do
 
         assert new_state.asset_change == :other
         assert is_reference(new_state.asset_timer_ref)
+        assert new_state.changed_static_paths == MapSet.new(["assets/file.#{extension}"])
       end
     end
 
@@ -217,10 +223,47 @@ defmodule Hologram.LiveReloadTest do
       assert asset_event("#{@static_dir}/uploads/photo.png", state) == {:noreply, state}
     end
 
-    test "ignores other file types in priv/static", %{state: state} do
-      for file_name <- ~w(app.js.map robots.txt cache_manifest.json app.css.gz) do
-        assert asset_event("#{@static_dir}/assets/#{file_name}", state) == {:noreply, state}
+    test "other files in priv/static start the asset timer with no change the tabs are told about",
+         %{state: state} do
+      for file_name <- ~w(app.js.map robots.txt cache_manifest.json app.css.gz font.woff2) do
+        assert {:noreply, new_state} = asset_event("#{@static_dir}/assets/#{file_name}", state)
+
+        assert new_state.asset_change == nil
+        assert is_reference(new_state.asset_timer_ref)
+        assert new_state.changed_static_paths == MapSet.new(["assets/#{file_name}"])
       end
+    end
+
+    test "a path with no extension in priv/static, such as a dir, starts the asset timer, reloading every tab",
+         %{state: state} do
+      for static_path <- ~w(assets/fonts assets/LICENSE) do
+        assert {:noreply, new_state} = asset_event("#{@static_dir}/#{static_path}", state)
+
+        assert new_state.asset_change == :other
+        assert is_reference(new_state.asset_timer_ref)
+        assert new_state.changed_static_paths == MapSet.new([static_path])
+      end
+    end
+
+    test "priv/static itself starts the asset timer, reloading every tab", %{state: state} do
+      assert {:noreply, new_state} = asset_event(@static_dir, state)
+
+      assert new_state.asset_change == :other
+      assert is_reference(new_state.asset_timer_ref)
+      assert new_state.changed_static_paths == MapSet.new([""])
+    end
+
+    test "ignores the hologram and uploads dirs themselves", %{state: state} do
+      assert asset_event("#{@static_dir}/hologram", state) == {:noreply, state}
+      assert asset_event("#{@static_dir}/uploads", state) == {:noreply, state}
+    end
+
+    test "a file the tabs aren't told about leaves a CSS change as it is", %{state: state_0} do
+      {:noreply, state_1} = asset_event("#{@static_dir}/assets/app.css", state_0)
+      {:noreply, state_2} = asset_event("#{@static_dir}/assets/font.woff2", state_1)
+
+      assert state_2.asset_change == :css
+      assert state_2.changed_static_paths == MapSet.new(["assets/app.css", "assets/font.woff2"])
     end
 
     test "ignores asset types outside priv/static", %{state: state} do
@@ -278,9 +321,64 @@ defmodule Hologram.LiveReloadTest do
 
   describe "handle_info/2, :debounced_asset_change" do
     setup do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+
       Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
 
       [state: LiveReload.initial_state(nil)]
+    end
+
+    test "updates the asset path registry and the asset manifest with the changed files",
+         %{state: state} do
+      file_path = Path.join(AssetPathRegistryStub.static_dir(), "assets/new.css")
+
+      file_path
+      |> Path.dirname()
+      |> File.mkdir_p!()
+
+      File.write!(file_path, "")
+
+      state = %{
+        state
+        | asset_change: :css,
+          asset_timer_ref: make_ref(),
+          changed_static_paths: MapSet.new(["assets/new.css"])
+      }
+
+      assert {:noreply, %{changed_static_paths: changed_static_paths}} =
+               LiveReload.handle_info(:debounced_asset_change, state)
+
+      assert changed_static_paths == MapSet.new()
+      assert AssetPathRegistry.lookup("assets/new.css") == {:ok, "/assets/new.css"}
+      assert AssetManifestCache.get_manifest_js() =~ ~s("assets/new.css": "/assets/new.css")
+
+      assert_receive :css_changed
+    end
+
+    test "a change to files the tabs aren't told about updates the asset path registry and leaves the tabs alone",
+         %{state: state} do
+      file_path = Path.join(AssetPathRegistryStub.static_dir(), "assets/font.woff2")
+
+      file_path
+      |> Path.dirname()
+      |> File.mkdir_p!()
+
+      File.write!(file_path, "")
+
+      state = %{
+        state
+        | asset_timer_ref: make_ref(),
+          changed_static_paths: MapSet.new(["assets/font.woff2"])
+      }
+
+      assert LiveReload.handle_info(:debounced_asset_change, state) ==
+               {:noreply, %{state | asset_timer_ref: nil, changed_static_paths: MapSet.new()}}
+
+      assert AssetPathRegistry.lookup("assets/font.woff2") == {:ok, "/assets/font.woff2"}
+
+      refute_receive :css_changed
+      refute_receive {:reload, _pages}
     end
 
     test "a CSS change tells the tabs to swap their stylesheets", %{state: state} do
@@ -452,6 +550,9 @@ defmodule Hologram.LiveReloadTest do
 
   describe "asset change replay" do
     setup do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+
       wait_for_process_cleanup(LiveReload)
       pid = start_supervised!({LiveReload, watch?: false})
 

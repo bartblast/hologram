@@ -4,7 +4,6 @@ defmodule Hologram.Assets.PathRegistry do
   use GenServer
 
   alias Hologram.Commons.ETS
-  alias Hologram.Commons.FileUtils
   alias Hologram.Reflection
 
   @doc """
@@ -91,12 +90,12 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
-  Reloads the path registry data.
+  Reloads the entries of Hologram's bundles, the files in the static dir's hologram dir, and leaves
+  the other entries as they are.
   """
   @spec reload :: :ok
   def reload do
-    ETS.replace_all(impl().ets_table_name(), find_assets(impl().static_dir()))
-    :ok
+    refresh_entries(&String.starts_with?(&1, "hologram/"))
   end
 
   @doc """
@@ -105,6 +104,32 @@ defmodule Hologram.Assets.PathRegistry do
   @spec static_dir() :: String.t()
   def static_dir do
     Reflection.otp_app_static_dir()
+  end
+
+  @doc """
+  Updates the entries the given changed files or dirs bear on, each given by its path relative to the
+  static dir, with "" for the static dir itself: the entry of a file's key, those of the key's
+  digested copies, and those of the files in a dir. A key whose files are gone loses its entry. The
+  entries of Hologram's bundles, in the hologram dir, and the other entries are left as they are.
+  """
+  @spec update([String.t()]) :: :ok
+  def update(static_paths) do
+    changed_keys = MapSet.new(static_paths, &asset_key/1)
+    dir_prefixes = Enum.map(static_paths, &dir_prefix/1)
+
+    refresh_entries(fn path ->
+      not String.starts_with?(path, "hologram/") and
+        (MapSet.member?(changed_keys, asset_key(path)) or String.starts_with?(path, dir_prefixes))
+    end)
+  end
+
+  # The key a file is an asset of: the file's own path, or for a digested copy or a bundle, the path
+  # left once the digest is taken off.
+  defp asset_key(relative_path) do
+    case match_digest_suffix(relative_path) do
+      {_kind, prefix, _digest, suffix} -> prefix <> suffix
+      nil -> relative_path
+    end
   end
 
   # Maps each asset key, the path of a file relative to the static dir, to the URL to serve it
@@ -176,15 +201,35 @@ defmodule Hologram.Assets.PathRegistry do
     end
   end
 
+  defp dir_prefix(""), do: ""
+
+  defp dir_prefix(static_path), do: static_path <> "/"
+
   defp find_assets(static_dir) do
     static_dir
-    |> FileUtils.list_files_recursively()
-    |> Enum.map(&String.replace_prefix(&1, "#{static_dir}/", ""))
+    |> list_relative_paths()
     |> build_entries(static_dir)
   end
 
   defp impl do
     Application.get_env(:hologram, :asset_path_registry_impl, __MODULE__)
+  end
+
+  # A file or dir that is gone by the time it is read, or a link to nothing, is left out: a tool
+  # writing the static files can remove one while they are listed.
+  defp list_files(path) do
+    case File.ls(path) do
+      {:ok, names} -> Enum.flat_map(names, &list_files(Path.join(path, &1)))
+      {:error, :enotdir} -> [path]
+      {:error, _reason} -> []
+    end
+  end
+
+  defp list_relative_paths(static_dir) do
+    static_dir
+    |> list_files()
+    |> Enum.map(&String.replace_prefix(&1, "#{static_dir}/", ""))
+    |> Enum.sort()
   end
 
   # A digest suffix is the 32 hex chars of an MD5, as `mix phx.digest` writes it, anywhere in the
@@ -242,6 +287,31 @@ defmodule Hologram.Assets.PathRegistry do
     else
       _no_latest_copies -> %{}
     end
+  end
+
+  # Rebuilds the entries of the files and keys the given function holds in scope, given their paths
+  # relative to the static dir, and leaves the others as they are. The new entries go in before the
+  # stale ones are deleted, so that a key kept throughout is readable with its old or its new value.
+  defp refresh_entries(in_scope?) do
+    static_dir = impl().static_dir()
+    ets_table_name = impl().ets_table_name()
+
+    entries =
+      static_dir
+      |> list_relative_paths()
+      |> Enum.filter(in_scope?)
+      |> build_entries(static_dir)
+
+    ETS.put(ets_table_name, entries)
+
+    new_keys = MapSet.new(entries, &elem(&1, 0))
+
+    ets_table_name
+    |> ETS.keys()
+    |> Enum.filter(&(is_binary(&1) and in_scope?.(&1) and not MapSet.member?(new_keys, &1)))
+    |> Enum.each(&ETS.delete(ets_table_name, &1))
+
+    :ok
   end
 
   # The copy copy_picker/1 picks stands in for the key. With none, the file at the key is served, and

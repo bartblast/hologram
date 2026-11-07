@@ -247,7 +247,7 @@ defmodule Hologram.LiveReload do
 
         {:noreply, %{state | timer_ref: timer_ref}}
 
-      {:asset, kind} ->
+      {:static, static_path, kind} ->
         # Started once per batch of changes and not pushed back, so that a tool writing assets
         # continuously still gets its changes shown.
         asset_timer_ref =
@@ -258,7 +258,8 @@ defmodule Hologram.LiveReload do
          %{
            state
            | asset_change: merge_asset_change(state.asset_change, kind),
-             asset_timer_ref: asset_timer_ref
+             asset_timer_ref: asset_timer_ref,
+             changed_static_paths: MapSet.put(state.changed_static_paths, static_path)
          }}
 
       :ignore ->
@@ -267,11 +268,20 @@ defmodule Hologram.LiveReload do
     end
   end
 
-  # Only CSS changed: the tabs swap their stylesheets in place. Anything else reloads every tab,
-  # which brings changed CSS in too. Independent of a live reload pass, which rebuilds Hologram's
-  # bundles, not the app's assets.
+  # The asset path registry learns the changed static files first, and the manifest of the pages
+  # rendered from then on with it, so that a tab told of the change finds them. Only CSS changed:
+  # the tabs swap their stylesheets in place. Another asset the tabs load changed: every tab
+  # reloads, which brings changed CSS in too. Only files the tabs aren't told about changed, such
+  # as fonts or the cache manifest: the tabs are left alone. Independent of a live reload pass,
+  # which rebuilds Hologram's bundles, not the app's assets.
   @impl GenServer
   def handle_info(:debounced_asset_change, state) do
+    state.changed_static_paths
+    |> MapSet.to_list()
+    |> PathRegistry.update()
+
+    ManifestCache.reload()
+
     new_state =
       case state.asset_change do
         :css ->
@@ -281,9 +291,13 @@ defmodule Hologram.LiveReload do
         :other ->
           broadcast_reload(:all)
           %{state | reload_version: state.reload_version + 1}
+
+        nil ->
+          state
       end
 
-    {:noreply, %{new_state | asset_change: nil, asset_timer_ref: nil}}
+    {:noreply,
+     %{new_state | asset_change: nil, asset_timer_ref: nil, changed_static_paths: MapSet.new()}}
   end
 
   @impl GenServer
@@ -366,9 +380,12 @@ defmodule Hologram.LiveReload do
   def initial_state(endpoint) do
     %{
       # What changed in the app's assets since the asset timer started: :css when only CSS did,
-      # :other when anything else did too, nil with no timer running.
+      # :other when another asset the tabs load did too, nil when neither did or no timer runs.
       asset_change: nil,
       asset_timer_ref: nil,
+      # The static files and dirs changed since the asset timer started, by their paths relative to
+      # the static dir.
+      changed_static_paths: MapSet.new(),
       # Counts the CSS changes the tabs were told about, from 1, so that a tab rendered before this
       # process started, whose CSS it can't vouch for, counts as older (see replay_asset_change/2).
       css_version: 1,
@@ -707,7 +724,8 @@ defmodule Hologram.LiveReload do
   end
 
   # Determines what a file event is about: source code, with the file a live reload pass recompiles,
-  # an asset of the app, CSS or another kind, or nothing live reload acts on.
+  # a file or dir of the app's static dir, with its path relative to the dir and whether the tabs
+  # are told about it as CSS, as another asset or not at all, or nothing live reload acts on.
   defp classify_file_event(file_path) do
     case Path.extname(file_path) do
       ".ex" ->
@@ -722,11 +740,8 @@ defmodule Hologram.LiveReload do
           :ignore
         end
 
-      extension when extension in @asset_extensions ->
-        classify_asset_event(file_path, extension)
-
-      _fallback ->
-        :ignore
+      extension ->
+        classify_static_event(file_path, extension)
     end
   end
 
@@ -734,11 +749,11 @@ defmodule Hologram.LiveReload do
   # report the path with a symbolic link on the way resolved. Phoenix's live reload matches its
   # patterns anywhere in the path for the same reason. What counts is what follows the last
   # priv/static in the path, since the project's own path can hold one too.
-  defp classify_asset_event(file_path, extension) do
-    if static_asset_path?(file_path) do
-      {:asset, if(extension == ".css", do: :css, else: :other)}
-    else
-      :ignore
+  defp classify_static_event(file_path, extension) do
+    case static_subpath(file_path) do
+      nil -> :ignore
+      [] -> {:static, "", :other}
+      subpath -> {:static, Path.join(subpath), static_change_kind(extension)}
     end
   end
 
@@ -752,13 +767,26 @@ defmodule Hologram.LiveReload do
   defp last_static_subpath([], subpath), do: subpath
 
   defp merge_asset_change(:other, _kind), do: :other
+  defp merge_asset_change(asset_change, nil), do: asset_change
   defp merge_asset_change(_asset_change, kind), do: kind
 
-  defp static_asset_path?(file_path) do
+  # A path with no extension is most likely a dir, created, renamed or removed, which can change the
+  # URLs of the assets in it, so the tabs reload, as they do for the static dir itself.
+  defp static_change_kind(".css"), do: :css
+
+  defp static_change_kind(""), do: :other
+
+  defp static_change_kind(extension) when extension in @asset_extensions, do: :other
+
+  defp static_change_kind(_extension), do: nil
+
+  # The segments of the path that follow the last priv/static, none for the static dir itself, or nil
+  # when there is no priv/static in the path or the segments lead into a subdir whose files aren't
+  # the app's assets, or name that subdir.
+  defp static_subpath(file_path) do
     case last_static_subpath(Path.split(file_path), nil) do
-      [subdir, _file_name | _rest] -> subdir not in @ignored_static_subdirs
-      [_file_name] -> true
-      _no_static_subpath -> false
+      [subdir | _rest] = subpath -> if subdir not in @ignored_static_subdirs, do: subpath
+      no_subpath -> no_subpath
     end
   end
 
