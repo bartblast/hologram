@@ -15,6 +15,7 @@ defmodule Hologram.Entity.DerivedTest do
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module33
   alias Hologram.Test.Fixtures.Entity.Module34
+  alias Hologram.Test.Fixtures.Entity.Module36
   alias Hologram.Test.Fixtures.Entity.Module37
   alias Hologram.Test.Fixtures.Entity.Module38
   alias Hologram.Test.Fixtures.Entity.Module40
@@ -66,6 +67,15 @@ defmodule Hologram.Entity.DerivedTest do
         "no definition for Hologram.Test.Fixtures.Entity.Module33.unknown - the Hologram compile resolves derived fields"
 
       assert_error ArgumentError, expected_msg, fn -> definition(Module33, :unknown) end
+    end
+  end
+
+  describe "expanded_references/2" do
+    # A query builder runs only in the build, over stand-ins of its own.
+    test "reads nothing through a derived value calling a query builder" do
+      assert expanded_references(Module36, [{[], :unread_count}, {[], :last_read_at}]) == [
+               {[], :last_read_at}
+             ]
     end
   end
 

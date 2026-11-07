@@ -90,10 +90,10 @@ defmodule Hologram.Entity.Derived do
   definition, written in place: a derived name is replaced by what its definition reads, on the row
   it is read on, recursively, and a derived field reached again inside its own reads adds nothing.
 
-  A definition is resolved natively, as resolve/2 resolves it: the fields a policy condition reads
-  outside any quantifier call no query builder, and a policy is validated before the build
-  resolves any definition. One reading a related set is refused there before anything expands one,
-  so a count reads nothing here - what a quantifier's condition reads is expanded by set_reads/2.
+  A definition is resolved natively, as resolve/2 resolves it, since a policy is validated before
+  the build resolves any definition. A field reading a related set - a count, or a query builder,
+  which is never run here - reads nothing of that set here: outside any quantifier the build
+  refuses one, and what a quantifier's condition reads through one is expanded by set_reads/2.
   """
   @spec expanded_references(module, list({list(atom), atom})) :: list({list(atom), atom})
   def expanded_references(entity_type, references) do
@@ -497,6 +497,12 @@ defmodule Hologram.Entity.Derived do
           [reference]
 
         field in visited ->
+          []
+
+        # A query builder runs only in the build, over its own stand-ins - natively it would read a
+        # stand-in as the row it stands for. What it reads is a related set, which a native
+        # expansion reads nothing of, as a count's query reads nothing here.
+        name in read_type.__derived_builder_calls__() ->
           []
 
         true ->

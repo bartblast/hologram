@@ -1429,6 +1429,16 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "related_chains/2" do
+    defmodule BuilderOwner do
+      use Hologram.Entity
+
+      alias Hologram.Test.Fixtures.Entity.Module36
+
+      relationship :memberships, [Module36]
+
+      allow :update, when: any(membership <- memberships, membership.unread_count > 0)
+    end
+
     test "returns the rows the given operation's rules read" do
       assert related_chains(Policy.Module12, :delete) == [[:parent, :parent]]
     end
@@ -1443,6 +1453,11 @@ defmodule Hologram.PolicyTest do
 
     test "returns no chains for an operation with no rules" do
       assert related_chains(Policy.Module12, :create) == []
+    end
+
+    # The server's verdict answers the any, and the builder reads a set the browser never holds.
+    test "returns a quantifier's set and nothing through a derived value calling a query builder" do
+      assert related_chains(BuilderOwner, :update) == [[:memberships]]
     end
   end
 

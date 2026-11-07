@@ -1495,6 +1495,56 @@ defmodule Hologram.Policy.ValidatorTest do
       end
     end
 
+    # The server's verdict answers the any, so the build never runs the builder over a stand-in.
+    test "accepts a non-read quantifier's condition comparing a derived field that calls a query builder" do
+      defmodule InlinePolicyFixture122 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module36
+
+        relationship :memberships, [Module36]
+
+        allow :update, when: any(membership <- memberships, membership.unread_count > 0)
+      end
+
+      assert validate_model!([InlinePolicyFixture122], []) == :ok
+    end
+
+    test "rejects a non-read quantifier's condition comparing a derived field that reads a server-only attribute beside a count" do
+      defmodule InlinePolicyFixture123Member do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        attribute :muted, :boolean, server_only: true
+
+        relationship :messages, [Module33]
+
+        derived :pending, :integer, fn muted, messages ->
+          if muted == true, do: count(messages), else: 0
+        end
+
+        allow :read
+      end
+
+      defmodule InlinePolicyFixture123 do
+        use Hologram.Entity
+
+        alias Hologram.Policy.ValidatorTest.InlinePolicyFixture123Member
+
+        relationship :members, [InlinePolicyFixture123Member]
+
+        allow :update, when: all(member <- members, member.pending > 0)
+      end
+
+      expected_msg =
+        "invalid predicate members.pending for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture123 - members.pending reads members.muted, which is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([InlinePolicyFixture123, InlinePolicyFixture123Member], [])
+      end
+    end
+
     test "rejects a condition comparing a derived field reading one that counts a related set" do
       defmodule InlinePolicyFixture102 do
         use Hologram.Entity
