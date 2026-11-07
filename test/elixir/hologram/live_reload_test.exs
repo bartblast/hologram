@@ -28,8 +28,8 @@ defmodule Hologram.LiveReloadTest do
   @static_dir "/app/priv/static"
   @file_path Path.join([@fixtures_dir, "live_reload", "module_1.ex"])
 
-  defp asset_event(file_path, state) do
-    LiveReload.handle_info({:file_event, self(), {file_path, [:modified]}}, state)
+  defp asset_event(file_path, state, events \\ [:modified]) do
+    LiveReload.handle_info({:file_event, self(), {file_path, events}}, state)
   end
 
   # Has the started live reload process see a CSS change, and waits for the tabs to be told.
@@ -234,10 +234,12 @@ defmodule Hologram.LiveReloadTest do
       end
     end
 
-    test "a path with no extension in priv/static, such as a dir, starts the asset timer, reloading every tab",
+    test "a path with no extension in priv/static, such as a dir, created, removed or renamed starts the asset timer, reloading every tab",
          %{state: state} do
-      for static_path <- ~w(assets/fonts assets/LICENSE) do
-        assert {:noreply, new_state} = asset_event("#{@static_dir}/#{static_path}", state)
+      for static_path <- ~w(assets/fonts assets/LICENSE),
+          events <- [[:created], [:removed], [:renamed], [:deleted], [:moved_from], [:moved_to]] do
+        assert {:noreply, new_state} =
+                 asset_event("#{@static_dir}/#{static_path}", state, events)
 
         assert new_state.asset_change == :other
         assert is_reference(new_state.asset_timer_ref)
@@ -245,10 +247,29 @@ defmodule Hologram.LiveReloadTest do
       end
     end
 
-    test "priv/static itself starts the asset timer, reloading every tab", %{state: state} do
-      assert {:noreply, new_state} = asset_event(@static_dir, state)
+    test "a path with no extension in priv/static, such as a dir, only modified starts the asset timer with no change the tabs are told about",
+         %{state: state} do
+      assert {:noreply, new_state} = asset_event("#{@static_dir}/assets", state, [:modified])
+
+      assert new_state.asset_change == nil
+      assert is_reference(new_state.asset_timer_ref)
+      assert new_state.changed_static_paths == MapSet.new(["assets"])
+    end
+
+    test "priv/static itself created, removed or renamed starts the asset timer, reloading every tab",
+         %{state: state} do
+      assert {:noreply, new_state} = asset_event(@static_dir, state, [:created])
 
       assert new_state.asset_change == :other
+      assert is_reference(new_state.asset_timer_ref)
+      assert new_state.changed_static_paths == MapSet.new([""])
+    end
+
+    test "priv/static itself only modified starts the asset timer with no change the tabs are told about",
+         %{state: state} do
+      assert {:noreply, new_state} = asset_event(@static_dir, state, [:modified])
+
+      assert new_state.asset_change == nil
       assert is_reference(new_state.asset_timer_ref)
       assert new_state.changed_static_paths == MapSet.new([""])
     end

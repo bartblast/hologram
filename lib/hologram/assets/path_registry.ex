@@ -215,13 +215,20 @@ defmodule Hologram.Assets.PathRegistry do
     Application.get_env(:hologram, :asset_path_registry_impl, __MODULE__)
   end
 
+  defp list_dir_files(dir_path) do
+    case File.ls(dir_path) do
+      {:ok, names} -> Enum.flat_map(names, &list_files(Path.join(dir_path, &1)))
+      {:error, _reason} -> []
+    end
+  end
+
   # A file or dir that is gone by the time it is read, or a link to nothing, is left out: a tool
   # writing the static files can remove one while they are listed.
   defp list_files(path) do
-    case File.ls(path) do
-      {:ok, names} -> Enum.flat_map(names, &list_files(Path.join(path, &1)))
-      {:error, :enotdir} -> [path]
-      {:error, _reason} -> []
+    cond do
+      File.regular?(path) -> [path]
+      File.dir?(path) -> list_dir_files(path)
+      true -> []
     end
   end
 

@@ -44,6 +44,10 @@ defmodule Hologram.LiveReload do
   # Phoenix's default live reload patterns list.
   @asset_extensions ~w(.css .js .png .jpeg .jpg .gif .svg)
 
+  # The file events that tell a dir was created, removed or renamed, as the watcher's backends name
+  # them on each OS.
+  @dir_change_events ~w(created deleted moved_from moved_to removed renamed)a
+
   # The priv/static subdirs whose files are not the app's assets: Hologram's own bundles, which
   # live reload passes already reload the tabs for, and files users upload, as in Phoenix's default
   # live reload patterns.
@@ -235,8 +239,8 @@ defmodule Hologram.LiveReload do
   end
 
   @impl GenServer
-  def handle_info({:file_event, _pid, {file_path, _events}}, state) do
-    case classify_file_event(file_path) do
+  def handle_info({:file_event, _pid, {file_path, events}}, state) do
+    case classify_file_event(file_path, events) do
       {:code, target_file_path} ->
         if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
 
@@ -726,7 +730,7 @@ defmodule Hologram.LiveReload do
   # Determines what a file event is about: source code, with the file a live reload pass recompiles,
   # a file or dir of the app's static dir, with its path relative to the dir and whether the tabs
   # are told about it as CSS, as another asset or not at all, or nothing live reload acts on.
-  defp classify_file_event(file_path) do
+  defp classify_file_event(file_path, events) do
     case Path.extname(file_path) do
       ".ex" ->
         {:code, file_path}
@@ -741,7 +745,7 @@ defmodule Hologram.LiveReload do
         end
 
       extension ->
-        classify_static_event(file_path, extension)
+        classify_static_event(file_path, extension, events)
     end
   end
 
@@ -749,12 +753,19 @@ defmodule Hologram.LiveReload do
   # report the path with a symbolic link on the way resolved. Phoenix's live reload matches its
   # patterns anywhere in the path for the same reason. What counts is what follows the last
   # priv/static in the path, since the project's own path can hold one too.
-  defp classify_static_event(file_path, extension) do
+  defp classify_static_event(file_path, extension, events) do
     case static_subpath(file_path) do
       nil -> :ignore
-      [] -> {:static, "", :other}
-      subpath -> {:static, Path.join(subpath), static_change_kind(extension)}
+      [] -> {:static, "", dir_change_kind(events)}
+      subpath -> {:static, Path.join(subpath), static_change_kind(extension, events)}
     end
+  end
+
+  # A dir created, removed or renamed can change the URLs of the assets in it, so the tabs reload.
+  # A dir that is only modified is one whose files changed, as the watcher on Windows reports along
+  # with each file, and the files' own events tell the tabs about them.
+  defp dir_change_kind(events) do
+    if Enum.any?(events, &(&1 in @dir_change_events)), do: :other
   end
 
   # The segments that follow the last "priv", "static" pair, or nil when there is none.
@@ -770,15 +781,14 @@ defmodule Hologram.LiveReload do
   defp merge_asset_change(asset_change, nil), do: asset_change
   defp merge_asset_change(_asset_change, kind), do: kind
 
-  # A path with no extension is most likely a dir, created, renamed or removed, which can change the
-  # URLs of the assets in it, so the tabs reload, as they do for the static dir itself.
-  defp static_change_kind(".css"), do: :css
+  # A path with no extension is most likely a dir.
+  defp static_change_kind(".css", _events), do: :css
 
-  defp static_change_kind(""), do: :other
+  defp static_change_kind("", events), do: dir_change_kind(events)
 
-  defp static_change_kind(extension) when extension in @asset_extensions, do: :other
+  defp static_change_kind(extension, _events) when extension in @asset_extensions, do: :other
 
-  defp static_change_kind(_extension), do: nil
+  defp static_change_kind(_extension, _events), do: nil
 
   # The segments of the path that follow the last priv/static, none for the static dir itself, or nil
   # when there is no priv/static in the path or the segments lead into a subdir whose files aren't
