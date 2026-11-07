@@ -26,15 +26,15 @@ defmodule Hologram.Assets.ManifestCacheTest do
     expected = """
     {
     "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
-    "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
-    "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-    "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
-    "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-    "test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
+    "hologram/test_file_9.css": "/hologram/test_file_9-d41d8cd98f00b204e9800998ecf8427e.css",
+    "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-d41d8cd98f00b204e9800998ecf8427e.js",
+    "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-d41d8cd98f00b204e9800998ecf8427e.css",
+    "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-d41d8cd98f00b204e9800998ecf8427e.css",
+    "test_dir_3/page.js": "/test_dir_3/page-d41d8cd98f00b204e9800998ecf8427e.js",
     "test_dir_3/test_file_10.css": "/test_dir_3/test_file_10.css",
     "test_dir_3/test_file_11-DOWNLOAD.css": "/test_dir_3/test_file_11-DOWNLOAD.css",
-    "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-    "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
+    "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-d41d8cd98f00b204e9800998ecf8427e.css",
+    "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-d41d8cd98f00b204e9800998ecf8427e.css"
     };\
     """
 
@@ -76,15 +76,15 @@ defmodule Hologram.Assets.ManifestCacheTest do
     expected = """
     {
     "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
-    "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
-    "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-    "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
-    "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-    "test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
+    "hologram/test_file_9.css": "/hologram/test_file_9-d41d8cd98f00b204e9800998ecf8427e.css",
+    "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-d41d8cd98f00b204e9800998ecf8427e.js",
+    "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-d41d8cd98f00b204e9800998ecf8427e.css",
+    "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-d41d8cd98f00b204e9800998ecf8427e.css",
+    "test_dir_3/page.js": "/test_dir_3/page-d41d8cd98f00b204e9800998ecf8427e.js",
     "test_dir_3/test_file_10.css": "/test_dir_3/test_file_10.css",
     "test_dir_3/test_file_11-DOWNLOAD.css": "/test_dir_3/test_file_11-DOWNLOAD.css",
-    "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-    "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
+    "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-d41d8cd98f00b204e9800998ecf8427e.css",
+    "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-d41d8cd98f00b204e9800998ecf8427e.css"
     };\
     """
 
