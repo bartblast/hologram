@@ -1720,15 +1720,15 @@ defmodule Hologram.Template.Renderer do
         Window.embed(term, QueryCache.permission_checking?())
       end
 
-    result =
-      read_term
-      |> QueryRunner.run_policied(DB.mapping(), Auth.user_id())
-      |> Entity.strip_server_only_deep()
+    stored = QueryRunner.run_policied(read_term, DB.mapping(), Auth.user_id())
 
     # Gathered as the prop resolves, so the client is handed the rows this render read - which is
     # what lets its own first render answer the same query from its own database rather than from
-    # a value passed down beside it.
-    Carry.collect(result)
+    # a value passed down beside it. Gathered as stored: the server's verdicts on a carried row read
+    # its server-only values, and the wire leaves those out of what the client is told.
+    Carry.collect(stored)
+
+    result = Entity.strip_server_only_deep(stored)
 
     # A count has no rows behind it, so carried rows cannot re-derive one - the number itself is
     # handed over, and the client holds it until its own database is complete enough to count.

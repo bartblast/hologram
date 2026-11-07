@@ -18,6 +18,7 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
+  alias Hologram.Policy
   alias Hologram.Server
   alias Hologram.Sync.Carry
   alias Hologram.Template.Renderer
@@ -37,6 +38,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyParent
+  alias Hologram.Test.Fixtures.Policy.Module33, as: PolicyVault
+  alias Hologram.Test.Fixtures.Policy.Module34, as: PolicyKey
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyMiddle
   alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyChained
   alias Hologram.Test.Fixtures.Template.Renderer.Module100
@@ -58,6 +61,8 @@ defmodule Hologram.Template.RendererFromQueryTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module118
   alias Hologram.Test.Fixtures.Template.Renderer.Module119
   alias Hologram.Test.Fixtures.Template.Renderer.Module120
+  alias Hologram.Test.Fixtures.Template.Renderer.Module121
+  alias Hologram.Test.Fixtures.Template.Renderer.Module122
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -391,6 +396,34 @@ defmodule Hologram.Template.RendererFromQueryTest do
       refute String.contains?(carried, "secret_note")
       refute String.contains?(carried, "tok_R4mQ")
       refute String.contains?(carried, "token")
+    end
+
+    # The server works a carried row's verdicts out over the row as stored, its server-only values
+    # among them - the wire then leaves those out of what the client is told.
+    test "carries a row's verdicts worked out over its server-only values" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module121, :dummy_module_121_digest)
+      dump_query_cache(QueryCacheStub, [Module122], true)
+      QueryCache.init(nil)
+
+      vault =
+        %{code: "kestrel", public: true}
+        |> PolicyVault.new()
+        |> DB.create!()
+
+      %{name: "kestrel", vault_id: vault.id}
+      |> PolicyKey.new()
+      |> DB.create!()
+
+      [{verdict_key, _clause}] = Policy.deciding_quantifiers(PolicyVault)
+
+      assert [carried] =
+               Module121
+               |> render_page_html()
+               |> boot_data()
+               |> get_in(["syncRows", "put_entity", inspect(PolicyVault)])
+
+      assert carried["$verdicts"] == %{verdict_key => false}
+      refute Map.has_key?(carried, "code")
     end
 
     test "names who the render read the rows as" do
