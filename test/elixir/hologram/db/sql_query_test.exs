@@ -6,6 +6,7 @@ defmodule Hologram.DB.SQLQueryTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity
+  alias Hologram.MisuseError
   alias Hologram.SQLError
 
   # Reaches the server outside the sandbox: the path without an enclosing transaction opens a
@@ -238,7 +239,7 @@ defmodule Hologram.DB.SQLQueryTest do
     test "leaves the enclosing transaction usable after a param that does not fit" do
       {:ok, id} =
         Connection.transaction(fn ->
-          assert_error ArgumentError,
+          assert_error MisuseError,
                        "DB.sql/3 got 0 params for a statement with 1 placeholder",
                        fn -> run(~s|SELECT $1::uuid AS "id"|, [], []) end
 
@@ -259,7 +260,7 @@ defmodule Hologram.DB.SQLQueryTest do
 
       {:ok, id} =
         Connection.transaction(fn ->
-          assert_error ArgumentError, expected_msg, fn ->
+          assert_error MisuseError, expected_msg, fn ->
             run(~s|SELECT $1::int8 AS "n"|, ["x"], [])
           end
 
@@ -347,7 +348,7 @@ defmodule Hologram.DB.SQLQueryTest do
     end
 
     test "raises on fewer params than placeholders" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "DB.sql/3 got 0 params for a statement with 1 placeholder",
                    fn ->
                      run(~s|SELECT $1::uuid AS "id"|, [], [])
@@ -355,7 +356,7 @@ defmodule Hologram.DB.SQLQueryTest do
     end
 
     test "raises on more params than placeholders" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "DB.sql/3 got 3 params for a statement with 2 placeholders",
                    fn ->
                      run(~s|SELECT $1::uuid AS "a", $2::uuid AS "b"|, [@id, @other_id, @id], [])
@@ -369,7 +370,7 @@ defmodule Hologram.DB.SQLQueryTest do
           "value you are passing matches the definition in your table or in your query or " <>
           "convert the value accordingly."
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(~s|SELECT $1::uuid AS "id"|, ["not-an-id"], [])
       end
     end
@@ -381,26 +382,26 @@ defmodule Hologram.DB.SQLQueryTest do
           ~s("x". Please make sure the value you are passing matches the definition in your ) <>
           "table or in your query or convert the value accordingly."
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(~s|SELECT $1::int8 AS "n"|, ["x"], [])
       end
     end
 
     test "raises on an unknown option" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "unknown option :timeot for DB.sql/3 - the one option is :timeout",
                    fn -> run(~s|SELECT 1 AS "one"|, [], timeot: 5_000) end
     end
 
     # PostgreSQL reads a zero statement timeout as no limit.
     test "raises on a zero timeout" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "invalid timeout 0 for DB.sql/3 - give a positive number of milliseconds up to 2147483647, or :infinity",
                    fn -> run(~s|SELECT 1 AS "one"|, [], timeout: 0) end
     end
 
     test "raises on a timeout that is not an integer" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    ~s(invalid timeout "5s" for DB.sql/3 - give a positive number of milliseconds up to 2147483647, or :infinity),
                    fn -> run(~s|SELECT 1 AS "one"|, [], timeout: "5s") end
     end
@@ -408,7 +409,7 @@ defmodule Hologram.DB.SQLQueryTest do
     # PostgreSQL stores the statement timeout as a 32-bit integer, so a larger value would fail the
     # statement that sets it rather than the call.
     test "raises on a timeout above the largest PostgreSQL accepts" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "invalid timeout 2147483648 for DB.sql/3 - give a positive number of milliseconds up to 2147483647, or :infinity",
                    fn -> run(~s|SELECT 1 AS "one"|, [], timeout: 2_147_483_648) end
     end
@@ -420,7 +421,7 @@ defmodule Hologram.DB.SQLQueryTest do
         "DB.sql/3 cannot take a session-level advisory lock - it would stay with a pooled " <>
           "connection after the read. Take pg_advisory_xact_lock inside DB.transaction/2 instead."
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run("SELECT pg_advisory_lock(1378)", [], [])
       end
     end
@@ -430,7 +431,7 @@ defmodule Hologram.DB.SQLQueryTest do
         "DB.sql/3 cannot take a session-level advisory lock - it would stay with a pooled " <>
           "connection after the read. Take pg_advisory_xact_lock inside DB.transaction/2 instead."
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run("SELECT PG_TRY_ADVISORY_LOCK_SHARED(1378)", [], [])
       end
     end
@@ -440,7 +441,7 @@ defmodule Hologram.DB.SQLQueryTest do
         "DB.sql/3 cannot prepare a named statement - it would stay with a pooled connection " <>
           "after the read. Pass the statement to DB.sql/3 itself, with its params."
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run("-- the monthly report\nPREPARE report AS SELECT 1", [], [])
       end
     end

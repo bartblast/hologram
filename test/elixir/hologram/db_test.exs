@@ -14,6 +14,7 @@ defmodule Hologram.DBTest do
   alias Hologram.DB.Schema
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.MisuseError
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.SQLError
@@ -214,14 +215,14 @@ defmodule Hologram.DBTest do
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
-      assert_error ArgumentError, expected_msg, fn -> create(%RoleGrant{}) end
+      assert_error MisuseError, expected_msg, fn -> create(%RoleGrant{}) end
     end
 
     test "rejects jobs" do
       expected_msg =
         "Hologram.Test.Fixtures.Job.Module1 is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits"
 
-      assert_error ArgumentError, expected_msg, fn -> create(JobModule1.new()) end
+      assert_error MisuseError, expected_msg, fn -> create(JobModule1.new()) end
     end
   end
 
@@ -375,7 +376,7 @@ defmodule Hologram.DBTest do
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         delete(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
       end
     end
@@ -493,7 +494,7 @@ defmodule Hologram.DBTest do
           "stored as the c_id column of the entity's own table - a join table backs a to-many " <>
           "relationship only"
 
-      assert_error ArgumentError, expected_msg, fn -> join_table_name(Module3, :c) end
+      assert_error MisuseError, expected_msg, fn -> join_table_name(Module3, :c) end
     end
 
     test "raises for an inverse of a to-one" do
@@ -502,7 +503,7 @@ defmodule Hologram.DBTest do
           "reads the channel_id column of Hologram.Test.Fixtures.Entity.Module28's table, and a " <>
           "join table backs a stored to-many relationship only"
 
-      assert_error ArgumentError, expected_msg, fn -> join_table_name(Module26, :messages) end
+      assert_error MisuseError, expected_msg, fn -> join_table_name(Module26, :messages) end
     end
 
     test "raises for an inverse of a to-many" do
@@ -510,11 +511,11 @@ defmodule Hologram.DBTest do
         "relationship :messages of Hologram.Test.Fixtures.Entity.Module29 is an inverse - it " <>
           "reads the join table of the labels relationship of Hologram.Test.Fixtures.Entity.Module28"
 
-      assert_error ArgumentError, expected_msg, fn -> join_table_name(Module29, :messages) end
+      assert_error MisuseError, expected_msg, fn -> join_table_name(Module29, :messages) end
     end
 
     test "raises for an undeclared relationship" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "Hologram.Test.Fixtures.Entity.Module3 declares no relationship :x",
                    fn -> join_table_name(Module3, :x) end
     end
@@ -524,7 +525,7 @@ defmodule Hologram.DBTest do
         "Hologram.Reflection is not an entity type module - join_table_name/2 takes an entity " <>
           "type and the name of one of its to-many relationships"
 
-      assert_error ArgumentError, expected_msg, fn -> join_table_name(Reflection, :a) end
+      assert_error MisuseError, expected_msg, fn -> join_table_name(Reflection, :a) end
     end
   end
 
@@ -605,7 +606,7 @@ defmodule Hologram.DBTest do
     end
 
     test "raises on a param that does not fit its placeholder" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "DB.sql/3 got 0 params for a statement with 1 placeholder",
                    fn ->
                      sql!(~s|SELECT $1::uuid AS "id"|)
@@ -627,7 +628,7 @@ defmodule Hologram.DBTest do
     end
 
     test "raises for a module that is not an entity type" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "Hologram.Reflection is not an entity type module - table_name/1 takes an entity type",
                    fn -> table_name(Reflection) end
     end
@@ -832,7 +833,7 @@ defmodule Hologram.DBTest do
     test "rejects role grants" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         update(RoleGrant, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f", role: :owner)
       end
     end
@@ -843,7 +844,7 @@ defmodule Hologram.DBTest do
       expected_msg =
         "invalid changes for Hologram.Test.Fixtures.Entity.Module32 - :message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         update(Module32, entity.id, message_count: 3)
       end
     end
@@ -1094,7 +1095,7 @@ defmodule Hologram.DBTest do
           "A field set directly on the struct is not recorded: writing the whole struct " <>
           "would overwrite concurrent changes to fields you didn't touch."
 
-      assert_error ArgumentError, expected_msg, fn -> update(entity) end
+      assert_error MisuseError, expected_msg, fn -> update(entity) end
     end
   end
 end

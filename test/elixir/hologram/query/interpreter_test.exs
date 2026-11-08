@@ -11,6 +11,7 @@ defmodule Hologram.Query.InterpreterTest do
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.Entity.NotIncluded
+  alias Hologram.MisuseError
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module1
@@ -750,11 +751,11 @@ defmodule Hologram.Query.InterpreterTest do
       expected_msg =
         "invalid value :urgent for placeholder :min - expected one of [:low, :medium, :high]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         QueryRunner.run(term, @mapping, %{min: :urgent})
       end
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, database(), bindings: %{min: :urgent})
       end
     end
@@ -1578,11 +1579,11 @@ defmodule Hologram.Query.InterpreterTest do
 
       expected_msg = "missing value for placeholder :priority"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         QueryRunner.run(term, @mapping, %{})
       end
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, database(), bindings: %{})
       end
     end
@@ -1595,11 +1596,11 @@ defmodule Hologram.Query.InterpreterTest do
 
       expected_msg = "nil value for placeholder :priority - use an explicit nil predicate instead"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         QueryRunner.run(term, @mapping, %{priority: nil})
       end
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, database(), bindings: %{priority: nil})
       end
     end
@@ -1615,11 +1616,11 @@ defmodule Hologram.Query.InterpreterTest do
       expected_msg =
         "nil element in the list for placeholder :priorities - use an explicit nil predicate instead"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         QueryRunner.run(term, @mapping, %{priorities: [nil, 3]})
       end
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, database(), bindings: %{priorities: [nil, 3]})
       end
     end
@@ -1753,11 +1754,11 @@ defmodule Hologram.Query.InterpreterTest do
       expected_msg =
         "invalid value :platinum for placeholder :tier - expected one of [:gold, :silver, :bronze]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         QueryRunner.run(term, @mapping, %{tier: :platinum})
       end
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, database(), bindings: %{tier: :platinum})
       end
     end

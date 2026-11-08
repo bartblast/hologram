@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   contextFixture,
   defineRuntimeGlobals,
   sinon,
@@ -14,7 +15,6 @@ import Clock from "../../../../assets/js/clock.mjs";
 import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
 import Elixir_Hologram_Query_Stage from "../../../../assets/js/elixir/hologram/query/stage.mjs";
 import {deriveGrantId} from "../../../../assets/js/elixir/hologram/auth.mjs";
-import HologramBoxedError from "../../../../assets/js/errors/boxed_error.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
@@ -407,9 +407,9 @@ describe("Elixir_Hologram_DB", () => {
     };
 
     it("raises for a value the client was never shown", () => {
-      assert.throw(
+      assertBoxedError(
         () => create(withServerOnlyValue()),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":api_token of MyApp.Doc is server-only - a browser cannot write it, set it in a command or a job",
       );
     });
@@ -423,25 +423,25 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("raises for a role grant", () => {
-      assert.throw(
+      assertBoxedError(
         () => create(struct(ROLE_GRANT, {role: "editor"})),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "role grants are written only through grant_role/revoke_role",
       );
     });
 
     it("raises for a job type", () => {
-      assert.throw(
+      assertBoxedError(
         () => create(struct(NOTIFY, {reason: "created"})),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "MyApp.Jobs.Notify is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits",
       );
     });
 
     it("raises when the value is not an entity struct", () => {
-      assert.throw(
+      assertBoxedError(
         () => create(Type.bitstring("x")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'create takes an entity struct, got: "x"',
       );
     });
@@ -501,9 +501,9 @@ describe("Elixir_Hologram_DB", () => {
     it("raises when no action is open", () => {
       Batches.reset();
 
-      assert.throw(
+      assertBoxedError(
         () => create(struct(TASK, {done: false, title: "alpha"})),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "create was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
       );
     });
@@ -758,9 +758,9 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("raises when the struct records no change", () => {
-      assert.throw(
+      assertBoxedError(
         () => update(held()),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "update takes recorded changes - put values with put_attribute, move counters with increment or decrement, and edges with add_relationship or delete_relationship. A field set directly on the struct is not recorded: writing the whole struct would overwrite concurrent changes to fields you didn't touch.",
       );
     });
@@ -768,10 +768,10 @@ describe("Elixir_Hologram_DB", () => {
     it("raises for a row this client does not hold", () => {
       const absent = Model.box(TASK, {done: false, id: ID_2, title: "x"});
 
-      assert.throw(
+      assertBoxedError(
         () =>
           update(putAttribute(absent, pairs([["title", Type.bitstring("y")]]))),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         `cannot update MyApp.Task - no entity with id "${ID_2}"`,
       );
     });
@@ -786,9 +786,9 @@ describe("Elixir_Hologram_DB", () => {
 
       vault.data[key] = [Type.atom("balance"), Type.integer(7)];
 
-      assert.throw(
+      assertBoxedError(
         () => update(increment(vault, Type.atom("balance"), Type.integer(1))),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":balance of MyApp.Vault is server-only - a browser cannot write it, set it in a command or a job",
       );
     });
@@ -798,12 +798,12 @@ describe("Elixir_Hologram_DB", () => {
 
       const doc = Model.box(DOC, LocalDatabase.getRow(DOC, ID_2));
 
-      assert.throw(
+      assertBoxedError(
         () =>
           update(
             putAttribute(doc, pairs([["api_token", Type.bitstring("s")]])),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":api_token of MyApp.Doc is server-only - a browser cannot write it, set it in a command or a job",
       );
     });
@@ -816,9 +816,9 @@ describe("Elixir_Hologram_DB", () => {
 
       Batches.reset();
 
-      assert.throw(
+      assertBoxedError(
         () => update(entity),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "update was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
       );
     });
@@ -908,35 +908,35 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("raises for a row this client does not hold", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           updateById(
             task,
             Type.bitstring(ID_2),
             changes([["title", Type.bitstring("x")]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         `cannot update MyApp.Task - no entity with id "${ID_2}"`,
       );
     });
 
     it("raises when nothing is changed", () => {
-      assert.throw(
+      assertBoxedError(
         () => updateById(task, Type.bitstring(ID_1), changes([])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid changes for MyApp.Task - at least one declared attribute or to-one relationship must be changed",
       );
     });
 
     it("raises on a change to a derived field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           updateById(
             task,
             Type.bitstring(ID_1),
             changes([["tag_count", Type.integer(3)]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid changes for MyApp.Task - :tag_count is a derived field of MyApp.Task - it's computed from its definition, so it's read-only",
       );
     });
@@ -944,7 +944,7 @@ describe("Elixir_Hologram_DB", () => {
     // Every offending name at once, where the struct form refuses the first it meets - and a
     // system attribute is among them, because it is not a settable column.
     it("raises naming every field that cannot be updated", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           updateById(
             task,
@@ -954,20 +954,20 @@ describe("Elixir_Hologram_DB", () => {
               ["created_at", Type.nil()],
             ]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid changes for MyApp.Task - only declared attributes and to-one relationships can be updated: :created_at, :nope",
       );
     });
 
     it("raises for a role grant", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           updateById(
             Type.alias(ROLE_GRANT),
             Type.bitstring(ID_1),
             changes([["role", Type.bitstring("editor")]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "role grants are written only through grant_role/revoke_role",
       );
     });
@@ -1075,9 +1075,9 @@ describe("Elixir_Hologram_DB", () => {
     // does not carry - here "absent" also covers a row never synced and a row this user may not
     // see, so answering :ok would silently drop a delete of a row alive on the server.
     it("raises for a row this client does not hold", () => {
-      assert.throw(
+      assertBoxedError(
         () => deleteById(task, Type.bitstring(ID_2)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         `cannot delete MyApp.Task - no entity with id "${ID_2}"`,
       );
     });
@@ -1085,25 +1085,25 @@ describe("Elixir_Hologram_DB", () => {
     it("raises for a struct whose row this client does not hold", () => {
       const absent = Model.box(TASK, {done: false, id: ID_2, title: "x"});
 
-      assert.throw(
+      assertBoxedError(
         () => deleteEntity(absent),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         `cannot delete MyApp.Task - no entity with id "${ID_2}"`,
       );
     });
 
     it("raises for a role grant", () => {
-      assert.throw(
+      assertBoxedError(
         () => deleteById(Type.alias(ROLE_GRANT), Type.bitstring(ID_1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "role grants are written only through grant_role/revoke_role",
       );
     });
 
     it("raises when the value is not an entity struct", () => {
-      assert.throw(
+      assertBoxedError(
         () => deleteEntity(Type.bitstring("x")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'delete takes an entity struct, got: "x"',
       );
     });
@@ -1111,9 +1111,9 @@ describe("Elixir_Hologram_DB", () => {
     it("raises when no action is open", () => {
       Batches.reset();
 
-      assert.throw(
+      assertBoxedError(
         () => deleteById(task, Type.bitstring(ID_1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "delete was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
       );
     });
@@ -1211,7 +1211,7 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("takes back the writes a raise undoes, and re-raises", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           transaction(
             fun(() => {
@@ -1221,7 +1221,7 @@ describe("Elixir_Hologram_DB", () => {
             }),
             noOpts,
           ),
-        HologramBoxedError,
+        "ArgumentError",
         "boom",
       );
 
@@ -1268,9 +1268,9 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("raises for a rollback outside a transaction", () => {
-      assert.throw(
+      assertBoxedError(
         () => rollback(Type.atom("locked")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "cannot rollback - not inside a transaction",
       );
     });
@@ -1281,9 +1281,9 @@ describe("Elixir_Hologram_DB", () => {
         noOpts,
       );
 
-      assert.throw(
+      assertBoxedError(
         () => rollback(Type.atom("locked")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "cannot rollback - not inside a transaction",
       );
     });
@@ -1340,9 +1340,9 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("raises naming the type and describing each violated declaration", () => {
-      assert.throw(
+      assertBoxedError(
         () => createBang(Model.box(TASK, {done: false, id: ID_2, title: null})),
-        HologramBoxedError,
+        "Hologram.WriteError",
         "cannot create MyApp.Task:\n  * attribute :title is required",
       );
     });
@@ -1352,23 +1352,23 @@ describe("Elixir_Hologram_DB", () => {
 
       const item = Model.box(ITEM, LocalDatabase.getRow(ITEM, ID_2));
 
-      assert.throw(
+      assertBoxedError(
         () =>
           updateBang(putAttribute(item, pairs([["stock", Type.integer(-1)]]))),
-        HologramBoxedError,
+        "Hologram.WriteError",
         `cannot update MyApp.Item "${ID_2}":\n  * attribute :stock must be at least 0, got: -1`,
       );
     });
 
     it("raises for a type-indexed update, quoting the changes it was given", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           updateByIdBang(
             task,
             Type.bitstring(ID_1),
             Type.map([[Type.atom("title"), Type.nil()]]),
           ),
-        HologramBoxedError,
+        "Hologram.WriteError",
         `cannot update MyApp.Task "${ID_1}":\n  * attribute :title is required`,
       );
     });
@@ -1521,9 +1521,9 @@ describe("Elixir_Hologram_DB", () => {
         [Type.atom("name"), Type.atom("wanted")],
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => read(filter(task, predicates([["title", placeholder]]))),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
       );
     });
@@ -1538,9 +1538,9 @@ describe("Elixir_Hologram_DB", () => {
         Type.atom("tag_count"),
       );
 
-      assert.throw(
+      assertBoxedError(
         () => read(term),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
       );
     });
@@ -1555,9 +1555,9 @@ describe("Elixir_Hologram_DB", () => {
         predicates([["done", Type.boolean(true)]]),
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => read(filter(task, predicates([["or", alternatives]]))),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "cannot read a query term containing placeholders - placeholder :wanted has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries",
       );
     });
@@ -1596,33 +1596,33 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("raises when the id is not a canonical entity id", () => {
-      assert.throw(
+      assertBoxedError(
         () => readById(task, Type.bitstring("nope")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'invalid id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
       );
 
-      assert.throw(
+      assertBoxedError(
         () => readById(task, Type.bitstring(ID_1.toUpperCase())),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         `invalid id "${ID_1.toUpperCase()}" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
       );
     });
 
     it("raises when the first argument is not an entity type module", () => {
-      assert.throw(
+      assertBoxedError(
         () => readById(filter(task, predicates([])), Type.bitstring(ID_1)),
-        HologramBoxedError,
-        "is not an entity type module - a by-id read takes the entity type, a query term is read with read/1",
+        "Hologram.MisuseError",
+        /is not an entity type module - a by-id read takes the entity type, a query term is read with read\/1$/,
       );
     });
 
     // A module name this build carries no entity for reaches the second half of the check, where
     // a query term is refused by the first.
     it("raises when the module names no entity type this build carries", () => {
-      assert.throw(
+      assertBoxedError(
         () => readById(Type.alias("MyApp.Nope"), Type.bitstring(ID_1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "MyApp.Nope is not an entity type module - a by-id read takes the entity type, a query term is read with read/1",
       );
     });

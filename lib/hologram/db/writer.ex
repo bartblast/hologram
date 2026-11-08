@@ -17,6 +17,7 @@ defmodule Hologram.DB.Writer do
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity.Metadata
+  alias Hologram.MisuseError
   alias Hologram.Reflection
 
   @doc false
@@ -86,7 +87,7 @@ defmodule Hologram.DB.Writer do
       entity.__meta__
 
     if attribute_ops == %{} and relationship_ops == %{} do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "update takes recorded changes - put values with put_attribute, move counters with " <>
             "increment or decrement, and edges with add_relationship or delete_relationship. " <>
@@ -214,7 +215,7 @@ defmodule Hologram.DB.Writer do
   defp lock_row!(entity_type, id, verb) do
     case EntityOperations.get(entity_type, id, lock: :update) do
       nil ->
-        raise ArgumentError,
+        raise MisuseError,
           message: "cannot #{verb} #{inspect(entity_type)} - no entity with id #{inspect(id)}"
 
       row ->

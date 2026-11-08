@@ -84,20 +84,20 @@ defmodule Hologram.JobCreateTest do
       expected_msg =
         "Hologram.Test.Fixtures.Entity.Module14 is not a job type - Job.create takes a module defined with use Hologram.Job"
 
-      assert_error ArgumentError, expected_msg, fn -> create(Module14) end
+      assert_error MisuseError, expected_msg, fn -> create(Module14) end
     end
 
     test "raises on a value of an attribute the framework sets" do
       expected_msg =
         ":status of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
 
-      assert_error ArgumentError, expected_msg, fn -> create(Module1, status: :done) end
+      assert_error MisuseError, expected_msg, fn -> create(Module1, status: :done) end
     end
 
     test "raises on an unknown option" do
       expected_msg = "Job.create takes authorize: operation or trust: true, got: [retry: true]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         create(Module1, %{}, computed_opts(retry: true))
       end
     end
@@ -106,7 +106,7 @@ defmodule Hologram.JobCreateTest do
       expected_msg =
         "Job.create takes authorize: operation or trust: true, got: [authorize: :archive, trust: true]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         create(Module1, %{}, computed_opts(authorize: :archive, trust: true))
       end
     end

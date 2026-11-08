@@ -480,11 +480,11 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates that entities of the given type are written through the general write surface.
 
-  Returns :ok, or raises ArgumentError for entity types the framework writes itself.
+  Returns :ok, or raises Hologram.MisuseError for entity types the framework writes itself.
   """
   @spec validate_writable!(module) :: :ok
   def validate_writable!(Hologram.Auth.RoleGrant) do
-    raise ArgumentError, "role grants are written only through grant_role/revoke_role"
+    raise MisuseError, "role grants are written only through grant_role/revoke_role"
   end
 
   def validate_writable!(_entity_type), do: :ok

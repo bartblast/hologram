@@ -363,7 +363,7 @@ describe("Elixir_Hologram_Entity", () => {
     it("raises on a role grant", () => {
       assertBoxedError(
         () => newEntity(Type.alias("Hologram.Auth.RoleGrant")),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "role grants are written only through grant_role/revoke_role",
       );
     });
@@ -390,7 +390,7 @@ describe("Elixir_Hologram_Entity", () => {
               Type.tuple([Type.atom("message_count"), Type.integer(3)]),
             ]),
           ),
-        "ArgumentError",
+        "Hologram.MisuseError",
         ":message_count is a derived field of MyApp.Channel - it's computed from its definition, so it's read-only",
       );
     });
@@ -409,7 +409,7 @@ describe("Elixir_Hologram_Entity", () => {
 
       assertBoxedError(
         () => newEntityWithValues(Type.alias(CHANNEL), values),
-        "ArgumentError",
+        "Hologram.MisuseError",
         `relationship :messages of ${CHANNEL} cannot be assigned at construction - it is an inverse that reads the channel_id reference of MyApp.Message, so write that instead`,
       );
     });
@@ -419,7 +419,7 @@ describe("Elixir_Hologram_Entity", () => {
 
       assertBoxedError(
         () => newEntityWithValues(Type.alias(POST), values),
-        "ArgumentError",
+        "Hologram.MisuseError",
         `relationship :author of ${POST} cannot be assigned at construction - set a to-one reference via the :author_id field, to-many edges via add_relationship`,
       );
     });
@@ -429,7 +429,7 @@ describe("Elixir_Hologram_Entity", () => {
 
       assertBoxedError(
         () => newEntityWithValues(Type.alias(NOTIFY), values),
-        "ArgumentError",
+        "Hologram.MisuseError",
         `:status of ${NOTIFY} is set by the framework - a job is enqueued as queued, and the worker records the rest`,
       );
     });
@@ -444,7 +444,7 @@ describe("Elixir_Hologram_Entity", () => {
 
       assertBoxedError(
         () => newEntityWithValues(Type.alias(NOTIFY), values),
-        "ArgumentError",
+        "Hologram.MisuseError",
         `:actor_id of ${NOTIFY} is set by the framework - a job is enqueued as queued, and the worker records the rest`,
       );
     });
@@ -459,7 +459,7 @@ describe("Elixir_Hologram_Entity", () => {
 
       assertBoxedError(
         () => newEntityWithValues(Type.alias(NOTIFY), values),
-        "ArgumentError",
+        "Hologram.MisuseError",
         `:error of ${NOTIFY} is set by the framework - a job is enqueued as queued, and the worker records the rest`,
       );
     });
@@ -487,7 +487,7 @@ describe("Elixir_Hologram_Entity", () => {
     it("raises on values that are neither a map nor a keyword list", () => {
       assertBoxedError(
         () => newEntityWithValues(Type.alias(ACCOUNT), Type.atom("nope")),
-        "ArgumentError",
+        "Hologram.MisuseError",
         ":nope is not a map or a keyword list of entity field values",
       );
     });
@@ -733,7 +733,7 @@ describe("Elixir_Hologram_Entity", () => {
     it("raises for something that is not an entity struct", () => {
       assertBoxedError(
         () => validate(Type.atom("nope")),
-        "ArgumentError",
+        "Hologram.MisuseError",
         ":nope is not an entity struct",
       );
     });

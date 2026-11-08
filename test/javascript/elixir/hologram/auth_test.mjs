@@ -3807,7 +3807,7 @@ describe("grant_role/3", () => {
 
     assertBoxedError(
       () => grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
-      "ArgumentError",
+      "Hologram.MisuseError",
       "grant_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
     );
   });
@@ -3994,7 +3994,7 @@ describe("revoke_role/3", () => {
 
     assertBoxedError(
       () => revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
-      "ArgumentError",
+      "Hologram.MisuseError",
       "revoke_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
     );
   });

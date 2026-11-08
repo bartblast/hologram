@@ -6,6 +6,7 @@ defmodule Hologram.Auth.RoleGrantTest do
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.Validator
+  alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -314,7 +315,7 @@ defmodule Hologram.Auth.RoleGrantTest do
     test "refuses construction the way the engine does" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         RoleGrant.new()
       end
     end

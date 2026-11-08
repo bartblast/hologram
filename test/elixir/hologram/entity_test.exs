@@ -6,6 +6,7 @@ defmodule Hologram.EntityTest do
   alias Hologram.Component.Action
   alias Hologram.Entity.NotIncluded
   alias Hologram.Entity.ServerOnly
+  alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module11
@@ -716,7 +717,7 @@ defmodule Hologram.EntityTest do
       expected_msg =
         "relationship :c of Hologram.Test.Fixtures.Entity.Module3 cannot be assigned at construction - set a to-one reference via the :c_id field, to-many edges via add_relationship"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module3.new(c: "id_2")
       end
     end
@@ -778,7 +779,7 @@ defmodule Hologram.EntityTest do
     test "raises on a role grant" do
       expected_msg = "role grants are written only through grant_role/revoke_role"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         new(Hologram.Auth.RoleGrant)
       end
     end
@@ -787,14 +788,14 @@ defmodule Hologram.EntityTest do
       expected_msg =
         "relationship :messages of Hologram.Test.Fixtures.Entity.Module26 cannot be assigned at construction - it is an inverse that reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so write that instead"
 
-      assert_error ArgumentError, expected_msg, fn -> new(Module26, messages: []) end
+      assert_error MisuseError, expected_msg, fn -> new(Module26, messages: []) end
     end
 
     test "raises on an assigned relationship value" do
       expected_msg =
         "relationship :c of Hologram.Test.Fixtures.Entity.Module3 cannot be assigned at construction - set a to-one reference via the :c_id field, to-many edges via add_relationship"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         new(Module3, %{c: "id_2"})
       end
     end
@@ -803,7 +804,7 @@ defmodule Hologram.EntityTest do
       expected_msg =
         ":status of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         new(JobModule1, %{status: :done})
       end
     end
@@ -812,7 +813,7 @@ defmodule Hologram.EntityTest do
       expected_msg =
         ":actor_id of Hologram.Test.Fixtures.Job.Module1 is set by the framework - a job is enqueued as queued, and the worker records the rest"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         new(JobModule1, %{actor_id: "018f4c11-1111-7111-8111-111111111111"})
       end
     end
@@ -821,7 +822,7 @@ defmodule Hologram.EntityTest do
       expected_msg =
         ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         new(Module32, message_count: 3)
       end
     end

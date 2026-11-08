@@ -94,7 +94,7 @@ function fieldPairs(values) {
     return values.data.map((pair) => [pair.data[0].value, pair.data[1]]);
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `${Interpreter.inspect(values)} is not a map or a keyword list of entity field values`,
   );
 }
@@ -106,7 +106,7 @@ function newEntity(entityType, values) {
   // Refused before the model is asked, as the server refuses it before reading any declaration:
   // a grant is written through grant_role/revoke_role and nowhere else.
   if (type === ROLE_GRANT) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       "role grants are written only through grant_role/revoke_role",
     );
   }
@@ -132,7 +132,7 @@ function refuseDerivedAssignment(entry, type, pairs) {
   const name = Object.keys(entry.derived).find((each) => given.has(each));
 
   if (name) {
-    Interpreter.raiseArgumentError(Model.derivedReadOnlyMessage(type, name));
+    Interpreter.raiseMisuseError(Model.derivedReadOnlyMessage(type, name));
   }
 }
 
@@ -145,7 +145,7 @@ function refuseFrameworkAttribute(entry, type, pairs) {
   const name = entry.frameworkAttributes.find((each) => given.has(each));
 
   if (name) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(Type.atom(name))} of ${type} is set by the framework - a job is enqueued as queued, and the worker records the rest`,
     );
   }
@@ -160,7 +160,7 @@ function refuseRelationshipAssignment(entry, type, pairs) {
   );
 
   if (inverseName) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `relationship ${Interpreter.inspect(Type.atom(inverseName))} of ${type} cannot be assigned at construction - it is an inverse that reads ${Model.describeInverse(type, inverseName)}, so write that instead`,
     );
   }
@@ -168,7 +168,7 @@ function refuseRelationshipAssignment(entry, type, pairs) {
   const name = Object.keys(entry.relationships).find((each) => given.has(each));
 
   if (name) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `relationship ${Interpreter.inspect(Type.atom(name))} of ${type} cannot be assigned at construction - set a to-one reference via the :${name}_id field, to-many edges via add_relationship`,
     );
   }
@@ -611,7 +611,7 @@ function validateChanges(entityType, changes) {
 
 function validateEntity(entity) {
   if (!Type.isMap(entity) || !hasField(entity, "__struct__")) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(entity)} is not an entity struct`,
     );
   }

@@ -10,7 +10,6 @@ import {
 import Batches from "../../../../assets/js/batches.mjs";
 import Bitstring from "../../../../assets/js/bitstring.mjs";
 import Elixir_Hologram_Job from "../../../../assets/js/elixir/hologram/job.mjs";
-import HologramBoxedError from "../../../../assets/js/errors/boxed_error.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
@@ -191,36 +190,36 @@ describe("Elixir_Hologram_Job", () => {
     // for every type, so the client cannot tell that state from a type declaring none - the
     // server's denial arrives as the batch's rejection instead.
     it("raises for a module that is not a job type", () => {
-      assert.throw(
+      assertBoxedError(
         () => create(task, values([["title", Type.bitstring("x")]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "MyApp.Task is not a job type - Job.create takes a module defined with use Hologram.Job",
       );
     });
 
     it("raises for a value that is not a module at all", () => {
-      assert.throw(
+      assertBoxedError(
         () => create(Type.bitstring("x"), Type.map([])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         '"x" is not a job type - Job.create takes a module defined with use Hologram.Job',
       );
     });
 
     it("raises for an unknown option", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           createWithOpts(
             notify,
             Type.map([]),
             opts([["nope", Type.boolean(true)]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "Job.create takes authorize: operation or trust: true, got: [nope: true]",
       );
     });
 
     it("raises for both options at once", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           createWithOpts(
             notify,
@@ -230,29 +229,29 @@ describe("Elixir_Hologram_Job", () => {
               ["trust", Type.boolean(true)],
             ]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "Job.create takes authorize: operation or trust: true, got: [authorize: :notify, trust: true]",
       );
     });
 
     // trust is the server's authority on either half, so a job claiming it belongs in server code.
     it("raises for a trust claim, which is not a client's to make", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           createWithOpts(
             notify,
             Type.map([]),
             opts([["trust", Type.boolean(true)]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "trust is the server's authority - a client cannot claim it",
       );
     });
 
     it("raises for a value of an attribute the framework sets", () => {
-      assert.throw(
+      assertBoxedError(
         () => create(notify, values([["status", Type.bitstring("done")]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":status of MyApp.Jobs.Notify is set by the framework - a job is enqueued as queued, and the worker records the rest",
       );
     });
@@ -266,9 +265,9 @@ describe("Elixir_Hologram_Job", () => {
     });
 
     it("raises naming the job type and each violated declaration", () => {
-      assert.throw(
+      assertBoxedError(
         () => createBang(notify, values([["reason", Type.nil()]])),
-        HologramBoxedError,
+        "Hologram.WriteError",
         "cannot create MyApp.Jobs.Notify:\n  * attribute :reason is required",
       );
     });

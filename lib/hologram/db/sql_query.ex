@@ -9,6 +9,7 @@ defmodule Hologram.DB.SQLQuery do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity.Validator
+  alias Hologram.MisuseError
   alias Hologram.SQLError
 
   # The bound a statement runs under unless the caller gives one - the driver's own default, which
@@ -55,7 +56,7 @@ defmodule Hologram.DB.SQLQuery do
   2_147_483_647, the largest PostgreSQL accepts, or :infinity - 15 seconds by default. The server
   enforces it.
 
-  Raises ArgumentError for a statement that takes a session-level advisory lock or prepares a
+  Raises Hologram.MisuseError for a statement that takes a session-level advisory lock or prepares a
   named statement, an unknown option, an invalid timeout, a param count that differs from the
   statement's placeholders, and a param the driver cannot send as its placeholder's type.
   """
@@ -136,7 +137,7 @@ defmodule Hologram.DB.SQLQuery do
     Connection.execute(query, params)
   rescue
     error in DBConnection.EncodeError ->
-      reraise ArgumentError,
+      reraise MisuseError,
               [
                 message:
                   "a param of DB.sql/3 does not fit the type of its placeholder in the statement " <>
@@ -180,7 +181,7 @@ defmodule Hologram.DB.SQLQuery do
     |> Keyword.keys()
     |> Enum.each(fn key ->
       if key != :timeout do
-        raise ArgumentError,
+        raise MisuseError,
           message: "unknown option #{inspect(key)} for DB.sql/3 - the one option is :timeout"
       end
     end)
@@ -193,7 +194,7 @@ defmodule Hologram.DB.SQLQuery do
         Integer.to_string(timeout)
 
       timeout ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "invalid timeout #{inspect(timeout)} for DB.sql/3 - give a positive number of " <>
               "milliseconds up to #{@max_timeout}, or :infinity"
@@ -216,14 +217,14 @@ defmodule Hologram.DB.SQLQuery do
   defp validate_no_session_state!(statement) do
     cond do
       Regex.match?(@session_lock_pattern, statement) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "DB.sql/3 cannot take a session-level advisory lock - it would stay with a pooled " <>
               "connection after the read. Take pg_advisory_xact_lock inside DB.transaction/2 " <>
               "instead."
 
       Regex.match?(@prepare_statement_pattern, statement) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "DB.sql/3 cannot prepare a named statement - it would stay with a pooled connection " <>
               "after the read. Pass the statement to DB.sql/3 itself, with its params."
@@ -238,7 +239,7 @@ defmodule Hologram.DB.SQLQuery do
     placeholder_count = length(oids)
 
     if param_count != placeholder_count do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "DB.sql/3 got #{quantity(param_count, "param")} for a statement with " <>
             quantity(placeholder_count, "placeholder")

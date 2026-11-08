@@ -45,6 +45,7 @@ defmodule Hologram.Job do
   alias Hologram.DB.Writer
   alias Hologram.Entity
   alias Hologram.Entity.Validator
+  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Reflection
@@ -122,9 +123,9 @@ defmodule Hologram.Job do
   webhook, a seed or a job enqueuing another job does. The two are the only options, and asking
   for both raises.
 
-  Raises ArgumentError for a module that is not a job type, for an unknown option, and for a value
-  of an attribute the framework sets. Raises Hologram.AccessDeniedError when a user is acting and
-  the job type declares no allow lines, since no rule can then grant the write.
+  Raises Hologram.MisuseError for a module that is not a job type, for an unknown option, and for a
+  value of an attribute the framework sets. Raises Hologram.AccessDeniedError when a user is acting
+  and the job type declares no allow lines, since no rule can then grant the write.
   """
   @spec create(module, %{optional(atom) => any} | keyword, keyword) ::
           {:ok, Entity.t()} | {:error, %{atom => list(atom | {atom, any})}}
@@ -194,7 +195,7 @@ defmodule Hologram.Job do
   defp parse_claim!(trust: true), do: :trust
 
   defp parse_claim!(opts) do
-    raise ArgumentError,
+    raise MisuseError,
       message: "Job.create takes authorize: operation or trust: true, got: #{inspect(opts)}"
   end
 
@@ -215,7 +216,7 @@ defmodule Hologram.Job do
 
   defp validate_job_type!(job_type) do
     if not Reflection.job?(job_type) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(job_type)} is not a job type - Job.create takes a module defined with use Hologram.Job"
     end

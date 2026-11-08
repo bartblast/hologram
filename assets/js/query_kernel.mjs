@@ -1,6 +1,7 @@
 "use strict";
 
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Model from "./model.mjs";
 import SortKey from "./sort_key.mjs";
@@ -916,19 +917,19 @@ export default class QueryKernel {
     const bindings = context.bindings ?? {};
 
     if (!(name in bindings)) {
-      throw new HologramRuntimeError(`missing value for placeholder :${name}`);
+      Interpreter.raiseMisuseError(`missing value for placeholder :${name}`);
     }
 
     const value = bindings[name];
 
     if (value === null || value === undefined) {
-      throw new HologramRuntimeError(
+      Interpreter.raiseMisuseError(
         `nil value for placeholder :${name} - use an explicit nil predicate instead`,
       );
     }
 
     if (Array.isArray(value) && value.some((element) => element == null)) {
-      throw new HologramRuntimeError(
+      Interpreter.raiseMisuseError(
         `nil element in the list for placeholder :${name} - use an explicit nil predicate instead`,
       );
     }
@@ -1094,7 +1095,7 @@ export default class QueryKernel {
       .map((label) => QueryKernel.#inspectEnumValue(label))
       .join(", ");
 
-    throw new HologramRuntimeError(
+    Interpreter.raiseMisuseError(
       `invalid value ${QueryKernel.#inspectEnumValue(value)} for placeholder :${name} - expected one of [${declared}]`,
     );
   }
