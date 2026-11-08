@@ -12,6 +12,7 @@ defmodule Hologram.PageTest do
   alias Hologram.Test.Fixtures.Page.Module5
   alias Hologram.Test.Fixtures.Page.Module6
   alias Hologram.Test.Fixtures.Page.Module7
+  alias Hologram.Test.Fixtures.Page.Module8
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
@@ -37,6 +38,10 @@ defmodule Hologram.PageTest do
 
   test "__route__/0" do
     assert Module1.__route__() == "/hologram-test-fixtures-runtime-page-module1"
+  end
+
+  test "__state__/0" do
+    assert Module8.__state__() == [{:count, :integer, [default: 0]}, {:user, :map, []}]
   end
 
   describe "cast_params/2" do
@@ -220,6 +225,58 @@ defmodule Hologram.PageTest do
         """)
 
       assert module.__params__() == [{:b, :integer, []}]
+    end
+  end
+
+  describe "state/3" do
+    test "raises when an entry has the same name as a param" do
+      expected_error_msg =
+        ~s/state "id" in Hologram.Test.Fixtures.Page.StateNamedLikeParam has the same name as a param, / <>
+          "which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.StateNamedLikeParam do
+          use Hologram.Page
+
+          param :id, :integer
+
+          state :id, :integer, default: 0
+
+          route "/hologram-test-fixtures-page-state-named-like-param/:id"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an entry is named cid" do
+      expected_error_msg =
+        ~s/state "cid" in Hologram.Test.Fixtures.Page.StateNamedCid has the same name as the layout's cid prop, / <>
+          "which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.StateNamedCid do
+          use Hologram.Page
+
+          state :cid, :string, default: "my_cid"
+
+          route "/hologram-test-fixtures-page-state-named-cid"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
     end
   end
 

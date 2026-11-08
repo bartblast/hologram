@@ -14,6 +14,7 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Test.Fixtures.Component.Module3
   alias Hologram.Test.Fixtures.Component.Module4
   alias Hologram.Test.Fixtures.Component.Module5
+  alias Hologram.Test.Fixtures.Component.Module7
 
   @server %Server{cid: "page"}
 
@@ -23,6 +24,14 @@ defmodule Hologram.ComponentTest do
 
   test "__props__/0" do
     assert Module4.__props__() == [{:a, :string, []}, {:b, :integer, [default: 222]}]
+  end
+
+  test "__state__/0" do
+    assert Module7.__state__() == [
+             {:count, :integer, [default: 0]},
+             {:password, :string, [default: "", secret: true]},
+             {:user, :map, []}
+           ]
   end
 
   test "colocated_template_path/1" do
@@ -879,6 +888,320 @@ defmodule Hologram.ComponentTest do
 
     test "raises ArgumentError for an invalid channel" do
       assert_raise ArgumentError, fn -> put_subscription(@server, "not_a_valid_channel") end
+    end
+  end
+
+  describe "state/3" do
+    test "accepts the supported options" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.SupportedStateOpts do
+          use Hologram.Component
+
+          state :a, :string
+          state :b, :string, default: "abc"
+          state :c, :string, default: "", secret: true
+          state :d, :string, secret: false
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__state__() == [
+               {:a, :string, []},
+               {:b, :string, [default: "abc"]},
+               {:c, :string, [default: "", secret: true]},
+               {:d, :string, [secret: false]}
+             ]
+    end
+
+    test "accepts options given as an expression" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.ExpressionStateOpts do
+          use Hologram.Component
+
+          @my_opts [default: "", secret: true]
+
+          state :a, :string, @my_opts
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__state__() == [{:a, :string, [default: "", secret: true]}]
+    end
+
+    test "raises when an option is not supported" do
+      expected_error_msg =
+        ~s/invalid option :some_option for state "b" in Hologram.Test.Fixtures.Component.UnsupportedStateOpt, expected one of: :default, :secret/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.UnsupportedStateOpt do
+          use Hologram.Component
+
+          state :b, :string, some_option: "abc"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an option given as an expression is not supported" do
+      expected_error_msg =
+        ~s/invalid option :some_option for state "b" in Hologram.Test.Fixtures.Component.UnsupportedExpressionStateOpt, expected one of: :default, :secret/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.UnsupportedExpressionStateOpt do
+          use Hologram.Component
+
+          @my_opts [some_option: "abc"]
+
+          state :b, :string, @my_opts
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when the options are not a keyword list" do
+      expected_error_msg =
+        ~s/the options for state "b" in Hologram.Test.Fixtures.Component.NonKeywordStateOpts / <>
+          ~s/must be a keyword list, got: [{"default", 1}]/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonKeywordStateOpts do
+          use Hologram.Component
+
+          state :b, :integer, [{"default", 1}]
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an option is given more than once" do
+      expected_error_msg =
+        ~s/option :default is given more than once for state "b" / <>
+          "in Hologram.Test.Fixtures.Component.RepeatedStateOpt"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.RepeatedStateOpt do
+          use Hologram.Component
+
+          state :b, :integer, default: 1, default: 2
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when the name is not an atom" do
+      expected_error_msg =
+        ~s/the name of state "b" in Hologram.Test.Fixtures.Component.NonAtomStateName must be an atom/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonAtomStateName do
+          use Hologram.Component
+
+          state "b", :integer, default: 0
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when the :secret option is not a boolean" do
+      expected_error_msg =
+        ~s/the :secret option for state "b" in Hologram.Test.Fixtures.Component.NonBooleanSecretOpt / <>
+          ~s/must be a boolean, got: "yes"/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonBooleanSecretOpt do
+          use Hologram.Component
+
+          state :b, :string, default: "", secret: "yes"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when a secret entry has no default value" do
+      expected_error_msg =
+        ~s/secret state "b" in Hologram.Test.Fixtures.Component.SecretStateWithoutDefault / <>
+          "needs a :default value, which it gets back when a page is restored from storage"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.SecretStateWithoutDefault do
+          use Hologram.Component
+
+          state :b, :string, secret: true
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when a secret entry given as an expression has no default value" do
+      expected_error_msg =
+        ~s/secret state "b" in Hologram.Test.Fixtures.Component.ExpressionSecretStateWithoutDefault / <>
+          "needs a :default value, which it gets back when a page is restored from storage"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.ExpressionSecretStateWithoutDefault do
+          use Hologram.Component
+
+          @my_opts [secret: true]
+
+          state :b, :string, @my_opts
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an entry is declared more than once" do
+      expected_error_msg =
+        ~s/state "b" is declared more than once in Hologram.Test.Fixtures.Component.DuplicateState/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DuplicateState do
+          use Hologram.Component
+
+          state :a, :string
+          state :b, :string
+          state :b, :integer
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an entry has the same name as a prop" do
+      expected_error_msg =
+        ~s/state "items" in Hologram.Test.Fixtures.Component.StateNamedLikeProp has the same name as a prop, / <>
+          "which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.StateNamedLikeProp do
+          use Hologram.Component
+
+          prop :items, :list
+
+          state :items, :list, default: []
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an entry has the same name as a prop declared after it" do
+      expected_error_msg =
+        ~s/state "items" in Hologram.Test.Fixtures.Component.StateNamedLikeLaterProp has the same name as a prop, / <>
+          "which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.StateNamedLikeLaterProp do
+          use Hologram.Component
+
+          state :items, :list, default: []
+
+          prop :items, :list
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an entry has the same name as a prop sourced from context" do
+      expected_error_msg =
+        ~s/state "user" in Hologram.Test.Fixtures.Component.StateNamedLikeContextProp has the same name as a prop, / <>
+          "which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.StateNamedLikeContextProp do
+          use Hologram.Component
+
+          prop :user, :map, from_context: :current_user
+
+          state :user, :map
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an entry is named cid" do
+      expected_error_msg =
+        ~s/state "cid" in Hologram.Test.Fixtures.Component.StateNamedCid has the same name as the cid prop, / <>
+          "which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.StateNamedCid do
+          use Hologram.Component
+
+          state :cid, :string, default: "my_cid"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
     end
   end
 

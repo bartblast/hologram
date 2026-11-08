@@ -41,7 +41,9 @@ defmodule Hologram.Page do
 
         use Hologram.Middleware.Builder
 
-        import Hologram.Component, only: unquote(Hologram.Component.__helper_imports__())
+        import Hologram.Component,
+          only: unquote([state: 2, state: 3] ++ Hologram.Component.__helper_imports__())
+
         import Hologram.Page, only: [layout: 1, layout: 2, param: 2, param: 3, route: 1]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
@@ -73,7 +75,8 @@ defmodule Hologram.Page do
         defoverridable init: 3
       end,
       Component.maybe_register_colocated_template_markup(template_path),
-      Page.register_params_accumulator()
+      Page.register_params_accumulator(),
+      Component.register_state_accumulator()
     ]
   end
 
@@ -89,7 +92,17 @@ defmodule Hologram.Page do
         def __params__, do: Enum.reverse(@__params__)
       end
 
-    [template_clause, params_clause]
+    # A page's params are its props: the renderers hand them to init and to the template in the
+    # props position. Its state also goes to the layout as props, merged over the layout's cid.
+    taken_names =
+      env.module
+      |> Module.get_attribute(:__params__)
+      |> Enum.map(fn {name, _type, _opts} -> {name, "a param"} end)
+      |> then(&[{:cid, "the layout's cid prop"} | &1])
+
+    state_clause = Component.build_state_clause(env, taken_names)
+
+    [template_clause, params_clause, state_clause]
   end
 
   @doc """

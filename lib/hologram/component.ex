@@ -70,6 +70,8 @@ defmodule Hologram.Component do
 
   @prop_opt_keys [:default, :from_context, :required, :values]
 
+  @state_opt_keys [:default, :secret]
+
   @doc false
   @spec __helper_imports__() :: keyword
   def __helper_imports__ do
@@ -101,7 +103,9 @@ defmodule Hologram.Component do
 
         use Hologram.Middleware.Builder
 
-        import Hologram.Component, only: unquote([prop: 2, prop: 3] ++ __helper_imports__())
+        import Hologram.Component,
+          only: unquote([prop: 2, prop: 3, state: 2, state: 3] ++ __helper_imports__())
+
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
         import Hologram.Template, only: [sigil_HOLO: 2, trust_html: 1]
@@ -134,7 +138,8 @@ defmodule Hologram.Component do
         defoverridable init: 2, init: 3
       end,
       maybe_register_colocated_template_markup(template_path),
-      register_props_accumulator()
+      register_props_accumulator(),
+      register_state_accumulator()
     ]
   end
 
@@ -150,7 +155,42 @@ defmodule Hologram.Component do
         def __props__, do: Enum.reverse(@__props__)
       end
 
-    [template_clause, props_clause]
+    # The cid is a prop every stateful component takes without declaring it, and the renderer reads
+    # it back from the merged props and state, so a state entry can't take its name either.
+    taken_names =
+      env.module
+      |> Module.get_attribute(:__props__)
+      |> Enum.map(fn {name, _type, _opts} -> {name, "a prop"} end)
+      |> then(&[{:cid, "the cid prop"} | &1])
+
+    state_clause = build_state_clause(env, taken_names)
+
+    [template_clause, props_clause, state_clause]
+  end
+
+  @doc """
+  Returns the AST of the __state__/0 function, after checking that no state entry takes one of the
+  given names, each paired with how a message describes what holds it.
+
+  The renderers merge state over props (params on a page), so a state entry named like one of them
+  would shadow it.
+  """
+  @spec build_state_clause(Macro.Env.t(), [{atom, String.t()}]) :: AST.t()
+  def build_state_clause(env, taken_names) do
+    env.module
+    |> Module.get_attribute(:__state__)
+    |> Enum.reverse()
+    |> Enum.each(fn {name, _type, _opts} ->
+      validate_state_name_free!(name, taken_names, env.module)
+    end)
+
+    quote do
+      @doc """
+      Returns the list of state definitions for the compiled component or page.
+      """
+      @spec __state__() :: list({atom, atom, keyword})
+      def __state__, do: Enum.reverse(@__state__)
+    end
   end
 
   @doc """
@@ -456,6 +496,47 @@ defmodule Hologram.Component do
     end
   end
 
+  @doc """
+  Returns the AST of code that registers __state__ module attribute.
+  """
+  @spec register_state_accumulator() :: AST.t()
+  def register_state_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__state__, accumulate: true)
+    end
+  end
+
+  @doc """
+  Accumulates the given state definition in __state__ module attribute.
+  """
+  @spec state(atom, atom, T.opts()) :: Macro.t()
+  defmacro state(name, type, opts \\ []) do
+    # Unlike a prop, a state entry is checked once evaluated, while the module body runs, so options
+    # given as an expression (a module attribute) are checked too. A secret entry relies on that: it
+    # has to have a default, and only the evaluated options can show it does. Each part is bound
+    # once, so an expression in it runs once.
+    quote do
+      state_name = unquote(name)
+      state_opts = unquote(opts)
+
+      Hologram.Component.validate_state!(state_name, state_opts, __MODULE__)
+
+      Module.put_attribute(__MODULE__, :__state__, {state_name, unquote(type), state_opts})
+    end
+  end
+
+  @doc """
+  Raises Hologram.CompileError if the given state entry can't be declared in the given module,
+  next to the entries declared before it.
+  """
+  @spec validate_state!(any, any, module) :: :ok
+  def validate_state!(name, opts, module) do
+    validate_state_name!(name, module)
+    validate_state_opts_shape!(opts, name, module)
+    validate_state_opt_keys!(opts, name, module)
+    validate_state_secret_opt!(opts, name, module)
+  end
+
   defp append_broadcast(server, channel, action_name, params, except \\ []) do
     Channel.validate!(channel)
 
@@ -635,6 +716,100 @@ defmodule Hologram.Component do
         end
 
       _other ->
+        :ok
+    end
+  end
+
+  # An entry is checked against the ones declared before it, which are already in the attribute.
+  defp validate_state_name!(name, module) do
+    unless is_atom(name) do
+      raise Hologram.CompileError,
+        message: "the name of state #{inspect(name)} in #{inspect(module)} must be an atom"
+    end
+
+    declared_before? =
+      module
+      |> Module.get_attribute(:__state__)
+      |> List.keymember?(name, 0)
+
+    if declared_before? do
+      raise Hologram.CompileError,
+        message: ~s/state "#{name}" is declared more than once in #{inspect(module)}/
+    end
+
+    :ok
+  end
+
+  defp validate_state_name_free!(name, taken_names, module) do
+    case List.keyfind(taken_names, name, 0) do
+      {^name, holder} ->
+        raise Hologram.CompileError,
+          message:
+            ~s/state "#{name}" in #{inspect(module)} has the same name as #{holder}, / <>
+              "which it would shadow - give them different names"
+
+      nil ->
+        :ok
+    end
+  end
+
+  # A repeated key would be stored with the rest, and only its first value would ever be read.
+  defp validate_state_opt_keys!(opts, name, module) do
+    keys = Keyword.keys(opts)
+
+    Enum.each(keys, fn key ->
+      if key not in @state_opt_keys do
+        raise Hologram.CompileError,
+          message:
+            ~s/invalid option #{inspect(key)} for state "#{name}" in #{inspect(module)}, / <>
+              "expected one of: " <> Enum.map_join(@state_opt_keys, ", ", &inspect/1)
+      end
+    end)
+
+    case keys -- Enum.uniq(keys) do
+      [] ->
+        :ok
+
+      [key | _rest] ->
+        raise Hologram.CompileError,
+          message:
+            ~s/option #{inspect(key)} is given more than once for state "#{name}" / <>
+              "in #{inspect(module)}"
+    end
+  end
+
+  defp validate_state_opts_shape!(opts, name, module) do
+    unless Keyword.keyword?(opts) do
+      raise Hologram.CompileError,
+        message:
+          ~s/the options for state "#{name}" in #{inspect(module)} must be a keyword list, / <>
+            "got: #{inspect(opts)}"
+    end
+
+    :ok
+  end
+
+  # A secret entry is put back to its default when a page is restored from device storage, which
+  # never holds its value, so it can't do without one.
+  defp validate_state_secret_opt!(opts, name, module) do
+    case Keyword.fetch(opts, :secret) do
+      {:ok, value} when not is_boolean(value) ->
+        raise Hologram.CompileError,
+          message:
+            ~s/the :secret option for state "#{name}" in #{inspect(module)} / <>
+              "must be a boolean, got: #{inspect(value)}"
+
+      {:ok, true} ->
+        unless Keyword.has_key?(opts, :default) do
+          raise Hologram.CompileError,
+            message:
+              ~s/secret state "#{name}" in #{inspect(module)} needs a :default value, / <>
+                "which it gets back when a page is restored from storage"
+        end
+
+        :ok
+
+      _fallback ->
         :ok
     end
   end
