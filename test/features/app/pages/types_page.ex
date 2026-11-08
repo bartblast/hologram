@@ -26,6 +26,8 @@ defmodule HologramFeatureTests.TypesPage do
       <button id="local function capture (server origin)" $click={command: :"local function capture (server origin)"}> local function capture (server origin) </button>
       <button id="remote function capture (client origin)" $click="remote function capture (client origin)"> remote function capture (client origin) </button>
       <button id="remote function capture (server origin)" $click={command: :"remote function capture (server origin)"}> remote function capture (server origin) </button>
+      <button id="Erlang function capture (client origin)" $click="Erlang function capture (client origin)"> Erlang function capture (client origin) </button>
+      <button id="Erlang function capture (server origin)" $click={command: :"Erlang function capture (server origin)"}> Erlang function capture (server origin) </button>
     </p>
     <p>
       <button id="atom" $click="atom"> atom </button>
@@ -92,6 +94,28 @@ defmodule HologramFeatureTests.TypesPage do
     put_command(component, :echo, term: term)
   end
 
+  def action(:"Erlang function capture (client origin)", _params, component) do
+    term = &:lists.reverse/1
+    result = "client = #{inspect(term.([1, 2, 3]))}"
+
+    component
+    |> put_state(:result, result)
+    |> put_command(:"Erlang function capture (client origin) echo", term: term)
+  end
+
+  def action(:"Erlang function capture (client origin) result", params, component) do
+    result =
+      component.state.result <>
+        ", server = #{inspect(params.server_result)}, echo = #{inspect(params.term.([1, 2, 3]))}"
+
+    put_state(component, :result, result)
+  end
+
+  def action(:"Erlang function capture (server origin) result", params, component) do
+    result = params.term.([1, 2, 3])
+    put_state(component, :result, result)
+  end
+
   def action(:float, _params, component) do
     term = 1.23
     put_command(component, :echo, term: term)
@@ -117,7 +141,9 @@ defmodule HologramFeatureTests.TypesPage do
   end
 
   def action(:"local function capture (client origin) result", params, component) do
-    result = component.state.result <> ", server = #{params.term.(2, 3)}"
+    result =
+      component.state.result <> ", server = #{params.server_result}, echo = #{params.term.(2, 3)}"
+
     put_state(component, :result, result)
   end
 
@@ -151,7 +177,9 @@ defmodule HologramFeatureTests.TypesPage do
   end
 
   def action(:"remote function capture (client origin) result", params, component) do
-    result = component.state.result <> ", server = #{params.term.(2, 3)}"
+    result =
+      component.state.result <> ", server = #{params.server_result}, echo = #{params.term.(2, 3)}"
+
     put_state(component, :result, result)
   end
 
@@ -183,8 +211,23 @@ defmodule HologramFeatureTests.TypesPage do
     put_action(server, :result, term: term)
   end
 
+  def command(:"Erlang function capture (client origin) echo", params, server) do
+    put_action(server, :"Erlang function capture (client origin) result",
+      server_result: params.term.([1, 2, 3]),
+      term: params.term
+    )
+  end
+
+  def command(:"Erlang function capture (server origin)", _params, server) do
+    term = &:lists.reverse/1
+    put_action(server, :"Erlang function capture (server origin) result", term: term)
+  end
+
   def command(:"local function capture (client origin) echo", params, server) do
-    put_action(server, :"local function capture (client origin) result", params)
+    put_action(server, :"local function capture (client origin) result",
+      server_result: params.term.(2, 3),
+      term: params.term
+    )
   end
 
   def command(:"local function capture (server origin)", _params, server) do
@@ -203,7 +246,10 @@ defmodule HologramFeatureTests.TypesPage do
   end
 
   def command(:"remote function capture (client origin) echo", params, server) do
-    put_action(server, :"remote function capture (client origin) result", params)
+    put_action(server, :"remote function capture (client origin) result",
+      server_result: params.term.(2, 3),
+      term: params.term
+    )
   end
 
   def command(:"remote function capture (server origin)", _params, server) do
