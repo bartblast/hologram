@@ -54,9 +54,14 @@ defmodule Hologram.Runtime.DeserializerTest do
       assert deserialize(4, "f123") === 123.0
     end
 
-    test "function capture" do
+    test "Elixir function capture" do
       data = "cCalendar.ISO#{@delimiter}parse_date#{@delimiter}2"
       assert deserialize(4, data) == (&Calendar.ISO.parse_date/2)
+    end
+
+    test "Erlang function capture" do
+      data = "c:lists#{@delimiter}reverse#{@delimiter}1"
+      assert deserialize(4, data) == (&:lists.reverse/1)
     end
 
     test "integer" do
@@ -162,9 +167,14 @@ defmodule Hologram.Runtime.DeserializerTest do
       assert deserialize(3, "f123") === 123.0
     end
 
-    test "function capture" do
+    test "Elixir function capture" do
       data = "cCalendar.ISO#{@delimiter}parse_date#{@delimiter}2"
       assert deserialize(3, data) == (&Calendar.ISO.parse_date/2)
+    end
+
+    test "Erlang function capture" do
+      data = "c:lists#{@delimiter}reverse#{@delimiter}1"
+      assert deserialize(3, data) == (&:lists.reverse/1)
     end
 
     test "integer" do
@@ -258,9 +268,14 @@ defmodule Hologram.Runtime.DeserializerTest do
       assert deserialize(2, "f123") === 123.0
     end
 
-    test "function capture" do
+    test "Elixir function capture" do
       data = "cCalendar.ISO#{@delimiter}parse_date#{@delimiter}2"
       assert deserialize(2, data) == (&Calendar.ISO.parse_date/2)
+    end
+
+    test "Erlang function capture" do
+      data = "c:lists#{@delimiter}reverse#{@delimiter}1"
+      assert deserialize(2, data) == (&:lists.reverse/1)
     end
 
     test "integer" do
@@ -343,7 +358,7 @@ defmodule Hologram.Runtime.DeserializerTest do
       assert deserialize(1, "__float__:123") === 123.0
     end
 
-    test "function capture" do
+    test "Elixir function capture" do
       data = %{
         "type" => "anonymous_function",
         "capturedModule" => "Calendar.ISO",
@@ -352,6 +367,17 @@ defmodule Hologram.Runtime.DeserializerTest do
       }
 
       assert deserialize(1, data) == (&Calendar.ISO.parse_date/2)
+    end
+
+    test "Erlang function capture" do
+      data = %{
+        "type" => "anonymous_function",
+        "capturedModule" => ":lists",
+        "capturedFunction" => "reverse",
+        "arity" => 1
+      }
+
+      assert deserialize(1, data) == (&:lists.reverse/1)
     end
 
     test "integer" do

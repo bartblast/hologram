@@ -8,12 +8,6 @@ defmodule App1.Endpoint do
     store: :cookie
   ]
 
-  plug Plug.Static,
-    at: "/",
-    from: :app_1,
-    gzip: false,
-    only: ~w(hologram)
-
   if code_reloading? do
     plug Phoenix.CodeReloader
   end

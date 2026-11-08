@@ -423,6 +423,10 @@ defmodule Hologram.ReflectionTest do
     assert build_dir() == "#{File.cwd!()}/_build/test/lib/hologram/priv"
   end
 
+  test "bundles_dir/0" do
+    assert bundles_dir() == "#{File.cwd!()}/_build/test/lib/hologram/priv/static"
+  end
+
   test "call_graph_dump_file_name/0" do
     assert call_graph_dump_file_name() == "call_graph.bin"
   end
@@ -687,6 +691,10 @@ defmodule Hologram.ReflectionTest do
 
   test "hologram_dep_dir/0" do
     assert hologram_dep_dir() == File.cwd!() <> "/deps/hologram"
+  end
+
+  test "js_deps_install_lock_file_name/0" do
+    assert js_deps_install_lock_file_name() == "hologram_js_deps_install.lock"
   end
 
   describe "js_imports?/1" do

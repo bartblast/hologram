@@ -36,6 +36,3 @@ hologram_cowboy_tests-*.tar
 
 # Node JS & npm.
 /assets/node_modules/
-
-# Hologram generated JavaScript bundles.
-/priv/static/hologram/

@@ -20,6 +20,3 @@ erl_crash.dump
 
 # Node JS & npm.
 /assets/node_modules/
-
-# Hologram generated JavaScript bundles.
-/apps/*/priv/static/hologram/

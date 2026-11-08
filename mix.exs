@@ -2,7 +2,7 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
-  @version "0.12.6"
+  @version "0.12.7"
 
   # Copied from Hologram.Commons.SystemUtils
   @windows_exec_suffixes [".bat", ".cmd", ".exe"]
@@ -98,6 +98,9 @@ defmodule Hologram.MixProject do
 
   def package do
     [
+      # Never "priv": Mix links a dep's build priv dir to the dep's own priv dir when it has one,
+      # and the compiler keeps each build env's bundles and compile state in its build priv dir
+      # (see Hologram.Reflection.bundles_dir/0), so every env would share them again.
       files: [
         "assets/js",
         "assets/package.json",

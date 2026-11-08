@@ -40,5 +40,30 @@ describe("AssetPathRegistry", () => {
     ]);
 
     assert.deepStrictEqual(AssetPathRegistry.entries, expected);
+    assert.deepStrictEqual(AssetPathRegistry.manifest, assetManifest);
+  });
+
+  it("replaceAppEntries()", () => {
+    AssetPathRegistry.populate({
+      "assets/app.css": "/assets/app-abc.css",
+      "assets/old.css": "/assets/old.css",
+      "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
+    });
+
+    AssetPathRegistry.replaceAppEntries({
+      "assets/app.css": "/assets/app.css",
+      "assets/new.css": "/assets/new.css",
+    });
+
+    const expected = Type.map([
+      [
+        Type.bitstring("hologram/runtime.js"),
+        Type.bitstring("/hologram/runtime-AAAAAAAA.js"),
+      ],
+      [Type.bitstring("assets/app.css"), Type.bitstring("/assets/app.css")],
+      [Type.bitstring("assets/new.css"), Type.bitstring("/assets/new.css")],
+    ]);
+
+    assert.deepStrictEqual(AssetPathRegistry.entries, expected);
   });
 });

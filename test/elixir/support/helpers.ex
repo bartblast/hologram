@@ -158,15 +158,16 @@ defmodule Hologram.Test.Helpers do
   @doc """
   Gives the given assets dir the lib's installed JavaScript deps, so that a compile skips
   `npm install`: copies `package.json` and `package-lock.json` from the lib's assets dir and writes
-  the digest file `Hologram.Compiler.maybe_install_js_deps/2` checks into the given build dir.
-  Returns the lib's `node_modules` path, to be given as the `:node_modules_path` opt.
+  the digest file `Hologram.Compiler.maybe_install_js_deps/1` checks into the assets dir's
+  `node_modules` dir, which holds nothing else. Returns the lib's `node_modules` path, to be given as
+  the `:node_modules_path` opt.
   """
-  @spec link_lib_js_deps(String.t(), String.t()) :: String.t()
-  def link_lib_js_deps(assets_dir, build_dir) do
+  @spec link_lib_js_deps(String.t()) :: String.t()
+  def link_lib_js_deps(assets_dir) do
     lib_assets_dir = Path.join(Reflection.root_dir(), "assets")
+    node_modules_dir = Path.join(assets_dir, "node_modules")
 
-    File.mkdir_p!(assets_dir)
-    File.mkdir_p!(build_dir)
+    File.mkdir_p!(node_modules_dir)
 
     for file_name <- ["package.json", "package-lock.json"] do
       lib_file_path = Path.join(lib_assets_dir, file_name)
@@ -180,7 +181,7 @@ defmodule Hologram.Test.Helpers do
       |> File.read!()
       |> CryptographicUtils.digest(:sha256, :binary)
 
-    package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
+    package_json_digest_path = Path.join(node_modules_dir, ".package_json_digest.bin")
     File.write!(package_json_digest_path, package_json_digest)
 
     Path.join(lib_assets_dir, "node_modules")

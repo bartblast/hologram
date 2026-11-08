@@ -1,5 +1,6 @@
 "use strict";
 
+import AssetPathRegistry from "./asset_path_registry.mjs";
 import ErrorOverlay from "./error_overlay.mjs";
 
 const OVERLAY_ID = "hologram-live-reload-error-overlay";
@@ -112,7 +113,16 @@ export default class LiveReload {
   // Loads the app's CSS afresh, without reloading the page. The stylesheets come from the
   // app's own static files, so a stylesheet from another origin is left alone, and so is
   // one marked data-no-reload, the attribute Phoenix's live reload skips too.
-  static swapStylesheets() {
+  //
+  // The app's asset paths come with a CSS change, by static path, as the server has them
+  // then, and the asset path registry takes them, so that a later render links them. A
+  // stylesheet whose asset the registry now names by another path, such as the plain file once
+  // a digested copy no longer holds its content, is swapped to that path.
+  static swapStylesheets(appAssetManifest = null) {
+    if (appAssetManifest !== null) {
+      $.#takeAppAssetPaths(appAssetManifest);
+    }
+
     const pageOrigin = document.location.origin;
 
     document.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
@@ -128,9 +138,44 @@ export default class LiveReload {
 
   static #freshStylesheetUrl(link) {
     const url = new URL(link.href);
+    const newestPath = $.#newestAssetPath(url.pathname);
+
+    if (newestPath !== null) {
+      url.pathname = newestPath;
+    }
+
     url.searchParams.set(SWAP_PARAM, `${Date.now()}-${++$.#swapCount}`);
 
     return url.toString();
+  }
+
+  // The path the asset path registry names the asset linked by the given URL path by, when it is
+  // another one, else null. The asset is told by its static path, the URL path with the leading
+  // slash and the digest `mix phx.digest` names a copy with taken off, read the way the server
+  // reads it, so that a stylesheet linked by any copy of the asset, or by a path the registry no
+  // longer holds, finds the asset's path. A URL path that can't be decoded, or an asset the
+  // registry doesn't know, is left as it is.
+  static #newestAssetPath(urlPath) {
+    if (AssetPathRegistry.manifest === null) {
+      return null;
+    }
+
+    let path;
+
+    try {
+      path = decodeURIComponent(urlPath);
+    } catch {
+      return null;
+    }
+
+    const relativePath = path.replace(/^\//, "");
+    const digestMatch = relativePath.match(/^(.+)-([0-9a-f]{32})(.+)$/);
+    const staticPath = digestMatch
+      ? digestMatch[1] + digestMatch[3]
+      : relativePath;
+    const assetPath = AssetPathRegistry.manifest[staticPath];
+
+    return assetPath !== undefined && assetPath !== path ? assetPath : null;
   }
 
   // The link element stays: the virtual DOM holds it, so it is given the fresh URL rather than
@@ -226,6 +271,14 @@ export default class LiveReload {
 
     observer.observe(link.parentNode, {childList: true});
     link.after(copy);
+  }
+
+  static #takeAppAssetPaths(appAssetManifest) {
+    if (AssetPathRegistry.entries === null) {
+      AssetPathRegistry.populate(globalThis.Hologram.assetManifest);
+    }
+
+    AssetPathRegistry.replaceAppEntries(appAssetManifest);
   }
 
   // The diagnostic arrives already read into lines of toned segments. The

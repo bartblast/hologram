@@ -278,7 +278,7 @@ Comparison:
 ```
 
 
-### ✅ compiler » maybe_install_js_deps_2
+### ✅ compiler » maybe_install_js_deps_1
 
 ```
 Name                 ips        average  deviation         median         99th %
