@@ -325,6 +325,8 @@ defmodule Hologram.Assets.PathRegistry do
     end
   end
 
+  # MD5 is what `mix phx.digest` names a copy by, so it's matched here, not used for security.
+  # sobelow_skip ["Crypto.WeakHash"]
   defp md5_digest(file_path) do
     case File.read(file_path) do
       {:ok, content} ->
