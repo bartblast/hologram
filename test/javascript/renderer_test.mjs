@@ -84,6 +84,8 @@ import {defineClientOnlyModule3Fixture} from "./support/fixtures/renderer/client
 import {defineClientOnlyModule4Fixture} from "./support/fixtures/renderer/client_only/module_4.mjs";
 import {defineClientOnlyModule5Fixture} from "./support/fixtures/renderer/client_only/module_5.mjs";
 import {defineClientOnlyModule6Fixture} from "./support/fixtures/renderer/client_only/module_6.mjs";
+import {defineClientOnlyModule7Fixture} from "./support/fixtures/renderer/client_only/module_7.mjs";
+import {defineClientOnlyModule8Fixture} from "./support/fixtures/renderer/client_only/module_8.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
@@ -170,6 +172,8 @@ defineClientOnlyModule3Fixture();
 defineClientOnlyModule4Fixture();
 defineClientOnlyModule5Fixture();
 defineClientOnlyModule6Fixture();
+defineClientOnlyModule7Fixture();
+defineClientOnlyModule8Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -6827,6 +6831,87 @@ describe("Renderer", () => {
               state: Type.map([
                 [Type.atom("a"), Type.integer(11)],
                 [Type.atom("b"), Type.integer(22)],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("with declared state defaults, component hasn't been initialized yet", () => {
+      const module = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module7",
+      );
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module,
+              props: Type.map([[Type.atom("cid"), cid]]),
+              state: Type.map([
+                [Type.atom("a"), Type.integer(1)],
+                [Type.atom("b"), Type.bitstring("abc")],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("with declared state defaults, which init/2 sees and can override", () => {
+      const module = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module8",
+      );
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module,
+              props: Type.map([[Type.atom("cid"), cid]]),
+              state: Type.map([
+                [Type.atom("a"), Type.integer(1)],
+                [Type.atom("b"), Type.bitstring("xyz")],
+                [
+                  Type.atom("c"),
+                  Type.map([
+                    [Type.atom("a"), Type.integer(1)],
+                    [Type.atom("b"), Type.bitstring("abc")],
+                  ]),
+                ],
               ]),
             }),
           ],

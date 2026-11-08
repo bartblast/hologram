@@ -1529,6 +1529,34 @@ export default class Renderer {
     return moduleProxy.__props__;
   }
 
+  // Based on state_defaults/1
+  //
+  // The declared defaults are a property of the module, so the map is built once and cached on the
+  // module proxy. Every component initialized from it shares the map, which is safe since nothing
+  // changes a state map in place: every write builds a new one.
+  // Deps: [:lists.keyfind/3]
+  static #getStateDefaults(moduleProxy) {
+    if (!("__stateDefaults__" in moduleProxy)) {
+      const entries = moduleProxy["__state__/0"]()
+        .data.map((definition) => {
+          const defaultEntry = Erlang_Lists["keyfind/3"](
+            Type.atom("default"),
+            Type.integer(1),
+            definition.data[2],
+          );
+
+          return Type.isFalse(defaultEntry)
+            ? null
+            : [definition.data[0], defaultEntry.data[1]];
+        })
+        .filter((entry) => entry !== null);
+
+      moduleProxy.__stateDefaults__ = Type.map(entries);
+    }
+
+    return moduleProxy.__stateDefaults__;
+  }
+
   // autofocus is a boolean attribute, so its presence is what counts: a bare attribute renders as
   // true, while autofocus={true} and autofocus="autofocus" render as text, and a falsy expression
   // leaves the attribute out entirely.
@@ -1747,7 +1775,14 @@ export default class Renderer {
     let componentEmittedContext;
 
     if (componentState === null) {
-      const initialComponentStruct = Type.componentStruct({props});
+      // The declared defaults are in place before init/2 runs, so init/2 sees them and can override
+      // them.
+      //
+      // WARNING: must match the struct init_component/3 starts from on the server.
+      const initialComponentStruct = Type.componentStruct({
+        props,
+        state: Renderer.#getStateDefaults(moduleProxy),
+      });
 
       const componentStruct = moduleProxy["init/2"](
         props,

@@ -19,6 +19,11 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
+  alias Hologram.Test.Fixtures.Template.Renderer.Module100
+  alias Hologram.Test.Fixtures.Template.Renderer.Module101
+  alias Hologram.Test.Fixtures.Template.Renderer.Module102
+  alias Hologram.Test.Fixtures.Template.Renderer.Module103
+  alias Hologram.Test.Fixtures.Template.Renderer.Module104
   alias Hologram.Test.Fixtures.Template.Renderer.Module11
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
@@ -1240,6 +1245,44 @@ defmodule Hologram.Template.RendererTest do
                 }, @server}
     end
 
+    test "with declared state defaults and no init/3" do
+      node = {:component, Module100, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>state_a = 1, state_b = abc</div>",
+                %{
+                  "my_component" => %{
+                    module: Module100,
+                    struct: %Component{props: %{cid: "my_component"}, state: %{a: 1, b: "abc"}}
+                  }
+                }, @server}
+    end
+
+    test "with declared state defaults, which init/3 sees and can override" do
+      node = {:component, Module101, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>state_a = 1, state_b = xyz</div>",
+                %{
+                  "my_component" => %{
+                    module: Module101,
+                    struct: %Component{
+                      props: %{cid: "my_component"},
+                      state: %{a: 1, b: "xyz", c: %{a: 1, b: "abc"}}
+                    }
+                  }
+                }, @server}
+    end
+
+    test "with declared state defaults and only server struct returned from init/3" do
+      node = {:component, Module103, [{"cid", [text: "my_component"]}], []}
+
+      assert {"<div>state_a = 1</div>", component_registry, _server_struct} =
+               render_dom(node, @env, @server)
+
+      assert component_registry["my_component"].struct.state == %{a: 1}
+    end
+
     test "with props and state, give state priority over prop if there are name collisions" do
       node =
         {:component, Module4,
@@ -1946,6 +1989,24 @@ defmodule Hologram.Template.RendererTest do
       setup_chunk_registry(ChunkRegistryStub)
 
       setup_page_digest_registry(PageDigestRegistryStub)
+    end
+
+    test "with declared state defaults and no init/3" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module102, :dummy_module_102_digest)
+
+      assert {"page state_a = 1, state_b = abc", component_registry, _server_struct} =
+               render_page_without_tree(Module102, @params, @server, @opts)
+
+      assert component_registry["page"].struct.state == %{a: 1, b: "abc"}
+    end
+
+    test "with declared state defaults, which init/3 sees and can override" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module104, :dummy_module_104_digest)
+
+      assert {"page state_a = 1, state_b = xyz", component_registry, _server_struct} =
+               render_page_without_tree(Module104, @params, @server, @opts)
+
+      assert component_registry["page"].struct.state == %{a: 1, b: "xyz", c: %{a: 1, b: "abc"}}
     end
 
     test "inside layout slot" do

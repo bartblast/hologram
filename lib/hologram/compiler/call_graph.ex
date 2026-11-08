@@ -1158,9 +1158,11 @@ defmodule Hologram.Compiler.CallGraph do
       {page_module, :__layout_props__, 0},
       {page_module, :__params__, 0},
       {page_module, :__route__, 0},
+      {page_module, :__state__, 0},
       {page_module, :action, 3},
       {page_module, :template, 0},
       {layout_module, :__props__, 0},
+      {layout_module, :__state__, 0},
       {layout_module, :action, 3},
       {layout_module, :template, 0}
     ]
@@ -1731,6 +1733,7 @@ defmodule Hologram.Compiler.CallGraph do
   defp add_component_call_graph_edges(call_graph, module) do
     call_graph
     |> add_edge(module, {module, :__props__, 0})
+    |> add_edge(module, {module, :__state__, 0})
     |> add_edge(module, {module, :action, 3})
     |> add_edge(module, {module, :init, 2})
     |> add_edge(module, {module, :template, 0})

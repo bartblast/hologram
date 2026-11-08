@@ -1060,11 +1060,6 @@ defmodule Hologram.Template.Renderer do
     Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
 
-  # The props are both handed to init and written back onto whatever it returned, so the field holds
-  # the props the render actually used rather than anything a handler put there. That is what lets a
-  # later handler read a prop's current value instead of a copy taken when the component mounted.
-  # A page reaches this with its URL params in the props position, which is how its params land on
-  # its struct too.
   # The client works every struct's props out again during its first render, so sending them would
   # put each prop value in the payload a second time - once inside the parent's state, once as the
   # child's props - for the client to immediately overwrite. The key stays and holds an empty map:
@@ -1077,8 +1072,18 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
+  # The props are both handed to init and written back onto whatever it returned, so the field holds
+  # the props the render actually used rather than anything a handler put there. That is what lets a
+  # later handler read a prop's current value instead of a copy taken when the component mounted.
+  # A page reaches this with its URL params in the props position, which is how its params land on
+  # its struct too.
+  #
+  # The declared state defaults are in place before init runs, so init sees them and can override
+  # them, and a component or page with nothing else to set up needs no init at all.
+  #
+  # WARNING: the struct it starts from must match the client renderer's #maybeInitComponent.
   defp init_component(module, props, server_struct) do
-    initial_component_struct = %Component{props: props}
+    initial_component_struct = %Component{props: props, state: state_defaults(module)}
 
     init_result =
       if Reflection.has_function?(module, :init, 3) do
@@ -1557,6 +1562,15 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp spread_entries(value), do: raise_invalid_spread_value(value)
+
+  defp state_defaults(module) do
+    Enum.reduce(module.__state__(), %{}, fn {name, _type, opts}, acc ->
+      case Keyword.fetch(opts, :default) do
+        {:ok, default} -> Map.put(acc, name, default)
+        :error -> acc
+      end
+    end)
+  end
 
   defp struct_key_part(%{__struct__: module}) when is_atom(module) do
     "#m" <> escape_key_text(Atom.to_string(module))
