@@ -7,6 +7,12 @@ defmodule Hologram.Assets.PathRegistry do
   alias Hologram.Reflection
 
   @doc """
+  Returns the path of the dir that holds the bundles the compiler writes, which the registry keys
+  under `hologram/`.
+  """
+  @callback bundles_dir() :: String.t()
+
+  @doc """
   Returns the name of the ETS table used by the asset path registry registered process.
   """
   @callback ets_table_name() :: atom
@@ -17,7 +23,7 @@ defmodule Hologram.Assets.PathRegistry do
   @callback process_name() :: atom
 
   @doc """
-  Returns the path of the static dir used by the asset path registry registered process.
+  Returns the path of the app's static dir used by the asset path registry registered process.
   """
   @callback static_dir() :: String.t()
 
@@ -33,9 +39,17 @@ defmodule Hologram.Assets.PathRegistry do
   def init(nil) do
     ets_table_name = impl().ets_table_name()
     ETS.create_named_table(ets_table_name)
-    ETS.put(ets_table_name, find_assets(impl().static_dir()))
+    ETS.put(ets_table_name, find_assets())
 
     {:ok, nil}
+  end
+
+  @doc """
+  Returns the implementation of the asset path registry's bundles dir path.
+  """
+  @spec bundles_dir() :: String.t()
+  def bundles_dir do
+    Reflection.bundles_dir()
   end
 
   @doc """
@@ -65,8 +79,9 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
-  Looks up the asset path (that includes the digest) of the given static file located in static dir.
-  If there is no matching entry for the given static file then :error atom is returned.
+  Looks up the asset path (that includes the digest) of the given static path: a file in the app's
+  static dir, or a bundle keyed under hologram/. If there is no matching entry for the given static
+  path then :error atom is returned.
   """
   @spec lookup(String.t()) :: {:ok, String.t()} | :error
   def lookup(static_path) do
@@ -90,16 +105,18 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
-  Reloads the entries of Hologram's bundles, the files in the static dir's hologram dir, and leaves
-  the other entries as they are.
+  Reloads the entries of Hologram's bundles, the files in the bundles dir, and leaves the other
+  entries as they are.
   """
   @spec reload :: :ok
   def reload do
-    refresh_entries(&String.starts_with?(&1, "hologram/"))
+    list_bundle_paths()
+    |> build_bundle_entries()
+    |> refresh_entries(&bundle_key?/1)
   end
 
   @doc """
-  Returns the implementation of the asset path registry's static dir path.
+  Returns the implementation of the asset path registry's app static dir path.
   """
   @spec static_dir() :: String.t()
   def static_dir do
@@ -108,36 +125,58 @@ defmodule Hologram.Assets.PathRegistry do
 
   @doc """
   Updates the entries the given changed files or dirs bear on, each given by its path relative to the
-  static dir, with "" for the static dir itself: the entry of a file's key, those of the key's
+  app's static dir, with "" for the static dir itself: the entry of a file's key, those of the key's
   digested copies, and those of the files in a dir. A key whose files are gone loses its entry. The
-  entries of Hologram's bundles, in the hologram dir, and the other entries are left as they are.
+  entries of Hologram's bundles, keyed under hologram/, and the other entries are left as they are.
   """
   @spec update([String.t()]) :: :ok
   def update(static_paths) do
+    static_dir = impl().static_dir()
     changed_keys = MapSet.new(static_paths, &asset_key/1)
     dir_prefixes = Enum.map(static_paths, &dir_prefix/1)
 
-    refresh_entries(fn path ->
-      not String.starts_with?(path, "hologram/") and
+    in_scope? = fn path ->
+      not bundle_key?(path) and
         (MapSet.member?(changed_keys, asset_key(path)) or String.starts_with?(path, dir_prefixes))
-    end)
+    end
+
+    static_dir
+    |> list_app_paths()
+    |> Enum.filter(in_scope?)
+    |> build_entries(static_dir)
+    |> refresh_entries(in_scope?)
   end
 
-  # The key a file is an asset of: the file's own path, or for a digested copy or a bundle, the path
-  # left once the digest is taken off.
+  # The key an app file is an asset of: the file's own path, or for a digested copy, the path left
+  # once the digest is taken off.
   defp asset_key(relative_path) do
-    case match_digest_suffix(relative_path) do
+    case match_copy_digest(relative_path) do
       {_kind, prefix, _digest, suffix} -> prefix <> suffix
       nil -> relative_path
     end
   end
 
-  # Maps each asset key, the path of a file relative to the static dir, to the URL to serve it
+  # Maps each bundle's key, its path under hologram/ with the hash taken off, to the URL to serve it
+  # from. The bundles dir holds the compiler's bundles only, so there are no copies to pick from,
+  # and a file whose name carries no hash is served under its own name. Of two bundles sharing a key,
+  # the one that sorts last is kept, so that the pick is deterministic.
+  defp build_bundle_entries(relative_paths) do
+    {_copies, bundles, plain_files} = classify_files(relative_paths, &match_bundle_hash/1)
+
+    bundle_entries = Enum.map(bundles, fn {key, path} -> {key, "/#{path}"} end)
+    plain_entries = Enum.map(plain_files, &{&1, "/#{&1}"})
+
+    (plain_entries ++ bundle_entries)
+    |> Map.new()
+    |> Map.to_list()
+  end
+
+  # Maps each asset key, the path of a file relative to the app's static dir, to the URL to serve it
   # from. A digested copy written by `mix phx.digest` stands in for its key only when copy_picker/1
   # picks it. When none is picked and nothing is at its key, each copy is a file of its own, under
   # its own name.
   defp build_entries(relative_paths, static_dir) do
-    {copies, bundles, plain_files} = classify_files(relative_paths)
+    {copies, _bundles, plain_files} = classify_files(relative_paths, &match_copy_digest/1)
     pick_copy = copy_picker(static_dir)
     relative_path_set = MapSet.new(relative_paths)
 
@@ -148,19 +187,18 @@ defmodule Hologram.Assets.PathRegistry do
         resolve_copies(key, key_copies, relative_path_set, pick_copy)
       end)
 
-    bundle_entries = Enum.map(bundles, fn {key, path} -> {key, "/#{path}"} end)
     plain_entries = Enum.map(plain_files, &{&1, "/#{&1}"})
 
-    # Map.new keeps the last entry of a key: a copy or a bundle takes the key of a plain file that
-    # shares it, and of two bundles sharing a key, the one that sorts last, so that the pick is
-    # deterministic.
-    (plain_entries ++ bundle_entries ++ copy_entries)
+    # Map.new keeps the last entry of a key: a copy takes the key of a plain file that shares it.
+    (plain_entries ++ copy_entries)
     |> Map.new()
     |> Map.to_list()
   end
 
-  defp classify_file(relative_path) do
-    case match_digest_suffix(relative_path) do
+  defp bundle_key?(path), do: String.starts_with?(path, "hologram/")
+
+  defp classify_file(relative_path, match_suffix) do
+    case match_suffix.(relative_path) do
       {kind, prefix, digest, suffix} ->
         cond do
           unlooked_up_bundle?(prefix, suffix) -> :unlooked_up_bundle
@@ -173,13 +211,13 @@ defmodule Hologram.Assets.PathRegistry do
     end
   end
 
-  # Splits the files into digested copies, Hologram's bundles and plain files, and leaves out the
-  # bundles no static path looks up, since the page digest and chunk registries say which to load:
-  # a page bundle, whose name carries its page module (hologram/page-<module>-<hash>.js), a chunk
-  # (hologram/chunk-<hash>.js), which all share the name left once the hash is taken off, and the
-  # source maps of digested and hashed files.
-  defp classify_files(relative_paths) do
-    classified_files = Enum.map(relative_paths, &classify_file/1)
+  # Splits the files into digested copies, Hologram's bundles and plain files, by the suffix the given
+  # function matches, and leaves out the bundles no static path looks up, since the page digest and
+  # chunk registries say which to load: a page bundle, whose name carries its page module
+  # (hologram/page-<module>-<hash>.js), a chunk (hologram/chunk-<hash>.js), which all share the name
+  # left once the hash is taken off, and the source maps of digested and hashed files.
+  defp classify_files(relative_paths, match_suffix) do
+    classified_files = Enum.map(relative_paths, &classify_file(&1, match_suffix))
 
     copies = for {:copy, key, path, digest} <- classified_files, do: {key, path, digest}
     bundles = for {:bundle, key, path} <- classified_files, do: {key, path}
@@ -205,14 +243,37 @@ defmodule Hologram.Assets.PathRegistry do
 
   defp dir_prefix(static_path), do: static_path <> "/"
 
-  defp find_assets(static_dir) do
-    static_dir
-    |> list_relative_paths()
-    |> build_entries(static_dir)
+  defp find_assets do
+    static_dir = impl().static_dir()
+
+    app_entries =
+      static_dir
+      |> list_app_paths()
+      |> build_entries(static_dir)
+
+    bundle_entries = build_bundle_entries(list_bundle_paths())
+
+    app_entries ++ bundle_entries
   end
 
   defp impl do
     Application.get_env(:hologram, :asset_path_registry_impl, __MODULE__)
+  end
+
+  # The files of the app's static dir. A hologram dir there is where the bundles went before they
+  # moved to the bundles dir, or another env's, so it's left out: only the bundles dir names this
+  # env's bundles.
+  defp list_app_paths(static_dir) do
+    static_dir
+    |> list_relative_paths()
+    |> Enum.reject(&bundle_key?/1)
+  end
+
+  # The files of the bundles dir, under the hologram/ prefix the bundles' URLs start with.
+  defp list_bundle_paths do
+    impl().bundles_dir()
+    |> list_relative_paths()
+    |> Enum.map(&("hologram/" <> &1))
   end
 
   defp list_dir_files(dir_path) do
@@ -239,15 +300,17 @@ defmodule Hologram.Assets.PathRegistry do
     |> Enum.sort()
   end
 
-  # A digest suffix is the 32 hex chars of an MD5, as `mix phx.digest` writes it, anywhere in the
-  # static dir, or the 8 chars of esbuild's content hash, which the Hologram compiler names its
-  # bundles with, only in the hologram dir. Anywhere else a name such as `arrow-DOWNLOAD.svg` would
-  # be taken for a digested `arrow.svg`. The MD5 form is tried first, so a compiler bundle that
-  # `mix phx.digest` digested again is read as a copy of the bundle.
-  defp match_digest_suffix(relative_path) do
-    with nil <- match_digest_suffix(:md5, ~r"^(.+)\-([0-9a-f]{32})(.+)$", relative_path) do
-      match_digest_suffix(:esbuild, ~r"^(hologram/[^/]+)\-([A-Z2-7]{8})(\.[^/]+)$", relative_path)
-    end
+  # A bundle's hash suffix is the 8 chars of esbuild's content hash, which the Hologram compiler names
+  # its bundles with. Matched only for the bundles: in the app's static dir a name such as
+  # `arrow-DOWNLOAD.svg` would be taken for a digested `arrow.svg`.
+  defp match_bundle_hash(relative_path) do
+    match_digest_suffix(:esbuild, ~r"^(hologram/[^/]+)\-([A-Z2-7]{8})(\.[^/]+)$", relative_path)
+  end
+
+  # A copy's digest suffix is the 32 hex chars of an MD5, as `mix phx.digest` writes it, anywhere in
+  # the app's static dir.
+  defp match_copy_digest(relative_path) do
+    match_digest_suffix(:md5, ~r"^(.+)\-([0-9a-f]{32})(.+)$", relative_path)
   end
 
   defp match_digest_suffix(kind, regex, relative_path) do
@@ -296,18 +359,11 @@ defmodule Hologram.Assets.PathRegistry do
     end
   end
 
-  # Rebuilds the entries of the files and keys the given function holds in scope, given their paths
-  # relative to the static dir, and leaves the others as they are. The new entries go in before the
-  # stale ones are deleted, so that a key kept throughout is readable with its old or its new value.
-  defp refresh_entries(in_scope?) do
-    static_dir = impl().static_dir()
+  # Puts the given entries in and deletes the other keys the given function holds in scope, leaving
+  # the rest as they are. The new entries go in before the stale ones are deleted, so that a key kept
+  # throughout is readable with its old or its new value.
+  defp refresh_entries(entries, in_scope?) do
     ets_table_name = impl().ets_table_name()
-
-    entries =
-      static_dir
-      |> list_relative_paths()
-      |> Enum.filter(in_scope?)
-      |> build_entries(static_dir)
 
     ETS.put(ets_table_name, entries)
 

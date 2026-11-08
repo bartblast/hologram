@@ -48,9 +48,9 @@ defmodule Hologram.LiveReload do
   # them on each OS.
   @dir_change_events ~w(created deleted moved_from moved_to removed renamed)a
 
-  # The priv/static subdirs whose files are not the app's assets: Hologram's own bundles, which
-  # live reload passes already reload the tabs for, and files users upload, as in Phoenix's default
-  # live reload patterns.
+  # The priv/static subdirs whose files are not the app's assets: the dir Hologram's bundles went to
+  # before they moved to Hologram's build dir, which the first compile after the move removes, and
+  # files users upload, as in Phoenix's default live reload patterns.
   @ignored_static_subdirs ~w(hologram uploads)
 
   @doc """
@@ -590,8 +590,8 @@ defmodule Hologram.LiveReload do
 
   @doc """
   Returns the app's static dir, whose assets live reload watches besides the source files: the
-  `priv/static` dir in the app's source dir. Not the one in the build dir, which is a symbolic link
-  to it.
+  `priv/static` dir in the app's source dir. Not the one in the app's build dir
+  (`_build/<env>/lib/<app>/priv/static`), which is a symbolic link to it.
   """
   @spec watched_static_dir :: String.t()
   def watched_static_dir do
@@ -800,9 +800,8 @@ defmodule Hologram.LiveReload do
     end
   end
 
-  # In a project with a priv dir, Hologram's compile writes its bundles to priv/static/hologram
-  # through the build's priv symlink, so the static dir exists before the app starts. The check
-  # keeps a project without one, or a dir deleted meanwhile, from failing the watcher's backend.
+  # A Phoenix project has a priv/static dir. The check keeps a project without one, or a dir deleted
+  # meanwhile, from failing the watcher's backend.
   defp all_watched_dirs do
     static_dir = watched_static_dir()
 

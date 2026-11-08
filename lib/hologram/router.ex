@@ -10,6 +10,14 @@ defmodule Hologram.Router do
   alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Runtime.Session
 
+  # The bundles, from the dir the compiler writes them to (see `Hologram.Reflection.bundles_dir/0`),
+  # which is Hologram's own static dir in the build dir of the env at hand. Only the bundles' names
+  # are looked up on disk, so the other /hologram/ routes skip the file check.
+  plug Plug.Static,
+    at: "/hologram",
+    from: {:hologram, "priv/static"},
+    only_matching: ~w(chunk- page- runtime-)
+
   plug :match
   plug :dispatch
 

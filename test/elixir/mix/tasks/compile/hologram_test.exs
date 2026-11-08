@@ -38,6 +38,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @assets_dir Path.join(@test_dir, "assets")
   @build_dir Path.join(@test_dir, "build")
   @build_lib_dir Path.join(@test_dir, "build_lib")
+  @legacy_bundles_dir Path.join([@test_dir, "app_static", "hologram"])
   @snapshot_build_dir Path.join(@test_dir, "snapshot_build")
   @snapshot_static_dir Path.join(@test_dir, "snapshot_static")
   @static_dir Path.join(@test_dir, "static")
@@ -736,6 +737,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       build_lib_dir: @build_lib_dir,
       esbuild_bin_path: Compiler.esbuild_bin_path(node_modules_path),
       js_dir: Path.join(@lib_assets_dir, "js"),
+      legacy_bundles_dir: @legacy_bundles_dir,
       node_modules_path: node_modules_path,
       static_dir: @static_dir,
       tmp_dir: @tmp_dir
@@ -818,6 +820,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     # Reused or re-read, an untouched module keeps its entry across runs
     assert load_module_info_items(opts)[Module1] == first_run_module_info
+  end
+
+  test "removes the dir in the app's static dir the bundles went to before", %{opts: opts} do
+    legacy_bundle_path = Path.join(@legacy_bundles_dir, "runtime-AAAAAAAA.js")
+
+    File.mkdir_p!(@legacy_bundles_dir)
+    File.write!(legacy_bundle_path, "")
+
+    run(opts)
+
+    refute File.exists?(@legacy_bundles_dir)
   end
 
   describe "kept compile state" do

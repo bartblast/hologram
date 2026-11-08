@@ -35,7 +35,7 @@ export default class AssetPathRegistry {
   }
 
   // Replaces the entries of the app's assets with the given ones, and keeps the entries of
-  // Hologram's own bundles, in the hologram dir, which name the bundles this document loaded.
+  // Hologram's own bundles, keyed under hologram/, which name the bundles this document loaded.
   static replaceAppEntries(appAssetManifest) {
     const bundleEntries = Object.entries(AssetPathRegistry.manifest).filter(
       ([staticPath]) => staticPath.startsWith("hologram/"),

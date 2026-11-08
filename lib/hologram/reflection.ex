@@ -261,6 +261,17 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the path of the dir the compiler writes the bundles to and `Hologram.Router` serves them
+  from: the static dir in the build dir. Each build env has a build dir of its own, so a compile in
+  one env never touches the bundles another env serves. `Hologram.Router` names the same dir as
+  `{:hologram, "priv/static"}`.
+  """
+  @spec bundles_dir() :: String.t()
+  def bundles_dir do
+    Path.join(build_dir(), "static")
+  end
+
+  @doc """
   Returns the call graph dump file name.
   """
   @spec call_graph_dump_file_name() :: String.t()

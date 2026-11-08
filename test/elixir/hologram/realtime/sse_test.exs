@@ -851,7 +851,7 @@ defmodule Hologram.Realtime.SSETest do
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
-      app_asset_paths = Map.drop(mapping, ["hologram/runtime.js", "hologram/test_file_9.css"])
+      app_asset_paths = Map.drop(mapping, ["hologram/runtime.js"])
 
       envelope_regex = ~r/\Aevent: css_changed\nid: \d+\ndata: (.+)\n\n\z/
       assert [_chunk, data] = Regex.run(envelope_regex, updated_conn.resp_body)

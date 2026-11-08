@@ -41,6 +41,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     * the compile inputs dump - what a compile with nothing to do is decided by, as the last compile
       that built every page saw it (see `Hologram.Compiler.CompileInputs`).
 
+  The bundles go to the build dir too, to its static dir (see `Hologram.Reflection.bundles_dir/0`),
+  which `Hologram.Router` serves them from. Each build env has a build dir of its own, so a compile
+  in one env leaves the bundles another env serves alone.
+
   ## Telemetry
 
   Emits the following events around each compilation run, i.e. the critical
@@ -130,9 +134,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       build_lib_dir: Path.join(Mix.Project.build_path(), "lib"),
       bundles_built: fn _built -> :ok end,
       js_dir: Path.join(assets_dir, "js"),
+      # TODO: Remove together with the removal in compile/1.
+      legacy_bundles_dir: Path.join(Reflection.otp_app_static_dir(), "hologram"),
       next_batch: fn remaining_pages, _links -> MapSet.to_list(remaining_pages) end,
       node_modules_path: node_modules_path,
-      static_dir: Path.join(Reflection.otp_app_static_dir(), "hologram"),
+      static_dir: Reflection.bundles_dir(),
       tmp_dir: Path.join(build_dir, "tmp")
     ]
   end
@@ -152,6 +158,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       File.mkdir_p!(build_dir)
       File.mkdir_p!(opts[:static_dir])
       File.mkdir_p!(opts[:tmp_dir])
+
+      # The dir in the app's static dir that the bundles went to before they moved to the build dir.
+      # Removed so that `mix phx.digest` stops digesting the old bundles and releases stop shipping
+      # them.
+      # TODO: Remove once apps have had a release to upgrade through.
+      File.rm_rf(opts[:legacy_bundles_dir])
 
       Compiler.maybe_install_js_deps(assets_dir, build_dir)
 

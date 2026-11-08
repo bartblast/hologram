@@ -423,6 +423,10 @@ defmodule Hologram.ReflectionTest do
     assert build_dir() == "#{File.cwd!()}/_build/test/lib/hologram/priv"
   end
 
+  test "bundles_dir/0" do
+    assert bundles_dir() == "#{File.cwd!()}/_build/test/lib/hologram/priv/static"
+  end
+
   test "call_graph_dump_file_name/0" do
     assert call_graph_dump_file_name() == "call_graph.bin"
   end
