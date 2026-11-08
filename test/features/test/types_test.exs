@@ -122,7 +122,7 @@ defmodule HologramFeatureTests.TypesTest do
       session
       |> visit(TypesPage)
       |> click(css("button[id='local function capture (client origin)']"))
-      |> assert_text(css("#result"), "client = 8, server = 8")
+      |> assert_text(css("#result"), "client = 8, server = 8, echo = 8")
     end
 
     feature "local capture (server origin)", %{session: session} do
@@ -146,7 +146,7 @@ defmodule HologramFeatureTests.TypesTest do
       session
       |> visit(TypesPage)
       |> click(css("button[id='remote function capture (client origin)']"))
-      |> assert_text(css("#result"), "client = 8, server = 8")
+      |> assert_text(css("#result"), "client = 8, server = 8, echo = 8")
     end
 
     feature "remote capture (server origin)", %{session: session} do
@@ -160,7 +160,7 @@ defmodule HologramFeatureTests.TypesTest do
       session
       |> visit(TypesPage)
       |> click(css("button[id='Erlang function capture (client origin)']"))
-      |> assert_text(css("#result"), "client = [3, 2, 1], server = [3, 2, 1]")
+      |> assert_text(css("#result"), "client = [3, 2, 1], server = [3, 2, 1], echo = [3, 2, 1]")
     end
 
     feature "Erlang capture (server origin)", %{session: session} do
