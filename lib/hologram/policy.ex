@@ -61,6 +61,7 @@ defmodule Hologram.Policy do
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.MisuseError
   alias Hologram.Policy.Expression
   alias Hologram.Query.Stage
   alias Hologram.Reflection
@@ -599,9 +600,9 @@ defmodule Hologram.Policy do
   @doc """
   Refuses an operation the given entity type cannot be asked about, or returns :ok.
 
-  A framework operation always passes. An atom passes when an allow line on the entity type names it. A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role. Anything else raises ArgumentError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
+  A framework operation always passes. An atom passes when an allow line on the entity type names it. A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role. Anything else raises Hologram.MisuseError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
 
-  The client mirrors the same refusals in validateOperation in assets/js/elixir/hologram/auth.mjs - a hand-ported pair, so a change here is a change there.
+  The client mirrors the same refusals in validateOperation in assets/js/model.mjs - a hand-ported pair, so a change here is a change there.
   """
   @spec validate_operation!(module, Entity.operation()) :: :ok
   def validate_operation!(_entity_type, operation) when operation in @framework_operations,
@@ -611,7 +612,7 @@ defmodule Hologram.Policy do
     if operation in operations(entity_type) do
       :ok
     else
-      raise ArgumentError, message: unknown_operation_message(entity_type, operation)
+      raise MisuseError, message: unknown_operation_message(entity_type, operation)
     end
   end
 
@@ -622,23 +623,23 @@ defmodule Hologram.Policy do
     if role_name in declared_names do
       :ok
     else
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "unknown role #{inspect(role_name)} in #{inspect(operation)} for #{inspect(entity_type)} - #{declared_roles_description(declared_names)}"
     end
   end
 
   def validate_operation!(entity_type, operation) when is_tuple(operation) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
   end
 
   # Nothing production reaches here - can?/3 refuses a shape this far off before asking, and
   # authorize/2 and the wire only ever pass an atom - but this function is public, and its
-  # docstring promises an ArgumentError for anything else.
+  # docstring promises a Hologram.MisuseError for anything else.
   def validate_operation!(entity_type, operation) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role}"
   end

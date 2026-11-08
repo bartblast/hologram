@@ -13,6 +13,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
+  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
@@ -579,7 +580,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown operation :transfer for Hologram.Test.Fixtures.Policy.Module1 - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         can?("user_id_1", :transfer, %Module1{public: true})
       end
     end
@@ -588,7 +589,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         can?("user_id_1", {:publish, :editor}, %Module1{public: true})
       end
     end
@@ -597,7 +598,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown role :editr in {:grant_role, :editr} for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         can?("user_id_1", {:grant_role, :editr}, %Module1{public: true})
       end
     end

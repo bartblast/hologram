@@ -10838,6 +10838,14 @@ describe("Interpreter", () => {
     );
   });
 
+  it("raiseMisuseError()", () => {
+    assertBoxedError(
+      () => Interpreter.raiseMisuseError("abc"),
+      "Hologram.MisuseError",
+      "abc",
+    );
+  });
+
   it("raiseTryClauseError()", () => {
     const term = Type.atom("abc");
 

@@ -114,7 +114,7 @@ defmodule Hologram.Query do
   recorded edge is not among them until it is written. Whether the target exists is the
   write's to judge.
 
-  Raises ArgumentError when the entity is not an entity struct, when the target id is not a
+  Raises Hologram.MisuseError when the entity is not an entity struct, when the target id is not a
   string, or when the relationship is a to-one relationship, an attribute, or unknown.
   """
   @spec add_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
@@ -132,7 +132,7 @@ defmodule Hologram.Query do
   A write carries exactly one claim - a struct already claiming an authority, through
   authorize/2 or trust/1, cannot claim another.
 
-  Raises ArgumentError when the entity is not an entity struct, when the operation is not an
+  Raises Hologram.MisuseError when the entity is not an entity struct, when the operation is not an
   atom, when the operation is neither a framework operation nor one an allow line on the entity
   type names (see Hologram.Policy.validate_operation!/2), or when the struct already carries a
   claim.
@@ -147,7 +147,7 @@ defmodule Hologram.Query do
   query term. A counting query evaluates to a non-negative integer - the number of
   results the query otherwise evaluates to, view bounds included.
 
-  Raises ArgumentError when the query is neither an entity type module nor a query
+  Raises Hologram.MisuseError when the query is neither an entity type module nor a query
   term, or when a cardinality is already marked.
   """
   @spec count(module | t) :: t
@@ -171,7 +171,7 @@ defmodule Hologram.Query do
   arguments, the same recording, the same replacement of an earlier operation on the edge,
   and deleting an edge the relationship does not hold is a no-op at the write.
 
-  Raises ArgumentError when the entity is not an entity struct, when the target id is not a
+  Raises Hologram.MisuseError when the entity is not an entity struct, when the target id is not a
   string, or when the relationship is a to-one relationship, an attribute, or unknown.
   """
   @spec delete_relationship(Entity.t(), atom, Entity.id()) :: Entity.t()
@@ -336,7 +336,7 @@ defmodule Hologram.Query do
   relationship, when a bound row is compared whole rather than through an attribute, or when the
   predicates take any other form - a bare name where only a value goes (a keyword value, a
   membership element, a range bound) is most likely a forgotten pin, and the error says so.
-  Raises ArgumentError when the query is neither an entity type module nor a query term, when
+  Raises Hologram.MisuseError when the query is neither an entity type module nor a query term, when
   pinned predicates are not a list of name and value pairs - a name being an attribute or a path -
   when a predicate names a relationship or an unknown attribute - on the right side of a
   comparison, which is how a forgotten pin on a variable reads - when a path goes through a
@@ -394,7 +394,7 @@ defmodule Hologram.Query do
   (`include(:owner)` is refused in favour of `include(owner)`), when a keyword entry nests a
   relationship (`include(tasks: owner)` is refused in favour of `include(tasks.owner)`), when a
   keyword entry pairs a relationship with anything but a pinned nested spec - a narrowed set is a
-  derived field - or when a spec or an entry is anything else. Raises ArgumentError when the
+  derived field - or when a spec or an entry is anything else. Raises Hologram.MisuseError when the
   query is neither an entity type module nor a query term, when a spec is invalid or empty, or
   when a name is not a declared relationship or derived field - which is how a forgotten pin on a
   variable reads.
@@ -430,7 +430,7 @@ defmodule Hologram.Query do
   increment 1 records a put of 11), and putting an attribute the struct carries an increment for
   replaces the increment.
 
-  Raises ArgumentError when the entity is not an entity struct, when the amount is not an
+  Raises Hologram.MisuseError when the entity is not an entity struct, when the amount is not an
   integer, when the name is an optional integer attribute, a non-integer attribute, a
   relationship, a system attribute, or unknown, when the put value the amount would fold into
   is not an integer, or when the struct's field holds nil - a counter always holds a number,
@@ -447,7 +447,7 @@ defmodule Hologram.Query do
   total order, or nil when no entity matches - never an error on multiplicity, since
   live re-evaluation makes transient multiplicity a normal state.
 
-  Raises ArgumentError when the query is neither an entity type module nor a query
+  Raises Hologram.MisuseError when the query is neither an entity type module nor a query
   term, or when a cardinality is already marked.
   """
   @spec one(module | t) :: t
@@ -467,7 +467,7 @@ defmodule Hologram.Query do
 
   Raises Hologram.CompileError, naming the location, when an option value is neither an
   integer literal nor pinned, or when the options are neither a keyword list nor pinned. Raises
-  ArgumentError when the query is neither an entity type module nor a query term, when the
+  Hologram.MisuseError when the query is neither an entity type module nor a query term, when the
   options are not a keyword list holding exactly :page and :size, or when either option is not
   a positive integer.
   """
@@ -497,7 +497,7 @@ defmodule Hologram.Query do
   neither recorded nor written, and an entity carrying no recorded change is refused by
   DB.update/1.
 
-  Raises ArgumentError when the entity is not an entity struct, when the values are neither a
+  Raises Hologram.MisuseError when the entity is not an entity struct, when the values are neither a
   keyword list nor a map, or when a name is a relationship, a system attribute, or unknown.
   """
   @spec put_attribute(Entity.t(), keyword | map) :: Entity.t()
@@ -522,8 +522,8 @@ defmodule Hologram.Query do
   A later call replaces the count an earlier one set rather than adding to it, so
   `skip(20) |> skip(20)` skips 20 - where two `Enum.drop` calls in a row drop 40.
 
-  Raises Hologram.CompileError, naming the location, when the count is neither an integer
-  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
+  Raises Hologram.CompileError, naming the location, when the count is neither an integer literal
+  nor pinned. Raises Hologram.MisuseError when the query is neither an entity type module nor a
   query term, or when the count is not a non-negative integer.
   """
   defmacro skip(query, value) do
@@ -562,12 +562,12 @@ defmodule Hologram.Query do
   which has no stored sort key.
 
   Raises Hologram.CompileError, naming the location, when an attribute is written as an atom
-  (`sort(:priority)` is refused in favour of `sort(priority)`), when a direction is
-  neither an atom nor pinned, or when the spec or an entry is neither a bare name, a pair nor
-  pinned. Raises ArgumentError when the query is neither an entity type module nor a query term,
-  when the spec is neither an attribute name nor a list, when an entry names a relationship or an
-  unknown attribute - which is how a forgotten pin on a variable reads - or when a direction is
-  neither :asc nor :desc.
+  (`sort(:priority)` is refused in favour of `sort(priority)`), when a direction is neither an atom
+  nor pinned, or when the spec or an entry is neither a bare name, a pair nor pinned. Raises
+  Hologram.MisuseError when the query is neither an entity type module nor a query term, when the
+  spec is neither an attribute name nor a list, when an entry names a relationship or an unknown
+  attribute - which is how a forgotten pin on a variable reads - or when a direction is neither :asc
+  nor :desc.
   """
   defmacro sort(query, spec) do
     lowered = Expression.ordering(spec, __CALLER__)
@@ -589,8 +589,8 @@ defmodule Hologram.Query do
   two `Enum.take` calls in a row keep the smaller count. A negative count is refused rather than
   read as "the last N" the way `Enum.take` reads it.
 
-  Raises Hologram.CompileError, naming the location, when the count is neither an integer
-  literal nor pinned. Raises ArgumentError when the query is neither an entity type module nor a
+  Raises Hologram.CompileError, naming the location, when the count is neither an integer literal
+  nor pinned. Raises Hologram.MisuseError when the query is neither an entity type module nor a
   query term, or when the count is not a non-negative integer.
   """
   defmacro take(query, value) do
@@ -620,8 +620,8 @@ defmodule Hologram.Query do
   from_query) cannot carry it - the build refuses one that does - since a component's query is
   read for the session user on both tiers.
 
-  Raises ArgumentError when the subject is neither an entity struct, an entity type module nor
-  a query term, or when a struct already carries a claim.
+  Raises Hologram.MisuseError when the subject is neither an entity struct, an entity type module
+  nor a query term, or when a struct already carries a claim.
   """
   @spec trust(Entity.t() | module | t) :: Entity.t() | t
   defdelegate trust(subject), to: Stage

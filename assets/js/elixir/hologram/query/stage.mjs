@@ -14,8 +14,8 @@ import Type from "../../../type.mjs";
 // Validation is the reason these are ports rather than the transpiled originals. The originals
 // ask the entity module for its attributes, and entity modules ship no reflection to the client -
 // but the same declarations are baked into the bundle as the model, which these read instead.
-// What is checked is what the server checks, in the same words: the ArgumentError messages are
-// mirrored, and the unit tests of both tiers pin the same words.
+// What is checked is what the server checks, in the same words: the Hologram.MisuseError messages
+// are mirrored, and the unit tests of both tiers pin the same words.
 
 const EQUALITY_OPERATORS = ["!=", "=="];
 const MEMBERSHIP_OPERATORS = ["in", "not_in"];
@@ -170,7 +170,7 @@ function derivedSetTarget(name, entityType, reason) {
       ? derivedRowsSpelled(derived)
       : `a :${derived.type} value`;
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `${Interpreter.inspect(name)} is a derived field holding ${held} in ${entityType} - ${reason}`,
   );
 }
@@ -188,14 +188,14 @@ function derivedValueTypes(entityType) {
 // would make the disjunction hold for every row - so neither is a disjunction, as on the server.
 function disjunctionClause(alternatives, scope) {
   if (alternatives.data.length < 2) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `a disjunction takes a list of at least two predicate lists, got: ${Interpreter.inspect(alternatives)}`,
     );
   }
 
   for (const alternative of alternatives.data) {
     if (!isPredicateList(alternative) || alternative.data.length === 0) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `an alternative of a disjunction is a non-empty list of name and value pairs, got: ${Interpreter.inspect(alternative)}`,
       );
     }
@@ -217,7 +217,7 @@ function entityTypeOf(entity, stage) {
     return type;
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `${stage} takes an entity struct, got: ${Interpreter.inspect(entity)}`,
   );
 }
@@ -288,12 +288,12 @@ function movedValue(entity, name, entityType, delta, stage) {
   }
 
   if (Model.structTypeName(value) === "Hologram.Entity.ServerOnly") {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} of ${entityType} is server-only - a browser cannot write it, set it in a command or a job`,
     );
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `${Interpreter.inspect(name)} in ${entityType} holds nil - a counter always holds a number, so there is nothing for ${stage} to move - read the row first, or give the attribute a default`,
   );
 }
@@ -307,7 +307,7 @@ function orderEntries(spec, entityType) {
     return spec.data.map((entry) => orderEntry(entry, entityType));
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `sort spec must be an attribute name or a list, got: ${Interpreter.inspect(spec)}`,
   );
 }
@@ -331,7 +331,7 @@ function orderEntry(entry, entityType) {
     validateAttributeName(name, entityType, "ordered");
 
     if (!Type.isAtom(direction) || !["asc", "desc"].includes(direction.value)) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `invalid direction ${Interpreter.inspect(direction)} for attribute ${Interpreter.inspect(name)} - use :asc or :desc`,
       );
     }
@@ -339,7 +339,7 @@ function orderEntry(entry, entityType) {
     return [name.value, direction.value];
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `invalid sort entry ${Interpreter.inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple`,
   );
 }
@@ -367,7 +367,7 @@ function includeOne(query, name, nestedSpec) {
 
   if (kind === "derived_value") {
     if (nestedSpec !== null) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `${Interpreter.inspect(name)} is a :${target} derived field in ${term.entity} - nothing is included under it`,
       );
     }
@@ -396,7 +396,7 @@ function includeSpecEntry(term, entry) {
     const [name, spec] = entry.data;
 
     if (Type.isAnonymousFunction(spec)) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `invalid include spec entry ${Interpreter.inspect(entry)} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end`,
       );
     }
@@ -404,7 +404,7 @@ function includeSpecEntry(term, entry) {
     return includeOne(term, name, spec);
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `invalid include spec entry ${Interpreter.inspect(entry)} - use a relationship name or a {name, spec} pair`,
   );
 }
@@ -555,7 +555,7 @@ function listTriples(name, list, entityType, scope) {
   const values = list.data;
 
   if (values.length === 0) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `filter list for attribute ${inspectName(name)} must not be empty`,
     );
   }
@@ -574,7 +574,7 @@ function listTriples(name, list, entityType, scope) {
     ];
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `invalid filter list ${Interpreter.inspect(list)} for attribute ${inspectName(name)} - use either a membership list of plain values or a list of operator tuples`,
   );
 }
@@ -628,7 +628,7 @@ function nameTypeOf(scope, name) {
   const levels = Type.isInteger(levelsTerm) ? Number(levelsTerm.value) : null;
 
   if (levels === null || levels < 1 || levels > rowsAbove) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} names no row above the condition it stands in, which has ${rowsSpelled(rowsAbove)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row`,
     );
   }
@@ -803,7 +803,7 @@ function predicateTriples(name, value, entityType, scope) {
   }
 
   if (Type.isTuple(value)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `invalid filter value ${Interpreter.inspect(value)} for attribute ${inspectName(name)}`,
     );
   }
@@ -825,13 +825,13 @@ function quantifierClause(scope, quantifier, value) {
   const relatedType = validateSource(hops, sourceType);
 
   if (!isPredicateList(predicates)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `a quantifier's condition is a list of name and value pairs, got: ${Interpreter.inspect(predicates)}`,
     );
   }
 
   if (quantifier === "all" && predicates.data.length === 0) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `all takes a condition - all over no condition says nothing, got: ${Interpreter.inspect(value)}`,
     );
   }
@@ -846,7 +846,7 @@ function quantifierClause(scope, quantifier, value) {
 }
 
 function raiseUnknownOperator(operator, name) {
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown operator :${operator} in the filter predicate for attribute ${inspectName(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact`,
   );
 }
@@ -854,7 +854,7 @@ function raiseUnknownOperator(operator, name) {
 // The known relationships are every relationship of the type - a source takes any of them.
 function raiseUnknownSourceName(name, entityType) {
   if (attributeNames(entityType).includes(name.value)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is an attribute in ${entityType} - a quantifier's source names relationships`,
     );
   }
@@ -865,7 +865,7 @@ function raiseUnknownSourceName(name, entityType) {
     .map((knownName) => `:${knownName}`)
     .join(", ");
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships: ${known}`,
   );
 }
@@ -929,7 +929,7 @@ function searchTriple(name, operator, operand, entityType) {
   validateSearchableAttribute(name, entityType, operator);
 
   if (!Type.isBinary(operand)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)} - a search term is a string`,
     );
   }
@@ -942,7 +942,7 @@ function setCardinality(query, cardinality) {
   const term = toTerm(query);
 
   if (term.cardinality !== "set") {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `cardinality is already set to :${term.cardinality}`,
     );
   }
@@ -954,7 +954,7 @@ function setViewBound(query, field, value) {
   const term = toTerm(query);
 
   if (!Type.isInteger(value) || value.value < 0n) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${field} must be a non-negative integer, got: ${Interpreter.inspect(value)}`,
     );
   }
@@ -1004,7 +1004,7 @@ function sourceStart(scope, source) {
     hops.data.length === 0 ||
     !hops.data.every(Type.isAtom)
   ) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: ${Interpreter.inspect(source)}`,
     );
   }
@@ -1076,7 +1076,7 @@ function toTerm(query) {
   const name = Type.isAlias(query) ? Interpreter.moduleExName(query) : null;
 
   if (name === null || !(name in (globalThis.Hologram.sync?.model ?? {}))) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(query)} is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive`,
     );
   }
@@ -1102,7 +1102,7 @@ function putClaim(entity, claim, stage) {
   const recorded = field(metadata, "claim");
 
   if (!Type.isNil(recorded)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${entityType} already carries a claim (${Interpreter.inspect(recorded)}) - a write claims exactly one authority`,
     );
   }
@@ -1132,7 +1132,7 @@ function putDelta(entity, name, amount, sign, stage) {
     const value = recorded.data[1];
 
     if (!Type.isInteger(value)) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `${Interpreter.inspect(name)} in ${entityType} carries a put value that is not an integer (${Interpreter.inspect(value)}) - ${stage} cannot move it`,
       );
     }
@@ -1188,7 +1188,7 @@ function putRelationshipOp(entity, relationshipName, targetId, op, stage) {
   validateEdgeRelationshipName(relationshipName, entityType, stage);
 
   if (!Type.isBitstring(targetId)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${stage} takes a target id string, got: ${Interpreter.inspect(targetId)}`,
     );
   }
@@ -1246,7 +1246,7 @@ function putPairs(values, stage) {
     : Type.isMap(values) && Object.values(values.data);
 
   if (!entries) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${stage} takes a keyword list or a map of attribute values, got: ${Interpreter.inspect(values)}`,
     );
   }
@@ -1258,7 +1258,7 @@ function validateActorAttribute(name, entityType) {
   const type = nameType(entityType, name);
 
   if (type !== "uuid") {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `user_id() requires a uuid attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}`,
     );
   }
@@ -1275,7 +1275,7 @@ function validateAttributeName(name, entityType, usage) {
   ].sort();
 
   if (isDerivedString(entityType, name)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is a derived string in ${entityType} - a string is ${usage} by the sort key stored with it, which a computed string has none of`,
     );
   }
@@ -1285,7 +1285,7 @@ function validateAttributeName(name, entityType, usage) {
   }
 
   if (relationshipNames(entityType).includes(name.value)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be ${usage}`,
     );
   }
@@ -1293,14 +1293,14 @@ function validateAttributeName(name, entityType, usage) {
   const derived = derivedRows(entityType, name.value);
 
   if (derived) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is a derived field holding ${derivedRowsSpelled(derived)} in ${entityType} - only attributes can be ${usage}`,
     );
   }
 
   const known = names.map((known) => `:${known}`).join(", ");
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown attribute ${Interpreter.inspect(name)} in ${entityType} - known attributes: ${known}`,
   );
 }
@@ -1319,7 +1319,7 @@ function validateComparableAttributes(
   otherEntityType,
 ) {
   if (JSON.stringify(nameValue(name)) === JSON.stringify(nameValue(other))) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `operator :${operator} compares attribute ${inspectName(name)} in ${entityType} with itself`,
     );
   }
@@ -1337,7 +1337,7 @@ function validateComparableAttributes(
   );
 
   if (type !== otherType && !widens) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `operator :${operator} compares ${compared}, which have different types (:${type} and :${otherType}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)`,
     );
   }
@@ -1356,7 +1356,7 @@ function validateComparableAttributes(
     values.every((value, index) => value === otherValues[index]);
 
   if (!sameValues) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `operator :${operator} compares ${compared}, which declare different values (${inspectEnumValues(values)} and ${inspectEnumValues(otherValues)}) - two enum attributes compare only when they declare the same values in the same order`,
     );
   }
@@ -1372,13 +1372,13 @@ function validateFilteredName(name, entityType) {
   const relationship = Model.entry(entityType).relationships[name.value];
 
   if (relationship && !relationship.toMany) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be filtered - filter its reference via :${name.value}_id`,
     );
   }
 
   if (relationship || Object.hasOwn(Model.inverses(entityType), name.value)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is a relationship in ${entityType} - only attributes can be filtered`,
     );
   }
@@ -1386,14 +1386,14 @@ function validateFilteredName(name, entityType) {
   const derived = derivedRows(entityType, name.value);
 
   if (derived) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is a derived field holding ${derivedRowsSpelled(derived)} in ${entityType} - only attributes can be filtered`,
     );
   }
 
   const known = names.map((known) => `:${known}`).join(", ");
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown attribute ${Interpreter.inspect(name)} in ${entityType} - known attributes: ${known}`,
   );
 }
@@ -1410,7 +1410,7 @@ function validateEnumOperand(name, operand, entityType) {
   const values = enumValues(declared.entityType, declared.name);
 
   if (!values.includes(Model.unbox(operand, "enum"))) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(operand)} is not a value of attribute ${inspectName(name)} in ${entityType} - the values are ${inspectEnumValues(values)}`,
     );
   }
@@ -1444,7 +1444,7 @@ function validateIncludedName(name, entityType) {
   }
 
   if (attributeNames(entityType).includes(name.value)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is an attribute in ${entityType} - only relationships and derived fields can be included`,
     );
   }
@@ -1455,27 +1455,27 @@ function validateIncludedName(name, entityType) {
     .map((loadableName) => `:${loadableName}`)
     .join(", ");
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown relationship ${Interpreter.inspect(name)} in ${entityType} - known relationships and derived fields: ${known}`,
   );
 }
 
 function validateMembershipList(operand, name, operator) {
   if (!Type.isList(operand)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `operator :${operator} on attribute ${inspectName(name)} requires a list operand, got: ${Interpreter.inspect(operand)}`,
     );
   }
 
   if (operand.data.length === 0) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `membership list for attribute ${inspectName(name)} must not be empty`,
     );
   }
 
   operand.data.forEach((value) => {
     if (Type.isList(value) || Type.isTuple(value) || isStruct(value, "Range")) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `invalid membership list element ${Interpreter.inspect(value)} for attribute ${inspectName(name)} - membership lists hold plain values`,
       );
     }
@@ -1486,19 +1486,19 @@ function validateMembershipRange(range, name, entityType) {
   const type = nameType(entityType, name);
 
   if (type !== "integer") {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `range ${Interpreter.inspect(range)} requires an integer attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}`,
     );
   }
 
   if (field(range, "step").value !== 1n) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `stepped range ${Interpreter.inspect(range)} for attribute ${inspectName(name)} is not supported - membership ranges use step 1`,
     );
   }
 
   if (field(range, "last").value < field(range, "first").value) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `range ${Interpreter.inspect(range)} for attribute ${inspectName(name)} is empty - it would match nothing`,
     );
   }
@@ -1508,7 +1508,7 @@ function validateMembershipRange(range, name, entityType) {
 // is read through the relationships its definition reads.
 function validateNotDerivedHop(hop, entityType, reason) {
   if (Object.hasOwn(Model.derived(entityType), hop.value)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(hop)} is a derived field in ${entityType} - ${reason}`,
     );
   }
@@ -1526,7 +1526,7 @@ function validateOperandName(operandName, entityType) {
   }
 
   if (!isPath(name)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `invalid attribute operand ${Interpreter.inspect(Type.tuple([Type.atom("attribute"), operandName]))} - an attribute is named by an atom, and a path by a list of two or more atoms`,
     );
   }
@@ -1539,7 +1539,7 @@ function validateOperandName(operandName, entityType) {
 // key its ordering uses, which the kernel reads off the row.
 function validateOrderableAttribute(name, entityType, operator) {
   if (isDerivedString(entityType, name)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `operator :${operator} requires an orderable attribute - ${inspectName(name)} in ${entityType} is a derived string, and a string compares by the sort key stored with it, which a computed string has none of`,
     );
   }
@@ -1547,7 +1547,7 @@ function validateOrderableAttribute(name, entityType, operator) {
   const type = nameType(entityType, name);
 
   if (!ORDERABLE_TYPES.includes(type)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `operator :${operator} requires an orderable attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}, and boolean and uuid attributes have no order to compare by`,
     );
   }
@@ -1568,7 +1568,7 @@ function validatePath(path, entityType) {
 
 function validatePathHop(hop, entityType) {
   if (Object.hasOwn(Model.inverses(entityType), hop.value)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(hop)} is an inverse relationship in ${entityType} - a path in a condition goes through to-one relationships that hold their reference`,
     );
   }
@@ -1576,7 +1576,7 @@ function validatePathHop(hop, entityType) {
   const relationship = Model.entry(entityType).relationships[hop.value];
 
   if (relationship && relationship.toMany) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(hop)} is a to-many relationship in ${entityType} - a path in a condition goes through to-one relationships only`,
     );
   }
@@ -1586,7 +1586,7 @@ function validatePathHop(hop, entityType) {
   }
 
   if (attributeNames(entityType).includes(hop.value)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(hop)} is an attribute in ${entityType} - a path goes through relationships, and only its last name is an attribute`,
     );
   }
@@ -1601,7 +1601,7 @@ function validatePathHop(hop, entityType) {
     .map((relationshipName) => `:${relationshipName}`)
     .join(", ");
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown relationship ${Interpreter.inspect(hop)} in ${entityType} - known relationships: ${known}`,
   );
 }
@@ -1614,7 +1614,7 @@ function validateScalarOperand(name, operator, operand, refuseNil = false) {
     (refuseNil && Type.isNil(operand));
 
   if (invalid) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `invalid operand ${Interpreter.inspect(operand)} for operator :${operator} on attribute ${inspectName(name)}`,
     );
   }
@@ -1624,7 +1624,7 @@ function validateScalarOperand(name, operator, operand, refuseNil = false) {
 // loose match.
 function validateSearchableAttribute(name, entityType, operator) {
   if (isDerivedString(entityType, name)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `operator :${operator} requires a stored string - ${inspectName(name)} in ${entityType} is a derived string, and a search reads the forms stored with a string`,
     );
   }
@@ -1632,7 +1632,7 @@ function validateSearchableAttribute(name, entityType, operator) {
   const type = nameType(entityType, name);
 
   if (type !== "string") {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `operator :${operator} requires a string attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}`,
     );
   }
@@ -1679,7 +1679,7 @@ function validateSourceSet(name, entityType) {
       return inverses[name.value].type;
     }
 
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is an inverse relationship holding one row in ${entityType} - any, none and all ask about the rows of a to-many relationship`,
     );
   }
@@ -1691,7 +1691,7 @@ function validateSourceSet(name, entityType) {
   }
 
   if (relationship) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(name)} is a to-one relationship in ${entityType} - any, none and all ask about the rows of a to-many relationship - compare the related row through a path: ${name.value}.<attribute>`,
     );
   }
@@ -1714,7 +1714,7 @@ function validateAmount(amount, stage) {
     return;
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     stage === "increment"
       ? `increment takes an integer amount, got: ${Interpreter.inspect(amount)}`
       : `decrement takes a positive integer amount, got: ${Interpreter.inspect(amount)}`,
@@ -1732,38 +1732,38 @@ function validateDeltaName(name, entityType, stage) {
   const spelled = Interpreter.inspect(name);
 
   if (named !== null && integerNames(entityType).includes(named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} in ${entityType} is optional and can hold nil - ${stage} moves attributes that always hold a number - declare it without optional: true, with a default`,
     );
   }
 
   if (named !== null && systemAttributeNames(entityType).includes(named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is a system attribute of ${entityType} - it is managed automatically and can't be moved`,
     );
   }
 
   if (named !== null && attributeNames(entityType).includes(named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is a :${attributeType(entityType, named)} attribute of ${entityType} - ${stage} moves integer attributes only`,
     );
   }
 
   if (named !== null && relationshipNames(entityType).includes(named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is a relationship in ${entityType} - ${stage} moves integer attributes only`,
     );
   }
 
   if (named !== null && Object.hasOwn(Model.derived(entityType), named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       Model.derivedReadOnlyMessage(entityType, named),
     );
   }
 
   const known = counters.map((counter) => `:${counter}`).join(", ");
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown attribute ${spelled} in ${entityType} - known counters: ${known}`,
   );
 }
@@ -1779,32 +1779,32 @@ function validateEdgeRelationshipName(name, entityType, stage) {
   const spelled = Interpreter.inspect(name);
 
   if (named !== null && Object.hasOwn(Model.inverses(entityType), named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is an inverse relationship in ${entityType} - it reads ${Model.describeInverse(entityType, named)}, so ${inverseWriteFix(entityType, named, stage)}`,
     );
   }
 
   if (named !== null && toOneRelationshipNames(entityType).includes(named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is a to-one relationship in ${entityType} - only to-many relationships hold edges - set its reference via put_attribute(:${named}_id, id)`,
     );
   }
 
   if (named !== null && attributeNames(entityType).includes(named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is an attribute in ${entityType} - only to-many relationships hold edges - put it via put_attribute`,
     );
   }
 
   if (named !== null && Object.hasOwn(Model.derived(entityType), named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       Model.derivedReadOnlyMessage(entityType, named),
     );
   }
 
   const known = toManyNames.map((toMany) => `:${toMany}`).join(", ");
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown relationship ${spelled} in ${entityType} - known to-many relationships: ${known}`,
   );
 }
@@ -1820,38 +1820,38 @@ function validatePutName(name, entityType) {
   const spelled = Interpreter.inspect(name);
 
   if (named !== null && toOneRelationshipNames(entityType).includes(named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is a relationship in ${entityType} - only attributes can be put - set its reference via :${named}_id`,
     );
   }
 
   if (named !== null && Object.hasOwn(Model.inverses(entityType), named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is an inverse relationship in ${entityType} - only attributes can be put - it reads ${Model.describeInverse(entityType, named)}, so write that instead`,
     );
   }
 
   if (named !== null && relationshipNames(entityType).includes(named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is a relationship in ${entityType} - only attributes can be put - add its edges via add_relationship`,
     );
   }
 
   if (named !== null && systemAttributeNames(entityType).includes(named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${spelled} is a system attribute of ${entityType} - it is managed automatically and can't be put`,
     );
   }
 
   if (named !== null && Object.hasOwn(Model.derived(entityType), named)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       Model.derivedReadOnlyMessage(entityType, named),
     );
   }
 
   const known = settable.map((settableName) => `:${settableName}`).join(", ");
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown attribute ${spelled} in ${entityType} - known attributes: ${known}`,
   );
 }
@@ -1884,7 +1884,7 @@ const Elixir_Hologram_Query_Stage = {
 
   "authorize/2": (entity, operation) => {
     if (!Type.isAtom(operation)) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `authorize takes an operation atom, got: ${Interpreter.inspect(operation)}`,
       );
     }
@@ -1917,7 +1917,7 @@ const Elixir_Hologram_Query_Stage = {
     const term = toTerm(query);
 
     if (!isPredicateList(predicates)) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: ${Interpreter.inspect(predicates)}`,
       );
     }
@@ -1935,13 +1935,13 @@ const Elixir_Hologram_Query_Stage = {
 
     if (Type.isList(spec)) {
       if (spec.data.length === 0) {
-        Interpreter.raiseArgumentError("include spec must not be empty");
+        Interpreter.raiseMisuseError("include spec must not be empty");
       }
 
       return spec.data.reduce(includeSpecEntry, toTerm(query));
     }
 
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `include spec must be a relationship name or a shape list, got: ${Interpreter.inspect(spec)}`,
     );
   },
@@ -1986,7 +1986,7 @@ const Elixir_Hologram_Query_Stage = {
   // claiming it would be asking this client's copy of the data to answer past the policies that
   // decided what it holds. A helper reaching for it learns at its own line that it is server code.
   "trust/1": (_subject) => {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       "trust is the server's authority - a client cannot claim it",
     );
   },

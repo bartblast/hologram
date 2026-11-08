@@ -162,10 +162,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end)
   end
 
-  # A build refuses a component's queries two ways, and both mean unbuildable here: a validation
-  # objecting to the term (Hologram.CompileError), and a query stage refusing its own arguments
-  # while the extractor evaluates the capture (ArgumentError). The question is whether the build
-  # can produce this component's queries at all, not which tier said no.
+  # A build refuses a component's queries three ways, and all mean unbuildable here: a validation
+  # objecting to the term (Hologram.CompileError), a query stage refusing its own arguments while
+  # the extractor evaluates the capture (Hologram.MisuseError), and a derived field the queries
+  # read that this build never resolved (ArgumentError). The question is whether the build can
+  # produce this component's queries at all, not which tier said no.
   defp buildable_queries?(module, entity_types) do
     [module]
     |> Compiler.extract_component_queries(entity_types, PLT.start())
@@ -175,6 +176,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   rescue
     ArgumentError -> false
     Hologram.CompileError -> false
+    Hologram.MisuseError -> false
   end
 
   # Only a component declaring a from_query prop can be refused - one without produces no terms,

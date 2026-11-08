@@ -77,8 +77,8 @@ defmodule Hologram.Auth do
 
   Takes the user entity or a bare user id, and nil for an anonymous session - rules referencing
   the acting user never match then. A framework operation the entity type declares no rule for is
-  denied; an operation nothing on the entity type declares is refused with ArgumentError - see
-  Hologram.Policy.validate_operation!/2.
+  denied; an operation nothing on the entity type declares is refused with Hologram.MisuseError -
+  see Hologram.Policy.validate_operation!/2.
 
   The operation is an atom, or `{:grant_role, role}` / `{:revoke_role, role}` asking about one role -
   the bare `:grant_role` or `:revoke_role` asks whether the user may grant or revoke some role at all.

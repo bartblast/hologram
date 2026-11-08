@@ -520,6 +520,9 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :put, 3}
     ],
     interpreter_class: [
+      # Interpreter.raiseMisuseError raises this by name, for the reason given at
+      # manually_ported_auth_module.
+      {Hologram.MisuseError, :message, 1},
       {Enum, :into, 2},
       {Enum, :to_list, 1},
       {Exception, :blame, 3},

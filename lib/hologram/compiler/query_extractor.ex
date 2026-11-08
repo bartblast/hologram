@@ -7,6 +7,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Derived.RowRef
+  alias Hologram.MisuseError
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.RowField
@@ -317,11 +318,11 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   # A stage call the developer wrote is theirs to read, so a refusal from it is reraised carrying
-  # the prop it belongs to, which the ArgumentError cannot know.
+  # the prop it belongs to, which the error cannot know.
   defp apply_authored_stage!(function, arg_values, context) do
     apply(Stage, function, arg_values)
   rescue
-    error in ArgumentError ->
+    error in [ArgumentError, MisuseError] ->
       reraise Hologram.CompileError,
               [
                 message: stage_error_message(function, arg_values, error, context),
@@ -337,7 +338,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp apply_derived!(function, arg_values, context) do
     apply(Derived, function, arg_values)
   rescue
-    error in ArgumentError ->
+    error in [ArgumentError, MisuseError] ->
       reraise Hologram.CompileError,
               [
                 message:
@@ -1486,6 +1487,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   rescue
     ArgumentError -> []
     Hologram.CompileError -> []
+    MisuseError -> []
   end
 
   # A record becomes the queries it admits: over every entity type of the build when the entity

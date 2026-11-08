@@ -11,6 +11,7 @@ defmodule Hologram.Query.Stage do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
+  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Placeholder
@@ -48,7 +49,7 @@ defmodule Hologram.Query.Stage do
   end
 
   def authorize(_entity, operation) do
-    raise ArgumentError, message: "authorize takes an operation atom, got: #{inspect(operation)}"
+    raise MisuseError, message: "authorize takes an operation atom, got: #{inspect(operation)}"
   end
 
   # Returns the polarity of a quantifier's condition, given the quantifier's own: whether the
@@ -73,7 +74,7 @@ defmodule Hologram.Query.Stage do
     term = to_term(query)
 
     if term.cardinality != :set do
-      raise ArgumentError,
+      raise MisuseError,
         message: "cardinality is already set to #{inspect(term.cardinality)}"
     end
 
@@ -146,13 +147,13 @@ defmodule Hologram.Query.Stage do
     term = to_term(query)
 
     if not filterable_predicates?(predicates) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: #{inspect(predicates)}"
     end
 
     if term.source == nil and row_field?(predicates) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "a row field stands for a field of the row a derived field is computed for, so only a derived field's query compares with one, got: #{inspect(predicates)}"
     end
@@ -173,7 +174,7 @@ defmodule Hologram.Query.Stage do
 
   def include(query, spec) when is_list(spec) do
     if spec == [] do
-      raise ArgumentError, message: "include spec must not be empty"
+      raise MisuseError, message: "include spec must not be empty"
     end
 
     term = to_term(query)
@@ -182,7 +183,7 @@ defmodule Hologram.Query.Stage do
   end
 
   def include(_query, spec) do
-    raise ArgumentError,
+    raise MisuseError,
       message: "include spec must be a relationship name or a shape list, got: #{inspect(spec)}"
   end
 
@@ -260,7 +261,7 @@ defmodule Hologram.Query.Stage do
     term = to_term(query)
 
     if term.cardinality != :set do
-      raise ArgumentError,
+      raise MisuseError,
         message: "cardinality is already set to #{inspect(term.cardinality)}"
     end
 
@@ -271,14 +272,14 @@ defmodule Hologram.Query.Stage do
   @spec paginate(module | Query.t(), keyword) :: Query.t()
   def paginate(query, opts) do
     if not Keyword.keyword?(opts) do
-      raise ArgumentError,
+      raise MisuseError,
         message: "paginate options must be a keyword list, got: #{inspect(opts)}"
     end
 
     unknown_keys = Keyword.keys(opts) -- [:page, :size]
 
     if unknown_keys != [] do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "unknown paginate option #{inspect(hd(unknown_keys))} - supported options: :page, :size"
     end
@@ -359,7 +360,7 @@ defmodule Hologram.Query.Stage do
     entity_type = entity_type!(entity, "put_attribute")
 
     if is_list(values) and not Keyword.keyword?(values) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "put_attribute takes a keyword list or a map of attribute values, got: #{inspect(values)}"
     end
@@ -383,7 +384,7 @@ defmodule Hologram.Query.Stage do
   end
 
   def put_attribute(_entity, values) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "put_attribute takes a keyword list or a map of attribute values, got: #{inspect(values)}"
   end
@@ -437,13 +438,13 @@ defmodule Hologram.Query.Stage do
   @spec sourced(module, list(atom)) :: Query.t()
   def sourced(owner, chain) do
     if not Reflection.entity?(owner) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(owner)} is not an entity type module - a derived field's query starts from a row of the entity type declaring it"
     end
 
     if not is_list(chain) or chain == [] or not Enum.all?(chain, &is_atom/1) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "a derived field's query is sourced by a list of relationship names, got: #{inspect(chain)}"
     end
@@ -661,7 +662,7 @@ defmodule Hologram.Query.Stage do
             do: derived_rows_spelled(definition),
             else: "a #{inspect(type)} value"
 
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a derived field holding #{held} in #{inspect(entity_type)} - #{reason}"
 
@@ -696,14 +697,14 @@ defmodule Hologram.Query.Stage do
   # is spared both shapes. The lowering never produces either.
   defp disjunction!(scope, alternatives) do
     if length(alternatives) < 2 do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "a disjunction takes a list of at least two predicate lists, got: #{inspect(alternatives)}"
     end
 
     Enum.each(alternatives, fn alternative ->
       if alternative == [] or not filterable_predicates?(alternative) do
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "an alternative of a disjunction is a non-empty list of name and value pairs, got: #{inspect(alternative)}"
       end
@@ -717,13 +718,13 @@ defmodule Hologram.Query.Stage do
     if Reflection.entity?(entity_type) do
       entity_type
     else
-      raise ArgumentError,
+      raise MisuseError,
         message: "#{stage} takes an entity struct, got: #{inspect(%{__struct__: entity_type})}"
     end
   end
 
   defp entity_type!(subject, stage) do
-    raise ArgumentError, message: "#{stage} takes an entity struct, got: #{inspect(subject)}"
+    raise MisuseError, message: "#{stage} takes an entity struct, got: #{inspect(subject)}"
   end
 
   defp enum_values(entity_type, name) do
@@ -734,7 +735,7 @@ defmodule Hologram.Query.Stage do
 
   defp equality_triple!(name, operator, operand) do
     if is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)}"
     end
@@ -771,7 +772,7 @@ defmodule Hologram.Query.Stage do
   # A function would narrow the set, which is what a derived field does - refused naming one.
   defp include_spec_entry!(_term, {name, function} = entry)
        when is_atom(name) and is_function(function) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "invalid include spec entry #{inspect(entry)} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end"
   end
@@ -783,7 +784,7 @@ defmodule Hologram.Query.Stage do
   end
 
   defp include_spec_entry!(_term, entry) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "invalid include spec entry #{inspect(entry)} - use a relationship name or a {name, spec} pair"
   end
@@ -873,7 +874,7 @@ defmodule Hologram.Query.Stage do
         value + delta
 
       nil ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} in #{inspect(entity_type)} holds nil - a counter always holds a number, so there is nothing for #{stage} to move - read the row first, or give the attribute a default"
     end
@@ -895,7 +896,7 @@ defmodule Hologram.Query.Stage do
     if is_integer(levels) and levels >= 1 and levels <= rows_above do
       Enum.at(scope, levels)
     else
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(name)} names no row above the condition it stands in, which has #{rows_spelled(rows_above)} above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row"
     end
@@ -908,7 +909,7 @@ defmodule Hologram.Query.Stage do
   defp nested_sub_term!(entity_type, name, nested_spec) do
     case validate_included_name!(name, entity_type) do
       {type, :derived_value} ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a #{inspect(type)} derived field in #{inspect(entity_type)} - nothing is included under it"
 
@@ -992,7 +993,7 @@ defmodule Hologram.Query.Stage do
   defp order_direction!(direction, _key) when direction in @directions, do: direction
 
   defp order_direction!(direction, key) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "invalid direction #{inspect(direction)} for attribute #{inspect(key)} - use :asc or :desc"
   end
@@ -1013,7 +1014,7 @@ defmodule Hologram.Query.Stage do
   end
 
   defp order_entries!(spec, _entity_type) do
-    raise ArgumentError,
+    raise MisuseError,
       message: "sort spec must be an attribute name or a list, got: #{inspect(spec)}"
   end
 
@@ -1040,7 +1041,7 @@ defmodule Hologram.Query.Stage do
   end
 
   defp order_entry!(entry, _entity_type) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "invalid sort entry #{inspect(entry)} - use an attribute name or an {attribute, :asc | :desc} tuple"
   end
@@ -1049,7 +1050,7 @@ defmodule Hologram.Query.Stage do
     validate_orderable_attribute!(name, entity_type, operator)
 
     if is_nil(operand) or is_list(operand) or is_tuple(operand) or is_struct(operand, Range) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)}"
     end
@@ -1204,14 +1205,14 @@ defmodule Hologram.Query.Stage do
   end
 
   defp predicate_triples!(name, value, _entity_type, _scope) when is_tuple(value) do
-    raise ArgumentError,
+    raise MisuseError,
       message: "invalid filter value #{inspect(value)} for attribute #{inspect_name(name)}"
   end
 
   defp predicate_triples!(name, values, entity_type, scope) when is_list(values) do
     cond do
       values == [] ->
-        raise ArgumentError,
+        raise MisuseError,
           message: "filter list for attribute #{inspect_name(name)} must not be empty"
 
       Enum.all?(values, &constraint_tuple?/1) ->
@@ -1222,7 +1223,7 @@ defmodule Hologram.Query.Stage do
         [{name, :in, normalize_membership_values(values)}]
 
       true ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "invalid filter list #{inspect(values)} for attribute #{inspect_name(name)} - use either a membership list of plain values or a list of operator tuples"
     end
@@ -1239,7 +1240,7 @@ defmodule Hologram.Query.Stage do
     %Metadata{claim: recorded_claim} = metadata = entity.__meta__
 
     if recorded_claim != nil do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(entity_type)} already carries a claim (#{inspect(recorded_claim)}) - a write claims exactly one authority"
     end
@@ -1264,7 +1265,7 @@ defmodule Hologram.Query.Stage do
         put_attribute(entity, name, value + sign * amount)
 
       {:put, value} ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} in #{inspect(entity_type)} carries a put value that is not an integer (#{inspect(value)}) - #{stage} cannot move it"
 
@@ -1296,7 +1297,7 @@ defmodule Hologram.Query.Stage do
     validate_edge_relationship_name!(relationship_name, entity_type, stage)
 
     if not is_binary(target_id) do
-      raise ArgumentError,
+      raise MisuseError,
         message: "#{stage} takes a target id string, got: #{inspect(target_id)}"
     end
 
@@ -1314,13 +1315,13 @@ defmodule Hologram.Query.Stage do
     related_type = validate_source!(hops, source_type)
 
     if not filterable_predicates?(predicates) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "a quantifier's condition is a list of name and value pairs, got: #{inspect(predicates)}"
     end
 
     if quantifier == :all and predicates == [] do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "all takes a condition - all over no condition says nothing, got: #{inspect(value)}"
     end
@@ -1337,7 +1338,7 @@ defmodule Hologram.Query.Stage do
   @spec raise_unknown_included_name!(atom, module) :: no_return
   defp raise_unknown_included_name!(name, entity_type) do
     if name in attribute_names(entity_type) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only relationships and derived fields can be included"
     end
@@ -1347,13 +1348,13 @@ defmodule Hologram.Query.Stage do
       |> Entity.loadable_names()
       |> Enum.map_join(", ", &inspect/1)
 
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships and derived fields: #{known}"
   end
 
   defp raise_unknown_operator!(operator, name) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "unknown operator #{inspect(operator)} in the filter predicate for attribute #{inspect_name(name)} - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact"
   end
@@ -1362,7 +1363,7 @@ defmodule Hologram.Query.Stage do
   @spec raise_unknown_source_name!(atom, module, String.t()) :: no_return
   defp raise_unknown_source_name!(name, entity_type, source) do
     if name in attribute_names(entity_type) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(name)} is an attribute in #{inspect(entity_type)} - #{source} names relationships"
     end
@@ -1372,7 +1373,7 @@ defmodule Hologram.Query.Stage do
       |> Entity.includable_names()
       |> Enum.map_join(", ", &inspect/1)
 
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known relationships: #{known}"
   end
@@ -1454,13 +1455,13 @@ defmodule Hologram.Query.Stage do
     owner = List.last(scope)
 
     if row_field.owner != owner do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(row_field)} reads a field of a #{inspect(row_field.owner)} row, but this query belongs to a derived field of #{inspect(owner)}"
     end
 
     if not (is_atom(name) or path?(name)) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(row_field)} names no field - a row field names an attribute by an atom, and a path by a list of two or more atoms"
     end
@@ -1478,7 +1479,7 @@ defmodule Hologram.Query.Stage do
         |> List.wrap()
         |> Enum.join(".")
 
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(row_field)} names the #{inspect(end_name)} relationship of #{inspect(end_type)} - a row field names an attribute: #{spelled}.<attribute>"
     end
@@ -1543,7 +1544,7 @@ defmodule Hologram.Query.Stage do
     validate_searchable_attribute!(name, entity_type, operator)
 
     if not is_binary(operand) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "invalid operand #{inspect(operand)} for operator #{inspect(operator)} on attribute #{inspect_name(name)} - a search term is a string"
     end
@@ -1552,7 +1553,7 @@ defmodule Hologram.Query.Stage do
   end
 
   defp set_view_bound!(_query, field, %RowField{} = row_field) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "#{field} must be a non-negative integer, got: #{inspect(row_field)} - a bound is known when the query is built, and a row field has no value then"
   end
@@ -1567,7 +1568,7 @@ defmodule Hologram.Query.Stage do
     term = to_term(query)
 
     if not is_integer(value) or value < 0 do
-      raise ArgumentError,
+      raise MisuseError,
         message: "#{field} must be a non-negative integer, got: #{inspect(value)}"
     end
 
@@ -1640,7 +1641,7 @@ defmodule Hologram.Query.Stage do
     if Reflection.entity?(query) do
       %Query{entity: query}
     else
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(query)} is not an entity type module or a query term - a query starts from a module with the \"use Hologram.Entity\" directive"
     end
@@ -1652,7 +1653,7 @@ defmodule Hologram.Query.Stage do
     type = attribute_type(entity_type, name)
 
     if type != :uuid do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "user_id() requires a uuid attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
     end
@@ -1667,11 +1668,11 @@ defmodule Hologram.Query.Stage do
   defp validate_amount!(amount, "decrement") when is_integer(amount) and amount > 0, do: :ok
 
   defp validate_amount!(amount, "increment") do
-    raise ArgumentError, message: "increment takes an integer amount, got: #{inspect(amount)}"
+    raise MisuseError, message: "increment takes an integer amount, got: #{inspect(amount)}"
   end
 
   defp validate_amount!(amount, "decrement") do
-    raise ArgumentError,
+    raise MisuseError,
       message: "decrement takes a positive integer amount, got: #{inspect(amount)}"
   end
 
@@ -1686,7 +1687,7 @@ defmodule Hologram.Query.Stage do
 
     cond do
       derived_string?(entity_type, name) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a derived string in #{inspect(entity_type)} - a string is #{usage} by the sort key stored with it, which a computed string has none of"
 
@@ -1694,19 +1695,19 @@ defmodule Hologram.Query.Stage do
         :ok
 
       name in relationship_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be #{usage}"
 
       derived = derived_rows_definition(entity_type, name) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a derived field holding #{derived_rows_spelled(derived)} in #{inspect(entity_type)} - only attributes can be #{usage}"
 
       true ->
         known = Enum.map_join(attribute_names, ", ", &inspect/1)
 
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
     end
@@ -1742,7 +1743,7 @@ defmodule Hologram.Query.Stage do
   # The two names may live on two rows - inside a quantifier, the related row and one above it - so
   # each is typed on its own row, and the same name on two rows is two attributes.
   defp validate_comparable_attributes!(name, name, operator, entity_type, _other_entity_type) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "operator #{inspect(operator)} compares attribute #{inspect_name(name)} in #{inspect(entity_type)} with itself"
   end
@@ -1754,13 +1755,13 @@ defmodule Hologram.Query.Stage do
 
     cond do
       type != other_type and {type, other_type} not in @widenings ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "operator #{inspect(operator)} compares #{compared}, which have different types (#{inspect(type)} and #{inspect(other_type)}) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
 
       type == :enum and
           enum_values(entity_type, name) != enum_values(other_entity_type, other) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "operator #{inspect(operator)} compares #{compared}, which declare different values (#{inspect(enum_values(entity_type, name))} and #{inspect(enum_values(other_entity_type, other))}) - two enum attributes compare only when they declare the same values in the same order"
 
@@ -1778,32 +1779,32 @@ defmodule Hologram.Query.Stage do
         :ok
 
       name in integer_names(entity_type.__attributes__()) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} in #{inspect(entity_type)} is optional and can hold nil - #{stage} moves attributes that always hold a number - declare it without optional: true, with a default"
 
       name in system_names ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a system attribute of #{inspect(entity_type)} - it is managed automatically and can't be moved"
 
       name in attribute_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a #{inspect(attribute_type(entity_type, name))} attribute of #{inspect(entity_type)} - #{stage} moves integer attributes only"
 
       name in relationship_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - #{stage} moves integer attributes only"
 
       Derived.declared?(entity_type, name) ->
-        raise ArgumentError, message: Derived.read_only_message(entity_type, name)
+        raise MisuseError, message: Derived.read_only_message(entity_type, name)
 
       true ->
         known = Enum.map_join(counter_names, ", ", &inspect/1)
 
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known counters: #{known}"
     end
@@ -1820,27 +1821,27 @@ defmodule Hologram.Query.Stage do
         :ok
 
       name in inverse_relationship_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is an inverse relationship in #{inspect(entity_type)} - it reads #{Entity.describe_inverse(entity_type, name)}, so #{inverse_write_fix(entity_type, name, stage)}"
 
       name in to_one_relationship_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a to-one relationship in #{inspect(entity_type)} - only to-many relationships hold edges - set its reference via put_attribute(:#{name}_id, id)"
 
       name in attribute_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is an attribute in #{inspect(entity_type)} - only to-many relationships hold edges - put it via put_attribute"
 
       Derived.declared?(entity_type, name) ->
-        raise ArgumentError, message: Derived.read_only_message(entity_type, name)
+        raise MisuseError, message: Derived.read_only_message(entity_type, name)
 
       true ->
         known = Enum.map_join(to_many_names, ", ", &inspect/1)
 
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "unknown relationship #{inspect(name)} in #{inspect(entity_type)} - known to-many relationships: #{known}"
     end
@@ -1855,7 +1856,7 @@ defmodule Hologram.Query.Stage do
         values = Keyword.fetch!(opts, :values)
 
         if operand not in values do
-          raise ArgumentError,
+          raise MisuseError,
             message:
               "#{inspect(operand)} is not a value of attribute #{inspect_name(name)} in #{inspect(entity_type)} - the values are #{inspect(values)}"
         end
@@ -1873,24 +1874,24 @@ defmodule Hologram.Query.Stage do
         :ok
 
       name in to_one_relationship_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered - filter its reference via :#{name}_id"
 
       name in relationship_names(entity_type) or name in inverse_relationship_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be filtered"
 
       derived = derived_rows_definition(entity_type, name) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a derived field holding #{derived_rows_spelled(derived)} in #{inspect(entity_type)} - only attributes can be filtered"
 
       true ->
         known = Enum.map_join(filterable_names, ", ", &inspect/1)
 
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
     end
@@ -1916,18 +1917,18 @@ defmodule Hologram.Query.Stage do
 
   defp validate_membership_list!(values, name, _operator) when is_list(values) do
     if values == [] do
-      raise ArgumentError,
+      raise MisuseError,
         message: "membership list for attribute #{inspect_name(name)} must not be empty"
     end
 
     Enum.each(values, fn
       value when is_list(value) or is_tuple(value) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "invalid membership list element #{inspect(value)} for attribute #{inspect_name(name)} - membership lists hold plain values"
 
       value when is_struct(value, Range) or is_struct(value, RowField) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "invalid membership list element #{inspect(value)} for attribute #{inspect_name(name)} - membership lists hold plain values"
 
@@ -1937,7 +1938,7 @@ defmodule Hologram.Query.Stage do
   end
 
   defp validate_membership_list!(operand, name, operator) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "operator #{inspect(operator)} on attribute #{inspect_name(name)} requires a list operand, got: #{inspect(operand)}"
   end
@@ -1946,19 +1947,19 @@ defmodule Hologram.Query.Stage do
     type = attribute_type(entity_type, name)
 
     if type != :integer do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "range #{inspect(range)} requires an integer attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
     end
 
     if range.step != 1 do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "stepped range #{inspect(range)} for attribute #{inspect_name(name)} is not supported - membership ranges use step 1"
     end
 
     if Range.size(range) == 0 do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "range #{inspect(range)} for attribute #{inspect_name(name)} is empty - it would match nothing"
     end
@@ -1968,7 +1969,7 @@ defmodule Hologram.Query.Stage do
   # is read through the relationships its definition reads.
   defp validate_not_derived_hop!(hop, entity_type, reason) do
     if Derived.declared?(entity_type, hop) do
-      raise ArgumentError,
+      raise MisuseError,
         message: "#{inspect(hop)} is a derived field in #{inspect(entity_type)} - #{reason}"
     end
   end
@@ -1983,7 +1984,7 @@ defmodule Hologram.Query.Stage do
 
       name ->
         if not path?(name) do
-          raise ArgumentError,
+          raise MisuseError,
             message:
               "invalid attribute operand #{inspect({:attribute, operand_name})} - an attribute is named by an atom, and a path by a list of two or more atoms"
         end
@@ -1994,7 +1995,7 @@ defmodule Hologram.Query.Stage do
 
   defp validate_orderable_attribute!(name, entity_type, operator) do
     if derived_string?(entity_type, name) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "operator #{inspect(operator)} requires an orderable attribute - #{inspect_name(name)} in #{inspect(entity_type)} is a derived string, and a string compares by the sort key stored with it, which a computed string has none of"
     end
@@ -2002,7 +2003,7 @@ defmodule Hologram.Query.Stage do
     type = attribute_type(entity_type, name)
 
     if type not in @orderable_types do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "operator #{inspect(operator)} requires an orderable attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}, and boolean and uuid attributes have no order to compare by"
     end
@@ -2017,11 +2018,11 @@ defmodule Hologram.Query.Stage do
         value
 
       {:ok, value} ->
-        raise ArgumentError,
+        raise MisuseError,
           message: "#{key} must be a positive integer, got: #{inspect(value)}"
 
       :error ->
-        raise ArgumentError, message: "paginate requires the #{inspect(key)} option"
+        raise MisuseError, message: "paginate requires the #{inspect(key)} option"
     end
   end
 
@@ -2040,14 +2041,14 @@ defmodule Hologram.Query.Stage do
     definitions = entity_type.__relationships__()
 
     if hop in inverse_relationship_names(entity_type) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(hop)} is an inverse relationship in #{inspect(entity_type)} - a path in a condition goes through to-one relationships that hold their reference"
     end
 
     case Enum.find(definitions, fn {name, _type, _opts} -> name == hop end) do
       {_name, [_target], _opts} ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(hop)} is a to-many relationship in #{inspect(entity_type)} - a path in a condition goes through to-one relationships only"
 
@@ -2056,7 +2057,7 @@ defmodule Hologram.Query.Stage do
 
       nil ->
         if hop in attribute_names(entity_type) do
-          raise ArgumentError,
+          raise MisuseError,
             message:
               "#{inspect(hop)} is an attribute in #{inspect(entity_type)} - a path goes through relationships, and only its last name is an attribute"
         end
@@ -2072,7 +2073,7 @@ defmodule Hologram.Query.Stage do
           |> relationship_names()
           |> Enum.map_join(", ", &inspect/1)
 
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "unknown relationship #{inspect(hop)} in #{inspect(entity_type)} - known relationships: #{known}"
     end
@@ -2095,32 +2096,32 @@ defmodule Hologram.Query.Stage do
         :ok
 
       name in to_one_relationship_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be put - set its reference via :#{name}_id"
 
       name in inverse_relationship_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is an inverse relationship in #{inspect(entity_type)} - only attributes can be put - it reads #{Entity.describe_inverse(entity_type, name)}, so write that instead"
 
       name in relationship_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a relationship in #{inspect(entity_type)} - only attributes can be put - add its edges via add_relationship"
 
       name in system_attribute_names(entity_type) ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is a system attribute of #{inspect(entity_type)} - it is managed automatically and can't be put"
 
       Derived.declared?(entity_type, name) ->
-        raise ArgumentError, message: Derived.read_only_message(entity_type, name)
+        raise MisuseError, message: Derived.read_only_message(entity_type, name)
 
       true ->
         known = Enum.map_join(settable_names, ", ", &inspect/1)
 
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "unknown attribute #{inspect(name)} in #{inspect(entity_type)} - known attributes: #{known}"
     end
@@ -2130,7 +2131,7 @@ defmodule Hologram.Query.Stage do
   # loose match.
   defp validate_searchable_attribute!(name, entity_type, operator) do
     if derived_string?(entity_type, name) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "operator #{inspect(operator)} requires a stored string - #{inspect_name(name)} in #{inspect(entity_type)} is a derived string, and a search reads the forms stored with a string"
     end
@@ -2138,7 +2139,7 @@ defmodule Hologram.Query.Stage do
     type = attribute_type(entity_type, name)
 
     if type != :string do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "operator #{inspect(operator)} requires a string attribute - attribute #{inspect_name(name)} in #{inspect(entity_type)} has type #{inspect(type)}"
     end
@@ -2165,7 +2166,7 @@ defmodule Hologram.Query.Stage do
         target
 
       %{to_many?: false} ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is an inverse relationship holding one row in #{inspect(entity_type)} - any, none and all ask about the rows of a to-many relationship"
 
@@ -2175,7 +2176,7 @@ defmodule Hologram.Query.Stage do
             target
 
           {_name, _target, _opts} ->
-            raise ArgumentError,
+            raise MisuseError,
               message:
                 "#{inspect(name)} is a to-one relationship in #{inspect(entity_type)} - any, none and all ask about the rows of a to-many relationship - compare the related row through a path: #{name}.<attribute>"
 
@@ -2188,7 +2189,7 @@ defmodule Hologram.Query.Stage do
 
   defp validate_source_shape!(hops, source) do
     if hops == [] or not is_list(hops) or not Enum.all?(hops, &is_atom/1) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: #{inspect(source)}"
     end
@@ -2207,7 +2208,7 @@ defmodule Hologram.Query.Stage do
             do: "an inverse relationship holding one row",
             else: "a to-one relationship"
 
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(name)} is #{kind} in #{inspect(entity_type)} - a derived field's query reads a set - read the related row's attributes through a path: #{name}.<attribute>"
 

@@ -6,6 +6,7 @@ defmodule Hologram.JobCreateTest do
 
   alias Hologram.AccessDeniedError
   alias Hologram.DB
+  alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Job.Module1
   alias Hologram.Test.Fixtures.Job.Module2
@@ -133,7 +134,7 @@ defmodule Hologram.JobCreateTest do
       expected_msg =
         "unknown operation :no_such for Hologram.Test.Fixtures.Job.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         create(Module1, %{}, authorize: :no_such)
       end
     end

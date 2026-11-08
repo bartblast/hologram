@@ -155,7 +155,7 @@ describe("Elixir_Hologram_Job", () => {
             values([["reason", Type.bitstring("x")]]),
             opts([["authorize", Type.atom("no_such")]]),
           ),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown operation :no_such for MyApp.Jobs.Notify - its allow lines declare :notify, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
       );
     });

@@ -2853,7 +2853,7 @@ describe("Elixir_Hologram_Auth", () => {
     it("raises on an operation the entity type declares no rule for", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), Type.atom("transfer"), document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown operation :transfer for MyApp.Document - its allow lines declare :archive, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
       );
     });
@@ -2863,7 +2863,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown operation {:publish, :editor} for MyApp.Document - the operation tuples are {:grant_role, role} and {:revoke_role, role}",
       );
     });
@@ -2876,7 +2876,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown role :editr in {:grant_role, :editr} for MyApp.Document - declared roles are: :editor, :owner, :viewer",
       );
     });

@@ -4,6 +4,7 @@ defmodule Hologram.Entity.Validator do
   alias Hologram.Commons.Types, as: T
   alias Hologram.DB.Codec
   alias Hologram.Entity
+  alias Hologram.MisuseError
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
@@ -1661,7 +1662,7 @@ defmodule Hologram.Entity.Validator do
         nil
     end
   rescue
-    error in ArgumentError ->
+    error in [ArgumentError, MisuseError] ->
       "relationship #{inspect(name)} in #{inspect(entity_type)} has an invalid sort option - #{Exception.message(error)}"
   end
 

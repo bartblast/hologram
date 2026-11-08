@@ -16,6 +16,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Entity.Model
+  alias Hologram.MisuseError
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
@@ -6709,7 +6710,7 @@ defmodule Hologram.CompilerTest do
         "unknown relationship :unknown in Hologram.Test.Fixtures.Entity.Module3 - known " <>
           "relationships and derived fields: :a, :b, :c"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         extract_component_queries([ComponentModule29], entity_types, ir_plt)
       end
     end

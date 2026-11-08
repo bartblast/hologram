@@ -31,6 +31,7 @@ defmodule Hologram.PolicyTest do
 
   alias Hologram.Auth.RoleGrant
   alias Hologram.Entity.Derived
+  alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module2
@@ -1501,7 +1502,7 @@ defmodule Hologram.PolicyTest do
       expected_msg =
         "unknown operation :pin for Hologram.Test.Fixtures.Policy.Module1 - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, :pin)
       end
     end
@@ -1510,7 +1511,7 @@ defmodule Hologram.PolicyTest do
       expected_msg =
         "unknown operation :archive for Hologram.Test.Fixtures.Entity.Module1 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Module1, :archive)
       end
     end
@@ -1519,7 +1520,7 @@ defmodule Hologram.PolicyTest do
       expected_msg =
         "unknown operation :publish for Hologram.Test.Fixtures.Policy.Module4 - its allow lines declare :archive, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module4, :publish)
       end
     end
@@ -1528,7 +1529,7 @@ defmodule Hologram.PolicyTest do
       expected_msg =
         "unknown role :editr in {:grant_role, :editr} for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, {:grant_role, :editr})
       end
     end
@@ -1537,7 +1538,7 @@ defmodule Hologram.PolicyTest do
       expected_msg =
         "unknown role :editor in {:revoke_role, :editor} for Hologram.Test.Fixtures.Entity.Module1 - it declares no role"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Module1, {:revoke_role, :editor})
       end
     end
@@ -1546,7 +1547,7 @@ defmodule Hologram.PolicyTest do
       expected_msg =
         "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, {:publish, :editor})
       end
     end
@@ -1555,7 +1556,7 @@ defmodule Hologram.PolicyTest do
       expected_msg =
         "unknown operation {:grant_role, :editor, :extra} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, {:grant_role, :editor, :extra})
       end
     end
@@ -1564,7 +1565,7 @@ defmodule Hologram.PolicyTest do
       expected_msg =
         ~s(unknown operation "read" for Hologram.Test.Fixtures.Policy.Module1 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role})
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, wrap_term("read"))
       end
     end

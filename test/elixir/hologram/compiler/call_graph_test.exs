@@ -3416,13 +3416,14 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {:lists, :reverse, 1} in result
     end
 
-    # A port raises these by name, so no edge reaches the error modules and the app's own code may
-    # never name them.
-    test "includes the message functions of the errors the ports raise by name", %{
+    # A port or the interpreter raises these by name, so no edge reaches the error modules and the
+    # app's own code may never name them.
+    test "includes the message functions of the errors raised by name", %{
       runtime_mfas: result
     } do
       assert {Hologram.AccessDeniedError, :message, 1} in result
       assert {Hologram.AssetNotFoundError, :message, 1} in result
+      assert {Hologram.MisuseError, :message, 1} in result
       assert {Hologram.WriteError, :message, 1} in result
     end
 

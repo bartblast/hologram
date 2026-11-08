@@ -8,6 +8,7 @@ defmodule Hologram.Entity.Derived do
   # row the way it evaluates a filter.
 
   alias Hologram.Entity
+  alias Hologram.MisuseError
   alias Hologram.Query
   alias Hologram.Query.RowField
   alias Hologram.Query.Stage
@@ -50,8 +51,8 @@ defmodule Hologram.Entity.Derived do
   Returns the definition of whether the given predicates, in the filter data form, hold for a row of
   the given owning entity type - checked as a filter of that type is.
 
-  Raises ArgumentError when the predicates name what the type does not declare or compare what does
-  not compare.
+  Raises Hologram.MisuseError when the predicates name what the type does not declare or compare
+  what does not compare.
   """
   @spec condition(module, Query.predicates()) :: definition
   def condition(owner, predicates), do: {:condition, Stage.predicate_triples!(owner, predicates)}
@@ -109,10 +110,10 @@ defmodule Hologram.Entity.Derived do
   a value, and a row reference for one ending at a related row. A set before the path's end makes
   the rows every path reaches one set.
 
-  Raises ArgumentError when the path names what the type does not declare, reads past an attribute
-  or a derived field, ends at an attribute through a set or through an inverse - a value is read
-  through to-one relationships holding their reference, as a condition's path is - or ends at a
-  derived field holding one row.
+  Raises Hologram.MisuseError when the path names what the type does not declare, reads past an
+  attribute or a derived field, ends at an attribute through a set or through an inverse - a value
+  is read through to-one relationships holding their reference, as a condition's path is - or ends
+  at a derived field holding one row.
   """
   @spec field(module, list(atom)) :: Query.t() | RowField.t() | RowRef.t()
   def field(owner, path) do
@@ -133,7 +134,7 @@ defmodule Hologram.Entity.Derived do
         %RowField{owner: owner, name: name_of(path)}
 
       {:derived_row, _through_set?} ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{Enum.join(path, ".")} is a derived field holding one row - include it, or read the rows it is computed from"
 
@@ -141,7 +142,7 @@ defmodule Hologram.Entity.Derived do
         raise_unknown_field!(end_type, last, path, "a field")
 
       {_kind, true} ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{Enum.join(path, ".")} reads through a set to one value per row of it - a derived field reads a set's rows with a query, or one value of the row through to-one relationships"
     end
@@ -160,14 +161,14 @@ defmodule Hologram.Entity.Derived do
   sets as is, a row field as the name it stands for, an expression concat/1, if_value/3 or
   condition/2 built as is, and a plain value as a value.
 
-  Raises ArgumentError on a query that starts from an entity type rather than from the row, and on
-  a related row, which is the relationship itself rather than anything computed from it.
+  Raises Hologram.MisuseError on a query that starts from an entity type rather than from the row,
+  and on a related row, which is the relationship itself rather than anything computed from it.
   """
   @spec lower(any) :: definition
   def lower(%Query{source: {_owner, _chain}} = term), do: {:query, term}
 
   def lower(%Query{entity: entity_type}) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "a derived field's query starts from a relationship of the row, got a query of every #{inspect(entity_type)} - read the rows through an argument naming the relationship"
   end
@@ -182,7 +183,7 @@ defmodule Hologram.Entity.Derived do
   def lower({:condition, clauses} = expression) when is_list(clauses), do: expression
 
   def lower(%RowRef{path: path}) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "#{Enum.join(path, ".")} is a related row - include the relationship, or derive one of its attributes: #{Enum.join(path, ".")}.<attribute>"
   end
@@ -193,7 +194,7 @@ defmodule Hologram.Entity.Derived do
       do: {:value, value}
 
   def lower(value) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "a derived field computes a value of its type, a field of the row or a query over its rows, got: #{inspect(value)}"
   end
@@ -282,7 +283,7 @@ defmodule Hologram.Entity.Derived do
 
     normalize(definition)
   rescue
-    error in ArgumentError ->
+    error in [ArgumentError, MisuseError] ->
       {file, line} = Map.fetch!(entity_type.__derived_locations__(), name)
 
       reraise Hologram.CompileError,
@@ -597,7 +598,7 @@ defmodule Hologram.Entity.Derived do
 
   @spec raise_unknown_field!(module, atom, list(atom), String.t()) :: no_return
   defp raise_unknown_field!(entity_type, name, path, kind) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "#{Enum.join(path, ".")} names #{inspect(name)}, which is not #{kind} of #{inspect(entity_type)}"
   end
@@ -766,7 +767,7 @@ defmodule Hologram.Entity.Derived do
   defp validate_stored_hops!(owner, hops) do
     Enum.reduce(hops, owner, fn hop, entity_type ->
       if Entity.inverse_relationship(entity_type, hop) do
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{inspect(hop)} is an inverse relationship in #{inspect(entity_type)} - a derived field reads a related row's value through to-one relationships that hold their reference"
       end
