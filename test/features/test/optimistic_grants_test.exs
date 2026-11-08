@@ -93,7 +93,7 @@ defmodule HologramFeatureTests.OptimisticGrantsTest do
         "declare no operation of their own, and the framework's own operations are :create, " <>
         ":delete, :grant_role, :read, :read_roles, :revoke_role and :update"
 
-    assert_client_error session, ArgumentError, expected_msg, fn ->
+    assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
       click(session, button("Ask about a computed operation"))
     end
   end

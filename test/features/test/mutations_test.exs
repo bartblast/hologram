@@ -510,4 +510,16 @@ defmodule HologramFeatureTests.MutationsTest do
     assert [%RestockItem{status: :done, actor_id: actor_id}] = DB.read(RestockItem)
     assert actor_id == session_user().id
   end
+
+  feature "refuses putting a relationship as an attribute in the browser", %{session: session} do
+    expected_msg =
+      ":author is a relationship in HologramFeatureTests.Entities.Note - only attributes can be " <>
+        "put - set its reference via :author_id"
+
+    assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
+      session
+      |> visit(MutationsPage)
+      |> click(button("Put author"))
+    end
+  end
 end

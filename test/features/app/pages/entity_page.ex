@@ -57,7 +57,7 @@ defmodule HologramFeatureTests.EntityPage do
       try do
         Review.new(product: "id_1")
       rescue
-        error in ArgumentError -> error.message
+        error in Hologram.MisuseError -> error.message
       end
 
     put_state(component, :result, "refused_#{result}")
