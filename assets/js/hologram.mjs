@@ -2792,7 +2792,15 @@ export default class Hologram {
     // Always save deserialized object to in-memory cache first (fastest)
     $.#pageSnapshots.set(snapshotKey, pageSnapshot);
 
-    const serializedPageSnapshot = Serializer.serialize(pageSnapshot, "client");
+    // Only the in-memory copy holds secret state: restoring it is no different from the page never
+    // having been left. Storage gets the entries with secret state at its defaults and props empty.
+    const serializedPageSnapshot = Serializer.serialize(
+      {
+        ...pageSnapshot,
+        componentRegistryEntries: ComponentRegistry.storableEntries(),
+      },
+      "client",
+    );
 
     // For beforeunload: save synchronously to session storage only
     if (forceSync) {

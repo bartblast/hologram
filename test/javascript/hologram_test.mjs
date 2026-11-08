@@ -41,10 +41,12 @@ import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
 import Vdom from "../../assets/js/vdom.mjs";
 
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
+import {defineModule8Fixture} from "./support/fixtures/hologram/module_8.mjs";
 
 defineRuntimeGlobals();
 registerWebApis();
 defineModule7Fixture();
+defineModule8Fixture();
 
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
@@ -2902,6 +2904,71 @@ describe("Hologram", () => {
 
         assert.equal(snapshot.identityPeriod, pagePeriod);
         assert.isNull(snapshot.identityTag);
+      });
+
+      // Storage never holds a secret: the stored copy has the declared default in its place, and
+      // empty props, which could carry the secret into a child. The registry, which the in-memory
+      // copy holds, keeps the real value.
+      it("holds secret state at its declared default and no props", async () => {
+        const cid = Type.bitstring("my_component");
+
+        const module = Type.alias("Hologram.Test.Fixtures.Module8");
+
+        const buildEntry = () =>
+          Type.map([
+            [Type.atom("module"), module],
+            [
+              Type.atom("struct"),
+              Type.componentStruct({
+                props: Type.map([
+                  [Type.atom("value"), Type.bitstring("hunter2")],
+                ]),
+                state: Type.map([
+                  [Type.atom("count"), Type.integer(5)],
+                  [Type.atom("password"), Type.bitstring("hunter2")],
+                  [Type.atom("token"), Type.bitstring("abc123")],
+                ]),
+              }),
+            ],
+          ]);
+
+        ComponentRegistry.clear();
+        ComponentRegistry.putEntry(cid, buildEntry());
+
+        try {
+          await Hologram.loadNewPage("/target", payloadFor("new"));
+
+          const snapshot = serializeStub.firstCall.args[0];
+
+          assert.deepStrictEqual(
+            snapshot.componentRegistryEntries,
+            Type.map([
+              [
+                cid,
+                Type.map([
+                  [Type.atom("module"), module],
+                  [
+                    Type.atom("struct"),
+                    Type.componentStruct({
+                      state: Type.map([
+                        [Type.atom("count"), Type.integer(5)],
+                        [Type.atom("password"), Type.bitstring("")],
+                        [Type.atom("token"), Type.bitstring("none")],
+                      ]),
+                    }),
+                  ],
+                ]),
+              ],
+            ]),
+          );
+
+          assert.deepStrictEqual(
+            ComponentRegistry.entries,
+            Type.map([[cid, buildEntry()]]),
+          );
+        } finally {
+          ComponentRegistry.clear();
+        }
       });
 
       it("is stamped with the code it was taken with", async () => {
