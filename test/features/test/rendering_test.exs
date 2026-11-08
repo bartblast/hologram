@@ -9,6 +9,7 @@ defmodule HologramFeatureTests.RenderingTest do
   alias HologramFeatureTests.Rendering.Page4
   alias HologramFeatureTests.Rendering.PropsOnStructPage
   alias HologramFeatureTests.Rendering.PropValidationPage
+  alias HologramFeatureTests.Rendering.StateDefaultsPage
 
   feature "root element without attributes", %{session: session} do
     session
@@ -92,6 +93,34 @@ defmodule HologramFeatureTests.RenderingTest do
       |> assert_text(css("#component_1"), "first")
       |> click(button("Show component 2"))
       |> assert_text(css("#component_2"), "second")
+    end
+  end
+
+  describe "declared state defaults" do
+    feature "seed a page's state on the server", %{session: session} do
+      session
+      |> visit(StateDefaultsPage)
+      |> assert_text(css("#page_greeting"), "page default")
+    end
+
+    feature "seed a layout's state on the server", %{session: session} do
+      session
+      |> visit(StateDefaultsPage)
+      |> assert_text(css("#layout_greeting"), "layout default")
+    end
+
+    feature "seed the state of a component initialized on the server", %{session: session} do
+      session
+      |> visit(StateDefaultsPage)
+      |> assert_text(css("#component_1"), "server component default")
+    end
+
+    # Component 2 isn't in the tree when the page loads, so the client renderer seeds its state.
+    feature "seed the state of a component initialized on the client", %{session: session} do
+      session
+      |> visit(StateDefaultsPage)
+      |> click(button("Show component 2"))
+      |> assert_text(css("#component_2"), "client component default")
     end
   end
 
