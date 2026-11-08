@@ -132,7 +132,7 @@ defmodule Hologram.Runtime.Deserializer do
   def deserialize(version, "c" <> data) when version in [3, 2] do
     [module_str, function_str, arity_str] = String.split(data, @delimiter)
 
-    module = Module.safe_concat([module_str])
+    module = deserialize_module(module_str)
     function = String.to_existing_atom(function_str)
     arity = IntegerUtils.parse!(arity_str)
 
@@ -187,7 +187,7 @@ defmodule Hologram.Runtime.Deserializer do
         "capturedFunction" => function_str,
         "arity" => arity
       }) do
-    module = Module.safe_concat([module_str])
+    module = deserialize_module(module_str)
     function = String.to_existing_atom(function_str)
 
     Function.capture(module, function, arity)
@@ -256,6 +256,12 @@ defmodule Hologram.Runtime.Deserializer do
     |> String.split(",")
     |> Enum.map(&IntegerUtils.parse!/1)
   end
+
+  # The client writes an Erlang module with a leading colon, like ":lists",
+  # and an Elixir module without the "Elixir." prefix, like "Calendar.ISO".
+  defp deserialize_module(":" <> erlang_module), do: String.to_existing_atom(erlang_module)
+
+  defp deserialize_module(elixir_module), do: Module.safe_concat([elixir_module])
 
   # A Regex struct's :re_pattern references a compiled pattern that exists
   # only in the client runtime, so the struct is rebuilt by compiling its
