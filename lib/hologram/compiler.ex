@@ -1220,12 +1220,18 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Installs JavaScript deps which are specified in package.json located in assets_dir.
-  Saves the package.json digest to package_json_digest.bin file in build_dir.
+  Installs JavaScript deps which are specified in package.json located in assets_dir, and records
+  the package.json digest in the node_modules dir the install fills (see `maybe_install_js_deps/1`).
   """
-  @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
+  @spec install_js_deps(T.file_path()) :: :ok
   # sobelow_skip ["CI.System"]
-  def install_js_deps(assets_dir, build_dir) do
+  def install_js_deps(assets_dir) do
+    package_json_digest_path = package_json_digest_path(assets_dir)
+
+    # Gone before npm runs, so that an install that fails leaves no record of a finished one, which
+    # every build env would then trust.
+    File.rm(package_json_digest_path)
+
     # Run from the project root, not from inside assets_dir, so version managers like
     # asdf/mise resolve the Node.js version from the consuming project's config rather
     # than any .tool-versions inside a git-checked-out dependency. npm still installs
@@ -1240,9 +1246,9 @@ defmodule Hologram.Compiler do
     end
 
     package_json_digest = get_package_json_digest(assets_dir)
-    package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
 
-    File.write!(package_json_digest_path, package_json_digest)
+    # npm creates no node_modules dir for a package.json with no deps.
+    FileUtils.write_p!(package_json_digest_path, package_json_digest)
   end
 
   @doc """
@@ -1452,22 +1458,24 @@ defmodule Hologram.Compiler do
 
   @doc """
   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
+  The record of the last install is kept in the node_modules dir it filled, like the deps, so every
+  build env reads the one record of the deps they share, and removing node_modules removes it too.
 
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_install_js_deps_2/README.md
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/maybe_install_js_deps_1/README.md
   """
-  @spec maybe_install_js_deps(T.file_path(), T.file_path()) :: :ok | nil
-  def maybe_install_js_deps(assets_dir, build_dir) do
-    package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
+  @spec maybe_install_js_deps(T.file_path()) :: :ok | nil
+  def maybe_install_js_deps(assets_dir) do
+    package_json_digest_path = package_json_digest_path(assets_dir)
     package_json_lock_path = Path.join(assets_dir, "package-lock.json")
 
     if !File.exists?(package_json_digest_path) or !File.exists?(package_json_lock_path) do
-      install_js_deps(assets_dir, build_dir)
+      install_js_deps(assets_dir)
     else
       old_package_json_digest = File.read!(package_json_digest_path)
       new_package_json_digest = get_package_json_digest(assets_dir)
 
       if new_package_json_digest != old_package_json_digest do
-        install_js_deps(assets_dir, build_dir)
+        install_js_deps(assets_dir)
       end
     end
   end
@@ -2517,6 +2525,12 @@ defmodule Hologram.Compiler do
     File.rename!(output_bundle_path <> ".map", static_source_map_path)
 
     {static_bundle_path, static_source_map_path}
+  end
+
+  # The record of the last JS deps install, in the node_modules dir it filled. npm leaves files it
+  # doesn't know there alone, on a reinstall and on an install after package.json changed.
+  defp package_json_digest_path(assets_dir) do
+    Path.join([assets_dir, "node_modules", ".package_json_digest.bin"])
   end
 
   # A compiled module is read. The entry of any other module is left as it is, unless it is a

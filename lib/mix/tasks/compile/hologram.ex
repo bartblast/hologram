@@ -165,7 +165,14 @@ defmodule Mix.Tasks.Compile.Hologram do
       # TODO: Remove once apps have had a release to upgrade through.
       File.rm_rf(opts[:legacy_bundles_dir])
 
-      Compiler.maybe_install_js_deps(assets_dir, build_dir)
+      # Every build env shares the JS deps, like Mix's deps, so their install takes a lock of the
+      # assets dir as well, which a compile in another env waits on. Taken under the compiler lock,
+      # and nothing that holds it waits on a compiler lock, so the two can't deadlock.
+      install_lock_path = Path.join(assets_dir, Reflection.js_deps_install_lock_file_name())
+
+      with_lock(install_lock_path, "JS deps install", fn ->
+        Compiler.maybe_install_js_deps(assets_dir)
+      end)
 
       # Resolved once the deps are installed: on the first compile in a fresh checkout there is no
       # node_modules before the install, and the binary of esbuild's platform package is in it.
@@ -940,7 +947,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp compile_with_lock(opts) do
     lock_path = Path.join(opts[:build_dir], Reflection.compiler_lock_file_name())
 
-    with_lock(lock_path, fn ->
+    with_lock(lock_path, "compiler", fn ->
       compile(opts)
     end)
   end
@@ -1688,7 +1695,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # is atomic and fails when the directory exists, with the OS-level PID in a file
   # inside it - which restructures acquisition, release and stale detection alike.
   # Worth doing only if this is ever actually observed: unlike the empty-lock race it
-  # needs a lock orphaned by a killed process, which the cleanup in with_lock/2
+  # needs a lock orphaned by a killed process, which the cleanup in with_lock/3
   # prevents on every normal exit, plus two invocations landing in the liveness check
   # within the same few milliseconds.
   defp remove_lock_for_dead_process(lock_path, os_pid) do
@@ -1730,7 +1737,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # An empty lock file is a lock in the middle of being acquired, not an invalid one:
-  # with_lock/2 creates the file with File.open/2 and only then writes the owner's PID
+  # with_lock/3 creates the file with File.open/2 and only then writes the owner's PID
   # into it, so a concurrent invocation can read it in between and must leave it alone.
   # Treating it as invalid would delete a lock that was just legitimately acquired and
   # let both compilations run at once.
@@ -1808,7 +1815,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     keep_template_modules(kept_template_modules, templatable_modules, validated_template_modules)
   end
 
-  defp with_lock(lock_path, fun) do
+  # Runs the given function while it holds the lock at the given path, which the given name names in
+  # the log line of a wait and in the error of a failed acquire.
+  defp with_lock(lock_path, lock_name, fun) do
     lock_path
     |> Path.dirname()
     |> File.mkdir_p!()
@@ -1832,12 +1841,12 @@ defmodule Mix.Tasks.Compile.Hologram do
         end
 
       {:error, :eexist} ->
-        Logger.info("Hologram: compiler already running, waiting...")
+        Logger.info("Hologram: #{lock_name} already running, waiting...")
         :timer.sleep(1_000)
-        with_lock(lock_path, fun)
+        with_lock(lock_path, lock_name, fun)
 
       {:error, reason} ->
-        raise "Hologram: failed to acquire compiler lock: #{inspect(reason)}"
+        raise "Hologram: failed to acquire #{lock_name} lock: #{inspect(reason)}"
     end
   end
 end

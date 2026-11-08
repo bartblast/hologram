@@ -52,6 +52,8 @@ defmodule Hologram.Reflection do
 
   @ignored_modules [Kernel.SpecialForms]
 
+  @js_deps_install_lock_file_name "hologram_js_deps_install.lock"
+
   @module_info_plt_dump_file_name "module_info.plt"
 
   @page_digest_plt_dump_file_name "page_digest.plt"
@@ -473,6 +475,12 @@ defmodule Hologram.Reflection do
   def hologram_dep_dir do
     fallback_dir = Path.join(Mix.Project.deps_path(), "hologram")
     Map.get(Mix.Project.deps_paths(), :hologram, fallback_dir)
+  end
+
+  @doc "Returns the file name of the lock the compiler holds while it installs Hologram's JS deps."
+  @spec js_deps_install_lock_file_name :: String.t()
+  def js_deps_install_lock_file_name do
+    @js_deps_install_lock_file_name
   end
 
   @doc """

@@ -47,6 +47,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @compile_inputs_path Path.join(@build_dir, Reflection.compile_inputs_dump_file_name())
   @compiler_lock_file_name Reflection.compiler_lock_file_name()
   @lock_path Path.join(@build_dir, @compiler_lock_file_name)
+  @install_lock_path Path.join(@assets_dir, Reflection.js_deps_install_lock_file_name())
 
   # The Elixir compile manifest of the :hologram app, the one app with a manifest in the test
   # build lib dir.
@@ -469,21 +470,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
   defp setup_empty_assets_and_build_dirs(opts) do
     assets_dir = Path.join(@test_dir, "assets_empty")
     clean_dir(assets_dir)
+    link_lib_js_deps(assets_dir)
 
     build_dir = setup_empty_build_dir()
-    link_lib_js_deps(assets_dir, build_dir)
 
     opts
     |> Keyword.put(:assets_dir, assets_dir)
     |> Keyword.put(:build_dir, build_dir)
   end
 
-  # A build dir with nothing compiled, holding the record of the lib's JavaScript deps being linked
-  # to the module's assets dir, so that a compile into it installs nothing.
+  # A build dir with nothing compiled. A compile into it installs nothing: the record of the JS deps
+  # install is the assets dir's, which every build dir shares.
   defp setup_empty_build_dir do
     build_dir = Path.join(@test_dir, "build_empty")
     clean_dir(build_dir)
-    link_lib_js_deps(@assets_dir, build_dir)
 
     build_dir
   end
@@ -628,9 +628,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert File.exists?(opts[:tmp_dir])
   end
 
+  # The bin dir only a real npm install creates, which link_lib_js_deps/1 doesn't.
   defp test_js_deps(opts) do
     assert opts[:assets_dir]
-           |> Path.join("node_modules")
+           |> Path.join("node_modules/.bin")
            |> File.exists?()
   end
 
@@ -777,7 +778,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     File.mkdir_p!(@manifest_dir)
     File.write!(@manifest_path, "manifest 1")
 
-    node_modules_path = link_lib_js_deps(@assets_dir, @build_dir)
+    node_modules_path = link_lib_js_deps(@assets_dir)
 
     opts = [
       assets_dir: @assets_dir,
@@ -800,6 +801,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   setup do
     File.rm(@lock_path)
+
+    # A test that dies holding the install lock would leave every later compile waiting on it.
+    File.rm(@install_lock_path)
+
     clean_dir(@tmp_dir)
 
     # Every test starts where the compile in setup_all ended: everything built, nothing in memory.
@@ -850,7 +855,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     opts = setup_empty_assets_and_build_dirs(initial_opts)
 
     # A compile with no record of an install installs the JavaScript deps too (see test_js_deps/1).
-    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+    package_json_digest_path =
+      Path.join([opts[:assets_dir], "node_modules", ".package_json_digest.bin"])
+
     File.rm!(package_json_digest_path)
 
     # Test case 1: when there are no previous build artifacts
@@ -3552,6 +3559,46 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert after_count == before_count
   end
 
+  describe "JS deps install" do
+    @tag timeout: 300_000
+    test "a compile into another build dir doesn't install the deps again", %{
+      opts: initial_opts
+    } do
+      opts = setup_empty_assets_and_build_dirs(initial_opts)
+      run(opts)
+
+      other_build_dir = Path.join(@test_dir, "build_other_env")
+      clean_dir(other_build_dir)
+      run(Keyword.put(opts, :build_dir, other_build_dir))
+
+      # The assets dir holds only the record the lib's deps were linked with, and a real npm install
+      # would have filled its node_modules dir.
+      refute opts[:assets_dir]
+             |> Path.join("node_modules/.bin")
+             |> File.exists?()
+    end
+
+    test "a compile waits for an install another process is running", %{opts: opts} do
+      # The current process is definitely running.
+      FileUtils.write_p!(@install_lock_path, "#{System.pid()}")
+
+      task =
+        Task.async(fn ->
+          start_time = System.system_time(:millisecond)
+          run(opts)
+          end_time = System.system_time(:millisecond)
+          end_time - start_time
+        end)
+
+      # Removed after a while, as the other process would once its install is done.
+      Process.sleep(2_000)
+      File.rm!(@install_lock_path)
+
+      assert Task.await(task, :infinity) >= 2_000
+      refute File.exists?(@install_lock_path)
+    end
+  end
+
   describe "compiler locking" do
     test "locking mechanism prevents concurrent compilation", %{opts: opts} do
       # The lock guards the actual compilation work, which emits
@@ -3601,7 +3648,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
         run(opts)
       end
 
-      refute File.exists?(@lock_path)
+      refute opts[:build_dir]
+             |> Path.join(@compiler_lock_file_name)
+             |> File.exists?()
+
+      refute opts[:assets_dir]
+             |> Path.join(Reflection.js_deps_install_lock_file_name())
+             |> File.exists?()
     end
 
     test "lock dir (which is the build dir) is created if it doesn't exist", %{opts: initial_opts} do
