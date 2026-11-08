@@ -52,6 +52,7 @@ defineModule8Fixture();
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
 const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
+const module8 = Type.alias("Hologram.Test.Fixtures.Module8");
 
 // Undoes IdentityTracker.init(), so that a test that started the tracker leaves no period behind
 // for the next one.
@@ -564,6 +565,64 @@ describe("Hologram", () => {
       await result;
 
       sinon.assert.calledOnce(renderStub);
+    });
+
+    // An action can return a struct it built itself, which knows nothing of the module's secret
+    // keys, so they are written back onto what is saved.
+    it("saves the module's secret keys on the struct a synchronous action returned", () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module8],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
+        Type.componentStruct({
+          state: Type.map([[Type.atom("password"), Type.bitstring("hunter2")]]),
+        }),
+      );
+
+      Hologram.executeAction(actionFor(cid1));
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentStruct(cid1),
+        Type.componentStruct({
+          secretKeys: Type.list([Type.atom("password"), Type.atom("token")]),
+          state: Type.map([[Type.atom("password"), Type.bitstring("hunter2")]]),
+        }),
+      );
+    });
+
+    it("saves the module's secret keys on the struct an asynchronous action returned", async () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module8],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
+        Promise.resolve(
+          Type.componentStruct({
+            state: Type.map([
+              [Type.atom("password"), Type.bitstring("hunter2")],
+            ]),
+          }),
+        ),
+      );
+
+      await Hologram.executeAction(actionFor(cid1));
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentStruct(cid1),
+        Type.componentStruct({
+          secretKeys: Type.list([Type.atom("password"), Type.atom("token")]),
+          state: Type.map([[Type.atom("password"), Type.bitstring("hunter2")]]),
+        }),
+      );
     });
 
     // The next command, the next action and the next page all come after the check, so an action
@@ -4743,7 +4802,6 @@ describe("Hologram", () => {
       // defaults. In jsdom the OPFS write throws, so the stored copy lands in session storage.
       it("keeps secret state in the in-memory copy of the page left, and out of the stored one", async () => {
         const cid = Type.bitstring("my_component");
-        const module8 = Type.alias("Hologram.Test.Fixtures.Module8");
 
         const buildRegistryEntries = (password, token) =>
           Type.map([

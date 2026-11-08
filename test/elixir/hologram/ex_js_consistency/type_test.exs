@@ -9,6 +9,7 @@ defmodule Hologram.ExJsConsistency.TypeTest do
   alias Hologram.Component
   alias Hologram.Component.Action
   alias Hologram.Component.Command
+  alias Hologram.Component.Metadata
 
   @moduletag :consistency
 
@@ -23,6 +24,7 @@ defmodule Hologram.ExJsConsistency.TypeTest do
   test "component struct" do
     assert %Component{} == %{
              __struct__: Component,
+             __meta__: %{__struct__: Metadata, secret_keys: []},
              emitted_context: %{},
              next_action: nil,
              next_command: nil,

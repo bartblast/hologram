@@ -128,8 +128,15 @@ export default class Type {
   }
 
   static componentStruct(data = {}) {
-    let {emittedContext, nextAction, nextCommand, nextPage, props, state} =
-      data;
+    let {
+      emittedContext,
+      nextAction,
+      nextCommand,
+      nextPage,
+      props,
+      secretKeys,
+      state,
+    } = data;
 
     if (typeof emittedContext === "undefined") {
       emittedContext = Type.map();
@@ -151,11 +158,21 @@ export default class Type {
       props = Type.map();
     }
 
+    if (typeof secretKeys === "undefined") {
+      secretKeys = Type.list();
+    }
+
     if (typeof state === "undefined") {
       state = Type.map();
     }
 
     return Type.struct("Hologram.Component", [
+      [
+        Type.atom("__meta__"),
+        Type.struct("Hologram.Component.Metadata", [
+          [Type.atom("secret_keys"), secretKeys],
+        ]),
+      ],
       [Type.atom("emitted_context"), emittedContext],
       [Type.atom("next_action"), nextAction],
       [Type.atom("next_command"), nextCommand],

@@ -3,6 +3,7 @@ defmodule Hologram.Component do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
+  alias Hologram.Component.Metadata
   alias Hologram.Realtime.Channel
   alias Hologram.Server
   alias Hologram.Server.Broadcast
@@ -12,7 +13,8 @@ defmodule Hologram.Component do
             next_command: nil,
             next_page: nil,
             props: %{},
-            state: %{}
+            state: %{},
+            __meta__: %Metadata{}
 
   defmodule Action do
     defstruct delay: 0, name: nil, params: %{}, target: nil
@@ -37,7 +39,8 @@ defmodule Hologram.Component do
           next_command: Command.t() | nil,
           next_page: module | {module, keyword},
           props: %{atom => any},
-          state: %{atom => any}
+          state: %{atom => any},
+          __meta__: Metadata.t()
         }
 
   @doc """

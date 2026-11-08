@@ -33,6 +33,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module110
   alias Hologram.Test.Fixtures.Template.Renderer.Module111
   alias Hologram.Test.Fixtures.Template.Renderer.Module113
+  alias Hologram.Test.Fixtures.Template.Renderer.Module114
+  alias Hologram.Test.Fixtures.Template.Renderer.Module115
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
@@ -1336,6 +1338,18 @@ defmodule Hologram.Template.RendererTest do
       assert component_registry["my_component"].struct.state == %{values: %{x: 1}}
     end
 
+    test "with secret state keys, listed on the struct init/3 returned" do
+      node = {:component, Module114, [{"cid", [text: "my_component"]}], []}
+
+      assert {"", component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert component_registry["my_component"].struct == %Component{
+               props: %{cid: "my_component"},
+               state: %{count: 1, password: "hunter2"},
+               __meta__: %Component.Metadata{secret_keys: [:password]}
+             }
+    end
+
     test "with props and state" do
       node =
         {:component, Module4,
@@ -2082,6 +2096,17 @@ defmodule Hologram.Template.RendererTest do
       assert_error Hologram.StateError, expected_msg, fn ->
         render_page_without_tree(Module109, %{id: 1}, @server, @opts)
       end
+    end
+
+    test "with secret state keys, listed on the page struct" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module115, :dummy_module_115_digest)
+
+      assert {"", component_registry, _server_struct} =
+               render_page_without_tree(Module115, @params, @server, @opts)
+
+      assert component_registry["page"].struct.__meta__ == %Component.Metadata{
+               secret_keys: [:password]
+             }
     end
 
     test "with a cid entry that init/3 put into the page state" do

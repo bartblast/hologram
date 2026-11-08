@@ -388,6 +388,16 @@ describe("Type", () => {
         Type.componentStruct(),
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component")],
+          [
+            Type.atom("__meta__"),
+            Type.map([
+              [
+                Type.atom("__struct__"),
+                Type.alias("Hologram.Component.Metadata"),
+              ],
+              [Type.atom("secret_keys"), Type.list()],
+            ]),
+          ],
           [Type.atom("emitted_context"), Type.map()],
           [Type.atom("next_action"), Type.nil()],
           [Type.atom("next_command"), Type.nil()],
@@ -421,6 +431,8 @@ describe("Type", () => {
         [Type.atom("d"), Type.integer(4)],
       ]);
 
+      const secretKeys = Type.list([Type.atom("e")]);
+
       const state = Type.map([
         [Type.atom("e"), Type.integer(5)],
         [Type.atom("f"), Type.integer(6)],
@@ -432,6 +444,7 @@ describe("Type", () => {
         nextCommand,
         nextPage,
         props,
+        secretKeys,
         state,
       });
 
@@ -439,6 +452,16 @@ describe("Type", () => {
         result,
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component")],
+          [
+            Type.atom("__meta__"),
+            Type.map([
+              [
+                Type.atom("__struct__"),
+                Type.alias("Hologram.Component.Metadata"),
+              ],
+              [Type.atom("secret_keys"), secretKeys],
+            ]),
+          ],
           [Type.atom("emitted_context"), emittedContext],
           [Type.atom("next_action"), nextAction],
           [Type.atom("next_command"), nextCommand],
@@ -1768,6 +1791,16 @@ describe("Type", () => {
         Type.componentStruct(),
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component")],
+          [
+            Type.atom("__meta__"),
+            Type.map([
+              [
+                Type.atom("__struct__"),
+                Type.alias("Hologram.Component.Metadata"),
+              ],
+              [Type.atom("secret_keys"), Type.list()],
+            ]),
+          ],
           [Type.atom("emitted_context"), Type.map()],
           [Type.atom("next_action"), Type.nil()],
           [Type.atom("next_command"), Type.nil()],

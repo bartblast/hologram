@@ -4805,6 +4805,98 @@ describe("Interpreter", () => {
       });
 
       describe("structs", () => {
+        describe("component", () => {
+          const state = Type.map([
+            [Type.atom("count"), Type.integer(5)],
+            [Type.atom("password"), Type.bitstring("hunter2")],
+          ]);
+
+          it("with a secret state key", () => {
+            const struct = Type.componentStruct({
+              secretKeys: Type.list([Type.atom("password")]),
+              state,
+            });
+
+            assert.equal(
+              Interpreter.inspect(struct),
+              "%{emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, props: %{}, state: %{count: 5, password: **redacted**}, __struct__: Hologram.Component}",
+            );
+          });
+
+          it("with a secret state key the state doesn't hold", () => {
+            const struct = Type.componentStruct({
+              secretKeys: Type.list([Type.atom("token")]),
+              state,
+            });
+
+            assert.equal(
+              Interpreter.inspect(struct),
+              '%{emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, props: %{}, state: %{count: 5, password: "hunter2"}, __struct__: Hologram.Component}',
+            );
+          });
+
+          it("without secret keys", () => {
+            const struct = Type.componentStruct({state});
+
+            assert.equal(
+              Interpreter.inspect(struct),
+              '%{emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, props: %{}, state: %{count: 5, password: "hunter2"}, __struct__: Hologram.Component}',
+            );
+          });
+
+          it("with secret keys and no state", () => {
+            const struct = Type.struct("Hologram.Component", [
+              [
+                Type.atom("__meta__"),
+                Type.struct("Hologram.Component.Metadata", [
+                  [
+                    Type.atom("secret_keys"),
+                    Type.list([Type.atom("password")]),
+                  ],
+                ]),
+              ],
+              [Type.atom("props"), Type.map()],
+            ]);
+
+            assert.equal(
+              Interpreter.inspect(struct),
+              "%{props: %{}, __struct__: Hologram.Component}",
+            );
+          });
+
+          it("without metadata", () => {
+            const struct = Type.struct("Hologram.Component", [
+              [Type.atom("state"), state],
+            ]);
+
+            assert.equal(
+              Interpreter.inspect(struct),
+              '%{state: %{count: 5, password: "hunter2"}, __struct__: Hologram.Component}',
+            );
+          });
+
+          it("nested in a list, with sort_maps", () => {
+            const struct = Type.componentStruct({
+              secretKeys: Type.list([Type.atom("password")]),
+              state,
+            });
+
+            const opts = Type.keywordList([
+              [
+                Type.atom("custom_options"),
+                Type.keywordList([
+                  [Type.atom("sort_maps"), Type.boolean(true)],
+                ]),
+              ],
+            ]);
+
+            assert.equal(
+              Interpreter.inspect(Type.list([struct]), opts),
+              "[%{__struct__: Hologram.Component, emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, props: %{}, state: %{count: 5, password: **redacted**}}]",
+            );
+          });
+        });
+
         describe("range", () => {
           it("step == 1", () => {
             const result = Interpreter.inspect(Type.range(123, 234, 1));

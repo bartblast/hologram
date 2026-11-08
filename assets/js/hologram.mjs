@@ -2531,10 +2531,18 @@ export default class Hologram {
       Client.sendCommand(nextCommand, epoch);
     }
 
+    // The metadata is written back, as after init, so an action that returns a struct it built
+    // itself still lists the module's secret keys.
     let savedComponentStruct = Erlang_Maps["put/3"](
+      Type.atom("__meta__"),
+      Renderer.componentMetadata(Interpreter.moduleProxy(componentModule)),
+      resultComponentStruct,
+    );
+
+    savedComponentStruct = Erlang_Maps["put/3"](
       Type.atom("next_action"),
       Type.nil(),
-      resultComponentStruct,
+      savedComponentStruct,
     );
 
     savedComponentStruct = Erlang_Maps["put/3"](

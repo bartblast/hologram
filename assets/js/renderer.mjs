@@ -188,6 +188,27 @@ export default class Renderer {
   // candidate, not only one whose declaration changed. settleFocus() clears it.
   static isPageArrival = false;
 
+  // Based on secret_keys/1
+  //
+  // The metadata every component struct of the module carries: the module's secret keys. Built
+  // once and cached on the module proxy, since it is a property of the module.
+  //
+  // WARNING: must match secret_keys/1 on the server.
+  static componentMetadata(moduleProxy) {
+    if (!("__componentMetadata__" in moduleProxy)) {
+      const secretKeys = ComponentRegistry.getSecretStateDefaults(
+        moduleProxy,
+      ).map(([key, _default]) => key);
+
+      moduleProxy.__componentMetadata__ = Type.struct(
+        "Hologram.Component.Metadata",
+        [[Type.atom("secret_keys"), Type.list(secretKeys)]],
+      );
+    }
+
+    return moduleProxy.__componentMetadata__;
+  }
+
   // Based on Elixir Renderer.encode_tree/1, which it inverts clause for clause.
   //
   // The payload arrives already parsed out of the response body, so this is not a parse: it is
@@ -1809,7 +1830,7 @@ export default class Renderer {
   // between renders, the registered entry describes a different component, so it is discarded and
   // the new module initializes fresh - state, emitted context, and action/command targeting all
   // follow the new module.
-  // Deps: [:maps.get/2]
+  // Deps: [:maps.get/2, :maps.put/3]
   static #maybeInitComponent(cid, moduleProxy, props) {
     let componentState = Renderer.#isModuleRegisteredForCid(cid, moduleProxy)
       ? ComponentRegistry.getComponentState(cid)
@@ -1822,14 +1843,23 @@ export default class Renderer {
       // them.
       //
       // WARNING: must match the struct init_component/3 starts from on the server.
-      const initialComponentStruct = Type.componentStruct({
-        props,
-        state: Renderer.#getStateDefaults(moduleProxy),
-      });
+      const metadata = Renderer.componentMetadata(moduleProxy);
 
-      const componentStruct = moduleProxy["init/2"](
-        props,
-        initialComponentStruct,
+      const initialComponentStruct = Erlang_Maps["put/3"](
+        Type.atom("__meta__"),
+        metadata,
+        Type.componentStruct({
+          props,
+          state: Renderer.#getStateDefaults(moduleProxy),
+        }),
+      );
+
+      // The metadata is written back onto whatever init/2 returned, as on the server, so the
+      // secret keys it lists are the module's.
+      const componentStruct = Erlang_Maps["put/3"](
+        Type.atom("__meta__"),
+        metadata,
+        moduleProxy["init/2"](props, initialComponentStruct),
       );
 
       Renderer.validateDeclaredState(

@@ -464,6 +464,10 @@ defmodule Hologram.Compiler.CallGraph do
       {:lists, :keyfind, 3},
       {:lists, :sort, 1},
       {:maps, :get, 2},
+      {:maps, :get, 3},
+      {:maps, :is_key, 2},
+      {:maps, :put, 3},
+      {:maps, :remove, 2},
       {:maps, :to_list, 1}
     ],
     manually_ported_code_module: [

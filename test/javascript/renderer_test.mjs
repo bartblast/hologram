@@ -88,6 +88,7 @@ import {defineClientOnlyModule7Fixture} from "./support/fixtures/renderer/client
 import {defineClientOnlyModule8Fixture} from "./support/fixtures/renderer/client_only/module_8.mjs";
 import {defineClientOnlyModule9Fixture} from "./support/fixtures/renderer/client_only/module_9.mjs";
 import {defineClientOnlyModule10Fixture} from "./support/fixtures/renderer/client_only/module_10.mjs";
+import {defineClientOnlyModule11Fixture} from "./support/fixtures/renderer/client_only/module_11.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
@@ -178,6 +179,7 @@ defineClientOnlyModule7Fixture();
 defineClientOnlyModule8Fixture();
 defineClientOnlyModule9Fixture();
 defineClientOnlyModule10Fixture();
+defineClientOnlyModule11Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -6916,6 +6918,44 @@ describe("Renderer", () => {
                     [Type.atom("b"), Type.bitstring("abc")],
                   ]),
                 ],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("with secret state keys, listed on the struct init/2 returned", () => {
+      const module = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module11",
+      );
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module,
+              props: Type.map([[Type.atom("cid"), cid]]),
+              secretKeys: Type.list([Type.atom("password")]),
+              state: Type.map([
+                [Type.atom("count"), Type.integer(1)],
+                [Type.atom("password"), Type.bitstring("hunter2")],
               ]),
             }),
           ],
