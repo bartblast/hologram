@@ -4,6 +4,7 @@ import {
   assert,
   assertBoxedError,
   assertBoxedErrorAsync,
+  assertBoxedStrictEqual,
   defineRuntimeGlobals,
   registerWebApis,
   sinon,
@@ -4575,10 +4576,14 @@ describe("Hologram", () => {
 
       // Filed under a history id of its own each time: the handler first saves the page being
       // left under the id it holds, which is the one the last restore went to.
-      const seedSnapshot = (historyId, snapshotPageModule = pageModule) => {
+      const seedSnapshot = (
+        historyId,
+        snapshotPageModule = pageModule,
+        componentRegistryEntries = Type.map(),
+      ) => {
         const pageSnapshot = {
           chunkDigests: ["SNAPSHOT"],
-          componentRegistryEntries: Type.map(),
+          componentRegistryEntries,
           identityPeriod: IdentityTracker.period,
           instanceId: "restored-instance",
           pageModule: snapshotPageModule,
@@ -4730,6 +4735,78 @@ describe("Hologram", () => {
 
         assert.strictEqual(App.instanceId, instanceId);
         sinon.assert.calledOnce(fetchPageStub);
+      });
+
+      // A popstate saves the page it leaves before restoring the one it goes to. The page left
+      // keeps its secret state in the in-memory copy, so going back to it brings back the values
+      // the page held when it was left, while the copy written to storage holds the declared
+      // defaults. In jsdom the OPFS write throws, so the stored copy lands in session storage.
+      it("keeps secret state in the in-memory copy of the page left, and out of the stored one", async () => {
+        const cid = Type.bitstring("my_component");
+        const module8 = Type.alias("Hologram.Test.Fixtures.Module8");
+
+        const buildRegistryEntries = (password, token) =>
+          Type.map([
+            [
+              cid,
+              Type.map([
+                [Type.atom("module"), module8],
+                [
+                  Type.atom("struct"),
+                  Type.componentStruct({
+                    state: Type.map([
+                      [Type.atom("count"), Type.integer(5)],
+                      [Type.atom("password"), Type.bitstring(password)],
+                      [Type.atom("token"), Type.bitstring(token)],
+                    ]),
+                  }),
+                ],
+              ]),
+            ],
+          ]);
+
+        ScriptRegistry.statuses.set("SNAPSHOT", "loaded");
+
+        seedSnapshot(
+          "history-secret-page",
+          pageModule,
+          buildRegistryEntries("hunter2", "abc123"),
+        );
+
+        seedSnapshot("history-other-page");
+
+        await Hologram.handlePopstateEvent({state: "history-secret-page"});
+        await flushPromises();
+
+        // What the page holds when it is left differs from what the restore read, which the
+        // handler keeps in memory too, so the last check sees the copy the save put there.
+        ComponentRegistry.populate(buildRegistryEntries("hunter3", "def456"));
+
+        // Saves the secret page, in memory and in storage, and restores the other one.
+        await Hologram.handlePopstateEvent({state: "history-other-page"});
+        await flushPromises();
+
+        assertBoxedStrictEqual(
+          Deserializer.deserialize(
+            sessionStorage.getItem(
+              "hologram_page_snapshot_history-secret-page",
+            ),
+          ).componentRegistryEntries,
+          buildRegistryEntries("", "none"),
+        );
+
+        // The registry no longer holds the secret page, so what it holds after going back was
+        // restored.
+        assertBoxedStrictEqual(ComponentRegistry.entries, Type.map());
+
+        // Restored from the in-memory copy, which is read before storage.
+        await Hologram.handlePopstateEvent({state: "history-secret-page"});
+        await flushPromises();
+
+        assertBoxedStrictEqual(
+          ComponentRegistry.entries,
+          buildRegistryEntries("hunter3", "def456"),
+        );
       });
 
       it("is restored at once when the tab has its chunks", async () => {
