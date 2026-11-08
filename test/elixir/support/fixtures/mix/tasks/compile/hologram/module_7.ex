@@ -7,6 +7,8 @@ defmodule Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7 do
 
   layout Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
+  state :value, :map
+
   @impl Page
   def action(:my_action, _params, component) do
     put_state(component, :value, %Module5{})

@@ -2,6 +2,9 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module3 do
   use Hologram.Component
 
+  state :a, :integer
+  state :b, :integer
+
   def init(_props, component, server) do
     {
       put_state(component, a: 1, b: 2),

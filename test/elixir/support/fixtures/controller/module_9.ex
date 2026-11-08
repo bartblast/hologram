@@ -5,6 +5,8 @@ defmodule Hologram.Test.Fixtures.Controller.Module9 do
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
+  state :session_value, :string
+
   @impl Page
   def init(_params, component, server) do
     put_state(component, session_value: get_session(server, "my_session_key"))

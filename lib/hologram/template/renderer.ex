@@ -1104,6 +1104,8 @@ defmodule Hologram.Template.Renderer do
           {initial_component_struct, mutated_server_struct}
       end
 
+    validate_declared_state(component_struct.state, module, "init/3")
+
     {%{component_struct | props: props}, %{returned_server_struct | cid: nil}}
   end
 
@@ -1577,6 +1579,59 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp struct_key_part(_map), do: ""
+
+  defp undeclared_state_message(key, module, handler) when is_atom(key) do
+    {holder, holder_names} =
+      if Reflection.page?(module) do
+        {"param", Enum.map(module.__params__(), fn {name, _type, _opts} -> name end)}
+      else
+        {"prop", [:cid | Enum.map(module.__props__(), fn {name, _type, _opts} -> name end)]}
+      end
+
+    hint =
+      if key in holder_names do
+        ~s/"#{key}" is a #{holder}, read it from component.props instead/
+      else
+        "declare it with state/2 or state/3"
+      end
+
+    ~s/state "#{key}" isn't declared in "#{Reflection.module_name(module)}", / <>
+      "but #{handler} put it - #{hint}"
+  end
+
+  defp undeclared_state_message(key, module, handler) do
+    "state key #{inspect(key)} isn't an atom, but #{handler} put it in " <>
+      ~s/"#{Reflection.module_name(module)}" - state is declared with atom names/
+  end
+
+  # put_state/2,3 can't tell which module it runs in, so the state is checked where the struct comes
+  # back from the module's own code. Of several undeclared keys the smallest in term order is named,
+  # so the message doesn't depend on map order. A key named like a prop (a param on a page) can't be
+  # declared, since the state would shadow it, so the message points at the props instead: the usual
+  # cause is init copying its props into state.
+  #
+  # WARNING: must match the client renderer's #validateDeclaredState.
+  defp validate_declared_state(state, module, handler) do
+    declared_names = Enum.map(module.__state__(), fn {name, _type, _opts} -> name end)
+
+    undeclared_keys =
+      state
+      |> Map.keys()
+      |> Enum.reject(&(&1 in declared_names))
+
+    case undeclared_keys do
+      [] ->
+        :ok
+
+      _non_empty ->
+        message =
+          undeclared_keys
+          |> Enum.min()
+          |> undeclared_state_message(module, handler)
+
+        raise Hologram.StateError, message: message
+    end
+  end
 
   # Runs last in the props pipeline, so the map it sees is exactly what the component's template
   # will see - defaults filled and context injected. The compiler already rejects a required prop

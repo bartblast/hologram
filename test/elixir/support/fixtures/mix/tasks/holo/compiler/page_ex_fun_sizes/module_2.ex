@@ -8,6 +8,8 @@ defmodule Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module2 
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
+  state :ecto_schema, :atom
+
   # The client code names no reflection function of the Ecto schema the state holds.
   def init(_params, component, _server) do
     put_state(component, ecto_schema: Module24)

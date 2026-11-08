@@ -5,6 +5,8 @@ defmodule Hologram.Test.Fixtures.Controller.Module13 do
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
+  state :subscription_count, :integer
+
   @impl Page
   def init(_params, component, server) do
     put_state(component, subscription_count: length(server.subscriptions))

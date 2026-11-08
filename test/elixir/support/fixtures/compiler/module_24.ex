@@ -6,6 +6,8 @@ defmodule Hologram.Test.Fixtures.Compiler.Module24 do
 
   layout Hologram.Test.Fixtures.Compiler.Module10
 
+  state :result, :any
+
   def template do
     ~HOLO"""
     Module24 template

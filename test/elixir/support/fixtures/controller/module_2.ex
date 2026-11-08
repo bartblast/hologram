@@ -5,6 +5,8 @@ defmodule Hologram.Test.Fixtures.Controller.Module2 do
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
+  state :cookie_value, :string
+
   @impl Page
   def init(_params, component, server) do
     put_state(component, cookie_value: get_cookie(server, "my_cookie_name"))
