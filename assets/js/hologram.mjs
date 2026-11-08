@@ -320,7 +320,7 @@ export default class Hologram {
         context,
       );
     } catch (error) {
-      throw Renderer.redactKeyError(
+      throw Renderer.redactError(
         error,
         Interpreter.moduleProxy(componentModule),
       );
@@ -328,7 +328,7 @@ export default class Hologram {
 
     if (resultComponentStruct instanceof Promise) {
       const redactedResult = resultComponentStruct.catch((error) => {
-        throw Renderer.redactKeyError(
+        throw Renderer.redactError(
           error,
           Interpreter.moduleProxy(componentModule),
         );

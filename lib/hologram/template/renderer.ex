@@ -852,31 +852,41 @@ defmodule Hologram.Template.Renderer do
     }
   end
 
-  # A secret value can reach a KeyError raised while the module's code runs: the template's vars
-  # hold the state, and a typo like component.state.pasword or Map.fetch!(component.state, :x)
-  # raises with the state map as its term, which Map.fetch!/2 also passes to the stack frame of the
-  # failed :erlang.map_get/2 call. Both get the module's secret values hidden, in any plain map
-  # they hold, since a map that only holds a key named like a secret one has nothing to lose by it.
+  # A secret value can reach an error raised while the module's code runs: the template's vars hold
+  # the state, and code like component.state.pasword, %{step: 1} = component.state or a helper no
+  # clause of which matches component.state raises with the state map in the exception's term or
+  # args, which the stack frame of a failed call lists too (Map.fetch!/2 passes it to
+  # :erlang.map_get/2). All of them get the module's secret values hidden, in any plain map they
+  # hold, since a map that only holds a key named like a secret one has nothing to lose by it.
   #
-  # WARNING: must match the client renderer's redactKeyError.
-  defp redact_key_error(error, stacktrace, module) do
-    case secret_keys(module) do
-      [] ->
-        {error, stacktrace}
+  # WARNING: must match the client renderer's redactError.
+  defp redact_error(error, stacktrace, secret_keys) do
+    redacted_error =
+      error
+      |> redact_exception_field(:term, &redact_secret_values(&1, secret_keys))
+      |> redact_exception_field(:args, fn args ->
+        if is_list(args) and not List.improper?(args) do
+          Enum.map(args, &redact_secret_values(&1, secret_keys))
+        else
+          args
+        end
+      end)
 
-      secret_keys ->
-        redacted_stacktrace =
-          Enum.map(stacktrace, fn
-            {frame_module, function, args, location} when is_list(args) ->
-              {frame_module, function, Enum.map(args, &redact_secret_values(&1, secret_keys)),
-               location}
+    redacted_stacktrace =
+      Enum.map(stacktrace, fn
+        {frame_module, function, args, location} when is_list(args) ->
+          {frame_module, function, Enum.map(args, &redact_secret_values(&1, secret_keys)),
+           location}
 
-            frame ->
-              frame
-          end)
+        frame ->
+          frame
+      end)
 
-        {%{error | term: redact_secret_values(error.term, secret_keys)}, redacted_stacktrace}
-    end
+    {redacted_error, redacted_stacktrace}
+  end
+
+  defp redact_exception_field(error, field, fun) do
+    if Map.has_key?(error, field), do: Map.update!(error, field, fun), else: error
   end
 
   # WARNING: must match the client renderer's #redactSecretValues.
@@ -888,12 +898,29 @@ defmodule Hologram.Template.Renderer do
 
   defp redact_secret_values(term, _secret_keys), do: term
 
+  # An error with nothing to hide goes on exactly as it was raised, so what an outer catch sees
+  # doesn't depend on whether the module declares a secret. Throws and exits carry no exception to
+  # hide anything in.
   defp run_hiding_secrets(module, fun) do
     fun.()
-  rescue
-    error in KeyError ->
-      {redacted_error, redacted_stacktrace} = redact_key_error(error, __STACKTRACE__, module)
-      reraise redacted_error, redacted_stacktrace
+  catch
+    :error, reason ->
+      stacktrace = __STACKTRACE__
+
+      case secret_keys(module) do
+        [] ->
+          :erlang.raise(:error, reason, stacktrace)
+
+        secret_keys ->
+          error = Exception.normalize(:error, reason, stacktrace)
+          {redacted_error, redacted_stacktrace} = redact_error(error, stacktrace, secret_keys)
+
+          if redacted_error === error and redacted_stacktrace === stacktrace do
+            :erlang.raise(:error, reason, stacktrace)
+          else
+            reraise redacted_error, redacted_stacktrace
+          end
+      end
   end
 
   # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,

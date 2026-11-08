@@ -226,23 +226,23 @@ export default class Renderer {
     return Type.list(tree.map(Renderer.#decodeNode));
   }
 
-  // Based on redact_key_error/3
+  // Based on redact_error/3
   //
-  // A secret value can reach a KeyError raised while the module's code runs: the template's vars
-  // hold the state, and a typo like component.state.pasword raises with the state map as its term,
-  // which the raising frame lists among its args too. Both get the module's secret values hidden, in
-  // any plain map they hold. Returns the error to throw, which is the given one when there is
-  // nothing to hide.
+  // A secret value can reach an error raised while the module's code runs: the template's vars hold
+  // the state, and code like component.state.pasword, %{step: 1} = component.state or a helper no
+  // clause of which matches component.state raises with the state map in the exception's term or
+  // args, which the raising frame lists among its args too. All of them get the module's secret
+  // values hidden, in any plain map they hold. Returns the error to throw, which is the given one,
+  // untouched, when there is nothing to hide.
   //
-  // WARNING: must match redact_key_error/3 on the server.
-  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
-  static redactKeyError(error, moduleProxy) {
-    // A throw or an exit carries no exception struct.
+  // WARNING: must match redact_error/3 on the server.
+  // Deps: [:maps.get/2, :maps.get/3, :maps.is_key/2, :maps.put/3]
+  static redactError(error, moduleProxy) {
+    // A throw or an exit carries no exception to hide anything in.
     if (
       !(error instanceof HologramBoxedError) ||
       error.kind.value !== "error" ||
-      !error.struct ||
-      !Type.isStruct(error.struct, "KeyError")
+      !error.struct
     ) {
       return error;
     }
@@ -256,19 +256,43 @@ export default class Renderer {
       return error;
     }
 
-    const term = Erlang_Maps["get/3"](
-      Type.atom("term"),
-      error.struct,
+    let isChanged = false;
+
+    const redact = (term) => {
+      const redactedTerm = Renderer.#redactSecretValues(term, secretKeys);
+
+      if (redactedTerm !== term) {
+        isChanged = true;
+      }
+
+      return redactedTerm;
+    };
+
+    let redactedStruct = error.struct;
+
+    if (
+      Type.isTrue(Erlang_Maps["is_key/2"](Type.atom("term"), redactedStruct))
+    ) {
+      redactedStruct = Erlang_Maps["put/3"](
+        Type.atom("term"),
+        redact(Erlang_Maps["get/2"](Type.atom("term"), redactedStruct)),
+        redactedStruct,
+      );
+    }
+
+    const args = Erlang_Maps["get/3"](
+      Type.atom("args"),
+      redactedStruct,
       Type.nil(),
     );
 
-    const redactedError = new HologramBoxedError(
-      Erlang_Maps["put/3"](
-        Type.atom("term"),
-        Renderer.#redactSecretValues(term, secretKeys),
-        error.struct,
-      ),
-    );
+    if (Type.isProperList(args)) {
+      redactedStruct = Erlang_Maps["put/3"](
+        Type.atom("args"),
+        Type.list(args.data.map(redact)),
+        redactedStruct,
+      );
+    }
 
     // Boxed, since an error user code re-raised already carries its stacktrace that way.
     const redactedStacktrace = Type.list(
@@ -279,16 +303,18 @@ export default class Renderer {
           ? Type.tuple([
               frameModule,
               frameFunction,
-              Type.list(
-                arityOrArgs.data.map((arg) =>
-                  Renderer.#redactSecretValues(arg, secretKeys),
-                ),
-              ),
+              Type.list(arityOrArgs.data.map(redact)),
               location,
             ])
           : frame;
       }),
     );
+
+    if (!isChanged) {
+      return error;
+    }
+
+    const redactedError = new HologramBoxedError(redactedStruct);
 
     redactedError.stacktrace = redactedStacktrace;
     redactedError.rederive(redactedStacktrace);
@@ -1539,7 +1565,7 @@ export default class Renderer {
         vars,
       ]);
     } catch (error) {
-      throw Renderer.redactKeyError(error, moduleProxy);
+      throw Renderer.redactError(error, moduleProxy);
     }
   }
 
@@ -1943,7 +1969,7 @@ export default class Renderer {
       try {
         initResult = moduleProxy["init/2"](props, initialComponentStruct);
       } catch (error) {
-        throw Renderer.redactKeyError(error, moduleProxy);
+        throw Renderer.redactError(error, moduleProxy);
       }
 
       // The metadata is written back onto whatever init/2 returned, as on the server, so the

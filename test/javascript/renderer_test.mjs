@@ -12336,7 +12336,7 @@ describe("Renderer", () => {
     });
   });
 
-  describe("redactKeyError()", () => {
+  describe("redactError()", () => {
     const secretsProxy = Interpreter.moduleProxy(
       Type.alias(
         "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module12",
@@ -12368,7 +12368,7 @@ describe("Renderer", () => {
     it("hides the secret values in the term", () => {
       assertBoxedError(
         () => {
-          throw Renderer.redactKeyError(keyError(), secretsProxy);
+          throw Renderer.redactError(keyError(), secretsProxy);
         },
         "KeyError",
         "key :pasword not found in:\n\n    %{count: 5, password: **redacted**}\n",
@@ -12383,7 +12383,7 @@ describe("Renderer", () => {
       const [frameModule, frameFunction, _args, location] =
         originalStacktrace[0].data;
 
-      const redactedStacktrace = Renderer.redactKeyError(error, secretsProxy)
+      const redactedStacktrace = Renderer.redactError(error, secretsProxy)
         .stacktrace.data;
 
       assert.deepStrictEqual(
@@ -12422,7 +12422,7 @@ describe("Renderer", () => {
 
       assertBoxedError(
         () => {
-          throw Renderer.redactKeyError(reraisedError, secretsProxy);
+          throw Renderer.redactError(reraisedError, secretsProxy);
         },
         "KeyError",
         "key :pasword not found in:\n\n    %{count: 5, password: **redacted**}\n",
@@ -12438,7 +12438,7 @@ describe("Renderer", () => {
 
       assertBoxedError(
         () => {
-          throw Renderer.redactKeyError(error, secretsProxy);
+          throw Renderer.redactError(error, secretsProxy);
         },
         "KeyError",
         "key :pasword not found in:\n\n    %{count: 5}\n",
@@ -12456,7 +12456,7 @@ describe("Renderer", () => {
 
       assertBoxedError(
         () => {
-          throw Renderer.redactKeyError(error, secretsProxy);
+          throw Renderer.redactError(error, secretsProxy);
         },
         "KeyError",
         'key :pasword not found in:\n\n    %{__struct__: MyStruct, password: "hunter2"}\n',
@@ -12466,33 +12466,66 @@ describe("Renderer", () => {
     it("returns the error as it is for a module with no secret keys", () => {
       const error = keyError();
 
-      assert.strictEqual(Renderer.redactKeyError(error, plainProxy), error);
+      assert.strictEqual(Renderer.redactError(error, plainProxy), error);
     });
 
-    it("returns an error other than a KeyError as it is", () => {
+    it("hides the secret values in the term of an exception other than a KeyError", () => {
+      const error = captureError(() =>
+        Erlang["error/1"](
+          Type.struct("MatchError", [
+            [Type.atom("__exception__"), Type.boolean(true)],
+            [Type.atom("term"), state],
+          ]),
+        ),
+      );
+
+      assertBoxedError(
+        () => {
+          throw Renderer.redactError(error, secretsProxy);
+        },
+        "MatchError",
+        "no match of right hand side value:\n\n    %{count: 5, password: **redacted**}\n",
+      );
+    });
+
+    it("hides the secret values in the args of a FunctionClauseError", () => {
+      const error = captureError(() =>
+        Interpreter.raiseFunctionClauseError("MyModule", "my_fun", 1, [state]),
+      );
+
+      assertBoxedError(
+        () => {
+          throw Renderer.redactError(error, secretsProxy);
+        },
+        "FunctionClauseError",
+        "no function clause matching in MyModule.my_fun/1\n\nThe following arguments were given to MyModule.my_fun/1:\n\n    # 1\n    %{count: 5, password: **redacted**}\n",
+      );
+    });
+
+    it("returns an error with nothing to hide as it is", () => {
       const error = captureError(() =>
         Interpreter.raiseArgumentError("my message"),
       );
 
-      assert.strictEqual(Renderer.redactKeyError(error, secretsProxy), error);
+      assert.strictEqual(Renderer.redactError(error, secretsProxy), error);
     });
 
     it("returns a throw as it is", () => {
       const error = captureError(() => Erlang["throw/1"](state));
 
-      assert.strictEqual(Renderer.redactKeyError(error, secretsProxy), error);
+      assert.strictEqual(Renderer.redactError(error, secretsProxy), error);
     });
 
     it("returns an exit as it is", () => {
       const error = captureError(() => Erlang["exit/1"](state));
 
-      assert.strictEqual(Renderer.redactKeyError(error, secretsProxy), error);
+      assert.strictEqual(Renderer.redactError(error, secretsProxy), error);
     });
 
     it("returns a value that isn't a boxed error as it is", () => {
       const error = new Error("my message");
 
-      assert.strictEqual(Renderer.redactKeyError(error, secretsProxy), error);
+      assert.strictEqual(Renderer.redactError(error, secretsProxy), error);
     });
   });
 

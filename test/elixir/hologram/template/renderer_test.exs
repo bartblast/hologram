@@ -40,6 +40,10 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module118
   alias Hologram.Test.Fixtures.Template.Renderer.Module119
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
+  alias Hologram.Test.Fixtures.Template.Renderer.Module120
+  alias Hologram.Test.Fixtures.Template.Renderer.Module121
+  alias Hologram.Test.Fixtures.Template.Renderer.Module122
+  alias Hologram.Test.Fixtures.Template.Renderer.Module123
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
@@ -1404,6 +1408,56 @@ defmodule Hologram.Template.RendererTest do
       assert_error KeyError,
                    ~s/key :x not found in:\n\n    %{cid: "my_component"}\n/,
                    fn -> render_dom(node, @env, @server) end
+    end
+
+    test "with init/3 matching the state against a pattern it doesn't fit, secret state values hidden in the error" do
+      node = {:component, Module120, [{"cid", [text: "my_component"]}], []}
+
+      assert_error MatchError,
+                   "no match of right hand side value:\n\n    %{password: **redacted**}\n",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "with init/3 calling a function no clause of which matches the state, secret state values hidden in the error and its stacktrace" do
+      node = {:component, Module121, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg = """
+      no function clause matching in Hologram.Test.Fixtures.Template.Renderer.Module121.step/1
+
+      The following arguments were given to Hologram.Test.Fixtures.Template.Renderer.Module121.step/1:
+
+          # 1
+          %{password: **redacted**}
+
+      Attempted function clauses (showing 1 out of 1):
+
+          defp step(-%{step: step}-)
+      """
+
+      assert_error FunctionClauseError, expected_msg, fn -> render_dom(node, @env, @server) end
+
+      try do
+        render_dom(node, @env, @server)
+        flunk("expected FunctionClauseError")
+      rescue
+        FunctionClauseError ->
+          [top_frame | _rest] = __STACKTRACE__
+
+          assert {Module121, :step, [%{password: %Component.Redacted{}}], _location} = top_frame
+      end
+    end
+
+    test "with an error raised by a module with no secret keys, the error goes on as it was raised" do
+      node = {:component, Module122, [{"cid", [text: "my_component"]}], []}
+
+      assert catch_error(render_dom(node, @env, @server)) == {:badmatch, %{}}
+    end
+
+    test "with an error that holds no secret value, raised by a module with secret keys, the error goes on as it was raised" do
+      node = {:component, Module123, [{"cid", [text: "my_component"]}], []}
+
+      assert catch_error(render_dom(node, @env, @server)) ==
+               {:badmatch, %{cid: "my_component"}}
     end
 
     test "with props and state" do
