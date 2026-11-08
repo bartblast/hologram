@@ -44,6 +44,10 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module121
   alias Hologram.Test.Fixtures.Template.Renderer.Module122
   alias Hologram.Test.Fixtures.Template.Renderer.Module123
+  alias Hologram.Test.Fixtures.Template.Renderer.Module124
+  alias Hologram.Test.Fixtures.Template.Renderer.Module125
+  alias Hologram.Test.Fixtures.Template.Renderer.Module126
+  alias Hologram.Test.Fixtures.Template.Renderer.Module127
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
@@ -1445,6 +1449,51 @@ defmodule Hologram.Template.RendererTest do
 
           assert {Module121, :step, [%{password: %Component.Redacted{}}], _location} = top_frame
       end
+    end
+
+    test "with init/3 raising the state as an Erlang error, secret state values hidden in the error" do
+      node = {:component, Module124, [{"cid", [text: "my_component"]}], []}
+
+      assert_error ErlangError, "Erlang error: %{password: **redacted**}", fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with init/3 converting the state to a string, secret state values hidden in the error" do
+      node = {:component, Module125, [{"cid", [text: "my_component"]}], []}
+
+      # The message lists every String.Chars implementation the app has, so only its end is matched.
+      assert_error Protocol.UndefinedError,
+                   ~r/\n\nGot value:\n\n    %\{password: \*\*redacted\*\*\}\n$/,
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "with init/3 applying a function on the state, secret state values hidden in the message Elixir builds from the stacktrace" do
+      node = {:component, Module126, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg =
+        "you attempted to apply a function named :foo on %{password: **redacted**}. " <>
+          "If you are using Kernel.apply/3, make sure the module is an atom. " <>
+          "If you are using the dot syntax, such as module.function(), " <>
+          "make sure the left-hand side of the dot is an atom representing a module"
+
+      assert_error ArgumentError, expected_msg, fn -> render_dom(node, @env, @server) end
+    end
+
+    test "with init/3 re-raising an exception it rescued, secret state values hidden in the error" do
+      node = {:component, Module127, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg = """
+      key :pasword not found in:
+
+          %{password: **redacted**}
+
+      Did you mean:
+
+          * :password
+      """
+
+      assert_error KeyError, expected_msg, fn -> render_dom(node, @env, @server) end
     end
 
     test "with an error raised by a module with no secret keys, the error goes on as it was raised" do

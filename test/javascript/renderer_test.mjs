@@ -12488,6 +12488,63 @@ describe("Renderer", () => {
       );
     });
 
+    it("hides the secret values in the original reason of an ErlangError", () => {
+      const error = captureError(() => Erlang["error/1"](state));
+
+      assertBoxedError(
+        () => {
+          throw Renderer.redactError(error, secretsProxy);
+        },
+        "ErlangError",
+        "Erlang error: %{count: 5, password: **redacted**}",
+      );
+    });
+
+    it("hides the secret values in a message built from the raising frame's args", () => {
+      const error = captureError(() =>
+        Erlang["apply/3"](state, Type.atom("foo"), Type.list()),
+      );
+
+      assertBoxedError(
+        () => {
+          throw Renderer.redactError(error, secretsProxy);
+        },
+        "ArgumentError",
+        "you attempted to apply a function named :foo on %{count: 5, password: **redacted**}. If you are using Kernel.apply/3, make sure the module is an atom. If you are using the dot syntax, such as module.function(), make sure the left-hand side of the dot is an atom representing a module",
+      );
+    });
+
+    // Checked on the struct, since in the test runtime this error's message falls back to the
+    // inspected struct, which a message check would only test.
+    it("hides the secret values in the value of a Protocol.UndefinedError", () => {
+      const error = captureError(() =>
+        Erlang["error/1"](
+          Type.struct("Protocol.UndefinedError", [
+            [Type.atom("__exception__"), Type.boolean(true)],
+            [Type.atom("description"), Type.bitstring("")],
+            [Type.atom("protocol"), Type.alias("String.Chars")],
+            [Type.atom("value"), state],
+          ]),
+        ),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.redactError(error, secretsProxy).struct,
+        Type.struct("Protocol.UndefinedError", [
+          [Type.atom("__exception__"), Type.boolean(true)],
+          [Type.atom("description"), Type.bitstring("")],
+          [Type.atom("protocol"), Type.alias("String.Chars")],
+          [
+            Type.atom("value"),
+            Type.map([
+              [Type.atom("count"), Type.integer(5)],
+              [Type.atom("password"), Type.redactedStruct()],
+            ]),
+          ],
+        ]),
+      );
+    });
+
     it("hides the secret values in the args of a FunctionClauseError", () => {
       const error = captureError(() =>
         Interpreter.raiseFunctionClauseError("MyModule", "my_fun", 1, [state]),

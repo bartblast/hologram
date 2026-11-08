@@ -229,11 +229,12 @@ export default class Renderer {
   // Based on redact_error/3
   //
   // A secret value can reach an error raised while the module's code runs: the template's vars hold
-  // the state, and code like component.state.pasword, %{step: 1} = component.state or a helper no
-  // clause of which matches component.state raises with the state map in the exception's term or
-  // args, which the raising frame lists among its args too. All of them get the module's secret
-  // values hidden, in any plain map they hold. Returns the error to throw, which is the given one,
-  // untouched, when there is nothing to hide.
+  // the state, and code like component.state.pasword, %{step: 1} = component.state, a helper no
+  // clause of which matches component.state, :erlang.error(component.state) or
+  // to_string(component.state) raises with the state map in the exception's term, original
+  // (ErlangError), value (Protocol.UndefinedError) or args, which the raising frame lists among its
+  // args too. All of them get the module's secret values hidden, in any plain map they hold.
+  // Returns the error to throw, which is the given one, untouched, when there is nothing to hide.
   //
   // WARNING: must match redact_error/3 on the server.
   // Deps: [:maps.get/2, :maps.get/3, :maps.is_key/2, :maps.put/3]
@@ -268,32 +269,6 @@ export default class Renderer {
       return redactedTerm;
     };
 
-    let redactedStruct = error.struct;
-
-    if (
-      Type.isTrue(Erlang_Maps["is_key/2"](Type.atom("term"), redactedStruct))
-    ) {
-      redactedStruct = Erlang_Maps["put/3"](
-        Type.atom("term"),
-        redact(Erlang_Maps["get/2"](Type.atom("term"), redactedStruct)),
-        redactedStruct,
-      );
-    }
-
-    const args = Erlang_Maps["get/3"](
-      Type.atom("args"),
-      redactedStruct,
-      Type.nil(),
-    );
-
-    if (Type.isProperList(args)) {
-      redactedStruct = Erlang_Maps["put/3"](
-        Type.atom("args"),
-        Type.list(args.data.map(redact)),
-        redactedStruct,
-      );
-    }
-
     // Boxed, since an error user code re-raised already carries its stacktrace that way.
     const redactedStacktrace = Type.list(
       Interpreter.boxStacktrace(error).data.map((frame) => {
@@ -309,6 +284,39 @@ export default class Renderer {
           : frame;
       }),
     );
+
+    // Normalized against the frames with the secrets hidden, since Elixir builds some messages from
+    // the raising frame's args, like the one for apply(component.state, :foo, []).
+    let redactedStruct = Interpreter.normalizeError(
+      error.value,
+      redactedStacktrace,
+    );
+
+    for (const field of ["original", "term", "value"]) {
+      const fieldAtom = Type.atom(field);
+
+      if (Type.isTrue(Erlang_Maps["is_key/2"](fieldAtom, redactedStruct))) {
+        redactedStruct = Erlang_Maps["put/3"](
+          fieldAtom,
+          redact(Erlang_Maps["get/2"](fieldAtom, redactedStruct)),
+          redactedStruct,
+        );
+      }
+    }
+
+    const args = Erlang_Maps["get/3"](
+      Type.atom("args"),
+      redactedStruct,
+      Type.nil(),
+    );
+
+    if (Type.isProperList(args)) {
+      redactedStruct = Erlang_Maps["put/3"](
+        Type.atom("args"),
+        Type.list(args.data.map(redact)),
+        redactedStruct,
+      );
+    }
 
     if (!isChanged) {
       return error;
