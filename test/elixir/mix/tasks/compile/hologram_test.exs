@@ -38,6 +38,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @assets_dir Path.join(@test_dir, "assets")
   @build_dir Path.join(@test_dir, "build")
   @build_lib_dir Path.join(@test_dir, "build_lib")
+  @legacy_bundles_dir Path.join([@test_dir, "app_static", "hologram"])
   @snapshot_build_dir Path.join(@test_dir, "snapshot_build")
   @snapshot_static_dir Path.join(@test_dir, "snapshot_static")
   @static_dir Path.join(@test_dir, "static")
@@ -46,6 +47,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @compile_inputs_path Path.join(@build_dir, Reflection.compile_inputs_dump_file_name())
   @compiler_lock_file_name Reflection.compiler_lock_file_name()
   @lock_path Path.join(@build_dir, @compiler_lock_file_name)
+  @install_lock_path Path.join(@assets_dir, Reflection.js_deps_install_lock_file_name())
 
   # The Elixir compile manifest of the :hologram app, the one app with a manifest in the test
   # build lib dir.
@@ -320,6 +322,28 @@ defmodule Mix.Tasks.Compile.HologramTest do
     items
   end
 
+  # Moves a bundle's files, its gzip copy included, to the given path of an older build, and returns
+  # the bundle info naming them under the given digest.
+  defp move_bundle_files(bundle_info, old_digest, old_bundle_path) do
+    old_gzip_path = Compiler.gzip_path(old_bundle_path)
+    old_source_map_path = old_bundle_path <> ".map"
+
+    File.rename!(bundle_info.static_bundle_path, old_bundle_path)
+
+    bundle_info.static_bundle_path
+    |> Compiler.gzip_path()
+    |> File.rename!(old_gzip_path)
+
+    File.rename!(bundle_info.static_source_map_path, old_source_map_path)
+
+    %{
+      bundle_info
+      | digest: old_digest,
+        static_bundle_path: old_bundle_path,
+        static_source_map_path: old_source_map_path
+    }
+  end
+
   # How many chunk bundles the last compile left.
   defp num_chunk_bundles do
     map_size(cache_state().chunks.bundle_infos)
@@ -333,18 +357,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     [signature] = signatures_carrying(chunks, @chunk_only_impl)
     bundle_info = chunks.bundle_infos[signature]
 
-    old_digest = "OLDCHUNK"
-    old_bundle_path = Path.join(opts[:static_dir], "chunk-#{old_digest}.js")
-    old_source_map_path = old_bundle_path <> ".map"
-    File.rename!(bundle_info.static_bundle_path, old_bundle_path)
-    File.rename!(bundle_info.static_source_map_path, old_source_map_path)
-
-    old_bundle_info = %{
-      bundle_info
-      | digest: old_digest,
-        static_bundle_path: old_bundle_path,
-        static_source_map_path: old_source_map_path
-    }
+    old_bundle_path = Path.join(opts[:static_dir], "chunk-OLDCHUNK.js")
+    old_bundle_info = move_bundle_files(bundle_info, "OLDCHUNK", old_bundle_path)
 
     Cache.put_chunks(%{
       chunks
@@ -371,6 +385,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
     |> PLT.put(Map.to_list(module_infos))
 
     Cache.put_module_infos(dumped_at, editable_modules)
+  end
+
+  # Moves the kept runtime bundle, its gzip copy and its source map to the names of an older build,
+  # and has the kept runtime state name them, as if an earlier compile had built that runtime.
+  defp put_kept_runtime_bundle_under_old_digest(opts) do
+    runtime = cache_state().runtime
+    old_bundle_path = Path.join(opts[:static_dir], "runtime-OLDRUNTM.js")
+    old_bundle_info = move_bundle_files(runtime.bundle_info, "OLDRUNTM", old_bundle_path)
+
+    Cache.put_runtime(%{runtime | bundle_info: old_bundle_info})
+
+    old_bundle_info
   end
 
   # Makes the first kept pages by name pending, so that a run rebuilds them with no edit, and
@@ -444,21 +470,20 @@ defmodule Mix.Tasks.Compile.HologramTest do
   defp setup_empty_assets_and_build_dirs(opts) do
     assets_dir = Path.join(@test_dir, "assets_empty")
     clean_dir(assets_dir)
+    link_lib_js_deps(assets_dir)
 
     build_dir = setup_empty_build_dir()
-    link_lib_js_deps(assets_dir, build_dir)
 
     opts
     |> Keyword.put(:assets_dir, assets_dir)
     |> Keyword.put(:build_dir, build_dir)
   end
 
-  # A build dir with nothing compiled, holding the record of the lib's JavaScript deps being linked
-  # to the module's assets dir, so that a compile into it installs nothing.
+  # A build dir with nothing compiled. A compile into it installs nothing: the record of the JS deps
+  # install is the assets dir's, which every build dir shares.
   defp setup_empty_build_dir do
     build_dir = Path.join(@test_dir, "build_empty")
     clean_dir(build_dir)
-    link_lib_js_deps(@assets_dir, build_dir)
 
     build_dir
   end
@@ -546,6 +571,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Path.wildcard()
       |> Enum.sort()
 
+    chunk_gzip_paths =
+      opts[:static_dir]
+      |> Path.join("chunk-????????.js.gz")
+      |> Path.wildcard()
+      |> Enum.sort()
+
     chunk_source_map_paths =
       opts[:static_dir]
       |> Path.join("chunk-????????.js.map")
@@ -558,6 +589,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
              bundle_infos
              |> Enum.map(& &1.static_bundle_path)
              |> Enum.sort()
+
+    assert chunk_gzip_paths == Enum.map(chunk_bundle_paths, &Compiler.gzip_path/1)
 
     assert chunk_source_map_paths ==
              bundle_infos
@@ -595,9 +628,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert File.exists?(opts[:tmp_dir])
   end
 
+  # The bin dir only a real npm install creates, which link_lib_js_deps/1 doesn't.
   defp test_js_deps(opts) do
     assert opts[:assets_dir]
-           |> Path.join("node_modules")
+           |> Path.join("node_modules/.bin")
            |> File.exists?()
   end
 
@@ -629,6 +663,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     assert num_page_bundles == @num_pages
 
+    num_page_gzip_copies =
+      opts[:static_dir]
+      |> Path.join("page-*-????????.js.gz")
+      |> Path.wildcard()
+      |> Enum.count()
+
+    assert num_page_gzip_copies == @num_pages
+
     num_page_source_maps =
       opts[:static_dir]
       |> Path.join("page-*-????????.js.map")
@@ -654,6 +696,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Enum.count()
 
     assert num_runtime_bundles == 1
+
+    num_runtime_gzip_copies =
+      opts[:static_dir]
+      |> Path.join("runtime-????????.js.gz")
+      |> Path.wildcard()
+      |> Enum.count()
+
+    assert num_runtime_gzip_copies == 1
 
     num_runtime_source_maps =
       opts[:static_dir]
@@ -728,7 +778,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     File.mkdir_p!(@manifest_dir)
     File.write!(@manifest_path, "manifest 1")
 
-    node_modules_path = link_lib_js_deps(@assets_dir, @build_dir)
+    node_modules_path = link_lib_js_deps(@assets_dir)
 
     opts = [
       assets_dir: @assets_dir,
@@ -736,6 +786,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       build_lib_dir: @build_lib_dir,
       esbuild_bin_path: Compiler.esbuild_bin_path(node_modules_path),
       js_dir: Path.join(@lib_assets_dir, "js"),
+      legacy_bundles_dir: @legacy_bundles_dir,
       node_modules_path: node_modules_path,
       static_dir: @static_dir,
       tmp_dir: @tmp_dir
@@ -750,6 +801,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   setup do
     File.rm(@lock_path)
+
+    # A test that dies holding the install lock would leave every later compile waiting on it.
+    File.rm(@install_lock_path)
+
     clean_dir(@tmp_dir)
 
     # Every test starts where the compile in setup_all ended: everything built, nothing in memory.
@@ -800,7 +855,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     opts = setup_empty_assets_and_build_dirs(initial_opts)
 
     # A compile with no record of an install installs the JavaScript deps too (see test_js_deps/1).
-    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+    package_json_digest_path =
+      Path.join([opts[:assets_dir], "node_modules", ".package_json_digest.bin"])
+
     File.rm!(package_json_digest_path)
 
     # Test case 1: when there are no previous build artifacts
@@ -818,6 +875,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     # Reused or re-read, an untouched module keeps its entry across runs
     assert load_module_info_items(opts)[Module1] == first_run_module_info
+  end
+
+  test "removes the dir in the app's static dir the bundles went to before", %{opts: opts} do
+    legacy_bundle_path = Path.join(@legacy_bundles_dir, "runtime-AAAAAAAA.js")
+
+    File.mkdir_p!(@legacy_bundles_dir)
+    File.write!(legacy_bundle_path, "")
+
+    run(opts)
+
+    refute File.exists?(@legacy_bundles_dir)
   end
 
   describe "kept compile state" do
@@ -1375,6 +1443,34 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert [{[:runtime, _first_page], true} | rest] = recorded_built.()
       refute Enum.any?(rest, fn {built, _runtime_on_disk?} -> :runtime in built end)
 
+      test_runtime_bundle(opts)
+    end
+
+    test "removes the runtime bundle a rebuild replaced as soon as its batch is built", %{
+      opts: opts
+    } do
+      run(opts)
+
+      old_bundle_info = put_kept_runtime_bundle_under_old_digest(opts)
+      fake_edit(find_editable_runtime_module())
+
+      {record_built, recorded_built} = record_calls()
+
+      old_paths = [
+        old_bundle_info.static_bundle_path,
+        Compiler.gzip_path(old_bundle_info.static_bundle_path),
+        old_bundle_info.static_source_map_path
+      ]
+
+      # Which of the old runtime's files are still on disk when a batch is reported, before the
+      # cleanup at the end of the compile.
+      bundles_built = fn built ->
+        record_built.({built, Enum.filter(old_paths, &File.exists?/1)})
+      end
+
+      run(Keyword.put(opts, :bundles_built, bundles_built))
+
+      assert [{[:runtime | _pages], []}] = recorded_built.()
       test_runtime_bundle(opts)
     end
 
@@ -2386,6 +2482,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
       signature = MapSet.new([NoSuchStruct])
       bundle_path = Path.join(opts[:static_dir], "chunk-NOSUCH11.js")
       File.write!(bundle_path, "")
+
+      bundle_path
+      |> Compiler.gzip_path()
+      |> File.write!("")
+
       File.write!(bundle_path <> ".map", "")
 
       bundle_info = %{
@@ -2436,6 +2537,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       refute File.exists?(old_bundle_info.static_bundle_path)
+
+      refute old_bundle_info.static_bundle_path
+             |> Compiler.gzip_path()
+             |> File.exists?()
+
       refute File.exists?(old_bundle_info.static_source_map_path)
       assert cache_state().chunks == chunks
       test_chunk_bundles(opts)
@@ -3453,6 +3559,46 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert after_count == before_count
   end
 
+  describe "JS deps install" do
+    @tag timeout: 300_000
+    test "a compile into another build dir doesn't install the deps again", %{
+      opts: initial_opts
+    } do
+      opts = setup_empty_assets_and_build_dirs(initial_opts)
+      run(opts)
+
+      other_build_dir = Path.join(@test_dir, "build_other_env")
+      clean_dir(other_build_dir)
+      run(Keyword.put(opts, :build_dir, other_build_dir))
+
+      # The assets dir holds only the record the lib's deps were linked with, and a real npm install
+      # would have filled its node_modules dir.
+      refute opts[:assets_dir]
+             |> Path.join("node_modules/.bin")
+             |> File.exists?()
+    end
+
+    test "a compile waits for an install another process is running", %{opts: opts} do
+      # The current process is definitely running.
+      FileUtils.write_p!(@install_lock_path, "#{System.pid()}")
+
+      task =
+        Task.async(fn ->
+          start_time = System.system_time(:millisecond)
+          run(opts)
+          end_time = System.system_time(:millisecond)
+          end_time - start_time
+        end)
+
+      # Removed after a while, as the other process would once its install is done.
+      Process.sleep(2_000)
+      File.rm!(@install_lock_path)
+
+      assert Task.await(task, :infinity) >= 2_000
+      refute File.exists?(@install_lock_path)
+    end
+  end
+
   describe "compiler locking" do
     test "locking mechanism prevents concurrent compilation", %{opts: opts} do
       # The lock guards the actual compilation work, which emits
@@ -3502,7 +3648,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
         run(opts)
       end
 
-      refute File.exists?(@lock_path)
+      refute opts[:build_dir]
+             |> Path.join(@compiler_lock_file_name)
+             |> File.exists?()
+
+      refute opts[:assets_dir]
+             |> Path.join(Reflection.js_deps_install_lock_file_name())
+             |> File.exists?()
     end
 
     test "lock dir (which is the build dir) is created if it doesn't exist", %{opts: initial_opts} do

@@ -31,6 +31,12 @@ defmodule Hologram.Assets.PathRegistryTest do
     System.put_env("HOLOGRAM_ENV", env)
   end
 
+  defp write_bundle_file(file_name) do
+    AssetPathRegistryStub.bundles_dir()
+    |> Path.join(file_name)
+    |> File.write!("")
+  end
+
   defp write_cache_manifest(json) do
     write_static_file("cache_manifest.json", json)
   end
@@ -265,15 +271,33 @@ defmodule Hologram.Assets.PathRegistryTest do
                {:ok, "/test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css"}
     end
 
-    test "reads a digested copy of a bundle as a copy, leaving the bundle's own key alone in dev and test" do
-      write_static_file("hologram/runtime-AAAAAAAA-d41d8cd98f00b204e9800998ecf8427e.js", "")
+    # The hologram dir in the app's static dir is where the bundles went before they moved to the
+    # bundles dir, which every build env shared, so its files can be another env's.
+    test "leaves out the files of the hologram dir in the app's static dir", %{mapping: mapping} do
+      write_static_file("hologram/runtime-ZZZZZZZZ.js", "")
+      write_static_file("hologram/runtime-ZZZZZZZZ-d41d8cd98f00b204e9800998ecf8427e.js", "")
+      write_static_file("hologram/test_file_9.css", "")
 
       init(nil)
 
       assert lookup("hologram/runtime.js") == {:ok, "/hologram/runtime-AAAAAAAA.js"}
+      assert ETS.get_all(AssetPathRegistryStub.ets_table_name()) == mapping
+    end
 
-      assert lookup("hologram/runtime-AAAAAAAA.js") ==
-               {:ok, "/hologram/runtime-AAAAAAAA-d41d8cd98f00b204e9800998ecf8427e.js"}
+    test "leaves out the gzip copy of the runtime bundle", %{mapping: mapping} do
+      write_bundle_file("runtime-AAAAAAAA.js.gz")
+
+      init(nil)
+
+      assert ETS.get_all(AssetPathRegistryStub.ets_table_name()) == mapping
+    end
+
+    test "maps a file of the bundles dir with no hash in its name under its own name" do
+      write_bundle_file("test_file_9.css")
+
+      init(nil)
+
+      assert lookup("hologram/test_file_9.css") == {:ok, "/hologram/test_file_9.css"}
     end
 
     test "maps a bundle as in dev and test outside them" do
@@ -296,11 +320,11 @@ defmodule Hologram.Assets.PathRegistryTest do
                {:ok, "/test_dir_1/test_dir_2/test_file_1-d41d8cd98f00b204e9800998ecf8427e.css"}
     end
 
-    test "asset exists, has esbuild content hash suffix, in hologram dir" do
+    test "asset exists, has esbuild content hash suffix, in bundles dir" do
       assert lookup("hologram/runtime.js") == {:ok, "/hologram/runtime-AAAAAAAA.js"}
     end
 
-    test "asset exists, has esbuild content hash-like suffix, outside hologram dir" do
+    test "asset exists, has esbuild content hash-like suffix, outside the bundles dir" do
       assert lookup("test_dir_3/test_file_11-DOWNLOAD.css") ==
                {:ok, "/test_dir_3/test_file_11-DOWNLOAD.css"}
 
@@ -350,9 +374,9 @@ defmodule Hologram.Assets.PathRegistryTest do
     end
 
     test "picks up a new runtime bundle" do
-      static_dir = AssetPathRegistryStub.static_dir()
-      File.rm!(static_dir <> "/hologram/runtime-AAAAAAAA.js")
-      write_static_file("hologram/runtime-EEEEEEEE.js", "")
+      bundles_dir = AssetPathRegistryStub.bundles_dir()
+      File.rm!(bundles_dir <> "/runtime-AAAAAAAA.js")
+      write_bundle_file("runtime-EEEEEEEE.js")
 
       reload()
 
@@ -368,6 +392,14 @@ defmodule Hologram.Assets.PathRegistryTest do
       assert ETS.get(ets_table_name, :dummy_key) == {:ok, :dummy_value}
     end
 
+    test "leaves out the files of the hologram dir in the app's static dir", %{mapping: mapping} do
+      write_static_file("hologram/runtime-ZZZZZZZZ.js", "")
+
+      reload()
+
+      assert ETS.get_all(AssetPathRegistryStub.ets_table_name()) == mapping
+    end
+
     test "leaves the entries of the app's assets alone" do
       ets_table_name = AssetPathRegistryStub.ets_table_name()
       ETS.put(ets_table_name, "test_dir_3/test_file_10.css", "/kept")
@@ -379,7 +411,7 @@ defmodule Hologram.Assets.PathRegistryTest do
       assert lookup("test_dir_3/test_file_12.css") == :error
     end
 
-    test "removes a bundle key the static dir no longer holds", %{mapping: mapping} do
+    test "removes a bundle key the bundles dir no longer holds", %{mapping: mapping} do
       ets_table_name = AssetPathRegistryStub.ets_table_name()
       ETS.put(ets_table_name, "hologram/stale.js", "/hologram/stale-EEEEEEEE.js")
 
@@ -508,7 +540,7 @@ defmodule Hologram.Assets.PathRegistryTest do
                Map.drop(mapping, test_dir_3_keys)
     end
 
-    test "rebuilds every entry outside the hologram dir for the static dir itself" do
+    test "rebuilds every entry outside the bundles for the static dir itself" do
       ets_table_name = AssetPathRegistryStub.ets_table_name()
       ETS.put(ets_table_name, "test_dir_3/test_file_10.css", "/stale")
       ETS.put(ets_table_name, "hologram/runtime.js", "/kept")

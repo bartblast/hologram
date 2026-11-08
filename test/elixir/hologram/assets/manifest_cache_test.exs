@@ -26,7 +26,6 @@ defmodule Hologram.Assets.ManifestCacheTest do
     expected = """
     {
     "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
-    "hologram/test_file_9.css": "/hologram/test_file_9-d41d8cd98f00b204e9800998ecf8427e.css",
     "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-d41d8cd98f00b204e9800998ecf8427e.js",
     "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-d41d8cd98f00b204e9800998ecf8427e.css",
     "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-d41d8cd98f00b204e9800998ecf8427e.css",
@@ -76,7 +75,6 @@ defmodule Hologram.Assets.ManifestCacheTest do
     expected = """
     {
     "hologram/runtime.js": "/hologram/runtime-AAAAAAAA.js",
-    "hologram/test_file_9.css": "/hologram/test_file_9-d41d8cd98f00b204e9800998ecf8427e.css",
     "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-d41d8cd98f00b204e9800998ecf8427e.js",
     "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-d41d8cd98f00b204e9800998ecf8427e.css",
     "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-d41d8cd98f00b204e9800998ecf8427e.css",

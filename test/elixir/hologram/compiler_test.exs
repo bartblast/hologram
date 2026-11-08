@@ -2,6 +2,7 @@ defmodule Hologram.CompilerTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Compiler
 
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
@@ -252,17 +253,15 @@ defmodule Hologram.CompilerTest do
   defp setup_js_deps_test(test_subdir) do
     test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
     assets_dir = Path.join(test_tmp_dir, "assets")
-    build_dir = Path.join(test_tmp_dir, "build")
 
     clean_dir(test_tmp_dir)
     File.mkdir_p!(assets_dir)
-    File.mkdir_p!(build_dir)
 
     lib_package_json_path = Path.join(@assets_dir, "package.json")
     fixture_package_json_path = Path.join(assets_dir, "package.json")
     File.cp!(lib_package_json_path, fixture_package_json_path)
 
-    [assets_dir: assets_dir, build_dir: build_dir]
+    [assets_dir: assets_dir]
   end
 
   # A module info PLT holding Module1, Module2, Module3 and Hologram.JS, the module of the manually
@@ -2186,6 +2185,11 @@ defmodule Hologram.CompilerTest do
 
       assert File.read!(static_bundle_path) == expected_bundle_js
 
+      assert static_bundle_path
+             |> gzip_path()
+             |> File.read!()
+             |> :zlib.gunzip() == expected_bundle_js
+
       expected_source_map_js =
         normalize_newlines("""
         {
@@ -2594,6 +2598,11 @@ defmodule Hologram.CompilerTest do
 
       assert File.read!(static_bundle_path_1) == expected_bundle_js_1
 
+      assert static_bundle_path_1
+             |> gzip_path()
+             |> File.read!()
+             |> :zlib.gunzip() == expected_bundle_js_1
+
       expected_bundle_js_2 =
         normalize_newlines("""
         (()=>{var o=2;})();
@@ -2601,6 +2610,11 @@ defmodule Hologram.CompilerTest do
         """)
 
       assert File.read!(static_bundle_path_2) == expected_bundle_js_2
+
+      assert static_bundle_path_2
+             |> gzip_path()
+             |> File.read!()
+             |> :zlib.gunzip() == expected_bundle_js_2
 
       expected_source_map_js_2 =
         normalize_newlines("""
@@ -3872,6 +3886,11 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "gzip_path/1" do
+    assert gzip_path("/my_static_dir/runtime-AAAAAAAA.js") ==
+             "/my_static_dir/runtime-AAAAAAAA.js.gz"
+  end
+
   describe "install_js_deps/1" do
     setup do
       setup_js_deps_test("install_js_deps_1")
@@ -3879,10 +3898,9 @@ defmodule Hologram.CompilerTest do
 
     @tag timeout: 300_000
     test "installs deps in node_modules dir and creates package-lock.json file", %{
-      assets_dir: assets_dir,
-      build_dir: build_dir
+      assets_dir: assets_dir
     } do
-      install_js_deps(assets_dir, build_dir)
+      install_js_deps(assets_dir)
 
       node_modules_dir = Path.join(assets_dir, "node_modules")
       assert File.exists?(node_modules_dir)
@@ -3892,25 +3910,48 @@ defmodule Hologram.CompilerTest do
     end
 
     @tag timeout: 300_000
-    test "creates a file containing the digest of package.json", %{
-      assets_dir: assets_dir,
-      build_dir: build_dir
+    test "creates a file containing the digest of package.json in the node_modules dir", %{
+      assets_dir: assets_dir
     } do
-      install_js_deps(assets_dir, build_dir)
+      install_js_deps(assets_dir)
 
-      package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
-      assert File.exists?(package_json_digest_path)
+      expected_digest =
+        assets_dir
+        |> Path.join("package.json")
+        |> File.read!()
+        |> CryptographicUtils.digest(:sha256, :binary)
+
+      package_json_digest_path =
+        Path.join([assets_dir, "node_modules", ".package_json_digest.bin"])
+
+      assert File.read!(package_json_digest_path) == expected_digest
     end
 
-    test "raises RuntimeError if npm install command fails", %{
-      assets_dir: assets_dir,
-      build_dir: build_dir
+    test "removes the record of the last install when npm install command fails", %{
+      assets_dir: assets_dir
     } do
+      link_lib_js_deps(assets_dir)
+
+      package_json_digest_path =
+        Path.join([assets_dir, "node_modules", ".package_json_digest.bin"])
+
+      assets_dir
+      |> Path.join("package.json")
+      |> File.rm!()
+
+      assert_raise RuntimeError, "npm install command failed", fn ->
+        install_js_deps(assets_dir)
+      end
+
+      refute File.exists?(package_json_digest_path)
+    end
+
+    test "raises RuntimeError if npm install command fails", %{assets_dir: assets_dir} do
       fixture_package_json_path = Path.join(assets_dir, "package.json")
       File.rm!(fixture_package_json_path)
 
       assert_raise RuntimeError, "npm install command failed", fn ->
-        install_js_deps(assets_dir, build_dir)
+        install_js_deps(assets_dir)
       end
 
       node_modules_dir = Path.join(assets_dir, "node_modules")
@@ -3919,7 +3960,9 @@ defmodule Hologram.CompilerTest do
       package_lock_json_path = Path.join(assets_dir, "package-lock.json")
       assert File.exists?(package_lock_json_path)
 
-      package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
+      package_json_digest_path =
+        Path.join([assets_dir, "node_modules", ".package_json_digest.bin"])
+
       refute File.exists?(package_json_digest_path)
     end
   end
@@ -4507,53 +4550,71 @@ defmodule Hologram.CompilerTest do
 
   describe "maybe_install_js_deps/1" do
     setup do
-      [assets_dir: assets_dir, build_dir: build_dir] =
-        setup_js_deps_test("maybe_install_js_deps_1")
+      [assets_dir: assets_dir] = setup_js_deps_test("maybe_install_js_deps_1")
 
       # The record an install leaves, without one: the deps are the lib's.
-      link_lib_js_deps(assets_dir, build_dir)
+      link_lib_js_deps(assets_dir)
 
-      [assets_dir: assets_dir, build_dir: build_dir]
+      package_json_digest_path =
+        Path.join([assets_dir, "node_modules", ".package_json_digest.bin"])
+
+      [assets_dir: assets_dir, package_json_digest_path: package_json_digest_path]
     end
 
     @tag timeout: 300_000
-    test "package_json_digest.bin file doesn't exist", %{
+    test "the record of the last install doesn't exist", %{
       assets_dir: assets_dir,
-      build_dir: build_dir
+      package_json_digest_path: package_json_digest_path
     } do
-      package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       File.rm!(package_json_digest_path)
 
-      assert maybe_install_js_deps(assets_dir, build_dir) == :ok
+      assert maybe_install_js_deps(assets_dir) == :ok
       assert File.exists?(package_json_digest_path)
     end
 
     @tag timeout: 300_000
-    test "package-lock.json file doesn't exist", %{assets_dir: assets_dir, build_dir: build_dir} do
+    test "node_modules dir doesn't exist", %{
+      assets_dir: assets_dir,
+      package_json_digest_path: package_json_digest_path
+    } do
+      assets_dir
+      |> Path.join("node_modules")
+      |> File.rm_rf!()
+
+      assert maybe_install_js_deps(assets_dir) == :ok
+      assert File.exists?(package_json_digest_path)
+    end
+
+    @tag timeout: 300_000
+    test "package-lock.json file doesn't exist", %{assets_dir: assets_dir} do
       package_lock_json_path = Path.join(assets_dir, "package-lock.json")
       File.rm!(package_lock_json_path)
 
-      assert maybe_install_js_deps(assets_dir, build_dir) == :ok
+      assert maybe_install_js_deps(assets_dir) == :ok
       assert File.exists?(package_lock_json_path)
     end
 
     @tag timeout: 300_000
-    test "package.json file changed", %{assets_dir: assets_dir, build_dir: build_dir} do
-      package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
+    test "package.json file changed", %{
+      assets_dir: assets_dir,
+      package_json_digest_path: package_json_digest_path
+    } do
       package_json_digest = File.read!(package_json_digest_path)
 
       package_json_path = Path.join(assets_dir, "package.json")
       File.write!(package_json_path, "{}")
 
-      assert maybe_install_js_deps(assets_dir, build_dir) == :ok
+      assert maybe_install_js_deps(assets_dir) == :ok
       assert File.read!(package_json_digest_path) != package_json_digest
     end
 
-    test "install is not needed", %{assets_dir: assets_dir, build_dir: build_dir} do
-      package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
+    test "install is not needed", %{
+      assets_dir: assets_dir,
+      package_json_digest_path: package_json_digest_path
+    } do
       package_json_digest_mtime = File.stat!(package_json_digest_path).mtime
 
-      assert maybe_install_js_deps(assets_dir, build_dir) == nil
+      assert maybe_install_js_deps(assets_dir) == nil
       assert File.stat!(package_json_digest_path).mtime == package_json_digest_mtime
     end
   end
@@ -4614,6 +4675,7 @@ defmodule Hologram.CompilerTest do
 
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".gz", "gzip copy")
       File.write!(bundle_path <> ".map", "map")
 
       page_state = fn modules, path ->
@@ -4859,6 +4921,7 @@ defmodule Hologram.CompilerTest do
       clean_dir(test_tmp_dir)
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".gz", "gzip copy")
       File.write!(bundle_path <> ".map", "map")
       static_dir = test_tmp_dir
 
@@ -5880,6 +5943,7 @@ defmodule Hologram.CompilerTest do
 
       bundle_path = Path.join(static_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".gz", "gzip copy")
       File.write!(bundle_path <> ".map", "map")
 
       bundle_info = %{
@@ -5890,7 +5954,7 @@ defmodule Hologram.CompilerTest do
       [bundle_info: bundle_info, static_dir: static_dir]
     end
 
-    test "a bundle and its source map on disk in the given static dir", %{
+    test "a bundle, its gzip copy and its source map on disk in the given static dir", %{
       bundle_info: bundle_info,
       static_dir: static_dir
     } do
@@ -5899,6 +5963,12 @@ defmodule Hologram.CompilerTest do
 
     test "a bundle whose file is gone", %{bundle_info: bundle_info, static_dir: static_dir} do
       File.rm!(bundle_info.static_bundle_path)
+
+      refute usable_bundle?(bundle_info, static_dir)
+    end
+
+    test "a bundle whose gzip copy is gone", %{bundle_info: bundle_info, static_dir: static_dir} do
+      File.rm!(bundle_info.static_bundle_path <> ".gz")
 
       refute usable_bundle?(bundle_info, static_dir)
     end
