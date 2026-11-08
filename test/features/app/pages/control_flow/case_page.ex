@@ -13,6 +13,8 @@ defmodule HologramFeatureTests.ControlFlow.CasePage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :result, :any
+
   def init(_params, component, _server) do
     put_state(component, :result, nil)
   end

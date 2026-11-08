@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.Events.Debounce.Page4 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :editor_open, :boolean
+  state :typed_value, :any
+
   def init(_params, component, _server) do
     put_state(component, editor_open: true, typed_value: nil)
   end

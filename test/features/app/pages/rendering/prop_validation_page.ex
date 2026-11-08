@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Rendering.PropValidationPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :props, :any
+
   def init(_params, component, _server) do
     put_state(component, props: nil)
   end

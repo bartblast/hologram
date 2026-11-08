@@ -8,6 +8,8 @@ defmodule HologramFeatureTests.Cookies.Page2 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :result, :any
+
   def init(_params, component, server) do
     result =
       server

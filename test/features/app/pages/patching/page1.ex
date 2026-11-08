@@ -10,6 +10,9 @@ defmodule HologramFeatureTests.Patching.Page1 do
 
   layout HologramFeatureTests.Components.EmptyLayout
 
+  state :root_elem_attr_1, :any
+  state :root_elem_attr_2, :any
+
   def init(_params, component, _server) do
     put_state(component, root_elem_attr_1: nil, root_elem_attr_2: nil)
   end

@@ -16,6 +16,10 @@ defmodule HologramFeatureTests.CallGraph.DynamicReflectionPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :result, :any
+  state :schema_module, :any
+  state :struct_module, :any
+
   def init(_params, component, _server) do
     put_state(component,
       result: nil,

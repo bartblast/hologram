@@ -5,6 +5,9 @@ defmodule HologramFeatureTests.TemplateSyntax.DynamicElementPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :clicked?, :boolean
+  state :level, :string
+
   def init(_params, component, _server) do
     put_state(component, clicked?: false, level: "h2")
   end

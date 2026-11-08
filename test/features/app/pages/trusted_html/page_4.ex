@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.TrustedHtml.Page4 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :content, :any
+
   def init(_params, component, _server) do
     put_state(component, :content, trust_html("<b>original</b>"))
   end

@@ -5,6 +5,9 @@ defmodule HologramFeatureTests.Realtime.Page14 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :broadcasts, :any
+  state :subscriptions, :any
+
   def init(_params, component, server) do
     put_state(component,
       broadcasts: inspect(server.broadcasts),

@@ -3,6 +3,11 @@ defmodule HologramFeatureTests.Components.Navigation.LeftListenersBox do
 
   prop :kind, :string
 
+  state :click_outside, :integer
+  state :reach, :integer
+  state :resize, :integer
+  state :window_resize, :integer
+
   def init(_props, component, _server) do
     put_state(component,
       click_outside: 0,

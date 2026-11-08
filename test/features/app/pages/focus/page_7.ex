@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.Focus.Page7 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :count, :integer
+
   def init(_params, component, _server) do
     put_state(component, :count, 0)
   end

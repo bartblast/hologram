@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.Realtime.Page12 do
 
   @channel_1 {:room, 1}
 
+  state :received, :string
+
   # The feature-test app ships no auth UI, so the user from the route param is
   # logged in inline.
   def init(params, component, server) do

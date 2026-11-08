@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.Routing.RouteWithoutParamsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :module, :any
+  state :params, :any
+
   def init(params, component, _server) do
     put_state(component, module: __MODULE__, params: params)
   end

@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.SessionRestore.AccountPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :marker, :string
+  state :user, :any
+
   def init(_params, component, server) do
     put_state(component, marker: "none", user: server.user_id || "anonymous")
   end

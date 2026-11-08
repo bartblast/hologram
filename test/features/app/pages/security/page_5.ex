@@ -5,6 +5,11 @@ defmodule HologramFeatureTests.Security.Page5 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :email, :any
+  state :select, :any
+  state :text, :any
+  state :textarea, :any
+
   def init(_params, component, _server) do
     put_state(component, email: nil, select: nil, text: nil, textarea: nil)
   end

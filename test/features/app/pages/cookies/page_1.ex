@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.Cookies.Page1 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :result, :any
+
   def init(_params, component, server) do
     put_state(component, :result, get_cookie(server, "cookie_key"))
   end

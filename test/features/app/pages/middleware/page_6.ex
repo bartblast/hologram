@@ -10,6 +10,8 @@ defmodule HologramFeatureTests.Middleware.Page6 do
   middleware Shared
   middleware :inline
 
+  state :result, :any
+
   def inline(server, _opts) do
     put_stash(server, :inline, "inline middleware")
   end

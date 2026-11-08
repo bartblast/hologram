@@ -14,6 +14,11 @@ defmodule HologramFeatureTests.CallGraph.TransientServerStructsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :items, :any
+  state :label, :string
+  state :reached, :any
+  state :transient_text, :any
+
   def init(_params, component, _server) do
     {:ok, reached} = load(:reached)
 

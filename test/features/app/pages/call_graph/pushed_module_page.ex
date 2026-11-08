@@ -11,6 +11,8 @@ defmodule HologramFeatureTests.CallGraph.PushedModulePage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :built, :any
+
   def init(_params, component, _server) do
     put_state(component, :built, nil)
   end

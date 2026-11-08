@@ -8,6 +8,8 @@ defmodule HologramFeatureTests.Patching.Page15 do
 
   layout HologramFeatureTests.Components.EmptyLayout
 
+  state :items, :list
+
   def init(_params, component, _server) do
     put_state(component, :items, [
       %{tag: "h2", text: "Alpha", starred?: true},

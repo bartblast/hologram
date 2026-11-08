@@ -3,6 +3,9 @@ defmodule HologramFeatureTests.Realtime.Component5 do
 
   @channel {:room, 18}
 
+  state :broadcasts, :string
+  state :subscriptions, :string
+
   def init(_props, component, server) do
     {
       put_state(component, broadcasts: "none", subscriptions: "none"),

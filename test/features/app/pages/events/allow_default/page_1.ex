@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.Events.AllowDefault.Page1 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :allowed, :boolean
+  state :prevented, :boolean
+
   def init(_params, component, _server) do
     put_state(component, allowed: false, prevented: false)
   end

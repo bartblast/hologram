@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.TemplateSyntax.ScriptInterpolationPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :value, :any
+
   # A closing script tag, an ampersand, each kind of quote, a template literal expression opener,
   # a backslash and a line break: everything the escaping has to carry through intact, and the one
   # sequence it must not let end the element.

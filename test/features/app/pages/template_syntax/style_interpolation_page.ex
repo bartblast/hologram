@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.TemplateSyntax.StyleInterpolationPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :value, :any
+
   # A closing style tag, an ampersand, both kinds of quote, a backslash and a child combinator:
   # everything the escaping has to carry through intact, and the one sequence it must not let end
   # the element. The rule the closing tag carries would hide the div if it ever took effect.

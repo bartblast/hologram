@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.Cookies.Page6 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :command_executed?, :boolean
+  state :cookie_value, :any
+
   def init(_params, component, _server) do
     put_state(component, command_executed?: false, cookie_value: nil)
   end

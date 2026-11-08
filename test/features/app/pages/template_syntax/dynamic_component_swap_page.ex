@@ -8,6 +8,8 @@ defmodule HologramFeatureTests.TemplateSyntax.DynamicComponentSwapPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :module, :any
+
   def init(_params, component, _server) do
     put_state(component, :module, Component7)
   end

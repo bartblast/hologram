@@ -13,6 +13,11 @@ defmodule HologramFeatureTests.CallGraph.ServerCreatedStructsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :label, :string
+  state :struct_from_broadcast, :any
+  state :struct_from_command, :any
+  state :struct_from_init, :map
+
   def init(_params, component, server) do
     {
       put_state(component,

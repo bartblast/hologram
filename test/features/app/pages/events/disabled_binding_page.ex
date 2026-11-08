@@ -8,6 +8,11 @@ defmodule HologramFeatureTests.Events.DisabledBindingPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :conditional, :any
+  state :conditional_with_params, :any
+  state :enabled, :boolean
+  state :pong, :boolean
+
   def init(_params, component, _server) do
     put_state(component,
       conditional: nil,

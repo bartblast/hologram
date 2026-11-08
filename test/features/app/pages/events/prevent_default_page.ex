@@ -8,6 +8,11 @@ defmodule HologramFeatureTests.Events.PreventDefaultPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :plain_key, :boolean
+  state :plain_submit, :boolean
+  state :prevented_key, :boolean
+  state :prevented_submit, :boolean
+
   def init(_params, component, _server) do
     put_state(component,
       plain_key: false,

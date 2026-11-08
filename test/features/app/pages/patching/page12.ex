@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.Patching.Page12 do
 
   layout HologramFeatureTests.Components.EmptyLayout
 
+  state :first_branch?, :boolean
+
   def init(_params, component, _server) do
     put_state(component, :first_branch?, true)
   end

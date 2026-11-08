@@ -8,6 +8,15 @@ defmodule HologramFeatureTests.Events.Change.Page1 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :checkbox, :boolean
+  state :email, :string
+  state :multiple_select, :list
+  state :radio, :string
+  state :result, :any
+  state :single_select, :string
+  state :text, :string
+  state :textarea, :string
+
   def init(_params, component, _server) do
     put_state(component,
       result: nil,

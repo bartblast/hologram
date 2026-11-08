@@ -11,6 +11,8 @@ defmodule HologramFeatureTests.Actions.LateResultDestinationPage do
 
   layout HologramFeatureTests.Components.LateResultLayout
 
+  state :result, :any
+
   # Has the late result page's :result key and renders it, so a surviving page result shows here.
   # Has no component with the late result component's cid and defines no command, so a surviving
   # component result or command raises. The layout is shared, so a surviving layout result lands on

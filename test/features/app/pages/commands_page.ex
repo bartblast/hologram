@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.CommandsPage do
 
   layout HologramFeatureTests.Components.CommandsLayout
 
+  state :result, :any
+
   def init(_params, component, _server) do
     put_state(component, :result, nil)
   end

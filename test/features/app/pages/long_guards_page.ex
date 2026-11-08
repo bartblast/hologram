@@ -31,6 +31,8 @@ defmodule HologramFeatureTests.LongGuardsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :result, :any
+
   # A chain as long as the lists above that no value can be looked up for: == holds for a float
   # equal to one of the integers, so every comparison has to be made.
   defmacrop loosely_equals_any_integer(var) do

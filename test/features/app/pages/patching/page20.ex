@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.Patching.Page20 do
 
   layout HologramFeatureTests.Components.EmptyLayout
 
+  state :claims, :list
+  state :items, :list
+
   def init(_params, component, _server) do
     put_state(component,
       claims: [],

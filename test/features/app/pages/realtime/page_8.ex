@@ -11,6 +11,8 @@ defmodule HologramFeatureTests.Realtime.Page8 do
   @channel_1 {:room, 1}
   @channel_2 {:room, 2}
 
+  state :received, :string
+
   def init(_params, component, server) do
     {
       put_state(component, :received, "none"),

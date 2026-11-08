@@ -14,6 +14,8 @@ defmodule HologramFeatureTests.Actions.Page6 do
 
   layout HologramFeatureTests.Components.LayoutWithQueuedAction
 
+  state :combined_result, :list
+
   def init(_params, component, _server) do
     component
     |> put_state(:combined_result, [])

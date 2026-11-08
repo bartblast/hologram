@@ -8,6 +8,11 @@ defmodule HologramFeatureTests.Events.MultipleBindingsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :filter_result, :list
+  state :full_value, :any
+  state :order_result, :list
+  state :quick_value, :any
+
   def init(_params, component, _server) do
     put_state(component,
       filter_result: [],

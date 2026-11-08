@@ -10,6 +10,8 @@ defmodule HologramFeatureTests.Actions.Page1 do
 
   layout HologramFeatureTests.Components.ActionsLayout
 
+  state :result, :any
+
   def init(_params, component, _server) do
     component
     |> put_state(:result, nil)

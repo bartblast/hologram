@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Components.LateReplyLayout do
   alias Hologram.UI.Runtime
   alias HologramFeatureTests.Components.CommonLayoutStyles
 
+  state :result, :any
+
   # Shared by both late reply pages, so the layout cid resolves on the destination too, to a new
   # instance of this same module, which has a clause for the reply. A reply that survives the
   # navigation does not raise there: it writes this result on the destination.

@@ -9,6 +9,9 @@ defmodule HologramFeatureTests.RegularExpressionsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :initial_regex, :any
+  state :result, :any
+
   def init(_params, component, _server) do
     component
     |> put_state(:initial_regex, ~r/i+j/)
