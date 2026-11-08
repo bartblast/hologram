@@ -2,6 +2,7 @@ defmodule Hologram.Realtime.SSE do
   @moduledoc false
 
   alias Hologram.Assets.ChunkRegistry
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Component.Action
   alias Hologram.DB.Oplog
   alias Hologram.LiveReload
@@ -109,13 +110,13 @@ defmodule Hologram.Realtime.SSE do
 
   @doc """
   Builds the SSE event-stream chunk for a `css_changed` event: the standard
-  `event:`/`id:`/`data:` framing with the given id and an empty data payload,
-  since the event says only that the app's CSS changed. The empty `data:` line
-  is still sent: the browser drops an event that carries no data field.
+  `event:`/`id:`/`data:` framing with the given id, and the given asset paths of
+  the app, by static path, as plain JSON, so that the tab can follow a
+  stylesheet whose URL changed.
   """
-  @spec encode_css_changed_envelope(integer) :: String.t()
-  def encode_css_changed_envelope(id) do
-    "event: css_changed\nid: #{id}\ndata:\n\n"
+  @spec encode_css_changed_envelope(integer, %{String.t() => String.t()}) :: String.t()
+  def encode_css_changed_envelope(id, app_asset_paths) do
+    "event: css_changed\nid: #{id}\ndata: #{Jason.encode!(app_asset_paths)}\n\n"
   end
 
   @doc """
@@ -379,10 +380,21 @@ defmodule Hologram.Realtime.SSE do
             {:halt, conn}
         end
 
-      # The app's CSS changed. Forwarded to every tab, which swaps its stylesheets in place.
+      # The app's CSS changed. Forwarded to every tab, which swaps its stylesheets in place, with
+      # the app's asset paths as they are when the event is written, which a replay to a tab that
+      # missed several changes needs too. Hologram's own bundles are left out: the tab keeps the
+      # ones its document loaded.
       :css_changed ->
         id = System.unique_integer([:positive, :monotonic])
-        chunk_data = encode_css_changed_envelope(id)
+
+        asset_paths = AssetPathRegistry.get_mapping()
+
+        app_asset_paths =
+          Map.reject(asset_paths, fn {static_path, _asset_path} ->
+            String.starts_with?(static_path, "hologram/")
+          end)
+
+        chunk_data = encode_css_changed_envelope(id, app_asset_paths)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}

@@ -67,6 +67,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     * the queries dump - the registered queries of every component, which the renderer and the
       sync layer read.
 
+  The bundles go to the build dir too, to its static dir (see `Hologram.Reflection.bundles_dir/0`),
+  which `Hologram.Router` serves them from. Each build env has a build dir of its own, so a compile
+  in one env leaves the bundles another env serves alone.
+
   ## Telemetry
 
   Emits the following events around each compilation run, i.e. the critical
@@ -184,9 +188,11 @@ defmodule Mix.Tasks.Compile.Hologram do
       data_model_failed: fn _kind, _reason -> :ok end,
       data_model_ready: fn _entity_types, _role_modules -> :ok end,
       js_dir: Path.join(assets_dir, "js"),
+      # TODO: Remove together with the removal in compile/1.
+      legacy_bundles_dir: Path.join(Reflection.otp_app_static_dir(), "hologram"),
       next_batch: fn remaining_pages, _links -> MapSet.to_list(remaining_pages) end,
       node_modules_path: node_modules_path,
-      static_dir: Path.join(Reflection.otp_app_static_dir(), "hologram"),
+      static_dir: Reflection.bundles_dir(),
       tmp_dir: Path.join(build_dir, "tmp")
     ]
   end
@@ -207,7 +213,20 @@ defmodule Mix.Tasks.Compile.Hologram do
       File.mkdir_p!(opts[:static_dir])
       File.mkdir_p!(opts[:tmp_dir])
 
-      Compiler.maybe_install_js_deps(assets_dir, build_dir)
+      # The dir in the app's static dir that the bundles went to before they moved to the build dir.
+      # Removed so that `mix phx.digest` stops digesting the old bundles and releases stop shipping
+      # them.
+      # TODO: Remove once apps have had a release to upgrade through.
+      File.rm_rf(opts[:legacy_bundles_dir])
+
+      # Every build env shares the JS deps, like Mix's deps, so their install takes a lock of the
+      # assets dir as well, which a compile in another env waits on. Taken under the compiler lock,
+      # and nothing that holds it waits on a compiler lock, so the two can't deadlock.
+      install_lock_path = Path.join(assets_dir, Reflection.js_deps_install_lock_file_name())
+
+      with_lock(install_lock_path, "JS deps install", fn ->
+        Compiler.maybe_install_js_deps(assets_dir)
+      end)
 
       # Resolved once the deps are installed: on the first compile in a fresh checkout there is no
       # node_modules before the install, and the binary of esbuild's platform package is in it.
@@ -826,7 +845,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       named_build_static_artifacts =
         Enum.flat_map(served_bundles_info, fn info ->
-          [info.static_bundle_path, info.static_source_map_path]
+          [
+            info.static_bundle_path,
+            Compiler.gzip_path(info.static_bundle_path),
+            info.static_source_map_path
+          ]
         end)
 
       Enum.each(old_build_static_artifacts -- named_build_static_artifacts, &File.rm/1)
@@ -1084,7 +1107,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     # The whole compile reads through a hold (see Hologram.Entity.Model.hold/0), not only its data
     # model step: it is what validates the code the hold is about, and a hold put during its later
     # steps doesn't stop those steps, which still read the model.
-    with_lock(lock_path, fn ->
+    with_lock(lock_path, "compiler", fn ->
       Model.compiling(fn -> compile(opts) end)
     end)
   end
@@ -1523,13 +1546,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     put_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes)
   end
 
-  # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
-  # the JS imports it registers or the app versions it names differ from the kept ones, and when a
-  # module of those MFAs was edited: its functions are in the bundle, so their code is too. It is
-  # rebuilt too when a file its bundle read changed (see Hologram.Compiler.js_inputs_changed?/2),
-  # and when the client config or the data layer constants it sets differ from this compile's.
-  # Both of its files are required, since nothing else in the compile would recreate a missing
-  # source map.
   # The kept component entries still to use: the ones of the tracked components (see
   # list_tracked_component_modules/3) that are not stale. A removed module, and a module no longer
   # a component, is not tracked any more, so its entry goes.
@@ -1541,6 +1557,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Map.drop(stale_components)
   end
 
+  # The runtime bundle carries the functions every page leaves out, so it is rebuilt when its MFAs,
+  # the JS imports it registers or the app versions it names differ from the kept ones, and when a
+  # module of those MFAs was edited: its functions are in the bundle, so their code is too. It is
+  # rebuilt too when a file its bundle read changed (see Hologram.Compiler.js_inputs_changed?/2),
+  # and when the client config or the data layer constants it sets differ from this compile's. Its
+  # bundle, gzip copy and source map are all required, since nothing else in the compile would
+  # recreate a missing one.
   defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
 
   defp keep_runtime_bundle?(kept_runtime, reaching_modules, inputs) do
@@ -1558,9 +1581,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         inputs[:js_fingerprints]
       ) and
       runtime_modules_untouched?(inputs[:mfas], reaching_modules) and
-      Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
-      File.exists?(kept_runtime.bundle_info.static_bundle_path) and
-      File.exists?(kept_runtime.bundle_info.static_source_map_path)
+      Compiler.usable_bundle?(kept_runtime.bundle_info, inputs[:static_dir])
   end
 
   # The kept runtime state describes the bundle this compile replaces. A compile that fails during
@@ -2281,6 +2302,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp remove_replaced_bundle(old_bundle_info, new_bundle_info) do
     if old_bundle_info.static_bundle_path != new_bundle_info.static_bundle_path do
       File.rm(old_bundle_info.static_bundle_path)
+
+      old_bundle_info.static_bundle_path
+      |> Compiler.gzip_path()
+      |> File.rm()
+
       File.rm(old_bundle_info.static_source_map_path)
     end
 
@@ -2310,7 +2336,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # is atomic and fails when the directory exists, with the OS-level PID in a file
   # inside it - which restructures acquisition, release and stale detection alike.
   # Worth doing only if this is ever actually observed: unlike the empty-lock race it
-  # needs a lock orphaned by a killed process, which the cleanup in with_lock/2
+  # needs a lock orphaned by a killed process, which the cleanup in with_lock/3
   # prevents on every normal exit, plus two invocations landing in the liveness check
   # within the same few milliseconds.
   defp remove_lock_for_dead_process(lock_path, os_pid) do
@@ -2400,7 +2426,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # An empty lock file is a lock in the middle of being acquired, not an invalid one:
-  # with_lock/2 creates the file with File.open/2 and only then writes the owner's PID
+  # with_lock/3 creates the file with File.open/2 and only then writes the owner's PID
   # into it, so a concurrent invocation can read it in between and must leave it alone.
   # Treating it as invalid would delete a lock that was just legitimately acquired and
   # let both compilations run at once.
@@ -2478,7 +2504,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     keep_template_modules(kept_template_modules, templatable_modules, validated_template_modules)
   end
 
-  defp with_lock(lock_path, fun) do
+  # Runs the given function while it holds the lock at the given path, which the given name names in
+  # the log line of a wait and in the error of a failed acquire.
+  defp with_lock(lock_path, lock_name, fun) do
     lock_path
     |> Path.dirname()
     |> File.mkdir_p!()
@@ -2502,12 +2530,12 @@ defmodule Mix.Tasks.Compile.Hologram do
         end
 
       {:error, :eexist} ->
-        Logger.info("Hologram: compiler already running, waiting...")
+        Logger.info("Hologram: #{lock_name} already running, waiting...")
         :timer.sleep(1_000)
-        with_lock(lock_path, fun)
+        with_lock(lock_path, lock_name, fun)
 
       {:error, reason} ->
-        raise "Hologram: failed to acquire compiler lock: #{inspect(reason)}"
+        raise "Hologram: failed to acquire #{lock_name} lock: #{inspect(reason)}"
     end
   end
 end

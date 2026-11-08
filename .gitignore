@@ -34,6 +34,7 @@ hologram-*.tar
 # Node JS & npm.
 npm-debug.log
 /assets/node_modules/
+/assets/hologram_js_deps_install.lock
 
 # Dialyzer PLTs.
 /.dialyzer/

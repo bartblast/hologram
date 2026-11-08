@@ -11,6 +11,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Realtime
   alias Hologram.Realtime.SSE
   alias Hologram.Realtime.SubscriptionRegistry
+  alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Sync.Session
   alias HologramFeatureTests.Entities.Account
@@ -410,8 +411,8 @@ defmodule HologramFeatureTests.Helpers do
   """
   @spec chunk_digests() :: [String.t()]
   def chunk_digests do
-    static_dir()
-    |> Path.join("hologram/chunk-????????.js")
+    Reflection.bundles_dir()
+    |> Path.join("chunk-????????.js")
     |> Path.wildcard()
     |> Enum.map(&Path.basename(&1, ".js"))
     |> Enum.map(&String.replace_prefix(&1, "chunk-", ""))
@@ -563,8 +564,9 @@ defmodule HologramFeatureTests.Helpers do
   """
   @spec read_chunk_bundle(String.t()) :: String.t()
   def read_chunk_bundle(digest) do
-    static_dir()
-    |> Path.join(RouterHelpers.chunk_bundle_path(digest))
+    digest
+    |> RouterHelpers.chunk_bundle_path()
+    |> bundle_file_path()
     |> File.read!()
   end
 
@@ -575,8 +577,9 @@ defmodule HologramFeatureTests.Helpers do
   def read_page_bundle(page_module) do
     digest = PageDigestRegistry.lookup(page_module)
 
-    static_dir()
-    |> Path.join(RouterHelpers.page_bundle_path(page_module, digest))
+    page_module
+    |> RouterHelpers.page_bundle_path(digest)
+    |> bundle_file_path()
     |> File.read!()
   end
 
@@ -586,8 +589,8 @@ defmodule HologramFeatureTests.Helpers do
   @spec read_runtime_bundle() :: String.t()
   def read_runtime_bundle do
     [runtime_bundle_path] =
-      static_dir()
-      |> Path.join("hologram/runtime-????????.js")
+      Reflection.bundles_dir()
+      |> Path.join("runtime-????????.js")
       |> Path.wildcard()
 
     File.read!(runtime_bundle_path)
@@ -1159,6 +1162,12 @@ defmodule HologramFeatureTests.Helpers do
     end)
   end
 
+  # The file the bundle at the given URL is served from, in the dir the compiler writes the bundles
+  # to.
+  defp bundle_file_path(bundle_url) do
+    Path.join(Reflection.bundles_dir(), Path.basename(bundle_url))
+  end
+
   defp connection?(instance_id) do
     :ets.member(SubscriptionRegistry.ets_table_name(), instance_id)
   end
@@ -1269,10 +1278,6 @@ defmodule HologramFeatureTests.Helpers do
       [{^instance_id, entry}] -> entry
       [] -> nil
     end
-  end
-
-  defp static_dir do
-    Application.app_dir(:hologram_feature_tests, "priv/static")
   end
 
   defp subscription_count(channel, cid) do

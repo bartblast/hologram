@@ -23,15 +23,14 @@ defmodule Hologram.Assets.ManifestCacheTest do
 
     assert get_manifest_json() ==
              ~s({"hologram/runtime.js":"/hologram/runtime-AAAAAAAA.js",) <>
-               ~s("hologram/test_file_9.css":"/hologram/test_file_9-99999999999999999999999999999999.css",) <>
-               ~s("test_dir_1/test_dir_2/page.js":"/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",) <>
-               ~s("test_dir_1/test_dir_2/test_file_1.css":"/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",) <>
-               ~s("test_dir_1/test_dir_2/test_file_2.css":"/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",) <>
-               ~s("test_dir_3/page.js":"/test_dir_3/page-66666666666666666666666666666666.js",) <>
+               ~s("test_dir_1/test_dir_2/page.js":"/test_dir_1/test_dir_2/page-d41d8cd98f00b204e9800998ecf8427e.js",) <>
+               ~s("test_dir_1/test_dir_2/test_file_1.css":"/test_dir_1/test_dir_2/test_file_1-d41d8cd98f00b204e9800998ecf8427e.css",) <>
+               ~s("test_dir_1/test_dir_2/test_file_2.css":"/test_dir_1/test_dir_2/test_file_2-d41d8cd98f00b204e9800998ecf8427e.css",) <>
+               ~s("test_dir_3/page.js":"/test_dir_3/page-d41d8cd98f00b204e9800998ecf8427e.js",) <>
                ~s("test_dir_3/test_file_10.css":"/test_dir_3/test_file_10.css",) <>
                ~s("test_dir_3/test_file_11-DOWNLOAD.css":"/test_dir_3/test_file_11-DOWNLOAD.css",) <>
-               ~s("test_dir_3/test_file_4.css":"/test_dir_3/test_file_4-44444444444444444444444444444444.css",) <>
-               ~s("test_dir_3/test_file_5.css":"/test_dir_3/test_file_5-55555555555555555555555555555555.css"})
+               ~s("test_dir_3/test_file_4.css":"/test_dir_3/test_file_4-d41d8cd98f00b204e9800998ecf8427e.css",) <>
+               ~s("test_dir_3/test_file_5.css":"/test_dir_3/test_file_5-d41d8cd98f00b204e9800998ecf8427e.css"})
   end
 
   test "get_manifest_json/0 encodes a path any JSON string can carry" do

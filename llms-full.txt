@@ -95,17 +95,7 @@ defmodule MyAppWeb.Endpoint do
 end
 ```
 
-#### 5. Configure Static Asset Serving
-
-Add the Hologram directory to the list of served static directories in your endpoint:
-
-```elixir
-plug Plug.Static,
-  # ...
-  only: ["hologram" | MyAppWeb.static_paths()]
-```
-
-#### 6. Configure Formatter
+#### 5. Configure Formatter
 
 Import Hologram formatter rules in `.formatter.exs`:
 
@@ -117,16 +107,7 @@ Import Hologram formatter rules in `.formatter.exs`:
 ]
 ```
 
-#### 7. Update GitIgnore
-
-Add the following line to your `.gitignore` file to exclude Hologram generated JavaScript bundles:
-
-```
-# Hologram generated JavaScript bundles.
-/priv/static/hologram/
-```
-
-#### 8. Optional: Configure App Directory
+#### 6. Optional: Configure App Directory
 
 Many developers prefer to organize their Hologram pages and components in an `app` directory outside of `lib` for better project structure. If you want to use this approach, modify your existing `elixirc_paths/1` functions in `mix.exs` to include the `app` directory:
 
@@ -137,9 +118,9 @@ defp elixirc_paths(_env), do: ["app", "lib"]
 
 This allows you to organize your code like `app/pages/`, `app/components/`, etc., which many developers find cleaner than keeping everything in `lib/`.
 
-#### 9. Optional: Configure Tailwind for the App Directory
+#### 7. Optional: Configure Tailwind for the App Directory
 
-If you use the `app` directory from step 8 and your app uses Tailwind v4, add the directory to its sources in `assets/css/app.css`. Without it, the classes used only in your pages and components are left out of the generated stylesheet:
+If you use the `app` directory from step 6 and your app uses Tailwind v4, add the directory to its sources in `assets/css/app.css`. Without it, the classes used only in your pages and components are left out of the generated stylesheet:
 
 ```css
 @source "../../app";
@@ -163,7 +144,7 @@ The official Hologram extension adds syntax highlighting for `.holo` templates a
 
 #### Umbrella Projects
 
-Hologram supports umbrella projects. The steps above apply to the child app that owns the Phoenix endpoint - it takes the Hologram dependency (step 1), the compiler entry (step 3), the router plug (step 4), the static asset configuration (step 5) and the gitignore entry (step 7).
+Hologram supports umbrella projects. The steps above apply to the child app that owns the Phoenix endpoint - it takes the Hologram dependency (step 1), the compiler entry (step 3) and the router plug (step 4).
 
 Child apps that only define pages and components take the dependency alone, without the compiler entry. Their pages are discovered and bundled when the endpoint app compiles.
 
@@ -4449,6 +4430,8 @@ To report a security vulnerability in Hologram, see the Reporting Vulnerabilitie
 ### Bundling
 
 The compiler builds one runtime bundle, which every page loads, one bundle per page, and chunks, which hold the code of struct types and load only when a struct needs them. A page bundle holds the Elixir code the page's client side can reach from its template, its actions and its layout's, compiled to JavaScript. Code that runs only on the server, like `init/3` and commands, is not bundled, but the values it hands to the client can bring code with them, as the sections below describe.
+
+The compiler writes the bundles to Hologram's build dir, `_build/<env>/lib/hologram/priv/static`, so each build environment has its own. `Hologram.Router` serves them under `/hologram/`, and sends a gzip copy to browsers that accept one. A bundle's file name carries a hash of its content, so the browser downloads each bundle once and then uses its cached copy.
 
 #### Struct Types
 

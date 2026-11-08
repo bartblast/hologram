@@ -14,7 +14,7 @@ defmodule HologramFeatureTestsWeb.Endpoint do
     store: :cookie
   ]
 
-  # Before Plug.Static, which is what serves the page bundles this delays.
+  # Before Hologram.Router, which is what serves the page bundles this delays.
   plug HologramFeatureTestsWeb.Plugs.SlowPageBundle
 
   plug HologramFeatureTestsWeb.Plugs.PhoenixReloadFrame
@@ -23,7 +23,7 @@ defmodule HologramFeatureTestsWeb.Endpoint do
     at: "/",
     from: :hologram_feature_tests,
     gzip: false,
-    only: ~w(assets fonts hologram images favicon.ico robots.txt)
+    only: ~w(assets fonts images favicon.ico robots.txt)
 
   if code_reloading? do
     plug Phoenix.CodeReloader

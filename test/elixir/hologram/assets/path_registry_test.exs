@@ -16,6 +16,21 @@ defmodule Hologram.Assets.PathRegistryTest do
     setup_asset_path_registry(AssetPathRegistryStub, false)
   end
 
+  # Puts the env var back as it was before the test, set or not.
+  defp put_hologram_env(env) do
+    previous = System.get_env("HOLOGRAM_ENV")
+
+    on_exit(fn ->
+      if previous do
+        System.put_env("HOLOGRAM_ENV", previous)
+      else
+        System.delete_env("HOLOGRAM_ENV")
+      end
+    end)
+
+    System.put_env("HOLOGRAM_ENV", env)
+  end
+
   # Reads the registry as fast as it can until asked what it saw, so a reload that empties the
   # table even briefly is caught rather than stepped over. What it keeps is the DISTINCT answers:
   # the loop turns over thousands of times while a reload runs, and every one of them says the same
@@ -26,6 +41,26 @@ defmodule Hologram.Assets.PathRegistryTest do
     after
       0 -> watch_lookups(report_to, static_path, MapSet.put(answers, lookup(static_path)))
     end
+  end
+
+  defp write_bundle_file(file_name) do
+    AssetPathRegistryStub.bundles_dir()
+    |> Path.join(file_name)
+    |> File.write!("")
+  end
+
+  defp write_cache_manifest(json) do
+    write_static_file("cache_manifest.json", json)
+  end
+
+  defp write_static_file(relative_path, content) do
+    file_path = Path.join(AssetPathRegistryStub.static_dir(), relative_path)
+
+    file_path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
+    File.write!(file_path, content)
   end
 
   test "get_mapping/0", %{mapping: mapping} do
@@ -42,12 +77,248 @@ defmodule Hologram.Assets.PathRegistryTest do
     end
   end
 
-  test "init/1", %{mapping: mapping} do
-    ets_table_name = AssetPathRegistryStub.ets_table_name()
+  describe "init/1" do
+    test "fills the ETS table with the mapping of the static dir", %{mapping: mapping} do
+      ets_table_name = AssetPathRegistryStub.ets_table_name()
 
-    assert init(nil) == {:ok, nil}
-    assert ets_table_exists?(ets_table_name)
-    assert ETS.get_all(ets_table_name) == mapping
+      assert init(nil) == {:ok, nil}
+      assert ets_table_exists?(ets_table_name)
+      assert ETS.get_all(ets_table_name) == mapping
+    end
+
+    test "picks the plain file over a copy that no longer holds its content in dev and test" do
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      write_static_file(
+        "test_dir_3/test_file_12-0f5f13cf0b14c88bd431ef163b63d68d.css",
+        "old content"
+      )
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") == {:ok, "/test_dir_3/test_file_12.css"}
+      assert lookup("test_dir_3/test_file_12-0f5f13cf0b14c88bd431ef163b63d68d.css") == :error
+    end
+
+    test "picks a copy that holds the content of the file at its key in dev and test" do
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") ==
+               {:ok, "/test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css"}
+    end
+
+    test "picks the copy that holds the content of the file at its key over a stale one that sorts after it in dev and test" do
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      write_static_file(
+        "test_dir_3/test_file_12-ffffffffffffffffffffffffffffffff.css",
+        "old content"
+      )
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") ==
+               {:ok, "/test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css"}
+    end
+
+    test "serves each copy under its own name when nothing is at its key in dev and test" do
+      write_static_file(
+        "test_dir_3/test_file_12-0f5f13cf0b14c88bd431ef163b63d68d.css",
+        "old content"
+      )
+
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") == :error
+
+      assert lookup("test_dir_3/test_file_12-0f5f13cf0b14c88bd431ef163b63d68d.css") ==
+               {:ok, "/test_dir_3/test_file_12-0f5f13cf0b14c88bd431ef163b63d68d.css"}
+
+      assert lookup("test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css") ==
+               {:ok, "/test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css"}
+    end
+
+    test "picks the copy the cache manifest names as the latest outside dev and test" do
+      put_hologram_env("prod")
+
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      write_static_file(
+        "test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css",
+        "old content"
+      )
+
+      write_static_file(
+        "test_dir_3/test_file_12-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.css",
+        "older content"
+      )
+
+      write_cache_manifest(~S"""
+      {"latest": {"test_dir_3/test_file_12.css": "test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css"}}
+      """)
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") ==
+               {:ok, "/test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css"}
+    end
+
+    test "picks the copy the cache manifest names as the latest when nothing is at its key outside dev and test" do
+      put_hologram_env("prod")
+
+      write_static_file(
+        "test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css",
+        "old content"
+      )
+
+      write_cache_manifest(~S"""
+      {"latest": {"test_dir_3/test_file_12.css": "test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css"}}
+      """)
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") ==
+               {:ok, "/test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css"}
+    end
+
+    test "picks the plain file when the cache manifest names no copy for it outside dev and test" do
+      put_hologram_env("prod")
+
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      write_cache_manifest(~S({"latest": {}}))
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") == {:ok, "/test_dir_3/test_file_12.css"}
+      assert lookup("test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css") == :error
+    end
+
+    test "picks the plain file when there is no cache manifest outside dev and test" do
+      put_hologram_env("prod")
+
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") == {:ok, "/test_dir_3/test_file_12.css"}
+    end
+
+    test "picks the plain file when the cache manifest isn't valid JSON outside dev and test" do
+      put_hologram_env("prod")
+
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      write_cache_manifest("{")
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") == {:ok, "/test_dir_3/test_file_12.css"}
+    end
+
+    test "picks the plain file when the cache manifest has no latest map outside dev and test" do
+      put_hologram_env("prod")
+
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      write_cache_manifest(~S({"version": 1}))
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") == {:ok, "/test_dir_3/test_file_12.css"}
+    end
+
+    test "serves each copy under its own name when the cache manifest names none and nothing is at its key outside dev and test" do
+      put_hologram_env("prod")
+
+      write_static_file(
+        "test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css",
+        "old content"
+      )
+
+      write_cache_manifest(~S({"latest": {}}))
+
+      init(nil)
+
+      assert lookup("test_dir_3/test_file_12.css") == :error
+
+      assert lookup("test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css") ==
+               {:ok, "/test_dir_3/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css"}
+    end
+
+    # The hologram dir in the app's static dir is where the bundles went before they moved to the
+    # bundles dir, which every build env shared, so its files can be another env's.
+    test "leaves out the files of the hologram dir in the app's static dir", %{mapping: mapping} do
+      write_static_file("hologram/runtime-ZZZZZZZZ.js", "")
+      write_static_file("hologram/runtime-ZZZZZZZZ-d41d8cd98f00b204e9800998ecf8427e.js", "")
+      write_static_file("hologram/test_file_9.css", "")
+
+      init(nil)
+
+      assert lookup("hologram/runtime.js") == {:ok, "/hologram/runtime-AAAAAAAA.js"}
+      assert ETS.get_all(AssetPathRegistryStub.ets_table_name()) == mapping
+    end
+
+    test "leaves out the gzip copy of the runtime bundle", %{mapping: mapping} do
+      write_bundle_file("runtime-AAAAAAAA.js.gz")
+
+      init(nil)
+
+      assert ETS.get_all(AssetPathRegistryStub.ets_table_name()) == mapping
+    end
+
+    test "maps a file of the bundles dir with no hash in its name under its own name" do
+      write_bundle_file("test_file_9.css")
+
+      init(nil)
+
+      assert lookup("hologram/test_file_9.css") == {:ok, "/hologram/test_file_9.css"}
+    end
+
+    test "maps a bundle as in dev and test outside them" do
+      put_hologram_env("prod")
+
+      init(nil)
+
+      assert lookup("hologram/runtime.js") == {:ok, "/hologram/runtime-AAAAAAAA.js"}
+    end
   end
 
   describe "lookup/2" do
@@ -58,14 +329,14 @@ defmodule Hologram.Assets.PathRegistryTest do
 
     test "asset exists, has digest suffix" do
       assert lookup("test_dir_1/test_dir_2/test_file_1.css") ==
-               {:ok, "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"}
+               {:ok, "/test_dir_1/test_dir_2/test_file_1-d41d8cd98f00b204e9800998ecf8427e.css"}
     end
 
-    test "asset exists, has esbuild content hash suffix, in hologram dir" do
+    test "asset exists, has esbuild content hash suffix, in bundles dir" do
       assert lookup("hologram/runtime.js") == {:ok, "/hologram/runtime-AAAAAAAA.js"}
     end
 
-    test "asset exists, has esbuild content hash-like suffix, outside hologram dir" do
+    test "asset exists, has esbuild content hash-like suffix, outside the bundles dir" do
       assert lookup("test_dir_3/test_file_11-DOWNLOAD.css") ==
                {:ok, "/test_dir_3/test_file_11-DOWNLOAD.css"}
 
@@ -105,53 +376,241 @@ defmodule Hologram.Assets.PathRegistryTest do
       :ok
     end
 
-    test "picks the digested copy that sorts last when an asset has two" do
-      dir = AssetPathRegistryStub.static_dir() <> "/test_dir_3"
-      File.write!(dir <> "/test_file_12-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.css", "")
-      File.write!(dir <> "/test_file_12-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.css", "")
-
-      reload()
-
-      assert lookup("test_dir_3/test_file_12.css") ==
-               {:ok, "/test_dir_3/test_file_12-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.css"}
-    end
-
-    test "replaces a stale value", %{mapping: mapping} do
+    test "replaces a stale value of a bundle", %{mapping: mapping} do
       ets_table_name = AssetPathRegistryStub.ets_table_name()
-      ETS.put(ets_table_name, "test_dir_3/test_file_10.css", "/stale")
+      ETS.put(ets_table_name, "hologram/runtime.js", "/stale")
 
       reload()
 
       assert ETS.get_all(ets_table_name) == mapping
     end
 
-    test "removes a key the data no longer holds", %{mapping: mapping} do
+    test "picks up a new runtime bundle" do
+      bundles_dir = AssetPathRegistryStub.bundles_dir()
+      File.rm!(bundles_dir <> "/runtime-AAAAAAAA.js")
+      write_bundle_file("runtime-EEEEEEEE.js")
+
+      reload()
+
+      assert lookup("hologram/runtime.js") == {:ok, "/hologram/runtime-EEEEEEEE.js"}
+    end
+
+    test "leaves a key that isn't a static path alone" do
       ets_table_name = AssetPathRegistryStub.ets_table_name()
       ETS.put(ets_table_name, :dummy_key, :dummy_value)
 
       reload()
 
+      assert ETS.get(ets_table_name, :dummy_key) == {:ok, :dummy_value}
+    end
+
+    test "leaves out the files of the hologram dir in the app's static dir", %{mapping: mapping} do
+      write_static_file("hologram/runtime-ZZZZZZZZ.js", "")
+
+      reload()
+
+      assert ETS.get_all(AssetPathRegistryStub.ets_table_name()) == mapping
+    end
+
+    test "leaves the entries of the app's assets alone" do
+      ets_table_name = AssetPathRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, "test_dir_3/test_file_10.css", "/kept")
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      reload()
+
+      assert lookup("test_dir_3/test_file_10.css") == {:ok, "/kept"}
+      assert lookup("test_dir_3/test_file_12.css") == :error
+    end
+
+    test "removes a bundle key the bundles dir no longer holds", %{mapping: mapping} do
+      ets_table_name = AssetPathRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, "hologram/stale.js", "/hologram/stale-EEEEEEEE.js")
+
+      reload()
+
       assert ETS.get_all(ets_table_name) == mapping
+    end
+
+    # A reload that empties the bundle entries first leaves every bundle unresolvable for as long as
+    # the walk of the bundles dir takes - so a page rendered in that window would be served links to
+    # bundles the registry says do not exist.
+    test "never answers with nothing for a bundle it holds", %{mapping: mapping} do
+      static_path = "hologram/runtime.js"
+      asset_path = mapping[static_path]
+
+      test_pid = self()
+      reader = spawn_link(fn -> watch_lookups(test_pid, static_path, MapSet.new()) end)
+
+      Enum.each(1..50, fn _round -> reload() end)
+
+      send(reader, {:report, self()})
+      assert_receive {:answers, answers}
+
+      assert answers == MapSet.new([{:ok, asset_path}])
     end
   end
 
-  # A reload that empties the table first leaves every asset unresolvable for as long as the walk
-  # of the static dir takes, which is the slowest thing here - so a page rendered in that window
-  # would be served links to assets the registry says do not exist.
-  test "reload/0 never answers with nothing for an asset it holds", %{mapping: mapping} do
-    AssetPathRegistry.start_link([])
+  describe "update/1" do
+    setup do
+      AssetPathRegistry.start_link([])
+      :ok
+    end
 
-    [{static_path, asset_path} | _rest] = Map.to_list(mapping)
+    test "drops a copy that no longer holds the content of the changed file at its key" do
+      write_static_file("test_dir_3/test_file_12.css", "new content")
 
-    test_pid = self()
-    reader = spawn_link(fn -> watch_lookups(test_pid, static_path, MapSet.new()) end)
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
 
-    Enum.each(1..50, fn _round -> reload() end)
+      update(["test_dir_3/test_file_12.css"])
 
-    send(reader, {:report, self()})
-    assert_receive {:answers, answers}
+      write_static_file("test_dir_3/test_file_12.css", "old content")
+      update(["test_dir_3/test_file_12.css"])
 
-    assert answers == MapSet.new([{:ok, asset_path}])
+      assert lookup("test_dir_3/test_file_12.css") == {:ok, "/test_dir_3/test_file_12.css"}
+    end
+
+    test "picks up a new copy that holds the content of the file at its key" do
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+      update(["test_dir_3/test_file_12.css"])
+
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      update(["test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css"])
+
+      assert lookup("test_dir_3/test_file_12.css") ==
+               {:ok, "/test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css"}
+    end
+
+    test "adds a new file" do
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      update(["test_dir_3/test_file_12.css"])
+
+      assert lookup("test_dir_3/test_file_12.css") == {:ok, "/test_dir_3/test_file_12.css"}
+    end
+
+    test "removes the key of a deleted file" do
+      File.rm!(AssetPathRegistryStub.static_dir() <> "/test_dir_3/test_file_10.css")
+
+      update(["test_dir_3/test_file_10.css"])
+
+      assert lookup("test_dir_3/test_file_10.css") == :error
+    end
+
+    test "serves each copy under its own name once the file at its key is deleted" do
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      update(["test_dir_3/test_file_12.css"])
+
+      File.rm!(AssetPathRegistryStub.static_dir() <> "/test_dir_3/test_file_12.css")
+      update(["test_dir_3/test_file_12.css"])
+
+      assert lookup("test_dir_3/test_file_12.css") == :error
+
+      assert lookup("test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css") ==
+               {:ok, "/test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css"}
+    end
+
+    test "removes the key of a copy served under its own name once it is deleted" do
+      write_static_file(
+        "test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css",
+        "new content"
+      )
+
+      update(["test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css"])
+
+      File.rm!(
+        AssetPathRegistryStub.static_dir() <>
+          "/test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css"
+      )
+
+      update(["test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css"])
+
+      assert lookup("test_dir_3/test_file_12-96c15c2bb2921193bf290df8cd85e2ba.css") == :error
+    end
+
+    test "drops the copies served under their own names once a file is at their key again" do
+      write_static_file(
+        "test_dir_3/test_file_12-0f5f13cf0b14c88bd431ef163b63d68d.css",
+        "old content"
+      )
+
+      update(["test_dir_3/test_file_12-0f5f13cf0b14c88bd431ef163b63d68d.css"])
+
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+      update(["test_dir_3/test_file_12.css"])
+
+      assert lookup("test_dir_3/test_file_12.css") == {:ok, "/test_dir_3/test_file_12.css"}
+      assert lookup("test_dir_3/test_file_12-0f5f13cf0b14c88bd431ef163b63d68d.css") == :error
+    end
+
+    test "removes the keys of the files in a deleted dir", %{mapping: mapping} do
+      File.rm_rf!(AssetPathRegistryStub.static_dir() <> "/test_dir_3")
+
+      update(["test_dir_3"])
+
+      test_dir_3_keys =
+        mapping
+        |> Map.keys()
+        |> Enum.filter(&String.starts_with?(&1, "test_dir_3/"))
+
+      assert ETS.get_all(AssetPathRegistryStub.ets_table_name()) ==
+               Map.drop(mapping, test_dir_3_keys)
+    end
+
+    test "rebuilds every entry outside the bundles for the static dir itself" do
+      ets_table_name = AssetPathRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, "test_dir_3/test_file_10.css", "/stale")
+      ETS.put(ets_table_name, "hologram/runtime.js", "/kept")
+      write_static_file("test_dir_4/test_file_12.css", "new content")
+
+      update([""])
+
+      assert lookup("test_dir_3/test_file_10.css") == {:ok, "/test_dir_3/test_file_10.css"}
+      assert lookup("test_dir_4/test_file_12.css") == {:ok, "/test_dir_4/test_file_12.css"}
+      assert lookup("hologram/runtime.js") == {:ok, "/kept"}
+    end
+
+    test "leaves out a link to nothing" do
+      File.ln_s!(
+        "missing.css",
+        AssetPathRegistryStub.static_dir() <> "/test_dir_3/test_file_12.css"
+      )
+
+      update(["test_dir_3/test_file_12.css"])
+
+      assert lookup("test_dir_3/test_file_12.css") == :error
+    end
+
+    test "adds the files of a new dir" do
+      write_static_file("test_dir_4/test_file_12.css", "new content")
+
+      update(["test_dir_4"])
+
+      assert lookup("test_dir_4/test_file_12.css") == {:ok, "/test_dir_4/test_file_12.css"}
+    end
+
+    test "leaves the entries of unchanged files alone" do
+      ets_table_name = AssetPathRegistryStub.ets_table_name()
+      ETS.put(ets_table_name, "test_dir_3/test_file_10.css", "/kept")
+      write_static_file("test_dir_3/test_file_12.css", "new content")
+
+      update(["test_dir_3/test_file_12.css"])
+
+      assert lookup("test_dir_3/test_file_10.css") == {:ok, "/kept"}
+    end
   end
 
   test "start_link/1" do

@@ -1,24 +1,14 @@
 defmodule HologramEcosystemTests.Ecto.ReflectionTest do
   use HologramEcosystemTests.TestCase, async: false
 
-  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Reflection
-  alias Hologram.Router.Helpers, as: RouterHelpers
+  alias HologramEcosystemTests.Bundles
   alias HologramEcosystemTests.Ecto.ClosedPage
   alias HologramEcosystemTests.Ecto.OpenPage
   alias HologramEcosystemTests.Ecto.Tag
 
   defp read_bundles(page) do
-    static_dir = Application.app_dir(:hologram_ecosystem_tests, "priv/static")
-    digest = PageDigestRegistry.lookup(page)
-    page_bundle_path = Path.join(static_dir, RouterHelpers.page_bundle_path(page, digest))
-
-    [runtime_bundle_path] =
-      static_dir
-      |> Path.join("hologram/runtime-????????.js")
-      |> Path.wildcard()
-
-    File.read!(page_bundle_path) <> File.read!(runtime_bundle_path)
+    Bundles.page(page) <> Bundles.runtime()
   end
 
   defp defines?(bundle, function, arity) do

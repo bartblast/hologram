@@ -194,8 +194,8 @@ export default class Sse {
         LiveReload.hideErrorOverlay();
       });
 
-      $.eventSource.addEventListener("css_changed", () => {
-        LiveReload.swapStylesheets();
+      $.eventSource.addEventListener("css_changed", (event) => {
+        LiveReload.swapStylesheets(JSON.parse(event.data));
       });
 
       $.eventSource.addEventListener("drop_sub_receipts", (event) => {

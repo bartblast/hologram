@@ -17,6 +17,10 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Router.PageModuleResolver
   alias Hologram.Sync.PageWindows, as: SyncPageWindows
 
+  # The name `mix phx.digest` gives a copy of an empty file, so that a fixture copy holds the content
+  # of the empty file at its key, as a copy the asset path registry serves does.
+  @empty_file_md5 "d41d8cd98f00b204e9800998ecf8427e"
+
   # The fixture pages the tests that start the page module resolver request.
   @page_module_resolver_pages [
     Hologram.Test.Fixtures.Router.Module1,
@@ -25,6 +29,14 @@ defmodule Hologram.Test.Stubs do
 
   def setup_asset_manifest_cache(stub, start_link \\ true) do
     stub_with(AssetManifestCacheMock, stub)
+
+    process_name = stub.process_name()
+
+    if ProcessUtils.running?(process_name) do
+      process_name
+      |> Process.whereis()
+      |> Process.exit(:kill)
+    end
 
     :persistent_term.erase(stub.persistent_term_key())
 
@@ -52,7 +64,7 @@ defmodule Hologram.Test.Stubs do
       ETS.delete(ets_table_name)
     end
 
-    mapping = setup_asset_fixtures(stub.static_dir())
+    mapping = setup_asset_fixtures(stub.static_dir(), stub.bundles_dir())
 
     if start_link do
       AssetPathRegistry.start_link([])
@@ -185,6 +197,8 @@ defmodule Hologram.Test.Stubs do
         @behaviour AssetManifestCache
 
         def persistent_term_key, do: unquote(random_atom())
+
+        def process_name, do: unquote(random_atom())
       end
 
       alias alias!(unquote(random_module).AssetManifestCacheStub)
@@ -197,6 +211,17 @@ defmodule Hologram.Test.Stubs do
     quote do
       defmodule alias!(unquote(random_module).AssetPathRegistryStub) do
         @behaviour AssetPathRegistry
+
+        def bundles_dir do
+          Path.join([
+            Reflection.tmp_dir(),
+            "tests",
+            "stubs",
+            "asset_path_registry",
+            "bundles_dir_0",
+            unquote(random_string())
+          ])
+        end
 
         def static_dir do
           Path.join([
@@ -343,38 +368,40 @@ defmodule Hologram.Test.Stubs do
     end
   end
 
-  defp setup_asset_fixtures(static_dir) do
+  defp setup_asset_fixtures(static_dir, bundles_dir) do
     FileUtils.recreate_dir(static_dir)
+    FileUtils.recreate_dir(bundles_dir)
 
     dir_2 = static_dir <> "/test_dir_1/test_dir_2"
-    file_2a_path = dir_2 <> "/test_file_1-11111111111111111111111111111111.css"
-    file_2b_path = dir_2 <> "/test_file_2-22222222222222222222222222222222.css"
-    file_2c_path = dir_2 <> "/page-33333333333333333333333333333333.js"
-    file_2d_path = dir_2 <> "/page-33333333333333333333333333333333.js.map"
+    file_2a_path = dir_2 <> "/test_file_1-#{@empty_file_md5}.css"
+    file_2b_path = dir_2 <> "/test_file_2-#{@empty_file_md5}.css"
+    file_2c_path = dir_2 <> "/page-#{@empty_file_md5}.js"
+    file_2d_path = dir_2 <> "/page-#{@empty_file_md5}.js.map"
     file_2e_path = dir_2 <> "/test_file_1.css"
+    file_2f_path = dir_2 <> "/test_file_2.css"
+    file_2g_path = dir_2 <> "/page.js"
 
     dir_3 = static_dir <> "/test_dir_3"
     file_3a_path = dir_3 <> "/test_file_5.css"
-    file_3b_path = dir_3 <> "/test_file_4-44444444444444444444444444444444.css"
-    file_3c_path = dir_3 <> "/test_file_5-55555555555555555555555555555555.css"
-    file_3d_path = dir_3 <> "/page-66666666666666666666666666666666.js"
-    file_3e_path = dir_3 <> "/page-66666666666666666666666666666666.js.map"
+    file_3b_path = dir_3 <> "/test_file_4-#{@empty_file_md5}.css"
+    file_3c_path = dir_3 <> "/test_file_5-#{@empty_file_md5}.css"
+    file_3d_path = dir_3 <> "/page-#{@empty_file_md5}.js"
+    file_3e_path = dir_3 <> "/page-#{@empty_file_md5}.js.map"
     file_3f_path = dir_3 <> "/test_file_10.css"
     file_3g_path = dir_3 <> "/test_file_11-DOWNLOAD.css"
+    file_3h_path = dir_3 <> "/test_file_4.css"
+    file_3i_path = dir_3 <> "/page.js"
 
-    dir_4 = static_dir <> "/hologram"
-    file_4a_path = dir_4 <> "/page-Elixir.MyPage1-BBBBBBBB.js"
-    file_4b_path = dir_4 <> "/page-Elixir.MyPage1-BBBBBBBB.js.map"
-    file_4c_path = dir_4 <> "/page-Elixir.MyPage2-CCCCCCCC.js"
-    file_4d_path = dir_4 <> "/page-Elixir.MyPage2-CCCCCCCC.js.map"
-    file_4e_path = dir_4 <> "/runtime-AAAAAAAA.js"
-    file_4f_path = dir_4 <> "/test_file_9-99999999999999999999999999999999.css"
-    file_4g_path = dir_4 <> "/chunk-DDDDDDDD.js"
-    file_4h_path = dir_4 <> "/chunk-DDDDDDDD.js.map"
+    file_4a_path = bundles_dir <> "/page-Elixir.MyPage1-BBBBBBBB.js"
+    file_4b_path = bundles_dir <> "/page-Elixir.MyPage1-BBBBBBBB.js.map"
+    file_4c_path = bundles_dir <> "/page-Elixir.MyPage2-CCCCCCCC.js"
+    file_4d_path = bundles_dir <> "/page-Elixir.MyPage2-CCCCCCCC.js.map"
+    file_4e_path = bundles_dir <> "/runtime-AAAAAAAA.js"
+    file_4g_path = bundles_dir <> "/chunk-DDDDDDDD.js"
+    file_4h_path = bundles_dir <> "/chunk-DDDDDDDD.js.map"
 
     File.mkdir_p!(dir_2)
     File.mkdir_p!(dir_3)
-    File.mkdir_p!(dir_4)
 
     file_paths = [
       file_2a_path,
@@ -382,6 +409,8 @@ defmodule Hologram.Test.Stubs do
       file_2c_path,
       file_2d_path,
       file_2e_path,
+      file_2f_path,
+      file_2g_path,
       file_3a_path,
       file_3b_path,
       file_3c_path,
@@ -389,12 +418,13 @@ defmodule Hologram.Test.Stubs do
       file_3e_path,
       file_3f_path,
       file_3g_path,
+      file_3h_path,
+      file_3i_path,
       file_4a_path,
       file_4b_path,
       file_4c_path,
       file_4d_path,
       file_4e_path,
-      file_4f_path,
       file_4g_path,
       file_4h_path
     ]
@@ -404,20 +434,16 @@ defmodule Hologram.Test.Stubs do
     [
       mapping: %{
         "test_dir_1/test_dir_2/test_file_1.css" =>
-          "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
+          "/test_dir_1/test_dir_2/test_file_1-#{@empty_file_md5}.css",
         "test_dir_1/test_dir_2/test_file_2.css" =>
-          "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-        "test_dir_1/test_dir_2/page.js" =>
-          "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-        "test_dir_3/test_file_4.css" =>
-          "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-        "test_dir_3/test_file_5.css" =>
-          "/test_dir_3/test_file_5-55555555555555555555555555555555.css",
+          "/test_dir_1/test_dir_2/test_file_2-#{@empty_file_md5}.css",
+        "test_dir_1/test_dir_2/page.js" => "/test_dir_1/test_dir_2/page-#{@empty_file_md5}.js",
+        "test_dir_3/test_file_4.css" => "/test_dir_3/test_file_4-#{@empty_file_md5}.css",
+        "test_dir_3/test_file_5.css" => "/test_dir_3/test_file_5-#{@empty_file_md5}.css",
         "test_dir_3/test_file_10.css" => "/test_dir_3/test_file_10.css",
         "test_dir_3/test_file_11-DOWNLOAD.css" => "/test_dir_3/test_file_11-DOWNLOAD.css",
-        "test_dir_3/page.js" => "/test_dir_3/page-66666666666666666666666666666666.js",
-        "hologram/runtime.js" => "/hologram/runtime-AAAAAAAA.js",
-        "hologram/test_file_9.css" => "/hologram/test_file_9-99999999999999999999999999999999.css"
+        "test_dir_3/page.js" => "/test_dir_3/page-#{@empty_file_md5}.js",
+        "hologram/runtime.js" => "/hologram/runtime-AAAAAAAA.js"
       }
     ]
   end

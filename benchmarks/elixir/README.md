@@ -362,7 +362,7 @@ list_reach_by_page/2         25.76       38.81 ms     ±6.52%       39.21 ms    
 ```
 
 
-### ✅ compiler » maybe_install_js_deps_2
+### ✅ compiler » maybe_install_js_deps_1
 
 ```
 Name                 ips        average  deviation         median         99th %

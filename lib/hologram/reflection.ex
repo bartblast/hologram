@@ -58,6 +58,8 @@ defmodule Hologram.Reflection do
 
   @ignored_modules [Kernel.SpecialForms]
 
+  @js_deps_install_lock_file_name "hologram_js_deps_install.lock"
+
   @module_info_plt_dump_file_name "module_info.plt"
 
   @page_digest_plt_dump_file_name "page_digest.plt"
@@ -282,6 +284,17 @@ defmodule Hologram.Reflection do
     :hologram
     |> :code.priv_dir()
     |> to_string()
+  end
+
+  @doc """
+  Returns the path of the dir the compiler writes the bundles to and `Hologram.Router` serves them
+  from: the static dir in the build dir. Each build env has a build dir of its own, so a compile in
+  one env never touches the bundles another env serves. `Hologram.Router` names the same dir as
+  `{:hologram, "priv/static"}`.
+  """
+  @spec bundles_dir() :: String.t()
+  def bundles_dir do
+    Path.join(build_dir(), "static")
   end
 
   @doc """
@@ -524,6 +537,12 @@ defmodule Hologram.Reflection do
   def hologram_dep_dir do
     fallback_dir = Path.join(Mix.Project.deps_path(), "hologram")
     Map.get(Mix.Project.deps_paths(), :hologram, fallback_dir)
+  end
+
+  @doc "Returns the file name of the lock the compiler holds while it installs Hologram's JS deps."
+  @spec js_deps_install_lock_file_name :: String.t()
+  def js_deps_install_lock_file_name do
+    @js_deps_install_lock_file_name
   end
 
   @doc """

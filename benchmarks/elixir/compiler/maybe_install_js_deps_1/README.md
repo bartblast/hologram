@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.maybe_install_js_deps/2
+Hologram.Compiler.maybe_install_js_deps/1
 
 ## System
 
