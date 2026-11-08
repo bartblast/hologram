@@ -26,6 +26,8 @@ defmodule HologramFeatureTests.TypesPage do
       <button id="local function capture (server origin)" $click={command: :"local function capture (server origin)"}> local function capture (server origin) </button>
       <button id="remote function capture (client origin)" $click="remote function capture (client origin)"> remote function capture (client origin) </button>
       <button id="remote function capture (server origin)" $click={command: :"remote function capture (server origin)"}> remote function capture (server origin) </button>
+      <button id="Erlang function capture (client origin)" $click="Erlang function capture (client origin)"> Erlang function capture (client origin) </button>
+      <button id="Erlang function capture (server origin)" $click={command: :"Erlang function capture (server origin)"}> Erlang function capture (server origin) </button>
     </p>
     <p>
       <button id="atom" $click="atom"> atom </button>
@@ -90,6 +92,25 @@ defmodule HologramFeatureTests.TypesPage do
   def action(:"bitstring (non-binary, not valid UTF-8)", _params, component) do
     term = <<255, 1::1>>
     put_command(component, :echo, term: term)
+  end
+
+  def action(:"Erlang function capture (client origin)", _params, component) do
+    term = &:lists.reverse/1
+    result = "client = #{inspect(term.([1, 2, 3]))}"
+
+    component
+    |> put_state(:result, result)
+    |> put_command(:"Erlang function capture (client origin) echo", term: term)
+  end
+
+  def action(:"Erlang function capture (client origin) result", params, component) do
+    result = component.state.result <> ", server = #{inspect(params.term.([1, 2, 3]))}"
+    put_state(component, :result, result)
+  end
+
+  def action(:"Erlang function capture (server origin) result", params, component) do
+    result = params.term.([1, 2, 3])
+    put_state(component, :result, result)
   end
 
   def action(:float, _params, component) do
@@ -181,6 +202,15 @@ defmodule HologramFeatureTests.TypesPage do
   def command(:"anonymous function (server origin, capture)", _params, server) do
     term = &(&1 * &2 + &1)
     put_action(server, :result, term: term)
+  end
+
+  def command(:"Erlang function capture (client origin) echo", params, server) do
+    put_action(server, :"Erlang function capture (client origin) result", params)
+  end
+
+  def command(:"Erlang function capture (server origin)", _params, server) do
+    term = &:lists.reverse/1
+    put_action(server, :"Erlang function capture (server origin) result", term: term)
   end
 
   def command(:"local function capture (client origin) echo", params, server) do

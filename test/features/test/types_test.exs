@@ -155,6 +155,20 @@ defmodule HologramFeatureTests.TypesTest do
       |> click(css("button[id='remote function capture (server origin)']"))
       |> assert_text(css("#result"), inspect(8))
     end
+
+    feature "Erlang capture (client origin)", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='Erlang function capture (client origin)']"))
+      |> assert_text(css("#result"), "client = [3, 2, 1], server = [3, 2, 1]")
+    end
+
+    feature "Erlang capture (server origin)", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='Erlang function capture (server origin)']"))
+      |> assert_text(css("#result"), inspect([3, 2, 1]))
+    end
   end
 
   feature "integer", %{session: session} do
