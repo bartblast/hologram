@@ -2186,6 +2186,11 @@ defmodule Hologram.CompilerTest do
 
       assert File.read!(static_bundle_path) == expected_bundle_js
 
+      assert static_bundle_path
+             |> gzip_path()
+             |> File.read!()
+             |> :zlib.gunzip() == expected_bundle_js
+
       expected_source_map_js =
         normalize_newlines("""
         {
@@ -2594,6 +2599,11 @@ defmodule Hologram.CompilerTest do
 
       assert File.read!(static_bundle_path_1) == expected_bundle_js_1
 
+      assert static_bundle_path_1
+             |> gzip_path()
+             |> File.read!()
+             |> :zlib.gunzip() == expected_bundle_js_1
+
       expected_bundle_js_2 =
         normalize_newlines("""
         (()=>{var o=2;})();
@@ -2601,6 +2611,11 @@ defmodule Hologram.CompilerTest do
         """)
 
       assert File.read!(static_bundle_path_2) == expected_bundle_js_2
+
+      assert static_bundle_path_2
+             |> gzip_path()
+             |> File.read!()
+             |> :zlib.gunzip() == expected_bundle_js_2
 
       expected_source_map_js_2 =
         normalize_newlines("""
@@ -3872,6 +3887,11 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "gzip_path/1" do
+    assert gzip_path("/my_static_dir/runtime-AAAAAAAA.js") ==
+             "/my_static_dir/runtime-AAAAAAAA.js.gz"
+  end
+
   describe "install_js_deps/1" do
     setup do
       setup_js_deps_test("install_js_deps_1")
@@ -4614,6 +4634,7 @@ defmodule Hologram.CompilerTest do
 
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".gz", "gzip copy")
       File.write!(bundle_path <> ".map", "map")
 
       page_state = fn modules, path ->
@@ -4859,6 +4880,7 @@ defmodule Hologram.CompilerTest do
       clean_dir(test_tmp_dir)
       bundle_path = Path.join(test_tmp_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".gz", "gzip copy")
       File.write!(bundle_path <> ".map", "map")
       static_dir = test_tmp_dir
 
@@ -5880,6 +5902,7 @@ defmodule Hologram.CompilerTest do
 
       bundle_path = Path.join(static_dir, "page-kept.js")
       File.write!(bundle_path, "bundle")
+      File.write!(bundle_path <> ".gz", "gzip copy")
       File.write!(bundle_path <> ".map", "map")
 
       bundle_info = %{
@@ -5890,7 +5913,7 @@ defmodule Hologram.CompilerTest do
       [bundle_info: bundle_info, static_dir: static_dir]
     end
 
-    test "a bundle and its source map on disk in the given static dir", %{
+    test "a bundle, its gzip copy and its source map on disk in the given static dir", %{
       bundle_info: bundle_info,
       static_dir: static_dir
     } do
@@ -5899,6 +5922,12 @@ defmodule Hologram.CompilerTest do
 
     test "a bundle whose file is gone", %{bundle_info: bundle_info, static_dir: static_dir} do
       File.rm!(bundle_info.static_bundle_path)
+
+      refute usable_bundle?(bundle_info, static_dir)
+    end
+
+    test "a bundle whose gzip copy is gone", %{bundle_info: bundle_info, static_dir: static_dir} do
+      File.rm!(bundle_info.static_bundle_path <> ".gz")
 
       refute usable_bundle?(bundle_info, static_dir)
     end

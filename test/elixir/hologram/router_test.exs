@@ -73,7 +73,12 @@ defmodule Hologram.RouterTest do
       file_path = Path.join(bundles_dir, file_name)
 
       File.write!(file_path, "my_bundle_content")
-      on_exit(fn -> File.rm(file_path) end)
+      File.write!(file_path <> ".gz", "my_gzip_copy_content")
+
+      on_exit(fn ->
+        File.rm(file_path)
+        File.rm(file_path <> ".gz")
+      end)
 
       [file_name: file_name]
     end
@@ -88,6 +93,56 @@ defmodule Hologram.RouterTest do
       assert conn.status == 200
       assert conn.resp_body == "my_bundle_content"
       assert Plug.Conn.get_resp_header(conn, "content-type") == ["text/javascript"]
+      assert Plug.Conn.get_resp_header(conn, "vary") == ["Accept-Encoding"]
+    end
+
+    test "serves the gzip copy of a bundle to a client that accepts gzip", %{file_name: file_name} do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/#{file_name}")
+        |> Plug.Conn.put_req_header("accept-encoding", "gzip")
+        |> call([])
+
+      assert conn.status == 200
+      assert conn.resp_body == "my_gzip_copy_content"
+      assert Plug.Conn.get_resp_header(conn, "content-encoding") == ["gzip"]
+      assert Plug.Conn.get_resp_header(conn, "content-type") == ["text/javascript"]
+      assert Plug.Conn.get_resp_header(conn, "vary") == ["Accept-Encoding"]
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+               "public, max-age=31536000, immutable"
+             ]
+    end
+
+    test "lets the client cache a bundle for good", %{file_name: file_name} do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/#{file_name}")
+        |> call([])
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+               "public, max-age=31536000, immutable"
+             ]
+    end
+
+    test "lets the client cache a bundle for good when it revalidates", %{file_name: file_name} do
+      [etag] =
+        :get
+        |> Plug.Test.conn("/hologram/#{file_name}")
+        |> call([])
+        |> Plug.Conn.get_resp_header("etag")
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/#{file_name}")
+        |> Plug.Conn.put_req_header("if-none-match", etag)
+        |> call([])
+
+      assert conn.status == 304
+
+      assert Plug.Conn.get_resp_header(conn, "cache-control") == [
+               "public, max-age=31536000, immutable"
+             ]
     end
 
     test "passes a request for a missing bundle on" do

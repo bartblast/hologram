@@ -680,7 +680,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       named_build_static_artifacts =
         Enum.flat_map(served_bundles_info, fn info ->
-          [info.static_bundle_path, info.static_source_map_path]
+          [
+            info.static_bundle_path,
+            Compiler.gzip_path(info.static_bundle_path),
+            info.static_source_map_path
+          ]
         end)
 
       Enum.each(old_build_static_artifacts -- named_build_static_artifacts, &File.rm/1)
@@ -1184,8 +1188,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   # the JS imports it registers or the app versions it names differ from the kept ones, and when a
   # module of those MFAs was edited: its functions are in the bundle, so their code is too. It is
   # rebuilt too when a file its bundle read changed (see Hologram.Compiler.js_inputs_changed?/2),
-  # and when the client config it sets differs from this compile's. Both of its files are required,
-  # since nothing else in the compile would recreate a missing source map.
+  # and when the client config it sets differs from this compile's. Its bundle, gzip copy and source
+  # map are all required, since nothing else in the compile would recreate a missing one.
   defp keep_runtime_bundle?(nil, _reaching_modules, _inputs), do: false
 
   defp keep_runtime_bundle?(kept_runtime, reaching_modules, inputs) do
@@ -1201,9 +1205,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         inputs[:js_fingerprints]
       ) and
       runtime_modules_untouched?(inputs[:mfas], reaching_modules) and
-      Path.dirname(kept_runtime.bundle_info.static_bundle_path) == inputs[:static_dir] and
-      File.exists?(kept_runtime.bundle_info.static_bundle_path) and
-      File.exists?(kept_runtime.bundle_info.static_source_map_path)
+      Compiler.usable_bundle?(kept_runtime.bundle_info, inputs[:static_dir])
   end
 
   # The kept runtime state describes the bundle this compile replaces. A compile that fails during
@@ -1652,6 +1654,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp remove_replaced_bundle(old_bundle_info, new_bundle_info) do
     if old_bundle_info.static_bundle_path != new_bundle_info.static_bundle_path do
       File.rm(old_bundle_info.static_bundle_path)
+
+      old_bundle_info.static_bundle_path
+      |> Compiler.gzip_path()
+      |> File.rm()
+
       File.rm(old_bundle_info.static_source_map_path)
     end
 

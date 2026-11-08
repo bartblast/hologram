@@ -215,7 +215,7 @@ defmodule Hologram.Assets.PathRegistry do
   # function matches, and leaves out the bundles no static path looks up, since the page digest and
   # chunk registries say which to load: a page bundle, whose name carries its page module
   # (hologram/page-<module>-<hash>.js), a chunk (hologram/chunk-<hash>.js), which all share the name
-  # left once the hash is taken off, and the source maps of digested and hashed files.
+  # left once the hash is taken off, and the gzip copies and source maps of digested and hashed files.
   defp classify_files(relative_paths, match_suffix) do
     classified_files = Enum.map(relative_paths, &classify_file(&1, match_suffix))
 
@@ -393,7 +393,7 @@ defmodule Hologram.Assets.PathRegistry do
 
   defp unlooked_up_bundle?(prefix, suffix) do
     prefix == "hologram/chunk" or String.starts_with?(prefix, "hologram/page-") or
-      suffix == ".js.map"
+      suffix in [".js.gz", ".js.map"]
   end
 
   defp unpicked_copy_entries(key, sorted_copies, relative_path_set) do

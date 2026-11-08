@@ -651,7 +651,8 @@ defmodule Hologram.Compiler do
   string names the build only, its output dir under the `:tmp_dir` opt, which keeps the entries of
   a shared bundle name apart while they are bundled at once: the chunks' files are named by the
   bundle name and the hash alone, since no two chunks have the same content. The returned digest is
-  the hash.
+  the hash. Next to the bundle goes its gzip copy, `<bundle_name>-<hash>.js.gz` (see
+  `gzip_path/1`).
 
   A bundle bigger than the `:max_bundle_size` config value fails the build, unless its bundle name
   is `"chunk"`: a chunk is downloaded only once a struct of one of its types is on the client, and
@@ -665,9 +666,10 @@ defmodule Hologram.Compiler do
   @spec bundle(module | String.t() | nil, T.file_path(), String.t(), T.opts()) :: map
   def bundle(entry_name, entry_file_path, bundle_name, opts) do
     # esbuild names the bundle and its source map by their content hash and writes the source map
-    # comment to match, so neither file is read back or rewritten. Each bundle gets its own output
-    # dir: the name is only known once esbuild has run, so the dir is listed for it, and it is
-    # recreated so that a bundle left there by a run that failed the size check is not listed too.
+    # comment to match, so the source map is never read back and neither file is rewritten. Each
+    # bundle gets its own output dir: the name is only known once esbuild has run, so the dir is
+    # listed for it, and it is recreated so that a bundle left there by a run that failed the size
+    # check is not listed too.
     output_name = bundle_output_name(bundle_name, entry_name)
     output_dir_name = bundle_output_dir_name(bundle_name, entry_name)
     output_dir = Path.join(opts[:tmp_dir], "#{output_dir_name}.output")
@@ -694,8 +696,8 @@ defmodule Hologram.Compiler do
     {static_bundle_path, static_source_map_path} =
       move_bundle_to_static_dir(output_dir, bundle_file_name, opts)
 
-    # Read once and removed, so that the output dir is left empty, as the bundle and its source map
-    # leave it.
+    # Read once and removed, so that the output dir is left empty, as the bundle, its gzip copy and
+    # its source map leave it.
     js_inputs =
       metafile_path
       |> read_esbuild_metafile()
@@ -1209,6 +1211,15 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the path of the gzip copy of the bundle at the given path: the bundle's path with `.gz`
+  appended.
+  """
+  @spec gzip_path(T.file_path()) :: T.file_path()
+  def gzip_path(bundle_path) do
+    bundle_path <> ".gz"
+  end
+
+  @doc """
   Installs JavaScript deps which are specified in package.json located in assets_dir.
   Saves the package.json digest to package_json_digest.bin file in build_dir.
   """
@@ -1497,9 +1508,8 @@ defmodule Hologram.Compiler do
   VM), when the modules of its kept MFAs meet `reaching_modules` (see
   `Hologram.Compiler.CallGraph.list_modules_reaching/2`: every way a page's bundle depends on a
   module is a path in the call graph from a vertex of the page, or of a component it renders, to that
-  module), when the bundle its kept state describes or that bundle's source map is no longer on disk
-  (a build dir can lose bundles to another build env sharing the static dir), or when that bundle
-  belongs to a static dir other than the given one. A page whose bundle's recorded inputs no longer
+  module), when the bundle its kept state describes, its gzip copy or its source map is no longer on
+  disk, or when that bundle belongs to a static dir other than the given one. A page whose bundle's recorded inputs no longer
   match `js_fingerprints`, the fingerprints of the files now, is rebuilt as well (see
   `js_inputs_changed?/2`): no beam moves when a JavaScript file a bundle inlines is edited. A page
   in `pending_pages` is rebuilt too: an earlier compile set out to build it and did not, so its kept
@@ -1749,14 +1759,18 @@ defmodule Hologram.Compiler do
 
   @doc """
   Whether the bundle the given bundle info describes can still be served from the given static dir:
-  it was written there, and both the bundle and its source map are on disk. A build dir can lose
-  bundles to another build env sharing the static dir, and the info names one static dir, so reusing
-  it for another would put a digest into that dir's page digest PLT whose file lives elsewhere.
+  it was written there, and the bundle, its gzip copy and its source map are all on disk. The info
+  names one static dir, so reusing it for another, like the one the bundles moved to from the app's
+  static dir, would put a digest into that dir's page digest PLT whose file lives elsewhere.
   """
   @spec usable_bundle?(map, T.file_path()) :: boolean
   def usable_bundle?(bundle_info, static_dir) do
-    Path.dirname(bundle_info.static_bundle_path) == static_dir and
-      File.exists?(bundle_info.static_bundle_path) and
+    bundle_path = bundle_info.static_bundle_path
+    gzip_path = gzip_path(bundle_path)
+
+    Path.dirname(bundle_path) == static_dir and
+      File.exists?(bundle_path) and
+      File.exists?(gzip_path) and
       File.exists?(bundle_info.static_source_map_path)
   end
 
@@ -2482,12 +2496,23 @@ defmodule Hologram.Compiler do
   end
 
   # Moves the bundle with the given file name and its source map from the output dir esbuild wrote
-  # them to into the static dir, and returns the paths of both there.
+  # them to into the static dir, and returns the paths of both there. The bundle's gzip copy is
+  # written in the output dir and moved first, so that a served copy is never half written and a
+  # served bundle always has one.
   defp move_bundle_to_static_dir(output_dir, bundle_file_name, opts) do
     output_bundle_path = Path.join(output_dir, bundle_file_name)
+    output_gzip_path = gzip_path(output_bundle_path)
     static_bundle_path = Path.join(opts[:static_dir], bundle_file_name)
     static_source_map_path = static_bundle_path <> ".map"
 
+    gzipped_bundle =
+      output_bundle_path
+      |> File.read!()
+      |> :zlib.gzip()
+
+    File.write!(output_gzip_path, gzipped_bundle)
+
+    File.rename!(output_gzip_path, gzip_path(static_bundle_path))
     File.rename!(output_bundle_path, static_bundle_path)
     File.rename!(output_bundle_path <> ".map", static_source_map_path)
 

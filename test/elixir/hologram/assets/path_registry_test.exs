@@ -284,6 +284,14 @@ defmodule Hologram.Assets.PathRegistryTest do
       assert ETS.get_all(AssetPathRegistryStub.ets_table_name()) == mapping
     end
 
+    test "leaves out the gzip copy of the runtime bundle", %{mapping: mapping} do
+      write_bundle_file("runtime-AAAAAAAA.js.gz")
+
+      init(nil)
+
+      assert ETS.get_all(AssetPathRegistryStub.ets_table_name()) == mapping
+    end
+
     test "maps a file of the bundles dir with no hash in its name under its own name" do
       write_bundle_file("test_file_9.css")
 

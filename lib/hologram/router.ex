@@ -12,10 +12,14 @@ defmodule Hologram.Router do
 
   # The bundles, from the dir the compiler writes them to (see `Hologram.Reflection.bundles_dir/0`),
   # which is Hologram's own static dir in the build dir of the env at hand. Only the bundles' names
-  # are looked up on disk, so the other /hologram/ routes skip the file check.
+  # are looked up on disk, so the other /hologram/ routes skip the file check. A bundle's name
+  # carries the hash of its content, so a browser keeps it for good once it has it, and gets the
+  # gzip copy the compiler writes next to it when it accepts gzip.
   plug Plug.Static,
     at: "/hologram",
+    cache_control_for_etags: "public, max-age=31536000, immutable",
     from: {:hologram, "priv/static"},
+    gzip: true,
     only_matching: ~w(chunk- page- runtime-)
 
   plug :match
