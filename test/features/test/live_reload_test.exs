@@ -8,6 +8,7 @@ defmodule HologramFeatureTests.LiveReloadTest do
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
   alias Hologram.Commons.PLT
+  alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias HologramFeatureTests.LiveReload.Page1
   alias HologramFeatureTests.LiveReload.Page2
@@ -30,9 +31,15 @@ defmodule HologramFeatureTests.LiveReloadTest do
     Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", message)
   end
 
-  defp bundle_static_path(page_module, digest) do
-    static_dir = Application.app_dir(:hologram_feature_tests, "priv/static")
-    Path.join(static_dir, RouterHelpers.page_bundle_path(page_module, digest))
+  # The file the page's bundle with the given digest is served from, in the dir the compiler writes
+  # the bundles to.
+  defp bundle_file_path(page_module, digest) do
+    bundle_file_name =
+      page_module
+      |> RouterHelpers.page_bundle_path(digest)
+      |> Path.basename()
+
+    Path.join(Reflection.bundles_dir(), bundle_file_name)
   end
 
   defp computed_color(session) do
@@ -66,16 +73,18 @@ defmodule HologramFeatureTests.LiveReloadTest do
       |> :crypto.strong_rand_bytes()
       |> Base.encode32()
 
-    old_bundle_path = bundle_static_path(page_module, old_digest)
-    new_bundle_path = bundle_static_path(page_module, new_digest)
+    old_bundle_path = bundle_file_path(page_module, old_digest)
+    new_bundle_path = bundle_file_path(page_module, new_digest)
 
     File.cp!(old_bundle_path, new_bundle_path)
+    File.cp!(old_bundle_path <> ".gz", new_bundle_path <> ".gz")
     File.cp!(old_bundle_path <> ".map", new_bundle_path <> ".map")
     PLT.put(plt, page_module, new_digest)
 
     on_exit(fn ->
       PLT.put(plt, page_module, old_digest)
       File.rm(new_bundle_path)
+      File.rm(new_bundle_path <> ".gz")
       File.rm(new_bundle_path <> ".map")
     end)
   end
@@ -89,10 +98,10 @@ defmodule HologramFeatureTests.LiveReloadTest do
     end
   end
 
-  # Rebuilds the asset paths from the static dir, as the server's start does: the asset path
-  # registry, restarted, and the asset manifest the pages are rendered with. The registry ends up as
-  # live reload's update after a change to the static files leaves it, and the test app runs no live
-  # reload.
+  # Rebuilds the asset paths from the app's static dir and the bundles dir, as the server's start
+  # does: the asset path registry, restarted, and the asset manifest the pages are rendered with.
+  # The registry ends up as live reload's update after a change to the static files leaves it, and
+  # the test app runs no live reload.
   defp rebuild_asset_paths do
     :ok = Supervisor.terminate_child(Hologram.Supervisor, PathRegistry)
     {:ok, _pid} = Supervisor.restart_child(Hologram.Supervisor, PathRegistry)

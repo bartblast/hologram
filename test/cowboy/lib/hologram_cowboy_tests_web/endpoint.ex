@@ -12,7 +12,7 @@ defmodule HologramCowboyTestsWeb.Endpoint do
     at: "/",
     from: :hologram_cowboy_tests,
     gzip: false,
-    only: ~w(assets fonts hologram images favicon.ico robots.txt)
+    only: ~w(assets fonts images favicon.ico robots.txt)
 
   plug Plug.RequestId
 
