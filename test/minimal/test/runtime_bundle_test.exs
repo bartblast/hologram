@@ -1,10 +1,12 @@
 defmodule HologramMinimalTests.RuntimeBundleTest do
   use ExUnit.Case, async: true
 
+  alias Hologram.Reflection
+
   defp read_runtime_bundle do
     [runtime_bundle_path] =
-      [Application.app_dir(:hologram_minimal_tests, "priv"), "static", "hologram", "runtime-*.js"]
-      |> Path.join()
+      Reflection.bundles_dir()
+      |> Path.join("runtime-????????.js")
       |> Path.wildcard()
 
     File.read!(runtime_bundle_path)

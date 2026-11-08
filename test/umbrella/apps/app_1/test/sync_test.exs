@@ -2,6 +2,7 @@ defmodule App1.SyncTest do
   use ExUnit.Case, async: true
 
   alias Hologram.Entity.Model
+  alias Hologram.Reflection
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Handshake
 
@@ -29,8 +30,7 @@ defmodule App1.SyncTest do
     # does not ADVERTISE sync, so a client of it never greets. The server refuses one anyway, for
     # the stale bundle that asks after a deploy - these are not alternatives.
     test "carries no sync constants, so no client of it asks to sync" do
-      pattern =
-        Path.join([Application.app_dir(:app_1, "priv"), "static", "hologram", "runtime-*.js"])
+      pattern = Path.join(Reflection.bundles_dir(), "runtime-????????.js")
 
       assert [bundle_path] = Path.wildcard(pattern)
 
