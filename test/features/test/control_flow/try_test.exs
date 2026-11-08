@@ -102,11 +102,11 @@ defmodule HologramFeatureTests.ControlFlow.TryTest do
 
   describe "__STACKTRACE__" do
     # The line `raise "boom"` sits on in app/pages/control_flow/try_page.ex.
-    @raise_line 304
+    @raise_line 306
 
     # The line `raise "bang"` sits on in app/pages/control_flow/try_page.ex -
     # the raise site reraise has to preserve, not the clause re-raising it.
-    @reraise_line 226
+    @reraise_line 228
 
     feature "holds the frame the error was raised in", %{session: session} do
       expected =
