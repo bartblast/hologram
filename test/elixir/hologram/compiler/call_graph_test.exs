@@ -985,6 +985,25 @@ defmodule Hologram.Compiler.CallGraphTest do
              )
     end
 
+    test "module definition IR, protocol module adds no edges to server-only implementations", %{
+      empty_call_graph: call_graph
+    } do
+      build(call_graph, IR.for_module(Inspect))
+
+      from_vertex = {Inspect, :inspect, 2}
+
+      assert has_edge?(call_graph, from_vertex, {Inspect.Date, :inspect, 2})
+
+      refute has_edge?(call_graph, from_vertex, {Inspect.Hologram.Component, :__impl__, 1})
+      refute has_edge?(call_graph, from_vertex, {Inspect.Hologram.Component, :inspect, 2})
+
+      refute has_edge?(
+               call_graph,
+               from_vertex,
+               {Inspect.Hologram.Component.Redacted, :inspect, 2}
+             )
+    end
+
     test "module definition IR, protocol module takes its function list from the PLT" do
       {:ok, info} = PLT.get(module_info_plt_fixture(), String.Chars)
 
@@ -2236,6 +2255,20 @@ defmodule Hologram.Compiler.CallGraphTest do
       result = list_chunk_entries([Protocol1], module_info_plt_fixture())
 
       assert result[Module12] == [{Module12, :__struct__, 0}, {Module12, :__struct__, 1}]
+    end
+
+    test "leaves out the server-only implementations" do
+      result = list_chunk_entries([Inspect], module_info_plt_fixture())
+
+      assert result[Hologram.Component] == [
+               {Hologram.Component, :__struct__, 0},
+               {Hologram.Component, :__struct__, 1}
+             ]
+
+      assert result[Hologram.Component.Redacted] == [
+               {Hologram.Component.Redacted, :__struct__, 0},
+               {Hologram.Component.Redacted, :__struct__, 1}
+             ]
     end
 
     test "leaves out the struct types of the Hex build tool" do

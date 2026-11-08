@@ -2755,6 +2755,8 @@ export default class Interpreter {
   // A secret value prints as **redacted** wherever a component struct is printed: in the messages
   // the error overlay and the console show, and among the args a FunctionClauseError lists.
   // __meta__ is the runtime's own bookkeeping, so it is left out of the output too.
+  //
+  // WARNING: must match the Inspect implementation for Hologram.Component on the server.
   // Deps: [:maps.get/3, :maps.is_key/2, :maps.put/3, :maps.remove/2]
   static #redactComponentStruct(struct) {
     const metadata = Erlang_Maps["get/3"](
