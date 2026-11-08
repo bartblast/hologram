@@ -158,12 +158,17 @@ defmodule Hologram.Assets.PathRegistry do
 
   # Maps each bundle's key, its path under hologram/ with the hash taken off, to the URL to serve it
   # from. The bundles dir holds the compiler's bundles only, so there are no copies to pick from,
-  # and a file whose name carries no hash is served under its own name. Of two bundles sharing a key,
-  # the one that sorts last is kept, so that the pick is deterministic.
+  # and a file whose name carries no hash is served under its own name. A bundle takes the key of a
+  # plain file that shares it, and of two bundles sharing a key, the one that sorts last is kept, so
+  # that the pick is deterministic.
   defp build_bundle_entries(relative_paths) do
     {_copies, bundles, plain_files} = classify_files(relative_paths, &match_bundle_hash/1)
 
-    bundle_entries = Enum.map(bundles, fn {key, path} -> {key, "/#{path}"} end)
+    bundle_entries =
+      bundles
+      |> Enum.sort()
+      |> Enum.map(fn {key, path} -> {key, "/#{path}"} end)
+
     plain_entries = Enum.map(plain_files, &{&1, "/#{&1}"})
 
     (plain_entries ++ bundle_entries)
