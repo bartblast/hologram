@@ -67,7 +67,7 @@ function parseClaim(opts) {
     }
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `Job.create takes authorize: operation or trust: true, got: ${Interpreter.inspect(opts)}`,
   );
 }
@@ -80,13 +80,13 @@ function validateJobType(jobType) {
     : null;
 
   if (type === null || !Model.isEntityType(type)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(jobType)} is not a job type - Job.create takes a module defined with use Hologram.Job`,
     );
   }
 
   if (Model.entry(type).frameworkAttributes.length === 0) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${type} is not a job type - Job.create takes a module defined with use Hologram.Job`,
     );
   }

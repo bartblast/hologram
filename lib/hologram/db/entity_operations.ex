@@ -22,6 +22,7 @@ defmodule Hologram.DB.EntityOperations do
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
+  alias Hologram.MisuseError
   alias Hologram.Policy
 
   @doc false
@@ -411,7 +412,7 @@ defmodule Hologram.DB.EntityOperations do
   @spec validate_id!(any) :: :ok
   def validate_id!(id) do
     if not Validator.attribute_value_valid?(id, :uuid) do
-      raise ArgumentError,
+      raise MisuseError,
             "invalid id #{inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end
 
@@ -688,7 +689,7 @@ defmodule Hologram.DB.EntityOperations do
 
     case Enum.find(join_tables, &(&1.relationship == relationship_name)) do
       nil ->
-        raise ArgumentError,
+        raise MisuseError,
               "invalid relationship for #{inspect(entity_type)} - #{inspect(relationship_name)} is not a declared to-many relationship"
 
       join_table ->
@@ -867,7 +868,7 @@ defmodule Hologram.DB.EntityOperations do
         end
 
       {:ok, %Postgrex.Result{num_rows: 0}} ->
-        raise ArgumentError,
+        raise MisuseError,
               "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
 
       # The writer explains nothing, the way insert/2 does not - update/3's merge point turns
@@ -1030,7 +1031,7 @@ defmodule Hologram.DB.EntityOperations do
 
   defp validate_changes!(entity_type, sorted_changes, sorted_deltas, columns_by_field) do
     if sorted_changes == [] and sorted_deltas == [] do
-      raise ArgumentError,
+      raise MisuseError,
             "invalid changes for #{inspect(entity_type)} - at least one declared attribute or to-one relationship must be changed"
     end
 
@@ -1050,7 +1051,7 @@ defmodule Hologram.DB.EntityOperations do
     if unmovable_names != [] do
       listed_names = Enum.map_join(unmovable_names, ", ", &inspect/1)
 
-      raise ArgumentError,
+      raise MisuseError,
             "invalid deltas for #{inspect(entity_type)} - only required integer attributes can be moved: #{listed_names}"
     end
 
@@ -1064,7 +1065,7 @@ defmodule Hologram.DB.EntityOperations do
     if both_names != [] do
       listed_names = Enum.map_join(both_names, ", ", &inspect/1)
 
-      raise ArgumentError,
+      raise MisuseError,
             "invalid deltas for #{inspect(entity_type)} - a field is either changed or moved, not both: #{listed_names}"
     end
 
@@ -1076,7 +1077,7 @@ defmodule Hologram.DB.EntityOperations do
     if unknown_names != [] do
       listed_names = Enum.map_join(unknown_names, ", ", &inspect/1)
 
-      raise ArgumentError,
+      raise MisuseError,
             "invalid changes for #{inspect(entity_type)} - only declared attributes and to-one relationships can be updated: #{listed_names}"
     end
 
@@ -1109,7 +1110,7 @@ defmodule Hologram.DB.EntityOperations do
       |> Enum.find(&Derived.declared?(entity_type, &1))
 
     if derived_name do
-      raise ArgumentError,
+      raise MisuseError,
             "invalid #{kind} for #{inspect(entity_type)} - #{Derived.read_only_message(entity_type, derived_name)}"
     end
   end

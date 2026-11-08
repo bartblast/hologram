@@ -9,7 +9,6 @@ import {
 } from "../../../support/helpers.mjs";
 
 import Elixir_Hologram_Query_Stage from "../../../../../assets/js/elixir/hologram/query/stage.mjs";
-import HologramBoxedError from "../../../../../assets/js/errors/boxed_error.mjs";
 import Model from "../../../../../assets/js/model.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
@@ -329,7 +328,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
             id: "uuid",
             tier: "enum",
           },
-          enumValues: {floor: ["low", "medium", "high"], tier: ["low", "high"]},
+          enumValues: {
+            floor: ["low", "medium", "high"],
+            tier: ["low", "high"],
+          },
           relationships: {items: {toMany: true, type: GADGET}},
           serverOnly: [],
         },
@@ -506,118 +508,118 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on an inverse of a to-one", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           addRelationship(
             entity(CHANNEL),
             Type.atom("messages"),
             Type.bitstring("m1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":messages is an inverse relationship in MyApp.Channel - it reads the channel_id reference of MyApp.Message, so set that reference on the MyApp.Message row via put_attribute(:channel_id, id)",
       );
     });
 
     it("raises on a single inverse", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           addRelationship(
             entity(CHANNEL),
             Type.atom("topic"),
             Type.bitstring("t1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":topic is an inverse relationship in MyApp.Channel - it reads the channel_id reference of MyApp.Topic, so set that reference on the MyApp.Topic row via put_attribute(:channel_id, id)",
       );
     });
 
     it("raises on an inverse of a to-many", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           addRelationship(
             entity(LABEL),
             Type.atom("messages"),
             Type.bitstring("m1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":messages is an inverse relationship in MyApp.Label - it reads the labels relationship of MyApp.Message, so record the edge on the MyApp.Message row via add_relationship(:labels, id)",
       );
     });
 
     it("raises on a to-one relationship name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           addRelationship(
             entity(PROJECT),
             Type.atom("owner"),
             Type.bitstring("u1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":owner is a to-one relationship in MyApp.Project - only to-many relationships hold edges - set its reference via put_attribute(:owner_id, id)",
       );
     });
 
     it("raises on an attribute name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           addRelationship(
             entity(PROJECT),
             Type.atom("name"),
             Type.bitstring("t1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":name is an attribute in MyApp.Project - only to-many relationships hold edges - put it via put_attribute",
       );
     });
 
     it("raises on an unknown relationship name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           addRelationship(
             entity(PROJECT),
             Type.atom("nope"),
             Type.bitstring("t1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown relationship :nope in MyApp.Project - known to-many relationships: :tasks",
       );
     });
 
     it("raises when the entity is not an entity struct", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           addRelationship(
             Type.bitstring("x"),
             Type.atom("tasks"),
             Type.bitstring("t1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'add_relationship takes an entity struct, got: "x"',
       );
     });
 
     it("raises when the target id is not a string", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           addRelationship(
             entity(PROJECT),
             Type.atom("tasks"),
             Type.integer(123),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "add_relationship takes a target id string, got: 123",
       );
     });
 
     it("raises on a derived field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           addRelationship(
             entity(ROOM),
             Type.atom("recent_messages"),
             Type.bitstring("t2"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":recent_messages is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
@@ -657,66 +659,66 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on an inverse of a to-many in its own stage's words", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           deleteRelationship(
             entity(LABEL),
             Type.atom("messages"),
             Type.bitstring("m1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":messages is an inverse relationship in MyApp.Label - it reads the labels relationship of MyApp.Message, so record the edge on the MyApp.Message row via delete_relationship(:labels, id)",
       );
     });
 
     it("raises on a to-one relationship name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           deleteRelationship(
             entity(PROJECT),
             Type.atom("owner"),
             Type.bitstring("u1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":owner is a to-one relationship in MyApp.Project - only to-many relationships hold edges - set its reference via put_attribute(:owner_id, id)",
       );
     });
 
     it("raises when the entity is not an entity struct", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           deleteRelationship(
             Type.bitstring("x"),
             Type.atom("tasks"),
             Type.bitstring("t1"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'delete_relationship takes an entity struct, got: "x"',
       );
     });
 
     it("raises when the target id is not a string", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           deleteRelationship(
             entity(PROJECT),
             Type.atom("tasks"),
             Type.integer(123),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "delete_relationship takes a target id string, got: 123",
       );
     });
 
     it("raises on a derived field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           deleteRelationship(
             entity(ROOM),
             Type.atom("recent_messages"),
             Type.bitstring("t2"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":recent_messages is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
@@ -833,77 +835,77 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on an amount that is not an integer", () => {
-      assert.throw(
+      assertBoxedError(
         () => increment(item(), Type.atom("count"), Type.float(1.5)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "increment takes an integer amount, got: 1.5",
       );
 
-      assert.throw(
+      assertBoxedError(
         () => increment(item(), Type.atom("count"), Type.bitstring("1")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'increment takes an integer amount, got: "1"',
       );
     });
 
     it("raises on an optional integer attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () => increment(item(), Type.atom("priority"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":priority in MyApp.Item is optional and can hold nil - increment moves attributes that always hold a number - declare it without optional: true, with a default",
       );
     });
 
     it("raises on a non-integer attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () => increment(item(), Type.atom("bio"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":bio is a :string attribute of MyApp.Item - increment moves integer attributes only",
       );
     });
 
     it("raises on a relationship", () => {
-      assert.throw(
+      assertBoxedError(
         () => increment(entity(PROJECT), Type.atom("owner"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":owner is a relationship in MyApp.Project - increment moves integer attributes only",
       );
     });
 
     it("raises on a system attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () => increment(item(), Type.atom("id"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":id is a system attribute of MyApp.Item - it is managed automatically and can't be moved",
       );
     });
 
     it("raises on an unknown name", () => {
-      assert.throw(
+      assertBoxedError(
         () => increment(item(), Type.atom("nope"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :nope in MyApp.Item - known counters: :count",
       );
     });
 
     it("raises when the entity is not an entity struct", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           increment(Type.bitstring("x"), Type.atom("count"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'increment takes an entity struct, got: "x"',
       );
     });
 
     it("raises when the struct's field holds nil", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           increment(
             entity(ITEM, {bio: "x", count: null, priority: null}),
             Type.atom("count"),
             Type.integer(1),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":count in MyApp.Item holds nil - a counter always holds a number, so there is nothing for increment to move - read the row first, or give the attribute a default",
       );
     });
@@ -911,31 +913,31 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // Not the same refusal: reading the row is what the message above tells a caller to do, and no
     // read produces this value on this tier.
     it("raises when the counter is one the client is never shown", () => {
-      assert.throw(
+      assertBoxedError(
         () => increment(entity(VAULT), Type.atom("balance"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":balance of MyApp.Vault is server-only - a browser cannot write it, set it in a command or a job",
       );
     });
 
     it("raises when the put value it would fold into is not an integer", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           increment(
             putAttribute(item(), predicates([["count", Type.nil()]])),
             Type.atom("count"),
             Type.integer(1),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":count in MyApp.Item carries a put value that is not an integer (nil) - increment cannot move it",
       );
     });
 
     it("raises on a derived field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           increment(entity(ROOM), Type.atom("message_count"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
@@ -990,27 +992,27 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [Type.integer(0), "0"],
         [Type.float(1.5), "1.5"],
       ]) {
-        assert.throw(
+        assertBoxedError(
           () => decrement(item(), Type.atom("count"), amount),
-          HologramBoxedError,
+          "Hologram.MisuseError",
           `decrement takes a positive integer amount, got: ${spelled}`,
         );
       }
     });
 
     it("raises on a non-integer attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () => decrement(item(), Type.atom("bio"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":bio is a :string attribute of MyApp.Item - decrement moves integer attributes only",
       );
     });
 
     it("raises on a derived field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           decrement(entity(ROOM), Type.atom("message_count"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
@@ -1141,97 +1143,97 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on a system attribute name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttribute(entity(TASK), predicates([["id", Type.bitstring("x")]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":id is a system attribute of MyApp.Task - it is managed automatically and can't be put",
       );
     });
 
     it("raises on a to-many relationship name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttribute(entity(PROJECT), predicates([["tasks", Type.list()]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":tasks is a relationship in MyApp.Project - only attributes can be put - add its edges via add_relationship",
       );
     });
 
     // A name an object inherits is no inverse - only the ones the model bakes are.
     it("raises on a name every object inherits as an unknown attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttribute(
             entity(CHANNEL),
             predicates([["constructor", Type.integer(1)]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :constructor in MyApp.Channel - known attributes: :name, :owner_id",
       );
     });
 
     it("raises on an inverse relationship name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttribute(
             entity(CHANNEL),
             predicates([["messages", Type.list()]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":messages is an inverse relationship in MyApp.Channel - only attributes can be put - it reads the channel_id reference of MyApp.Message, so write that instead",
       );
     });
 
     it("raises on a to-one relationship name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttribute(entity(PROJECT), predicates([["owner", Type.nil()]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":owner is a relationship in MyApp.Project - only attributes can be put - set its reference via :owner_id",
       );
     });
 
     it("raises on an unknown name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttribute(
             entity(PROJECT),
             predicates([["nope", Type.integer(1)]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :nope in MyApp.Project - known attributes: :name, :owner_id",
       );
     });
 
     it("raises when the entity is not an entity struct", () => {
-      assert.throw(
+      assertBoxedError(
         () => putAttribute(Type.bitstring("x"), predicates([])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'put_attribute takes an entity struct, got: "x"',
       );
 
-      assert.throw(
+      assertBoxedError(
         () => putAttribute(task, predicates([])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "put_attribute takes an entity struct, got: MyApp.Task",
       );
     });
 
     it("raises when the values are neither a keyword list nor a map", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttribute(
             entity(TASK),
             Type.list([Type.integer(1), Type.integer(2)]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "put_attribute takes a keyword list or a map of attribute values, got: [1, 2]",
       );
     });
 
     it("raises on a derived field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttribute(
             entity(ROOM),
@@ -1239,7 +1241,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               Type.tuple([Type.atom("message_count"), Type.integer(3)]),
             ]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
@@ -1267,23 +1269,23 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on an unknown name", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttributeValue(entity(TASK), Type.atom("nope"), Type.integer(1)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :nope in MyApp.Task - known attributes: :done, :due_on, :position, :starts_at, :status, :title",
       );
     });
 
     it("raises on a derived field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           putAttributeValue(
             entity(ROOM),
             Type.atom("message_count"),
             Type.integer(3),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":message_count is a derived field of MyApp.Room - it's computed from its definition, so it's read-only",
       );
     });
@@ -1350,29 +1352,29 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises when the entity is not an entity struct", () => {
-      assert.throw(
+      assertBoxedError(
         () => authorize(Type.bitstring("x"), Type.atom("archive")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'authorize takes an entity struct, got: "x"',
       );
     });
 
     it("raises when the operation is not an atom", () => {
-      assert.throw(
+      assertBoxedError(
         () => authorize(entity(TASK), Type.bitstring("archive")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'authorize takes an operation atom, got: "archive"',
       );
     });
 
     it("raises when the struct already carries a claim", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           authorize(
             authorize(entity(TASK), Type.atom("update")),
             Type.atom("delete"),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "MyApp.Task already carries a claim ({:authorize, :update}) - a write claims exactly one authority",
       );
     });
@@ -1380,7 +1382,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises when the operation is one the entity type never declared", () => {
       assertBoxedError(
         () => authorize(entity(TASK), Type.atom("archive")),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown operation :archive for MyApp.Task - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
       );
     });
@@ -1392,25 +1394,25 @@ describe("Elixir_Hologram_Query_Stage", () => {
   // answer past the policies that decided what it holds.
   describe("trust/1", () => {
     it("refuses an entity struct", () => {
-      assert.throw(
+      assertBoxedError(
         () => trust(entity(TASK)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "trust is the server's authority - a client cannot claim it",
       );
     });
 
     it("refuses a query", () => {
-      assert.throw(
+      assertBoxedError(
         () => trust(task),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "trust is the server's authority - a client cannot claim it",
       );
     });
 
     it("refuses a query term", () => {
-      assert.throw(
+      assertBoxedError(
         () => trust(filter(task, predicates([["done", Type.boolean(true)]]))),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "trust is the server's authority - a client cannot claim it",
       );
     });
@@ -1418,7 +1420,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
   describe("count/1", () => {
     it("marks the query as counting", () => {
-      assert.deepStrictEqual(count(task), {...freshTerm, cardinality: "count"});
+      assert.deepStrictEqual(count(task), {
+        ...freshTerm,
+        cardinality: "count",
+      });
     });
 
     it("composes with other stages", () => {
@@ -1429,9 +1434,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises when cardinality is already marked", () => {
-      assert.throw(
+      assertBoxedError(
         () => count(one(task)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "cardinality is already set to :one",
       );
     });
@@ -1911,17 +1916,17 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on predicates that are not a list of name and value pairs", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(task, Type.integer(123)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: 123",
       );
     });
 
     it("raises on an unknown attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["x", Type.integer(1)]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );
     });
@@ -1929,9 +1934,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // A to-one relationship names a reference the predicate can read instead, and the message
     // says which - a to-many has none to offer.
     it("raises on a one-element list as a predicate name", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, pathPredicates(["owner"], Type.bitstring("x"))),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: [{[:owner], "x"}]',
       );
     });
@@ -1939,9 +1944,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a one-element list as an attribute operand", () => {
       const operand = Type.tuple([Type.atom("attribute"), path("name")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, predicates([["note", operand]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid attribute operand {:attribute, [:name]} - an attribute is named by an atom, and a path by a list of two or more atoms",
       );
     });
@@ -1952,27 +1957,27 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("attribute"), path("owner", "email")]),
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, pathPredicates(["owner", "email"], value)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :< compares attribute owner.email in MyApp.Booking with itself",
       );
     });
 
     it("raises on a path through an inverse relationship", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             Type.alias(CHANNEL),
             pathPredicates(["messages", "body"], Type.bitstring("x")),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":messages is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference",
       );
     });
 
     it("raises on a path reaching an inverse relationship on a later hop", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             Type.alias(MESSAGE),
@@ -1981,7 +1986,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
               Type.bitstring("x"),
             ),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":messages is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference",
       );
     });
@@ -1992,65 +1997,65 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("attribute"), path("messages", "body")]),
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(Type.alias(CHANNEL), predicates([["name", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":messages is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference",
       );
     });
 
     it("raises on a path through a single inverse", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             Type.alias(CHANNEL),
             pathPredicates(["topic", "title"], Type.bitstring("x")),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":topic is an inverse relationship in MyApp.Channel - a path in a condition goes through to-one relationships that hold their reference",
       );
     });
 
     it("raises on a path through a to-many relationship", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             booking,
             pathPredicates(["owner", "projects", "name"], Type.bitstring("x")),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":projects is a to-many relationship in MyApp.User - a path in a condition goes through to-one relationships only",
       );
     });
 
     it("raises on a path through an attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             booking,
             pathPredicates(["owner", "email", "x"], Type.bitstring("x")),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":email is an attribute in MyApp.User - a path goes through relationships, and only its last name is an attribute",
       );
     });
 
     it("raises on a path through an unknown relationship", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             booking,
             pathPredicates(["boss", "email"], Type.bitstring("x")),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown relationship :boss in MyApp.Booking - known relationships: :assignee, :owner",
       );
     });
 
     it("raises on a path to an unknown attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, pathPredicates(["owner", "x"], Type.integer(1))),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :x in MyApp.User - known attributes: :active, :email, :ends_on, :id, :level, :logins, :manager_id, :starts_on",
       );
     });
@@ -2058,9 +2063,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an ordering comparison on a path to a boolean attribute", () => {
       const value = Type.tuple([Type.atom(">"), Type.boolean(true)]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, pathPredicates(["owner", "active"], value)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :> requires an orderable attribute - attribute owner.active in MyApp.Booking has type :boolean, and boolean and uuid attributes have no order to compare by",
       );
     });
@@ -2068,9 +2073,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a comparison against a value the enum a path ends at does not declare", () => {
       const value = Type.tuple([Type.atom(">="), Type.atom("urgent")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, pathPredicates(["owner", "level"], value)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":urgent is not a value of attribute owner.level in MyApp.Booking - the values are [:low, :medium, :high]",
       );
     });
@@ -2081,59 +2086,59 @@ describe("Elixir_Hologram_Query_Stage", () => {
         path("assignee", "email"),
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, predicates([["owner_id", operand]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :== compares attribute :owner_id with attribute assignee.email in MyApp.Booking, which have different types (:uuid and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
       );
     });
 
     it("raises on a path through an unknown relationship on a later hop", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             booking,
             pathPredicates(["owner", "boss", "email"], Type.bitstring("x")),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown relationship :boss in MyApp.User - known relationships: :manager, :projects",
       );
     });
 
     it("raises on a path to a relationship", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, pathPredicates(["owner", "manager"], Type.nil())),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":manager is a relationship in MyApp.User - only attributes can be filtered - filter its reference via :manager_id",
       );
     });
 
     it("raises on a to-one relationship, naming its reference field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(Type.alias(PROJECT), predicates([["owner", Type.integer(1)]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":owner is a relationship in MyApp.Project - only attributes can be filtered - filter its reference via :owner_id",
       );
     });
 
     it("raises on an inverse relationship", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             Type.alias(CHANNEL),
             predicates([["messages", Type.integer(1)]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":messages is a relationship in MyApp.Channel - only attributes can be filtered",
       );
     });
 
     it("raises on a to-many relationship", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(Type.alias(PROJECT), predicates([["tasks", Type.integer(1)]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":tasks is a relationship in MyApp.Project - only attributes can be filtered",
       );
     });
@@ -2141,9 +2146,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an unknown operator", () => {
       const value = Type.tuple([Type.atom("like"), Type.bitstring("a")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown operator :like in the filter predicate for attribute :title - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact",
       );
     });
@@ -2151,9 +2156,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an ordering comparison over the id attribute", () => {
       const value = Type.tuple([Type.atom("<"), Type.bitstring("t1")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["id", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :< requires an orderable attribute - attribute :id in MyApp.Task has type :uuid, and boolean and uuid attributes have no order to compare by",
       );
     });
@@ -2161,9 +2166,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an attribute compared with itself", () => {
       const value = Type.tuple([Type.atom("<"), attribute("guests")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, predicates([["guests", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :< compares attribute :guests in MyApp.Booking with itself",
       );
     });
@@ -2171,9 +2176,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an attribute operand for a membership operator", () => {
       const value = Type.tuple([Type.atom("in"), attribute("capacity")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, predicates([["guests", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :in on attribute :guests requires a list operand, got: {:attribute, :capacity}",
       );
     });
@@ -2181,9 +2186,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an attribute pair of different types", () => {
       const value = Type.tuple([Type.atom("<"), attribute("held_at")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, predicates([["check_in", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :< compares attribute :check_in with attribute :held_at in MyApp.Booking, which have different types (:date and :datetime) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
       );
     });
@@ -2191,9 +2196,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an enum pair declaring different values", () => {
       const value = Type.tuple([Type.atom("=="), attribute("tier")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, predicates([["level", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :== compares attribute :level with attribute :tier in MyApp.Booking, which declare different values ([:low, :medium, :high] and [:low, :high]) - two enum attributes compare only when they declare the same values in the same order",
       );
     });
@@ -2201,9 +2206,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an ordering comparison between reference fields", () => {
       const value = Type.tuple([Type.atom("<"), attribute("owner_id")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, predicates([["assignee_id", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :< requires an orderable attribute - attribute :assignee_id in MyApp.Booking has type :uuid, and boolean and uuid attributes have no order to compare by",
       );
     });
@@ -2211,9 +2216,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an unknown attribute operand", () => {
       const value = Type.tuple([Type.atom("=="), attribute("x")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, predicates([["guests", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :x in MyApp.Booking - known attributes: :assignee_id, :capacity, :check_in, :check_out, :created_at, :guests, :held_at, :id, :level, :name, :note, :owner_id, :priority, :rating, :tier, :updated_at",
       );
     });
@@ -2221,9 +2226,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a relationship as an attribute operand", () => {
       const value = Type.tuple([Type.atom("=="), attribute("owner")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(booking, predicates([["assignee_id", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":owner is a relationship in MyApp.Booking - only attributes can be filtered - filter its reference via :owner_id",
       );
     });
@@ -2231,9 +2236,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a comparison against a value the enum does not declare", () => {
       const value = Type.tuple([Type.atom(">"), Type.atom("archived")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["status", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":archived is not a value of attribute :status in MyApp.Task - the values are [:open, :blocked, :done]",
       );
     });
@@ -2244,9 +2249,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.list([Type.bitstring("a")]),
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'invalid operand ["a"] for operator :== on attribute :title',
       );
     });
@@ -2254,9 +2259,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a non-list operand for a membership operator", () => {
       const value = Type.tuple([Type.atom("in"), Type.bitstring("a")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'operator :in on attribute :title requires a list operand, got: "a"',
       );
     });
@@ -2264,17 +2269,17 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an empty membership list", () => {
       const value = Type.tuple([Type.atom("in"), Type.list([])]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "membership list for attribute :title must not be empty",
       );
     });
 
     it("raises on an empty filter list", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", Type.list([])]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "filter list for attribute :title must not be empty",
       );
     });
@@ -2285,34 +2290,34 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom(">="), Type.integer(3)]),
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", values]])),
-        HologramBoxedError,
-        "use either a membership list of plain values or a list of operator tuples",
+        "Hologram.MisuseError",
+        'invalid filter list ["a", {:">=", 3}] for attribute :title - use either a membership list of plain values or a list of operator tuples',
       );
     });
 
     it("raises on a range over a non-integer attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", range(1, 5)]])),
-        HologramBoxedError,
-        "requires an integer attribute - attribute :title in MyApp.Task has type :string",
+        "Hologram.MisuseError",
+        "range 1..5 requires an integer attribute - attribute :title in MyApp.Task has type :string",
       );
     });
 
     it("raises on a stepped range", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["position", range(0, 100, 5)]])),
-        HologramBoxedError,
-        "is not supported - membership ranges use step 1",
+        "Hologram.MisuseError",
+        "stepped range 0..100//5 for attribute :position is not supported - membership ranges use step 1",
       );
     });
 
     it("raises on an empty range", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["position", range(5, 1)]])),
-        HologramBoxedError,
-        "is empty - it would match nothing",
+        "Hologram.MisuseError",
+        "range 5..1 for attribute :position is empty - it would match nothing",
       );
     });
 
@@ -2320,17 +2325,17 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an actor leaf over a non-uuid attribute", () => {
       const value = Type.tuple([Type.atom("actor")]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "user_id() requires a uuid attribute - attribute :title in MyApp.Task has type :string",
       );
     });
 
     it("raises on a disjunction with no alternatives", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["or", Type.list([])]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "a disjunction takes a list of at least two predicate lists, got: []",
       );
     });
@@ -2338,9 +2343,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a disjunction with one alternative", () => {
       const value = disjunction([["done", Type.boolean(true)]]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["or", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "a disjunction takes a list of at least two predicate lists, got: [[done: true]]",
       );
     });
@@ -2351,9 +2356,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.list([Type.integer(1)]),
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["or", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "an alternative of a disjunction is a non-empty list of name and value pairs, got: [1]",
       );
     });
@@ -2361,9 +2366,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on an empty alternative", () => {
       const value = disjunction([["done", Type.boolean(true)]], []);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["or", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "an alternative of a disjunction is a non-empty list of name and value pairs, got: []",
       );
     });
@@ -2371,9 +2376,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // The shape decides, not the name, so an or entry holding anything but predicate lists is read
     // as an attribute named or - which this entity type does not declare.
     it("raises on an or entry whose value is not a list of lists as an unknown attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["or", Type.boolean(true)]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :or in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );
     });
@@ -2384,9 +2389,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [["done", Type.boolean(true)]],
       );
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["or", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );
     });
@@ -2464,9 +2469,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on a value a derived enum does not declare", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(post, pairs([["tier", op(">", Type.atom("mid"))]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":mid is not a value of attribute :tier in MyApp.Post - the values are [:low, :high]",
       );
     });
@@ -2481,71 +2486,71 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on an ordering comparison of a derived string", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(post, pairs([["channel_name", op(">", Type.bitstring("a"))]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :> requires an orderable attribute - :channel_name in MyApp.Post is a derived string, and a string compares by the sort key stored with it, which a computed string has none of",
       );
     });
 
     it("raises on an ordering comparison with a derived string", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(post, pairs([["body", op(">", attribute("channel_name"))]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :> requires an orderable attribute - :channel_name in MyApp.Post is a derived string, and a string compares by the sort key stored with it, which a computed string has none of",
       );
     });
 
     it("raises on a search of a derived string", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             post,
             pairs([["channel_name", op("contains", Type.bitstring("gen"))]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :contains requires a stored string - :channel_name in MyApp.Post is a derived string, and a search reads the forms stored with a string",
       );
     });
 
     it("raises on a search for a derived string", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             post,
             pairs([["body", op("contains", attribute("channel_name"))]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :contains requires a stored string - :channel_name in MyApp.Post is a derived string, and a search reads the forms stored with a string",
       );
     });
 
     it("raises on a derived field holding one row", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(room, pairs([["first_message", Type.nil()]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":first_message is a derived field holding one row in MyApp.Room - only attributes can be filtered",
       );
     });
 
     it("raises on a derived field holding a set", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(room, pairs([["recent_messages", Type.nil()]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":recent_messages is a derived field holding a set of rows in MyApp.Room - only attributes can be filtered",
       );
     });
 
     it("raises on a path through a derived field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             room,
             pairs([[["first_message", "body"], Type.bitstring("hi")]]),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":first_message is a derived field in MyApp.Room - a path in a condition goes through to-one relationships that hold their reference",
       );
     });
@@ -2623,29 +2628,29 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on a quantifier over a derived field holding one row", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(room, quantified("any", atoms("first_message"), [])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":first_message is a derived field holding one row in MyApp.Room - any, none and all ask about the rows of a set",
       );
     });
 
     it("raises on a quantifier over a derived value", () => {
-      assert.throw(
+      assertBoxedError(
         () => filter(room, quantified("any", atoms("message_count"), [])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":message_count is a derived field holding a :integer value in MyApp.Room - any, none and all ask about the rows of a set",
       );
     });
 
     it("raises on a quantifier's source through a derived field", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(
             room,
             quantified("any", atoms("first_message", "channel"), []),
           ),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":first_message is a derived field in MyApp.Room - a quantifier's source goes through relationships, with a derived set only at its end",
       );
     });
@@ -3248,7 +3253,7 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
     for (const [name, call, message] of refusals) {
       it(name, () => {
-        assertBoxedError(call, "ArgumentError", message);
+        assertBoxedError(call, "Hologram.MisuseError", message);
       });
     }
   });
@@ -3371,9 +3376,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a list as a search term", () => {
       const value = search("contains", Type.list([Type.bitstring("ab")]));
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         'invalid operand ["ab"] for operator :contains on attribute :title - a search term is a string',
       );
     });
@@ -3381,9 +3386,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a nil search term", () => {
       const value = search("starts_with", Type.nil());
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid operand nil for operator :starts_with on attribute :title - a search term is a string",
       );
     });
@@ -3396,9 +3401,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
         [Type.atom("step"), Type.integer(1)],
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", search("contains", range)]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid operand 1..2 for operator :contains on attribute :title - a search term is a string",
       );
     });
@@ -3406,9 +3411,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a search for an attribute of another type", () => {
       const value = search("contains", attribute(Type.atom("position")));
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :contains compares attribute :title with attribute :position in MyApp.Task, which have different types (:string and :integer) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)",
       );
     });
@@ -3416,9 +3421,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a search for the attribute itself", () => {
       const value = search("starts_with", attribute(Type.atom("title")));
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["title", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :starts_with compares attribute :title in MyApp.Task with itself",
       );
     });
@@ -3426,9 +3431,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a search on an attribute that is not a string", () => {
       const value = search("starts_with", Type.bitstring("1"));
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["position", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :starts_with requires a string attribute - attribute :position in MyApp.Task has type :integer",
       );
     });
@@ -3436,9 +3441,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a search with a placeholder term on an attribute that is not a string", () => {
       const value = search("contains", placeholder("query"));
 
-      assert.throw(
+      assertBoxedError(
         () => filter(task, predicates([["position", value]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "operator :contains requires a string attribute - attribute :position in MyApp.Task has type :integer",
       );
     });
@@ -3446,10 +3451,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a tuple as a search term", () => {
       const tuple = Type.tuple([Type.atom("a"), Type.atom("b")]);
 
-      assert.throw(
+      assertBoxedError(
         () =>
           filter(task, predicates([["title", search("starts_with", tuple)]])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid operand {:a, :b} for operator :starts_with on attribute :title - a search term is a string",
       );
     });
@@ -3490,9 +3495,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
 
       // A function's inspect carries a counter that depends on the functions built before it, so
       // the entry is matched up to it.
-      assert.throw(
+      assertBoxedError(
         () => include(project, spec),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         /invalid include spec entry \{:tasks, #Function<\d+\.\d+\/1 in MyModule>\} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, \[Task\], fn tasks -> filter\(tasks, \.\.\.\) end/,
       );
     });
@@ -3662,33 +3667,33 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // The relationship declaration already says how many entities are embedded, so a sub-term
     // marking a cardinality of its own would be saying something the shape cannot honour.
     it("raises on an attribute name", () => {
-      assert.throw(
+      assertBoxedError(
         () => include(project, Type.atom("name")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":name is an attribute in MyApp.Project - only relationships and derived fields can be included",
       );
     });
 
     it("raises on an empty include spec", () => {
-      assert.throw(
+      assertBoxedError(
         () => include(project, Type.list([])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "include spec must not be empty",
       );
     });
 
     it("raises on an invalid include spec", () => {
-      assert.throw(
+      assertBoxedError(
         () => include(project, Type.integer(123)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "include spec must be a relationship name or a shape list, got: 123",
       );
     });
 
     it("raises on an invalid include spec entry", () => {
-      assert.throw(
+      assertBoxedError(
         () => include(project, Type.list([Type.integer(123)])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid include spec entry 123 - use a relationship name or a {name, spec} pair",
       );
     });
@@ -3696,25 +3701,25 @@ describe("Elixir_Hologram_Query_Stage", () => {
     it("raises on a nil nested spec", () => {
       const spec = Type.list([Type.tuple([Type.atom("channel"), Type.nil()])]);
 
-      assert.throw(
+      assertBoxedError(
         () => include(Type.alias(MESSAGE), spec),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown relationship nil in MyApp.Channel - known relationships and derived fields: :messages, :owner, :topic",
       );
     });
 
     it("raises on an unknown relationship, naming the inverses among the known ones", () => {
-      assert.throw(
+      assertBoxedError(
         () => include(Type.alias(CHANNEL), Type.atom("x")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown relationship :x in MyApp.Channel - known relationships and derived fields: :messages, :owner, :topic",
       );
     });
 
     it("raises on an unknown relationship", () => {
-      assert.throw(
+      assertBoxedError(
         () => include(project, Type.atom("x")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown relationship :x in MyApp.Project - known relationships and derived fields: :owner, :tasks",
       );
     });
@@ -3779,9 +3784,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on an include under a derived value", () => {
-      assert.throw(
+      assertBoxedError(
         () => include(room, nested("message_count", "name")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":message_count is a :integer derived field in MyApp.Room - nothing is included under it",
       );
     });
@@ -3791,9 +3796,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("message_count"), Type.nil()]),
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => include(room, spec),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":message_count is a :integer derived field in MyApp.Room - nothing is included under it",
       );
     });
@@ -4130,9 +4135,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises when cardinality is already marked", () => {
-      assert.throw(
+      assertBoxedError(
         () => one(count(task)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "cardinality is already set to :count",
       );
     });
@@ -4147,9 +4152,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on a negative count", () => {
-      assert.throw(
+      assertBoxedError(
         () => skip(task, Type.integer(-5)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "skip must be a non-negative integer, got: -5",
       );
     });
@@ -4219,17 +4224,17 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on a non-atom spec", () => {
-      assert.throw(
+      assertBoxedError(
         () => sort(task, Type.integer(123)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "sort spec must be an attribute name or a list, got: 123",
       );
     });
 
     it("raises on an invalid entry", () => {
-      assert.throw(
+      assertBoxedError(
         () => sort(task, Type.list([Type.integer(123)])),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid sort entry 123 - use an attribute name or an {attribute, :asc | :desc} tuple",
       );
     });
@@ -4239,17 +4244,17 @@ describe("Elixir_Hologram_Query_Stage", () => {
         Type.tuple([Type.atom("title"), Type.atom("down")]),
       ]);
 
-      assert.throw(
+      assertBoxedError(
         () => sort(task, spec),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "invalid direction :down for attribute :title - use :asc or :desc",
       );
     });
 
     it("raises on a relationship name", () => {
-      assert.throw(
+      assertBoxedError(
         () => sort(Type.alias(PROJECT), Type.atom("tasks")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":tasks is a relationship in MyApp.Project - only attributes can be ordered",
       );
     });
@@ -4257,17 +4262,17 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // A reference field is not among the attributes on either tier - a relationship is followed,
     // never ordered by.
     it("raises on a to-one reference field", () => {
-      assert.throw(
+      assertBoxedError(
         () => sort(Type.alias(PROJECT), Type.atom("owner_id")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :owner_id in MyApp.Project - known attributes: :id, :name",
       );
     });
 
     it("raises on an unknown attribute", () => {
-      assert.throw(
+      assertBoxedError(
         () => sort(task, Type.atom("x")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
       );
     });
@@ -4290,33 +4295,33 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on a derived string", () => {
-      assert.throw(
+      assertBoxedError(
         () => sort(post, Type.atom("channel_name")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":channel_name is a derived string in MyApp.Post - a string is ordered by the sort key stored with it, which a computed string has none of",
       );
     });
 
     it("raises on a derived field holding a set", () => {
-      assert.throw(
+      assertBoxedError(
         () => sort(room, Type.atom("recent_messages")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":recent_messages is a derived field holding a set of rows in MyApp.Room - only attributes can be ordered",
       );
     });
 
     it("raises on a derived field holding one row", () => {
-      assert.throw(
+      assertBoxedError(
         () => sort(room, Type.atom("first_message")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         ":first_message is a derived field holding one row in MyApp.Room - only attributes can be ordered",
       );
     });
 
     it("raises on an unknown name, listing the derived values it can sort by", () => {
-      assert.throw(
+      assertBoxedError(
         () => sort(post, Type.atom("nope")),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "unknown attribute :nope in MyApp.Post - known attributes: :body, :created_at, :id, :later_count, :position, :tier, :updated_at",
       );
     });
@@ -4342,17 +4347,17 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises on a negative count", () => {
-      assert.throw(
+      assertBoxedError(
         () => take(task, Type.integer(-5)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "take must be a non-negative integer, got: -5",
       );
     });
 
     it("raises on a non-integer count", () => {
-      assert.throw(
+      assertBoxedError(
         () => take(task, Type.float(5.0)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         "take must be a non-negative integer, got: 5.0",
       );
     });
@@ -4378,9 +4383,9 @@ describe("Elixir_Hologram_Query_Stage", () => {
     });
 
     it("raises for a value that is neither a module nor a term", () => {
-      assert.throw(
+      assertBoxedError(
         () => take(Type.bitstring("MyApp.Task"), Type.integer(5)),
-        HologramBoxedError,
+        "Hologram.MisuseError",
         '"MyApp.Task" is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive',
       );
     });
@@ -4388,10 +4393,10 @@ describe("Elixir_Hologram_Query_Stage", () => {
     // A type whose rows never reach a client is one this side cannot answer for, so it is
     // refused where the server would refuse a module that is not an entity type at all.
     it("raises for a type this build never told the client about", () => {
-      assert.throw(
+      assertBoxedError(
         () => take(Type.alias("MyApp.Unknown"), Type.integer(5)),
-        HologramBoxedError,
-        "MyApp.Unknown is not an entity type module or a query term",
+        "Hologram.MisuseError",
+        'MyApp.Unknown is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive',
       );
     });
   });

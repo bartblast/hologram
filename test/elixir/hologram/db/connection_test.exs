@@ -4,6 +4,7 @@ defmodule Hologram.DB.ConnectionTest do
   import Hologram.DB.Connection
 
   alias Hologram.DB.Config
+  alias Hologram.MisuseError
 
   # Reaches the server outside the sandbox: this is the transaction machinery the sandbox
   # routes through, so it is tested on a real connection.
@@ -150,7 +151,7 @@ defmodule Hologram.DB.ConnectionTest do
     end
 
     test "raises outside of a transaction" do
-      assert_error ArgumentError, "cannot rollback - not inside a transaction", fn ->
+      assert_error MisuseError, "cannot rollback - not inside a transaction", fn ->
         rollback(:some_reason)
       end
     end

@@ -2796,7 +2796,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "can? asks about one role - {:grant_role, [:editor, :viewer]} names several",
       );
     });
@@ -2810,7 +2810,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
       );
     });
@@ -2823,7 +2823,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
       );
     });
@@ -2853,7 +2853,7 @@ describe("Elixir_Hologram_Auth", () => {
     it("raises on an operation the entity type declares no rule for", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), Type.atom("transfer"), document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown operation :transfer for MyApp.Document - its allow lines declare :archive, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
       );
     });
@@ -2863,7 +2863,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown operation {:publish, :editor} for MyApp.Document - the operation tuples are {:grant_role, role} and {:revoke_role, role}",
       );
     });
@@ -2876,7 +2876,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown role :editr in {:grant_role, :editr} for MyApp.Document - declared roles are: :editor, :owner, :viewer",
       );
     });
@@ -2983,7 +2983,7 @@ describe("Elixir_Hologram_Auth", () => {
     it("raises on a module that is not a global role", () => {
       assertBoxedError(
         () => hasRole(Type.bitstring(ALICE), Type.alias("MyApp.Roles.Nobody")),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown global role MyApp.Roles.Nobody - defined global roles are: MyApp.Roles.Admin, MyApp.Roles.Support",
       );
     });
@@ -2992,7 +2992,7 @@ describe("Elixir_Hologram_Auth", () => {
     it("raises on a module that is not a global role for an anonymous session", () => {
       assertBoxedError(
         () => hasRole(Type.nil(), Type.alias("MyApp.Roles.Nobody")),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown global role MyApp.Roles.Nobody - defined global roles are: MyApp.Roles.Admin, MyApp.Roles.Support",
       );
     });
@@ -3002,7 +3002,7 @@ describe("Elixir_Hologram_Auth", () => {
 
       assertBoxedError(
         () => hasRole(Type.bitstring(ALICE), Type.alias("MyApp.Roles.Nobody")),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown global role MyApp.Roles.Nobody - no module is defined with use Hologram.Role",
       );
     });
@@ -3237,7 +3237,7 @@ describe("Elixir_Hologram_Auth", () => {
       assertBoxedError(
         () =>
           hasRole(Type.bitstring(ALICE), Type.atom("publisher"), document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown role :publisher for MyApp.Document - declared roles are: :editor, :owner, :viewer",
       );
     });
@@ -3252,7 +3252,7 @@ describe("Elixir_Hologram_Auth", () => {
             Type.atom("editor"),
             Type.struct("MyApp.Note", [[Type.atom("id"), Type.bitstring(DOC)]]),
           ),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown role :editor for MyApp.Note - declared roles are: ",
       );
     });
@@ -3261,7 +3261,7 @@ describe("Elixir_Hologram_Auth", () => {
     it("raises on a role the entity type does not declare for an anonymous session", () => {
       assertBoxedError(
         () => hasRole(Type.nil(), Type.atom("publisher"), document()),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown role :publisher for MyApp.Document - declared roles are: :editor, :owner, :viewer",
       );
     });
@@ -3736,7 +3736,7 @@ describe("grant_role/3", () => {
     assertBoxedError(
       () =>
         grant(Type.bitstring(GATED_BOB), Type.atom("publisher"), document()),
-      "ArgumentError",
+      "Hologram.MisuseError",
       "unknown role :publisher for MyApp.Document - declared roles are: :editor, :owner, :viewer",
     );
   });
@@ -3797,7 +3797,7 @@ describe("grant_role/3", () => {
   it("raises on a user id that is not an entity id", () => {
     assertBoxedError(
       () => grant(Type.bitstring("nope"), Type.atom("viewer"), document()),
-      "ArgumentError",
+      "Hologram.MisuseError",
       'invalid user id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
     );
   });
@@ -3807,7 +3807,7 @@ describe("grant_role/3", () => {
 
     assertBoxedError(
       () => grant(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
-      "ArgumentError",
+      "Hologram.MisuseError",
       "grant_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
     );
   });
@@ -3994,7 +3994,7 @@ describe("revoke_role/3", () => {
 
     assertBoxedError(
       () => revoke(Type.bitstring(GATED_BOB), Type.atom("viewer"), document()),
-      "ArgumentError",
+      "Hologram.MisuseError",
       "revoke_role was called outside an action - a client write happens inside an action, whose writes ship together when it returns",
     );
   });

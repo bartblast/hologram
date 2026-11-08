@@ -9,6 +9,7 @@ defmodule Hologram.Entity do
   alias Hologram.Entity.ServerOnly
   alias Hologram.Entity.Validator
   alias Hologram.Job
+  alias Hologram.MisuseError
   alias Hologram.Policy.Expression, as: PolicyExpression
   alias Hologram.Reflection
 
@@ -1195,7 +1196,7 @@ defmodule Hologram.Entity do
       |> Enum.find(&Map.has_key?(values_map, &1))
 
     if assigned_derived_name do
-      raise ArgumentError,
+      raise MisuseError,
         message: Derived.read_only_message(entity_type, assigned_derived_name)
     end
 
@@ -1205,7 +1206,7 @@ defmodule Hologram.Entity do
       |> Enum.find(&Map.has_key?(values_map, &1))
 
     if assigned_inverse_name do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "relationship #{inspect(assigned_inverse_name)} of #{inspect(entity_type)} cannot be assigned at construction - it is an inverse that reads #{describe_inverse(entity_type, assigned_inverse_name)}, so write that instead"
     end
@@ -1216,7 +1217,7 @@ defmodule Hologram.Entity do
       |> Enum.find(&Map.has_key?(values_map, &1))
 
     if assigned_relationship_name do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "relationship #{inspect(assigned_relationship_name)} of #{inspect(entity_type)} cannot be assigned at construction - set a to-one reference via the :#{assigned_relationship_name}_id field, to-many edges via add_relationship"
     end
@@ -1236,7 +1237,7 @@ defmodule Hologram.Entity do
       end
 
     if framework_name do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(framework_name)} of #{inspect(entity_type)} is set by the framework - a job is enqueued as queued, and the worker records the rest"
     end

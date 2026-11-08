@@ -3,6 +3,7 @@ defmodule Hologram.Policy.Validator do
 
   alias Hologram.Entity
   alias Hologram.Entity.Derived
+  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Query.Stage
   alias Hologram.Reflection
@@ -390,7 +391,7 @@ defmodule Hologram.Policy.Validator do
   defp validate_delegated_operation!(target_type, operation, via, delegated_operation, location) do
     Policy.validate_operation!(target_type, delegated_operation)
   rescue
-    error in ArgumentError ->
+    error in [ArgumentError, MisuseError] ->
       message =
         "invalid via option #{describe_via(via)} for allow #{inspect(operation)} in #{location} - #{Exception.message(error)}"
 
@@ -521,7 +522,7 @@ defmodule Hologram.Policy.Validator do
 
     :ok
   rescue
-    error in ArgumentError ->
+    error in [ArgumentError, MisuseError] ->
       message =
         "invalid predicate for allow #{inspect(operation)} in #{location} - #{Exception.message(error)}"
 
@@ -691,7 +692,7 @@ defmodule Hologram.Policy.Validator do
 
       with true <- Derived.value_field?(read_type, name),
            reading when is_binary(reading) <- Derived.set_reading(read_type, name) do
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "#{server_only_spelling(path)} #{reading} - a policy condition reads a related set only through any, none or all"
       end

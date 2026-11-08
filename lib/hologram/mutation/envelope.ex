@@ -18,6 +18,7 @@ defmodule Hologram.Mutation.Envelope do
   alias Hologram.Entity
   alias Hologram.Entity.Validator
   alias Hologram.Job
+  alias Hologram.MisuseError
   alias Hologram.Mutation.Write
   alias Hologram.Policy
   alias Hologram.Reflection
@@ -77,7 +78,7 @@ defmodule Hologram.Mutation.Envelope do
 
     {:ok, {:authorize, operation}}
   rescue
-    ArgumentError ->
+    [ArgumentError, MisuseError] ->
       {:error, "claim names no operation #{inspect(entity_type)} declares: #{inspect(operation)}"}
   end
 

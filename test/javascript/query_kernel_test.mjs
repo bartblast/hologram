@@ -1,6 +1,10 @@
 "use strict";
 
-import {assert, defineRuntimeGlobals} from "./support/helpers.mjs";
+import {
+  assert,
+  assertBoxedError,
+  defineRuntimeGlobals,
+} from "./support/helpers.mjs";
 
 import Batch from "../../assets/js/batch.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
@@ -289,9 +293,9 @@ describe("QueryKernel", () => {
     it("refuses a placeholder the bindings do not name", () => {
       const filter = [["priority", "==", {placeholder: "priority"}]];
 
-      assert.throw(
+      assertBoxedError(
         () => matching(filter, {}),
-        HologramRuntimeError,
+        "Hologram.MisuseError",
         "missing value for placeholder :priority",
       );
     });
@@ -300,9 +304,9 @@ describe("QueryKernel", () => {
       const filter = [["priority", "==", {placeholder: "priority"}]];
       const context = {bindings: {priority: null}};
 
-      assert.throw(
+      assertBoxedError(
         () => matching(filter, context),
-        HologramRuntimeError,
+        "Hologram.MisuseError",
         "nil value for placeholder :priority - use an explicit nil predicate instead",
       );
     });
@@ -311,9 +315,9 @@ describe("QueryKernel", () => {
       const filter = [["priority", "in", {placeholder: "priorities"}]];
       const context = {bindings: {priorities: [null, 3]}};
 
-      assert.throw(
+      assertBoxedError(
         () => matching(filter, context),
-        HologramRuntimeError,
+        "Hologram.MisuseError",
         "nil element in the list for placeholder :priorities - use an explicit nil predicate instead",
       );
     });
@@ -1514,12 +1518,12 @@ describe("QueryKernel", () => {
     });
 
     it("refuses a placeholder binding a label a derived enum does not declare", () => {
-      assert.throw(
+      assertBoxedError(
         () =>
           scores([["tier", "==", {placeholder: "tier"}]], {
             bindings: {tier: "platinum"},
           }),
-        HologramRuntimeError,
+        "Hologram.MisuseError",
         "invalid value :platinum for placeholder :tier - expected one of [:gold, :silver, :bronze]",
       );
     });
@@ -2561,9 +2565,9 @@ describe("QueryKernel", () => {
     it("refuses a placeholder bound to a value the enum does not declare, as the reference does", () => {
       const filter = [["priority", ">=", {placeholder: "min"}]];
 
-      assert.throw(
+      assertBoxedError(
         () => titlesMatching(filter, {bindings: {min: "urgent"}}),
-        HologramRuntimeError,
+        "Hologram.MisuseError",
         "invalid value :urgent for placeholder :min - expected one of [:low, :medium, :high]",
       );
     });

@@ -19,6 +19,7 @@ defmodule Hologram.DB do
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator
   alias Hologram.Migrator
+  alias Hologram.MisuseError
   alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Reflection
@@ -249,7 +250,7 @@ defmodule Hologram.DB do
   be quoted in SQL. The name follows the model: renaming the entity type or the relationship moves
   it, so code that asks for it keeps working where a name written out would break.
 
-  Raises ArgumentError when the first argument is not an entity type module, or when the
+  Raises Hologram.MisuseError when the first argument is not an entity type module, or when the
   relationship is a to-one relationship or not declared.
   """
   @spec join_table_name(module, atom) :: String.t()
@@ -266,7 +267,7 @@ defmodule Hologram.DB do
 
     case join_table do
       %{name: name} -> name
-      nil -> raise ArgumentError, message: join_table_refusal(entity_type, relationship)
+      nil -> raise MisuseError, message: join_table_refusal(entity_type, relationship)
     end
   end
 
@@ -276,10 +277,10 @@ defmodule Hologram.DB do
   integer for counting queries.
 
   The query is an entity type module (the whole entity set) or a query term built with
-  Hologram.Query stages. Directly executed query terms embed concrete runtime values -
-  the query registry is never involved. A term containing placeholder leaves raises
-  ArgumentError: placeholders exist only in compiler-registered queries. So does a derived field's
-  query, which is read through its field.
+  Hologram.Query stages. Directly executed query terms embed concrete runtime values - the query
+  registry is never involved. A term containing placeholder leaves raises Hologram.MisuseError:
+  placeholders exist only in compiler-registered queries. So does a derived field's query, which is
+  read through its field.
 
   A :string ordering reads the attribute's sort-key companion column, which every
   :string attribute derives.
@@ -318,7 +319,7 @@ defmodule Hologram.DB do
   policies withhold reads as nil - as if it did not exist, which is what the template tier and
   the client answer. Without an acting user the row is read raw.
 
-  Raises ArgumentError when the id is not a canonical entity id (a lowercase
+  Raises Hologram.MisuseError when the id is not a canonical entity id (a lowercase
   8-4-4-4-12 UUID string), or when the first argument is not an entity type module.
   """
   @spec read(module, Entity.id()) :: Entity.t() | nil
@@ -338,7 +339,7 @@ defmodule Hologram.DB do
 
   @doc """
   Aborts the innermost enclosing transaction, making it return {:error, reason}. Raises
-  ArgumentError when called outside of a transaction.
+  Hologram.MisuseError when called outside of a transaction.
   """
   @spec rollback(any) :: no_return
   defdelegate rollback(reason), to: Connection
@@ -402,7 +403,7 @@ defmodule Hologram.DB do
   transaction carry on. Inside an enclosing transaction its own bound applies as well. The read
   is not run again when PostgreSQL resolves a deadlock, since it takes no row locks.
 
-  Raises ArgumentError for a statement that takes a session-level advisory lock or prepares a
+  Raises Hologram.MisuseError for a statement that takes a session-level advisory lock or prepares a
   named statement, either of which would outlive the read on a pooled connection - a
   transaction-level advisory lock taken inside an enclosing transaction is held until that
   transaction ends. Raises it as well for an option other than `timeout:`, an invalid timeout, a
@@ -436,7 +437,7 @@ defmodule Hologram.DB do
   cut to a prefix and a hash. The name follows the model: renaming the entity type moves it, so
   code that asks for it keeps working where a name written out would break.
 
-  Raises ArgumentError when the argument is not an entity type module.
+  Raises Hologram.MisuseError when the argument is not an entity type module.
   """
   @spec table_name(module) :: String.t()
   def table_name(entity_type) do
@@ -470,7 +471,7 @@ defmodule Hologram.DB do
   columns plus updated_at - there is no full-row variant. Changes (a map or keyword list)
   are keyed by declared attribute and to-one relationship names - a to-one reference is
   set, reassigned, or cleared (nil) through its relationship name. Changing any other
-  name, system attributes included, raises ArgumentError - as do empty changes and an
+  name, system attributes included, raises Hologram.MisuseError - as do empty changes and an
   id that names no entity.
 
   Returns :ok, or {:error, violations} - the map Entity.validate/2 returns, naming each
@@ -516,10 +517,10 @@ defmodule Hologram.DB do
   put_attribute, the amounts recorded with increment and decrement, and the edges recorded with
   add_relationship and delete_relationship - in one transaction, and returns :ok.
 
-  Only recorded changes are written: a field set directly on the struct is not among them, and
-  a struct carrying nothing recorded raises ArgumentError, as does an id that names no entity.
-  The attribute changes go first and the edges follow, so a refused value leaves the edges
-  unapplied and an edge that raises takes the values with it.
+  Only recorded changes are written: a field set directly on the struct is not among them, and a
+  struct carrying nothing recorded raises Hologram.MisuseError, as does an id that names no entity.
+  The attribute changes go first and the edges follow, so a refused value leaves the edges unapplied
+  and an edge that raises takes the values with it.
 
   With an acting user set, the write is evaluated against that user's policies for :update - or
   for the operation the entity claims through authorize/2 - and raises
@@ -780,7 +781,7 @@ defmodule Hologram.DB do
   # A derived field's query reads a set reached from a row of its owning type, and compares with
   # that row's fields - read alone it has no row to start from.
   defp assert_not_sourced!(%Query{source: {owner, chain}}) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "cannot read a derived field's query on its own - it reads #{Enum.join(chain, ".")} of a #{inspect(owner)} row, so it is read through the derived field"
   end
@@ -793,7 +794,7 @@ defmodule Hologram.DB do
         :ok
 
       [name | _rest] ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "cannot read a query term containing placeholders - placeholder #{inspect(name)} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
     end
@@ -850,7 +851,7 @@ defmodule Hologram.DB do
 
   defp validate_entity_type!(term, hint) do
     if not Reflection.entity?(term) do
-      raise ArgumentError, message: "#{inspect(term)} is not an entity type module - #{hint}"
+      raise MisuseError, message: "#{inspect(term)} is not an entity type module - #{hint}"
     end
 
     :ok
@@ -861,7 +862,7 @@ defmodule Hologram.DB do
   # rather than the redirect, since the two verbs are now the same word in different modules.
   defp validate_not_job!(entity_type) do
     if Reflection.job?(entity_type) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "#{inspect(entity_type)} is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits"
     end

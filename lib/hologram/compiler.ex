@@ -4277,7 +4277,7 @@ defmodule Hologram.Compiler do
   end
 
   # The operations a type can be asked about, framework ones included - the client's copy of
-  # Policy.operations/1, so validateOperation in assets/js/elixir/hologram/auth.mjs refuses what
+  # Policy.operations/1, so validateOperation in assets/js/model.mjs refuses what
   # Policy.validate_operation!/2 refuses without a second hand-ported list. Baked whether or not
   # the build checks permissions: a build that checks nothing still runs authorize/2 in an action,
   # and its policy key is empty by design.

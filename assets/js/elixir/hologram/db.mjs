@@ -57,7 +57,7 @@ function currentBatch(verb) {
   const batch = Batches.current();
 
   if (batch === null) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${verb} was called outside an action - a client write happens inside an action, whose writes ship together when it returns`,
     );
   }
@@ -72,7 +72,7 @@ function entityTypeOf(entity, verb) {
   const type = Model.structTypeName(entity);
 
   if (type === null || !Model.isEntityType(type)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${verb} takes an entity struct, got: ${Interpreter.inspect(entity)}`,
     );
   }
@@ -99,7 +99,7 @@ function assertNoPlaceholders(term) {
   const [name] = placeholderNames(term);
 
   if (name !== undefined) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `cannot read a query term containing placeholders - placeholder :${name} has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries`,
     );
   }
@@ -175,7 +175,7 @@ function refuseServerOnlyValues(entity, entityType) {
 // A create is refused for holding a VALUE the client was never shown; an update for NAMING one,
 // which a put does outright. Same reason and same words either way.
 function refuseServerOnly(entityType, name) {
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `:${name} of ${entityType} is server-only - a browser cannot write it, set it in a command or a job`,
   );
 }
@@ -224,7 +224,7 @@ function heldRow(entityType, id, verb) {
   const held = LocalDatabase.getRow(entityType, id);
 
   if (held === null) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `cannot ${verb} ${entityType} - no entity with id "${id}"`,
     );
   }
@@ -353,7 +353,7 @@ function changeValues(changes) {
 // refusal, exactly as the server's reaches Writer.create past DB.create/1's.
 export function createEntity(entity, entityType) {
   if (entityType === ROLE_GRANT) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       "role grants are written only through grant_role/revoke_role",
     );
   }
@@ -444,7 +444,7 @@ function changeNames(changes) {
 // automatically", which is what the struct form says about the same name.
 function validateChangeNames(entityType, names) {
   if (names.length === 0) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `invalid changes for ${entityType} - at least one declared attribute or to-one relationship must be changed`,
     );
   }
@@ -456,7 +456,7 @@ function validateChangeNames(entityType, names) {
     .find((name) => Object.hasOwn(Model.derived(entityType), name));
 
   if (derivedName !== undefined) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `invalid changes for ${entityType} - ${Model.derivedReadOnlyMessage(entityType, derivedName)}`,
     );
   }
@@ -470,7 +470,7 @@ function validateChangeNames(entityType, names) {
       .map((name) => `:${name}`)
       .join(", ");
 
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `invalid changes for ${entityType} - only declared attributes and to-one relationships can be updated: ${listed}`,
     );
   }
@@ -511,7 +511,7 @@ function validateMoves(entityType, held, deltas) {
 
 function validateEntityType(query) {
   if (!Type.isAlias(query) || !Model.isEntityType(aliasName(query))) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `${Interpreter.inspect(query)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1`,
     );
   }
@@ -549,7 +549,7 @@ function updateEntry(entity, entityType, id, held, data, deltas) {
 // the server keeps it only if none of them moved since this client last saw the row.
 function deleteRow(entityType, id, claim) {
   if (entityType === ROLE_GRANT) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       "role grants are written only through grant_role/revoke_role",
     );
   }
@@ -631,7 +631,7 @@ function writeClaim(entity) {
 
 function validateId(id) {
   if (!Type.isBitstring(id) || !ID_PATTERN.test(Bitstring.toText(id))) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `invalid id ${Interpreter.inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
     );
   }
@@ -670,7 +670,7 @@ const Elixir_Hologram_DB = {
     // A job's create means more than storing a row - it schedules work to run after the batch
     // commits - so it has one spelling, the way a role grant has one.
     if (Model.entry(entityType).frameworkAttributes.length > 0) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `${entityType} is a job type - create it through Job.create/2, which records who enqueued it so the worker can run it as them after the transaction commits`,
       );
     }
@@ -727,7 +727,7 @@ const Elixir_Hologram_DB = {
 
   "rollback/1": (reason) => {
     if (openTransactions === 0) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         "cannot rollback - not inside a transaction",
       );
     }
@@ -811,7 +811,7 @@ const Elixir_Hologram_DB = {
       Object.keys(attributeOps.data).length === 0 &&
       Object.keys(relationshipOps.data).length === 0
     ) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         "update takes recorded changes - put values with put_attribute, move counters with " +
           "increment or decrement, and edges with add_relationship or delete_relationship. " +
           "A field set directly on the struct is not recorded: writing the whole struct " +
@@ -826,7 +826,7 @@ const Elixir_Hologram_DB = {
     // the rows it holds - which is also what makes a move meaningful, since a delta needs a value
     // to preview against.
     if (held === null) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `cannot update ${entityType} - no entity with id "${id}"`,
       );
     }
@@ -881,7 +881,7 @@ const Elixir_Hologram_DB = {
     const type = aliasName(entityType);
 
     if (type === ROLE_GRANT) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         "role grants are written only through grant_role/revoke_role",
       );
     }
@@ -890,7 +890,7 @@ const Elixir_Hologram_DB = {
     const held = LocalDatabase.getRow(type, rowId);
 
     if (held === null) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `cannot update ${type} - no entity with id "${rowId}"`,
       );
     }

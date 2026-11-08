@@ -17,6 +17,7 @@ defmodule Hologram.Query.Interpreter do
   alias Hologram.DB.SortKey
   alias Hologram.Entity
   alias Hologram.Entity.Derived
+  alias Hologram.MisuseError
   alias Hologram.Query
   alias Hologram.Query.Ordering
 
@@ -59,7 +60,7 @@ defmodule Hologram.Query.Interpreter do
   one of which the term names, and none of which may be nil - neither as a value nor as an element
   of a list - which is what the database refuses one for.
 
-  Raises ArgumentError on a missing or nil binding.
+  Raises Hologram.MisuseError on a missing or nil binding.
   """
   @spec run(Query.t(), %{atom => any}, keyword) :: list(struct) | struct | integer | nil
   def run(term, database, opts \\ []) do
@@ -487,7 +488,7 @@ defmodule Hologram.Query.Interpreter do
 
     case Map.fetch(bindings, name) do
       :error ->
-        raise ArgumentError, message: "missing value for placeholder #{inspect(name)}"
+        raise MisuseError, message: "missing value for placeholder #{inspect(name)}"
 
       {:ok, value} ->
         value
@@ -674,7 +675,7 @@ defmodule Hologram.Query.Interpreter do
     if Map.has_key?(ranks_for_key, value) do
       value
     else
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "invalid value #{inspect(value)} for placeholder #{inspect(name)} - expected one of #{inspect(declared_values(ranks_for_key))}"
     end
@@ -686,14 +687,14 @@ defmodule Hologram.Query.Interpreter do
   # suit. A LITERAL list may still name nil: it is part of a term rather than a value handed to
   # one, so it says what it means on its face.
   defp validate_binding!(nil, name) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "nil value for placeholder #{inspect(name)} - use an explicit nil predicate instead"
   end
 
   defp validate_binding!(values, name) when is_list(values) do
     if Enum.any?(values, &is_nil/1) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "nil element in the list for placeholder #{inspect(name)} - use an explicit nil predicate instead"
     end

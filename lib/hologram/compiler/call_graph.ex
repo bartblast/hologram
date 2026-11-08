@@ -520,6 +520,9 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :put, 3}
     ],
     interpreter_class: [
+      # Interpreter.raiseMisuseError raises this by name, for the reason given at
+      # manually_ported_auth_module.
+      {Hologram.MisuseError, :message, 1},
       {Enum, :into, 2},
       {Enum, :to_list, 1},
       {Exception, :blame, 3},
@@ -534,8 +537,19 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :get, 2},
       {:maps, :to_list, 1}
     ],
+    # The auth port raises this by name, the way the renderer raises Hologram.PropError (see
+    # renderer_class), so no module atom appears in client-reachable code for the compiler to
+    # follow. Without this, deriving the message of an error the app's own code never names fails
+    # with UndefinedFunctionError.
+    manually_ported_auth_module: [
+      {Hologram.AccessDeniedError, :message, 1}
+    ],
     manually_ported_code_module: [
       {:code, :ensure_loaded, 1}
+    ],
+    # Raised by name by the DB and Job ports, for the reason given at manually_ported_auth_module.
+    manually_ported_db_module: [
+      {Hologram.WriteError, :message, 1}
     ],
     # The entity port matches a declared format against a value by running the pattern the model
     # compiled. It reaches the engine through a module proxy, so no :re atom appears in
@@ -549,6 +563,10 @@ defmodule Hologram.Compiler.CallGraph do
     ],
     manually_ported_io_module: [
       {:erlang, :iolist_to_binary, 1}
+    ],
+    # Raised by name, for the reason given at manually_ported_auth_module.
+    manually_ported_router_helpers_module: [
+      {Hologram.AssetNotFoundError, :message, 1}
     ],
     # A declared format is baked as its source and its options, and the model compiles it into a
     # pattern the first time it reads the type - reached through a module proxy like the port's

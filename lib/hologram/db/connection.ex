@@ -6,6 +6,7 @@ defmodule Hologram.DB.Connection do
   # Hologram.DB - these functions back its delegates, which also carry the docs.
 
   alias Hologram.DB
+  alias Hologram.MisuseError
 
   @connection_key {__MODULE__, :connection}
 
@@ -88,7 +89,7 @@ defmodule Hologram.DB.Connection do
         throw({@rollback_throw, depth, reason})
 
       _other ->
-        raise ArgumentError, "cannot rollback - not inside a transaction"
+        raise MisuseError, "cannot rollback - not inside a transaction"
     end
   end
 

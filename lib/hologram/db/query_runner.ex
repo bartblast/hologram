@@ -9,6 +9,7 @@ defmodule Hologram.DB.QueryRunner do
   alias Hologram.Entity.Derived
   alias Hologram.Entity.Metadata
   alias Hologram.Entity.Validator
+  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
@@ -33,7 +34,7 @@ defmodule Hologram.DB.QueryRunner do
   its placeholder meets, enum membership included. A membership placeholder takes a list whose
   elements are validated the same way - an empty list is legal and matches nothing.
 
-  Raises ArgumentError when a binding is invalid, when a placeholder value is missing, or
+  Raises Hologram.MisuseError when a binding is invalid, when a placeholder value is missing, or
   when a placeholder value or list element is nil - a sometimes-nil variable branches into
   an explicit nil predicate instead.
   """
@@ -109,7 +110,7 @@ defmodule Hologram.DB.QueryRunner do
         acc
 
       {:ok, {existing_kind, existing_type, _existing_opts}} ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "placeholder #{inspect(placeholder_name)} binds as #{binding_description(existing_kind, existing_type)} and #{binding_description(kind, type)} - rename one of the conflicting variables"
 
@@ -308,7 +309,7 @@ defmodule Hologram.DB.QueryRunner do
   defp encode_param!(values, name, {:list, type}) when is_list(values) do
     Enum.map(values, fn
       nil ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "nil element in the list for placeholder #{inspect(name)} - use an explicit nil predicate instead"
 
@@ -358,10 +359,10 @@ defmodule Hologram.DB.QueryRunner do
   defp resolve_param!({:placeholder, name, type}, bindings) do
     case Map.fetch(bindings, name) do
       :error ->
-        raise ArgumentError, message: "missing value for placeholder #{inspect(name)}"
+        raise MisuseError, message: "missing value for placeholder #{inspect(name)}"
 
       {:ok, nil} ->
-        raise ArgumentError,
+        raise MisuseError,
           message:
             "nil value for placeholder #{inspect(name)} - use an explicit nil predicate instead"
 
@@ -390,7 +391,7 @@ defmodule Hologram.DB.QueryRunner do
 
       value ->
         if not Validator.attribute_value_valid?(value, type, opts) do
-          raise ArgumentError,
+          raise MisuseError,
             message:
               "invalid element #{inspect(value)} in the list for placeholder #{inspect(name)} - expected #{expected_description(type, opts)}"
         end
@@ -398,14 +399,14 @@ defmodule Hologram.DB.QueryRunner do
   end
 
   defp validate_binding!(name, value, :list, _type, _opts) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "non-list value #{inspect(value)} for placeholder #{inspect(name)} - the placeholder binds a membership list"
   end
 
   defp validate_binding!(name, value, :scalar, type, opts) do
     if not Validator.attribute_value_valid?(value, type, opts) do
-      raise ArgumentError,
+      raise MisuseError,
         message:
           "invalid value #{inspect(value)} for placeholder #{inspect(name)} - expected #{expected_description(type, opts)}"
     end
@@ -449,7 +450,7 @@ defmodule Hologram.DB.QueryRunner do
           "the query defines placeholders #{inspect(defined_names)}"
         end
 
-      raise ArgumentError,
+      raise MisuseError,
         message: "unknown placeholder #{inspect(hd(unknown_names))} in bindings - #{description}"
     end
 

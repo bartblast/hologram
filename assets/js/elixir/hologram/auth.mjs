@@ -814,13 +814,13 @@ function operationKey(operation) {
     }
 
     if (Type.isAtom(name) && Type.isList(role)) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `can? asks about one role - ${Interpreter.inspect(operation)} names several`,
       );
     }
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
   );
 }
@@ -1196,12 +1196,12 @@ function expandedGlobalRoles(role) {
   const defined = Object.keys(expanded).sort();
 
   if (defined.length === 0) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `unknown global role ${Interpreter.inspect(role)} - no module is defined with use Hologram.Role`,
     );
   }
 
-  Interpreter.raiseArgumentError(
+  Interpreter.raiseMisuseError(
     `unknown global role ${Interpreter.inspect(role)} - defined global roles are: ${defined.join(", ")}`,
   );
 }
@@ -1234,7 +1234,7 @@ function validateDeclaredRole(entityType, role) {
   const roleName = Type.isAtom(role) ? role.value : null;
 
   if (roleName === null || !declared.includes(roleName)) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `unknown role ${Interpreter.inspect(role)} for ${entityType} - declared roles are: ${declared.map((name) => `:${name}`).join(", ")}`,
     );
   }
@@ -1253,7 +1253,7 @@ function validateId(term, subject) {
       value,
     )
   ) {
-    Interpreter.raiseArgumentError(
+    Interpreter.raiseMisuseError(
       `invalid ${subject} id ${Interpreter.inspect(term)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
     );
   }

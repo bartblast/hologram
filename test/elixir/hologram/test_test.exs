@@ -4,6 +4,7 @@ defmodule Hologram.TestTest do
   import Hologram.Test, only: [as_user: 1, as_user: 2]
 
   alias Hologram.Auth.Context
+  alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity.Module14
 
   describe "as_user/1" do
@@ -39,7 +40,7 @@ defmodule Hologram.TestTest do
       expected_msg =
         "cannot act as Hologram.Test.Fixtures.Entity.Module14 with a nil id - an unset actor reads as an anonymous session and writes as trusted code, so an authorization test would pass for the wrong reason"
 
-      assert_error ArgumentError, expected_msg, fn -> as_user(%Module14{}) end
+      assert_error MisuseError, expected_msg, fn -> as_user(%Module14{}) end
     end
   end
 
@@ -73,7 +74,7 @@ defmodule Hologram.TestTest do
       expected_msg =
         "cannot act as Hologram.Test.Fixtures.Entity.Module14 with a nil id - an unset actor reads as an anonymous session and writes as trusted code, so an authorization test would pass for the wrong reason"
 
-      assert_error ArgumentError, expected_msg, fn -> as_user(%Module14{}, fn -> :ok end) end
+      assert_error MisuseError, expected_msg, fn -> as_user(%Module14{}, fn -> :ok end) end
     end
   end
 end

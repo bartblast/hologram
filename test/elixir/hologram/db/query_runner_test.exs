@@ -13,6 +13,7 @@ defmodule Hologram.DB.QueryRunnerTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.QueryCompiler
   alias Hologram.Entity.NotIncluded
+  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Placeholder
@@ -935,7 +936,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       expected_msg =
         ~s(invalid value "not-a-uuid" for placeholder :entity_id - expected a :uuid value)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{entity_id: "not-a-uuid"})
       end
     end
@@ -946,7 +947,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       expected_msg =
         "non-list value 5 for placeholder :ids - the placeholder binds a membership list"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{ids: 5})
       end
     end
@@ -960,7 +961,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       expected_msg = "invalid value 5 for placeholder :name - expected a :string value"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{name: 5})
       end
     end
@@ -974,7 +975,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       expected_msg =
         ~s(invalid value "many" for placeholder :threshold - expected a :integer value)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{threshold: "many"})
       end
     end
@@ -985,7 +986,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       expected_msg =
         ~s(invalid element "x" in the list for placeholder :ids - expected a :integer value)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{ids: [1, "x"]})
       end
     end
@@ -993,7 +994,7 @@ defmodule Hologram.DB.QueryRunnerTest do
     test "raises on a missing placeholder value" do
       term = %{Stage.normalize(Module2) | filter: [{:c, :==, {:placeholder, :search}}]}
 
-      assert_error ArgumentError, "missing value for placeholder :search", fn ->
+      assert_error MisuseError, "missing value for placeholder :search", fn ->
         run(term, @mapping)
       end
     end
@@ -1004,7 +1005,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       expected_msg =
         "nil element in the list for placeholder :ids - use an explicit nil predicate instead"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{ids: [1, nil]})
       end
     end
@@ -1014,7 +1015,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       expected_msg = "nil value for placeholder :search - use an explicit nil predicate instead"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{search: nil})
       end
     end
@@ -1028,7 +1029,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       expected_msg =
         "placeholder :x binds as :integer and {:list, :integer} - rename one of the conflicting variables"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{x: 5})
       end
     end
@@ -1042,7 +1043,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       expected_msg = ~s(invalid value "x" for placeholder :value - expected a :integer value)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{value: "x"})
       end
     end
@@ -1052,7 +1053,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       expected_msg = "invalid value 123 for placeholder :search - expected a :string value"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{search: 123})
       end
     end
@@ -1062,7 +1063,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       expected_msg = "invalid value 123 for placeholder :search - expected a :string value"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{search: 123})
       end
     end
@@ -1076,7 +1077,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       expected_msg =
         "invalid value :urgent for placeholder :priority - expected one of [:low, :medium, :high]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{priority: :urgent})
       end
     end
@@ -1086,7 +1087,7 @@ defmodule Hologram.DB.QueryRunnerTest do
 
       expected_msg = "invalid value :z for placeholder :choice - expected one of [:x, :y]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{choice: :z})
       end
     end
@@ -1097,7 +1098,7 @@ defmodule Hologram.DB.QueryRunnerTest do
       expected_msg =
         "unknown placeholder :serach in bindings - the query defines placeholders [:search]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         run(term, @mapping, %{search: "x", serach: "y"})
       end
     end

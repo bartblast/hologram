@@ -7,6 +7,7 @@ defmodule Hologram.DBReadTest do
   alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.Entity
+  alias Hologram.MisuseError
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Test.Fixtures.Entity.Module14
@@ -205,7 +206,7 @@ defmodule Hologram.DBReadTest do
       expected_msg =
         "cannot read a query term containing placeholders - placeholder :min_b has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module2
         |> filter(b >= ^%Placeholder{name: :min_b})
         |> DB.read()
@@ -216,7 +217,7 @@ defmodule Hologram.DBReadTest do
       expected_msg =
         "cannot read a query term containing placeholders - placeholder :sort has no value: directly executed queries embed concrete runtime values, placeholders exist only in compiler-registered queries"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module2
         |> sort(^%Placeholder{name: :sort})
         |> DB.read()
@@ -227,7 +228,7 @@ defmodule Hologram.DBReadTest do
       expected_msg =
         "cannot read a derived field's query on its own - it reads channel.messages of a Hologram.Test.Fixtures.Entity.Module28 row, so it is read through the derived field"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module28
         |> Stage.sourced([:channel, :messages])
         |> DB.read()
@@ -276,9 +277,9 @@ defmodule Hologram.DBReadTest do
       expected_msg =
         ~s(invalid id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings)
 
-      assert_error ArgumentError, expected_msg, fn -> DB.read(PolicyModule2, "nope") end
+      assert_error MisuseError, expected_msg, fn -> DB.read(PolicyModule2, "nope") end
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         as_user(user, fn -> DB.read(PolicyModule2, "nope") end)
       end
     end
@@ -294,9 +295,9 @@ defmodule Hologram.DBReadTest do
       expected_msg =
         "#{inspect(term)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1"
 
-      assert_error ArgumentError, expected_msg, fn -> DB.read(term, entity.id) end
+      assert_error MisuseError, expected_msg, fn -> DB.read(term, entity.id) end
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         as_user(user, fn -> DB.read(term, entity.id) end)
       end
     end

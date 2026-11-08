@@ -11,6 +11,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module13
@@ -199,7 +200,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       expected_msg =
         "invalid relationship for Hologram.Test.Fixtures.Entity.Module3 - :b is not a declared to-many relationship"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         add_relationship(Module3, Entity.generate_id(), :b, Entity.generate_id())
       end
     end
@@ -1116,7 +1117,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       expected_msg =
         "invalid relationship for Hologram.Test.Fixtures.Entity.Module3 - :b is not a declared to-many relationship"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         delete_relationship(Module3, Entity.generate_id(), :b, Entity.generate_id())
       end
     end
@@ -1359,7 +1360,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       expected_msg =
         "cannot update Hologram.Test.Fixtures.Entity.Module2 - no entity with id #{inspect(missing_id)}"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         update(Module2, missing_id, %{c: "after"})
       end
 
@@ -1629,7 +1630,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       expected_msg =
         "invalid deltas for Hologram.Test.Fixtures.Entity.Module10 - only required integer attributes can be moved: :bio, :nope, :priority"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         update(Module10, created_entity.id, %{}, deltas: %{bio: 1, nope: 1, priority: 1})
       end
     end
@@ -1640,7 +1641,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       expected_msg =
         "invalid deltas for Hologram.Test.Fixtures.Entity.Module32 - :message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         update(Module32, created_entity.id, %{}, deltas: %{message_count: 1})
       end
     end
@@ -1654,7 +1655,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       expected_msg =
         "invalid deltas for Hologram.Test.Fixtures.Entity.Module10 - a field is either changed or moved, not both: :count"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         update(Module10, created_entity.id, %{count: 7}, deltas: %{count: 1})
       end
     end
@@ -1927,21 +1928,21 @@ defmodule Hologram.DB.EntityOperationsTest do
       expected_unknown_msg =
         "invalid changes for Hologram.Test.Fixtures.Entity.Module2 - only declared attributes and to-one relationships can be updated: :nonexistent"
 
-      assert_error ArgumentError, expected_unknown_msg, fn ->
+      assert_error MisuseError, expected_unknown_msg, fn ->
         update(Module2, created_entity.id, %{nonexistent: 1})
       end
 
       expected_system_msg =
         "invalid changes for Hologram.Test.Fixtures.Entity.Module2 - only declared attributes and to-one relationships can be updated: :created_at"
 
-      assert_error ArgumentError, expected_system_msg, fn ->
+      assert_error MisuseError, expected_system_msg, fn ->
         update(Module2, created_entity.id, %{created_at: DateTime.utc_now(:microsecond)})
       end
 
       expected_revisions_msg =
         ~s(invalid changes for Hologram.Test.Fixtures.Entity.Module2 - only declared attributes and to-one relationships can be updated: :"$revisions")
 
-      assert_error ArgumentError, expected_revisions_msg, fn ->
+      assert_error MisuseError, expected_revisions_msg, fn ->
         update(Module2, created_entity.id, %{"$revisions": %{}})
       end
     end
@@ -1955,11 +1956,11 @@ defmodule Hologram.DB.EntityOperationsTest do
       expected_msg =
         "invalid changes for Hologram.Test.Fixtures.Entity.Module2 - at least one declared attribute or to-one relationship must be changed"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         update(Module2, created_entity.id, %{})
       end
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         update(Module2, created_entity.id, %{}, deltas: %{})
       end
     end
@@ -1970,7 +1971,7 @@ defmodule Hologram.DB.EntityOperationsTest do
       expected_msg =
         "cannot update Hologram.Test.Fixtures.Entity.Module2 - no entity with id #{inspect(nonexistent_id)}"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         update(Module2, nonexistent_id, %{c: "some text"})
       end
     end

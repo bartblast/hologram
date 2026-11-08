@@ -357,7 +357,7 @@ export default class Model {
       const declared =
         own.length === 0 ? "no operation of their own" : Model.#joinNames(own);
 
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `unknown operation ${Interpreter.inspect(operation)} for ${type} - its allow lines declare ${declared}, and the framework's own operations are ${Model.#joinNames(Model.frameworkOperations)}`,
       );
     }
@@ -365,7 +365,7 @@ export default class Model {
     const [name, role] = operation.data;
 
     if (!["grant_role", "revoke_role"].includes(name.value)) {
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `unknown operation ${Interpreter.inspect(operation)} for ${type} - the operation tuples are {:grant_role, role} and {:revoke_role, role}`,
       );
     }
@@ -378,7 +378,7 @@ export default class Model {
           ? "it declares no role"
           : `declared roles are: ${roles.map((roleName) => `:${roleName}`).join(", ")}`;
 
-      Interpreter.raiseArgumentError(
+      Interpreter.raiseMisuseError(
         `unknown role ${Interpreter.inspect(role)} in ${Interpreter.inspect(operation)} for ${type} - ${declared}`,
       );
     }

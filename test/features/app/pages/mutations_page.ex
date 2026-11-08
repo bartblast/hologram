@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.MutationsPage do
   alias HologramFeatureTests.Components.Mutations.Jobs
   alias HologramFeatureTests.Components.Mutations.Notes
   alias HologramFeatureTests.Entities.Item
+  alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.User
   alias HologramFeatureTests.Jobs.RestockItem
 
@@ -22,6 +23,7 @@ defmodule HologramFeatureTests.MutationsPage do
     <p>
       <button $click={command: :create_restock_job}> Create restock job </button>
       <button $click={command: :log_in}> Log in </button>
+      <button $click="put_author"> Put author </button>
       <button $click={command: :restock_item}> Restock item </button>
     </p>
     <Notes cid="notes" />
@@ -31,6 +33,15 @@ defmodule HologramFeatureTests.MutationsPage do
       Result: <strong id="result"><code>{@result}</code></strong>
     </p>
     """
+  end
+
+  # A relationship goes where only an attribute does, so the stage refuses the call in the browser.
+  def action(:put_author, _params, component) do
+    [body: "unsaved"]
+    |> Note.new()
+    |> put_attribute(:author, nil)
+
+    component
   end
 
   def action(:show_result, params, component) do

@@ -5,6 +5,7 @@ defmodule Hologram.Query.StageTest do
 
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.MisuseError
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.RowField
@@ -95,7 +96,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - it reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so set that reference on the Hologram.Test.Fixtures.Entity.Module28 row via put_attribute(:channel_id, id)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         add_relationship(entity, :messages, Entity.generate_id())
       end
     end
@@ -106,7 +107,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":topic is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - it reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module27, so set that reference on the Hologram.Test.Fixtures.Entity.Module27 row via put_attribute(:channel_id, id)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         add_relationship(entity, :topic, Entity.generate_id())
       end
     end
@@ -117,7 +118,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module29 - it reads the labels relationship of Hologram.Test.Fixtures.Entity.Module28, so record the edge on the Hologram.Test.Fixtures.Entity.Module28 row via add_relationship(:labels, id)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         add_relationship(entity, :messages, Entity.generate_id())
       end
     end
@@ -128,7 +129,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":c is a to-one relationship in Hologram.Test.Fixtures.Entity.Module3 - only to-many relationships hold edges - set its reference via put_attribute(:c_id, id)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         add_relationship(entity, :c, Entity.generate_id())
       end
     end
@@ -139,7 +140,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":name is an attribute in Hologram.Test.Fixtures.Entity.Module16 - only to-many relationships hold edges - put it via put_attribute"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         add_relationship(entity, :name, Entity.generate_id())
       end
     end
@@ -150,13 +151,13 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown relationship :nope in Hologram.Test.Fixtures.Entity.Module3 - known to-many relationships: :a"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         add_relationship(entity, :nope, Entity.generate_id())
       end
     end
 
     test "raises when the entity is not an entity struct" do
-      assert_error ArgumentError, ~s(add_relationship takes an entity struct, got: "x"), fn ->
+      assert_error MisuseError, ~s(add_relationship takes an entity struct, got: "x"), fn ->
         add_relationship(wrap_term("x"), :a, Entity.generate_id())
       end
     end
@@ -165,7 +166,7 @@ defmodule Hologram.Query.StageTest do
       entity = Module3.new()
       expected_msg = "add_relationship takes a target id string, got: 123"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         add_relationship(entity, :a, wrap_term(123))
       end
     end
@@ -174,7 +175,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":recent_messages is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         add_relationship(Module32.new(), :recent_messages, Entity.generate_id())
       end
     end
@@ -211,7 +212,7 @@ defmodule Hologram.Query.StageTest do
     end
 
     test "raises when the entity is not an entity struct" do
-      assert_error ArgumentError, ~s(authorize takes an entity struct, got: "x"), fn ->
+      assert_error MisuseError, ~s(authorize takes an entity struct, got: "x"), fn ->
         authorize(wrap_term("x"), :archive)
       end
     end
@@ -220,7 +221,7 @@ defmodule Hologram.Query.StageTest do
       entity = Module2.new(c: "x")
       expected_msg = ~s(authorize takes an operation atom, got: "archive")
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         authorize(entity, wrap_term("archive"))
       end
     end
@@ -231,7 +232,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :update}) - a write claims exactly one authority"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         entity
         |> authorize(:update)
         |> authorize(:delete)
@@ -244,7 +245,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         entity
         |> trust()
         |> authorize(:update)
@@ -255,7 +256,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown operation :archive for Hologram.Test.Fixtures.Entity.Module2 - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         authorize(Module2.new(c: "x"), :archive)
       end
     end
@@ -297,7 +298,7 @@ defmodule Hologram.Query.StageTest do
     test "raises when cardinality is already marked" do
       expected_msg = "cardinality is already set to :one"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module2
         |> one()
         |> count()
@@ -337,15 +338,15 @@ defmodule Hologram.Query.StageTest do
     test "raises on an amount that is not a positive integer" do
       entity = Module10.new(count: 5)
 
-      assert_error ArgumentError, "decrement takes a positive integer amount, got: -1", fn ->
+      assert_error MisuseError, "decrement takes a positive integer amount, got: -1", fn ->
         decrement(entity, :count, -1)
       end
 
-      assert_error ArgumentError, "decrement takes a positive integer amount, got: 0", fn ->
+      assert_error MisuseError, "decrement takes a positive integer amount, got: 0", fn ->
         decrement(entity, :count, 0)
       end
 
-      assert_error ArgumentError, "decrement takes a positive integer amount, got: 1.5", fn ->
+      assert_error MisuseError, "decrement takes a positive integer amount, got: 1.5", fn ->
         decrement(entity, :count, 1.5)
       end
     end
@@ -356,7 +357,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":bio is a :string attribute of Hologram.Test.Fixtures.Entity.Module10 - decrement moves integer attributes only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         decrement(entity, :bio, 1)
       end
     end
@@ -365,7 +366,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         decrement(Module32.new(), :message_count, 1)
       end
     end
@@ -411,7 +412,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module29 - it reads the labels relationship of Hologram.Test.Fixtures.Entity.Module28, so record the edge on the Hologram.Test.Fixtures.Entity.Module28 row via delete_relationship(:labels, id)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         delete_relationship(entity, :messages, Entity.generate_id())
       end
     end
@@ -422,13 +423,13 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":c is a to-one relationship in Hologram.Test.Fixtures.Entity.Module3 - only to-many relationships hold edges - set its reference via put_attribute(:c_id, id)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         delete_relationship(entity, :c, Entity.generate_id())
       end
     end
 
     test "raises when the entity is not an entity struct" do
-      assert_error ArgumentError, ~s(delete_relationship takes an entity struct, got: "x"), fn ->
+      assert_error MisuseError, ~s(delete_relationship takes an entity struct, got: "x"), fn ->
         delete_relationship(wrap_term("x"), :a, Entity.generate_id())
       end
     end
@@ -437,7 +438,7 @@ defmodule Hologram.Query.StageTest do
       entity = Module3.new()
       expected_msg = "delete_relationship takes a target id string, got: 123"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         delete_relationship(entity, :a, wrap_term(123))
       end
     end
@@ -446,7 +447,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":recent_messages is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         delete_relationship(Module32.new(), :recent_messages, Entity.generate_id())
       end
     end
@@ -856,7 +857,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":z is not a value of attribute :c in Hologram.Test.Fixtures.Entity.Module4 - the values are [:x, :y]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module4, c: {:>, :z})
       end
     end
@@ -865,7 +866,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":urgent is not a value of attribute e.priority in Hologram.Test.Fixtures.Entity.Module25 - the values are [:low, :medium, :high]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module25, [{[:e, :priority], {:>=, :urgent}}])
       end
     end
@@ -874,7 +875,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "stepped range 10..3//-1 for attribute :b is not supported - membership ranges use step 1"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: 10..3//-1)
       end
     end
@@ -882,7 +883,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a disjunction with no alternatives" do
       expected_msg = "a disjunction takes a list of at least two predicate lists, got: []"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, or: [])
       end
     end
@@ -891,7 +892,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "a disjunction takes a list of at least two predicate lists, got: [[a: true]]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, or: [[a: true]])
       end
     end
@@ -899,7 +900,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a list operand for an equality operator" do
       expected_msg = "invalid operand [1, 2] for operator :== on attribute :b"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:==, [1, 2]})
       end
     end
@@ -908,7 +909,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid membership list element {:>=, 3} for attribute :b - membership lists hold plain values"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:in, [1, {:>=, 3}]})
       end
     end
@@ -917,7 +918,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid filter list [1, {:>=, 3}] for attribute :b - use either a membership list of plain values or a list of operator tuples"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: [1, {:>=, 3}])
       end
     end
@@ -925,7 +926,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a nil ordering operand" do
       expected_msg = "invalid operand nil for operator :>= on attribute :b"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:>=, nil})
       end
     end
@@ -936,7 +937,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ~s(#{inspect(term)} is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(term, a: true)
       end
     end
@@ -945,7 +946,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ~s(String is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(String, a: true)
       end
     end
@@ -953,7 +954,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a non-list membership operand" do
       expected_msg = "operator :in on attribute :b requires a list operand, got: 5"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:in, 5})
       end
     end
@@ -962,7 +963,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ~s(123 is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(123, a: true)
       end
     end
@@ -971,7 +972,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: [{[:a], true}]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, [{[:a], true}])
       end
     end
@@ -980,7 +981,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid attribute operand {:attribute, [:b]} - an attribute is named by an atom, and a path by a list of two or more atoms"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:attribute, [:b]})
       end
     end
@@ -989,7 +990,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :== compares attribute :c_id with attribute b.c in Hologram.Test.Fixtures.Entity.Module3, which have different types (:uuid and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, c_id: {:attribute, [:b, :c]})
       end
     end
@@ -998,7 +999,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :< compares attribute b.b in Hologram.Test.Fixtures.Entity.Module3 with itself"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, [{[:b, :b], {:<, {:attribute, [:b, :b]}}}])
       end
     end
@@ -1007,7 +1008,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, [{[:messages, :body], "x"}])
       end
     end
@@ -1016,7 +1017,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module28, [{[:channel, :messages, :body], "x"}])
       end
     end
@@ -1025,7 +1026,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, [{:name, {:==, {:attribute, [:messages, :body]}}}])
       end
     end
@@ -1034,7 +1035,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":topic is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a path in a condition goes through to-one relationships that hold their reference"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, [{[:topic, :summary], "x"}])
       end
     end
@@ -1043,7 +1044,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":a is a to-many relationship in Hologram.Test.Fixtures.Entity.Module3 - a path in a condition goes through to-one relationships only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, [{[:a, :c], "x"}])
       end
     end
@@ -1052,7 +1053,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":c is an attribute in Hologram.Test.Fixtures.Entity.Module2 - a path goes through relationships, and only its last name is an attribute"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, [{[:c, :x], 1}])
       end
     end
@@ -1061,7 +1062,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, [{[:x, :a], true}])
       end
     end
@@ -1070,7 +1071,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships: :a, :b, :c"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module5, [{[:a, :x, :c], "x"}])
       end
     end
@@ -1079,7 +1080,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":b is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :b_id"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module5, [{[:a, :b], nil}])
       end
     end
@@ -1088,7 +1089,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, [{[:b, :x], 1}])
       end
     end
@@ -1097,7 +1098,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :c_id"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, c: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
       end
     end
@@ -1106,7 +1107,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":messages is a relationship in Hologram.Test.Fixtures.Entity.Module26 - only attributes can be filtered"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, messages: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
       end
     end
@@ -1115,7 +1116,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":a is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, a: "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f")
       end
     end
@@ -1124,7 +1125,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :>= requires an orderable attribute - attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 has type :uuid, and boolean and uuid attributes have no order to compare by"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, c_id: {:>=, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})
       end
     end
@@ -1133,7 +1134,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, x: 1)
       end
     end
@@ -1142,7 +1143,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :b_id, :c_id, :created_at, :id, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, x: 1)
       end
     end
@@ -1151,7 +1152,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid membership list element 1..3 for attribute :b - membership lists hold plain values"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:in, [1..3, 5]})
       end
     end
@@ -1160,7 +1161,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "range 3..10 requires an integer attribute - attribute :d in Hologram.Test.Fixtures.Entity.Module4 has type :float"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module4, d: 3..10)
       end
     end
@@ -1168,7 +1169,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a range operand for an equality operator" do
       expected_msg = "invalid operand 1..5 for operator :== on attribute :b"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:==, 1..5})
       end
     end
@@ -1176,7 +1177,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a range operand for an ordering comparison" do
       expected_msg = "invalid operand 1..5 for operator :> on attribute :b"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:>, 1..5})
       end
     end
@@ -1185,7 +1186,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be filtered - filter its reference via :c_id"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, b_id: {:==, {:attribute, :c}})
       end
     end
@@ -1194,7 +1195,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "stepped range 3..10//2 for attribute :b is not supported - membership ranges use step 1"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: 3..10//2)
       end
     end
@@ -1203,7 +1204,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "an alternative of a disjunction is a non-empty list of name and value pairs, got: [1]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, or: [[a: true], [1]])
       end
     end
@@ -1212,7 +1213,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :< compares attribute :count in Hologram.Test.Fixtures.Entity.Module10 with itself"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module10, count: {:<, {:attribute, :count}})
       end
     end
@@ -1221,7 +1222,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :in on attribute :count requires a list operand, got: {:attribute, :priority}"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module10, count: {:in, {:attribute, :priority}})
       end
     end
@@ -1230,7 +1231,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :< compares attribute :released_on with attribute :held_at in Hologram.Test.Fixtures.Entity.Module10, which have different types (:date and :datetime) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module10, released_on: {:<, {:attribute, :held_at}})
       end
     end
@@ -1239,7 +1240,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "an alternative of a disjunction is a non-empty list of name and value pairs, got: []"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, or: [[a: true], []])
       end
     end
@@ -1247,7 +1248,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on an empty filter list" do
       expected_msg = "filter list for attribute :b must not be empty"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: [])
       end
     end
@@ -1255,7 +1256,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on an empty membership list" do
       expected_msg = "membership list for attribute :b must not be empty"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:in, []})
       end
     end
@@ -1263,7 +1264,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on an empty range" do
       expected_msg = "range 5..3//1 for attribute :b is empty - it would match nothing"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: 5..3//1)
       end
     end
@@ -1272,7 +1273,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :== compares attribute :level with attribute :tier in Hologram.Test.Fixtures.Entity.Module24, which declare different values ([:low, :medium, :high] and [:low, :high]) - two enum attributes compare only when they declare the same values in the same order"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module24, level: {:==, {:attribute, :tier}})
       end
     end
@@ -1280,7 +1281,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on an invalid tuple filter value" do
       expected_msg = "invalid filter value {1, 2, 3} for attribute :b"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {1, 2, 3})
       end
     end
@@ -1291,7 +1292,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :or in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, or: true)
       end
     end
@@ -1300,7 +1301,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :< requires an orderable attribute - attribute :a_id in Hologram.Test.Fixtures.Entity.Module5 has type :uuid, and boolean and uuid attributes have no order to compare by"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module5, a_id: {:<, {:attribute, :b_id}})
       end
     end
@@ -1309,7 +1310,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :> requires an orderable attribute - attribute b.a in Hologram.Test.Fixtures.Entity.Module3 has type :boolean, and boolean and uuid attributes have no order to compare by"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module3, [{[:b, :a], {:>, true}}])
       end
     end
@@ -1318,7 +1319,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :< requires an orderable attribute - attribute :id in Hologram.Test.Fixtures.Entity.Module2 has type :uuid, and boolean and uuid attributes have no order to compare by"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, id: {:<, "018f4571-a1b2-7c3d-8e4f-5a6b7c8d9e0f"})
       end
     end
@@ -1327,7 +1328,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, or: [[x: 1], [a: true]])
       end
     end
@@ -1336,7 +1337,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:==, {:attribute, :x}})
       end
     end
@@ -1345,7 +1346,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown operator :like in the filter predicate for attribute :b - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:like, "x"})
       end
     end
@@ -1354,7 +1355,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown operator :like in the filter predicate for attribute :b - supported operators: :!=, :<, :<=, :==, :>, :>=, :contains, :contains_exact, :in, :not_in, :starts_with, :starts_with_exact"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:like, %Placeholder{name: :x}})
       end
     end
@@ -1363,7 +1364,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: [:a]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, [:a])
       end
     end
@@ -1398,7 +1399,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":mid is not a value of attribute :tier in Hologram.Test.Fixtures.Entity.Module33 - the values are [:low, :high]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module33, tier: {:>, :mid})
       end
     end
@@ -1413,7 +1414,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :> requires an orderable attribute - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a string compares by the sort key stored with it, which a computed string has none of"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module33, channel_name: {:>, "a"})
       end
     end
@@ -1422,7 +1423,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :> requires an orderable attribute - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a string compares by the sort key stored with it, which a computed string has none of"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module33, body: {:>, {:attribute, :channel_name}})
       end
     end
@@ -1431,7 +1432,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :contains requires a stored string - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a search reads the forms stored with a string"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module33, channel_name: {:contains, "gen"})
       end
     end
@@ -1440,7 +1441,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :contains requires a stored string - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a search reads the forms stored with a string"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module33, body: {:contains, {:attribute, :channel_name}})
       end
     end
@@ -1449,7 +1450,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":first_message is a derived field holding one row in Hologram.Test.Fixtures.Entity.Module32 - only attributes can be filtered"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module32, first_message: nil)
       end
     end
@@ -1458,7 +1459,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":recent_messages is a derived field holding a set of rows in Hologram.Test.Fixtures.Entity.Module32 - only attributes can be filtered"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module32, recent_messages: nil)
       end
     end
@@ -1467,7 +1468,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":first_message is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a path in a condition goes through to-one relationships that hold their reference"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module32, [{[:first_message, :body], "hi"}])
       end
     end
@@ -1506,7 +1507,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":first_message is a derived field holding one row in Hologram.Test.Fixtures.Entity.Module32 - any, none and all ask about the rows of a set"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module32, any: {[:first_message], []})
       end
     end
@@ -1515,7 +1516,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":message_count is a derived field holding a :integer value in Hologram.Test.Fixtures.Entity.Module32 - any, none and all ask about the rows of a set"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module32, any: {[:message_count], []})
       end
     end
@@ -1524,7 +1525,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":first_message is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a quantifier's source goes through relationships, with a derived set only at its end"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module32, any: {[:first_message, :channel], []})
       end
     end
@@ -1669,7 +1670,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":channel is a to-one relationship in Hologram.Test.Fixtures.Entity.Module28 - any, none and all ask about the rows of a to-many relationship - compare the related row through a path: channel.<attribute>"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module28, any: {[:channel], []})
       end
     end
@@ -1678,7 +1679,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":topic is an inverse relationship holding one row in Hologram.Test.Fixtures.Entity.Module26 - any, none and all ask about the rows of a to-many relationship"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:topic], []})
       end
     end
@@ -1716,7 +1717,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":body is an attribute in Hologram.Test.Fixtures.Entity.Module28 - a quantifier's source names relationships"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module28, any: {[:body, :messages], []})
       end
     end
@@ -1725,7 +1726,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown relationship :thread in Hologram.Test.Fixtures.Entity.Module28 - known relationships: :channel, :labels"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module28, any: {[:thread, :messages], []})
       end
     end
@@ -1734,7 +1735,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":name is an attribute in Hologram.Test.Fixtures.Entity.Module26 - a quantifier's source names relationships"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:name], []})
       end
     end
@@ -1743,7 +1744,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown relationship :posts in Hologram.Test.Fixtures.Entity.Module26 - known relationships: :messages, :topic"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:posts], []})
       end
     end
@@ -1752,7 +1753,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: []"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[], []})
       end
     end
@@ -1761,7 +1762,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ~s(a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: ["messages"])
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {["messages"], []})
       end
     end
@@ -1770,7 +1771,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown relationship :topic in Hologram.Test.Fixtures.Entity.Module28 - known relationships: :channel, :labels"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [any: {[:topic], []}]})
       end
     end
@@ -1779,7 +1780,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "all takes a condition - all over no condition says nothing, got: {[:messages], []}"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, all: {[:messages], []})
       end
     end
@@ -1787,7 +1788,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a condition that is not a list of name and value pairs" do
       expected_msg = "a quantifier's condition is a list of name and value pairs, got: [:body]"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [:body]})
       end
     end
@@ -1796,7 +1797,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :title in Hologram.Test.Fixtures.Entity.Module28 - known attributes: :body, :channel_id, :created_at, :id, :position, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [title: "x"]})
       end
     end
@@ -1805,7 +1806,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :== compares attribute :name in Hologram.Test.Fixtures.Entity.Module29 with itself"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module28, any: {[:labels], [name: {:attribute, :name}]})
       end
     end
@@ -1814,7 +1815,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :== compares attribute :name in Hologram.Test.Fixtures.Entity.Module26 with itself"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26,
           any: {[:messages], [{{:outer, 1, :name}, {:attribute, {:outer, 1, :name}}}]}
         )
@@ -1825,7 +1826,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :== compares attribute :name in Hologram.Test.Fixtures.Entity.Module29 with attribute :position in Hologram.Test.Fixtures.Entity.Module28, which have different types (:string and :integer) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module28, any: {[:labels], [name: {:attribute, {:outer, 1, :position}}]})
       end
     end
@@ -1834,7 +1835,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :>= compares attribute :priority in Hologram.Test.Fixtures.Entity.Module17 with attribute :tier in Hologram.Test.Fixtures.Entity.Module31, which declare different values ([:low, :medium, :high] and [:low, :high]) - two enum attributes compare only when they declare the same values in the same order"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module31, any: {[:items], [priority: {:>=, {:attribute, {:outer, 1, :tier}}}]})
       end
     end
@@ -1843,7 +1844,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :title in Hologram.Test.Fixtures.Entity.Module26 - known attributes: :created_at, :id, :name, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [{{:outer, 1, :title}, "x"}]})
       end
     end
@@ -1852,7 +1853,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "{:outer, 1, :name} names no row above the condition it stands in, which has no row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, [{{:outer, 1, :name}, "general"}])
       end
     end
@@ -1861,7 +1862,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "{:outer, 2, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [{{:outer, 2, :name}, "general"}]})
       end
     end
@@ -1870,7 +1871,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [{{:outer, 0, :name}, "x"}]})
       end
     end
@@ -1879,7 +1880,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ~s(invalid attribute operand {:attribute, {:outer, 1, "name"}} - an attribute is named by an atom, and a path by a list of two or more atoms)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [body: {:attribute, {:outer, 1, "name"}}]})
       end
     end
@@ -1888,7 +1889,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "a quantifier's source is a list of relationship names, or {:outer, levels, list}, got: {:outer, 1, []}"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [any: {{:outer, 1, []}, []}]})
       end
     end
@@ -1897,7 +1898,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "{:outer, 0, :name} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [body: {:attribute, {:outer, 0, :name}}]})
       end
     end
@@ -1906,7 +1907,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "{:outer, 2, [:messages]} names no row above the condition it stands in, which has 1 row above it - {:outer, levels, name} reads the row levels quantifiers out, from 1 up to the outermost row"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module26, any: {[:messages], [any: {{:outer, 2, [:messages]}, []}]})
       end
     end
@@ -2003,7 +2004,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "a row field stands for a field of the row a derived field is computed for, so only a derived field's query compares with one, got: #{inspect(position: row_field)}"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module28, position: row_field)
       end
     end
@@ -2014,7 +2015,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "#{inspect(row_field)} reads a field of a Hologram.Test.Fixtures.Entity.Module26 row, but this query belongs to a derived field of Hologram.Test.Fixtures.Entity.Module28"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module28
         |> sourced([:channel, :messages])
         |> filter(body: row_field)
@@ -2025,7 +2026,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :== compares attribute :position in Hologram.Test.Fixtures.Entity.Module28 with attribute :name in Hologram.Test.Fixtures.Entity.Module26, which have different types (:integer and :string) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module26
         |> sourced([:messages])
         |> filter(position: %RowField{owner: Module26, name: :name})
@@ -2038,7 +2039,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "#{inspect(row_field)} names the :channel relationship of Hologram.Test.Fixtures.Entity.Module28 - a row field names an attribute: channel.<attribute>"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module28
         |> sourced([:channel, :messages])
         |> filter(channel_id: row_field)
@@ -2051,7 +2052,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "#{inspect(row_field)} names the :topic relationship of Hologram.Test.Fixtures.Entity.Module26 - a row field names an attribute: topic.<attribute>"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module26
         |> sourced([:messages])
         |> filter(body: row_field)
@@ -2064,7 +2065,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "#{inspect(row_field)} names no field - a row field names an attribute by an atom, and a path by a list of two or more atoms"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module26
         |> sourced([:messages])
         |> filter(body: row_field)
@@ -2077,7 +2078,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid membership list element #{inspect(row_field)} for attribute :position - membership lists hold plain values"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module28
         |> sourced([:channel, :messages])
         |> filter(position: {:in, [1, row_field]})
@@ -2097,7 +2098,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :> requires an orderable attribute - :channel_name in Hologram.Test.Fixtures.Entity.Module33 is a derived string, and a string compares by the sort key stored with it, which a computed string has none of"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module33
         |> sourced([:channel, :messages])
         |> filter(body: {:>, %RowField{owner: Module33, name: :channel_name}})
@@ -2159,7 +2160,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ~s(invalid operand ["ab"] for operator :contains on attribute :c - a search term is a string)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:contains, ["ab"]})
       end
     end
@@ -2168,7 +2169,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid operand nil for operator :starts_with on attribute :c - a search term is a string"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:starts_with, nil})
       end
     end
@@ -2177,7 +2178,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid operand 1..2 for operator :contains on attribute :c - a search term is a string"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:contains, 1..2})
       end
     end
@@ -2186,7 +2187,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :contains compares attribute :c with attribute :b in Hologram.Test.Fixtures.Entity.Module2, which have different types (:string and :integer) - two attributes compare when they have the same type, or when one widens to the other (:integer to :float)"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:contains, {:attribute, :b}})
       end
     end
@@ -2195,7 +2196,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :starts_with compares attribute :c in Hologram.Test.Fixtures.Entity.Module2 with itself"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:starts_with, {:attribute, :c}})
       end
     end
@@ -2204,7 +2205,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :starts_with requires a string attribute - attribute :b in Hologram.Test.Fixtures.Entity.Module2 has type :integer"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:starts_with, "1"})
       end
     end
@@ -2213,7 +2214,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "operator :contains requires a string attribute - attribute :b in Hologram.Test.Fixtures.Entity.Module2 has type :integer"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, b: {:contains, %Placeholder{name: :query}})
       end
     end
@@ -2222,7 +2223,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid operand {:a, :b} for operator :starts_with on attribute :c - a search term is a string"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         filter(Module2, c: {:starts_with, {:a, :b}})
       end
     end
@@ -2260,7 +2261,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid include spec entry {:a, &Function.identity/1} - include takes names and paths - a narrowed, ordered or bounded set is a derived field: derived :open_tasks, [Task], fn tasks -> filter(tasks, ...) end"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(Module3, a: &Function.identity/1)
       end
     end
@@ -2365,7 +2366,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":a is an attribute in Hologram.Test.Fixtures.Entity.Module2 - only relationships and derived fields can be included"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(Module2, :a)
       end
     end
@@ -2373,7 +2374,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on an empty include spec" do
       expected_msg = "include spec must not be empty"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(Module3, wrap_term([]))
       end
     end
@@ -2381,7 +2382,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on an invalid include spec" do
       expected_msg = "include spec must be a relationship name or a shape list, got: 123"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(Module3, wrap_term(123))
       end
     end
@@ -2390,7 +2391,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid include spec entry 123 - use a relationship name or a {name, spec} pair"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(Module3, [123])
       end
     end
@@ -2399,7 +2400,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown relationship nil in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(Module5, a: nil)
       end
     end
@@ -2418,7 +2419,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown relationship :x in Hologram.Query.StageTest.KnownRelationshipsFixture - known relationships and derived fields: :a, :b, :c"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(KnownRelationshipsFixture, :x)
       end
     end
@@ -2427,7 +2428,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown relationship :x in Hologram.Test.Fixtures.Entity.Module3 - known relationships and derived fields: :a, :b, :c"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(Module3, :x)
       end
     end
@@ -2484,7 +2485,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":message_count is a :integer derived field in Hologram.Test.Fixtures.Entity.Module32 - nothing is included under it"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(Module32, message_count: :name)
       end
     end
@@ -2493,7 +2494,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":message_count is a :integer derived field in Hologram.Test.Fixtures.Entity.Module32 - nothing is included under it"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         include(Module32, message_count: nil)
       end
     end
@@ -2576,11 +2577,11 @@ defmodule Hologram.Query.StageTest do
     test "raises on an amount that is not an integer" do
       entity = Module10.new(count: 5)
 
-      assert_error ArgumentError, "increment takes an integer amount, got: 1.5", fn ->
+      assert_error MisuseError, "increment takes an integer amount, got: 1.5", fn ->
         increment(entity, :count, 1.5)
       end
 
-      assert_error ArgumentError, ~s(increment takes an integer amount, got: "1"), fn ->
+      assert_error MisuseError, ~s(increment takes an integer amount, got: "1"), fn ->
         increment(entity, :count, "1")
       end
     end
@@ -2591,7 +2592,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":priority in Hologram.Test.Fixtures.Entity.Module10 is optional and can hold nil - increment moves attributes that always hold a number - declare it without optional: true, with a default"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         increment(entity, :priority, 1)
       end
     end
@@ -2602,7 +2603,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":bio is a :string attribute of Hologram.Test.Fixtures.Entity.Module10 - increment moves integer attributes only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         increment(entity, :bio, 1)
       end
     end
@@ -2613,7 +2614,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":b is a relationship in Hologram.Test.Fixtures.Entity.Module3 - increment moves integer attributes only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         increment(entity, :b, 1)
       end
     end
@@ -2624,7 +2625,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":id is a system attribute of Hologram.Test.Fixtures.Entity.Module10 - it is managed automatically and can't be moved"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         increment(entity, :id, 1)
       end
     end
@@ -2635,13 +2636,13 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module10 - known counters: :count"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         increment(entity, :nope, 1)
       end
     end
 
     test "raises when the entity is not an entity struct" do
-      assert_error ArgumentError, ~s(increment takes an entity struct, got: "x"), fn ->
+      assert_error MisuseError, ~s(increment takes an entity struct, got: "x"), fn ->
         increment(wrap_term("x"), :count, 1)
       end
     end
@@ -2652,7 +2653,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":count in Hologram.Test.Fixtures.Entity.Module10 holds nil - a counter always holds a number, so there is nothing for increment to move - read the row first, or give the attribute a default"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         increment(entity, :count, 1)
       end
     end
@@ -2663,7 +2664,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":count in Hologram.Test.Fixtures.Entity.Module10 carries a put value that is not an integer (nil) - increment cannot move it"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         entity
         |> put_attribute(count: nil)
         |> increment(:count, 1)
@@ -2674,7 +2675,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         increment(Module32.new(), :message_count, 1)
       end
     end
@@ -3068,7 +3069,7 @@ defmodule Hologram.Query.StageTest do
     test "raises when cardinality is already marked" do
       expected_msg = "cardinality is already set to :one"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module2
         |> one()
         |> one()
@@ -3119,7 +3120,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a non-integer page" do
       expected_msg = ~s(page must be a positive integer, got: "2")
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         paginate(Module2, page: "2", size: 20)
       end
     end
@@ -3127,7 +3128,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a non-positive page" do
       expected_msg = "page must be a positive integer, got: 0"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         paginate(Module2, page: 0, size: 20)
       end
     end
@@ -3135,7 +3136,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a non-positive size" do
       expected_msg = "size must be a positive integer, got: 0"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         paginate(Module2, page: 1, size: 0)
       end
     end
@@ -3143,7 +3144,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on an unknown option" do
       expected_msg = "unknown paginate option :foo - supported options: :page, :size"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         paginate(Module2, page: 1, size: 20, foo: 1)
       end
     end
@@ -3151,7 +3152,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on non-keyword options" do
       expected_msg = "paginate options must be a keyword list, got: 5"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         paginate(Module2, wrap_term(5))
       end
     end
@@ -3159,7 +3160,7 @@ defmodule Hologram.Query.StageTest do
     test "raises when the page option is missing" do
       expected_msg = "paginate requires the :page option"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         paginate(Module2, size: 20)
       end
     end
@@ -3320,7 +3321,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":id is a system attribute of Hologram.Test.Fixtures.Entity.Module2 - it is managed automatically and can't be put"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         put_attribute(entity, id: Entity.generate_id())
       end
     end
@@ -3331,7 +3332,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":a is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be put - add its edges via add_relationship"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         put_attribute(entity, a: [])
       end
     end
@@ -3342,7 +3343,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":messages is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - only attributes can be put - it reads the channel_id reference of Hologram.Test.Fixtures.Entity.Module28, so write that instead"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         put_attribute(entity, messages: [])
       end
     end
@@ -3353,7 +3354,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be put - set its reference via :c_id"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         put_attribute(entity, c: Module1.new())
       end
     end
@@ -3364,17 +3365,17 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :b_id, :c_id"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         put_attribute(entity, nope: 1)
       end
     end
 
     test "raises when the entity is not an entity struct" do
-      assert_error ArgumentError, ~s(put_attribute takes an entity struct, got: "x"), fn ->
+      assert_error MisuseError, ~s(put_attribute takes an entity struct, got: "x"), fn ->
         put_attribute(wrap_term("x"), a: true)
       end
 
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "put_attribute takes an entity struct, got: Hologram.Test.Fixtures.Entity.Module2",
                    fn -> put_attribute(wrap_term(Module2), a: true) end
     end
@@ -3382,11 +3383,11 @@ defmodule Hologram.Query.StageTest do
     test "raises when the values are neither a keyword list nor a map" do
       entity = Module2.new(c: "x")
 
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "put_attribute takes a keyword list or a map of attribute values, got: [1, 2]",
                    fn -> put_attribute(entity, [1, 2]) end
 
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    ~s(put_attribute takes a keyword list or a map of attribute values, got: "a"),
                    fn -> put_attribute(entity, wrap_term("a")) end
     end
@@ -3395,7 +3396,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         put_attribute(Module32.new(), message_count: 3)
       end
     end
@@ -3417,7 +3418,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         put_attribute(entity, :nope, 1)
       end
     end
@@ -3426,7 +3427,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":message_count is a derived field of Hologram.Test.Fixtures.Entity.Module32 - it's computed from its definition, so it's read-only"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         put_attribute(Module32.new(), :message_count, 3)
       end
     end
@@ -3519,7 +3520,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a negative count" do
       expected_msg = "skip must be a non-negative integer, got: -5"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         skip(Module2, -5)
       end
     end
@@ -3530,7 +3531,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "skip must be a non-negative integer, got: #{inspect(row_field)} - a bound is known when the query is built, and a row field has no value then"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module26
         |> sourced([:messages])
         |> skip(row_field)
@@ -3615,7 +3616,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a non-atom spec" do
       expected_msg = "sort spec must be an attribute name or a list, got: 123"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module2, 123)
       end
     end
@@ -3624,7 +3625,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":c is a relationship in Hologram.Test.Fixtures.Entity.Module3 - only attributes can be ordered"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module3, :c)
       end
     end
@@ -3632,7 +3633,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on an invalid direction" do
       expected_msg = "invalid direction :down for attribute :b - use :asc or :desc"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module2, b: :down)
       end
     end
@@ -3641,7 +3642,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "invalid sort entry 123 - use an attribute name or an {attribute, :asc | :desc} tuple"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module2, [123])
       end
     end
@@ -3650,7 +3651,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :c_id in Hologram.Test.Fixtures.Entity.Module3 - known attributes: :created_at, :id, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module3, :c_id)
       end
     end
@@ -3659,7 +3660,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :x in Hologram.Test.Fixtures.Entity.Module2 - known attributes: :a, :b, :c, :created_at, :id, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module2, :x)
       end
     end
@@ -3682,7 +3683,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":channel_name is a derived string in Hologram.Test.Fixtures.Entity.Module33 - a string is ordered by the sort key stored with it, which a computed string has none of"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module33, :channel_name)
       end
     end
@@ -3691,7 +3692,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":recent_messages is a derived field holding a set of rows in Hologram.Test.Fixtures.Entity.Module32 - only attributes can be ordered"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module32, :recent_messages)
       end
     end
@@ -3700,7 +3701,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":first_message is a derived field holding one row in Hologram.Test.Fixtures.Entity.Module32 - only attributes can be ordered"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module32, :first_message)
       end
     end
@@ -3709,7 +3710,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "unknown attribute :nope in Hologram.Test.Fixtures.Entity.Module33 - known attributes: :body, :created_at, :id, :later_count, :position, :tier, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sort(Module33, :nope)
       end
     end
@@ -3780,13 +3781,13 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":not_an_entity is not an entity type module - a derived field's query starts from a row of the entity type declaring it"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sourced(wrap_term(:not_an_entity), [:messages])
       end
     end
 
     test "raises on an empty chain" do
-      assert_error ArgumentError,
+      assert_error MisuseError,
                    "a derived field's query is sourced by a list of relationship names, got: []",
                    fn -> sourced(Module26, wrap_term([])) end
     end
@@ -3795,28 +3796,28 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":channel is a to-one relationship in Hologram.Test.Fixtures.Entity.Module28 - a derived field's query reads a set - read the related row's attributes through a path: channel.<attribute>"
 
-      assert_error ArgumentError, expected_msg, fn -> sourced(Module28, [:channel]) end
+      assert_error MisuseError, expected_msg, fn -> sourced(Module28, [:channel]) end
     end
 
     test "raises on a chain ending at an inverse holding one row" do
       expected_msg =
         ":topic is an inverse relationship holding one row in Hologram.Test.Fixtures.Entity.Module26 - a derived field's query reads a set - read the related row's attributes through a path: topic.<attribute>"
 
-      assert_error ArgumentError, expected_msg, fn -> sourced(Module26, [:topic]) end
+      assert_error MisuseError, expected_msg, fn -> sourced(Module26, [:topic]) end
     end
 
     test "raises on a chain ending at an attribute" do
       expected_msg =
         ":name is an attribute in Hologram.Test.Fixtures.Entity.Module26 - a derived field's query names relationships"
 
-      assert_error ArgumentError, expected_msg, fn -> sourced(Module28, [:channel, :name]) end
+      assert_error MisuseError, expected_msg, fn -> sourced(Module28, [:channel, :name]) end
     end
 
     test "raises on an unknown relationship" do
       expected_msg =
         "unknown relationship :replies in Hologram.Test.Fixtures.Entity.Module28 - known relationships: :channel, :labels"
 
-      assert_error ArgumentError, expected_msg, fn -> sourced(Module28, [:replies, :labels]) end
+      assert_error MisuseError, expected_msg, fn -> sourced(Module28, [:replies, :labels]) end
     end
 
     test "reads a derived set of the owning row" do
@@ -3837,7 +3838,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":first_message is a derived field holding one row in Hologram.Test.Fixtures.Entity.Module32 - a derived field's query reads a set"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sourced(Module32, [:first_message])
       end
     end
@@ -3846,7 +3847,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ":recent_messages is a derived field in Hologram.Test.Fixtures.Entity.Module32 - a derived field's query goes through relationships, with a derived set only at its end"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         sourced(Module32, [:recent_messages, :channel])
       end
     end
@@ -3891,7 +3892,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a negative count" do
       expected_msg = "take must be a non-negative integer, got: -5"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         take(Module2, -5)
       end
     end
@@ -3899,7 +3900,7 @@ defmodule Hologram.Query.StageTest do
     test "raises on a non-integer count" do
       expected_msg = "take must be a non-negative integer, got: 5.0"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         take(Module2, wrap_term(5.0))
       end
     end
@@ -3910,7 +3911,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "take must be a non-negative integer, got: #{inspect(row_field)} - a bound is known when the query is built, and a row field has no value then"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         Module26
         |> sourced([:messages])
         |> take(row_field)
@@ -4046,7 +4047,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         ~s("x" is not an entity type module or a query term - a query starts from a module with the "use Hologram.Entity" directive)
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         trust(wrap_term("x"))
       end
     end
@@ -4057,7 +4058,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "Hologram.Test.Fixtures.Entity.Module2 already carries a claim ({:authorize, :update}) - a write claims exactly one authority"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         entity
         |> authorize(:update)
         |> trust()
@@ -4070,7 +4071,7 @@ defmodule Hologram.Query.StageTest do
       expected_msg =
         "Hologram.Test.Fixtures.Entity.Module2 already carries a claim (:trust) - a write claims exactly one authority"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         entity
         |> trust()
         |> trust()

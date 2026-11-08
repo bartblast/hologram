@@ -1384,7 +1384,7 @@ describe("Model", () => {
     it("raises on an operation no allow line on the type names", () => {
       assertBoxedError(
         () => Model.validateOperation(PROJECT, Type.atom("pin")),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown operation :pin for MyApp.Project - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
       );
     });
@@ -1392,7 +1392,7 @@ describe("Model", () => {
     it("raises on an operation for a type whose allow lines name none of their own", () => {
       assertBoxedError(
         () => Model.validateOperation(TASK, Type.atom("archive")),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown operation :archive for MyApp.Task - its allow lines declare no operation of their own, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update",
       );
     });
@@ -1404,7 +1404,7 @@ describe("Model", () => {
             PROJECT,
             Type.tuple([Type.atom("grant_role"), Type.atom("editr")]),
           ),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown role :editr in {:grant_role, :editr} for MyApp.Project - declared roles are: :editor, :owner",
       );
     });
@@ -1416,7 +1416,7 @@ describe("Model", () => {
             TASK,
             Type.tuple([Type.atom("revoke_role"), Type.atom("editor")]),
           ),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown role :editor in {:revoke_role, :editor} for MyApp.Task - it declares no role",
       );
     });
@@ -1428,7 +1428,7 @@ describe("Model", () => {
             PROJECT,
             Type.tuple([Type.atom("publish"), Type.atom("editor")]),
           ),
-        "ArgumentError",
+        "Hologram.MisuseError",
         "unknown operation {:publish, :editor} for MyApp.Project - the operation tuples are {:grant_role, role} and {:revoke_role, role}",
       );
     });

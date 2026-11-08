@@ -126,7 +126,7 @@ defmodule HologramFeatureTests.WriteClaimsPage do
 
         "updated_unrecorded_note"
       rescue
-        error in ArgumentError -> error.message
+        error in Hologram.MisuseError -> error.message
       end
 
     put_action(server, :show_result, result: result)

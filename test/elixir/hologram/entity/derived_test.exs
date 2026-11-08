@@ -4,6 +4,7 @@ defmodule Hologram.Entity.DerivedTest do
   import Hologram.Entity.Derived
 
   alias Hologram.Entity.Derived.RowRef
+  alias Hologram.MisuseError
   alias Hologram.Query
   alias Hologram.Query.RowField
   alias Hologram.Test.Fixtures.Entity.Derived.Module1, as: DerivedModule1
@@ -39,7 +40,7 @@ defmodule Hologram.Entity.DerivedTest do
       expected_msg =
         "unknown attribute :nothing in Hologram.Test.Fixtures.Entity.Module34 - known attributes: :active, :badge, :channel_id, :channel_load, :created_at, :display_name, :featured, :id, :level, :named_after_channel, :nickname, :ranked, :recent_count, :score, :score_label, :top_score, :updated_at"
 
-      assert_error ArgumentError, expected_msg, fn -> condition(Module34, nothing: 1) end
+      assert_error MisuseError, expected_msg, fn -> condition(Module34, nothing: 1) end
     end
   end
 
@@ -142,35 +143,35 @@ defmodule Hologram.Entity.DerivedTest do
       expected_msg =
         "first_message is a derived field holding one row - include it, or read the rows it is computed from"
 
-      assert_error ArgumentError, expected_msg, fn -> field(Module32, [:first_message]) end
+      assert_error MisuseError, expected_msg, fn -> field(Module32, [:first_message]) end
     end
 
     test "raises on an attribute read through a set" do
       expected_msg =
         "messages.body reads through a set to one value per row of it - a derived field reads a set's rows with a query, or one value of the row through to-one relationships"
 
-      assert_error ArgumentError, expected_msg, fn -> field(Module26, [:messages, :body]) end
+      assert_error MisuseError, expected_msg, fn -> field(Module26, [:messages, :body]) end
     end
 
     test "raises on an attribute read through an inverse relationship" do
       expected_msg =
         ":topic is an inverse relationship in Hologram.Test.Fixtures.Entity.Module26 - a derived field reads a related row's value through to-one relationships that hold their reference"
 
-      assert_error ArgumentError, expected_msg, fn -> field(Module26, [:topic, :summary]) end
+      assert_error MisuseError, expected_msg, fn -> field(Module26, [:topic, :summary]) end
     end
 
     test "raises on a name the row does not declare" do
       expected_msg =
         "nothing names :nothing, which is not a field of Hologram.Test.Fixtures.Entity.Module28"
 
-      assert_error ArgumentError, expected_msg, fn -> field(Module28, [:nothing]) end
+      assert_error MisuseError, expected_msg, fn -> field(Module28, [:nothing]) end
     end
 
     test "raises on a path through what is no relationship" do
       expected_msg =
         "body.length names :body, which is not a relationship of Hologram.Test.Fixtures.Entity.Module28"
 
-      assert_error ArgumentError, expected_msg, fn -> field(Module28, [:body, :length]) end
+      assert_error MisuseError, expected_msg, fn -> field(Module28, [:body, :length]) end
     end
   end
 
@@ -211,21 +212,21 @@ defmodule Hologram.Entity.DerivedTest do
       expected_msg =
         "a derived field's query starts from a relationship of the row, got a query of every Hologram.Test.Fixtures.Entity.Module28 - read the rows through an argument naming the relationship"
 
-      assert_error ArgumentError, expected_msg, fn -> lower(%Query{entity: Module28}) end
+      assert_error MisuseError, expected_msg, fn -> lower(%Query{entity: Module28}) end
     end
 
     test "raises on a value of no derived field's type" do
       expected_msg =
         "a derived field computes a value of its type, a field of the row or a query over its rows, got: [1, 2]"
 
-      assert_error ArgumentError, expected_msg, fn -> lower(wrap_term([1, 2])) end
+      assert_error MisuseError, expected_msg, fn -> lower(wrap_term([1, 2])) end
     end
 
     test "raises on a related row" do
       expected_msg =
         "channel is a related row - include the relationship, or derive one of its attributes: channel.<attribute>"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         lower(%RowRef{owner: Module28, path: [:channel]})
       end
     end

@@ -24,6 +24,7 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity.Module10
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Entity.Module15
@@ -662,7 +663,7 @@ defmodule Hologram.DB.WriterTest do
           "A field set directly on the struct is not recorded: writing the whole struct " <>
           "would overwrite concurrent changes to fields you didn't touch."
 
-      assert_error ArgumentError, expected_msg, fn -> update(%{entity | public: true}) end
+      assert_error MisuseError, expected_msg, fn -> update(%{entity | public: true}) end
     end
 
     test "raises when the row does not exist" do
@@ -671,7 +672,7 @@ defmodule Hologram.DB.WriterTest do
       expected_msg =
         ~s(cannot update Hologram.Test.Fixtures.Policy.Module1 - no entity with id "#{entity.id}")
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         entity
         |> put_attribute(:public, true)
         |> update()
@@ -729,7 +730,7 @@ defmodule Hologram.DB.WriterTest do
       expected_msg =
         ~s(cannot update Hologram.Test.Fixtures.Policy.Module1 - no entity with id "#{id}")
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         as_user(user, fn -> update(Module1, id, public: true) end)
       end
     end
