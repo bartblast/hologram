@@ -89,6 +89,8 @@ import {defineClientOnlyModule8Fixture} from "./support/fixtures/renderer/client
 import {defineClientOnlyModule9Fixture} from "./support/fixtures/renderer/client_only/module_9.mjs";
 import {defineClientOnlyModule10Fixture} from "./support/fixtures/renderer/client_only/module_10.mjs";
 import {defineClientOnlyModule11Fixture} from "./support/fixtures/renderer/client_only/module_11.mjs";
+import {defineClientOnlyModule12Fixture} from "./support/fixtures/renderer/client_only/module_12.mjs";
+import {defineClientOnlyModule13Fixture} from "./support/fixtures/renderer/client_only/module_13.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
@@ -180,6 +182,8 @@ defineClientOnlyModule8Fixture();
 defineClientOnlyModule9Fixture();
 defineClientOnlyModule10Fixture();
 defineClientOnlyModule11Fixture();
+defineClientOnlyModule12Fixture();
+defineClientOnlyModule13Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -7215,6 +7219,64 @@ describe("Renderer", () => {
       assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
     });
 
+    it("with a template reading a missing var, secret state values hidden in the error", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module12",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "KeyError",
+        'key :missing not found in:\n\n    %{cid: "my_component", password: **redacted**}\n',
+      );
+    });
+
+    it("with init/2 reading a missing state key, secret state values hidden in the error", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module13",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "KeyError",
+        "key :pasword not found in:\n\n    %{password: **redacted**}\n",
+      );
+    });
+
     it("with unregistered var used", () => {
       const node = Type.tuple([
         Type.atom("component"),
@@ -12271,6 +12333,166 @@ describe("Renderer", () => {
       Renderer.renderTree(Type.list([li, li]));
 
       sinon.assert.notCalled(warnStub);
+    });
+  });
+
+  describe("redactKeyError()", () => {
+    const secretsProxy = Interpreter.moduleProxy(
+      Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module12",
+      ),
+    );
+
+    const plainProxy = Interpreter.moduleProxy(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+    );
+
+    const state = Type.map([
+      [Type.atom("count"), Type.integer(5)],
+      [Type.atom("password"), Type.bitstring("hunter2")],
+    ]);
+
+    const captureError = (callable) => {
+      try {
+        callable();
+      } catch (error) {
+        return error;
+      }
+
+      return null;
+    };
+
+    const keyError = () =>
+      captureError(() => Interpreter.dotOperator(state, Type.atom("pasword")));
+
+    it("hides the secret values in the term", () => {
+      assertBoxedError(
+        () => {
+          throw Renderer.redactKeyError(keyError(), secretsProxy);
+        },
+        "KeyError",
+        "key :pasword not found in:\n\n    %{count: 5, password: **redacted**}\n",
+      );
+    });
+
+    // The frames keep their files and lines: only the args of the failed :erlang.map_get/2 call
+    // change.
+    it("hides the secret values in the args of the stacktrace's frames", () => {
+      const error = keyError();
+      const originalStacktrace = Interpreter.boxStacktrace(error).data;
+      const [frameModule, frameFunction, _args, location] =
+        originalStacktrace[0].data;
+
+      const redactedStacktrace = Renderer.redactKeyError(error, secretsProxy)
+        .stacktrace.data;
+
+      assert.deepStrictEqual(
+        redactedStacktrace[0],
+        Type.tuple([
+          frameModule,
+          frameFunction,
+          Type.list([
+            Type.atom("pasword"),
+            Type.map([
+              [Type.atom("count"), Type.integer(5)],
+              [Type.atom("password"), Type.redactedStruct()],
+            ]),
+          ]),
+          location,
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        redactedStacktrace.slice(1),
+        originalStacktrace.slice(1),
+      );
+    });
+
+    // User code that rescues and re-raises hands on the stacktrace boxed.
+    it("hides the secret values in an error user code re-raised", () => {
+      const error = keyError();
+
+      const reraisedError = captureError(() =>
+        Erlang["raise/3"](
+          Type.atom("error"),
+          error.struct,
+          Interpreter.boxStacktrace(error),
+        ),
+      );
+
+      assertBoxedError(
+        () => {
+          throw Renderer.redactKeyError(reraisedError, secretsProxy);
+        },
+        "KeyError",
+        "key :pasword not found in:\n\n    %{count: 5, password: **redacted**}\n",
+      );
+    });
+
+    it("leaves a term map with no secret keys as it is", () => {
+      const map = Type.map([[Type.atom("count"), Type.integer(5)]]);
+
+      const error = captureError(() =>
+        Interpreter.dotOperator(map, Type.atom("pasword")),
+      );
+
+      assertBoxedError(
+        () => {
+          throw Renderer.redactKeyError(error, secretsProxy);
+        },
+        "KeyError",
+        "key :pasword not found in:\n\n    %{count: 5}\n",
+      );
+    });
+
+    it("leaves a term struct as it is", () => {
+      const struct = Type.struct("MyStruct", [
+        [Type.atom("password"), Type.bitstring("hunter2")],
+      ]);
+
+      const error = captureError(() =>
+        Interpreter.dotOperator(struct, Type.atom("pasword")),
+      );
+
+      assertBoxedError(
+        () => {
+          throw Renderer.redactKeyError(error, secretsProxy);
+        },
+        "KeyError",
+        'key :pasword not found in:\n\n    %{__struct__: MyStruct, password: "hunter2"}\n',
+      );
+    });
+
+    it("returns the error as it is for a module with no secret keys", () => {
+      const error = keyError();
+
+      assert.strictEqual(Renderer.redactKeyError(error, plainProxy), error);
+    });
+
+    it("returns an error other than a KeyError as it is", () => {
+      const error = captureError(() =>
+        Interpreter.raiseArgumentError("my message"),
+      );
+
+      assert.strictEqual(Renderer.redactKeyError(error, secretsProxy), error);
+    });
+
+    it("returns a throw as it is", () => {
+      const error = captureError(() => Erlang["throw/1"](state));
+
+      assert.strictEqual(Renderer.redactKeyError(error, secretsProxy), error);
+    });
+
+    it("returns an exit as it is", () => {
+      const error = captureError(() => Erlang["exit/1"](state));
+
+      assert.strictEqual(Renderer.redactKeyError(error, secretsProxy), error);
+    });
+
+    it("returns a value that isn't a boxed error as it is", () => {
+      const error = new Error("my message");
+
+      assert.strictEqual(Renderer.redactKeyError(error, secretsProxy), error);
     });
   });
 

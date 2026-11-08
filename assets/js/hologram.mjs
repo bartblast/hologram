@@ -310,15 +310,31 @@ export default class Hologram {
       vars: {},
     });
 
-    const resultComponentStruct = Interpreter.callNamedFunction(
-      componentModule,
-      Type.atom("action"),
-      Type.list(args),
-      context,
-    );
+    let resultComponentStruct;
+
+    try {
+      resultComponentStruct = Interpreter.callNamedFunction(
+        componentModule,
+        Type.atom("action"),
+        Type.list(args),
+        context,
+      );
+    } catch (error) {
+      throw Renderer.redactKeyError(
+        error,
+        Interpreter.moduleProxy(componentModule),
+      );
+    }
 
     if (resultComponentStruct instanceof Promise) {
-      return resultComponentStruct.then((resolved) => {
+      const redactedResult = resultComponentStruct.catch((error) => {
+        throw Renderer.redactKeyError(
+          error,
+          Interpreter.moduleProxy(componentModule),
+        );
+      });
+
+      return redactedResult.then((resolved) => {
         // The await can span a navigation, and the result belongs to the page the action ran on.
         // Its target may resolve on the destination too - "page", "layout", a cid both pages use -
         // to an instance that never produced it, and when it does not resolve the registry write

@@ -567,6 +567,56 @@ describe("Hologram", () => {
       sinon.assert.calledOnce(renderStub);
     });
 
+    it("hides secret state values in a KeyError a synchronous action raises", () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module8],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      const state = Type.map([
+        [Type.atom("password"), Type.bitstring("hunter2")],
+      ]);
+
+      callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
+        Interpreter.dotOperator(state, Type.atom("pasword")),
+      );
+
+      assertBoxedError(
+        () => Hologram.executeAction(actionFor(cid1)),
+        "KeyError",
+        "key :pasword not found in:\n\n    %{password: **redacted**}\n",
+      );
+    });
+
+    it("hides secret state values in a KeyError an asynchronous action raises", async () => {
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module8],
+          [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
+        ]),
+      );
+
+      const state = Type.map([
+        [Type.atom("password"), Type.bitstring("hunter2")],
+      ]);
+
+      callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
+        Promise.resolve().then(() =>
+          Interpreter.dotOperator(state, Type.atom("pasword")),
+        ),
+      );
+
+      await assertBoxedErrorAsync(
+        () => Hologram.executeAction(actionFor(cid1)),
+        "KeyError",
+        "key :pasword not found in:\n\n    %{password: **redacted**}\n",
+      );
+    });
+
     // An action can return a struct it built itself, which knows nothing of the module's secret
     // keys, so they are written back onto what is saved.
     it("saves the module's secret keys on the struct a synchronous action returned", () => {

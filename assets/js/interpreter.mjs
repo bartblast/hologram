@@ -20,10 +20,6 @@ import uniqWith from "lodash/uniqWith.js";
 // term (nil/false) is never mistaken for "no clause matched".
 const NO_MATCH = Symbol("NO_MATCH");
 
-// Stands in for a secret value while a component struct is inspected (see
-// #redactComponentStruct()). It is no term, so it never leaves inspect.
-const REDACTED = {type: "redacted"};
-
 // The OTP application a module belongs to decides which formatter its BIF errors name: erts
 // modules name erl_erts_errors, kernel modules name erl_kernel_errors, and the rest are stdlib
 // modules naming erl_stdlib_errors. Only the modules that depart from the stdlib default are
@@ -783,9 +779,6 @@ export default class Interpreter {
 
       case "port":
         return `#Port<${term.segments.join(".")}>`;
-
-      case "redacted":
-        return "**redacted**";
     }
   }
 
@@ -2383,6 +2376,11 @@ export default class Interpreter {
       term = Interpreter.#redactComponentStruct(term);
     }
 
+    // Based on the Inspect implementation for Hologram.Component.Redacted.
+    if (Type.isStruct(term, "Hologram.Component.Redacted")) {
+      return "**redacted**";
+    }
+
     const optCustomOptions =
       Interpreter.accessKeywordListElement(opts, Type.atom("custom_options")) ||
       Type.keywordList();
@@ -2790,7 +2788,7 @@ export default class Interpreter {
     const redactedState = secretKeys.reduce(
       (acc, key) =>
         Type.isTrue(Erlang_Maps["is_key/2"](key, acc))
-          ? Erlang_Maps["put/3"](key, REDACTED, acc)
+          ? Erlang_Maps["put/3"](key, Type.redactedStruct(), acc)
           : acc,
       state,
     );

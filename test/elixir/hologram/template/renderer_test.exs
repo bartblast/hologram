@@ -35,6 +35,10 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module113
   alias Hologram.Test.Fixtures.Template.Renderer.Module114
   alias Hologram.Test.Fixtures.Template.Renderer.Module115
+  alias Hologram.Test.Fixtures.Template.Renderer.Module116
+  alias Hologram.Test.Fixtures.Template.Renderer.Module117
+  alias Hologram.Test.Fixtures.Template.Renderer.Module118
+  alias Hologram.Test.Fixtures.Template.Renderer.Module119
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
@@ -1350,6 +1354,58 @@ defmodule Hologram.Template.RendererTest do
              }
     end
 
+    test "with a template reading a missing var, secret state values hidden in the error" do
+      node = {:component, Module116, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg = """
+      key :missing not found in:
+
+          %{count: 5, password: **redacted**, cid: "my_component"}
+      """
+
+      assert_error KeyError, expected_msg, fn -> render_dom(node, @env, @server) end
+    end
+
+    test "with init/3 fetching a missing state key, secret state values hidden in the error and its stacktrace" do
+      node = {:component, Module117, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg = """
+      key :pasword not found in:
+
+          %{password: **redacted**}
+
+      Did you mean:
+
+          * :password
+      """
+
+      assert_error KeyError, expected_msg, fn -> render_dom(node, @env, @server) end
+    end
+
+    test "with init/3 fetching a missing state key, secret state values hidden in the stacktrace" do
+      node = {:component, Module117, [{"cid", [text: "my_component"]}], []}
+
+      try do
+        render_dom(node, @env, @server)
+        flunk("expected KeyError")
+      rescue
+        KeyError ->
+          [top_frame | _rest] = __STACKTRACE__
+
+          assert top_frame ==
+                   {:erlang, :map_get, [:pasword, %{password: %Component.Redacted{}}],
+                    [error_info: %{module: :erl_erts_errors}]}
+      end
+    end
+
+    test "with init/3 fetching a missing key of a map with no secret keys, the error left as it is" do
+      node = {:component, Module119, [{"cid", [text: "my_component"]}], []}
+
+      assert_error KeyError,
+                   ~s/key :x not found in:\n\n    %{cid: "my_component"}\n/,
+                   fn -> render_dom(node, @env, @server) end
+    end
+
     test "with props and state" do
       node =
         {:component, Module4,
@@ -2107,6 +2163,14 @@ defmodule Hologram.Template.RendererTest do
       assert component_registry["page"].struct.__meta__ == %Component.Metadata{
                secret_keys: [:password]
              }
+    end
+
+    test "with a template reading a missing var, secret state values hidden in the error" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module118, :dummy_module_118_digest)
+
+      assert_error KeyError,
+                   "key :missing not found in:\n\n    %{password: **redacted**}\n",
+                   fn -> render_page_without_tree(Module118, @params, @server, @opts) end
     end
 
     test "with a cid entry that init/3 put into the page state" do

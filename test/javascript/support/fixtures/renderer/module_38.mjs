@@ -33,6 +33,22 @@ export function defineModule38Fixture() {
 
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Template.Renderer.Module38",
+    "__state__",
+    0,
+    "public",
+    [
+      {
+        params: (_context) => [],
+        guards: [],
+        body: (_context) => {
+          return Type.list();
+        },
+      },
+    ],
+  );
+
+  Interpreter.defineElixirFunction(
+    "Hologram.Test.Fixtures.Template.Renderer.Module38",
     "template",
     0,
     "public",

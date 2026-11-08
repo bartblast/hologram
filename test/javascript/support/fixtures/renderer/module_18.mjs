@@ -24,6 +24,28 @@ export function defineModule18Fixture() {
 
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Template.Renderer.Module18",
+    "__state__",
+    0,
+    "public",
+    [
+      {
+        params: (_context) => [],
+        guards: [],
+        body: (_context) => {
+          return Type.list([
+            Type.tuple([
+              Type.atom("b"),
+              Type.atom("integer"),
+              Type.keywordList(),
+            ]),
+          ]);
+        },
+      },
+    ],
+  );
+
+  Interpreter.defineElixirFunction(
+    "Hologram.Test.Fixtures.Template.Renderer.Module18",
     "template",
     0,
     "public",

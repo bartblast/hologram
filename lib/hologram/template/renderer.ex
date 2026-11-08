@@ -7,6 +7,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Component
   alias Hologram.Component.Metadata
+  alias Hologram.Component.Redacted
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
@@ -851,6 +852,50 @@ defmodule Hologram.Template.Renderer do
     }
   end
 
+  # A secret value can reach a KeyError raised while the module's code runs: the template's vars
+  # hold the state, and a typo like component.state.pasword or Map.fetch!(component.state, :x)
+  # raises with the state map as its term, which Map.fetch!/2 also passes to the stack frame of the
+  # failed :erlang.map_get/2 call. Both get the module's secret values hidden, in any plain map
+  # they hold, since a map that only holds a key named like a secret one has nothing to lose by it.
+  #
+  # WARNING: must match the client renderer's redactKeyError.
+  defp redact_key_error(error, stacktrace, module) do
+    case secret_keys(module) do
+      [] ->
+        {error, stacktrace}
+
+      secret_keys ->
+        redacted_stacktrace =
+          Enum.map(stacktrace, fn
+            {frame_module, function, args, location} when is_list(args) ->
+              {frame_module, function, Enum.map(args, &redact_secret_values(&1, secret_keys)),
+               location}
+
+            frame ->
+              frame
+          end)
+
+        {%{error | term: redact_secret_values(error.term, secret_keys)}, redacted_stacktrace}
+    end
+  end
+
+  # WARNING: must match the client renderer's #redactSecretValues.
+  defp redact_secret_values(term, secret_keys) when is_map(term) and not is_struct(term) do
+    Enum.reduce(secret_keys, term, fn key, acc ->
+      if Map.has_key?(acc, key), do: Map.put(acc, key, %Redacted{}), else: acc
+    end)
+  end
+
+  defp redact_secret_values(term, _secret_keys), do: term
+
+  defp run_hiding_secrets(module, fun) do
+    fun.()
+  rescue
+    error in KeyError ->
+      {redacted_error, redacted_stacktrace} = redact_key_error(error, __STACKTRACE__, module)
+      reraise redacted_error, redacted_stacktrace
+  end
+
   # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,
   # with no escaping. An attribute value lands in the DOM through setAttribute on the client, a
   # prop is a value a component receives rather than markup, and the HTML projection escapes
@@ -1095,7 +1140,9 @@ defmodule Hologram.Template.Renderer do
 
     init_result =
       if Reflection.has_function?(module, :init, 3) do
-        module.init(props, initial_component_struct, server_struct)
+        run_hiding_secrets(module, fn ->
+          module.init(props, initial_component_struct, server_struct)
+        end)
       else
         {initial_component_struct, server_struct}
       end
@@ -1397,7 +1444,7 @@ defmodule Hologram.Template.Renderer do
          server_struct
        ) do
     vars = Map.merge(params, page_state)
-    page_dom = page_module.template().(vars)
+    page_dom = run_hiding_secrets(page_module, fn -> page_module.template().(vars) end)
 
     layout_module = page_module.__layout_module__()
     layout_props_dom = build_layout_props_dom(page_module, page_state)
@@ -1466,8 +1513,8 @@ defmodule Hologram.Template.Renderer do
       slots_parent_module: parent_module
     }
 
-    vars
-    |> module.template().()
+    module
+    |> run_hiding_secrets(fn -> module.template().(vars) end)
     |> render_tree(env, server_struct)
   end
 

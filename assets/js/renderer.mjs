@@ -8,6 +8,7 @@ import Debouncer from "./debouncer.mjs";
 import EventListeners from "./event_listeners.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import Hologram from "./hologram.mjs";
+import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
@@ -223,6 +224,85 @@ export default class Renderer {
   // See: docs/navigation_payload_wire_format.md
   static decodeTree(tree) {
     return Type.list(tree.map(Renderer.#decodeNode));
+  }
+
+  // Based on redact_key_error/3
+  //
+  // A secret value can reach a KeyError raised while the module's code runs: the template's vars
+  // hold the state, and a typo like component.state.pasword raises with the state map as its term,
+  // which the raising frame lists among its args too. Both get the module's secret values hidden, in
+  // any plain map they hold. Returns the error to throw, which is the given one when there is
+  // nothing to hide.
+  //
+  // WARNING: must match redact_key_error/3 on the server.
+  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
+  static redactKeyError(error, moduleProxy) {
+    // A throw or an exit carries no exception struct.
+    if (
+      !(error instanceof HologramBoxedError) ||
+      error.kind.value !== "error" ||
+      !error.struct ||
+      !Type.isStruct(error.struct, "KeyError")
+    ) {
+      return error;
+    }
+
+    const secretKeys = Erlang_Maps["get/2"](
+      Type.atom("secret_keys"),
+      Renderer.componentMetadata(moduleProxy),
+    ).data;
+
+    if (secretKeys.length === 0) {
+      return error;
+    }
+
+    const term = Erlang_Maps["get/3"](
+      Type.atom("term"),
+      error.struct,
+      Type.nil(),
+    );
+
+    const redactedError = new HologramBoxedError(
+      Erlang_Maps["put/3"](
+        Type.atom("term"),
+        Renderer.#redactSecretValues(term, secretKeys),
+        error.struct,
+      ),
+    );
+
+    // Boxed, since an error user code re-raised already carries its stacktrace that way.
+    const redactedStacktrace = Type.list(
+      Interpreter.boxStacktrace(error).data.map((frame) => {
+        const [frameModule, frameFunction, arityOrArgs, location] = frame.data;
+
+        return frame.data.length === 4 && Type.isList(arityOrArgs)
+          ? Type.tuple([
+              frameModule,
+              frameFunction,
+              Type.list(
+                arityOrArgs.data.map((arg) =>
+                  Renderer.#redactSecretValues(arg, secretKeys),
+                ),
+              ),
+              location,
+            ])
+          : frame;
+      }),
+    );
+
+    redactedError.stacktrace = redactedStacktrace;
+    redactedError.rederive(redactedStacktrace);
+
+    // The JavaScript frames are the original error's, under the new header: the original header
+    // holds the message with the secret values in it.
+    const isJsFrame = (line) => /^\s+at /.test(line);
+
+    redactedError.stack = [
+      ...redactedError.stack.split("\n").filter((line) => !isJsFrame(line)),
+      ...(error.stack ?? "").split("\n").filter(isJsFrame),
+    ].join("\n");
+
+    return redactedError;
   }
 
   // Based on render_tree/3
@@ -1454,9 +1534,13 @@ export default class Renderer {
   }
 
   static #evaluateTemplate(moduleProxy, vars) {
-    return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
-      vars,
-    ]);
+    try {
+      return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
+        vars,
+      ]);
+    } catch (error) {
+      throw Renderer.redactKeyError(error, moduleProxy);
+    }
   }
 
   // Decides whether a live event satisfies an attribute's modifier filters. Modifiers are a
@@ -1854,12 +1938,20 @@ export default class Renderer {
         }),
       );
 
+      let initResult;
+
+      try {
+        initResult = moduleProxy["init/2"](props, initialComponentStruct);
+      } catch (error) {
+        throw Renderer.redactKeyError(error, moduleProxy);
+      }
+
       // The metadata is written back onto whatever init/2 returned, as on the server, so the
       // secret keys it lists are the module's.
       const componentStruct = Erlang_Maps["put/3"](
         Type.atom("__meta__"),
         metadata,
-        moduleProxy["init/2"](props, initialComponentStruct),
+        initResult,
       );
 
       Renderer.validateDeclaredState(
@@ -2090,6 +2182,24 @@ export default class Renderer {
   static #raisePhoenixSafeTuple() {
     Interpreter.raiseArgumentError(
       "Phoenix.HTML safe tuples aren't supported in Hologram templates, use trust_html/1 instead",
+    );
+  }
+
+  // Based on redact_secret_values/2
+  //
+  // WARNING: must match redact_secret_values/2 on the server.
+  // Deps: [:maps.is_key/2, :maps.put/3]
+  static #redactSecretValues(term, secretKeys) {
+    if (!Type.isMap(term) || Type.isStruct(term)) {
+      return term;
+    }
+
+    return secretKeys.reduce(
+      (acc, key) =>
+        Type.isTrue(Erlang_Maps["is_key/2"](key, acc))
+          ? Erlang_Maps["put/3"](key, Type.redactedStruct(), acc)
+          : acc,
+      term,
     );
   }
 
