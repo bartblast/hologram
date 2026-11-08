@@ -1580,23 +1580,35 @@ defmodule Hologram.Template.Renderer do
 
   defp struct_key_part(_map), do: ""
 
-  defp undeclared_state_message(key, module, handler) when is_atom(key) do
-    {holder, holder_names} =
-      if Reflection.page?(module) do
-        {"param", Enum.map(module.__params__(), fn {name, _type, _opts} -> name end)}
+  # A key named like a prop (a param on a page) can't be declared, since the state would shadow it,
+  # so the hint points at the props instead: the usual cause is init copying its props into state. A
+  # page's state is merged over its layout's cid, so a page can't keep a cid entry at all.
+  defp undeclared_state_hint(key, module) do
+    name = Atom.to_string(key)
+    page? = Reflection.page?(module)
+
+    {holder, holder_definitions} =
+      if page? do
+        {"param", module.__params__()}
       else
-        {"prop", [:cid | Enum.map(module.__props__(), fn {name, _type, _opts} -> name end)]}
+        {"prop", [{:cid, :string, []} | module.__props__()]}
       end
 
-    hint =
-      if key in holder_names do
-        ~s/"#{key}" is a #{holder}, read it from component.props instead/
-      else
+    cond do
+      page? and key == :cid ->
+        ~s/"cid" is the layout's cid prop, put the value under another name/
+
+      List.keymember?(holder_definitions, key, 0) ->
+        ~s/"#{name}" is a #{holder}, read it from component.props instead/
+
+      true ->
         "declare it with state/2 or state/3"
-      end
+    end
+  end
 
-    ~s/state "#{key}" isn't declared in "#{Reflection.module_name(module)}", / <>
-      "but #{handler} put it - #{hint}"
+  defp undeclared_state_message(key, module, handler) when is_atom(key) do
+    ~s/state "#{Atom.to_string(key)}" isn't declared in "#{Reflection.module_name(module)}", / <>
+      "but #{handler} put it - #{undeclared_state_hint(key, module)}"
   end
 
   defp undeclared_state_message(key, module, handler) do
@@ -1606,11 +1618,9 @@ defmodule Hologram.Template.Renderer do
 
   # put_state/2,3 can't tell which module it runs in, so the state is checked where the struct comes
   # back from the module's own code. Of several undeclared keys the smallest in term order is named,
-  # so the message doesn't depend on map order. A key named like a prop (a param on a page) can't be
-  # declared, since the state would shadow it, so the message points at the props instead: the usual
-  # cause is init copying its props into state.
+  # so the message doesn't depend on map order.
   #
-  # WARNING: must match the client renderer's #validateDeclaredState.
+  # WARNING: must match the client renderer's validateDeclaredState.
   defp validate_declared_state(state, module, handler) do
     declared_names = Enum.map(module.__state__(), fn {name, _type, _opts} -> name end)
 

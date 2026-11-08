@@ -36,7 +36,13 @@ export function defineClientOnlyModule3Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list();
+          return Type.list([
+            Type.tuple([
+              Type.atom("props_seen_by_init"),
+              Type.atom("map"),
+              Type.keywordList(),
+            ]),
+          ]);
         },
       },
     ],

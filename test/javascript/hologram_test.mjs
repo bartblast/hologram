@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedErrorAsync,
   defineRuntimeGlobals,
   registerWebApis,
   sinon,
@@ -560,6 +561,90 @@ describe("Hologram", () => {
       await result;
 
       sinon.assert.calledOnce(renderStub);
+    });
+
+    // The next command, the next action and the next page all come after the check, so an action
+    // that fails it sends, queues and navigates nothing.
+    it("raises for state a synchronous action put without declaring it", () => {
+      const struct = Type.componentStruct({nextAction: Type.nil()});
+
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), struct],
+        ]),
+      );
+
+      ActionQueue.entries = [];
+
+      const sendCommandStub = sinon
+        .stub(Client, "sendCommand")
+        .callsFake(() => null);
+
+      callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
+        Type.componentStruct({
+          nextAction: Type.actionStruct({
+            name: Type.atom("the_next_action"),
+            params: Type.map(),
+            target: cid1,
+          }),
+          nextCommand: Type.commandStruct({
+            name: Type.atom("the_next_command"),
+            params: Type.map(),
+            target: cid1,
+          }),
+          nextPage: module7,
+          state: Type.map([[Type.atom("undeclared"), Type.integer(1)]]),
+        }),
+      );
+
+      assertBoxedError(
+        () => Hologram.executeAction(actionFor(cid1)),
+        "Hologram.StateError",
+        'state "undeclared" isn\'t declared in "Hologram.Test.Fixtures.Module7", but action :test_action put it - declare it with state/2 or state/3',
+      );
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentStruct(cid1),
+        struct,
+      );
+
+      assert.deepStrictEqual(ActionQueue.entries, []);
+      sinon.assert.notCalled(sendCommandStub);
+      sinon.assert.notCalled(renderStub);
+    });
+
+    it("raises for state an asynchronous action put without declaring it", async () => {
+      const struct = Type.componentStruct({nextAction: Type.nil()});
+
+      ComponentRegistry.putEntry(
+        cid1,
+        Type.map([
+          [Type.atom("module"), module7],
+          [Type.atom("struct"), struct],
+        ]),
+      );
+
+      callNamedFunctionStub.callsFake((_module, _fun, _args, _context) =>
+        Promise.resolve(
+          Type.componentStruct({
+            state: Type.map([[Type.atom("undeclared"), Type.integer(1)]]),
+          }),
+        ),
+      );
+
+      await assertBoxedErrorAsync(
+        () => Hologram.executeAction(actionFor(cid1)),
+        "Hologram.StateError",
+        'state "undeclared" isn\'t declared in "Hologram.Test.Fixtures.Module7", but action :test_action put it - declare it with state/2 or state/3',
+      );
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getComponentStruct(cid1),
+        struct,
+      );
+      sinon.assert.notCalled(renderStub);
     });
 
     // A next action is a continuation of the one that produced it, so it belongs to the same page

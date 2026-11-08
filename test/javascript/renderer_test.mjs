@@ -86,6 +86,8 @@ import {defineClientOnlyModule5Fixture} from "./support/fixtures/renderer/client
 import {defineClientOnlyModule6Fixture} from "./support/fixtures/renderer/client_only/module_6.mjs";
 import {defineClientOnlyModule7Fixture} from "./support/fixtures/renderer/client_only/module_7.mjs";
 import {defineClientOnlyModule8Fixture} from "./support/fixtures/renderer/client_only/module_8.mjs";
+import {defineClientOnlyModule9Fixture} from "./support/fixtures/renderer/client_only/module_9.mjs";
+import {defineClientOnlyModule10Fixture} from "./support/fixtures/renderer/client_only/module_10.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
@@ -174,6 +176,8 @@ defineClientOnlyModule5Fixture();
 defineClientOnlyModule6Fixture();
 defineClientOnlyModule7Fixture();
 defineClientOnlyModule8Fixture();
+defineClientOnlyModule9Fixture();
+defineClientOnlyModule10Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -7036,7 +7040,7 @@ describe("Renderer", () => {
       );
     });
 
-    it("with props and state, give state priority over prop if there are name collisions", () => {
+    it("with props and state", () => {
       const node = Type.tuple([
         Type.atom("component"),
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module4"),
@@ -7059,10 +7063,7 @@ describe("Renderer", () => {
 
       const entry = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module4"),
-        state: Type.map([
-          [Type.atom("a"), Type.bitstring("state_a")],
-          [Type.atom("b"), Type.bitstring("state_b")],
-        ]),
+        state: Type.map([[Type.atom("a"), Type.bitstring("state_a")]]),
       });
 
       ComponentRegistry.putEntry(cid, entry);
@@ -7077,7 +7078,7 @@ describe("Renderer", () => {
 
       const expectedVdom = [
         vnode("div", {attrs: {}, on: {}}, [
-          "var_a = state_a, var_b = state_b, var_c = prop_c",
+          "var_a = state_a, var_b = prop_b, var_c = prop_c",
         ]),
       ];
 
@@ -7141,6 +7142,37 @@ describe("Renderer", () => {
         'component vars = %{cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"}';
 
       assert.equal(result, expected);
+    });
+
+    it("with state that init/2 put without declaring it", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "Hologram.StateError",
+        'state "b" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but init/2 put it - declare it with state/2 or state/3',
+      );
+
+      assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
     });
 
     it("with unregistered var used", () => {
@@ -7526,8 +7558,6 @@ describe("Renderer", () => {
       const entry34 = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module34"),
         state: Type.map([
-          [Type.atom("cid"), cid34],
-          [Type.atom("a"), Type.bitstring("34a_prop")],
           [Type.atom("b"), Type.bitstring("34b_state")],
           [Type.atom("c"), Type.bitstring("34c_state")],
           [Type.atom("x"), Type.bitstring("34x_state")],
@@ -7540,22 +7570,14 @@ describe("Renderer", () => {
 
       const entry35 = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module35"),
-        state: Type.map([
-          [Type.atom("cid"), cid35],
-          [Type.atom("a"), Type.bitstring("35a_prop")],
-          [Type.atom("z"), Type.bitstring("35z_state")],
-        ]),
+        state: Type.map([[Type.atom("z"), Type.bitstring("35z_state")]]),
       });
 
       ComponentRegistry.putEntry(cid35, entry35);
 
       const entry36 = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module36"),
-        state: Type.map([
-          [Type.atom("cid"), cid36],
-          [Type.atom("a"), Type.bitstring("36a_prop")],
-          [Type.atom("z"), Type.bitstring("36z_state")],
-        ]),
+        state: Type.map([[Type.atom("z"), Type.bitstring("36z_state")]]),
       });
 
       ComponentRegistry.putEntry(cid36, entry36);
@@ -9735,11 +9757,10 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("aggregate page vars, giving state vars priority over param vars when there are name conflicts", () => {
+    it("aggregate page vars", () => {
       const pageEntry = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
         state: Type.map([
-          [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
         ]),
       });
@@ -9761,7 +9782,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'page vars = %{key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
+          'page vars = %{key_1: "param_value_1", key_2: "param_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
@@ -9772,7 +9793,6 @@ describe("Renderer", () => {
       const pageEntry = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
         state: Type.map([
-          [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
         ]),
       });
@@ -9803,7 +9823,7 @@ describe("Renderer", () => {
       );
     });
 
-    it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
+    it("aggregate layout vars", () => {
       initComponentRegistryEntry(
         Type.bitstring("page"),
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module24"),
@@ -9812,7 +9832,6 @@ describe("Renderer", () => {
       const layoutEntry = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module23"),
         state: Type.map([
-          [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
         ]),
       });
@@ -9826,7 +9845,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
+          'layout vars = %{cid: "layout", key_1: "prop_value_1", key_2: "prop_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
@@ -12576,6 +12595,108 @@ describe("Renderer", () => {
       const result = toText(term);
 
       assert.equal(result, dummyStringCharsProtocolResult);
+    });
+  });
+
+  describe("validateDeclaredState()", () => {
+    const componentProxy = Interpreter.moduleProxy(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9"),
+    );
+
+    const pageProxy = Interpreter.moduleProxy(
+      Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module10",
+      ),
+    );
+
+    it("declared keys", () => {
+      const state = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      assert.isUndefined(
+        Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+      );
+    });
+
+    it("undeclared keys, the smallest one is named", () => {
+      const state = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("c"), Type.integer(3)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state "b" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but action :x put it - declare it with state/2 or state/3',
+      );
+    });
+
+    it("undeclared key named like a prop", () => {
+      const state = Type.map([[Type.atom("label"), Type.bitstring("abc")]]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state "label" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but action :x put it - "label" is a prop, read it from component.props instead',
+      );
+    });
+
+    it("undeclared key named cid", () => {
+      const state = Type.map([[Type.atom("cid"), Type.bitstring("my_cid")]]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state "cid" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but action :x put it - "cid" is a prop, read it from component.props instead',
+      );
+    });
+
+    it("undeclared key named like a page param", () => {
+      const state = Type.map([[Type.atom("id"), Type.integer(1)]]);
+
+      assertBoxedError(
+        () => Renderer.validateDeclaredState(state, pageProxy, "action :x"),
+        "Hologram.StateError",
+        'state "id" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module10", but action :x put it - "id" is a param, read it from component.props instead',
+      );
+    });
+
+    it("undeclared cid key of a page", () => {
+      const state = Type.map([[Type.atom("cid"), Type.bitstring("my_cid")]]);
+
+      assertBoxedError(
+        () => Renderer.validateDeclaredState(state, pageProxy, "action :x"),
+        "Hologram.StateError",
+        'state "cid" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module10", but action :x put it - "cid" is the layout\'s cid prop, put the value under another name',
+      );
+    });
+
+    it("undeclared key that isn't an atom", () => {
+      const state = Type.map([[Type.bitstring("b"), Type.integer(2)]]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state key "b" isn\'t an atom, but action :x put it in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9" - state is declared with atom names',
+      );
+    });
+
+    it("undeclared keys of different types, the smallest in term order is named", () => {
+      const state = Type.map([
+        [Type.bitstring("b"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state "c" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but action :x put it - declare it with state/2 or state/3',
+      );
     });
   });
 

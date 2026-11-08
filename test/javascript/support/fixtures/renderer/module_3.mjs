@@ -32,7 +32,18 @@ export function defineModule3Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list();
+          return Type.list([
+            Type.tuple([
+              Type.atom("a"),
+              Type.atom("integer"),
+              Type.keywordList(),
+            ]),
+            Type.tuple([
+              Type.atom("b"),
+              Type.atom("integer"),
+              Type.keywordList(),
+            ]),
+          ]);
         },
       },
     ],

@@ -34,7 +34,13 @@ export function defineClientOnlyModule4Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list();
+          return Type.list([
+            Type.tuple([
+              Type.atom("initialized"),
+              Type.atom("boolean"),
+              Type.keywordList(),
+            ]),
+          ]);
         },
       },
     ],

@@ -32,6 +32,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module11
   alias Hologram.Test.Fixtures.Template.Renderer.Module110
   alias Hologram.Test.Fixtures.Template.Renderer.Module111
+  alias Hologram.Test.Fixtures.Template.Renderer.Module113
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
@@ -2080,6 +2081,18 @@ defmodule Hologram.Template.RendererTest do
 
       assert_error Hologram.StateError, expected_msg, fn ->
         render_page_without_tree(Module109, %{id: 1}, @server, @opts)
+      end
+    end
+
+    test "with a cid entry that init/3 put into the page state" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module113, :dummy_module_113_digest)
+
+      expected_msg =
+        ~s/state "cid" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module113", / <>
+          ~s/but init\/3 put it - "cid" is the layout's cid prop, put the value under another name/
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_page_without_tree(Module113, @params, @server, @opts)
       end
     end
 

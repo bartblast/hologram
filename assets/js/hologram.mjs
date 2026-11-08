@@ -338,12 +338,20 @@ export default class Hologram {
           return;
         }
 
-        Hologram.#processActionResult(resolved, name, target, startTime, epoch);
+        Hologram.#processActionResult(
+          resolved,
+          componentModule,
+          name,
+          target,
+          startTime,
+          epoch,
+        );
       });
     }
 
     Hologram.#processActionResult(
       resultComponentStruct,
+      componentModule,
       name,
       target,
       startTime,
@@ -2480,11 +2488,20 @@ export default class Hologram {
   // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
   static #processActionResult(
     resultComponentStruct,
+    componentModule,
     name,
     target,
     startTime,
     epoch,
   ) {
+    // Checked against the module that ran the action, before anything in the result takes effect,
+    // so an action that fails it changes nothing.
+    Renderer.validateDeclaredState(
+      Erlang_Maps["get/2"](Type.atom("state"), resultComponentStruct),
+      Interpreter.moduleProxy(componentModule),
+      `action ${Interpreter.inspect(name)}`,
+    );
+
     let nextAction = Erlang_Maps["get/2"](
       Type.atom("next_action"),
       resultComponentStruct,
