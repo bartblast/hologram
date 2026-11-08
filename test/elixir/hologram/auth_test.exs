@@ -541,7 +541,7 @@ defmodule Hologram.AuthTest do
 
       expected_msg = "can? asks about one role - {:grant_role, [:editor, :viewer]} names several"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         can?(user, {:grant_role, [:editor, :viewer]}, resource)
       end
     end
@@ -553,7 +553,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         can?("user_id_1", {:grant_role, "viewer"}, %Module1{public: true})
       end
     end
@@ -562,7 +562,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         can?("user_id_1", {:grant_role, :editor, :extra}, %Module1{public: true})
       end
     end
@@ -571,7 +571,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         can?("user_id_1", "read", %Module1{public: true})
       end
     end
@@ -1427,7 +1427,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown global role Hologram.Test.Fixtures.Entity.Module1 - defined global roles are: Hologram.Test.Fixtures.Role.Module1, Hologram.Test.Fixtures.Role.Module2"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         grant_role(user, Hologram.Test.Fixtures.Entity.Module1)
       end
     end
@@ -1436,7 +1436,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "invalid user id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
 
-      assert_error ArgumentError, expected_msg, fn -> grant_role("nope", Role.Module1) end
+      assert_error MisuseError, expected_msg, fn -> grant_role("nope", Role.Module1) end
     end
 
     test "raises on a user that does not exist" do
@@ -1445,7 +1445,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown user id #{inspect(user_id)} - roles are granted only to existing users"
 
-      assert_error ArgumentError, expected_msg, fn -> grant_role(user_id, Role.Module1) end
+      assert_error MisuseError, expected_msg, fn -> grant_role(user_id, Role.Module1) end
     end
 
     test "raises on a global grant issued by an acting user" do
@@ -1675,7 +1675,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown role :publisher for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
 
-      assert_error ArgumentError, expected_msg, fn -> grant_role(user, :publisher, Module1) end
+      assert_error MisuseError, expected_msg, fn -> grant_role(user, :publisher, Module1) end
     end
 
     test "raises on an entity id that is not a canonical entity id" do
@@ -1684,7 +1684,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "invalid entity id \"nope\" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         grant_role(user, :owner, %Module1{id: "nope"})
       end
     end
@@ -1812,8 +1812,8 @@ defmodule Hologram.AuthTest do
       end
     end
 
-    # The verb raises an ArgumentError for this; a batch cannot be answered with a raise, so the
-    # same violation comes back the way a create naming no row does.
+    # The verb raises a Hologram.MisuseError for this; a batch cannot be answered with a raise, so
+    # the same violation comes back the way a create naming no row does.
     test "answers the grantee as not found for a user that does not exist" do
       granter = create_user("user_118@example.com")
       resource = create_resource()
@@ -2008,7 +2008,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown global role Hologram.Test.Fixtures.Entity.Module1 - defined global roles are: Hologram.Test.Fixtures.Role.Module1, Hologram.Test.Fixtures.Role.Module2"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         has_role?(user, Hologram.Test.Fixtures.Entity.Module1)
       end
     end
@@ -2018,7 +2018,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown global role Hologram.Test.Fixtures.Entity.Module1 - defined global roles are: Hologram.Test.Fixtures.Role.Module1, Hologram.Test.Fixtures.Role.Module2"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         has_role?(nil, Hologram.Test.Fixtures.Entity.Module1)
       end
     end
@@ -2151,7 +2151,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown role :publisher for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         has_role?(user, :publisher, resource)
       end
     end
@@ -2162,7 +2162,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown role :editor for Hologram.Test.Fixtures.Entity.Module4 - declared roles are: "
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         has_role?(user, :editor, %Hologram.Test.Fixtures.Entity.Module4{})
       end
     end
@@ -2174,7 +2174,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown role :publisher for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         has_role?(nil, :publisher, resource)
       end
     end
@@ -2215,7 +2215,7 @@ defmodule Hologram.AuthTest do
       expected_msg =
         "unknown global role Hologram.Test.Fixtures.Entity.Module1 - defined global roles are: Hologram.Test.Fixtures.Role.Module1, Hologram.Test.Fixtures.Role.Module2"
 
-      assert_error ArgumentError, expected_msg, fn ->
+      assert_error MisuseError, expected_msg, fn ->
         revoke_role(user, Hologram.Test.Fixtures.Entity.Module1)
       end
     end

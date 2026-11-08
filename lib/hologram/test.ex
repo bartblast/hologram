@@ -2,6 +2,7 @@ defmodule Hologram.Test do
   alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.DB.SchemaReconciler
+  alias Hologram.MisuseError
 
   @doc """
   Runs the rest of the calling process as the given user and returns that user unchanged,
@@ -14,7 +15,7 @@ defmodule Hologram.Test do
   Takes the user entity, a bare user id, or nil to run anonymously from this point on. A test
   that sets no actor at all is anonymous too.
 
-  Raises ArgumentError when given a user struct whose id is nil - an unset actor reads as an
+  Raises Hologram.MisuseError when given a user struct whose id is nil - an unset actor reads as an
   anonymous session and writes as trusted code, so the silent outcome would be a test passing
   without exercising what it was written for.
   """
@@ -40,7 +41,7 @@ defmodule Hologram.Test do
   Takes the user entity, a bare user id, or nil to run the function anonymously - the spelling
   for a block that must not carry the enclosing actor.
 
-  Raises ArgumentError when given a user struct whose id is nil, as its single-argument
+  Raises Hologram.MisuseError when given a user struct whose id is nil, as its single-argument
   counterpart does.
   """
   @spec as_user(struct | String.t() | nil, (-> any)) :: any
@@ -91,7 +92,7 @@ defmodule Hologram.Test do
   # carrying a nil id asks for it by accident, and the outcome is silent: the test would exercise
   # neither the policy nor the gate it was written for.
   defp actor_user_id(%{__struct__: module, id: nil}) do
-    raise ArgumentError,
+    raise MisuseError,
       message:
         "cannot act as #{inspect(module)} with a nil id - an unset actor reads as an anonymous session and writes as trusted code, so an authorization test would pass for the wrong reason"
   end

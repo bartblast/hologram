@@ -16,6 +16,7 @@ defmodule Hologram.Auth do
   alias Hologram.Entity
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator
+  alias Hologram.MisuseError
   alias Hologram.Policy
   alias Hologram.Policy.Evaluator
   alias Hologram.Query
@@ -283,8 +284,8 @@ defmodule Hologram.Auth do
   Returns true when the given user holds the given role on the given entity, or false otherwise.
 
   Takes the user entity or a bare user id, and nil for an anonymous session, which holds no role.
-  The role is a name the entity's own type declares - an undeclared one raises ArgumentError. A
-  role whose extends chain reaches the given role counts as holding it: with
+  The role is a name the entity's own type declares - an undeclared one raises Hologram.MisuseError.
+  A role whose extends chain reaches the given role counts as holding it: with
   `role :owner, extends: :member`, an owner has :member.
 
   The entity is a struct, asking about that row - a role held on the whole entity type counts
@@ -730,22 +731,22 @@ defmodule Hologram.Auth do
 
   defp evaluate(_user_or_id, {_name, role_names} = operation, _entity, _source)
        when is_list(role_names) do
-    raise ArgumentError, "can? asks about one role - #{inspect(operation)} names several"
+    raise MisuseError, "can? asks about one role - #{inspect(operation)} names several"
   end
 
   defp evaluate(_user_or_id, {name, role_name}, _entity, _source)
        when not is_atom(name) or not is_atom(role_name) do
-    raise ArgumentError, @operation_shape_message
+    raise MisuseError, @operation_shape_message
   end
 
   defp evaluate(_user_or_id, operation, _entity, _source)
        when is_tuple(operation) and tuple_size(operation) != 2 do
-    raise ArgumentError, @operation_shape_message
+    raise MisuseError, @operation_shape_message
   end
 
   defp evaluate(_user_or_id, operation, _entity, _source)
        when not is_atom(operation) and not is_tuple(operation) do
-    raise ArgumentError, @operation_shape_message
+    raise MisuseError, @operation_shape_message
   end
 
   defp evaluate(user_or_id, operation, entity, source) do
@@ -1127,14 +1128,14 @@ defmodule Hologram.Auth do
     if role not in declared_names do
       declared_roles = Enum.map_join(declared_names, ", ", &inspect/1)
 
-      raise ArgumentError,
+      raise MisuseError,
             "unknown role #{inspect(role)} for #{inspect(entity_type)} - declared roles are: #{declared_roles}"
     end
   end
 
   defp validate_global_role!(role) do
     if not Reflection.role?(role) do
-      raise ArgumentError, unknown_global_role_message(role)
+      raise MisuseError, unknown_global_role_message(role)
     end
 
     :ok
@@ -1142,7 +1143,7 @@ defmodule Hologram.Auth do
 
   defp validate_id!(id, subject) do
     if not Validator.attribute_value_valid?(id, :uuid) do
-      raise ArgumentError,
+      raise MisuseError,
             "invalid #{subject} id #{inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end
 
@@ -1187,7 +1188,7 @@ defmodule Hologram.Auth do
           message =
             "unknown user id #{inspect(user_id)} - roles are granted only to existing users"
 
-          reraise ArgumentError, [message: message], __STACKTRACE__
+          reraise MisuseError, [message: message], __STACKTRACE__
 
         _other_violation ->
           reraise error, __STACKTRACE__
