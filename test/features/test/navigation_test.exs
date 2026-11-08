@@ -9,6 +9,7 @@ defmodule HologramFeatureTests.NavigationTest do
   alias HologramFeatureTests.Navigation.Page6
   alias HologramFeatureTests.Navigation.Page7
   alias HologramFeatureTests.Navigation.Page8
+  alias HologramFeatureTests.Navigation.SecretStatePage
   alias HologramFeatureTests.Routing.RouteWithPercentEncodedParamsPage
 
   describe "link component" do
@@ -273,6 +274,63 @@ defmodule HologramFeatureTests.NavigationTest do
       |> assert_page(Page1)
       # Previous page state should still be preserved
       |> assert_text("Page 1 result A")
+    end
+  end
+
+  # A secret state entry is never written to device storage. The snapshot the tab keeps in memory
+  # holds its value, and the one written to storage holds its declared default.
+  describe "secret state" do
+    feature "back within the document brings the secret values back", %{session: session} do
+      session
+      |> visit(SecretStatePage)
+      |> click(button("Put note"))
+      |> assert_text(css("#note"), "[typed note]")
+      |> click(button("Put password"))
+      |> assert_text(css("#password"), "[typed password]")
+      |> click(button("Put component note"))
+      |> assert_text(css("#component_note"), "[widget note]")
+      |> click(button("Put component password"))
+      |> assert_text(css("#component_password"), "[widget password]")
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> go_back()
+      |> assert_page(SecretStatePage)
+      |> assert_text(css("#note"), "[typed note]")
+      |> assert_text(css("#password"), "[typed password]")
+      |> assert_text(css("#component_note"), "[widget note]")
+      |> assert_text(css("#component_password"), "[widget password]")
+    end
+
+    # The reload starts a new document, so going back restores the page from the snapshot the
+    # client-side navigation wrote to storage. The clicks after the restore show the page runs its
+    # actions, and the component's one, which reads a prop, that its props are back.
+    feature "back past a reload brings the secret values back at their defaults", %{
+      session: session
+    } do
+      session
+      |> visit(SecretStatePage)
+      |> click(button("Put note"))
+      |> assert_text(css("#note"), "[typed note]")
+      |> click(button("Put password"))
+      |> assert_text(css("#password"), "[typed password]")
+      |> click(button("Put component note"))
+      |> assert_text(css("#component_note"), "[widget note]")
+      |> click(button("Put component password"))
+      |> assert_text(css("#component_password"), "[widget password]")
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> reload()
+      |> assert_page(Page2)
+      |> go_back()
+      |> assert_page(SecretStatePage)
+      |> assert_text(css("#note"), "[typed note]")
+      |> assert_text(css("#password"), "[]")
+      |> assert_text(css("#component_note"), "[widget note]")
+      |> assert_text(css("#component_password"), "[]")
+      |> click(button("Put password"))
+      |> assert_text(css("#password"), "[typed password]")
+      |> click(button("Put component password"))
+      |> assert_text(css("#component_password"), "[widget password]")
     end
   end
 
