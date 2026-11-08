@@ -917,6 +917,26 @@ defmodule Hologram.ComponentTest do
              ]
     end
 
+    test "accepts a prop declared after a state entry with another name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.StateBeforeProp do
+          use Hologram.Component
+
+          state :count, :integer, default: 0
+
+          prop :label, :string
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__props__() == [{:label, :string, []}]
+      assert module.__state__() == [{:count, :integer, [default: 0]}]
+    end
+
     test "accepts options given as an expression" do
       {{:module, module, _binary, _result}, _bindings} =
         Code.eval_string("""
@@ -1118,48 +1138,48 @@ defmodule Hologram.ComponentTest do
       end
     end
 
-    test "raises when an entry has the same name as a prop" do
+    test "raises at the state entry when it has the same name as a prop declared before it" do
+      code = """
+      defmodule Hologram.Test.Fixtures.Component.StateClashLineAfterProp do
+        use Hologram.Component
+
+        prop :items, :list
+
+        state :items, :list, default: []
+
+        def template do
+          ~HOLO""
+        end
+      end
+      """
+
       expected_error_msg =
-        ~s/state "items" in Hologram.Test.Fixtures.Component.StateNamedLikeProp has the same name as a prop, / <>
+        ~s/state "items" in Hologram.Test.Fixtures.Component.StateClashLineAfterProp has the same name as a prop, / <>
           "which it would shadow - give them different names"
 
-      assert_error Hologram.CompileError, expected_error_msg, fn ->
-        Code.eval_string("""
-        defmodule Hologram.Test.Fixtures.Component.StateNamedLikeProp do
-          use Hologram.Component
-
-          prop :items, :list
-
-          state :items, :list, default: []
-
-          def template do
-            ~HOLO""
-          end
-        end
-        """)
-      end
+      assert compile_error_at(code) == {expected_error_msg, 6}
     end
 
-    test "raises when an entry has the same name as a prop declared after it" do
+    test "raises at the prop when it has the same name as a state entry declared before it" do
+      code = """
+      defmodule Hologram.Test.Fixtures.Component.StateClashLineBeforeProp do
+        use Hologram.Component
+
+        state :items, :list, default: []
+
+        prop :items, :list
+
+        def template do
+          ~HOLO""
+        end
+      end
+      """
+
       expected_error_msg =
-        ~s/state "items" in Hologram.Test.Fixtures.Component.StateNamedLikeLaterProp has the same name as a prop, / <>
+        ~s/state "items" in Hologram.Test.Fixtures.Component.StateClashLineBeforeProp has the same name as a prop, / <>
           "which it would shadow - give them different names"
 
-      assert_error Hologram.CompileError, expected_error_msg, fn ->
-        Code.eval_string("""
-        defmodule Hologram.Test.Fixtures.Component.StateNamedLikeLaterProp do
-          use Hologram.Component
-
-          state :items, :list, default: []
-
-          prop :items, :list
-
-          def template do
-            ~HOLO""
-          end
-        end
-        """)
-      end
+      assert compile_error_at(code) == {expected_error_msg, 6}
     end
 
     test "raises when an entry has the same name as a prop sourced from context" do

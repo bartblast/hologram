@@ -92,15 +92,7 @@ defmodule Hologram.Page do
         def __params__, do: Enum.reverse(@__params__)
       end
 
-    # A page's params are its props: the renderers hand them to init and to the template in the
-    # props position. Its state also goes to the layout as props, merged over the layout's cid.
-    taken_names =
-      env.module
-      |> Module.get_attribute(:__params__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, "a param"} end)
-      |> then(&[{:cid, "the layout's cid prop"} | &1])
-
-    state_clause = Component.build_state_clause(env, taken_names)
+    state_clause = Component.build_state_clause()
 
     [template_clause, params_clause, state_clause]
   end
@@ -245,8 +237,14 @@ defmodule Hologram.Page do
   defmacro param(name, type, opts \\ []) do
     validate_param_opts!(opts, name, __CALLER__.module)
 
+    # A page's params are its props: the renderers hand them to init and to the template in the
+    # props position, under any state entry of the same name.
     quote do
-      Module.put_attribute(__MODULE__, :__params__, {unquote(name), unquote(type), unquote(opts)})
+      param_name = unquote(name)
+
+      Hologram.Component.validate_free_of_state!(param_name, "a param", __MODULE__)
+
+      Module.put_attribute(__MODULE__, :__params__, {param_name, unquote(type), unquote(opts)})
     end
   end
 

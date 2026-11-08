@@ -155,35 +155,16 @@ defmodule Hologram.Component do
         def __props__, do: Enum.reverse(@__props__)
       end
 
-    # The cid is a prop every stateful component takes without declaring it, and the renderer reads
-    # it back from the merged props and state, so a state entry can't take its name either.
-    taken_names =
-      env.module
-      |> Module.get_attribute(:__props__)
-      |> Enum.map(fn {name, _type, _opts} -> {name, "a prop"} end)
-      |> then(&[{:cid, "the cid prop"} | &1])
-
-    state_clause = build_state_clause(env, taken_names)
+    state_clause = build_state_clause()
 
     [template_clause, props_clause, state_clause]
   end
 
   @doc """
-  Returns the AST of the __state__/0 function, after checking that no state entry takes one of the
-  given names, each paired with how a message describes what holds it.
-
-  The renderers merge state over props (params on a page), so a state entry named like one of them
-  would shadow it.
+  Returns the AST of the __state__/0 function.
   """
-  @spec build_state_clause(Macro.Env.t(), [{atom, String.t()}]) :: AST.t()
-  def build_state_clause(env, taken_names) do
-    env.module
-    |> Module.get_attribute(:__state__)
-    |> Enum.reverse()
-    |> Enum.each(fn {name, _type, _opts} ->
-      validate_state_name_free!(name, taken_names, env.module)
-    end)
-
+  @spec build_state_clause() :: AST.t()
+  def build_state_clause do
     quote do
       @doc """
       Returns the list of state definitions for the compiled component or page.
@@ -272,7 +253,11 @@ defmodule Hologram.Component do
     validate_prop_opts!(opts, name, __CALLER__.module)
 
     quote do
-      Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), unquote(opts)})
+      prop_name = unquote(name)
+
+      Hologram.Component.validate_free_of_state!(prop_name, "a prop", __MODULE__)
+
+      Module.put_attribute(__MODULE__, :__props__, {prop_name, unquote(type), unquote(opts)})
     end
   end
 
@@ -526,12 +511,30 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Raises Hologram.CompileError if a state entry declared in the given module has the given name,
+  since it would shadow the holder of that name declared after it (described by holder, like
+  "a prop").
+  """
+  @spec validate_free_of_state!(atom, String.t(), module) :: :ok
+  def validate_free_of_state!(name, holder, module) do
+    declared_as_state? =
+      module
+      |> Module.get_attribute(:__state__, [])
+      |> List.keymember?(name, 0)
+
+    if declared_as_state?, do: raise_state_name_taken!(name, holder, module)
+
+    :ok
+  end
+
+  @doc """
   Raises Hologram.CompileError if the given state entry can't be declared in the given module,
-  next to the entries declared before it.
+  next to the state entries, props or params, and cid declared before it.
   """
   @spec validate_state!(any, any, module) :: :ok
   def validate_state!(name, opts, module) do
     validate_state_name!(name, module)
+    validate_state_name_free!(name, module)
     validate_state_opts_shape!(opts, name, module)
     validate_state_opt_keys!(opts, name, module)
     validate_state_secret_opt!(opts, name, module)
@@ -550,9 +553,33 @@ defmodule Hologram.Component do
     %{server | broadcasts: [broadcast | server.broadcasts]}
   end
 
+  defp holder_names(definitions, holder) do
+    Enum.map(definitions, fn {name, _type, _opts} -> {name, holder} end)
+  end
+
   defp normalize_except({_kind, _id} = identity), do: [identity]
 
   defp normalize_except(list) when is_list(list), do: list
+
+  defp raise_state_name_taken!(name, holder, module) do
+    raise Hologram.CompileError,
+      message:
+        ~s/state "#{name}" in #{inspect(module)} has the same name as #{holder}, / <>
+          "which it would shadow - give them different names"
+  end
+
+  # The names declared so far that a state entry can't take, each with how the message describes
+  # what holds it. The cid is a prop every stateful component takes without declaring it, read back
+  # from the merged props and state, and a page's state is merged over its layout's cid.
+  defp taken_state_names(module) do
+    if Module.defines?(module, {:__is_hologram_page__, 0}) do
+      params = Module.get_attribute(module, :__params__)
+      [{:cid, "the layout's cid prop"} | holder_names(params, "a param")]
+    else
+      props = Module.get_attribute(module, :__props__)
+      [{:cid, "the cid prop"} | holder_names(props, "a prop")]
+    end
+  end
 
   defp validate_prop_opt_entry!({key, _value}, name, module) when is_atom(key) do
     if key not in @prop_opt_keys do
@@ -740,16 +767,18 @@ defmodule Hologram.Component do
     :ok
   end
 
-  defp validate_state_name_free!(name, taken_names, module) do
-    case List.keyfind(taken_names, name, 0) do
-      {^name, holder} ->
-        raise Hologram.CompileError,
-          message:
-            ~s/state "#{name}" in #{inspect(module)} has the same name as #{holder}, / <>
-              "which it would shadow - give them different names"
+  # The renderers merge state over props (params on a page), so a state entry can't take a name one
+  # of them holds. Each side is checked against what was declared before it - an entry here, props
+  # and params in validate_free_of_state!/3 - so a clash is reported at whichever comes second.
+  defp validate_state_name_free!(name, module) do
+    taken_name =
+      module
+      |> taken_state_names()
+      |> List.keyfind(name, 0)
 
-      nil ->
-        :ok
+    case taken_name do
+      {^name, holder} -> raise_state_name_taken!(name, holder, module)
+      nil -> :ok
     end
   end
 
