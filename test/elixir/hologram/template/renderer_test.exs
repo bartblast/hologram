@@ -1365,11 +1365,12 @@ defmodule Hologram.Template.RendererTest do
     test "with a template reading a missing var, secret state values hidden in the error" do
       node = {:component, Module116, [{"cid", [text: "my_component"]}], []}
 
-      expected_msg = """
-      key :missing not found in:
+      expected_msg =
+        normalize_newlines("""
+        key :missing not found in:
 
-          %{count: 5, password: **redacted**, cid: "my_component"}
-      """
+            %{count: 5, password: **redacted**, cid: "my_component"}
+        """)
 
       assert_error KeyError, expected_msg, fn -> render_dom(node, @env, @server) end
     end
@@ -1377,15 +1378,16 @@ defmodule Hologram.Template.RendererTest do
     test "with init/3 fetching a missing state key, secret state values hidden in the error and its stacktrace" do
       node = {:component, Module117, [{"cid", [text: "my_component"]}], []}
 
-      expected_msg = """
-      key :pasword not found in:
+      expected_msg =
+        normalize_newlines("""
+        key :pasword not found in:
 
-          %{password: **redacted**}
+            %{password: **redacted**}
 
-      Did you mean:
+        Did you mean:
 
-          * :password
-      """
+            * :password
+        """)
 
       assert_error KeyError, expected_msg, fn -> render_dom(node, @env, @server) end
     end
@@ -1425,18 +1427,19 @@ defmodule Hologram.Template.RendererTest do
     test "with init/3 calling a function no clause of which matches the state, secret state values hidden in the error and its stacktrace" do
       node = {:component, Module121, [{"cid", [text: "my_component"]}], []}
 
-      expected_msg = """
-      no function clause matching in Hologram.Test.Fixtures.Template.Renderer.Module121.step/1
+      expected_msg =
+        normalize_newlines("""
+        no function clause matching in Hologram.Test.Fixtures.Template.Renderer.Module121.step/1
 
-      The following arguments were given to Hologram.Test.Fixtures.Template.Renderer.Module121.step/1:
+        The following arguments were given to Hologram.Test.Fixtures.Template.Renderer.Module121.step/1:
 
-          # 1
-          %{password: **redacted**}
+            # 1
+            %{password: **redacted**}
 
-      Attempted function clauses (showing 1 out of 1):
+        Attempted function clauses (showing 1 out of 1):
 
-          defp step(-%{step: step}-)
-      """
+            defp step(-%{step: step}-)
+        """)
 
       assert_error FunctionClauseError, expected_msg, fn -> render_dom(node, @env, @server) end
 
@@ -1483,15 +1486,16 @@ defmodule Hologram.Template.RendererTest do
     test "with init/3 re-raising an exception it rescued, secret state values hidden in the error" do
       node = {:component, Module127, [{"cid", [text: "my_component"]}], []}
 
-      expected_msg = """
-      key :pasword not found in:
+      expected_msg =
+        normalize_newlines("""
+        key :pasword not found in:
 
-          %{password: **redacted**}
+            %{password: **redacted**}
 
-      Did you mean:
+        Did you mean:
 
-          * :password
-      """
+            * :password
+        """)
 
       assert_error KeyError, expected_msg, fn -> render_dom(node, @env, @server) end
     end
