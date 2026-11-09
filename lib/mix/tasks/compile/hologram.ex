@@ -750,10 +750,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   # Returns the module info PLT of this compile, which is the cache's, the module digests diff, and
   # whether any entry changed. A cold compile reads every module against the dump, diffs the two
   # PLTs, copies the result into the cache's PLT, once, and compares the two PLTs' entries. A warm
-  # one brings the cache's PLT in line in place, reading the modules the compiler reported among the
-  # beams a save can rewrite, and takes the diff from that scan (see
-  # Hologram.Compiler.patch_module_info_plt!/5). The cache holds the editable modules only between
-  # two finished compiles, so nil means cold.
+  # one brings the cache's PLT in line in place, reading the modules the compiler reported and the
+  # beams whose mtime or size moved among the beams a save can rewrite, and takes the diff from that
+  # scan (see Hologram.Compiler.patch_module_info_plt!/5). The cache holds the editable modules only
+  # between two finished compiles, so nil means cold.
   defp build_module_info_plt(
          %{editable_modules: nil} = cache,
          old_plt,

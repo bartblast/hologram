@@ -891,7 +891,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   describe "kept compile state" do
     setup do
       # Reset on the way out too: a test here can leave faked entries in the cache that nothing
-      # rereads, since the modules they are for are not reported as compiled.
+      # rereads, such as a library module's, which no compile checks against its beam.
       on_exit(&Cache.reset/0)
     end
 
@@ -1073,31 +1073,29 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
     end
 
-    test "copies the kept entry of an editable module the compiler did not report", %{
-      opts: opts
-    } do
+    test "reads an editable module another process compiled", %{opts: opts} do
       run(opts)
 
       %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
         cache_state()
 
-      # The mtime faked here would make a check of the beam read it, so a kept digest shows that
-      # the beam was not checked, and no page is rebuilt for it.
-      kept_info = %{module_infos[Module2] | digest: "kept", mtime: 0}
-      put_kept_module_infos(%{module_infos | Module2 => kept_info}, dumped_at, editable_modules)
+      pages_reaching_module_2 = count_pages_reaching(Module2)
 
-      assert count_built_bundles(fn -> run(opts) end) == 0
+      # Another OS process compiled it: this VM's compiler reported nothing, but the beam no longer
+      # matches the kept entry's mtime.
+      stale_info = %{module_infos[Module2] | digest: "stale", mtime: 0}
+      put_kept_module_infos(%{module_infos | Module2 => stale_info}, dumped_at, editable_modules)
 
-      assert cache_state().module_infos[Module2] == kept_info
+      assert count_built_bundles(fn -> run(opts) end) == pages_reaching_module_2
+
+      assert pages_reaching_module_2 > 0
+      assert cache_state().module_infos[Module2] == module_infos[Module2]
     end
 
-    test "a run with no changes checks only the beams of the protocols", %{opts: opts} do
+    test "a run with no changes checks every editable beam and builds no bundle", %{opts: opts} do
       run(opts)
 
-      %{editable_modules: editable_modules, module_infos: module_infos} = cache_state()
-
-      num_editable_protocols =
-        Enum.count(editable_modules, fn module -> module_infos[module].protocol? end)
+      %{editable_modules: editable_modules} = cache_state()
 
       # The function a beam is checked against its entry through, which is private, so its local
       # calls are counted.
@@ -1105,14 +1103,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
       :erlang.trace_pattern(mfa, true, [:local, :call_count])
 
       try do
-        run(opts)
+        assert count_built_bundles(fn -> run(opts) end) == 0
 
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, num_editable_protocols}
+        assert :erlang.trace_info(mfa, :call_count) ==
+                 {:call_count, MapSet.size(editable_modules)}
       after
         :erlang.trace_pattern(mfa, false, [:local, :call_count])
       end
-
-      assert num_editable_protocols > 0
     end
 
     test "a run into a fresh build dir dumps the call graph of what the pages reach", %{
@@ -3138,8 +3135,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       %{editable_modules: editable_modules, module_infos: module_infos} = cache_state()
 
-      # A consolidated protocol, whose beam a new implementation rewrites without a compile, so it
-      # is checked against its entry on every compile rather than taken from the compiler.
+      # A consolidated protocol, whose beam a new implementation rewrites without a compile, so the
+      # compiler reports nothing and the beam is checked against its entry.
       protocol_info = module_infos[Enumerable]
 
       # The state of a compile that dumped in the same second as the beam was last written: its

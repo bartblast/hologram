@@ -1632,15 +1632,17 @@ defmodule Hologram.Compiler do
   digest did not is changed, but no edit).
 
   A module the compiler reported since the last compile (`compiled_modules`, see
-  `Hologram.Compiler.Tracer.take/1`) is read, whatever its entry says. The entry of any other module
-  is left where it is, unless it is a protocol's, whose consolidated beam a new implementation
-  rewrites without a compile, or there is none; that one is checked against the entry's mtime and
-  size, as in `build_module_info_plt!/3`, with `dumped_at` the mtime of the dump the last compile
-  wrote. A module of `editable_modules` that is not among `editable_beams` now is looked up as
+  `Hologram.Compiler.Tracer.take/1`) is read, whatever its entry says. Any other beam is checked
+  against its entry's mtime and size, as in `build_module_info_plt!/3`, with `dumped_at` the mtime of
+  the module info dump on disk when the last compile finished, and read when they moved or when the
+  beam is not older than that dump by a second: another OS process compiling the project, or a new
+  implementation rewriting a consolidated protocol, changes a beam with no compile in this VM. A
+  module of `editable_modules` that is not among `editable_beams` now is looked up as
   `build_module_info_plt!/3` looks up every module, and loses its entry only when the VM has no beam
   for it: a deleted module is purged, while a consolidated protocol whose directory is off the code
   path for a moment (Phoenix's reloader takes it off while it recompiles) keeps its entry. Leaving
-  the entries a scan into a new PLT would copy is what makes a compile that changed nothing cheap.
+  the entries a scan into a new PLT would copy is what makes a compile that changed nothing cheap: a
+  stat per beam, no read.
   """
   @spec patch_module_info_plt!(
           PLT.t(),
@@ -2533,26 +2535,20 @@ defmodule Hologram.Compiler do
     Path.join([assets_dir, "node_modules", ".package_json_digest.bin"])
   end
 
-  # A compiled module is read. The entry of any other module is left as it is, unless it is a
-  # protocol's, whose consolidated beam a new implementation rewrites without a compile; that one,
-  # and a beam with no entry, is checked against its mtime and size first.
+  # A compiled module is read. Any other beam is checked against its entry's mtime and size first:
+  # another OS process can rewrite it, as a new implementation rewrites a consolidated protocol's,
+  # with no compile this VM's tracer sees.
   defp patch_module_info_plt_entry!(plt, module, beam_path, dumped_at, compiled_modules) do
     old_info = get_module_info(plt, module)
 
-    cond do
-      MapSet.member?(compiled_modules, module) ->
-        put_compared_module_info(plt, module, old_info, Reflection.beam_info(beam_path))
+    new_info =
+      if MapSet.member?(compiled_modules, module) do
+        Reflection.beam_info(beam_path)
+      else
+        reusable_module_info(module, beam_path, plt, dumped_at) || Reflection.beam_info(beam_path)
+      end
 
-      match?(%{protocol?: false}, old_info) ->
-        :kept
-
-      true ->
-        new_info =
-          reusable_module_info(module, beam_path, plt, dumped_at) ||
-            Reflection.beam_info(beam_path)
-
-        put_compared_module_info(plt, module, old_info, new_info)
-    end
+    put_compared_module_info(plt, module, old_info, new_info)
   end
 
   # A module that left the listing without its beam being deleted, as the full scan would see it. A
