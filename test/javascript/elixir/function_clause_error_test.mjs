@@ -89,22 +89,6 @@ describe("Elixir_FunctionClauseError", () => {
       );
     });
 
-    it("hides a secret state value of a component argument", () => {
-      const component = Type.componentStruct({
-        secretKeys: Type.list([Type.atom("password")]),
-        state: Type.map([[Type.atom("password"), Type.bitstring("hunter2")]]),
-      });
-
-      const struct = structFixture({
-        args: Type.list([Type.atom("abc"), component]),
-      });
-
-      assert.equal(
-        message(struct),
-        "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    :abc\n\n    # 2\n    %{emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, props: %{}, state: %{password: **redacted**}, __struct__: Hologram.Component}\n",
-      );
-    });
-
     it("keeps an argument holding a newline on one line", () => {
       const struct = structFixture({
         args: Type.list([Type.bitstring("a\nb"), Type.integer(123)]),

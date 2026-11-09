@@ -3,7 +3,6 @@ defmodule Hologram.Component do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
-  alias Hologram.Component.Metadata
   alias Hologram.Realtime.Channel
   alias Hologram.Server
   alias Hologram.Server.Broadcast
@@ -13,8 +12,7 @@ defmodule Hologram.Component do
             next_command: nil,
             next_page: nil,
             props: %{},
-            state: %{},
-            __meta__: %Metadata{}
+            state: %{}
 
   defmodule Action do
     defstruct delay: 0, name: nil, params: %{}, target: nil
@@ -39,8 +37,7 @@ defmodule Hologram.Component do
           next_command: Command.t() | nil,
           next_page: module | {module, keyword},
           props: %{atom => any},
-          state: %{atom => any},
-          __meta__: Metadata.t()
+          state: %{atom => any}
         }
 
   @doc """
@@ -845,43 +842,4 @@ defmodule Hologram.Component do
         :ok
     end
   end
-end
-
-defimpl Inspect, for: Hologram.Component do
-  alias Hologram.Component
-  alias Hologram.Component.Metadata
-  alias Hologram.Component.Redacted
-
-  # A secret value prints as **redacted** wherever the server inspects a component struct: in logs,
-  # crash reports and the left and right of a failed test assertion. (ExUnit's diff of two structs
-  # that differ only in a secret value falls back to comparing them field by field, which shows the
-  # values.) __meta__ is the runtime's own bookkeeping, so it is left out of the output too.
-  #
-  # WARNING: must match the client's Interpreter.#redactComponentStruct.
-  @spec inspect(Component.t(), Inspect.Opts.t()) :: {Inspect.Algebra.t(), Inspect.Opts.t()}
-  def inspect(component, opts) do
-    infos =
-      for %{field: field} = info <- Component.__info__(:struct), field != :__meta__, do: info
-
-    component
-    |> redact()
-    |> Inspect.Map.inspect_as_struct(Macro.inspect_atom(:literal, Component), infos, opts)
-  end
-
-  defp redact(
-         %{__meta__: %Metadata{secret_keys: [_first | _rest] = secret_keys}, state: state} =
-           component
-       )
-       when is_map(state) do
-    redacted_state =
-      Enum.reduce(secret_keys, state, fn key, acc ->
-        if Map.has_key?(acc, key), do: Map.put(acc, key, %Redacted{}), else: acc
-      end)
-
-    %{component | state: redacted_state}
-  end
-
-  # An implementation that raises makes Inspect print the raw struct in an Inspect.Error, secrets
-  # included, so a struct of an odd shape is printed as it is rather than raising.
-  defp redact(component), do: component
 end

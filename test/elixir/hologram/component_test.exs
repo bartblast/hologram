@@ -6,7 +6,6 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Component
   alias Hologram.Component.Action
   alias Hologram.Component.Command
-  alias Hologram.Component.Metadata
   alias Hologram.Reflection
   alias Hologram.Server
   alias Hologram.Server.Broadcast
@@ -99,57 +98,6 @@ defmodule Hologram.ComponentTest do
     test "overridden implementation" do
       assert Module2.init(:props_dummy, build_component_struct(), build_server_struct()) ==
                {%Component{state: %{overriden: true}}, %Server{}}
-    end
-  end
-
-  describe "inspect/2" do
-    @state %{count: 5, password: "hunter2"}
-
-    test "a secret state value prints as **redacted** and the metadata is left out" do
-      component = %Component{state: @state, __meta__: %Metadata{secret_keys: [:password]}}
-
-      assert inspect(component) ==
-               "%Hologram.Component{emitted_context: %{}, next_action: nil, next_command: nil, " <>
-                 "next_page: nil, props: %{}, state: %{count: 5, password: **redacted**}}"
-    end
-
-    test "a secret key the state doesn't hold changes nothing" do
-      component = %Component{state: @state, __meta__: %Metadata{secret_keys: [:token]}}
-
-      assert inspect(component) ==
-               "%Hologram.Component{emitted_context: %{}, next_action: nil, next_command: nil, " <>
-                 ~s/next_page: nil, props: %{}, state: %{count: 5, password: "hunter2"}}/
-    end
-
-    test "no secret keys" do
-      component = %Component{state: @state}
-
-      assert inspect(component) ==
-               "%Hologram.Component{emitted_context: %{}, next_action: nil, next_command: nil, " <>
-                 ~s/next_page: nil, props: %{}, state: %{count: 5, password: "hunter2"}}/
-    end
-
-    test "a state that isn't a map is printed as it is" do
-      component = %Component{state: :invalid, __meta__: %Metadata{secret_keys: [:password]}}
-
-      assert inspect(component) ==
-               "%Hologram.Component{emitted_context: %{}, next_action: nil, next_command: nil, " <>
-                 "next_page: nil, props: %{}, state: :invalid}"
-    end
-
-    test "passes the options on" do
-      component = %Component{state: @state, __meta__: %Metadata{secret_keys: [:password]}}
-
-      assert inspect(component, limit: 3) ==
-               "%Hologram.Component{emitted_context: %{}, next_action: nil, next_command: nil, ...}"
-    end
-
-    test "nested in another term" do
-      component = %Component{state: @state, __meta__: %Metadata{secret_keys: [:password]}}
-
-      assert inspect({:ok, [component]}) ==
-               "{:ok, [%Hologram.Component{emitted_context: %{}, next_action: nil, next_command: nil, " <>
-                 "next_page: nil, props: %{}, state: %{count: 5, password: **redacted**}}]}"
     end
   end
 

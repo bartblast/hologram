@@ -6,7 +6,6 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Component
-  alias Hologram.Component.Metadata
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
@@ -1077,21 +1076,14 @@ defmodule Hologram.Template.Renderer do
   # the props the render actually used rather than anything a handler put there. That is what lets a
   # later handler read a prop's current value instead of a copy taken when the component mounted.
   # A page reaches this with its URL params in the props position, which is how its params land on
-  # its struct too. The metadata is written back the same way, so the secret keys it lists are the
-  # module's whatever init returned.
+  # its struct too.
   #
   # The declared state defaults are in place before init runs, so init sees them and can override
   # them, and a component or page with nothing else to set up needs no init at all.
   #
   # WARNING: the struct it starts from must match the client renderer's #maybeInitComponent.
   defp init_component(module, props, server_struct) do
-    metadata = %Metadata{secret_keys: secret_keys(module)}
-
-    initial_component_struct = %Component{
-      props: props,
-      state: state_defaults(module),
-      __meta__: metadata
-    }
+    initial_component_struct = %Component{props: props, state: state_defaults(module)}
 
     init_result =
       if Reflection.has_function?(module, :init, 3) do
@@ -1114,7 +1106,7 @@ defmodule Hologram.Template.Renderer do
 
     validate_declared_state(component_struct.state, module, "init/3")
 
-    {%{component_struct | props: props, __meta__: metadata}, %{returned_server_struct | cid: nil}}
+    {%{component_struct | props: props}, %{returned_server_struct | cid: nil}}
   end
 
   defp inject_default_prop_values(props, module) do
@@ -1558,11 +1550,6 @@ defmodule Hologram.Template.Renderer do
     end)
     |> Enum.map(&render_tree_attribute(&1, key_scope))
     |> Enum.reject(&is_nil/1)
-  end
-
-  # WARNING: must match the client renderer's componentMetadata.
-  defp secret_keys(module) do
-    for {name, _type, opts} <- module.__state__(), opts[:secret] == true, do: name
   end
 
   defp spread_entries(value)

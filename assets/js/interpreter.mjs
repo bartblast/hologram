@@ -20,10 +20,6 @@ import uniqWith from "lodash/uniqWith.js";
 // term (nil/false) is never mistaken for "no clause matched".
 const NO_MATCH = Symbol("NO_MATCH");
 
-// Stands in for a secret value while a component struct is inspected (see
-// #redactComponentStruct()). It is no term, so it never leaves inspect.
-const REDACTED = {type: "redacted"};
-
 // The OTP application a module belongs to decides which formatter its BIF errors name: erts
 // modules name erl_erts_errors, kernel modules name erl_kernel_errors, and the rest are stdlib
 // modules naming erl_stdlib_errors. Only the modules that depart from the stdlib default are
@@ -783,9 +779,6 @@ export default class Interpreter {
 
       case "port":
         return `#Port<${term.segments.join(".")}>`;
-
-      case "redacted":
-        return "**redacted**";
     }
   }
 
@@ -2379,10 +2372,6 @@ export default class Interpreter {
       return Interpreter.#inspectRange(term, opts);
     }
 
-    if (Type.isStruct(term, "Hologram.Component")) {
-      term = Interpreter.#redactComponentStruct(term);
-    }
-
     const optCustomOptions =
       Interpreter.accessKeywordListElement(opts, Type.atom("custom_options")) ||
       Type.keywordList();
@@ -2750,52 +2739,6 @@ export default class Interpreter {
     ]);
 
     Erlang["error/1"](struct);
-  }
-
-  // A secret value prints as **redacted** wherever a component struct is printed: in the messages
-  // the error overlay and the console show, and among the args a FunctionClauseError lists.
-  // __meta__ is the runtime's own bookkeeping, so it is left out of the output too.
-  //
-  // WARNING: must match the Inspect implementation for Hologram.Component on the server.
-  // Deps: [:maps.get/3, :maps.is_key/2, :maps.put/3, :maps.remove/2]
-  static #redactComponentStruct(struct) {
-    const metadata = Erlang_Maps["get/3"](
-      Type.atom("__meta__"),
-      struct,
-      Type.nil(),
-    );
-
-    const shownStruct = Erlang_Maps["remove/2"](Type.atom("__meta__"), struct);
-
-    if (!Type.isMap(metadata)) {
-      return shownStruct;
-    }
-
-    const secretKeys = Erlang_Maps["get/3"](
-      Type.atom("secret_keys"),
-      metadata,
-      Type.list(),
-    ).data;
-
-    const state = Erlang_Maps["get/3"](
-      Type.atom("state"),
-      shownStruct,
-      Type.nil(),
-    );
-
-    if (secretKeys.length === 0 || !Type.isMap(state)) {
-      return shownStruct;
-    }
-
-    const redactedState = secretKeys.reduce(
-      (acc, key) =>
-        Type.isTrue(Erlang_Maps["is_key/2"](key, acc))
-          ? Erlang_Maps["put/3"](key, REDACTED, acc)
-          : acc,
-      state,
-    );
-
-    return Erlang_Maps["put/3"](Type.atom("state"), redactedState, shownStruct);
   }
 
   // What the message of an UndefinedFunctionError adds for the given function,

@@ -464,10 +464,6 @@ defmodule Hologram.Compiler.CallGraph do
       {:lists, :keyfind, 3},
       {:lists, :sort, 1},
       {:maps, :get, 2},
-      {:maps, :get, 3},
-      {:maps, :is_key, 2},
-      {:maps, :put, 3},
-      {:maps, :remove, 2},
       {:maps, :to_list, 1}
     ],
     manually_ported_code_module: [
@@ -520,17 +516,6 @@ defmodule Hologram.Compiler.CallGraph do
   # vertex. A module named only as a value, whose vertex the walk of build_reach/3 reaches, is built
   # when it has one of them: otherwise building it would add no edge to that vertex.
   @module_vertex_edge_flags [:component?, :ecto_schema?, :exception?, :page?, :struct?]
-
-  # Implementations the client never dispatches to, so the graph gives them no dispatch edges and no
-  # chunk entries. The Inspect implementations for component structs and their redaction marker are
-  # the server's: the client prints terms with its own inspect, which redacts component structs
-  # itself, and they couldn't run there anyway (Hologram.Component.__info__/1 isn't on the client).
-  # Bundled, they would give every page chunks wherever Inspect is a client protocol, since every
-  # page's payload names Hologram.Component.
-  @server_only_protocol_implementations [
-    Inspect.Hologram.Component,
-    Inspect.Hologram.Component.Redacted
-  ]
 
   @doc """
   Adds an edge between two vertices in the call graph.
@@ -993,8 +978,7 @@ defmodule Hologram.Compiler.CallGraph do
   of the given protocols. The types are read from the module info PLT, so a type no code names is
   among them, and so is a type with no implementation, for its struct functions. An implementation
   for a built-in type is left out, and so are the struct types and the implementations of Hex, the
-  build tool, which a dev build has loaded, and the implementations the client never dispatches to
-  (the Inspect implementations for component structs and their redaction marker).
+  build tool, which a dev build has loaded.
   """
   @spec list_chunk_entries(Enumerable.t(module), PLT.t()) :: %{module => [vertex]}
   def list_chunk_entries(protocols, module_info_plt) do
@@ -1002,7 +986,7 @@ defmodule Hologram.Compiler.CallGraph do
       for protocol <- protocols,
           functions = [{:__impl__, 1} | protocol_functions(protocol, module_info_plt)],
           # The implementations the protocol's dispatch edges are built from (see build/3).
-          impl <- list_client_protocol_implementations(protocol, module_info_plt),
+          impl <- Reflection.list_protocol_implementations(protocol, module_info_plt),
           type = implementation_for(impl, module_info_plt),
           type not in @built_in_protocol_types,
           {function, arity} <- functions do
@@ -1783,7 +1767,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp add_protocol_call_graph_edges(call_graph, module) do
     funs = protocol_functions(module, call_graph.module_info_plt)
-    impls = list_client_protocol_implementations(module, call_graph.module_info_plt)
+    impls = Reflection.list_protocol_implementations(module, call_graph.module_info_plt)
 
     edges =
       for impl <- impls,
@@ -2217,11 +2201,6 @@ defmodule Hologram.Compiler.CallGraph do
     |> reject_hex_mfas()
     |> Enum.reject(&MapSet.member?(walk.runtime_mfa_set, &1))
     |> Enum.sort()
-  end
-
-  defp list_client_protocol_implementations(protocol, module_info_plt) do
-    Reflection.list_protocol_implementations(protocol, module_info_plt) --
-      @server_only_protocol_implementations
   end
 
   defp list_modules_reaching_in_graph(graph, target_modules, module_info_plt) do

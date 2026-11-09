@@ -2401,15 +2401,13 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # Consolidated protocol dispatchers list every loaded implementation. A clause for a struct type
-  # always stays: the implementation for a struct type is in no runtime or page bundle, it is loaded
-  # in a chunk once a struct of the type is on the client, and by then the dispatcher has to name
-  # it, or dispatch would fall through to Any or raise Protocol.UndefinedError with the
-  # implementation loaded. A server-only implementation (see CallGraph) is never loaded, so dispatch
-  # to it raises UndefinedFunctionError, as falling through to Any would for those types too. A
-  # clause for a built-in type stays only when its implementation ships in the same bundle, so
-  # dispatch on a built-in type the bundle has no implementation for falls through to the catch-all
-  # clause.
+  # Consolidated protocol dispatchers list every loaded implementation. A clause for a struct
+  # type always stays: the implementation for a struct type is in no runtime or page bundle, it is
+  # loaded in a chunk once a struct of the type is on the client, and by then the dispatcher has to
+  # name it, or dispatch would fall through to Any or raise Protocol.UndefinedError with the
+  # implementation loaded. A clause for a built-in type stays only when its implementation ships
+  # in the same bundle, so dispatch on a built-in type the bundle has no implementation for falls
+  # through to the catch-all clause.
   defp maybe_prune_protocol_dispatcher_function_defs(
          function_defs,
          module,

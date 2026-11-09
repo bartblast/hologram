@@ -63,35 +63,6 @@ export default class ComponentRegistry {
     return Erlang_Maps["get/3"](cid, ComponentRegistry.entries, null);
   }
 
-  // The [key, default] pairs of the module's secret state entries. Every secret entry has a
-  // default, which the state macro checks. Cached on the module proxy, since it is a property of
-  // the module.
-  // Deps: [:lists.keyfind/3]
-  static getSecretStateDefaults(moduleProxy) {
-    if (!("__secretStateDefaults__" in moduleProxy)) {
-      moduleProxy.__secretStateDefaults__ = moduleProxy["__state__/0"]()
-        .data.filter((definition) => {
-          const secretEntry = Erlang_Lists["keyfind/3"](
-            Type.atom("secret"),
-            Type.integer(1),
-            definition.data[2],
-          );
-
-          return !Type.isFalse(secretEntry) && Type.isTrue(secretEntry.data[1]);
-        })
-        .map((definition) => [
-          definition.data[0],
-          Erlang_Lists["keyfind/3"](
-            Type.atom("default"),
-            Type.integer(1),
-            definition.data[2],
-          ).data[1],
-        ]);
-    }
-
-    return moduleProxy.__secretStateDefaults__;
-  }
-
   // Deps: [:maps.is_key/2]
   static isCidRegistered(cid) {
     return Type.isTrue(Erlang_Maps["is_key/2"](cid, ComponentRegistry.entries));
@@ -140,7 +111,7 @@ export default class ComponentRegistry {
           struct,
         );
 
-        const secretDefaults = ComponentRegistry.getSecretStateDefaults(
+        const secretDefaults = ComponentRegistry.#getSecretStateDefaults(
           Interpreter.moduleProxy(module),
         );
 
@@ -160,5 +131,34 @@ export default class ComponentRegistry {
         ];
       }),
     );
+  }
+
+  // The [key, default] pairs of the module's secret state entries. Every secret entry has a
+  // default, which the state macro checks. Cached on the module proxy, since it is a property of
+  // the module.
+  // Deps: [:lists.keyfind/3]
+  static #getSecretStateDefaults(moduleProxy) {
+    if (!("__secretStateDefaults__" in moduleProxy)) {
+      moduleProxy.__secretStateDefaults__ = moduleProxy["__state__/0"]()
+        .data.filter((definition) => {
+          const secretEntry = Erlang_Lists["keyfind/3"](
+            Type.atom("secret"),
+            Type.integer(1),
+            definition.data[2],
+          );
+
+          return !Type.isFalse(secretEntry) && Type.isTrue(secretEntry.data[1]);
+        })
+        .map((definition) => [
+          definition.data[0],
+          Erlang_Lists["keyfind/3"](
+            Type.atom("default"),
+            Type.integer(1),
+            definition.data[2],
+          ).data[1],
+        ]);
+    }
+
+    return moduleProxy.__secretStateDefaults__;
   }
 }
