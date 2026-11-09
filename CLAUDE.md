@@ -4,7 +4,7 @@
 
 The test apps under `test/` that depend on Hologram through a git dep (the `git:` entry in their `mix.exs`) build from the commit their ref points at, not from the working tree.
 
-- The library is the code the git dep builds from (`lib/`, `assets/` and the like). Changes to tests, test apps, docs, llms files, CI or config don't count.
+- The library is the code the git dep builds from (`lib/`, `assets/` and the like). Changes to tests, test apps, docs, llms files, CI or config don't count, and neither do changes to only comments, `@doc` or `@moduledoc` in the library.
 - Bump a test app's ref only when the library changed since the commit the ref points at. A feature test commit never makes another bump needed.
 - Before implementing feature tests, bump the ref in all feature test apps to the last commit that changed the library, then compile the feature test app. Skip the bump when the refs already point there, for example on a second feature test commit with no library change in between.
 - A branch that changes the library ends with a commit that bumps the refs in all test apps to the last commit that changed the library, even when it has no feature tests. That commit skips any test app whose ref already points there. A branch that changes only CI, config or the test apps themselves gets no bump commit.
