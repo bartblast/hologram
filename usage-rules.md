@@ -10,7 +10,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Commands use `server` struct, not `socket`. Return `%Server{}`, not `{:noreply, socket}`.
 - Cookie keys are strings (`"my_cookie"`), session keys are atoms or strings (`:locale`). Mixing these up causes errors.
 - `init/3` for pages receives URL params, not props. Don't confuse with component `init/3` which receives props.
-- Never give a state key the same name as a prop. Templates merge props and state with state winning, so the state key shadows the prop entirely. Copying a prop into a same-named state key in `init` is the usual cause - `init` runs once, so the copy never refreshes and fresh props never reach the template. Use distinct names (an `:initial_count` prop feeding a `:count` state key).
+- Declare every state key with `state :name, :type`, in components and pages. Putting a key that isn't declared raises `Hologram.StateError` once the `init` or action that put it returns. A state key with the same name as one of the module's props or params, or named `cid`, fails the build.
 - Never copy a prop into state so an action can read it. Read it from the struct: `component.props.name`. Props follow whatever the parent passes, so an action always reads the current value.
 - Stateless components cannot handle events. You need a `cid` to make a component stateful.
 - The page cid is `"page"`, the layout cid is `"layout"`. Don't forget these when targeting actions.
@@ -71,6 +71,10 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - A missing required prop is caught at compile time wherever a template writes the component out, and so is any value the compiler can evaluate without running anything: plain text with no interpolation, or a literal - including composites like `{[:small, :large]}` and `{%{size: :small}}`.
 - Everything else is checked while rendering and raises `Hologram.PropError`: a `...{@props}` spread, a `<{@module} />` dynamic tag, a `from_context:` prop, an interpolated value (`size="a{@b}"`), and any expression, including one nested inside an otherwise literal value (`{[:small, @other]}`).
 - Read a prop in an action with `component.props.name`. Defaults and context-sourced props are in there too, and so is `cid`.
+- Declare state with `state :name, :type` or `state :name, :type, default: value`. The default is in the state before `init/3` or `init/2` runs, so a component whose state starts as constants needs no `init`.
+- State options are `default:` and `secret:`. Any other option is a compile error.
+- A nested update like `put_state(component, [:form, :email], value)` needs only `:form` declared.
+- Mark sensitive state with `secret: true`, like `state :password, :string, default: "", secret: true`. Its value never reaches device storage, so a page restored from storage gets the default back. Hologram prints it as `**redacted**`. A secret entry needs a `default:`.
 - Stateful components require a `cid` attribute: `<MyComponent cid="my_id" />`. Without `cid`, the component is stateless.
 - Each stateful instance is initialized exactly once: `init/3` (props, component, server) runs when its lifecycle starts during server-side page rendering, `init/2` (props, component) when it is dynamically added to an already-loaded page.
 - `init/3` can return a `Component` struct, a `Server` struct, or a `{component, server}` tuple.
@@ -89,6 +93,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Supported param types: `:atom`, `:float`, `:integer`, `:string`.
 - `param` takes no options yet - passing one is a compile error.
 - A page's params are its props, so an action reads a URL param with `component.props.name`, the same way a component reads a prop.
+- Declare page state with `state :name, :type`, the same way as in a component. A state key can't share a param's name.
 - The page's component ID (cid) is always `"page"`. Use `target: "page"` to target actions at it.
 - Hologram uses a search tree router, not ordered routing. Static segments always match before parameterized ones. You cannot have two ambiguous parameterized routes at the same level (e.g. `/:username` and `/:post_slug`) - use distinct prefixes instead.
 
@@ -98,7 +103,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - A layout template **must** include `<Hologram.UI.Runtime />` inside the `<head>` tag.
 - A layout template **must** include `<slot />` where page content will be inserted.
 - The layout's component ID (cid) is always `"layout"`. Use `target: "layout"` to target actions at it.
-- Pass props to layouts via `layout MyApp.MainLayout, prop: value` or via `put_state/2` in the page's `init/3`.
+- Pass props to layouts via `layout MyApp.MainLayout, prop: value` or via page state named like the layout's props, declared with `state` and put in the page's `init/3`.
 - `<script>` elements in layouts and templates get the page's Content Security Policy nonce automatically, so inline and third-party scripts need nothing. Don't write a `nonce` attribute yourself, since Hologram drops it. The policy blocks inline `on*` handler attributes and `javascript:` URLs, so use event bindings like `$click`.
 
 ## Events
@@ -142,7 +147,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 
 - Actions are client-side. Define with `def action(name, params, component)`. **Not** `handle_event`.
 - Actions must return a `%Component{}` struct. Chain operations with `|>`.
-- Update state: `put_state(component, :key, value)` or `put_state(component, key: val1, key2: val2)`.
+- Update state: `put_state(component, :key, value)` or `put_state(component, key: val1, key2: val2)`. Every top-level key must be declared with `state`.
 - Nested state update: `put_state(component, [:path, :key], value)`.
 - Trigger a command: `put_command(component, :cmd_name)` or `put_command(component, :cmd_name, param: value)`.
 - Navigate: `put_page(component, PageModule)` or `put_page(component, PageModule, param: value)`.
