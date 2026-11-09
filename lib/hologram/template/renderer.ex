@@ -7,7 +7,6 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Component
   alias Hologram.Component.Metadata
-  alias Hologram.Component.Redacted
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
@@ -852,88 +851,6 @@ defmodule Hologram.Template.Renderer do
     }
   end
 
-  # A secret value can reach an error raised while the module's code runs: the template's vars hold
-  # the state, and code like component.state.pasword, %{step: 1} = component.state, a helper no
-  # clause of which matches component.state, :erlang.error(component.state) or
-  # to_string(component.state) raises with the state map in the exception's term, original
-  # (ErlangError), value (Protocol.UndefinedError) or args, which the stack frame of a failed call
-  # lists too (Map.fetch!/2 passes it to :erlang.map_get/2). All of them get the module's secret
-  # values hidden, in any plain map they hold, since a map that only holds a key named like a
-  # secret one has nothing to lose by it.
-  #
-  # WARNING: must match the client renderer's redactError.
-  defp redact_error(reason, stacktrace, secret_keys) do
-    redacted_stacktrace =
-      Enum.map(stacktrace, fn
-        {frame_module, function, args, location} when is_list(args) ->
-          {frame_module, function, Enum.map(args, &redact_secret_values(&1, secret_keys)),
-           location}
-
-        frame ->
-          frame
-      end)
-
-    # Normalized against the frames with the secrets hidden, since Elixir builds some messages
-    # from the raising frame's args, like the one for apply(component.state, :foo, []).
-    error = Exception.normalize(:error, reason, redacted_stacktrace)
-
-    redacted_error =
-      error
-      |> redact_exception_field(:original, &redact_secret_values(&1, secret_keys))
-      |> redact_exception_field(:term, &redact_secret_values(&1, secret_keys))
-      |> redact_exception_field(:value, &redact_secret_values(&1, secret_keys))
-      |> redact_exception_field(:args, fn args ->
-        if is_list(args) and not List.improper?(args) do
-          Enum.map(args, &redact_secret_values(&1, secret_keys))
-        else
-          args
-        end
-      end)
-
-    if redacted_stacktrace === stacktrace and redacted_error === error do
-      :unchanged
-    else
-      {redacted_error, redacted_stacktrace}
-    end
-  end
-
-  defp redact_exception_field(error, field, fun) do
-    if Map.has_key?(error, field), do: Map.update!(error, field, fun), else: error
-  end
-
-  # WARNING: must match the client renderer's #redactSecretValues.
-  defp redact_secret_values(term, secret_keys) when is_map(term) and not is_struct(term) do
-    Enum.reduce(secret_keys, term, fn key, acc ->
-      if Map.has_key?(acc, key), do: Map.put(acc, key, %Redacted{}), else: acc
-    end)
-  end
-
-  defp redact_secret_values(term, _secret_keys), do: term
-
-  # An error with nothing to hide goes on exactly as it was raised, so what an outer catch sees
-  # doesn't depend on whether the module declares a secret. Throws and exits carry no exception to
-  # hide anything in.
-  defp run_hiding_secrets(module, fun) do
-    fun.()
-  catch
-    :error, reason ->
-      stacktrace = __STACKTRACE__
-
-      case secret_keys(module) do
-        [] ->
-          :erlang.raise(:error, reason, stacktrace)
-
-        secret_keys ->
-          case redact_error(reason, stacktrace, secret_keys) do
-            :unchanged ->
-              :erlang.raise(:error, reason, stacktrace)
-
-            {redacted_error, redacted_stacktrace} ->
-              reraise redacted_error, redacted_stacktrace
-          end
-      end
-  end
-
   # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,
   # with no escaping. An attribute value lands in the DOM through setAttribute on the client, a
   # prop is a value a component receives rather than markup, and the HTML projection escapes
@@ -1178,9 +1095,7 @@ defmodule Hologram.Template.Renderer do
 
     init_result =
       if Reflection.has_function?(module, :init, 3) do
-        run_hiding_secrets(module, fn ->
-          module.init(props, initial_component_struct, server_struct)
-        end)
+        module.init(props, initial_component_struct, server_struct)
       else
         {initial_component_struct, server_struct}
       end
@@ -1482,7 +1397,7 @@ defmodule Hologram.Template.Renderer do
          server_struct
        ) do
     vars = Map.merge(params, page_state)
-    page_dom = run_hiding_secrets(page_module, fn -> page_module.template().(vars) end)
+    page_dom = page_module.template().(vars)
 
     layout_module = page_module.__layout_module__()
     layout_props_dom = build_layout_props_dom(page_module, page_state)
@@ -1551,8 +1466,8 @@ defmodule Hologram.Template.Renderer do
       slots_parent_module: parent_module
     }
 
-    module
-    |> run_hiding_secrets(fn -> module.template().(vars) end)
+    vars
+    |> module.template().()
     |> render_tree(env, server_struct)
   end
 

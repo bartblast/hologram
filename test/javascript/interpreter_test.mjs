@@ -4897,13 +4897,6 @@ describe("Interpreter", () => {
           });
         });
 
-        it("redacted marker", () => {
-          assert.equal(
-            Interpreter.inspect(Type.list([Type.redactedStruct()])),
-            "[**redacted**]",
-          );
-        });
-
         describe("range", () => {
           it("step == 1", () => {
             const result = Interpreter.inspect(Type.range(123, 234, 1));

@@ -516,12 +516,6 @@ export default class Type {
     ]);
   }
 
-  // The marker a secret value is replaced with where Hologram prints it, which prints as
-  // **redacted**.
-  static redactedStruct() {
-    return Type.struct("Hologram.Component.Redacted", []);
-  }
-
   static reference(node, creation, idWords) {
     return {
       type: "reference",

@@ -1649,15 +1649,6 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("redactedStruct()", () => {
-    assert.deepStrictEqual(
-      Type.redactedStruct(),
-      Type.map([
-        [Type.atom("__struct__"), Type.alias("Hologram.Component.Redacted")],
-      ]),
-    );
-  });
-
   it("reference()", () => {
     const result = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [1, 2, 3]);
 
