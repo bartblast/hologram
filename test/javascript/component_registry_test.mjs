@@ -6,15 +6,10 @@ import {
   initComponentRegistryEntry,
 } from "./support/helpers.mjs";
 
-import {defineModule1Fixture} from "./support/fixtures/component_registry/module_1.mjs";
-import {defineModule2Fixture} from "./support/fixtures/component_registry/module_2.mjs";
-
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
-defineModule1Fixture();
-defineModule2Fixture();
 
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
@@ -293,112 +288,5 @@ describe("ComponentRegistry", () => {
     ComponentRegistry.putComponentStruct(cid4, componentStruct);
 
     assert.equal(ComponentRegistry.getComponentStruct(cid4), componentStruct);
-  });
-
-  describe("storableEntries()", () => {
-    const secretsModule = Type.alias(
-      "Hologram.Test.Fixtures.ComponentRegistry.Module1",
-    );
-
-    const plainModule = Type.alias(
-      "Hologram.Test.Fixtures.ComponentRegistry.Module2",
-    );
-
-    const props = Type.map([[Type.atom("value"), Type.bitstring("hunter2")]]);
-
-    // Built fresh each time, so that a write the registry wasn't meant to see shows up as a
-    // difference from a new copy.
-    const buildSecretsEntry = () =>
-      Type.map([
-        [Type.atom("module"), secretsModule],
-        [
-          Type.atom("struct"),
-          Type.componentStruct({
-            emittedContext: emittedContext1,
-            props: props,
-            state: Type.map([
-              [Type.atom("count"), Type.integer(5)],
-              [Type.atom("password"), Type.bitstring("hunter2")],
-              [Type.atom("token"), Type.bitstring("abc123")],
-            ]),
-          }),
-        ],
-      ]);
-
-    const buildPlainEntry = () =>
-      Type.map([
-        [Type.atom("module"), plainModule],
-        [
-          Type.atom("struct"),
-          Type.componentStruct({
-            emittedContext: emittedContext2,
-            props: props,
-            state: Type.map([
-              [Type.atom("count"), Type.integer(7)],
-              [Type.atom("label"), Type.bitstring("abc")],
-            ]),
-          }),
-        ],
-      ]);
-
-    beforeEach(() => {
-      ComponentRegistry.entries = Type.map([
-        [cid1, buildSecretsEntry()],
-        [cid2, buildPlainEntry()],
-      ]);
-    });
-
-    it("puts each secret state entry back to its default and empties the props", () => {
-      assert.deepStrictEqual(
-        ComponentRegistry.storableEntries(),
-        Type.map([
-          [
-            cid1,
-            Type.map([
-              [Type.atom("module"), secretsModule],
-              [
-                Type.atom("struct"),
-                Type.componentStruct({
-                  emittedContext: emittedContext1,
-                  state: Type.map([
-                    [Type.atom("count"), Type.integer(5)],
-                    [Type.atom("password"), Type.bitstring("")],
-                    [Type.atom("token"), Type.bitstring("none")],
-                  ]),
-                }),
-              ],
-            ]),
-          ],
-          [
-            cid2,
-            Type.map([
-              [Type.atom("module"), plainModule],
-              [
-                Type.atom("struct"),
-                Type.componentStruct({
-                  emittedContext: emittedContext2,
-                  state: Type.map([
-                    [Type.atom("count"), Type.integer(7)],
-                    [Type.atom("label"), Type.bitstring("abc")],
-                  ]),
-                }),
-              ],
-            ]),
-          ],
-        ]),
-      );
-    });
-
-    it("leaves the registry as it is", () => {
-      ComponentRegistry.storableEntries();
-
-      assert.deepStrictEqual(
-        ComponentRegistry.entries,
-        Type.map([
-          [cid1, buildSecretsEntry()],
-          [cid2, buildPlainEntry()],
-        ]),
-      );
-    });
   });
 });

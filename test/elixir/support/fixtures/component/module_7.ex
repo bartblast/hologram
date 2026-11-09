@@ -5,7 +5,6 @@ defmodule Hologram.Test.Fixtures.Component.Module7 do
   prop :label, :string
 
   state :count, :integer, default: 0
-  state :password, :string, default: "", secret: true
   state :user, :map
 
   def template do

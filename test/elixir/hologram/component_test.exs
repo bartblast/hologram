@@ -29,7 +29,6 @@ defmodule Hologram.ComponentTest do
   test "__state__/0" do
     assert Module7.__state__() == [
              {:count, :integer, [default: 0]},
-             {:password, :string, [default: "", secret: true]},
              {:user, :map, []}
            ]
   end
@@ -900,8 +899,6 @@ defmodule Hologram.ComponentTest do
 
           state :a, :string
           state :b, :string, default: "abc"
-          state :c, :string, default: "", secret: true
-          state :d, :string, secret: false
 
           def template do
             ~HOLO""
@@ -911,9 +908,7 @@ defmodule Hologram.ComponentTest do
 
       assert module.__state__() == [
                {:a, :string, []},
-               {:b, :string, [default: "abc"]},
-               {:c, :string, [default: "", secret: true]},
-               {:d, :string, [secret: false]}
+               {:b, :string, [default: "abc"]}
              ]
     end
 
@@ -943,7 +938,7 @@ defmodule Hologram.ComponentTest do
         defmodule Hologram.Test.Fixtures.Component.ExpressionStateOpts do
           use Hologram.Component
 
-          @my_opts [default: "", secret: true]
+          @my_opts [default: ""]
 
           state :a, :string, @my_opts
 
@@ -953,12 +948,12 @@ defmodule Hologram.ComponentTest do
         end
         """)
 
-      assert module.__state__() == [{:a, :string, [default: "", secret: true]}]
+      assert module.__state__() == [{:a, :string, [default: ""]}]
     end
 
     test "raises when an option is not supported" do
       expected_error_msg =
-        ~s/invalid option :some_option for state "b" in Hologram.Test.Fixtures.Component.UnsupportedStateOpt, expected one of: :default, :secret/
+        ~s/invalid option :some_option for state "b" in Hologram.Test.Fixtures.Component.UnsupportedStateOpt, expected one of: :default/
 
       assert_error Hologram.CompileError, expected_error_msg, fn ->
         Code.eval_string("""
@@ -977,7 +972,7 @@ defmodule Hologram.ComponentTest do
 
     test "raises when an option given as an expression is not supported" do
       expected_error_msg =
-        ~s/invalid option :some_option for state "b" in Hologram.Test.Fixtures.Component.UnsupportedExpressionStateOpt, expected one of: :default, :secret/
+        ~s/invalid option :some_option for state "b" in Hologram.Test.Fixtures.Component.UnsupportedExpressionStateOpt, expected one of: :default/
 
       assert_error Hologram.CompileError, expected_error_msg, fn ->
         Code.eval_string("""
@@ -1046,68 +1041,6 @@ defmodule Hologram.ComponentTest do
           use Hologram.Component
 
           state "b", :integer, default: 0
-
-          def template do
-            ~HOLO""
-          end
-        end
-        """)
-      end
-    end
-
-    test "raises when the :secret option is not a boolean" do
-      expected_error_msg =
-        ~s/the :secret option for state "b" in Hologram.Test.Fixtures.Component.NonBooleanSecretOpt / <>
-          ~s/must be a boolean, got: "yes"/
-
-      assert_error Hologram.CompileError, expected_error_msg, fn ->
-        Code.eval_string("""
-        defmodule Hologram.Test.Fixtures.Component.NonBooleanSecretOpt do
-          use Hologram.Component
-
-          state :b, :string, default: "", secret: "yes"
-
-          def template do
-            ~HOLO""
-          end
-        end
-        """)
-      end
-    end
-
-    test "raises when a secret entry has no default value" do
-      expected_error_msg =
-        ~s/secret state "b" in Hologram.Test.Fixtures.Component.SecretStateWithoutDefault / <>
-          "needs a :default value, which it gets back when a page is restored from storage"
-
-      assert_error Hologram.CompileError, expected_error_msg, fn ->
-        Code.eval_string("""
-        defmodule Hologram.Test.Fixtures.Component.SecretStateWithoutDefault do
-          use Hologram.Component
-
-          state :b, :string, secret: true
-
-          def template do
-            ~HOLO""
-          end
-        end
-        """)
-      end
-    end
-
-    test "raises when a secret entry given as an expression has no default value" do
-      expected_error_msg =
-        ~s/secret state "b" in Hologram.Test.Fixtures.Component.ExpressionSecretStateWithoutDefault / <>
-          "needs a :default value, which it gets back when a page is restored from storage"
-
-      assert_error Hologram.CompileError, expected_error_msg, fn ->
-        Code.eval_string("""
-        defmodule Hologram.Test.Fixtures.Component.ExpressionSecretStateWithoutDefault do
-          use Hologram.Component
-
-          @my_opts [secret: true]
-
-          state :b, :string, @my_opts
 
           def template do
             ~HOLO""

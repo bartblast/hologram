@@ -439,12 +439,9 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :get, 2}
     ],
     component_registry_class: [
-      {:lists, :keyfind, 3},
       {:maps, :get, 2},
       {:maps, :get, 3},
-      {:maps, :is_key, 2},
-      {:maps, :merge, 2},
-      {:maps, :put, 3}
+      {:maps, :is_key, 2}
     ],
     hologram_class: [
       {:maps, :get, 2},

@@ -70,7 +70,7 @@ defmodule Hologram.Component do
 
   @prop_opt_keys [:default, :from_context, :required, :values]
 
-  @state_opt_keys [:default, :secret]
+  @state_opt_keys [:default]
 
   @doc false
   @spec __helper_imports__() :: keyword
@@ -497,9 +497,8 @@ defmodule Hologram.Component do
   @spec state(atom, atom, T.opts()) :: Macro.t()
   defmacro state(name, type, opts \\ []) do
     # Unlike a prop, a state entry is checked once evaluated, while the module body runs, so options
-    # given as an expression (a module attribute) are checked too. A secret entry relies on that: it
-    # has to have a default, and only the evaluated options can show it does. Each part is bound
-    # once, so an expression in it runs once.
+    # given as an expression (a module attribute) are checked too. Each part is bound once, so an
+    # expression in it runs once.
     quote do
       state_name = unquote(name)
       state_opts = unquote(opts)
@@ -537,7 +536,6 @@ defmodule Hologram.Component do
     validate_state_name_free!(name, module)
     validate_state_opts_shape!(opts, name, module)
     validate_state_opt_keys!(opts, name, module)
-    validate_state_secret_opt!(opts, name, module)
   end
 
   defp append_broadcast(server, channel, action_name, params, except \\ []) do
@@ -816,30 +814,5 @@ defmodule Hologram.Component do
     end
 
     :ok
-  end
-
-  # A secret entry is put back to its default when a page is restored from device storage, which
-  # never holds its value, so it can't do without one.
-  defp validate_state_secret_opt!(opts, name, module) do
-    case Keyword.fetch(opts, :secret) do
-      {:ok, value} when not is_boolean(value) ->
-        raise Hologram.CompileError,
-          message:
-            ~s/the :secret option for state "#{name}" in #{inspect(module)} / <>
-              "must be a boolean, got: #{inspect(value)}"
-
-      {:ok, true} ->
-        unless Keyword.has_key?(opts, :default) do
-          raise Hologram.CompileError,
-            message:
-              ~s/secret state "#{name}" in #{inspect(module)} needs a :default value, / <>
-                "which it gets back when a page is restored from storage"
-        end
-
-        :ok
-
-      _fallback ->
-        :ok
-    end
   end
 end
