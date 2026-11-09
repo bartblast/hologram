@@ -608,7 +608,7 @@ defmodule Hologram.ComponentTest do
 
     test "raises at the call site when the channel is invalid" do
       assert_error ArgumentError,
-                   "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
+                   ~s(a channel must be an identifier, like :search or {:message, 42}, got: "bad-channel"),
                    fn -> put_broadcast(@server, "bad-channel", :foo) end
     end
   end
@@ -684,7 +684,7 @@ defmodule Hologram.ComponentTest do
 
     test "raises at the call site when the channel is invalid" do
       assert_error ArgumentError,
-                   "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
+                   ~s(a channel must be an identifier, like :search or {:message, 42}, got: "bad-channel"),
                    fn -> put_broadcast_except(@server, {:user, "u1"}, "bad-channel", :foo) end
     end
   end

@@ -1,52 +1,18 @@
 defmodule Hologram.Realtime.Channel do
   @moduledoc false
 
-  @doc """
-  Validates a channel argument; returns the channel or raises `ArgumentError`.
+  alias Hologram.Identifier
 
-  Accepted shapes:
-    * bare atom (e.g. `:notifications`)
-    * tagged tuple of size >= 2 with an atom tag and primitive values
-      (atom, integer, string) as the remaining elements
-      (e.g. `{:room, 42}`, `{:doc, "abc", "v2"}`)
+  @doc """
+  Returns the given channel, or raises `ArgumentError` when it isn't an identifier: an atom, like
+  `:notifications`, or a tuple of an atom followed by one or more integers, strings or atoms, like
+  `{:room, 42}` or `{:doc, "abc", "v2"}`, with no `nil`, `true` or `false` among its atoms and only valid UTF-8 strings.
   """
   @spec validate!(any) :: atom | tuple
-  def validate!(channel) when is_atom(channel), do: channel
-
-  def validate!(channel) when is_tuple(channel) and tuple_size(channel) >= 2 do
-    [tag | rest] = Tuple.to_list(channel)
-
-    unless is_atom(tag) do
-      raise ArgumentError,
-            "channel tuple's first element must be an atom; got #{inspect(channel)}"
-    end
-
-    Enum.each(rest, fn value ->
-      unless primitive?(value) do
-        raise ArgumentError,
-              "channel tuple elements after the tag must be primitive (atom, integer, string); got #{inspect(value)} in #{inspect(channel)}"
-      end
-    end)
-
-    channel
-  end
-
-  def validate!(channel) when is_tuple(channel) do
-    raise ArgumentError,
-          "channel tuple must have at least 2 elements; got #{tuple_size(channel)}-tuple #{inspect(channel)}"
-  end
-
-  def validate!(channel) when is_binary(channel) do
-    raise ArgumentError,
-          "channel must be a bare atom or tagged tuple; got bare string #{inspect(channel)}"
-  end
-
   def validate!(channel) do
-    raise ArgumentError,
-          "channel must be a bare atom or tagged tuple; got #{inspect(channel)}"
+    Identifier.validate!(
+      channel,
+      "a channel must be an identifier, like :search or {:message, 42}"
+    )
   end
-
-  defp primitive?(value) when is_atom(value) or is_integer(value) or is_binary(value), do: true
-
-  defp primitive?(_value), do: false
 end
