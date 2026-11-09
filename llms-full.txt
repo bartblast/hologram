@@ -722,7 +722,7 @@ Take a list of comments, each with a reply box that isn't bound to state:
 
 Say a user is typing a reply to the second comment when the first one is deleted. If Hologram matched elements by their position, it would update the first `<li>` to show what was the second comment and remove the last `<li>`. The half-written reply would stay in the second `<li>`, which now shows the third comment, so it would end up under the wrong comment.
 
-To avoid that, Hologram gives each item a key and matches elements by key instead of position. An item that is a map or struct with an `:id`, like each comment above, is keyed by its `:id` automatically, so the example works as written and the reply stays with its comment. Two structs of different types with the same id get different keys. The `:id` must be a string, an integer, or an atom other than `nil`, `true` and `false`. An item with any other `:id`, such as a float or a tuple, gets no automatic key.
+To avoid that, Hologram gives each item a key and matches elements by key instead of position. An item that is a map or struct with an `:id`, like each comment above, is keyed by its `:id` automatically, so the example works as written and the reply stays with its comment. Two structs of different types with the same id get different keys. The `:id` must be an integer, a string or an identifier. An identifier is an atom, like `:search`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:message, 42}`, with no `nil`, `true` or `false` among its atoms. An item with any other `:id`, such as a float or a tuple that doesn't start with an atom, gets no automatic key.
 
 For items without an `:id`, such as strings, add a `$key` to the tag, with a value that identifies the item:
 
@@ -739,7 +739,27 @@ For items without an `:id`, such as strings, add a `$key` to the tag, with a val
 
 A `$key` replaces the automatic key, so you can also use it when the `:id` isn't the right identity, like a list that can show the same record twice. It keys only the tag it's on, so if the loop body renders several tags, give each one a `$key`. When the loop body is a stateless component, put the `$key` on its tag, like `<Invite email={email} $key={email} />`. Whatever the component renders then stays with its item when the list changes, as it would with a `$key` on an element. A stateful component is keyed by its `cid`, so it needs no `$key` and can't take one.
 
-Put a `$key` on a tag directly inside the `{%for}` block, or inside an `{%if}` block there. Anywhere else, the build fails. The value must be a string, an integer, or an atom other than `nil`, `true` and `false`. Any other value raises an `ArgumentError`. Keys only need to be unique within one list.
+A `$key` can be an identifier, which lets it combine values. Take a feed of posts and comments, where a post and a comment can share an id. When `item.kind` is an atom like `:post` or `:comment`, `$key={item.kind, item.id}` keeps them apart. A loop with several generators gets no automatic key, so key its items by every value they come from:
+
+```holo
+<ul>
+  {%for size <- @sizes, color <- @colors}
+    <li $key={:variant, size, color}>{size} {color}</li>
+  {/for}
+</ul>
+```
+
+A `$key` can also be a map or struct, and Hologram keys it the way it would key that item automatically. That helps when the loop item isn't the record, like with `Enum.with_index/1`:
+
+```holo
+<ol>
+  {%for {comment, index} <- Enum.with_index(@comments)}
+    <li $key={comment}>{index + 1}. {comment.text}</li>
+  {/for}
+</ol>
+```
+
+Put a `$key` on a tag directly inside the `{%for}` block, or inside an `{%if}` block there. Anywhere else, the build fails. The value must be an integer, a string, an identifier, or a map or struct with an `:id` that can be a key. Any other value raises an `ArgumentError`. Keys only need to be unique within one list.
 
 Items without a key are matched by position. So are the items of a loop with several generators or with the `uniq` option, since those get no automatic key. When two items in one list have the same key, Hologram matches them by position too and logs a warning in the browser console.
 
@@ -3358,7 +3378,7 @@ An instance is a single browser tab - one JS execution context. Each instance is
 
 ##### Channels
 
-A channel is the target of a broadcast and the thing a component subscribes to. Channels are structured, typed values, never raw topic strings. A channel is either a bare atom like `:notifications`, or a tuple of an atom tag followed by one or more primitive values, like `{:room, 42}` or `{:doc, "abc-123", "v2"}`.
+A channel is the target of a broadcast and the thing a component subscribes to. Channels are structured, typed values, never raw topic strings. A channel is an identifier: an atom, like `:notifications`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:room, 42}` or `{:doc, "abc-123", "v2"}`. No atom in it can be `nil`, `true` or `false`. A channel built from missing data, like `{:room, nil}`, raises an `ArgumentError`. If Hologram accepted it, every client whose room id is missing would end up on the same channel and get each other's broadcasts.
 
 The framework encodes each channel to an internal topic for you, so you never build or see a topic string, and a malformed channel is rejected with a clear error instead of routing nowhere. There are two kinds: identity channels and application channels.
 
