@@ -5,6 +5,8 @@ defmodule HologramCowboyTests.CommandPage do
 
   layout HologramCowboyTests.Components.DefaultLayout
 
+  state :result, :string
+
   def init(_params, component, _server) do
     put_state(component, :result, "none")
   end
