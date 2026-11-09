@@ -11327,6 +11327,15 @@ describe("Renderer", () => {
       assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aabc"]);
     });
 
+    it("an item with an identifier id", () => {
+      const node = loopItem(
+        itemWithId(Type.tuple([Type.atom("post"), Type.integer(7)])),
+        [keyedElement("li", 0)],
+      );
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#tapost,i7"]);
+    });
+
     it("an integer id and a string id with the same text give different keys", () => {
       const integerNode = loopItem(itemWithId(Type.integer(1)), [
         keyedElement("li", 0),
@@ -11354,21 +11363,21 @@ describe("Renderer", () => {
     });
 
     it("the characters keys are delimited by are escaped", () => {
-      const node = loopItem(itemWithId(Type.bitstring("a#b:c\\d")), [
+      const node = loopItem(itemWithId(Type.bitstring("a#b:c,d\\e")), [
         keyedElement("li", 0),
       ]);
 
       assert.deepStrictEqual(keysOf(render(node)), [
-        "1a2b3c:0#sa\\#b\\:c\\\\d",
+        "1a2b3c:0#sa\\#b\\:c\\,d\\\\e",
       ]);
     });
 
     it("an atom id is escaped", () => {
-      const node = loopItem(itemWithId(Type.atom("a#b:c")), [
+      const node = loopItem(itemWithId(Type.atom("a#b:c,d")), [
         keyedElement("li", 0),
       ]);
 
-      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aa\\#b\\:c"]);
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aa\\#b\\:c\\,d"]);
     });
 
     it("a struct's module is escaped", () => {
@@ -11392,6 +11401,8 @@ describe("Renderer", () => {
         itemWithId(Type.float(1.5)),
         itemWithId(Bitstring.fromBytes([255])),
         itemWithId(Type.list([Type.integer(1)])),
+        itemWithId(Type.tuple([Type.atom("post"), Type.nil()])),
+        itemWithId(Type.tuple([Type.integer(1), Type.integer(2)])),
         Type.map([[Type.atom("name"), Type.bitstring("no id")]]),
         Type.integer(5),
         Type.keywordList([[Type.atom("id"), Type.integer(1)]]),
@@ -11681,6 +11692,11 @@ describe("Renderer", () => {
       Type.tuple([value]),
     ];
 
+    const multiValueExpressionPart = (...values) => [
+      Type.atom("expression"),
+      Type.tuple(values),
+    ];
+
     const keyAttr = (...parts) =>
       Type.tuple([Type.bitstring("$key"), Type.keywordList(parts)]);
 
@@ -11698,6 +11714,11 @@ describe("Renderer", () => {
     const explicitlyKeyed = (tagName, slotKey, value) =>
       elementWithAttrs(tagName, [
         keyAttr(textPart(slotKey), expressionPart(value)),
+      ]);
+
+    const explicitlyKeyedByValues = (tagName, slotKey, ...values) =>
+      elementWithAttrs(tagName, [
+        keyAttr(textPart(slotKey), multiValueExpressionPart(...values)),
       ]);
 
     const component = (module, props) =>
@@ -11737,6 +11758,66 @@ describe("Renderer", () => {
       assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aabc"]);
     });
 
+    it("an identifier $key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyedByValues(
+          "li",
+          "1a2b3c:0",
+          Type.atom("post"),
+          Type.integer(7),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#tapost,i7"]);
+    });
+
+    it("an identifier $key in the one-value form gives the same key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed(
+          "li",
+          "1a2b3c:0",
+          Type.tuple([Type.atom("post"), Type.integer(7)]),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#tapost,i7"]);
+    });
+
+    it("an identifier $key with several values", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyedByValues(
+          "li",
+          "1a2b3c:0",
+          Type.atom("cell"),
+          Type.integer(1),
+          Type.bitstring("b"),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#tacell,i1,sb"]);
+    });
+
+    it("a string in an identifier $key is escaped", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyedByValues(
+          "li",
+          "1a2b3c:0",
+          Type.atom("a"),
+          Type.bitstring("x,y"),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#taa,sx\\,y"]);
+    });
+
+    it("a string $key is escaped", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed("li", "1a2b3c:0", Type.bitstring("x,y")),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#sx\\,y"]);
+    });
+
     it("a sibling without $key keeps the item's own part", () => {
       const node = loopItem(itemWithId(Type.integer(1)), [
         explicitlyKeyed("dt", "1a2b3c:0", Type.bitstring("abc")),
@@ -11765,64 +11846,6 @@ describe("Renderer", () => {
       );
 
       assert.equal(result.key, "1a2b3c:0#sabc");
-    });
-
-    it("a $key that can't be a key raises", () => {
-      const cases = [
-        [Type.float(1.5), "1.5"],
-        [Type.map(), "%{}"],
-        [Type.list([Type.integer(1)]), "[1]"],
-        [Type.nil(), "nil"],
-        [Type.boolean(true), "true"],
-        [Type.boolean(false), "false"],
-      ];
-
-      for (const [value, text] of cases) {
-        assertBoxedError(
-          () => render(explicitlyKeyed("li", "1a2b3c:0", value)),
-          "ArgumentError",
-          `$key takes a string, an integer or an atom other than nil, true and false, got: ${text}`,
-        );
-      }
-    });
-
-    it("a $key that can't be a key raises on an element keyed by what it loads", () => {
-      const node = elementWithAttrs("link", [
-        Type.tuple([
-          Type.bitstring("href"),
-          Type.keywordList([textPart("/a.css")]),
-        ]),
-        keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
-      ]);
-
-      assertBoxedError(
-        () => render(node),
-        "ArgumentError",
-        "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
-      );
-    });
-
-    it("a $key that can't be a key raises before the element's children render", () => {
-      const trustedHtml = Type.struct("Hologram.Template.TrustedHTML", [
-        [Type.atom("html"), Type.bitstring("<b>bold</b>")],
-      ]);
-
-      const node = Type.tuple([
-        Type.atom("element"),
-        Type.bitstring("textarea"),
-        Type.list([
-          keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
-        ]),
-        Type.list([
-          Type.tuple([Type.atom("expression"), Type.tuple([trustedHtml])]),
-        ]),
-      ]);
-
-      assertBoxedError(
-        () => render(node),
-        "ArgumentError",
-        "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
-      );
     });
 
     it("a dynamic tag resolving to an element takes its $key", () => {
@@ -11856,6 +11879,14 @@ describe("Renderer", () => {
       assert.equal(p.key, "7a8b9c:2#sabc");
     });
 
+    it("a component's identifier $key", () => {
+      const node = component(module5, [
+        keyAttr(multiValueExpressionPart(Type.atom("post"), Type.integer(7))),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#tapost,i7"]);
+    });
+
     it("a component's $key under an outer item", () => {
       const node = loopItem(itemWithId(Type.integer(1)), [
         loopItem(itemWithId(Type.integer(7)), [
@@ -11864,6 +11895,18 @@ describe("Renderer", () => {
       ]);
 
       assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#sabc#i1"]);
+    });
+
+    it("a component's $key doesn't reach the component's siblings", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        component(module5, [keyAttr(expressionPart(Type.bitstring("abc")))]),
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "4d5e6f:0#sabc",
+        "1a2b3c:0#i1",
+      ]);
     });
 
     it("a stateless component's $key outside a loop item", () => {
@@ -11928,6 +11971,25 @@ describe("Renderer", () => {
       assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#i5"]);
     });
 
+    it("a stateful component with an identifier cid", () => {
+      const cidValue = Type.tuple([Type.atom("post"), Type.integer(7)]);
+
+      initComponentRegistryEntry(cidValue, module5);
+
+      const cid = Type.tuple([
+        Type.bitstring("cid"),
+        Type.keywordList([
+          multiValueExpressionPart(Type.atom("post"), Type.integer(7)),
+        ]),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        component(module5, [cid]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#tapost,i7"]);
+    });
+
     it("a stateful component outside a loop item keeps the plain key", () => {
       initComponentRegistryEntry(Type.bitstring("my_component"), module5);
 
@@ -11983,6 +12045,106 @@ describe("Renderer", () => {
       );
     });
 
+    it("a $key that can't be a key raises", () => {
+      const cases = [
+        [Type.float(1.5), "1.5"],
+        [Type.map(), "%{}"],
+        [Type.list([Type.integer(1)]), "[1]"],
+        [Type.nil(), "nil - nil, true and false can't be in an identifier"],
+        [
+          Type.boolean(true),
+          "true - nil, true and false can't be in an identifier",
+        ],
+        [
+          Type.boolean(false),
+          "false - nil, true and false can't be in an identifier",
+        ],
+        [Bitstring.fromBytes([255]), "<<255>> - strings must be valid UTF-8"],
+        [
+          Type.tuple([Type.atom("post"), Type.nil()]),
+          "{:post, nil} - nil, true and false can't be in an identifier",
+        ],
+        [
+          Type.tuple([Type.bitstring("post"), Type.integer(1)]),
+          '{"post", 1} - an identifier tuple starts with an atom',
+        ],
+        [
+          Type.tuple([Type.atom("post")]),
+          "{:post} - an identifier tuple holds an atom and at least one more value",
+        ],
+        [
+          Type.tuple([Type.atom("post"), Type.float(1.5)]),
+          "{:post, 1.5} - an identifier tuple holds only integers, strings and atoms after its atom",
+        ],
+        [
+          Type.tuple([Type.atom("post"), Bitstring.fromBytes([255])]),
+          "{:post, <<255>>} - strings must be valid UTF-8",
+        ],
+      ];
+
+      for (const [value, text] of cases) {
+        assertBoxedError(
+          () => render(explicitlyKeyed("li", "1a2b3c:0", value)),
+          "ArgumentError",
+          `$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: ${text}`,
+        );
+      }
+    });
+
+    it("a $key that can't be a key raises on an element keyed by what it loads", () => {
+      const node = elementWithAttrs("link", [
+        Type.tuple([
+          Type.bitstring("href"),
+          Type.keywordList([textPart("/a.css")]),
+        ]),
+        keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+      );
+    });
+
+    it("a $key that can't be a key raises before the element's children render", () => {
+      const trustedHtml = Type.struct("Hologram.Template.TrustedHTML", [
+        [Type.atom("html"), Type.bitstring("<b>bold</b>")],
+      ]);
+
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("textarea"),
+        Type.list([
+          keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
+        ]),
+        Type.list([
+          Type.tuple([Type.atom("expression"), Type.tuple([trustedHtml])]),
+        ]),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+      );
+    });
+
+    it("a $key that can't be a key raises in the multi-value form", () => {
+      const node = explicitlyKeyedByValues(
+        "li",
+        "1a2b3c:0",
+        Type.atom("post"),
+        Type.nil(),
+      );
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: {:post, nil} - nil, true and false can't be in an identifier",
+      );
+    });
+
     it("a component's $key that can't be a key raises", () => {
       const node = component(module5, [
         keyAttr(expressionPart(Type.float(1.5))),
@@ -11991,20 +12153,8 @@ describe("Renderer", () => {
       assertBoxedError(
         () => render(node),
         "ArgumentError",
-        "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+        "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
       );
-    });
-
-    it("a component's $key doesn't reach the component's siblings", () => {
-      const node = loopItem(itemWithId(Type.integer(1)), [
-        component(module5, [keyAttr(expressionPart(Type.bitstring("abc")))]),
-        keyedElement("li", 0),
-      ]);
-
-      assert.deepStrictEqual(keysOf(render(node)), [
-        "4d5e6f:0#sabc",
-        "1a2b3c:0#i1",
-      ]);
     });
   });
 

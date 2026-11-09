@@ -4095,6 +4095,14 @@ defmodule Hologram.Template.RendererTest do
                {[{:element, "li", [{"$key", [text: "k:0#aabc"]}], []}], %{}, @server}
     end
 
+    test "an item with an identifier id" do
+      node =
+        {:loop_item, {%{id: {:post, 7}}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#tapost,i7"]}], []}], %{}, @server}
+    end
+
     test "an integer id and a string id with the same text give different keys" do
       li = {:element, "li", [{"$key", [text: "k:0"]}], []}
 
@@ -4116,17 +4124,19 @@ defmodule Hologram.Template.RendererTest do
 
     test "the characters keys are delimited by are escaped" do
       node =
-        {:loop_item, {%{id: "a#b:c\\d"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+        {:loop_item, {%{id: "a#b:c,d\\e"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
 
       assert render_tree(node, @env, @server) ==
-               {[{:element, "li", [{"$key", [text: "k:0#sa\\#b\\:c\\\\d"]}], []}], %{}, @server}
+               {[{:element, "li", [{"$key", [text: "k:0#sa\\#b\\:c\\,d\\\\e"]}], []}], %{},
+                @server}
     end
 
     test "an atom id is escaped" do
-      node = {:loop_item, {%{id: :"a#b:c"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+      node =
+        {:loop_item, {%{id: :"a#b:c,d"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
 
       assert render_tree(node, @env, @server) ==
-               {[{:element, "li", [{"$key", [text: "k:0#aa\\#b\\:c"]}], []}], %{}, @server}
+               {[{:element, "li", [{"$key", [text: "k:0#aa\\#b\\:c\\,d"]}], []}], %{}, @server}
     end
 
     test "a struct's module is escaped" do
@@ -4147,6 +4157,8 @@ defmodule Hologram.Template.RendererTest do
             %{id: 1.5},
             %{id: <<255>>},
             %{id: [1]},
+            %{id: {:post, nil}},
+            %{id: {1, 2}},
             %{name: "no id"},
             5,
             [id: 1]
@@ -4425,6 +4437,51 @@ defmodule Hologram.Template.RendererTest do
                {[{:element, "li", [{"$key", [text: "k:0#aabc"]}], []}], %{}, @server}
     end
 
+    test "an identifier $key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {:post, 7}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#tapost,i7"]}], []}], %{}, @server}
+    end
+
+    test "an identifier $key in the one-value form gives the same key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {{:post, 7}}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#tapost,i7"]}], []}], %{}, @server}
+    end
+
+    test "an identifier $key with several values" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {:cell, 1, "b"}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#tacell,i1,sb"]}], []}], %{}, @server}
+    end
+
+    test "a string in an identifier $key is escaped" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {:a, "x,y"}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#taa,sx\\,y"]}], []}], %{}, @server}
+    end
+
+    test "a string $key is escaped" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {"x,y"}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#sx\\,y"]}], []}], %{}, @server}
+    end
+
     test "a sibling without $key keeps the item's own part" do
       node =
         {:loop_item, {%{id: 1}},
@@ -4459,43 +4516,6 @@ defmodule Hologram.Template.RendererTest do
                {{:element, "li", [{"$key", [text: "k:0#sabc"]}], []}, %{}, @server}
     end
 
-    test "a $key that can't be a key raises" do
-      for {value, text} <- [
-            {1.5, "1.5"},
-            {%{}, "%{}"},
-            {[1], "[1]"},
-            {nil, "nil"},
-            {true, "true"},
-            {false, "false"}
-          ] do
-        node = {:element, "li", [{"$key", [text: "k:0", expression: {value}]}], []}
-
-        assert_raise ArgumentError,
-                     "$key takes a string, an integer or an atom other than nil, true and false, got: #{text}",
-                     fn -> render_tree(node, @env, @server) end
-      end
-    end
-
-    test "a $key that can't be a key raises on an element keyed by what it loads" do
-      node =
-        {:element, "link",
-         [{"href", [text: "/a.css"]}, {"$key", [text: "k:0", expression: {1.5}]}], []}
-
-      assert_raise ArgumentError,
-                   "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
-                   fn -> render_tree(node, @env, @server) end
-    end
-
-    test "a $key that can't be a key raises before the element's children render" do
-      node =
-        {:element, "textarea", [{"$key", [text: "k:0", expression: {1.5}]}],
-         [expression: {%TrustedHTML{html: "<b>bold</b>"}}]}
-
-      assert_raise ArgumentError,
-                   "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
-                   fn -> render_tree(node, @env, @server) end
-    end
-
     test "a dynamic tag resolving to an element takes its $key" do
       node =
         {:loop_item, {%{id: 1}},
@@ -4523,6 +4543,18 @@ defmodule Hologram.Template.RendererTest do
 
       assert keyed_div_key == div_key <> "#sabc"
       assert keyed_p_key == p_key <> "#sabc"
+    end
+
+    test "a component's identifier $key" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node = {:component, Module1, [{"$key", [expression: {:post, 7}]}], []}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#tapost,i7"
     end
 
     test "a component's $key under an outer item" do
@@ -4624,6 +4656,19 @@ defmodule Hologram.Template.RendererTest do
       assert key == slot_key <> "#i5"
     end
 
+    test "a stateful component with an identifier cid" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node =
+        {:loop_item, {%{id: 1}}, [{:component, Module1, [{"cid", [expression: {:post, 7}]}], []}]}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], _registry, _server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#tapost,i7"
+    end
+
     test "a stateful component outside a loop item keeps the plain key" do
       assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
                render_tree({:component, Module1, [], []}, @env, @server)
@@ -4671,11 +4716,63 @@ defmodule Hologram.Template.RendererTest do
                    fn -> render_tree(node, @env, @server) end
     end
 
+    test "a $key that can't be a key raises" do
+      for {value, text} <- [
+            {1.5, "1.5"},
+            {%{}, "%{}"},
+            {[1], "[1]"},
+            {nil, "nil - nil, true and false can't be in an identifier"},
+            {true, "true - nil, true and false can't be in an identifier"},
+            {false, "false - nil, true and false can't be in an identifier"},
+            {<<255>>, "<<255>> - strings must be valid UTF-8"},
+            {{:post, nil}, "{:post, nil} - nil, true and false can't be in an identifier"},
+            {{"post", 1}, ~s({"post", 1} - an identifier tuple starts with an atom)},
+            {{:post}, "{:post} - an identifier tuple holds an atom and at least one more value"},
+            {{:post, 1.5},
+             "{:post, 1.5} - an identifier tuple holds only integers, strings and atoms after its atom"},
+            {{:post, <<255>>}, "{:post, <<255>>} - strings must be valid UTF-8"}
+          ] do
+        node = {:element, "li", [{"$key", [text: "k:0", expression: {value}]}], []}
+
+        assert_error ArgumentError,
+                     "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: #{text}",
+                     fn -> render_tree(node, @env, @server) end
+      end
+    end
+
+    test "a $key that can't be a key raises on an element keyed by what it loads" do
+      node =
+        {:element, "link",
+         [{"href", [text: "/a.css"]}, {"$key", [text: "k:0", expression: {1.5}]}], []}
+
+      assert_error ArgumentError,
+                   "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "a $key that can't be a key raises before the element's children render" do
+      node =
+        {:element, "textarea", [{"$key", [text: "k:0", expression: {1.5}]}],
+         [expression: {%TrustedHTML{html: "<b>bold</b>"}}]}
+
+      assert_error ArgumentError,
+                   "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "a $key that can't be a key raises in the multi-value form" do
+      node = {:element, "li", [{"$key", [text: "k:0", expression: {:post, nil}]}], []}
+
+      assert_error ArgumentError,
+                   "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: {:post, nil} - nil, true and false can't be in an identifier",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
     test "a component's $key that can't be a key raises" do
       node = {:component, Module1, [{"$key", [expression: {1.5}]}], []}
 
-      assert_raise ArgumentError,
-                   "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+      assert_error ArgumentError,
+                   "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
                    fn -> render_tree(node, @env, @server) end
     end
   end

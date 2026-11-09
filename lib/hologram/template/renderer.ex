@@ -6,6 +6,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Component
+  alias Hologram.Identifier
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
@@ -873,21 +874,18 @@ defmodule Hologram.Template.Renderer do
   end
 
   # Backslash-escapes the characters key parts are delimited by. The slot key holds no "#", its hash
-  # being base 36, so with values escaped every unescaped "#" after it starts a part and every
-  # unescaped ":" is a suffix Vdom.dedupeKeys adds on the client. A value can therefore never pose
-  # as another part or as a repeat's number.
+  # being base 36, so with values escaped every unescaped "#" after it starts a part, every
+  # unescaped ":" is a suffix Vdom.dedupeKeys adds on the client, and every unescaped "," inside a
+  # tuple's body ends one of its elements. A value can therefore never pose as another part, as a
+  # repeat's number or as two elements of a tuple.
   #
   # WARNING: must match the client renderer's #escapeKeyText (renderer.mjs).
   defp escape_key_text(text) do
-    String.replace(text, ["\\", "#", ":"], &("\\" <> &1))
+    String.replace(text, ["\\", "#", ":", ","], &("\\" <> &1))
   end
 
-  defp evaluate_prop_value({name, [expression: {value}]}) do
-    {name, value}
-  end
-
-  defp evaluate_prop_value({name, [expression: value]}) do
-    {name, value}
+  defp evaluate_prop_value({name, [expression: expression]}) do
+    {name, expression_value(expression)}
   end
 
   # WARNING: must match the client renderer's #evalutatePropValue: parts evaluate raw and
@@ -1012,13 +1010,24 @@ defmodule Hologram.Template.Renderer do
     Enum.find_value(props_dom, :error, fn
       {"$key", value_dom} ->
         Enum.find_value(value_dom, fn
-          {:expression, {value}} -> {:ok, value}
+          {:expression, expression} -> {:ok, expression_value(expression)}
           _part -> nil
         end)
 
       _prop_dom ->
         nil
     end)
+  end
+
+  # Why a value that can't be a key can't be one, for the $key error. Only a binary that isn't
+  # valid UTF-8 gets here among strings.
+  #
+  # WARNING: must match the client renderer's #explicitKeyHint (renderer.mjs).
+  defp explicit_key_hint(value) when is_binary(value), do: "strings must be valid UTF-8"
+
+  defp explicit_key_hint(value) do
+    {:error, hint} = Identifier.check(value)
+    hint
   end
 
   # The key part of a $key the template author wrote, which raises for a value that can't be a
@@ -1030,12 +1039,24 @@ defmodule Hologram.Template.Renderer do
       nil ->
         raise ArgumentError,
           message:
-            "$key takes a string, an integer or an atom other than nil, true and false, got: #{inspect(value)}"
+            Identifier.message(
+              "$key takes an integer, a string or an identifier, like :search or {:message, 42}",
+              value,
+              explicit_key_hint(value)
+            )
 
       body ->
         "#" <> body
     end
   end
+
+  # The value an expression evaluates to: the one value of {value}, or the whole tuple when the
+  # braces hold none or several, so $key={:post, id} and $key={{:post, id}} give the same key.
+  #
+  # WARNING: must match the client renderer's #expressionValue (renderer.mjs).
+  defp expression_value({value}), do: value
+
+  defp expression_value(expression), do: expression
 
   # The name a fill marker files its value under: the text of its name attribute.
   defp fill_name(attributes) do
@@ -1150,10 +1171,23 @@ defmodule Hologram.Template.Renderer do
   defp item_key_part(_source), do: nil
 
   # A key value as text, tagged by its type so that 1, "1" and :"1" stay apart, or nil for a value
-  # that can't be a key. nil, true and false are refused with the other non-identifying values.
+  # that can't be a key. Only an integer, a valid UTF-8 string or an identifier can be one, so nil,
+  # true and false can't. An identifier tuple is "t" followed by its elements, each tagged by its
+  # type and separated by ",".
   #
   # WARNING: must match the client renderer's #keyBody (renderer.mjs).
   defp key_body(value) when is_integer(value), do: "i" <> Integer.to_string(value)
+
+  defp key_body(value) when is_tuple(value) do
+    if Identifier.check(value) == :ok do
+      body =
+        value
+        |> Tuple.to_list()
+        |> Enum.map_join(",", &key_body/1)
+
+      "t" <> body
+    end
+  end
 
   defp key_body(value) when is_binary(value) do
     if String.valid?(value), do: "s" <> escape_key_text(value)
@@ -1518,8 +1552,13 @@ defmodule Hologram.Template.Renderer do
 
   # The template author's own $key, which the compiler puts behind the key of the element's place.
   # It takes the place of the item's own part, and the parts of enclosing items still follow it.
-  defp render_tree_attribute({"$key", [text: slot_key, expression: {value}]}, key_scope) do
-    {"$key", [text: slot_key <> explicit_key_part(value) <> outer_key_parts(key_scope)]}
+  defp render_tree_attribute({"$key", [text: slot_key, expression: expression]}, key_scope) do
+    explicit_part =
+      expression
+      |> expression_value()
+      |> explicit_key_part()
+
+    {"$key", [text: slot_key <> explicit_part <> outer_key_parts(key_scope)]}
   end
 
   defp render_tree_attribute({name, []}, _key_scope), do: {name, []}

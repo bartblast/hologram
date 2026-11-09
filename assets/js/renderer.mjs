@@ -9,6 +9,7 @@ import EventListeners from "./event_listeners.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import Identifier from "./identifier.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
 import Once from "./once.mjs";
@@ -1183,13 +1184,14 @@ export default class Renderer {
   // Based on escape_key_text/1
   //
   // Backslash-escapes the characters key parts are delimited by. The slot key holds no "#", its
-  // hash being base 36, so with values escaped every unescaped "#" after it starts a part and
-  // every unescaped ":" is a suffix Vdom.dedupeKeys adds. A value can therefore never pose as
-  // another part or as a repeat's number.
+  // hash being base 36, so with values escaped every unescaped "#" after it starts a part, every
+  // unescaped ":" is a suffix Vdom.dedupeKeys adds, and every unescaped "," inside a tuple's body
+  // ends one of its elements. A value can therefore never pose as another part, as a repeat's
+  // number or as two elements of a tuple.
   //
   // WARNING: must match escape_key_text/1 on the server.
   static #escapeKeyText(text) {
-    return text.replace(/[\\#:]/g, "\\$&");
+    return text.replace(/[\\#:,]/g, "\\$&");
   }
 
   // Based on stringify_for_script_interpolation/1
@@ -1420,11 +1422,7 @@ export default class Renderer {
         Type.atom("expression"),
       )
     ) {
-      if (valueDom.data[0].data[1].data.length === 1) {
-        evaluatedValue = valueDom.data[0].data[1].data[0];
-      } else {
-        evaluatedValue = valueDom.data[0].data[1];
-      }
+      evaluatedValue = $.#expressionValue(valueDom.data[0].data[1]);
     } else {
       evaluatedValue = Renderer.valueDomToBitstring(valueDom);
     }
@@ -1469,12 +1467,26 @@ export default class Renderer {
 
       for (const partDom of propDom.data[1].data) {
         if (Type.isRecordTuple(partDom, "expression", 2)) {
-          return partDom.data[1].data[0];
+          return $.#expressionValue(partDom.data[1]);
         }
       }
     }
 
     return null;
+  }
+
+  // Based on explicit_key_hint/1
+  //
+  // Why a value that can't be a key can't be one, for the $key error. Only a binary that isn't
+  // valid UTF-8 gets here among strings.
+  //
+  // WARNING: must match explicit_key_hint/1 on the server.
+  static #explicitKeyHint(value) {
+    if (Type.isBinary(value)) {
+      return "strings must be valid UTF-8";
+    }
+
+    return Identifier.check(value).hint;
   }
 
   // Based on explicit_key_part/1
@@ -1488,11 +1500,25 @@ export default class Renderer {
 
     if (body === null) {
       Interpreter.raiseArgumentError(
-        `$key takes a string, an integer or an atom other than nil, true and false, got: ${Interpreter.inspect(value)}`,
+        Identifier.message(
+          "$key takes an integer, a string or an identifier, like :search or {:message, 42}",
+          value,
+          $.#explicitKeyHint(value),
+        ),
       );
     }
 
     return `#${body}`;
+  }
+
+  // Based on expression_value/1
+  //
+  // The value an expression evaluates to: the one value of {value}, or the whole tuple when the
+  // braces hold none or several, so $key={:post, id} and $key={{:post, id}} give the same key.
+  //
+  // WARNING: must match expression_value/1 on the server.
+  static #expressionValue(expression) {
+    return expression.data.length === 1 ? expression.data[0] : expression;
   }
 
   // Based on filter_allowed_props/2
@@ -1748,13 +1774,20 @@ export default class Renderer {
   // Based on key_body/1
   //
   // A key value as text, tagged by its type so that 1, "1" and :"1" stay apart, or null for a
-  // value that can't be a key. nil, true and false are refused with the other non-identifying
-  // values.
+  // value that can't be a key. Only an integer, a valid UTF-8 string or an identifier can be one,
+  // so nil, true and false can't. An identifier tuple is "t" followed by its elements, each tagged
+  // by its type and separated by ",".
   //
   // WARNING: must match key_body/1 on the server.
   static #keyBody(value) {
     if (Type.isInteger(value)) {
       return `i${value.value.toString()}`;
+    }
+
+    if (Type.isTuple(value)) {
+      return Identifier.check(value) === null
+        ? `t${value.data.map((element) => $.#keyBody(element)).join(",")}`
+        : null;
     }
 
     if (Type.isBinary(value) && Bitstring.isText(value)) {
@@ -2872,7 +2905,7 @@ export default class Renderer {
           return {
             key:
               Bitstring.toText(valueDom.data[0].data[1]) +
-              $.#explicitKeyPart(valueDom.data[1].data[1].data[0]) +
+              $.#explicitKeyPart($.#expressionValue(valueDom.data[1].data[1])) +
               $.#outerKeyParts(keyScope),
             isItemKeyed: Boolean(keyScope),
           };
