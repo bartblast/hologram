@@ -11818,6 +11818,53 @@ describe("Renderer", () => {
       assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#sx\\,y"]);
     });
 
+    it("a map $key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed(
+          "li",
+          "1a2b3c:0",
+          Type.map([
+            [Type.atom("id"), Type.integer(7)],
+            [Type.atom("name"), Type.bitstring("a")],
+          ]),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i7"]);
+    });
+
+    it("a struct $key", () => {
+      const item = Type.map([
+        [Type.atom("__struct__"), Type.alias("MyApp.Comment")],
+        [Type.atom("id"), Type.integer(7)],
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed("li", "1a2b3c:0", item),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "1a2b3c:0#mElixir.MyApp.Comment#i7",
+      ]);
+    });
+
+    it("an enclosing item's part follows a struct $key", () => {
+      const item = Type.map([
+        [Type.atom("__struct__"), Type.alias("MyApp.Comment")],
+        [Type.atom("id"), Type.integer(7)],
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        loopItem(Type.tuple([item, Type.integer(0)]), [
+          explicitlyKeyed("li", "1a2b3c:0", item),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "1a2b3c:0#mElixir.MyApp.Comment#i7#i1",
+      ]);
+    });
+
     it("a sibling without $key keeps the item's own part", () => {
       const node = loopItem(itemWithId(Type.integer(1)), [
         explicitlyKeyed("dt", "1a2b3c:0", Type.bitstring("abc")),
@@ -11885,6 +11932,19 @@ describe("Renderer", () => {
       ]);
 
       assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#tapost,i7"]);
+    });
+
+    it("a component's struct $key", () => {
+      const item = Type.map([
+        [Type.atom("__struct__"), Type.alias("MyApp.Comment")],
+        [Type.atom("id"), Type.integer(7)],
+      ]);
+
+      const node = component(module5, [keyAttr(expressionPart(item))]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "4d5e6f:0#mElixir.MyApp.Comment#i7",
+      ]);
     });
 
     it("a component's $key under an outer item", () => {
@@ -12048,7 +12108,27 @@ describe("Renderer", () => {
     it("a $key that can't be a key raises", () => {
       const cases = [
         [Type.float(1.5), "1.5"],
-        [Type.map(), "%{}"],
+        [Type.map(), "%{} - the map has no :id that can be a key"],
+        [
+          Type.map([[Type.atom("name"), Type.bitstring("a")]]),
+          '%{name: "a"} - the map has no :id that can be a key',
+        ],
+        [
+          itemWithId(Type.nil()),
+          "%{id: nil} - the map has no :id that can be a key",
+        ],
+        [
+          itemWithId(Type.float(1.5)),
+          "%{id: 1.5} - the map has no :id that can be a key",
+        ],
+        // The id comes first, the order the server inspects this struct in.
+        [
+          Type.map([
+            [Type.atom("id"), Type.nil()],
+            [Type.atom("__struct__"), Type.alias("MyApp.Comment")],
+          ]),
+          "%{id: nil, __struct__: MyApp.Comment} - the map has no :id that can be a key",
+        ],
         [Type.list([Type.integer(1)]), "[1]"],
         [Type.nil(), "nil - nil, true and false can't be in an identifier"],
         [
@@ -12086,7 +12166,7 @@ describe("Renderer", () => {
         assertBoxedError(
           () => render(explicitlyKeyed("li", "1a2b3c:0", value)),
           "ArgumentError",
-          `$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: ${text}`,
+          `$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: ${text}`,
         );
       }
     });
@@ -12103,7 +12183,7 @@ describe("Renderer", () => {
       assertBoxedError(
         () => render(node),
         "ArgumentError",
-        "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
       );
     });
 
@@ -12126,7 +12206,7 @@ describe("Renderer", () => {
       assertBoxedError(
         () => render(node),
         "ArgumentError",
-        "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
       );
     });
 
@@ -12141,7 +12221,7 @@ describe("Renderer", () => {
       assertBoxedError(
         () => render(node),
         "ArgumentError",
-        "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: {:post, nil} - nil, true and false can't be in an identifier",
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: {:post, nil} - nil, true and false can't be in an identifier",
       );
     });
 
@@ -12153,7 +12233,7 @@ describe("Renderer", () => {
       assertBoxedError(
         () => render(node),
         "ArgumentError",
-        "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
       );
     });
   });

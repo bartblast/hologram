@@ -4482,6 +4482,42 @@ defmodule Hologram.Template.RendererTest do
                {[{:element, "li", [{"$key", [text: "k:0#sx\\,y"]}], []}], %{}, @server}
     end
 
+    test "a map $key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {%{id: 7, name: "a"}}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i7"]}], []}], %{}, @server}
+    end
+
+    test "a struct $key" do
+      item = %{__struct__: MyApp.Comment, id: 7}
+
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {item}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#mElixir.MyApp.Comment#i7"]}], []}], %{},
+                @server}
+    end
+
+    test "an enclosing item's part follows a struct $key" do
+      item = %{__struct__: MyApp.Comment, id: 7}
+
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:loop_item, {{item, 0}},
+            [{:element, "li", [{"$key", [text: "k:0", expression: {item}]}], []}]}
+         ]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#mElixir.MyApp.Comment#i7#i1"]}], []}],
+                %{}, @server}
+    end
+
     test "a sibling without $key keeps the item's own part" do
       node =
         {:loop_item, {%{id: 1}},
@@ -4555,6 +4591,19 @@ defmodule Hologram.Template.RendererTest do
                render_tree(node, @env, @server)
 
       assert key == slot_key <> "#tapost,i7"
+    end
+
+    test "a component's struct $key" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      item = %{__struct__: MyApp.Comment, id: 7}
+      node = {:component, Module1, [{"$key", [expression: {item}]}], []}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#mElixir.MyApp.Comment#i7"
     end
 
     test "a component's $key under an outer item" do
@@ -4719,7 +4768,12 @@ defmodule Hologram.Template.RendererTest do
     test "a $key that can't be a key raises" do
       for {value, text} <- [
             {1.5, "1.5"},
-            {%{}, "%{}"},
+            {%{}, "%{} - the map has no :id that can be a key"},
+            {%{name: "a"}, ~s(%{name: "a"} - the map has no :id that can be a key)},
+            {%{id: nil}, "%{id: nil} - the map has no :id that can be a key"},
+            {%{id: 1.5}, "%{id: 1.5} - the map has no :id that can be a key"},
+            {%{__struct__: MyApp.Comment, id: nil},
+             "%{id: nil, __struct__: MyApp.Comment} - the map has no :id that can be a key"},
             {[1], "[1]"},
             {nil, "nil - nil, true and false can't be in an identifier"},
             {true, "true - nil, true and false can't be in an identifier"},
@@ -4735,7 +4789,7 @@ defmodule Hologram.Template.RendererTest do
         node = {:element, "li", [{"$key", [text: "k:0", expression: {value}]}], []}
 
         assert_error ArgumentError,
-                     "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: #{text}",
+                     "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: #{text}",
                      fn -> render_tree(node, @env, @server) end
       end
     end
@@ -4746,7 +4800,7 @@ defmodule Hologram.Template.RendererTest do
          [{"href", [text: "/a.css"]}, {"$key", [text: "k:0", expression: {1.5}]}], []}
 
       assert_error ArgumentError,
-                   "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+                   "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
                    fn -> render_tree(node, @env, @server) end
     end
 
@@ -4756,7 +4810,7 @@ defmodule Hologram.Template.RendererTest do
          [expression: {%TrustedHTML{html: "<b>bold</b>"}}]}
 
       assert_error ArgumentError,
-                   "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+                   "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
                    fn -> render_tree(node, @env, @server) end
     end
 
@@ -4764,7 +4818,7 @@ defmodule Hologram.Template.RendererTest do
       node = {:element, "li", [{"$key", [text: "k:0", expression: {:post, nil}]}], []}
 
       assert_error ArgumentError,
-                   "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: {:post, nil} - nil, true and false can't be in an identifier",
+                   "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: {:post, nil} - nil, true and false can't be in an identifier",
                    fn -> render_tree(node, @env, @server) end
     end
 
@@ -4772,7 +4826,7 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module1, [{"$key", [expression: {1.5}]}], []}
 
       assert_error ArgumentError,
-                   "$key takes an integer, a string or an identifier, like :search or {:message, 42}, got: 1.5",
+                   "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
                    fn -> render_tree(node, @env, @server) end
     end
   end

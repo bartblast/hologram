@@ -1478,12 +1478,16 @@ export default class Renderer {
   // Based on explicit_key_hint/1
   //
   // Why a value that can't be a key can't be one, for the $key error. Only a binary that isn't
-  // valid UTF-8 gets here among strings.
+  // valid UTF-8 gets here among strings, and only a map whose :id can't be a key among maps.
   //
   // WARNING: must match explicit_key_hint/1 on the server.
   static #explicitKeyHint(value) {
     if (Type.isBinary(value)) {
       return "strings must be valid UTF-8";
+    }
+
+    if (Type.isMap(value)) {
+      return "the map has no :id that can be a key";
     }
 
     return Identifier.check(value).hint;
@@ -1492,20 +1496,25 @@ export default class Renderer {
   // Based on explicit_key_part/1
   //
   // The key part of a $key the template author wrote, which raises for a value that can't be a
-  // key, since the author asked for that key.
+  // key, since the author asked for that key. A map or struct gives the part a loop over it would
+  // give it, so $key={comment} keys a comment the way the automatic key does.
   //
   // WARNING: must match explicit_key_part/1 on the server.
   static #explicitKeyPart(value) {
+    if (Type.isMap(value)) {
+      const part = $.#itemKeyPart(Type.tuple([value]));
+
+      if (part === null) {
+        $.#raiseInvalidExplicitKey(value);
+      }
+
+      return part;
+    }
+
     const body = $.#keyBody(value);
 
     if (body === null) {
-      Interpreter.raiseArgumentError(
-        Identifier.message(
-          "$key takes an integer, a string or an identifier, like :search or {:message, 42}",
-          value,
-          $.#explicitKeyHint(value),
-        ),
-      );
+      $.#raiseInvalidExplicitKey(value);
     }
 
     return `#${body}`;
@@ -2081,6 +2090,19 @@ export default class Renderer {
   // its siblings.
   static #putKeyScopeLevel(keyScope, level) {
     return {level, outer: keyScope ? keyScope.outer : "", loop: keyScope?.loop};
+  }
+
+  // Based on raise_invalid_explicit_key/1
+  //
+  // WARNING: must match raise_invalid_explicit_key/1 on the server.
+  static #raiseInvalidExplicitKey(value) {
+    Interpreter.raiseArgumentError(
+      Identifier.message(
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key",
+        value,
+        $.#explicitKeyHint(value),
+      ),
+    );
   }
 
   // Based on raise_invalid_spread_value/1

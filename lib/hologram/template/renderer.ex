@@ -1020,10 +1020,12 @@ defmodule Hologram.Template.Renderer do
   end
 
   # Why a value that can't be a key can't be one, for the $key error. Only a binary that isn't
-  # valid UTF-8 gets here among strings.
+  # valid UTF-8 gets here among strings, and only a map whose :id can't be a key among maps.
   #
   # WARNING: must match the client renderer's #explicitKeyHint (renderer.mjs).
   defp explicit_key_hint(value) when is_binary(value), do: "strings must be valid UTF-8"
+
+  defp explicit_key_hint(value) when is_map(value), do: "the map has no :id that can be a key"
 
   defp explicit_key_hint(value) do
     {:error, hint} = Identifier.check(value)
@@ -1031,22 +1033,18 @@ defmodule Hologram.Template.Renderer do
   end
 
   # The key part of a $key the template author wrote, which raises for a value that can't be a
-  # key, since the author asked for that key.
+  # key, since the author asked for that key. A map or struct gives the part a loop over it would
+  # give it, so $key={comment} keys a comment the way the automatic key does.
   #
   # WARNING: must match the client renderer's #explicitKeyPart (renderer.mjs).
+  defp explicit_key_part(value) when is_map(value) do
+    item_key_part({value}) || raise_invalid_explicit_key(value)
+  end
+
   defp explicit_key_part(value) do
     case key_body(value) do
-      nil ->
-        raise ArgumentError,
-          message:
-            Identifier.message(
-              "$key takes an integer, a string or an identifier, like :search or {:message, 42}",
-              value,
-              explicit_key_hint(value)
-            )
-
-      body ->
-        "#" <> body
+      nil -> raise_invalid_explicit_key(value)
+      body -> "#" <> body
     end
   end
 
@@ -1393,6 +1391,17 @@ defmodule Hologram.Template.Renderer do
       {Hologram.Runtime, :page_mounted?},
       page_mounted?
     )
+  end
+
+  # WARNING: must match the client renderer's #raiseInvalidExplicitKey (renderer.mjs).
+  defp raise_invalid_explicit_key(value) do
+    raise ArgumentError,
+      message:
+        Identifier.message(
+          "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key",
+          value,
+          explicit_key_hint(value)
+        )
   end
 
   defp raise_invalid_spread_value(value) do
