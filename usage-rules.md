@@ -72,9 +72,8 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Everything else is checked while rendering and raises `Hologram.PropError`: a `...{@props}` spread, a `<{@module} />` dynamic tag, a `from_context:` prop, an interpolated value (`size="a{@b}"`), and any expression, including one nested inside an otherwise literal value (`{[:small, @other]}`).
 - Read a prop in an action with `component.props.name`. Defaults and context-sourced props are in there too, and so is `cid`.
 - Declare state with `state :name, :type` or `state :name, :type, default: value`. The default is in the state before `init/3` or `init/2` runs, so a component whose state starts as constants needs no `init`.
-- State options are `default:` and `secret:`. Any other option is a compile error.
+- The only state option is `default:`. Any other option is a compile error.
 - A nested update like `put_state(component, [:form, :email], value)` needs only `:form` declared.
-- Mark sensitive state with `secret: true`, like `state :password, :string, default: "", secret: true`. Its value never reaches device storage, so a page restored from storage gets the default back. Hologram prints it as `**redacted**`. A secret entry needs a `default:`.
 - Stateful components require a `cid` attribute: `<MyComponent cid="my_id" />`. Without `cid`, the component is stateless.
 - Each stateful instance is initialized exactly once: `init/3` (props, component, server) runs when its lifecycle starts during server-side page rendering, `init/2` (props, component) when it is dynamically added to an already-loaded page.
 - `init/3` can return a `Component` struct, a `Server` struct, or a `{component, server}` tuple.

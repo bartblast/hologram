@@ -924,7 +924,7 @@ State takes the same types as props.
 
 ##### Options
 
-State can be configured using the `default` and `secret` options. Any other option is a compile error.
+State can be configured using the `default` option. Any other option is a compile error.
 
 ###### Default Value
 
@@ -935,18 +935,6 @@ state :count, :integer, default: 0
 ```
 
 The default is in the state before `init/3` or `init/2` runs, so `init` sees it and can change it. A component or page whose state starts out as constant values needs no `init` at all. An entry with no default isn't in the state until something puts it there.
-
-###### Secret
-
-Mark an entry that holds sensitive data, like a password typed into a form, using the `secret` option:
-
-```elixir
-state :password, :string, default: "", secret: true
-```
-
-Hologram never writes a secret value to device storage. Back and Forward restore a page from a snapshot Hologram took when the page was left. Hologram keeps each snapshot in memory with the real value, and while it's there, the page comes back as it was left. A full page load, like a refresh, clears that memory. Going Back to a page left before it restores the snapshot from the browser's storage, which holds the entry's default in place of its value, so the page comes back with the default. That's why a secret entry needs a `default`.
-
-Wherever Hologram prints a component, it shows a secret value as `**redacted**`: in the error overlay, the browser console, server logs and test output. That covers the component struct and the errors its template, `init` and actions raise. Hologram hides a secret under its key in the component's state, so a copy of it kept elsewhere, like a prop passed to a child component or an action's params, prints as it is.
 
 ##### Names
 
