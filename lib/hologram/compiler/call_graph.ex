@@ -88,8 +88,11 @@ defmodule Hologram.Compiler.CallGraph do
   # added) or what Hologram.Reflection.beam_info/1 records about a module. A kept dump holds the
   # graph and the module infos of every module whose beam did not change, as the Hologram that wrote
   # it built them, so without a bump an upgrade keeps them as they were, and the pages built from
-  # them can miss functions without any error. One bump per release is enough: if the value already
-  # differs from the one at the last release tag, leave it
+  # them can miss functions without any error. An edge or walk entry for a function that only modules
+  # compiled against the new Hologram define, like __state__/0, needs no bump when the module it
+  # belongs to is one of them: a module compiled against an older Hologram gets the function only
+  # when it is recompiled, which changes its beam. One bump per release is enough: if the value
+  # already differs from the one at the last release tag, leave it
   # (`git show <tag>:lib/hologram/compiler/call_graph.ex | grep "@dump_version"`, nothing printed
   # meaning 0).
   @dump_version 1
