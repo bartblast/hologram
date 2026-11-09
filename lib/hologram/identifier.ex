@@ -4,6 +4,8 @@ defmodule Hologram.Identifier do
   # An identifier names something, like a channel or a key: an atom, or a tuple of an atom followed
   # by one or more integers, strings or atoms. None of its atoms is nil, true or false, and its
   # strings are valid UTF-8.
+  #
+  # WARNING: must match the client's Identifier (identifier.mjs).
 
   @reserved_atom_hint "nil, true and false can't be in an identifier"
 
