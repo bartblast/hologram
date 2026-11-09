@@ -30,14 +30,6 @@ defmodule Hologram.Compiler.Tracer do
   end
 
   @doc """
-  Returns whether the tracer records this VM's compiles: true once `register/0` has run.
-  """
-  @spec registered?() :: boolean
-  def registered? do
-    :ets.whereis(@table) != :undefined
-  end
-
-  @doc """
   Returns the modules compiled since the last take whose beams in `beam_paths` hold what the
   compiler produced, and forgets their records. The compiler reports a module before it writes its
   beam, and Mix stamps the beam with the time its compile started, so the file's bytes are compared

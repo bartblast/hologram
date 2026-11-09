@@ -1222,19 +1222,35 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert Module8.value() == :beam
     end
 
-    test "unloads the old code of a module another process compiled on a cold compile", %{
+    test "unloads the old code of a module another process compiled after a failed compile", %{
       opts: opts
     } do
       run(opts)
 
-      # The next compile in this VM is cold, as after one that failed, and its scan reads the
-      # module.
-      Cache.reset()
+      # What a failed compile leaves, so the next compile is cold. Then another process's compile
+      # writes its dumps, its record of the compile inputs among them, which says nothing changed.
+      Cache.clear_module_infos()
       fake_edit_in_dump(Module8, opts)
-      fake_recompile()
       load_code_other_than_beam(Module8)
 
       run(opts)
+
+      assert Module8.value() == :beam
+    end
+
+    test "unloads the old code of a module another process compiled after a run that found nothing changed",
+         %{opts: opts} do
+      run(opts)
+
+      # A new VM whose first run finds nothing changed and compiles nothing. Then another process
+      # compiles the module, and a live reload pass compiles.
+      Cache.reset()
+      assert run(opts) == :noop
+
+      fake_edit_in_dump(Module8, opts)
+      load_code_other_than_beam(Module8)
+
+      run(Keyword.put(opts, :force?, true))
 
       assert Module8.value() == :beam
     end
@@ -3539,6 +3555,22 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a new VM with no record compiles", %{opts: opts} do
       File.rm!(@compile_inputs_path)
 
+      assert run(opts) == :ok
+    end
+
+    test "a compile after a failed one in the same VM compiles", %{opts: opts} do
+      fake_recompile()
+      assert run(opts) == :ok
+
+      # What a failed compile leaves in the cache. The record of the compile inputs this run wrote
+      # stands for one another process's compile wrote since.
+      Cache.clear_module_infos()
+
+      assert run(opts) == :ok
+    end
+
+    test "a run after one that found nothing changed in the same VM compiles", %{opts: opts} do
+      assert run(opts) == :noop
       assert run(opts) == :ok
     end
 

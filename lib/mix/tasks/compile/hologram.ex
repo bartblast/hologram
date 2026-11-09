@@ -106,11 +106,20 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     result =
       cond do
-        opts[:force?] -> compile_with_lock(opts)
-        language_server_build?(opts) -> :noop
-        !compiler_enabled?() -> :noop
-        nothing_changed?(opts) -> :noop
-        true -> compile_with_lock(opts)
+        opts[:force?] ->
+          opts
+          |> put_first_compile()
+          |> compile_with_lock()
+
+        language_server_build?(opts) ->
+          :noop
+
+        !compiler_enabled?() ->
+          :noop
+
+        true ->
+          opts = put_first_compile(opts)
+          if nothing_changed?(opts), do: :noop, else: compile_with_lock(opts)
       end
 
     # TODO: Remove this block together with refresh_umbrella_app_manifests/0
@@ -203,9 +212,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       # once the graph says what is reachable. The dump time is the mtime of the module info dump
       # the before picture came from: the one this VM kept, or the one the first compile in a VM
       # loaded.
-      # Taken before the cache starts, which registers the tracer (see unload_replaced_modules/2).
-      tracer_registered? = Tracer.registered?()
-
       {cache, old_module_info_plt, before_dumped_at} =
         load_before_state(build_dir, call_graph_dump_path, compile_state_dump_path, sup)
 
@@ -231,7 +237,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       # Before anything below calls into the changed modules.
-      unload_replaced_modules(module_digests_diff, compiled_modules, tracer_registered?)
+      unload_replaced_modules(module_digests_diff, compiled_modules, opts[:first_compile?])
 
       # Everything a bundle depends on besides its modules. Kept bundles built with other inputs
       # (another Hologram build, another esbuild, client stack traces toggled) are forgotten before
@@ -1278,12 +1284,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  # The first compile in a VM has nothing to do when the world is as the record of the last compile
-  # that built every page says (see Hologram.Compiler.CompileInputs), and it can tell before it loads
-  # anything. A later compile in the same VM comes after an edit this VM compiled, so the record is
-  # not consulted for it.
+  # The first run in a VM to get past the gates (see put_first_compile/1) has nothing to do when the
+  # world is as the record of the last compile that built every page says (see
+  # Hologram.Compiler.CompileInputs), and it can tell before it loads anything. A later run in the
+  # same VM does not consult the record, whether it follows a compile or a run that found nothing
+  # changed: the record can be another OS process's since, whose modules this VM still runs the old
+  # code of until a compile unloads them (see unload_replaced_modules/3).
   defp nothing_changed?(opts) do
-    if Cache.get().editable_modules == nil do
+    if opts[:first_compile?] do
       record =
         opts[:build_dir]
         |> Path.join(Reflection.compile_inputs_dump_file_name())
@@ -1338,6 +1346,12 @@ defmodule Mix.Tasks.Compile.Hologram do
       modules: modules,
       sizes: chunk_sizes
     })
+  end
+
+  # Marks that a compile started in this VM, a run that finds nothing changed included, and puts in
+  # the opts whether it is the VM's first (see nothing_changed?/1 and unload_replaced_modules/3).
+  defp put_first_compile(opts) do
+    Keyword.put(opts, :first_compile?, not Cache.mark_compile_started())
   end
 
   # Whether the module info dump on disk is the one the given mtime belongs to: the one this VM
@@ -1543,6 +1557,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     case Cache.get() do
       %{editable_modules: nil} ->
         :ok = Cache.reset()
+
+        # The reset forgets the mark this compile's run set (see put_first_compile/1), so that the
+        # compile leaves it, however it ends.
+        Cache.mark_compile_started()
+
         cache = Cache.get()
 
         # The two dumps are one before picture, and the graph dump is never written without the
@@ -1756,12 +1775,12 @@ defmodule Mix.Tasks.Compile.Hologram do
   # whole seconds, and it covers only its reloadable apps. Unloaded the same way, so that a call
   # loads the new beam. The modules this VM's compiler reported are its own compile's, loaded new.
   # Hologram's own modules are left loaded: this compile runs them, and would run two versions of the
-  # compiler at once. Nothing is unloaded when the tracer was not registered before this compile: on
-  # the first compile in a VM it reports none of the modules Elixir compiled before it, which the VM
-  # loaded from the beams Elixir just wrote.
-  defp unload_replaced_modules(_module_digests_diff, _compiled_modules, false), do: :ok
+  # compiler at once. Nothing is unloaded on the first compile in a VM: the tracer reports none of
+  # the modules Elixir compiled before it, which the VM loaded from the beams Elixir just wrote.
+  defp unload_replaced_modules(_module_digests_diff, _compiled_modules, true = _first_compile?),
+    do: :ok
 
-  defp unload_replaced_modules(module_digests_diff, compiled_modules, true) do
+  defp unload_replaced_modules(module_digests_diff, compiled_modules, false = _first_compile?) do
     stale_statuses =
       (module_digests_diff.added_modules ++ module_digests_diff.edited_modules)
       |> Map.new(&{&1, :modified})

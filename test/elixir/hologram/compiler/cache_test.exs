@@ -181,6 +181,32 @@ defmodule Hologram.Compiler.CacheTest do
     end
   end
 
+  describe "compile_started?" do
+    test "is clear at first" do
+      refute get().compile_started?
+    end
+
+    test "is set by mark_compile_started/0, which returns whether it was set" do
+      refute mark_compile_started()
+      assert get().compile_started?
+      assert mark_compile_started()
+    end
+
+    test "is kept by clear_module_infos/0" do
+      mark_compile_started()
+      clear_module_infos()
+
+      assert get().compile_started?
+    end
+
+    test "is cleared by reset/0" do
+      mark_compile_started()
+      reset()
+
+      refute get().compile_started?
+    end
+  end
+
   describe "compile_state_changed?" do
     setup do
       dump_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "cache", "changed"])

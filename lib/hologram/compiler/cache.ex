@@ -84,6 +84,7 @@ defmodule Hologram.Compiler.Cache do
           bundle_inputs: map | nil,
           call_graph: CallGraph.t(),
           chunks: chunks_state | nil,
+          compile_started?: boolean,
           compile_state_changed?: boolean,
           dumped_at: non_neg_integer | nil,
           editable_modules: MapSet.t(module) | nil,
@@ -104,10 +105,10 @@ defmodule Hologram.Compiler.Cache do
   Forgets the dump time and the editable modules, which marks the kept module infos as untrusted,
   while keeping the module info PLT's entries, the IR PLT, the encode PLT, the encoding inputs, the
   module metadata, the template modules, the bundle inputs, the paths of the files the kept bundles
-  read, whether the compile state changed since it was last dumped or loaded, and the call graph,
-  so that the next compile starts from the build dir. The compile task calls it before it changes
-  the kept state in place: a compile that dies mid-way must not leave a half-patched graph or
-  half-scanned infos that the next compile would trust.
+  read, whether the compile state changed since it was last dumped or loaded, whether a compile
+  started in this VM, and the call graph, so that the next compile starts from the build dir. The
+  compile task calls it before it changes the kept state in place: a compile that dies mid-way must
+  not leave a half-patched graph or half-scanned infos that the next compile would trust.
   """
   @spec clear_module_infos() :: :ok
   def clear_module_infos do
@@ -172,8 +173,9 @@ defmodule Hologram.Compiler.Cache do
   with (the dump time, the editable modules, the encoding inputs, the module metadata, the runtime
   state, the chunk state, the template modules and the bundle inputs are nil when no compile has
   finished in this VM, and the module info PLT's entries are then not to be trusted), the paths of
-  the files the kept bundles read, and whether the compile state changed since it was last dumped or
-  loaded. Starts the cache on first use.
+  the files the kept bundles read, whether the compile state changed since it was last dumped or
+  loaded, and whether a compile started in this VM since the cache started or was reset. Starts the
+  cache on first use.
   """
   @spec get() :: t
   def get do
@@ -258,6 +260,10 @@ defmodule Hologram.Compiler.Cache do
       _other_version ->
         {:reply, :error, state}
     end
+  end
+
+  def handle_call(:mark_compile_started, _from, state) do
+    {:reply, state.compile_started?, %{state | compile_started?: true}}
   end
 
   def handle_call({:put_app_versions, app_versions}, _from, state) do
@@ -348,6 +354,18 @@ defmodule Hologram.Compiler.Cache do
   @spec load_compile_state(String.t()) :: :ok | :error
   def load_compile_state(path) do
     GenServer.call(server(), {:load_compile_state, path}, :infinity)
+  end
+
+  @doc """
+  Marks that a compile started in this VM, and returns whether one had already. The compile task
+  calls it as a run starts, one that finds nothing changed included, and again after the reset a
+  cold compile does, so that the compile leaves the mark however it ends: the next compile is not
+  the VM's first, even after one that failed and left no module infos it can trust.
+  `clear_module_infos/0` keeps the mark, and `reset/0` forgets it.
+  """
+  @spec mark_compile_started() :: boolean
+  def mark_compile_started do
+    GenServer.call(server(), :mark_compile_started)
   end
 
   @doc """
@@ -471,8 +489,9 @@ defmodule Hologram.Compiler.Cache do
   with empty ones
   and forgets the kept dump time, editable modules, encoding inputs, module metadata, pending pages,
   application versions, runtime state, chunk state, template modules, bundle inputs and the paths of
-  the files the kept bundles read, and marks the compile state as unchanged, so the next compile
-  starts from the build dir, as the first one in the VM does.
+  the files the kept bundles read, and the mark that a compile started (see
+  `mark_compile_started/0`), and marks the compile state as unchanged, so the next compile starts
+  from the build dir, as the first one in the VM does.
   """
   @spec reset() :: :ok
   def reset do
@@ -509,6 +528,7 @@ defmodule Hologram.Compiler.Cache do
       bundle_inputs: nil,
       call_graph: CallGraph.start(),
       chunks: nil,
+      compile_started?: false,
       compile_state_changed?: false,
       dumped_at: nil,
       editable_modules: nil,
