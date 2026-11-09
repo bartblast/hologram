@@ -203,6 +203,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       # once the graph says what is reachable. The dump time is the mtime of the module info dump
       # the before picture came from: the one this VM kept, or the one the first compile in a VM
       # loaded.
+      # Taken before the cache starts, which registers the tracer (see unload_replaced_modules/2).
+      tracer_registered? = Tracer.registered?()
+
       {cache, old_module_info_plt, before_dumped_at} =
         load_before_state(build_dir, call_graph_dump_path, compile_state_dump_path, sup)
 
@@ -226,6 +229,9 @@ defmodule Mix.Tasks.Compile.Hologram do
           compiled_modules,
           sup
         )
+
+      # Before anything below calls into the changed modules.
+      unload_replaced_modules(module_digests_diff, compiled_modules, tracer_registered?)
 
       # Everything a bundle depends on besides its modules. Kept bundles built with other inputs
       # (another Hologram build, another esbuild, client stack traces toggled) are forgotten before
@@ -1058,6 +1064,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Enum.each(&Cache.delete_page/1)
   end
 
+  # Whether the module's source is in Hologram's lib dir, given with a trailing slash.
+  defp hologram_lib_module?(module, hologram_lib_prefix) do
+    module
+    |> Reflection.source_path()
+    |> String.starts_with?(hologram_lib_prefix)
+  end
+
   # The bundle of each chunk the kept state names, served until the first batch replaces the ones
   # to rebuild. With no chunk to build no batch replaces any, so only the kept ones: a signature
   # the app no longer has goes with the cleanup. None without a state.
@@ -1734,6 +1747,48 @@ defmodule Mix.Tasks.Compile.Hologram do
     Mix.Dep.cached()
     |> Enum.filter(& &1.opts[:in_umbrella])
     |> Enum.map(& &1.app)
+  end
+
+  # Unloads the modules of the diff whose loaded code is not their beam's, or that have no beam any
+  # more: another OS process compiled or deleted them, so the VM still runs their old code, which the
+  # server renders with and this compile reads props and routes from. Phoenix's reloader unloads
+  # such modules too, but misses some: without its Mix listener it goes by the manifest's mtime in
+  # whole seconds, and it covers only its reloadable apps. Unloaded the same way, so that a call
+  # loads the new beam. The modules this VM's compiler reported are its own compile's, loaded new.
+  # Hologram's own modules are left loaded: this compile runs them, and would run two versions of the
+  # compiler at once. Nothing is unloaded when the tracer was not registered before this compile: on
+  # the first compile in a VM it reports none of the modules Elixir compiled before it, which the VM
+  # loaded from the beams Elixir just wrote.
+  defp unload_replaced_modules(_module_digests_diff, _compiled_modules, false), do: :ok
+
+  defp unload_replaced_modules(module_digests_diff, compiled_modules, true) do
+    stale_statuses =
+      (module_digests_diff.added_modules ++ module_digests_diff.edited_modules)
+      |> Map.new(&{&1, :modified})
+      |> Map.merge(Map.new(module_digests_diff.removed_modules, &{&1, :removed}))
+
+    hologram_lib_prefix =
+      Compiler
+      |> Reflection.source_path()
+      |> Path.dirname()
+      |> Path.dirname()
+      |> Kernel.<>("/")
+
+    # In this order, since the source path is read from a loaded module, and the status costs an
+    # md5 of the beam.
+    stale_statuses
+    |> Map.keys()
+    |> Enum.filter(fn module ->
+      not MapSet.member?(compiled_modules, module) and :code.is_loaded(module) != false and
+        not hologram_lib_module?(module, hologram_lib_prefix)
+    end)
+    |> :code.module_status()
+    |> Enum.each(fn {module, status} ->
+      if status == stale_statuses[module] do
+        :code.purge(module)
+        :code.delete(module)
+      end
+    end)
   end
 
   # An empty lock file is a lock in the middle of being acquired, not an invalid one:

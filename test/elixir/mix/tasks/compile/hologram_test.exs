@@ -19,6 +19,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module8
 
   # The module is most of the lib suite's serial phase, so CI runs it in a job of its own (see the
   # lib_tests matrix in .github/workflows/ci.yml).
@@ -288,6 +289,35 @@ defmodule Mix.Tasks.Compile.HologramTest do
     |> load_plt_items()
   end
 
+  # Loads other code for the module than its beam holds, as a VM still runs once another OS process
+  # rewrote the beam. The beam's code is loaded back when the test exits.
+  defp load_code_other_than_beam(module) do
+    beam_path = :code.which(module)
+    ignore_module_conflict? = Code.get_compiler_option(:ignore_module_conflict)
+    Code.put_compiler_option(:ignore_module_conflict, true)
+
+    [{^module, bytecode}] =
+      try do
+        # Under the module's own file name, which its compile info names.
+        Code.compile_string(
+          "defmodule #{inspect(module)} do def value, do: :memory end",
+          Reflection.source_path(module)
+        )
+      after
+        Code.put_compiler_option(:ignore_module_conflict, ignore_module_conflict?)
+      end
+
+    on_exit(fn -> reload_beam(module) end)
+
+    # This VM compiled it, which the tracer records, but the code stands for what the beam held
+    # before the other process rewrote it.
+    :ets.delete(Tracer, module)
+
+    # Loaded from the beam's path, as Mix loads a module, so that the VM compares it with the beam.
+    :code.purge(module)
+    {:module, ^module} = :code.load_binary(module, beam_path, bytecode)
+  end
+
   defp load_compile_state_dump(opts) do
     dump_path = Path.join(opts[:build_dir], Reflection.compile_state_dump_file_name())
     assert File.exists?(dump_path)
@@ -425,6 +455,83 @@ defmodule Mix.Tasks.Compile.HologramTest do
     recorded = fn -> Agent.get(agent, &Enum.reverse/1) end
 
     {record, recorded}
+  end
+
+  defp reload_beam(module) do
+    :code.purge(module)
+    :code.delete(module)
+    :code.purge(module)
+    {:module, ^module} = :code.load_file(module)
+  end
+
+  # Deletes the module's beam as another OS process does when its source file goes, the module
+  # staying loaded. The beam and its code are put back when the test exits.
+  defp remove_beam(module) do
+    Code.ensure_loaded!(module)
+    beam_path = :code.which(module)
+    bytecode = File.read!(beam_path)
+    %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
+
+    on_exit(fn ->
+      File.write!(beam_path, bytecode)
+      File.touch!(beam_path, mtime)
+      reload_beam(module)
+    end)
+
+    File.rm!(beam_path)
+  end
+
+  # The calls of the given functions this process made while the function ran, in order, as
+  # {module, function} pairs. Each function is given with the arguments a call must have, or :_ for
+  # any. Collected by another process, since the compile can take messages off this one's mailbox.
+  defp trace_calls(functions, fun) do
+    {:ok, collector} = Agent.start_link(fn -> [] end)
+    {:ok, tracer} = Task.start_link(fn -> collect_traced_calls(collector) end)
+
+    patterns =
+      Enum.map(functions, fn
+        {module, function, :_} -> {{module, function, :_}, true}
+        {module, function, args} -> {{module, function, length(args)}, [{args, [], []}]}
+      end)
+
+    try do
+      Enum.each(patterns, fn {mfa, match_spec} ->
+        :erlang.trace_pattern(mfa, match_spec, [:global])
+      end)
+
+      :erlang.trace(self(), true, [:call, {:tracer, tracer}])
+      fun.()
+    after
+      :erlang.trace(self(), false, [:call])
+
+      Enum.each(patterns, fn {mfa, _match_spec} ->
+        :erlang.trace_pattern(mfa, false, [:global])
+      end)
+    end
+
+    # Every trace message of this process is in the tracer's mailbox once this arrives.
+    ref = :erlang.trace_delivered(self())
+
+    receive do
+      {:trace_delivered, _pid, ^ref} -> :ok
+    end
+
+    send(tracer, {:done, self()})
+
+    receive do
+      :collected -> Agent.get(collector, &Enum.reverse/1)
+    end
+  end
+
+  defp collect_traced_calls(collector) do
+    receive do
+      {:trace, _pid, :call, {module, function, _args}} ->
+        Agent.update(collector, &[{module, function} | &1])
+        collect_traced_calls(collector)
+
+      {:done, caller} ->
+        send(caller, :collected)
+    end
   end
 
   # What the compiler tracer records when the module is compiled: the bytes its beam holds.
@@ -1090,6 +1197,93 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert pages_reaching_module_2 > 0
       assert cache_state().module_infos[Module2] == module_infos[Module2]
+    end
+
+    test "unloads the old code of a module another process compiled", %{opts: opts} do
+      run(opts)
+
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+        cache_state()
+
+      load_code_other_than_beam(Module8)
+      assert :code.module_status(Module8) == :modified
+
+      stale_info = %{module_infos[Module8] | digest: "stale", mtime: 0}
+      put_kept_module_infos(%{module_infos | Module8 => stale_info}, dumped_at, editable_modules)
+
+      # Unloaded before the compile asks the pages for their routes, as the first call into the
+      # changed modules.
+      calls =
+        trace_calls([{:code, :delete, [Module8]}, {Compiler, :validate_page_modules, :_}], fn ->
+          run(opts)
+        end)
+
+      assert calls == [{:code, :delete}, {Compiler, :validate_page_modules}]
+      assert Module8.value() == :beam
+    end
+
+    test "unloads the old code of a module another process compiled on a cold compile", %{
+      opts: opts
+    } do
+      run(opts)
+
+      # The next compile in this VM is cold, as after one that failed, and its scan reads the
+      # module.
+      Cache.reset()
+      fake_edit_in_dump(Module8, opts)
+      fake_recompile()
+      load_code_other_than_beam(Module8)
+
+      run(opts)
+
+      assert Module8.value() == :beam
+    end
+
+    test "unloads a module whose beam another process deleted", %{opts: opts} do
+      run(opts)
+
+      remove_beam(Module8)
+      run(opts)
+
+      refute :code.is_loaded(Module8)
+    end
+
+    test "keeps loaded the old code of Hologram's own module another process compiled", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+        cache_state()
+
+      # A Hologram module the compile doesn't call.
+      module = Hologram.Benchmarks
+      load_code_other_than_beam(module)
+
+      stale_info = %{module_infos[module] | digest: "stale", mtime: 0}
+      put_kept_module_infos(%{module_infos | module => stale_info}, dumped_at, editable_modules)
+
+      run(opts)
+
+      assert :code.module_status(module) == :modified
+    end
+
+    test "keeps loaded a module another process compiled when its code is the beam's", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+        cache_state()
+
+      Code.ensure_loaded!(Module8)
+
+      stale_info = %{module_infos[Module8] | digest: "stale", mtime: 0}
+      put_kept_module_infos(%{module_infos | Module8 => stale_info}, dumped_at, editable_modules)
+
+      run(opts)
+
+      assert :code.is_loaded(Module8)
     end
 
     test "a run with no changes checks every editable beam and builds no bundle", %{opts: opts} do
