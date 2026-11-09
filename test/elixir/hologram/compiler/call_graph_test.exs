@@ -164,9 +164,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       {page_module, :__layout_props__, 0},
       {page_module, :__params__, 0},
       {page_module, :__route__, 0},
+      {page_module, :__state__, 0},
       {page_module, :action, 3},
       {page_module, :template, 0},
       {layout_module, :__props__, 0},
+      {layout_module, :__state__, 0},
       {layout_module, :action, 3},
       {layout_module, :template, 0}
     ]
@@ -901,11 +903,13 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert has_vertex?(call_graph, {Module4, :__props__, 0})
+      assert has_vertex?(call_graph, {Module4, :__state__, 0})
       assert has_vertex?(call_graph, {Module4, :action, 3})
       assert has_vertex?(call_graph, {Module4, :init, 2})
       assert has_vertex?(call_graph, {Module4, :template, 0})
 
       assert has_edge?(call_graph, Module4, {Module4, :__props__, 0})
+      assert has_edge?(call_graph, Module4, {Module4, :__state__, 0})
       assert has_edge?(call_graph, Module4, {Module4, :action, 3})
       assert has_edge?(call_graph, Module4, {Module4, :init, 2})
       assert has_edge?(call_graph, Module4, {Module4, :template, 0})
@@ -2838,9 +2842,11 @@ defmodule Hologram.Compiler.CallGraphTest do
                {Module14, :__layout_props__, 0},
                {Module14, :__params__, 0},
                {Module14, :__route__, 0},
+               {Module14, :__state__, 0},
                {Module14, :action, 3},
                {Module14, :template, 0},
                {Module15, :__props__, 0},
+               {Module15, :__state__, 0},
                {Module15, :action, 3},
                {Module15, :init, 2},
                {Module15, :template, 0},
@@ -3032,6 +3038,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> list_page_mfas_with_analysis(Module17)
 
       assert {Module15, :__props__, 0} in result
+      assert {Module15, :__state__, 0} in result
       assert {Module15, :action, 3} in result
       assert {Module15, :init, 2} in result
       assert {Module15, :template, 0} in result
@@ -3047,6 +3054,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> list_page_mfas_with_analysis(Module17)
 
       assert {Module15, :__props__, 0} in result
+      assert {Module15, :__state__, 0} in result
       assert {Module15, :action, 3} in result
       assert {Module15, :init, 2} in result
       assert {Module15, :template, 0} in result
@@ -3076,6 +3084,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> list_page_mfas_with_analysis(Module17)
 
       assert {Module4, :__props__, 0} in result
+      assert {Module4, :__state__, 0} in result
       assert {Module4, :action, 3} in result
       assert {Module4, :init, 2} in result
       assert {Module4, :template, 0} in result
@@ -3524,6 +3533,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> list_runtime_mfas()
 
       assert {Module38, :__props__, 0} in result
+      assert {Module38, :__state__, 0} in result
       assert {Module38, :action, 3} in result
       assert {Module38, :init, 2} in result
       assert {Module38, :template, 0} in result
@@ -3542,6 +3552,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> list_runtime_mfas()
 
       assert {Module39, :__props__, 0} in result
+      assert {Module39, :__state__, 0} in result
       assert {Module39, :action, 3} in result
       assert {Module39, :init, 2} in result
       assert {Module39, :template, 0} in result
@@ -3590,6 +3601,7 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> list_runtime_mfas()
 
       assert {Module39, :__props__, 0} in result
+      assert {Module39, :__state__, 0} in result
       assert {Module39, :action, 3} in result
       assert {Module39, :init, 2} in result
       assert {Module39, :template, 0} in result

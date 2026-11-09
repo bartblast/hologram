@@ -8,6 +8,10 @@ defmodule HologramFeatureTests.Events.ClickOutsidePage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :close_count, :integer
+  state :note_count, :integer
+  state :open?, :boolean
+
   def init(_params, component, _server) do
     put_state(component,
       close_count: 0,

@@ -10,6 +10,9 @@ defmodule HologramFeatureTests.SessionRestore.ProtectedPage do
 
   middleware :require_login
 
+  state :marker, :string
+  state :user, :any
+
   def require_login(%{user_id: nil} = server, _opts) do
     put_redirect(server, LoginPage)
   end

@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Actions.Page18 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :show_component?, :boolean
+
   def init(_params, component, _server) do
     put_state(component, show_component?: false)
   end

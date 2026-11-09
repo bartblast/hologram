@@ -28,6 +28,28 @@ export function defineClientOnlyModule3Fixture() {
 
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module3",
+    "__state__",
+    0,
+    "public",
+    [
+      {
+        params: (_context) => [],
+        guards: [],
+        body: (_context) => {
+          return Type.list([
+            Type.tuple([
+              Type.atom("props_seen_by_init"),
+              Type.atom("map"),
+              Type.keywordList(),
+            ]),
+          ]);
+        },
+      },
+    ],
+  );
+
+  Interpreter.defineElixirFunction(
+    "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module3",
     "init",
     2,
     "public",

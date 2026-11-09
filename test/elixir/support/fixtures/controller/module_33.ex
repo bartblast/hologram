@@ -5,6 +5,8 @@ defmodule Hologram.Test.Fixtures.Controller.Module33 do
 
   layout Hologram.Test.Fixtures.LayoutWithRuntime
 
+  state :date, :any
+
   @impl Page
   def init(_params, component, _server) do
     put_state(component, :date, ~D[2026-10-05])

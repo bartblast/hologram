@@ -41,7 +41,9 @@ defmodule Hologram.Page do
 
         use Hologram.Middleware.Builder
 
-        import Hologram.Component, only: unquote(Hologram.Component.__helper_imports__())
+        import Hologram.Component,
+          only: unquote([state: 2, state: 3] ++ Hologram.Component.__helper_imports__())
+
         import Hologram.Page, only: [layout: 1, layout: 2, param: 2, param: 3, route: 1]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
@@ -73,7 +75,8 @@ defmodule Hologram.Page do
         defoverridable init: 3
       end,
       Component.maybe_register_colocated_template_markup(template_path),
-      Page.register_params_accumulator()
+      Page.register_params_accumulator(),
+      Component.register_state_accumulator()
     ]
   end
 
@@ -89,7 +92,9 @@ defmodule Hologram.Page do
         def __params__, do: Enum.reverse(@__params__)
       end
 
-    [template_clause, params_clause]
+    state_clause = Component.build_state_clause()
+
+    [template_clause, params_clause, state_clause]
   end
 
   @doc """
@@ -232,8 +237,14 @@ defmodule Hologram.Page do
   defmacro param(name, type, opts \\ []) do
     validate_param_opts!(opts, name, __CALLER__.module)
 
+    # A page's params are its props: the renderers hand them to init and to the template in the
+    # props position, under any state entry of the same name.
     quote do
-      Module.put_attribute(__MODULE__, :__params__, {unquote(name), unquote(type), unquote(opts)})
+      param_name = unquote(name)
+
+      Hologram.Component.validate_free_of_state!(param_name, "a param", __MODULE__)
+
+      Module.put_attribute(__MODULE__, :__params__, {param_name, unquote(type), unquote(opts)})
     end
   end
 

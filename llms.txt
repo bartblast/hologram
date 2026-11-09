@@ -16,7 +16,7 @@
 
 - [Architecture](https://hologram.page/docs/architecture): Pages and components, code distribution, client-server communication
 - [Template Syntax](https://hologram.page/docs/template-syntax): ~HOLO sigil, HTML markup, @var access, component nodes, dynamic nodes, interpolation, trusted HTML, attribute and prop spread, control flow blocks, keyed lists
-- [Components](https://hologram.page/docs/components): Reusable UI building blocks, props, stateful vs stateless, slots, templates
+- [Components](https://hologram.page/docs/components): Reusable UI building blocks, props, state, stateful vs stateless, slots, templates
 - [Pages](https://hologram.page/docs/pages): Route entry points, routing and parameters, differences from regular components
 - [Layouts](https://hologram.page/docs/layouts): Root components that wrap page content, specifying layouts, layout templates
 - [Events](https://hologram.page/docs/events): User interaction handling, event types, event data, binding syntax, event targets

@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.Components.TemplateSyntax.Component7 do
   use Hologram.Component
 
+  state :count, :integer
+
   def init(_props, component) do
     put_state(component, :count, 0)
   end

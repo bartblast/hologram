@@ -19,7 +19,20 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
+  alias Hologram.Test.Fixtures.Template.Renderer.Module100
+  alias Hologram.Test.Fixtures.Template.Renderer.Module101
+  alias Hologram.Test.Fixtures.Template.Renderer.Module102
+  alias Hologram.Test.Fixtures.Template.Renderer.Module103
+  alias Hologram.Test.Fixtures.Template.Renderer.Module104
+  alias Hologram.Test.Fixtures.Template.Renderer.Module105
+  alias Hologram.Test.Fixtures.Template.Renderer.Module106
+  alias Hologram.Test.Fixtures.Template.Renderer.Module107
+  alias Hologram.Test.Fixtures.Template.Renderer.Module108
+  alias Hologram.Test.Fixtures.Template.Renderer.Module109
   alias Hologram.Test.Fixtures.Template.Renderer.Module11
+  alias Hologram.Test.Fixtures.Template.Renderer.Module110
+  alias Hologram.Test.Fixtures.Template.Renderer.Module111
+  alias Hologram.Test.Fixtures.Template.Renderer.Module113
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
@@ -1240,7 +1253,90 @@ defmodule Hologram.Template.RendererTest do
                 }, @server}
     end
 
-    test "with props and state, give state priority over prop if there are name collisions" do
+    test "with declared state defaults and no init/3" do
+      node = {:component, Module100, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>state_a = 1, state_b = abc</div>",
+                %{
+                  "my_component" => %{
+                    module: Module100,
+                    struct: %Component{props: %{cid: "my_component"}, state: %{a: 1, b: "abc"}}
+                  }
+                }, @server}
+    end
+
+    test "with declared state defaults, which init/3 sees and can override" do
+      node = {:component, Module101, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>state_a = 1, state_b = xyz</div>",
+                %{
+                  "my_component" => %{
+                    module: Module101,
+                    struct: %Component{
+                      props: %{cid: "my_component"},
+                      state: %{a: 1, b: "xyz", c: %{a: 1, b: "abc"}}
+                    }
+                  }
+                }, @server}
+    end
+
+    test "with declared state defaults and only server struct returned from init/3" do
+      node = {:component, Module103, [{"cid", [text: "my_component"]}], []}
+
+      assert {"<div>state_a = 1</div>", component_registry, _server_struct} =
+               render_dom(node, @env, @server)
+
+      assert component_registry["my_component"].struct.state == %{a: 1}
+    end
+
+    test "with state that init/3 put without declaring it" do
+      node = {:component, Module105, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg =
+        ~s/state "b" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module105", / <>
+          "but init/3 put it - declare it with state/2 or state/3"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with props that init/3 copied into state" do
+      node =
+        {:component, Module108, [{"cid", [text: "my_component"]}, {"label", [text: "abc"]}], []}
+
+      expected_msg =
+        ~s/state "cid" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module108", / <>
+          ~s/but init\/3 put it - "cid" is a prop, read it from component.props instead/
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with state that init/3 put under a key that isn't an atom" do
+      node = {:component, Module110, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg =
+        ~s/state key "b" isn't an atom, but init\/3 put it in / <>
+          ~s/"Hologram.Test.Fixtures.Template.Renderer.Module110" - state is declared with atom names/
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with state put by init/3 under a path, whose top key is declared" do
+      node = {:component, Module107, [{"cid", [text: "my_component"]}], []}
+
+      assert {"", component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert component_registry["my_component"].struct.state == %{values: %{x: 1}}
+    end
+
+    test "with props and state" do
       node =
         {:component, Module4,
          [
@@ -1250,13 +1346,13 @@ defmodule Hologram.Template.RendererTest do
          ], []}
 
       assert render_dom(node, @env, @server) ==
-               {"<div>var_a = state_a, var_b = state_b, var_c = prop_c</div>",
+               {"<div>var_a = state_a, var_b = prop_b, var_c = prop_c</div>",
                 %{
                   "my_component" => %{
                     module: Module4,
                     struct: %Component{
                       props: %{b: "prop_b", c: "prop_c", cid: "my_component"},
-                      state: %{a: "state_a", b: "state_b"}
+                      state: %{a: "state_a"}
                     }
                   }
                 }, @server}
@@ -1435,8 +1531,6 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       props: %{a: "34a_prop", cid: "component_34"},
                       state: %{
-                        cid: "component_34",
-                        a: "34a_prop",
                         b: "34b_state",
                         c: "34c_state",
                         x: "34x_state",
@@ -1449,14 +1543,14 @@ defmodule Hologram.Template.RendererTest do
                     module: Module35,
                     struct: %Component{
                       props: %{a: "35a_prop", cid: "component_35"},
-                      state: %{cid: "component_35", a: "35a_prop", z: "35z_state"}
+                      state: %{z: "35z_state"}
                     }
                   },
                   "component_36" => %{
                     module: Module36,
                     struct: %Component{
                       props: %{a: "36a_prop", cid: "component_36"},
-                      state: %{cid: "component_36", a: "36a_prop", z: "36z_state"}
+                      state: %{z: "36z_state"}
                     }
                   }
                 },
@@ -1948,6 +2042,72 @@ defmodule Hologram.Template.RendererTest do
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 
+    test "with declared state defaults and no init/3" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module102, :dummy_module_102_digest)
+
+      assert {"page state_a = 1, state_b = abc", component_registry, _server_struct} =
+               render_page_without_tree(Module102, @params, @server, @opts)
+
+      assert component_registry["page"].struct.state == %{a: 1, b: "abc"}
+    end
+
+    test "with declared state defaults, which init/3 sees and can override" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module104, :dummy_module_104_digest)
+
+      assert {"page state_a = 1, state_b = xyz", component_registry, _server_struct} =
+               render_page_without_tree(Module104, @params, @server, @opts)
+
+      assert component_registry["page"].struct.state == %{a: 1, b: "xyz", c: %{a: 1, b: "abc"}}
+    end
+
+    test "with state that init/3 put without declaring it" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module106, :dummy_module_106_digest)
+
+      expected_msg =
+        ~s/state "b" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module106", / <>
+          "but init/3 put it - declare it with state/2 or state/3"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_page_without_tree(Module106, @params, @server, @opts)
+      end
+    end
+
+    test "with params that init/3 copied into state" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module109, :dummy_module_109_digest)
+
+      expected_msg =
+        ~s/state "id" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module109", / <>
+          ~s/but init\/3 put it - "id" is a param, read it from component.props instead/
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_page_without_tree(Module109, %{id: 1}, @server, @opts)
+      end
+    end
+
+    test "with a cid entry that init/3 put into the page state" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module113, :dummy_module_113_digest)
+
+      expected_msg =
+        ~s/state "cid" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module113", / <>
+          ~s/but init\/3 put it - "cid" is the layout's cid prop, put the value under another name/
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_page_without_tree(Module113, @params, @server, @opts)
+      end
+    end
+
+    test "with state that the layout's init/3 put without declaring it" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module111, :dummy_module_111_digest)
+
+      expected_msg =
+        ~s/state "b" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module112", / <>
+          "but init/3 put it - declare it with state/2 or state/3"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_page_without_tree(Module111, @params, @server, @opts)
+      end
+    end
+
     test "inside layout slot" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module14, :dummy_module_14_digest)
 
@@ -1982,20 +2142,20 @@ defmodule Hologram.Template.RendererTest do
                render_page_without_tree(Module27, @params, @server, @opts)
     end
 
-    test "aggregate page vars, giving state vars priority over param vars when there are name conflicts" do
+    test "aggregate page vars" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
 
       params = %{key_1: "param_value_1", key_2: "param_value_2"}
 
-      assert {~s'page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
+      assert {~s'page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;param_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _component_registry, _server_struct} =
                render_page_without_tree(Module21, params, @server, @opts)
     end
 
-    test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do
+    test "aggregate layout vars" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
 
-      assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
+      assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;prop_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _component_registry, _server_struct} =
                render_page_without_tree(Module24, @params, @server, @opts)
     end

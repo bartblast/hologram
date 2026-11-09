@@ -5,6 +5,9 @@ defmodule HologramFeatureTests.AssetManifestPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :static_path, :any
+  state :status, :string
+
   # The file behind this path is planted by test/test_helper.exs, so this page works under
   # mix test only - visiting it under mix phx.server raises until that file exists.
   def init(_params, component, _server) do

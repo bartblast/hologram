@@ -9,6 +9,10 @@ defmodule HologramFeatureTests.TemplateSyntax.DynamicComponentPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :module_1, :any
+  state :module_2, :any
+  state :module_3, :any
+
   def init(_params, component, _server) do
     put_state(component, module_1: Component2, module_2: Component5, module_3: nil)
   end

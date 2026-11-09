@@ -5,6 +5,8 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module10 do
   alias Hologram.Test.Fixtures.Template.Renderer.Module11
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
 
+  state :a, :integer
+
   def init(_props, component, server) do
     {
       put_state(component, a: 10),

@@ -3,6 +3,8 @@ defmodule HologramFeatureTests.Components.TemplateSyntax.Component3 do
 
   prop :dom_id, :string
 
+  state :my_state_value, :string
+
   def init(_props, component, _server) do
     put_state(component, :my_state_value, "value_7")
   end

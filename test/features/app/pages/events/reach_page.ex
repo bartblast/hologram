@@ -7,6 +7,22 @@ defmodule HologramFeatureTests.Events.ReachPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :chat_loads, :integer
+  state :chat_messages, :any
+  state :filled_bottom, :integer
+  state :filled_right, :integer
+  state :hidden_child_bottom, :integer
+  state :resize_bottom, :integer
+  state :reversed_bottom, :integer
+  state :reversed_top, :integer
+  state :rtl_left, :integer
+  state :rtl_right, :integer
+  state :scroll_bottom, :integer
+  state :scroll_left, :integer
+  state :scroll_right, :integer
+  state :scroll_top, :integer
+  state :tall_child_bottom, :integer
+
   def init(_params, component, _server) do
     put_state(component,
       chat_loads: 0,

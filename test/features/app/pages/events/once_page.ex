@@ -8,6 +8,18 @@ defmodule HologramFeatureTests.Events.OncePage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :click_count, :integer
+  state :click_outside_count, :integer
+  state :debounce_count, :integer
+  state :reach_bottom_count, :integer
+  state :reach_once_count, :integer
+  state :reach_top_count, :integer
+  state :rearm_count, :integer
+  state :rearm_shown, :boolean
+  state :rerender_tick, :integer
+  state :resize_once_count, :integer
+  state :resize_plain_count, :integer
+
   def init(_params, component, _server) do
     put_state(component,
       click_count: 0,

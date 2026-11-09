@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Realtime.Page23 do
 
   @channel {:room, 23}
 
+  state :received, :string
+
   # The action queued here is scheduled as soon as the page mounts, so the command it
   # issues reaches the server while the SSE handshake is still in flight. A subscription
   # declared from that command is the boot-time race this page exists to exercise.

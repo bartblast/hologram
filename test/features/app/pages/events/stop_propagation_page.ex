@@ -8,6 +8,11 @@ defmodule HologramFeatureTests.Events.StopPropagationPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :plain_inner, :boolean
+  state :plain_outer, :boolean
+  state :stopped_inner, :boolean
+  state :stopped_outer, :boolean
+
   def init(_params, component, _server) do
     put_state(component,
       plain_inner: false,

@@ -550,6 +550,35 @@ export default class Renderer {
     return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
   }
 
+  // Based on validate_declared_state/3
+  //
+  // put_state/2,3 can't tell which module it runs in, so the state is checked where the struct comes
+  // back from the module's own code. Of several undeclared keys the smallest in term order is named,
+  // so the message doesn't depend on map order.
+  //
+  // WARNING: must match validate_declared_state/3 on the server.
+  static validateDeclaredState(state, moduleProxy, handler) {
+    const declaredNames = Renderer.#getDeclaredStateNames(moduleProxy);
+
+    // The map's data is keyed by encoded keys already.
+    const undeclaredKeys = Object.entries(state.data)
+      .filter(([encodedKey, _entry]) => !declaredNames.has(encodedKey))
+      .map(([_encodedKey, [key, _value]]) => key);
+
+    if (undeclaredKeys.length === 0) {
+      return;
+    }
+
+    Interpreter.raiseError(
+      "Hologram.StateError",
+      Renderer.#undeclaredStateMessage(
+        Renderer.#smallestStateKey(undeclaredKeys),
+        moduleProxy,
+        handler,
+      ),
+    );
+  }
+
   static valueDomToBitstring(valueDom) {
     // Cache the property access
     const valueParts = valueDom.data;
@@ -1521,12 +1550,54 @@ export default class Renderer {
     return moduleProxy.__constrainedProps__;
   }
 
+  // The names of the module's declared state entries, as encoded map keys, cached on the module
+  // proxy like the defaults.
+  static #getDeclaredStateNames(moduleProxy) {
+    if (!("__declaredStateNames__" in moduleProxy)) {
+      moduleProxy.__declaredStateNames__ = new Set(
+        moduleProxy["__state__/0"]().data.map((definition) =>
+          Type.encodeMapKey(definition.data[0]),
+        ),
+      );
+    }
+
+    return moduleProxy.__declaredStateNames__;
+  }
+
   static #getPropDefinitions(moduleProxy) {
     if (!("__props__" in moduleProxy)) {
       moduleProxy.__props__ = moduleProxy["__props__/0"]();
     }
 
     return moduleProxy.__props__;
+  }
+
+  // Based on state_defaults/1
+  //
+  // The declared defaults are a property of the module, so the map is built once and cached on the
+  // module proxy. Every component initialized from it shares the map, which is safe since nothing
+  // changes a state map in place: every write builds a new one.
+  // Deps: [:lists.keyfind/3]
+  static #getStateDefaults(moduleProxy) {
+    if (!("__stateDefaults__" in moduleProxy)) {
+      const entries = moduleProxy["__state__/0"]()
+        .data.map((definition) => {
+          const defaultEntry = Erlang_Lists["keyfind/3"](
+            Type.atom("default"),
+            Type.integer(1),
+            definition.data[2],
+          );
+
+          return Type.isFalse(defaultEntry)
+            ? null
+            : [definition.data[0], defaultEntry.data[1]];
+        })
+        .filter((entry) => entry !== null);
+
+      moduleProxy.__stateDefaults__ = Type.map(entries);
+    }
+
+    return moduleProxy.__stateDefaults__;
   }
 
   // autofocus is a boolean attribute, so its presence is what counts: a bare attribute renders as
@@ -1747,11 +1818,24 @@ export default class Renderer {
     let componentEmittedContext;
 
     if (componentState === null) {
-      const initialComponentStruct = Type.componentStruct({props});
+      // The declared defaults are in place before init/2 runs, so init/2 sees them and can override
+      // them.
+      //
+      // WARNING: must match the struct init_component/3 starts from on the server.
+      const initialComponentStruct = Type.componentStruct({
+        props,
+        state: Renderer.#getStateDefaults(moduleProxy),
+      });
 
       const componentStruct = moduleProxy["init/2"](
         props,
         initialComponentStruct,
+      );
+
+      Renderer.validateDeclaredState(
+        Erlang_Maps["get/2"](Type.atom("state"), componentStruct),
+        moduleProxy,
+        "init/2",
       );
 
       ComponentRegistry.putEntry(
@@ -2895,6 +2979,26 @@ export default class Renderer {
     );
   }
 
+  // Enum.min/1 over the keys, in term order. Equal keys of different types, like 1 and 1.0, give
+  // the integer, which sorts first among map keys on the BEAM. compareTerms doesn't compare every
+  // type yet, and a key it can't compare leaves the first key standing rather than raising in
+  // place of the StateError.
+  static #smallestStateKey(keys) {
+    return keys.reduce((min, candidate) => {
+      let order;
+
+      try {
+        order = Interpreter.compareTerms(candidate, min);
+      } catch {
+        return min;
+      }
+
+      return order < 0 || (order === 0 && Type.isInteger(candidate))
+        ? candidate
+        : min;
+    });
+  }
+
   // Based on spread_entries/1
   // Returns [key, value] term pairs. Structs are maps, but their __struct__ key is not a name.
   static #spreadEntries(value) {
@@ -2961,6 +3065,46 @@ export default class Renderer {
         : Interpreter.moduleExName(parentModule);
 
     return Vdom.trustedHtmlVnode(Bitstring.toText(html), module);
+  }
+
+  // Based on undeclared_state_hint/2
+  static #undeclaredStateHint(key, moduleProxy) {
+    const isPage = "__params__/0" in moduleProxy;
+
+    if (isPage && key.value === "cid") {
+      return `"cid" is the layout's cid prop, put the value under another name`;
+    }
+
+    const holder = isPage ? "param" : "prop";
+
+    const holderNames = (
+      isPage ? moduleProxy["__params__/0"]() : moduleProxy["__props__/0"]()
+    ).data.map((definition) => definition.data[0].value);
+
+    if (!isPage) {
+      holderNames.push("cid");
+    }
+
+    return holderNames.includes(key.value)
+      ? `"${key.value}" is a ${holder}, read it from component.props instead`
+      : "declare it with state/2 or state/3";
+  }
+
+  // Based on undeclared_state_message/3
+  static #undeclaredStateMessage(key, moduleProxy, handler) {
+    const moduleName = Interpreter.moduleExName(moduleProxy.__exModule__);
+
+    if (!Type.isAtom(key)) {
+      return (
+        `state key ${Interpreter.inspect(key)} isn't an atom, but ${handler} put it in ` +
+        `"${moduleName}" - state is declared with atom names`
+      );
+    }
+
+    return (
+      `state "${key.value}" isn't declared in "${moduleName}", but ${handler} put it - ` +
+      Renderer.#undeclaredStateHint(key, moduleProxy)
+    );
   }
 
   static #updateFormInputChecked(element, newChecked) {

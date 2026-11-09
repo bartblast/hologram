@@ -5,6 +5,13 @@ defmodule HologramFeatureTests.Focus.Page2 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :blocked?, :boolean
+  state :editing?, :boolean
+  state :late?, :boolean
+  state :locked?, :boolean
+  state :order?, :boolean
+  state :pair?, :boolean
+
   def init(_params, component, _server) do
     put_state(component,
       blocked?: false,

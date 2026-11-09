@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.Middleware.Page7 do
 
   middleware :own
 
+  state :result, :string
+
   def own(server, _opts) do
     put_stash(server, :own, "own middleware")
   end

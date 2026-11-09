@@ -8,6 +8,10 @@ defmodule HologramFeatureTests.Events.WindowPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :escape_count, :integer
+  state :listening, :boolean
+  state :shortcut_count, :integer
+
   def init(_params, component, _server) do
     put_state(component,
       escape_count: 0,

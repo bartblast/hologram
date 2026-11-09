@@ -223,6 +223,8 @@ defmodule Blog.HomePage do
 
   layout Blog.MainLayout
 
+  state :posts, :list
+
   def init(_params, component, _server) do
     # In real app, fetch from database
     posts = [
@@ -283,6 +285,8 @@ defmodule Blog.PostPage do
   param :id, :integer
 
   layout Blog.MainLayout
+
+  state :post, :map
 
   def init(params, component, _server) do
     # In real app, fetch from database
@@ -575,6 +579,8 @@ A bare interpolation is only as safe as the value. Write one for values the appl
 To output HTML as markup instead of escaping it, like Markdown rendered to HTML or content from a CMS, mark it with `trust_html/1` and interpolate it as an element's content:
 
 ```elixir
+state :body, :any
+
 def init(%{slug: slug}, component, _server) do
   post = Blog.get_post!(slug)
   put_state(component, :body, trust_html(post.body_html))
@@ -823,7 +829,7 @@ prop :user_id, :integer, default: 123
 
 Props can be typed using the following types:
 
-- `:any` - Any type (no type checking)
+- `:any` - Any type
 - `:atom` - Atoms
 - `:boolean` - Booleans
 - `:bitstring` - Bitstrings
@@ -886,6 +892,54 @@ A missing required prop is reported at compile time wherever a template writes t
 
 Everything else is checked while rendering, and raises `Hologram.PropError` naming the template the component was rendered from. That covers a prop arriving through a spread, a component chosen by a dynamic tag, a prop sourced from the Context, an interpolated value such as `size="a{@b}"`, and any expression - including one nested inside an otherwise literal value, such as `{[:small, @other]}`.
 
+#### State
+
+A stateful component declares the state it keeps with the `state/2` macro, receiving `name` and `type` params, the same way it declares props:
+
+```elixir
+state :count, :integer
+```
+
+or `state/3` macro that can receive the third `opts` param:
+
+```elixir
+state :count, :integer, default: 0
+```
+
+Pages declare their state the same way.
+
+Every key a component or page puts in its state has to be declared. Putting one that isn't raises `Hologram.StateError` once the `init` or action that put it returns, naming the key, the module and the function. A nested update needs only its first key declared:
+
+```elixir
+state :form, :map, default: %{}
+
+def action(:email_changed, params, component) do
+  put_state(component, [:form, :email], params.event.value)
+end
+```
+
+##### Types
+
+State takes the same types as props.
+
+##### Options
+
+State can be configured using the `default` option. Any other option is a compile error.
+
+###### Default Value
+
+Set the value an entry starts with using the `default` option:
+
+```elixir
+state :count, :integer, default: 0
+```
+
+The default is in the state before `init/3` or `init/2` runs, so `init` sees it and can change it. A component or page whose state starts out as constant values needs no `init` at all. An entry with no default isn't in the state until something puts it there.
+
+##### Names
+
+A state entry can't have the same name as one of the component's props or the page's params, and it can't be named `cid`. Templates read state and props by the same `@name`, so state would hide the prop, and the build fails instead. When a prop supplies a starting value that the component goes on to own, give the state entry a name of its own, like an `:initial_count` prop feeding a `:count` entry.
+
 #### Stateful vs. Stateless Components
 
 Components can be either stateful or stateless:
@@ -933,6 +987,8 @@ The function should return either:
 Example:
 
 ```elixir
+state :kill_count, :integer
+
 def init(_props, component, server) do
   component = put_state(component, :kill_count, 439)
   server = put_session(server, :name, "John Wick")
@@ -953,6 +1009,9 @@ The function should return a `Component` struct with any initial state.
 Example:
 
 ```elixir
+state :kill_count, :integer
+state :name, :string
+
 def init(_props, component) do
   put_state(component, kill_count: 439, name: "John Wick")
 end
@@ -980,11 +1039,7 @@ end
 
 ###### Optional Initialization
 
-Both `init/3` and `init/2` functions are optional. If you don't need to initialize state or perform any preparation, you can omit them entirely - Hologram provides default implementations that simply return the `Component` and `Server` structs unchanged.
-
-###### Props and State Name Collisions
-
-Give props and state entries different names. Templates merge the two with state taking precedence, so a state entry sharing a prop's name shadows it entirely. Copying a prop into a same-named state entry during `init` is the usual way to hit this: initialization runs only once, so the copy never refreshes, and the template keeps reading the copy rather than the prop. New values from the parent arrive on every render, none of them reach the screen, and nothing warns you. When a prop supplies a starting value that the component goes on to own, separate names - an `:initial_count` prop feeding a `:count` state entry - keep the prop reachable and make the snapshot obvious.
+Both `init/3` and `init/2` functions are optional. If declared defaults cover the starting state and there's nothing else to prepare, you can omit them entirely - Hologram provides default implementations that simply return the `Component` and `Server` structs unchanged.
 
 ##### Reading Props in Actions
 
@@ -992,6 +1047,8 @@ A stateful component's props are carried on its `%Component{}` struct, so an act
 
 ```elixir
 prop :label, :string
+
+state :announced, :string
 
 def action(:announce, _params, component) do
   put_state(component, :announced, component.props.label)
@@ -1067,6 +1124,8 @@ Stateful components can handle user interactions and business logic through two 
 Example:
 
 ```elixir
+state :count, :integer, default: 0
+
 def action(:increment, params, component) do
   put_state(component, :count, component.state.count + params.by)
 end
@@ -1110,11 +1169,9 @@ defmodule MyApp.GreetingPage do
 
   route "/hello/:username"
 
-  layout MyApp.MainLayout
+  param :username, :string
 
-  def init(params, component, _server) do
-    put_state(component, :username, params.username)
-  end
+  layout MyApp.MainLayout
 
   def template do
     ~HOLO"""
@@ -1202,6 +1259,9 @@ Using the `layout/1` macro and setting props through the page's `init/3` functio
 
 ```elixir
 layout MyApp.MainLayout
+
+state :page_title, :string
+state :show_sidebar?, :boolean
 
 def init(_params, component, _server) do
   put_state(component, page_title: "My Page", show_sidebar?: true)
@@ -1711,6 +1771,8 @@ end
 For example:
 
 ```elixir
+state :count, :integer
+
 def action(:update_count, params, component) do
   put_state(component, :count, params.new_count)
 end
@@ -1741,6 +1803,8 @@ Actions must return a `%Component{}` struct. This struct not only reflects chang
 Within an action, you can:
 
 ##### Update Component State
+
+Every top-level key you put has to be declared with `state/2` or `state/3`, as the State section of the Components documentation describes. A nested path needs only its first key declared.
 
 By setting the value for a single key:
 
@@ -1902,6 +1966,8 @@ Here's a simple example that demonstrates how actions work in Hologram. The coun
 defmodule MyApp.Components.Counter do
   # ...
 
+  state :count, :integer, default: 0
+
   def template do
     ~HOLO"""
     <div>
@@ -2040,6 +2106,8 @@ Commands can be triggered using event attributes in templates or from actions. F
 Commands can also be triggered from actions using `put_command/3`:
 
 ```elixir
+state :saving, :boolean, default: false
+
 def action(:save_form, params, component) do
   component
   |> put_state(:saving, true)
@@ -2142,12 +2210,10 @@ Synchronized inputs maintain their displayed values in sync with your component'
 
 ###### Basic Usage
 
-To create a synchronized input, you need three things: state initialization, the input element synchronized with the state, and an event handler:
+To create a synchronized input, you need three things: a state entry, the input element synchronized with the state, and an event handler:
 
 ```elixir
-def init(_props, component, _server) do
-  put_state(component, :email, "")
-end
+state :email, :string, default: ""
 ```
 
 ```holo
@@ -2192,6 +2258,8 @@ With non-synchronized inputs, you can access form data from `params.event` in bo
 ```
 
 ```elixir
+state :validation_error, :string, default: ""
+
 def action(:form_changed, params, component) do
   # params.event contains all form data: %{username: "...", email: "..."}
   # Validate the form whenever any field changes
@@ -2403,6 +2471,8 @@ The `$focused` attribute declares whether an element should have focus. Set it f
 ```
 
 ```elixir
+state :editing_title?, :boolean, default: false
+
 def action(:edit_title, _params, component) do
   put_state(component, :editing_title?, true)
 end
@@ -2457,9 +2527,7 @@ The same pattern works with one state value that names the field to focus. The e
 ```
 
 ```elixir
-def init(_params, component, _server) do
-  put_state(component, :focused_field, nil)
-end
+state :focused_field, :atom, default: nil
 
 def action(:submit, params, component) do
   case validate(params.event) do
@@ -2508,6 +2576,8 @@ A page reached by client-side navigation is shown before its code has finished l
 Hologram's virtual DOM patching is aware of JS interop. If you manipulate the DOM directly via JS interop (e.g. appending child elements), those changes are preserved across Hologram re-renders, as long as the container element is present in the template:
 
 ```elixir
+state :counter, :integer, default: 0
+
 def template do
   ~HOLO"""
   <button $click={:populate}>Populate JS subtree</button>
@@ -2913,6 +2983,8 @@ You can read session values using the `get_session/2` and `get_session/3` functi
 For simple values stored in the session:
 
 ```elixir
+state :locale, :string
+
 def init(_params, component, server) do
   locale = get_session(server, :locale)
   put_state(component, :locale, locale)
@@ -2924,6 +2996,8 @@ end
 Sessions can store any Elixir data type, including complex data structures like maps, lists, and tuples. You can work with these structures directly:
 
 ```elixir
+state :user_preferences, :map
+
 def init(_params, component, server) do
   preferences =
     server
@@ -2939,6 +3013,8 @@ end
 When a session key doesn't exist, `get_session/2` returns `nil`. You can provide default values using `get_session/3`:
 
 ```elixir
+state :cart_items, :list
+
 def init(_params, component, server) do
   cart_items = get_session(server, :cart, [])
   put_state(component, :cart_items, cart_items)
@@ -3108,6 +3184,8 @@ You can read cookies using the `get_cookie/2` function or `get_cookie/3` with a 
 For simple string values stored in cookies:
 
 ```elixir
+state :cookie_value, :string
+
 def init(_params, component, server) do
   cookie_value = get_cookie(server, "my_cookie")
   put_state(component, :cookie_value, cookie_value)
@@ -3119,6 +3197,8 @@ end
 Hologram can automatically encode and decode complex Elixir data structures (maps, lists, tuples, etc.) in cookies:
 
 ```elixir
+state :user_data, :map
+
 def init(_params, component, server) do
   user_data =
     server
@@ -3134,6 +3214,9 @@ end
 Use `get_cookie/3` to provide a default value when a cookie doesn't exist:
 
 ```elixir
+state :preferences, :map
+state :theme, :string
+
 def init(_params, component, server) do
   # Set default theme if no cookie exists
   theme = get_cookie(server, "theme", "light")
@@ -3381,6 +3464,8 @@ Broadcasting dispatches an action to every component subscribed to the channel -
 For example, a command that persists a new chat message and broadcasts it to the room, with the action handler that adds it to the list on each subscriber:
 
 ```elixir
+state :messages, :list, default: []
+
 def command(:send_message, %{room_id: room_id, text: text}, server) do
   message = Chat.create_message(room_id, text)
   put_broadcast(server, {:room, room_id}, :add_message, message: message)
@@ -3438,7 +3523,12 @@ defmodule MyApp.RoomPage do
 
   route "/rooms/:id"
 
+  param :id, :integer
+
   layout MyApp.Layout
+
+  state :messages, :list
+  state :room_id, :integer
 
   def init(%{id: room_id}, component, server) do
     messages = Chat.recent_messages(room_id)
@@ -3580,9 +3670,7 @@ defmodule MyApp.CalculatorPage do
 
   layout MyApp.DefaultLayout
 
-  def init(_params, component, _server) do
-    put_state(component, :result, nil)
-  end
+  state :result, :any, default: nil
 
   def template do
     ~HOLO"""
@@ -4007,6 +4095,8 @@ Hologram.dispatchAction("my_action", "page", { amount: 42, label: "test" });
 **Corresponding action in your page, layout, or component:**
 
 ```elixir
+state :result, :tuple
+
 def action(:my_action, params, component) do
   # params.amount => 42 (integer)
   # params.label  => "test" (string)
@@ -4108,6 +4198,8 @@ Hologram.dispatchAction("chart_clicked", "page", { point: 42 });
 ```
 
 ```elixir
+state :selected, :integer
+
 # Hologram handler (runs in the browser)
 def action(:chart_clicked, params, component) do
   put_state(component, :selected, params.point)
@@ -4438,6 +4530,9 @@ The compiler writes the bundles to Hologram's build dir, `_build/<env>/lib/holog
 Client code that works with a struct needs the struct's code: its protocol implementations, like `String.Chars` to interpolate it in a template, and its `__struct__` functions, which build it. Neither the runtime bundle nor a page bundle holds them. The compiler writes them to chunks, which are separate files, and the browser loads a type's chunks when a struct of that type reaches it: in the state `init/3` sets, in an action a command returns, or in an action the server broadcasts.
 
 ```elixir
+state :every, :string
+state :price, :map
+
 def init(_params, component, _server) do
   # Loads Price's chunks: the struct reaches the state.
   price = %Price{amount: 1_000, currency: :EUR}

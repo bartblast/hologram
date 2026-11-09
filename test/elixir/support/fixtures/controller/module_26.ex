@@ -10,6 +10,8 @@ defmodule Hologram.Test.Fixtures.Controller.Module26 do
 
   middleware :enrich
 
+  state :marker, :any
+
   def enrich(server, _opts) do
     put_stash(server, :marker, "injected_by_middleware")
   end

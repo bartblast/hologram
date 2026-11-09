@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.TemplateSyntax.PropSpreadPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :props, :map
+
   def init(_params, component, _server) do
     put_state(component, :props, %{dom_id: "scenario_3", prop_1: "value_3"})
   end

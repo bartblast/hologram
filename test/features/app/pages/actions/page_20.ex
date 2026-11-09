@@ -12,6 +12,8 @@ defmodule HologramFeatureTests.Actions.Page20 do
 
   layout HologramFeatureTests.Components.PendingActionLayout
 
+  state :result, :any
+
   def init(_params, component, _server) do
     put_state(component, :result, nil)
   end

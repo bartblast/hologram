@@ -13,6 +13,8 @@ defmodule Hologram.Test.Fixtures.Module7 do
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
+  state :written, :any
+
   @impl Page
   def template do
     ~HOLO""
@@ -21,6 +23,28 @@ end
 
 */
 export function defineModule7Fixture() {
+  Interpreter.defineElixirFunction(
+    "Hologram.Test.Fixtures.Module7",
+    "__state__",
+    0,
+    "public",
+    [
+      {
+        params: (_context) => [],
+        guards: [],
+        body: (_context) => {
+          return Type.list([
+            Type.tuple([
+              Type.atom("written"),
+              Type.atom("any"),
+              Type.keywordList(),
+            ]),
+          ]);
+        },
+      },
+    ],
+  );
+
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Module7",
     "__params__",

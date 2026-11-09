@@ -9,6 +9,10 @@ defmodule HologramFeatureTests.Rendering.PropsOnStructPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :count, :integer
+  state :result, :any
+  state :show_component_2, :boolean
+
   def init(_params, component, _server) do
     component
     |> put_state(:count, 0)

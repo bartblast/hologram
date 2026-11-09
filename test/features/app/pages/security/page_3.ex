@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.Security.Page3 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :show_script_4?, :boolean
+
   def init(_params, component, _server) do
     put_state(component, :show_script_4?, false)
   end

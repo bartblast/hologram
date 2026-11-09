@@ -10,7 +10,6 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
-  alias Hologram.Commons.ProcessUtils
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
@@ -29,11 +28,7 @@ defmodule Hologram.Test.Stubs do
 
     process_name = stub.process_name()
 
-    if ProcessUtils.running?(process_name) do
-      process_name
-      |> Process.whereis()
-      |> Process.exit(:kill)
-    end
+    kill_process(process_name)
 
     :persistent_term.erase(stub.persistent_term_key())
 
@@ -49,11 +44,7 @@ defmodule Hologram.Test.Stubs do
 
     process_name = stub.process_name()
 
-    if ProcessUtils.running?(process_name) do
-      process_name
-      |> Process.whereis()
-      |> Process.exit(:kill)
-    end
+    kill_process(process_name)
 
     ets_table_name = stub.ets_table_name()
 
@@ -251,6 +242,15 @@ defmodule Hologram.Test.Stubs do
       end
 
       alias alias!(unquote(random_module).PageModuleResolverStub)
+    end
+  end
+
+  # The process is linked to the previous test's process, so it can exit between a liveness check
+  # and the kill. Looking it up once never sends the kill to nil.
+  defp kill_process(name) do
+    case Process.whereis(name) do
+      nil -> :ok
+      pid -> Process.exit(pid, :kill)
     end
   end
 

@@ -5,6 +5,8 @@ defmodule HologramClusterTests.InitSubscribePage do
 
   layout HologramClusterTests.Components.DefaultLayout
 
+  state :received, :string
+
   @channel {:room, :init}
 
   def init(_params, component, server) do

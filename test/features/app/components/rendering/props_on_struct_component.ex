@@ -3,6 +3,8 @@ defmodule HologramFeatureTests.Components.Rendering.PropsOnStructComponent do
 
   prop :count, :integer
 
+  state :result, :any
+
   def init(_props, component, _server) do
     put_state(component, :result, nil)
   end

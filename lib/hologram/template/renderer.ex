@@ -1060,11 +1060,6 @@ defmodule Hologram.Template.Renderer do
     Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
 
-  # The props are both handed to init and written back onto whatever it returned, so the field holds
-  # the props the render actually used rather than anything a handler put there. That is what lets a
-  # later handler read a prop's current value instead of a copy taken when the component mounted.
-  # A page reaches this with its URL params in the props position, which is how its params land on
-  # its struct too.
   # The client works every struct's props out again during its first render, so sending them would
   # put each prop value in the payload a second time - once inside the parent's state, once as the
   # child's props - for the client to immediately overwrite. The key stays and holds an empty map:
@@ -1077,8 +1072,18 @@ defmodule Hologram.Template.Renderer do
     end)
   end
 
+  # The props are both handed to init and written back onto whatever it returned, so the field holds
+  # the props the render actually used rather than anything a handler put there. That is what lets a
+  # later handler read a prop's current value instead of a copy taken when the component mounted.
+  # A page reaches this with its URL params in the props position, which is how its params land on
+  # its struct too.
+  #
+  # The declared state defaults are in place before init runs, so init sees them and can override
+  # them, and a component or page with nothing else to set up needs no init at all.
+  #
+  # WARNING: the struct it starts from must match the client renderer's #maybeInitComponent.
   defp init_component(module, props, server_struct) do
-    initial_component_struct = %Component{props: props}
+    initial_component_struct = %Component{props: props, state: state_defaults(module)}
 
     init_result =
       if Reflection.has_function?(module, :init, 3) do
@@ -1098,6 +1103,8 @@ defmodule Hologram.Template.Renderer do
         %Server{} = mutated_server_struct ->
           {initial_component_struct, mutated_server_struct}
       end
+
+    validate_declared_state(component_struct.state, module, "init/3")
 
     {%{component_struct | props: props}, %{returned_server_struct | cid: nil}}
   end
@@ -1558,11 +1565,83 @@ defmodule Hologram.Template.Renderer do
 
   defp spread_entries(value), do: raise_invalid_spread_value(value)
 
+  defp state_defaults(module) do
+    Enum.reduce(module.__state__(), %{}, fn {name, _type, opts}, acc ->
+      case Keyword.fetch(opts, :default) do
+        {:ok, default} -> Map.put(acc, name, default)
+        :error -> acc
+      end
+    end)
+  end
+
   defp struct_key_part(%{__struct__: module}) when is_atom(module) do
     "#m" <> escape_key_text(Atom.to_string(module))
   end
 
   defp struct_key_part(_map), do: ""
+
+  # A key named like a prop (a param on a page) can't be declared, since the state would shadow it,
+  # so the hint points at the props instead: the usual cause is init copying its props into state. A
+  # page's state is merged over its layout's cid, so a page can't keep a cid entry at all.
+  defp undeclared_state_hint(key, module) do
+    name = Atom.to_string(key)
+    page? = Reflection.page?(module)
+
+    {holder, holder_definitions} =
+      if page? do
+        {"param", module.__params__()}
+      else
+        {"prop", [{:cid, :string, []} | module.__props__()]}
+      end
+
+    cond do
+      page? and key == :cid ->
+        ~s/"cid" is the layout's cid prop, put the value under another name/
+
+      List.keymember?(holder_definitions, key, 0) ->
+        ~s/"#{name}" is a #{holder}, read it from component.props instead/
+
+      true ->
+        "declare it with state/2 or state/3"
+    end
+  end
+
+  defp undeclared_state_message(key, module, handler) when is_atom(key) do
+    ~s/state "#{Atom.to_string(key)}" isn't declared in "#{Reflection.module_name(module)}", / <>
+      "but #{handler} put it - #{undeclared_state_hint(key, module)}"
+  end
+
+  defp undeclared_state_message(key, module, handler) do
+    "state key #{inspect(key)} isn't an atom, but #{handler} put it in " <>
+      ~s/"#{Reflection.module_name(module)}" - state is declared with atom names/
+  end
+
+  # put_state/2,3 can't tell which module it runs in, so the state is checked where the struct comes
+  # back from the module's own code. Of several undeclared keys the smallest in term order is named,
+  # so the message doesn't depend on map order.
+  #
+  # WARNING: must match the client renderer's validateDeclaredState.
+  defp validate_declared_state(state, module, handler) do
+    declared_names = Enum.map(module.__state__(), fn {name, _type, _opts} -> name end)
+
+    undeclared_keys =
+      state
+      |> Map.keys()
+      |> Enum.reject(&(&1 in declared_names))
+
+    case undeclared_keys do
+      [] ->
+        :ok
+
+      _non_empty ->
+        message =
+          undeclared_keys
+          |> Enum.min()
+          |> undeclared_state_message(module, handler)
+
+        raise Hologram.StateError, message: message
+    end
+  end
 
   # Runs last in the props pipeline, so the map it sees is exactly what the component's template
   # will see - defaults filled and context injected. The compiler already rejects a required prop

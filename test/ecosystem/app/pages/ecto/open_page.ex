@@ -9,6 +9,9 @@ defmodule HologramEcosystemTests.Ecto.OpenPage do
 
   layout HologramEcosystemTests.Components.DefaultLayout
 
+  state :fields, :string
+  state :schema, :atom
+
   def init(_params, component, _server) do
     put_state(component, fields: "", schema: Tag)
   end

@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.Realtime.Page2 do
   @channel_1 {:room, 1}
   @channel_2 {:room, 2}
 
+  state :received_1, :string
+  state :received_2, :string
+
   def init(_params, component, server) do
     new_component =
       component

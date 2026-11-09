@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Components.ThrottleLayout do
   alias Hologram.UI.Runtime
   alias HologramFeatureTests.Components.CommonLayoutStyles
 
+  state :result, :integer
+
   def init(_params, component, _server) do
     put_state(component, :result, 0)
   end

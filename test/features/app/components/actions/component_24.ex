@@ -3,6 +3,9 @@ defmodule HologramFeatureTests.Components.Actions.Component24 do
 
   prop :value, :string
 
+  state :draft, :any
+  state :editing?, :boolean
+
   # An in-place editor: it shows its own draft while editing and the owner's value otherwise. A
   # commit both leaves editing and forwards the draft to the owner in a next action, so for the
   # length of that chain the value shown has two sources - a frame painted in between would show

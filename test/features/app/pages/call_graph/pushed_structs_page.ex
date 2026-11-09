@@ -16,6 +16,9 @@ defmodule HologramFeatureTests.CallGraph.PushedStructsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :plain_result, :any
+  state :struct_result, :any
+
   def init(_params, component, server) do
     {
       put_state(component, plain_result: nil, struct_result: nil),

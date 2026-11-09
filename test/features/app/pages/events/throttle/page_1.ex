@@ -8,6 +8,11 @@ defmodule HologramFeatureTests.Events.Throttle.Page1 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :plain_count, :integer
+  state :plain_key, :any
+  state :throttled_count, :integer
+  state :throttled_key, :any
+
   def init(_params, component, _server) do
     put_state(component,
       plain_count: 0,

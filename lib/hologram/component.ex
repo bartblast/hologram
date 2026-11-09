@@ -70,6 +70,8 @@ defmodule Hologram.Component do
 
   @prop_opt_keys [:default, :from_context, :required, :values]
 
+  @state_opt_keys [:default]
+
   @doc false
   @spec __helper_imports__() :: keyword
   def __helper_imports__ do
@@ -101,7 +103,9 @@ defmodule Hologram.Component do
 
         use Hologram.Middleware.Builder
 
-        import Hologram.Component, only: unquote([prop: 2, prop: 3] ++ __helper_imports__())
+        import Hologram.Component,
+          only: unquote([prop: 2, prop: 3, state: 2, state: 3] ++ __helper_imports__())
+
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
         import Hologram.Template, only: [sigil_HOLO: 2, trust_html: 1]
@@ -134,7 +138,8 @@ defmodule Hologram.Component do
         defoverridable init: 2, init: 3
       end,
       maybe_register_colocated_template_markup(template_path),
-      register_props_accumulator()
+      register_props_accumulator(),
+      register_state_accumulator()
     ]
   end
 
@@ -150,7 +155,23 @@ defmodule Hologram.Component do
         def __props__, do: Enum.reverse(@__props__)
       end
 
-    [template_clause, props_clause]
+    state_clause = build_state_clause()
+
+    [template_clause, props_clause, state_clause]
+  end
+
+  @doc """
+  Returns the AST of the __state__/0 function.
+  """
+  @spec build_state_clause() :: AST.t()
+  def build_state_clause do
+    quote do
+      @doc """
+      Returns the list of state definitions for the compiled component or page.
+      """
+      @spec __state__() :: list({atom, atom, keyword})
+      def __state__, do: Enum.reverse(@__state__)
+    end
   end
 
   @doc """
@@ -232,7 +253,11 @@ defmodule Hologram.Component do
     validate_prop_opts!(opts, name, __CALLER__.module)
 
     quote do
-      Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), unquote(opts)})
+      prop_name = unquote(name)
+
+      Hologram.Component.validate_free_of_state!(prop_name, "a prop", __MODULE__)
+
+      Module.put_attribute(__MODULE__, :__props__, {prop_name, unquote(type), unquote(opts)})
     end
   end
 
@@ -456,6 +481,63 @@ defmodule Hologram.Component do
     end
   end
 
+  @doc """
+  Returns the AST of code that registers __state__ module attribute.
+  """
+  @spec register_state_accumulator() :: AST.t()
+  def register_state_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__state__, accumulate: true)
+    end
+  end
+
+  @doc """
+  Accumulates the given state definition in __state__ module attribute.
+  """
+  @spec state(atom, atom, T.opts()) :: Macro.t()
+  defmacro state(name, type, opts \\ []) do
+    # Unlike a prop, a state entry is checked once evaluated, while the module body runs, so options
+    # given as an expression (a module attribute) are checked too. Each part is bound once, so an
+    # expression in it runs once.
+    quote do
+      state_name = unquote(name)
+      state_opts = unquote(opts)
+
+      Hologram.Component.validate_state!(state_name, state_opts, __MODULE__)
+
+      Module.put_attribute(__MODULE__, :__state__, {state_name, unquote(type), state_opts})
+    end
+  end
+
+  @doc """
+  Raises Hologram.CompileError if a state entry declared in the given module has the given name,
+  since it would shadow the holder of that name declared after it (described by holder, like
+  "a prop").
+  """
+  @spec validate_free_of_state!(atom, String.t(), module) :: :ok
+  def validate_free_of_state!(name, holder, module) do
+    declared_as_state? =
+      module
+      |> Module.get_attribute(:__state__, [])
+      |> List.keymember?(name, 0)
+
+    if declared_as_state?, do: raise_state_name_taken!(name, holder, module)
+
+    :ok
+  end
+
+  @doc """
+  Raises Hologram.CompileError if the given state entry can't be declared in the given module,
+  next to the state entries, props or params, and cid declared before it.
+  """
+  @spec validate_state!(any, any, module) :: :ok
+  def validate_state!(name, opts, module) do
+    validate_state_name!(name, module)
+    validate_state_name_free!(name, module)
+    validate_state_opts_shape!(opts, name, module)
+    validate_state_opt_keys!(opts, name, module)
+  end
+
   defp append_broadcast(server, channel, action_name, params, except \\ []) do
     Channel.validate!(channel)
 
@@ -469,9 +551,33 @@ defmodule Hologram.Component do
     %{server | broadcasts: [broadcast | server.broadcasts]}
   end
 
+  defp holder_names(definitions, holder) do
+    Enum.map(definitions, fn {name, _type, _opts} -> {name, holder} end)
+  end
+
   defp normalize_except({_kind, _id} = identity), do: [identity]
 
   defp normalize_except(list) when is_list(list), do: list
+
+  defp raise_state_name_taken!(name, holder, module) do
+    raise Hologram.CompileError,
+      message:
+        ~s/state "#{name}" in #{inspect(module)} has the same name as #{holder}, / <>
+          "which it would shadow - give them different names"
+  end
+
+  # The names declared so far that a state entry can't take, each with how the message describes
+  # what holds it. The cid is a prop every stateful component takes without declaring it, read back
+  # from the merged props and state, and a page's state is merged over its layout's cid.
+  defp taken_state_names(module) do
+    if Module.defines?(module, {:__is_hologram_page__, 0}) do
+      params = Module.get_attribute(module, :__params__)
+      [{:cid, "the layout's cid prop"} | holder_names(params, "a param")]
+    else
+      props = Module.get_attribute(module, :__props__)
+      [{:cid, "the cid prop"} | holder_names(props, "a prop")]
+    end
+  end
 
   defp validate_prop_opt_entry!({key, _value}, name, module) when is_atom(key) do
     if key not in @prop_opt_keys do
@@ -637,5 +743,76 @@ defmodule Hologram.Component do
       _other ->
         :ok
     end
+  end
+
+  # An entry is checked against the ones declared before it, which are already in the attribute.
+  defp validate_state_name!(name, module) do
+    unless is_atom(name) do
+      raise Hologram.CompileError,
+        message: "the name of state #{inspect(name)} in #{inspect(module)} must be an atom"
+    end
+
+    declared_before? =
+      module
+      |> Module.get_attribute(:__state__)
+      |> List.keymember?(name, 0)
+
+    if declared_before? do
+      raise Hologram.CompileError,
+        message: ~s/state "#{name}" is declared more than once in #{inspect(module)}/
+    end
+
+    :ok
+  end
+
+  # The renderers merge state over props (params on a page), so a state entry can't take a name one
+  # of them holds. Each side is checked against what was declared before it - an entry here, props
+  # and params in validate_free_of_state!/3 - so a clash is reported at whichever comes second.
+  defp validate_state_name_free!(name, module) do
+    taken_name =
+      module
+      |> taken_state_names()
+      |> List.keyfind(name, 0)
+
+    case taken_name do
+      {^name, holder} -> raise_state_name_taken!(name, holder, module)
+      nil -> :ok
+    end
+  end
+
+  # A repeated key would be stored with the rest, and only its first value would ever be read.
+  defp validate_state_opt_keys!(opts, name, module) do
+    keys = Keyword.keys(opts)
+
+    Enum.each(keys, fn key ->
+      if key not in @state_opt_keys do
+        raise Hologram.CompileError,
+          message:
+            ~s/invalid option #{inspect(key)} for state "#{name}" in #{inspect(module)}, / <>
+              "expected one of: " <> Enum.map_join(@state_opt_keys, ", ", &inspect/1)
+      end
+    end)
+
+    case keys -- Enum.uniq(keys) do
+      [] ->
+        :ok
+
+      [key | _rest] ->
+        raise Hologram.CompileError,
+          message:
+            ~s/option #{inspect(key)} is given more than once for state "#{name}" / <>
+              "in #{inspect(module)}"
+    end
+  end
+
+  defp validate_state_opts_shape!(opts, name, module) do
+    unless Keyword.keyword?(opts) do
+      raise Hologram.CompileError,
+        message:
+          ~s/the options for state "#{name}" in #{inspect(module)} must be a keyword list, / <>
+            "got: #{inspect(opts)}"
+    end
+
+    :ok
   end
 end

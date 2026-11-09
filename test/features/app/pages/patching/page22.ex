@@ -10,6 +10,8 @@ defmodule HologramFeatureTests.Patching.Page22 do
 
   layout HologramFeatureTests.Components.EmptyLayout
 
+  state :names, :list
+
   def init(_params, component, _server) do
     put_state(component, :names, ["alpha", "bravo", "charlie"])
   end

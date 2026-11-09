@@ -7,6 +7,8 @@ defmodule Hologram.Test.Fixtures.Controller.Module18 do
 
   layout LayoutFixture
 
+  state :observed_cid, :string
+
   @impl Page
   def init(_params, component, server) do
     put_state(component, observed_cid: server.cid)

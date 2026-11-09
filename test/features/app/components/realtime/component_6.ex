@@ -3,6 +3,8 @@ defmodule HologramFeatureTests.Realtime.Component6 do
 
   prop :room, :integer
 
+  state :received, :string
+
   def init(props, component, server) do
     {
       put_state(component, :received, "none"),

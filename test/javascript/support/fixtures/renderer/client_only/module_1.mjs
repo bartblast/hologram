@@ -24,6 +24,28 @@ export function defineClientOnlyModule1Fixture() {
 
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module1",
+    "__state__",
+    0,
+    "public",
+    [
+      {
+        params: (_context) => [],
+        guards: [],
+        body: (_context) => {
+          return Type.list([
+            Type.tuple([
+              Type.atom("initialized"),
+              Type.atom("boolean"),
+              Type.keywordList(),
+            ]),
+          ]);
+        },
+      },
+    ],
+  );
+
+  Interpreter.defineElixirFunction(
+    "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module1",
     "init",
     2,
     "public",

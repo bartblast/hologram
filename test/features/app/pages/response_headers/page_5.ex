@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.ResponseHeaders.Page5 do
 
   middleware :mark
 
+  state :result, :any
+
   def mark(server, _opts) do
     put_response_header(server, "x-set-by", "command middleware")
   end

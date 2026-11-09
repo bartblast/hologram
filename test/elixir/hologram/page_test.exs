@@ -12,6 +12,7 @@ defmodule Hologram.PageTest do
   alias Hologram.Test.Fixtures.Page.Module5
   alias Hologram.Test.Fixtures.Page.Module6
   alias Hologram.Test.Fixtures.Page.Module7
+  alias Hologram.Test.Fixtures.Page.Module8
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
@@ -37,6 +38,10 @@ defmodule Hologram.PageTest do
 
   test "__route__/0" do
     assert Module1.__route__() == "/hologram-test-fixtures-runtime-page-module1"
+  end
+
+  test "__state__/0" do
+    assert Module8.__state__() == [{:count, :integer, [default: 0]}, {:user, :map, []}]
   end
 
   describe "cast_params/2" do
@@ -220,6 +225,108 @@ defmodule Hologram.PageTest do
         """)
 
       assert module.__params__() == [{:b, :integer, []}]
+    end
+  end
+
+  describe "state/3" do
+    test "accepts a param declared after a state entry with another name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.StateBeforeParam do
+          use Hologram.Page
+
+          state :count, :integer, default: 0
+
+          param :id, :integer
+
+          route "/hologram-test-fixtures-page-state-before-param/:id"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__params__() == [{:id, :integer, []}]
+      assert module.__state__() == [{:count, :integer, [default: 0]}]
+    end
+
+    test "raises at the state entry when it has the same name as a param declared before it" do
+      code = """
+      defmodule Hologram.Test.Fixtures.Page.StateClashLineAfterParam do
+        use Hologram.Page
+
+        param :id, :integer
+
+        state :id, :integer, default: 0
+
+        route "/hologram-test-fixtures-page-state-clash-line-after-param/:id"
+
+        layout Hologram.Test.Fixtures.LayoutFixture
+
+        def template do
+          ~HOLO""
+        end
+      end
+      """
+
+      expected_error_msg =
+        ~s/state "id" in Hologram.Test.Fixtures.Page.StateClashLineAfterParam has the same name as a param, / <>
+          "which it would shadow - give them different names"
+
+      assert compile_error_at(code) == {expected_error_msg, 6}
+    end
+
+    test "raises at the param when it has the same name as a state entry declared before it" do
+      code = """
+      defmodule Hologram.Test.Fixtures.Page.StateClashLineBeforeParam do
+        use Hologram.Page
+
+        state :id, :integer, default: 0
+
+        param :id, :integer
+
+        route "/hologram-test-fixtures-page-state-clash-line-before-param/:id"
+
+        layout Hologram.Test.Fixtures.LayoutFixture
+
+        def template do
+          ~HOLO""
+        end
+      end
+      """
+
+      expected_error_msg =
+        ~s/state "id" in Hologram.Test.Fixtures.Page.StateClashLineBeforeParam has the same name as a param, / <>
+          "which it would shadow - give them different names"
+
+      assert compile_error_at(code) == {expected_error_msg, 6}
+    end
+
+    test "raises when an entry is named cid" do
+      expected_error_msg =
+        ~s/state "cid" in Hologram.Test.Fixtures.Page.StateNamedCid has the same name as the layout's cid prop, / <>
+          "which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.StateNamedCid do
+          use Hologram.Page
+
+          state :cid, :string, default: "my_cid"
+
+          route "/hologram-test-fixtures-page-state-named-cid"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
     end
   end
 

@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Components.LayoutWithoutProps do
   alias Hologram.UI.Runtime
   alias HologramFeatureTests.Components.CommonLayoutStyles
 
+  state :result, :any
+
   def init(props, component, _server) do
     put_state(component, :result, props)
   end

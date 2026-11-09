@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.ContentSecurityPolicy.Page3 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :result, :string
+
   def init(_params, component, _server) do
     put_state(component, :result, "none")
   end

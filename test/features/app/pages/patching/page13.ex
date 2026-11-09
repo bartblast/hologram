@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.Patching.Page13 do
 
   layout HologramFeatureTests.Components.EmptyLayout
 
+  state :badges?, :boolean
+  state :items, :list
+
   def init(_params, component, _server) do
     put_state(component, items: ["item 1"], badges?: true)
   end
