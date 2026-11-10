@@ -66,6 +66,130 @@ describe("ElementRefRegistry", () => {
     });
   });
 
+  describe("missingElementHint()", () => {
+    const chainedActionHint =
+      " - a template declares the ref, but nothing renders it right now. An element the action's " +
+      "own state change renders is on the page only once the action returns, so look it up in " +
+      "an action chained with put_action/2";
+
+    const showPage = (names) => {
+      ElementRefRegistry.putPageRefNames("Elixir.MyPage", names);
+      ElementRefRegistry.replace(new Map(), pageModule);
+    };
+
+    const tuple = (name, ...keys) =>
+      Type.tuple([Type.atom(name), ...keys.map((key) => Type.integer(key))]);
+
+    afterEach(() => {
+      ElementRefRegistry.pageRefNames = new Map();
+    });
+
+    it("says a template declares a keyless ref nothing renders", () => {
+      showPage([["search", 0]]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(Type.atom("search")),
+        chainedActionHint,
+      );
+    });
+
+    it("says a template declares a keyed ref nothing renders", () => {
+      showPage([["message", 1]]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(tuple("message", 99)),
+        chainedActionHint,
+      );
+    });
+
+    it("says how many key parts the refs of the name take", () => {
+      showPage([["item", 1]]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(tuple("item", 1, 2)),
+        " - refs named :item take 1 key part",
+      );
+    });
+
+    it("says the refs of the name take no key parts", () => {
+      showPage([["search", 0]]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(tuple("search", 1)),
+        " - refs named :search take no key parts",
+      );
+    });
+
+    // String.jaro_distance("serch", "perch") is 0.867, and ("serch", "search") 0.944.
+    it("suggests the closest declared name", () => {
+      showPage([
+        ["perch", 0],
+        ["search", 0],
+      ]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(Type.atom("serch")),
+        " - did you mean :search?",
+      );
+    });
+
+    it("suggests a keyed ref as a template writes it", () => {
+      showPage([["cell", 2]]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(tuple("cel", 1, 2)),
+        " - did you mean {:cell, ..., ...}?",
+      );
+    });
+
+    // String.jaro_distance("tutbon", "button") is 0.822, and ("massege", "message") 0.743: the
+    // first would miss with each swap counted twice, and the second would be suggested with swaps
+    // ignored.
+    it("counts swapped letters as Elixir's suggestions do", () => {
+      showPage([
+        ["button", 0],
+        ["message", 0],
+      ]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(Type.atom("tutbon")),
+        " - did you mean :button?",
+      );
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(Type.atom("massege")),
+        "",
+      );
+    });
+
+    // String.jaro_distance("field", "fold") is 0.783, and ("header", "ader") 0.764.
+    it("suggests a name only as close as Elixir's suggestions take it", () => {
+      showPage([
+        ["field", 0],
+        ["header", 0],
+      ]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(Type.atom("fold")),
+        " - did you mean :field?",
+      );
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(Type.atom("ader")),
+        "",
+      );
+    });
+
+    it("adds nothing when the page declares no refs", () => {
+      showPage([]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(Type.atom("search")),
+        "",
+      );
+    });
+  });
+
   describe("putPageRefNames() / refNames()", () => {
     afterEach(() => {
       ElementRefRegistry.pageRefNames = new Map();

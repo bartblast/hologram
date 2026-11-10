@@ -198,7 +198,7 @@ const Elixir_Hologram_JS = {
 
     if (element === null) {
       Interpreter.raiseMisuseError(
-        `no element is rendered under the ref ${Interpreter.inspect(ref)}`,
+        `no element is rendered under the ref ${Interpreter.inspect(ref)}${ElementRefRegistry.missingElementHint(ref)}`,
       );
     }
 

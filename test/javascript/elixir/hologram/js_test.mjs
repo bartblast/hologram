@@ -1107,6 +1107,7 @@ describe("Elixir_Hologram_JS", () => {
 
     afterEach(() => {
       ElementRefRegistry.clear();
+      ElementRefRegistry.pageRefNames = new Map();
     });
 
     it("returns the element rendered under an atom ref", () => {
@@ -1157,6 +1158,17 @@ describe("Elixir_Hologram_JS", () => {
         () => element(Type.tuple([Type.atom("message"), Type.nil()])),
         "Hologram.MisuseError",
         "JS.element/1 takes a ref, like :search or {:message, 42}, or a native value, got: {:message, nil} - nil, true and false can't be in an identifier",
+      );
+    });
+
+    it("raises with a hint when the page declares a ref close to it", () => {
+      ElementRefRegistry.putPageRefNames("Elixir.MyPage", [["search", 0]]);
+      putElement(Type.atom("menu"), document.createElement("nav"));
+
+      assertBoxedError(
+        () => element(Type.atom("serch")),
+        "Hologram.MisuseError",
+        "no element is rendered under the ref :serch - did you mean :search?",
       );
     });
 
