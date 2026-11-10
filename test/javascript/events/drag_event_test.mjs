@@ -3,7 +3,9 @@
 import {assert, defineRuntimeGlobals, sinon} from "../support/helpers.mjs";
 
 import DragEvent from "../../../assets/js/events/drag_event.mjs";
+import DroppedFileRegistry from "../../../assets/js/dropped_file_registry.mjs";
 import Type from "../../../assets/js/type.mjs";
+import Utils from "../../../assets/js/utils.mjs";
 
 defineRuntimeGlobals();
 
@@ -66,6 +68,7 @@ function buildExpected({
   data = Type.map(),
   dropEffect = "none",
   effectsAllowed = buildEffectsAllowed(true, true, true),
+  files = [],
   items = [],
   types = [],
 } = {}) {
@@ -77,7 +80,16 @@ function buildExpected({
         [Type.atom("data"), data],
         [Type.atom("drop_effect"), Type.atom(dropEffect)],
         [Type.atom("effects_allowed"), effectsAllowed],
-        [Type.atom("files"), Type.list()],
+        [
+          Type.atom("files"),
+          Type.list(
+            files.map((path) =>
+              Type.struct("Hologram.File", [
+                [Type.atom("path"), Type.bitstring(path)],
+              ]),
+            ),
+          ),
+        ],
         [
           Type.atom("items"),
           Type.list(
@@ -104,6 +116,21 @@ describe("DragEvent", () => {
   });
 
   describe("buildOperationParam()", () => {
+    const folderPath = "/$hologram/drops/dummy_uuid";
+
+    let randomUUIDStub;
+
+    beforeEach(() => {
+      randomUUIDStub = sinon
+        .stub(Utils, "randomUUID")
+        .callsFake(() => "dummy_uuid");
+    });
+
+    afterEach(() => {
+      randomUUIDStub.restore();
+      DroppedFileRegistry.entries = new Map();
+    });
+
     it("reads the data on dragstart", () => {
       const dataTransfer = buildDataTransfer({
         data: {"text/plain": "Buy milk", "application/x-task": "42"},
@@ -185,7 +212,11 @@ describe("DragEvent", () => {
         data: {"text/plain": "notes.txt"},
         items: [
           {kind: "string", type: "text/plain"},
-          {kind: "file", type: "text/plain"},
+          {
+            kind: "file",
+            type: "text/plain",
+            getAsFile: () => ({name: "notes.txt"}),
+          },
         ],
         types: ["text/plain", "Files"],
       });
@@ -198,6 +229,7 @@ describe("DragEvent", () => {
         data: Type.map([
           [Type.bitstring("text/plain"), Type.bitstring("notes.txt")],
         ]),
+        files: [`${folderPath}/notes.txt`],
         items: [
           ["string", "text/plain"],
           ["file", "text/plain"],
@@ -207,6 +239,185 @@ describe("DragEvent", () => {
 
       assert.deepStrictEqual(result, expected);
       sinon.assert.calledOnceWithExactly(dataTransfer.getData, "text/plain");
+    });
+
+    describe("files", () => {
+      function fileItem(file, entry = undefined) {
+        const item = {kind: "file", type: "", getAsFile: () => file};
+
+        if (entry !== undefined) {
+          item.webkitGetAsEntry = () => entry;
+        }
+
+        return item;
+      }
+
+      function dropFiles(items, event = null) {
+        const dropEvent =
+          event ??
+          buildEvent("drop", buildDataTransfer({items, types: ["Files"]}));
+
+        return DragEvent.buildOperationParam(dropEvent);
+      }
+
+      function expectedFiles(paths) {
+        return buildExpected({
+          files: paths,
+          items: paths.map(() => ["file", ""]),
+          types: ["Files"],
+        });
+      }
+
+      it("names a dropped file by its path", () => {
+        const file = {name: "notes.txt"};
+
+        const result = dropFiles([fileItem(file)]);
+
+        assert.deepStrictEqual(
+          result,
+          expectedFiles([`${folderPath}/notes.txt`]),
+        );
+
+        assert.deepStrictEqual(
+          DroppedFileRegistry.entries,
+          new Map([[`${folderPath}/notes.txt`, file]]),
+        );
+      });
+
+      it("keeps the File when the store has no entry for it", () => {
+        const file = {name: "notes.txt"};
+
+        const result = dropFiles([fileItem(file, null)]);
+
+        assert.deepStrictEqual(
+          result,
+          expectedFiles([`${folderPath}/notes.txt`]),
+        );
+
+        assert.deepStrictEqual(
+          DroppedFileRegistry.entries,
+          new Map([[`${folderPath}/notes.txt`, file]]),
+        );
+      });
+
+      it("keeps the File of a file entry", () => {
+        const file = {name: "notes.txt"};
+        const entry = {isDirectory: false, name: "notes.txt"};
+
+        const result = dropFiles([fileItem(file, entry)]);
+
+        assert.deepStrictEqual(
+          result,
+          expectedFiles([`${folderPath}/notes.txt`]),
+        );
+
+        assert.deepStrictEqual(
+          DroppedFileRegistry.entries,
+          new Map([[`${folderPath}/notes.txt`, file]]),
+        );
+      });
+
+      it("keeps the entry of a folder", () => {
+        const entry = {isDirectory: true, name: "photos"};
+
+        const result = dropFiles([fileItem({name: "photos"}, entry)]);
+
+        assert.deepStrictEqual(result, expectedFiles([`${folderPath}/photos`]));
+
+        assert.deepStrictEqual(
+          DroppedFileRegistry.entries,
+          new Map([[`${folderPath}/photos`, entry]]),
+        );
+      });
+
+      it("skips a file item with no File", () => {
+        const result = dropFiles([fileItem(null)]);
+
+        assert.deepStrictEqual(
+          result,
+          buildExpected({items: [["file", ""]], types: ["Files"]}),
+        );
+
+        assert.deepStrictEqual(DroppedFileRegistry.entries, new Map());
+      });
+
+      it("gives each file a folder of its own, so files with the same name stay apart", () => {
+        randomUUIDStub.onFirstCall().returns("uuid_1");
+        randomUUIDStub.onSecondCall().returns("uuid_2");
+
+        const firstFile = {name: "notes.txt"};
+        const secondFile = {name: "notes.txt"};
+
+        const result = dropFiles([fileItem(firstFile), fileItem(secondFile)]);
+
+        assert.deepStrictEqual(
+          result,
+          expectedFiles([
+            "/$hologram/drops/uuid_1/notes.txt",
+            "/$hologram/drops/uuid_2/notes.txt",
+          ]),
+        );
+
+        assert.deepStrictEqual(
+          DroppedFileRegistry.entries,
+          new Map([
+            ["/$hologram/drops/uuid_1/notes.txt", firstFile],
+            ["/$hologram/drops/uuid_2/notes.txt", secondFile],
+          ]),
+        );
+      });
+
+      it("gives every binding of one drop the same files", () => {
+        randomUUIDStub.onFirstCall().returns("uuid_1");
+        randomUUIDStub.onSecondCall().returns("uuid_2");
+
+        const file = {name: "notes.txt"};
+
+        const event = buildEvent(
+          "drop",
+          buildDataTransfer({items: [fileItem(file)], types: ["Files"]}),
+        );
+
+        const expected = expectedFiles(["/$hologram/drops/uuid_1/notes.txt"]);
+
+        assert.deepStrictEqual(dropFiles(null, event), expected);
+        assert.deepStrictEqual(dropFiles(null, event), expected);
+
+        assert.deepStrictEqual(
+          DroppedFileRegistry.entries,
+          new Map([["/$hologram/drops/uuid_1/notes.txt", file]]),
+        );
+      });
+
+      for (const type of [
+        "drag",
+        "dragend",
+        "dragenter",
+        "dragleave",
+        "dragover",
+        "dragstart",
+      ]) {
+        it(`carries no files on ${type}`, () => {
+          const getAsFile = sinon.spy();
+
+          const result = DragEvent.buildOperationParam(
+            buildEvent(
+              type,
+              buildDataTransfer({
+                items: [{kind: "file", type: "", getAsFile}],
+                types: ["Files"],
+              }),
+            ),
+          );
+
+          assert.deepStrictEqual(
+            result,
+            buildExpected({items: [["file", ""]], types: ["Files"]}),
+          );
+
+          sinon.assert.notCalled(getAsFile);
+        });
+      }
     });
 
     it("leaves out Hologram's placeholder type", () => {

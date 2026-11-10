@@ -78,6 +78,35 @@ defmodule Hologram.Runtime.DeserializerTest do
       assert deserialize(4, data) == %{:x => 1, "y" => 2.34}
     end
 
+    test "map, Hologram.File struct" do
+      data = %{
+        "t" => "m",
+        "d" => [["a__struct__", "aElixir.Hologram.File"], ["apath", "s/etc/passwd"]]
+      }
+
+      assert_error Hologram.MisuseError,
+                   "a %Hologram.File{} can't be sent to the server - a dropped file lives only in the browser, so handle the drop in an action",
+                   fn -> deserialize(4, data) end
+    end
+
+    test "map, Hologram.File struct inside another term" do
+      file = %{
+        "t" => "m",
+        "d" => [["a__struct__", "aElixir.Hologram.File"], ["apath", "s/etc/passwd"]]
+      }
+
+      data = %{"t" => "m", "d" => [["afiles", %{"t" => "l", "d" => [file]}]]}
+
+      assert_error Hologram.MisuseError,
+                   "a %Hologram.File{} can't be sent to the server - a dropped file lives only in the browser, so handle the drop in an action",
+                   fn -> deserialize(4, data) end
+    end
+
+    test "map, with a path key" do
+      data = %{"t" => "m", "d" => [["apath", "s/etc/passwd"]]}
+      assert deserialize(4, data) == %{path: "/etc/passwd"}
+    end
+
     test "pid" do
       data = "pmy_node@my_host#{@delimiter}0,11,222#{@delimiter}server"
       assert deserialize(4, data) == pid("0.11.222")
@@ -403,6 +432,20 @@ defmodule Hologram.Runtime.DeserializerTest do
       }
 
       assert deserialize(1, data) == %{:a => 1, "b" => 2.34}
+    end
+
+    test "map, Hologram.File struct" do
+      data = %{
+        "type" => "map",
+        "data" => [
+          ["__atom__:__struct__", "__atom__:Elixir.Hologram.File"],
+          ["__atom__:path", "__binary__:/etc/passwd"]
+        ]
+      }
+
+      assert_error Hologram.MisuseError,
+                   "a %Hologram.File{} can't be sent to the server - a dropped file lives only in the browser, so handle the drop in an action",
+                   fn -> deserialize(1, data) end
     end
 
     test "pid" do

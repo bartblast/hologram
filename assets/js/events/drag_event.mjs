@@ -1,7 +1,9 @@
 "use strict";
 
+import DroppedFileRegistry from "../dropped_file_registry.mjs";
 import MouseEvent from "../events/mouse_event.mjs";
 import Type from "../type.mjs";
+import Utils from "../utils.mjs";
 
 // What each effectAllowed value allows, by effect. A drag whose source set nothing reports
 // "uninitialized", which allows every effect, as does a value no browser reports.
@@ -24,6 +26,10 @@ const EMPTY_DATA_TRANSFER = {
   items: [],
   types: [],
 };
+
+// The files of each drop event, built once: an event reaches every $drop binding on its path, and
+// each binding has to see the same paths, with each file registered once.
+const filesByDropEvent = new WeakMap();
 
 export default class DragEvent {
   // Allow the browser's native default. A dragstart's default starts the drag and a drag over an
@@ -125,7 +131,7 @@ export default class DragEvent {
         Type.atom("effects_allowed"),
         $.#buildEffectsAllowed(dataTransfer.effectAllowed),
       ],
-      [Type.atom("files"), Type.list()],
+      [Type.atom("files"), $.#buildFiles(event, items)],
       [
         Type.atom("items"),
         Type.list(
@@ -155,6 +161,47 @@ export default class DragEvent {
         Type.boolean(allowed.includes(effect)),
       ]),
     );
+  }
+
+  // Each dropped file goes in the registry under a folder of its own, named by a new id, so two
+  // files of one drop with the same name stay apart, and a path kept from before a reload never
+  // names a file a later drop brought. A folder is kept as its entry, since its File reads as an
+  // empty file. A DataTransfer built by a script has no entries, so its items are read as plain
+  // files.
+  static #buildFiles(event, items) {
+    if (event.type !== "drop") {
+      return Type.list();
+    }
+
+    if (filesByDropEvent.has(event)) {
+      return filesByDropEvent.get(event);
+    }
+
+    const files = items
+      .filter((item) => item.kind === "file")
+      .map((item) => {
+        const entry = item.webkitGetAsEntry?.() ?? null;
+        const value = entry?.isDirectory ? entry : item.getAsFile();
+
+        if (value === null) {
+          return null;
+        }
+
+        const path = `/$hologram/drops/${Utils.randomUUID()}/${value.name}`;
+
+        DroppedFileRegistry.put(path, value);
+
+        return Type.struct("Hologram.File", [
+          [Type.atom("path"), Type.bitstring(path)],
+        ]);
+      })
+      .filter((file) => file !== null);
+
+    const boxedFiles = Type.list(files);
+
+    filesByDropEvent.set(event, boxedFiles);
+
+    return boxedFiles;
   }
 }
 

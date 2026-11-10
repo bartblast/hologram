@@ -27,6 +27,7 @@ defmodule Hologram.Runtime.Deserializer do
     :link,
     :move,
     :none,
+    :path,
     :string,
     :type,
     :types,
@@ -172,6 +173,7 @@ defmodule Hologram.Runtime.Deserializer do
     data
     |> Enum.map(fn [key, value] -> {deserialize(version, key), deserialize(version, value)} end)
     |> Enum.into(%{})
+    |> refuse_file()
     |> maybe_recompile_regex()
   end
 
@@ -242,6 +244,7 @@ defmodule Hologram.Runtime.Deserializer do
     data
     |> Enum.map(fn [key, value] -> {deserialize(1, key), deserialize(1, value)} end)
     |> Enum.into(%{})
+    |> refuse_file()
   end
 
   def deserialize(1, %{"type" => "pid", "segments" => [x, y, z]}) do
@@ -307,4 +310,16 @@ defmodule Hologram.Runtime.Deserializer do
   end
 
   defp maybe_recompile_regex(map), do: map
+
+  # A dropped file lives only in the browser, so a %Hologram.File{} the client sends names nothing
+  # on the server. Refusing it keeps a crafted path from reaching the server's File functions.
+  # TODO: once commands upload dropped files (#228), let a %Hologram.File{} through as the uploaded
+  # file instead of refusing it.
+  defp refuse_file(%{__struct__: Hologram.File}) do
+    raise Hologram.MisuseError,
+      message:
+        "a %Hologram.File{} can't be sent to the server - a dropped file lives only in the browser, so handle the drop in an action"
+  end
+
+  defp refuse_file(map), do: map
 end
