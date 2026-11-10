@@ -978,6 +978,31 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Writes the module info PLT to the dump at the given path, with a new random token next to it that
+  tells this dump from any other (see `module_info_dump_stamp/1`). The token is written first, so
+  that a compile that dies between the two leaves a token no dump was written with.
+  """
+  @spec dump_module_info_plt(PLT.t(), T.file_path()) :: :ok
+  def dump_module_info_plt(plt, dump_path) do
+    token =
+      12
+      |> :crypto.strong_rand_bytes()
+      |> Base.url_encode64(padding: false)
+
+    dump_path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
+    dump_path
+    |> module_info_dump_token_path()
+    |> FileUtils.write_atomically!(token)
+
+    PLT.dump(plt, dump_path)
+
+    :ok
+  end
+
+  @doc """
   Encodes into the encode PLT every function of the given MFAs that is not there yet, reading each
   module's IR once however many entry files reach it. Erlang modules are skipped, and so are
   protocol modules, whose dispatcher functions depend on the entry file and are encoded per entry
@@ -1510,6 +1535,22 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns what tells the module info dump at the given path from another one: its mtime in posix
+  seconds and the token `dump_module_info_plt/2` wrote with it, or nil when there is no dump. Each
+  dump gets a new random token, so another compile's dump written within the same second has
+  another stamp. The token is nil when there is none, as in a build dir only an older Hologram
+  wrote to. An older Hologram that rewrites the dump leaves the token there, and the mtime alone
+  tells its dump apart then.
+  """
+  @spec module_info_dump_stamp(T.file_path()) :: {non_neg_integer, String.t() | nil} | nil
+  def module_info_dump_stamp(dump_path) do
+    case File.stat(dump_path, time: :posix) do
+      {:ok, %File.Stat{mtime: mtime}} -> {mtime, read_module_info_dump_token(dump_path)}
+      {:error, _reason} -> nil
+    end
+  end
+
+  @doc """
   Splits the given pages into the ones a compile must rebuild and the ones whose bundle it can reuse.
 
   A page is rebuilt when the pages PLT holds no state for it (a new page, or the first compile in a
@@ -1632,15 +1673,17 @@ defmodule Hologram.Compiler do
   digest did not is changed, but no edit).
 
   A module the compiler reported since the last compile (`compiled_modules`, see
-  `Hologram.Compiler.Tracer.take/1`) is read, whatever its entry says. The entry of any other module
-  is left where it is, unless it is a protocol's, whose consolidated beam a new implementation
-  rewrites without a compile, or there is none; that one is checked against the entry's mtime and
-  size, as in `build_module_info_plt!/3`, with `dumped_at` the mtime of the dump the last compile
-  wrote. A module of `editable_modules` that is not among `editable_beams` now is looked up as
+  `Hologram.Compiler.Tracer.take/1`) is read, whatever its entry says. Any other beam is checked
+  against its entry's mtime and size, as in `build_module_info_plt!/3`, with `dumped_at` the mtime of
+  the module info dump on disk when the last compile finished, and read when they moved or when the
+  beam is not older than that dump by a second: another OS process compiling the project, or a new
+  implementation rewriting a consolidated protocol, changes a beam with no compile in this VM. A
+  module of `editable_modules` that is not among `editable_beams` now is looked up as
   `build_module_info_plt!/3` looks up every module, and loses its entry only when the VM has no beam
   for it: a deleted module is purged, while a consolidated protocol whose directory is off the code
   path for a moment (Phoenix's reloader takes it off while it recompiles) keeps its entry. Leaving
-  the entries a scan into a new PLT would copy is what makes a compile that changed nothing cheap.
+  the entries a scan into a new PLT would copy is what makes a compile that changed nothing cheap: a
+  stat per beam, no read.
   """
   @spec patch_module_info_plt!(
           PLT.t(),
@@ -2527,32 +2570,30 @@ defmodule Hologram.Compiler do
     {static_bundle_path, static_source_map_path}
   end
 
+  # The file holding the token of the module info dump at the given path (see
+  # dump_module_info_plt/2).
+  defp module_info_dump_token_path(dump_path), do: dump_path <> ".token"
+
   # The record of the last JS deps install, in the node_modules dir it filled. npm leaves files it
   # doesn't know there alone, on a reinstall and on an install after package.json changed.
   defp package_json_digest_path(assets_dir) do
     Path.join([assets_dir, "node_modules", ".package_json_digest.bin"])
   end
 
-  # A compiled module is read. The entry of any other module is left as it is, unless it is a
-  # protocol's, whose consolidated beam a new implementation rewrites without a compile; that one,
-  # and a beam with no entry, is checked against its mtime and size first.
+  # A compiled module is read. Any other beam is checked against its entry's mtime and size first:
+  # another OS process can rewrite it, as a new implementation rewrites a consolidated protocol's,
+  # with no compile this VM's tracer sees.
   defp patch_module_info_plt_entry!(plt, module, beam_path, dumped_at, compiled_modules) do
     old_info = get_module_info(plt, module)
 
-    cond do
-      MapSet.member?(compiled_modules, module) ->
-        put_compared_module_info(plt, module, old_info, Reflection.beam_info(beam_path))
+    new_info =
+      if MapSet.member?(compiled_modules, module) do
+        Reflection.beam_info(beam_path)
+      else
+        reusable_module_info(module, beam_path, plt, dumped_at) || Reflection.beam_info(beam_path)
+      end
 
-      match?(%{protocol?: false}, old_info) ->
-        :kept
-
-      true ->
-        new_info =
-          reusable_module_info(module, beam_path, plt, dumped_at) ||
-            Reflection.beam_info(beam_path)
-
-        put_compared_module_info(plt, module, old_info, new_info)
-    end
+    put_compared_module_info(plt, module, old_info, new_info)
   end
 
   # A module that left the listing without its beam being deleted, as the full scan would see it. A
@@ -2637,11 +2678,21 @@ defmodule Hologram.Compiler do
     if info, do: PLT.put(new_plt, module, info)
   end
 
-  # Not reusable: read it.
+  # Read unless reusable. A path the VM still names for a loaded module whose file another OS
+  # process deleted has nothing to read, so the module gets no entry, as a deleted one. Checked only
+  # when the entry is not reused, whose check of the beam found no file then.
   defp put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at) do
     info =
-      reusable_module_info(module, beam_source, old_plt, dumped_at) ||
-        Reflection.beam_info(beam_source)
+      cond do
+        reused_info = reusable_module_info(module, beam_source, old_plt, dumped_at) ->
+          reused_info
+
+        is_binary(beam_source) or File.regular?(beam_source) ->
+          Reflection.beam_info(beam_source)
+
+        true ->
+          nil
+      end
 
     put_module_info(new_plt, module, info)
   end
@@ -2651,6 +2702,16 @@ defmodule Hologram.Compiler do
     metafile_path
     |> File.read!()
     |> JSON.decode!()
+  end
+
+  # nil when the dump has no token: an older Hologram wrote it.
+  defp read_module_info_dump_token(dump_path) do
+    case dump_path
+         |> module_info_dump_token_path()
+         |> File.read() do
+      {:ok, token} -> token
+      {:error, _reason} -> nil
+    end
   end
 
   # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states. A
