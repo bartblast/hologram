@@ -2612,7 +2612,7 @@ For what Hologram does itself, like moving focus with `$focused`, use that inste
 
 ##### Naming Elements
 
-A ref is an identifier, the same kind of value channels and `$key` take. An identifier is an atom, like `:search`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:message, 42}`. None of its atoms can be `nil`, `true` or `false`. An element ref is never an Elixir reference, the kind `make_ref/0` returns. The text form `$ref="sales_chart"` is the atom `:sales_chart`, so it takes only a name you can write as an atom without quotes. Write any other ref as an expression. That's also how each element in a loop gets its own:
+A ref is an identifier, the same kind of value channels and `$key` take. An identifier is an atom, like `:search`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:message, 42}`. None of its atoms can be `nil`, `true` or `false`. A ref that's a single atom is an atom ref, and one that's a tuple is a tuple ref, whose values after the name are its parts. An element ref is never an Elixir reference, the kind `make_ref/0` returns. The text form `$ref="sales_chart"` is the atom `:sales_chart`, so it takes only a name you can write as an atom without quotes. Write any other ref as an expression. That's also how each element in a loop gets its own:
 
 ```holo
 {%for message <- @messages}
@@ -2644,17 +2644,23 @@ Inside `MessageList`, the element takes the ref from the prop:
 <ul $ref={@list_ref}>...</ul>
 ```
 
+A reusable component shouldn't name its elements with a fixed ref, since the page may render it twice or use the same name itself. Take the ref as a prop, or build one from something unique to each instance, like its cid, and start it with the package's name:
+
+```holo
+<ul $ref={:acme_ui_menu, @cid}>...</ul>
+```
+
 `:window` and `:document` are built-in refs. `JS.element(:window)` returns the window and `JS.element(:document)` the document, so code that takes a ref can be given the window, like `scroll_ref={:window}`. A template can't name an element `:window` or `:document`.
 
 `JS.element/1` also takes a native value and returns it unchanged, so a component that takes a ref prop can pass the prop to `JS.element/1` whether it was given a ref or an element.
 
 Two elements rendered under one ref raise a `Hologram.MisuseError` that names the ref and the components that rendered them. Elements in the branches of one `{%if}` and `{%else}` don't clash, since only one of them renders. An element that takes another's place under the same ref isn't a duplicate either. The build fails for the mistakes it can see in literal refs:
 
-- a ref without keys twice in one template, outside the branches of one `{%if}` and `{%else}`
-- a ref without keys inside a `{%for}`, or in a component that renders itself
-- a component whose template has a ref without keys, rendered twice or inside a `{%for}`
-- the same ref without keys in a page, its layout and the components they render together
-- a ref name used with different numbers of key parts on one page
+- the same atom ref on two elements of one template, unless they're in the two branches of one `{%if}` and `{%else}`
+- an atom ref inside a `{%for}`, or in a component that renders itself
+- a component whose template has an atom ref, rendered twice or inside a `{%for}`
+- the same atom ref in a page, its layout and the components they render together
+- a ref name used with different numbers of parts on one page
 
 ##### Keep the Ref, Not the Element
 
@@ -2662,22 +2668,28 @@ Keep the ref in state and look the element up when you need it. An element kept 
 
 ##### Elements an Action Renders
 
-Hologram renders after an action returns, so an action can't look up an element its own state change adds. Look it up in a chained action instead, which runs after that render and before the browser paints:
+Hologram renders after an action returns, so an action can't look up an element its own state change adds. Take a reply form that opens with a rich text editor, a JavaScript library that needs the element it runs in:
+
+```holo
+<button $click="open_reply">Reply</button>
+{%if @replying?}
+  <div $ref="reply_editor"></div>
+{/if}
+```
+
+Looking up `:reply_editor` in the action that sets `@replying?` raises, since the `<div>` isn't on the page until that action returns. Look it up in a chained action instead, which runs after that render and before the browser paints:
 
 ```elixir
-def action(:open_preview, _params, component) do
+def action(:open_reply, _params, component) do
   component
-  |> put_state(:preview?, true)
-  |> put_action(:size_preview)
+  |> put_state(:replying?, true)
+  |> put_action(:start_reply_editor)
 end
 
-def action(:size_preview, _params, component) do
-  height =
-    :preview
-    |> JS.element()
-    |> JS.get(:scrollHeight)
+def action(:start_reply_editor, _params, component) do
+  JS.new(:Editor, [JS.element(:reply_editor)])
 
-  put_state(component, :preview_height, height)
+  component
 end
 ```
 
@@ -4090,7 +4102,7 @@ Returns the element a template names with `$ref`, as a native value the other JS
 |> JS.call(:select, [])
 ```
 
-`JS.element(:window)` and `JS.element(:document)` return the window and the document. A native value is returned unchanged. When nothing is rendered under the ref, it raises a `Hologram.MisuseError`. See the "Element Refs" section in the DOM documentation.
+`JS.element(:window)` and `JS.element(:document)` return the window and the document as native values too. A native value is returned unchanged. When nothing is rendered under the ref, it raises a `Hologram.MisuseError`. See the "Element Refs" section in the DOM documentation.
 
 ##### JS.dispatch_event - Dispatch Events
 
@@ -4423,6 +4435,8 @@ Since JS interop functions only work in the browser, functions that use them can
 #### Publishing Packages
 
 Planning to publish a reusable package that wraps a JavaScript library, a Web API, or provides Hologram utilities? Check the Package Naming conventions to help distinguish official and community packages.
+
+A package's components share the page's refs with the app. See the "Refs Are Page-Wide" section in the DOM documentation for how to name their elements.
 
 ### Configuration
 

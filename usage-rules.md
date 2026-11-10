@@ -192,7 +192,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - `$focus` and `$blur` fire only for focus changes the user (or JS interop) makes, never for focus Hologram moves.
 - `$focus` is an event, `$focused` is state: `$focus={true}` fails the build, and a binding that evaluates to `true` raises when the event fires. `$focused` on a component tag does nothing, so set it on an element inside the component.
 - **Element refs** name an element for JS interop: `<ul $ref="messages">` or, in a loop, `<li $ref={:message, message.id}>`, then `JS.element(:messages)` or `JS.element({:message, 42})` in an action. A ref is an identifier, never an Elixir reference from `make_ref/0`. `$ref="name"` is the atom `:name`, and a ref can come from state or props: `$ref={@list_ref}`. **Not** `id=` plus `JS.call(:document, :getElementById, [...])`.
-- Refs are page-wide, and two elements rendered under one ref raise. A ref without keys inside a `{%for}`, twice in a template, or in a component rendered twice fails the build, so give loop items keyed refs. Elements in `{%if}`/`{%else}` branches don't clash.
+- Refs are page-wide, and two elements rendered under one ref raise. An atom ref like `:search` inside a `{%for}`, twice in a template, or in a component rendered twice fails the build, so give loop items tuple refs like `{:item, item.id}`. Elements in `{%if}`/`{%else}` branches don't clash.
 - `$ref` goes on an element. On a component tag it fails the build, so pass the ref as a prop. It fails on `<slot>`, `<window>`, `<document>` and `<html>` too. `:window` and `:document` are built-in refs.
 - Keep the ref in state, never the element. An action can't look up an element its own state change renders, so look it up in a chained action with `put_action/2`. `JS.element/1` in a template fails the build.
 - Direct DOM manipulation via JS interop is preserved across Hologram re-renders, as long as the container element stays in the template.
@@ -273,7 +273,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 - Never build `JS.eval` / `JS.exec` code from user input, since it runs as code with the page's nonce. Pass values with `JS.call/3` instead.
 - Async: JS Promises become Elixir Tasks. Use `Task.await/1` to get the result.
 - Dispatch actions from JS: `Hologram.dispatchAction("action_name", "page", {key: value})`. Available immediately - calls before the runtime loads are queued and replayed on mount (safe for inline `<script>`).
-- Get an element a template names with `$ref`: `JS.element(:search)`. `JS.element(:window)` and `JS.element(:document)` return the window and the document.
+- Get an element a template names with `$ref`: `JS.element(:search)`. `JS.element(:window)` and `JS.element(:document)` return the window and the document as native values too.
 - Dispatch DOM events from Elixir: `JS.dispatch_event(target, "my:event", detail: %{value: 42})`.
 - Elixir anonymous functions can be passed as JS callbacks.
 - JS interop only works in action handlers (client-side). It is a no-op during server-side rendering.
