@@ -14,6 +14,12 @@ export default class ElementRefRegistry {
   // Made public to make tests easier
   static pageModule = null;
 
+  // Made public to make tests easier
+  // The literal refs each page renders, as [name, key count] pairs, by the page module's name. Each
+  // page's bundle puts its own when it is defined, so the registry holds the names of every page
+  // the tab has loaded.
+  static pageRefNames = new Map();
+
   static clear() {
     $.elements = new Map();
     $.pageModule = null;
@@ -22,6 +28,20 @@ export default class ElementRefRegistry {
   // The element rendered under the given ref, or null when nothing is.
   static get(ref) {
     return $.elements.get(Type.encodeMapKey(ref)) ?? null;
+  }
+
+  // Puts the literal refs the given page renders, as [name, key count] pairs, by the page module's
+  // name.
+  static putPageRefNames(pageModuleName, names) {
+    $.pageRefNames.set(pageModuleName, names);
+  }
+
+  // The literal refs the current page renders, as [name, key count] pairs, or none when no page is
+  // shown or its bundle carries none.
+  static refNames() {
+    return $.pageModule === null
+      ? []
+      : ($.pageRefNames.get($.pageModule.value) ?? []);
   }
 
   static replace(elementsByRef, pageModule) {

@@ -589,6 +589,49 @@ defmodule Hologram.CompilerTest do
       refute String.contains?(result, js_fragment_3)
     end
 
+    test "hands the runtime the refs its page renders, inside its define", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result =
+        build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(),
+          js_dir: @js_dir,
+          ref_names: {MyApp.Page, [{:item, 1}, {:"my-search", 0}]}
+        )
+
+      expected =
+        ~s'ElementRefRegistry.putPageRefNames("Elixir.MyApp.Page", [["item",1],["my-search",0]]);\n  },'
+
+      assert String.contains?(result, expected)
+    end
+
+    test "hands the runtime nothing for a page without refs", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result =
+        build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(),
+          js_dir: @js_dir,
+          ref_names: {MyApp.Page, []}
+        )
+
+      refute String.contains?(result, "putPageRefNames")
+    end
+
+    test "hands the runtime nothing without the ref names", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result = build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      refute String.contains?(result, "putPageRefNames")
+    end
+
+    test "takes the element ref registry from the deps it is defined with", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result = build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      assert String.contains?(result, "  ElementRefRegistry,\n")
+    end
+
     test "leaves its function defs for the runtime to define, under its own digest", %{
       ir_plt: ir_plt
     } do

@@ -142,6 +142,7 @@ export default class Hologram {
   static #deps = {
     Bitstring: Bitstring,
     ERTS: ERTS,
+    ElementRefRegistry: ElementRefRegistry,
     HologramBoxedError: HologramBoxedError,
     HologramInterpreterError: HologramInterpreterError,
     Interpreter: Interpreter,

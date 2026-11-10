@@ -323,7 +323,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       templatable_modules = page_modules ++ component_modules
 
-      {template_modules, template_refs} =
+      {template_modules, template_refs, ref_names_by_page} =
         validate_templates(
           templatable_modules,
           page_modules,
@@ -478,7 +478,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       entry_file_opts =
         Keyword.merge(opts,
           module_info_plt: new_module_info_plt,
-          module_metadata: module_metadata
+          module_metadata: module_metadata,
+          ref_names_by_page: ref_names_by_page
         )
 
       # The runtime bundle is kept like a page's: rebuilt when its inputs differ from the ones it
@@ -1807,7 +1808,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # deadlock when a component renders itself. Only the templates an edit can affect are validated
   # (see Hologram.Compiler.list_templatables_to_validate/3), and the IR of the ones no page reaches is
   # built for that alone. Returns the modules each templatable's template uses and the refs it
-  # declares, kept for the next compile.
+  # declares, kept for the next compile, and the refs each page renders, for its bundle.
   #
   # A template's refs depend on its own IR alone, so the ones it validates are summarized again and
   # the others kept. Whether they clash depends on every template a page renders, so the check runs
@@ -1840,7 +1841,8 @@ defmodule Mix.Tasks.Compile.Hologram do
         Compiler.list_template_refs_by_module(modules_to_validate, ir_plt)
       )
 
-    Compiler.check_template_refs(template_refs, page_layouts(page_modules, module_info_plt))
+    ref_names_by_page =
+      Compiler.check_template_refs(template_refs, page_layouts(page_modules, module_info_plt))
 
     template_modules =
       keep_template_entries(
@@ -1849,7 +1851,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         validated_template_modules
       )
 
-    {template_modules, template_refs}
+    {template_modules, template_refs, ref_names_by_page}
   end
 
   # Runs the given function while it holds the lock at the given path, which the given name names in

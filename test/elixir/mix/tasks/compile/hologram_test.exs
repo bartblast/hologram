@@ -19,6 +19,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module8
 
   # The module is most of the lib suite's serial phase, so CI runs it in a job of its own (see the
   # lib_tests matrix in .github/workflows/ci.yml).
@@ -2578,6 +2579,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
              |> defines_chunk_only_impl?()
 
       test_chunk_registry_plt(opts)
+    end
+
+    # The page declares one ref, its layout another, and a component it renders a keyed one.
+    test "a page bundle carries the refs its page renders with its layout", %{opts: opts} do
+      run(opts)
+
+      %{bundle_info: %{static_bundle_path: bundle_path}} =
+        PLT.get!(cache_state().pages_plt, Module8)
+
+      # The bundle is minified, so the call is matched from the method name on.
+      assert bundle_path
+             |> File.read!()
+             |> String.contains?(
+               ~s'putPageRefNames("Elixir.Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module8",[["item",1],["menu",0],["search",0]])'
+             )
     end
 
     # The runtime's own code names the struct, so the runtime bundle holds its struct functions and

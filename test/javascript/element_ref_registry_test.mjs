@@ -66,6 +66,50 @@ describe("ElementRefRegistry", () => {
     });
   });
 
+  describe("putPageRefNames() / refNames()", () => {
+    afterEach(() => {
+      ElementRefRegistry.pageRefNames = new Map();
+    });
+
+    it("returns the names the current page's bundle put", () => {
+      ElementRefRegistry.putPageRefNames("Elixir.MyPage", [
+        ["item", 1],
+        ["search", 0],
+      ]);
+
+      ElementRefRegistry.putPageRefNames("Elixir.MyOtherPage", [["menu", 0]]);
+
+      ElementRefRegistry.replace(new Map(), pageModule);
+
+      assert.deepStrictEqual(ElementRefRegistry.refNames(), [
+        ["item", 1],
+        ["search", 0],
+      ]);
+    });
+
+    it("returns none for a page whose bundle put none", () => {
+      ElementRefRegistry.replace(new Map(), pageModule);
+
+      assert.deepStrictEqual(ElementRefRegistry.refNames(), []);
+    });
+
+    it("returns none when no page is shown", () => {
+      ElementRefRegistry.putPageRefNames("Elixir.MyPage", [["search", 0]]);
+
+      assert.deepStrictEqual(ElementRefRegistry.refNames(), []);
+    });
+
+    it("keeps the names of a page a navigation left", () => {
+      ElementRefRegistry.putPageRefNames("Elixir.MyPage", [["search", 0]]);
+      ElementRefRegistry.replace(new Map(), pageModule);
+
+      ElementRefRegistry.clear();
+      ElementRefRegistry.replace(new Map(), pageModule);
+
+      assert.deepStrictEqual(ElementRefRegistry.refNames(), [["search", 0]]);
+    });
+  });
+
   describe("replace()", () => {
     it("takes the given elements and page in place of the ones it held", () => {
       ElementRefRegistry.replace(

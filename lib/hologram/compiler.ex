@@ -481,6 +481,9 @@ defmodule Hologram.Compiler do
       each module is asked, which reads the BEAM of a module that is not loaded (default: none).
     * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
       it; the modules it does not hold are read from the loaded modules (default: none).
+    * `:ref_names` - the page module and the literal refs it renders with its layout, as names with
+      their numbers of key parts, as `check_template_refs/2` returns them, which the script puts in
+      the runtime's element ref registry (default: none).
     * `:runtime_js_binding_modules` - modules whose JS imports are skipped when the imports are
       aggregated, because the runtime script, which every page loads, already registers their
       bindings (default: none).
@@ -501,7 +504,7 @@ defmodule Hologram.Compiler do
 
     const startTime = performance.now();
 
-    #{render_script_announcement(defs)}
+    #{render_script_announcement(defs <> render_page_ref_names(opts[:ref_names]))}
 
     console.debug("Hologram: page script executed in", PerformanceTimer.diff(startTime));\
     """
@@ -915,7 +918,8 @@ defmodule Hologram.Compiler do
   module (`encode_reachable_functions/5`), and then each page is rendered from that cache, so a
   module's IR is read once for all the pages of one call. The compile task calls it once per batch;
   a function already in the encode PLT, encoded for an earlier batch or an earlier compile, is not
-  encoded again. The module info PLT is taken from the `module_info_plt:` opt.
+  encoded again. The module info PLT is taken from the `module_info_plt:` opt, and each page's
+  literal refs from the `ref_names_by_page:` opt, as `check_template_refs/2` returns them.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/create_page_entry_files_6/README.md
   """
@@ -936,6 +940,7 @@ defmodule Hologram.Compiler do
         opts
       ) do
     module_info_plt = opts[:module_info_plt]
+    ref_names_by_page = Keyword.get(opts, :ref_names_by_page, %{})
 
     mfas_by_page
     |> Enum.flat_map(fn {_page_module, mfas} -> mfas end)
@@ -950,6 +955,7 @@ defmodule Hologram.Compiler do
           js_dir: opts[:js_dir],
           module_info_plt: module_info_plt,
           module_metadata: opts[:module_metadata],
+          ref_names: {page_module, Map.get(ref_names_by_page, page_module, [])},
           runtime_js_binding_modules: runtime_js_binding_modules
         )
         |> create_entry_file(entry_name, opts[:tmp_dir])
@@ -3008,6 +3014,23 @@ defmodule Hologram.Compiler do
     "in the template of #{inspect(module)} (rendered from #{Enum.map_join(through, " > ", &inspect/1)})"
   end
 
+  # The call that puts the literal refs a page renders in the runtime's element ref registry, with
+  # the names written as JSON, since a ref's name can be any atom. A page without refs puts none.
+  defp render_page_ref_names(nil), do: ""
+
+  defp render_page_ref_names({_page_module, []}), do: ""
+
+  defp render_page_ref_names({page_module, names}) do
+    names_json =
+      names
+      |> Enum.map(fn {name, key_count} -> [Atom.to_string(name), key_count] end)
+      |> Jason.encode!()
+
+    render_block(
+      "ElementRefRegistry.putPageRefNames(#{Jason.encode!(Atom.to_string(page_module))}, #{names_json});"
+    )
+  end
+
   # Two occurrences render together unless a block they are both in renders each in another branch.
   defp render_together?(first, second) do
     first_branches = Map.new(first.blocks)
@@ -3343,6 +3366,7 @@ defmodule Hologram.Compiler do
         const {
           Bitstring,
           ERTS,
+          ElementRefRegistry,
           HologramBoxedError,
           HologramInterpreterError,
           Interpreter,
