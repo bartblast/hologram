@@ -1378,72 +1378,6 @@ The `$change` event data structure depends on where the event handler is placed:
 
 For detailed information about `$change` event behavior with forms, including synthetic event mapping, usage patterns, and data types for different input types, see the "Event Handling" section in the Forms documentation.
 
-##### Focus Events
-
-The `$focus` and `$blur` events include no fields: `params.event` is an empty map.
-
-Both events report focus changes the user makes, and those your own code makes through JavaScript interop. Focus that Hologram moves to apply the `$focused` or `autofocus` attribute doesn't trigger them. To move focus from your state, see the "Focus" section in the DOM documentation.
-
-##### Keyboard Events
-
-Keyboard events (`$key_down`, `$key_up`) include:
-
-- `alt_key` - whether the Alt key was held
-- `code` - the physical key code (e.g. `"KeyK"`, `"Enter"`), independent of keyboard layout
-- `ctrl_key` - whether the Ctrl key was held
-- `key` - the value of the key pressed (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), reflecting the layout and modifiers
-- `meta_key` - whether the Meta key (Command on macOS, Windows key on Windows) was held
-- `repeat` - whether the key is being held down and auto-repeating
-- `shift_key` - whether the Shift key was held
-
-Some keyboard events carry no key at all. Chrome and other Chromium-based browsers send a `keydown` and a `keyup` with no key when the user fills a field from an autofill suggestion, and a script or browser extension can dispatch a plain `Event` named `keydown` or `keyup` too. Hologram ignores these events, so the handler does not run for them and `key` is always a string.
-
-To run a handler only for specific keys or key combinations, see the "Keyboard Key Filters" section below.
-
-##### Mouse Events
-
-Mouse events (like `$mouse_move`) include:
-
-- `client_x` - X coordinate relative to the client area (viewport)
-- `client_y` - Y coordinate relative to the client area (viewport)
-- `movement_x` - horizontal movement delta since the last mouse event
-- `movement_y` - vertical movement delta since the last mouse event
-- `offset_x` - X coordinate relative to the target element
-- `offset_y` - Y coordinate relative to the target element
-- `page_x` - X coordinate relative to the page
-- `page_y` - Y coordinate relative to the page
-- `screen_x` - X coordinate relative to the screen
-- `screen_y` - Y coordinate relative to the screen
-
-##### Pointer Events
-
-Pointer events (like `$click`, `$click_outside`, `$pointer_cancel`, `$pointer_down`, `$pointer_move`, `$pointer_up`) include:
-
-- `client_x` - X coordinate relative to the client area (viewport)
-- `client_y` - Y coordinate relative to the client area (viewport)
-- `movement_x` - horizontal movement delta since the last pointer event
-- `movement_y` - vertical movement delta since the last pointer event
-- `offset_x` - X coordinate relative to the target element
-- `offset_y` - Y coordinate relative to the target element
-- `page_x` - X coordinate relative to the page
-- `page_y` - Y coordinate relative to the page
-- `pointer_type` - the type of pointer that triggered the event, as an atom (`:mouse`, `:touch`, or `:pen`), or `nil` if the device type cannot be detected by the browser
-- `screen_x` - X coordinate relative to the screen
-- `screen_y` - Y coordinate relative to the screen
-
-###### Click Event
-
-A `$click` binding fires on a plain click, but not on a modified one - the modifier signals that the user wants the browser's own behavior, such as opening a link in a new tab or window, so Hologram stays out of the way. A click counts as modified when any of these is held:
-
-- `⌥ Alt`
-- `⌃ Ctrl`
-- `⌘ Command`
-- `⇧ Shift`
-
-###### Click-Outside Event
-
-The `$click_outside` event fires when a click lands anywhere outside the bound element and its descendants - the gesture behind dismissible UI like dropdowns, popovers, modals, and menus. A click on the element or inside it does nothing. It is usually rendered only while the element is open, behind a conditional, so it listens for outside clicks just then.
-
 ##### Drag and Drop Events
 
 The drag and drop events (`$drag_start`, `$drag`, `$drag_enter`, `$drag_over`, `$drag_leave`, `$drop`, `$drag_end`) bind the browser's native drag and drop: the drag image follows the pointer, a drag can cross into other windows and apps, and files can be dropped from the desktop. An element drags when it has `draggable="true"`. Links, images and selected text drag without it.
@@ -1469,7 +1403,7 @@ def action(:dropped, %{column: column}, component) do
 end
 ```
 
-Each drag event includes the mouse event fields (see "Mouse Events" above) and a `data_transfer` map:
+Each drag event includes the mouse event fields (see "Mouse Events" below) and a `data_transfer` map:
 
 - `data` - the drag data, a map of data type to string, like `%{"text/plain" => "Buy milk"}`
 - `drop_effect` - the effect the drop target picked, `:none`, `:copy`, `:move` or `:link`
@@ -1535,6 +1469,72 @@ No `$drag_leave` fires after a drop, so clear a highlight in the `$drop` action 
 - Firefox reports `0` for every coordinate on `$drag`.
 
 `$drag_start.prevent_default` cancels the drag.
+
+##### Focus Events
+
+The `$focus` and `$blur` events include no fields: `params.event` is an empty map.
+
+Both events report focus changes the user makes, and those your own code makes through JavaScript interop. Focus that Hologram moves to apply the `$focused` or `autofocus` attribute doesn't trigger them. To move focus from your state, see the "Focus" section in the DOM documentation.
+
+##### Keyboard Events
+
+Keyboard events (`$key_down`, `$key_up`) include:
+
+- `alt_key` - whether the Alt key was held
+- `code` - the physical key code (e.g. `"KeyK"`, `"Enter"`), independent of keyboard layout
+- `ctrl_key` - whether the Ctrl key was held
+- `key` - the value of the key pressed (e.g. `"k"`, `"Enter"`, `"ArrowUp"`), reflecting the layout and modifiers
+- `meta_key` - whether the Meta key (Command on macOS, Windows key on Windows) was held
+- `repeat` - whether the key is being held down and auto-repeating
+- `shift_key` - whether the Shift key was held
+
+Some keyboard events carry no key at all. Chrome and other Chromium-based browsers send a `keydown` and a `keyup` with no key when the user fills a field from an autofill suggestion, and a script or browser extension can dispatch a plain `Event` named `keydown` or `keyup` too. Hologram ignores these events, so the handler does not run for them and `key` is always a string.
+
+To run a handler only for specific keys or key combinations, see the "Keyboard Key Filters" section below.
+
+##### Mouse Events
+
+Mouse events (like `$mouse_move`) include:
+
+- `client_x` - X coordinate relative to the client area (viewport)
+- `client_y` - Y coordinate relative to the client area (viewport)
+- `movement_x` - horizontal movement delta since the last mouse event
+- `movement_y` - vertical movement delta since the last mouse event
+- `offset_x` - X coordinate relative to the target element
+- `offset_y` - Y coordinate relative to the target element
+- `page_x` - X coordinate relative to the page
+- `page_y` - Y coordinate relative to the page
+- `screen_x` - X coordinate relative to the screen
+- `screen_y` - Y coordinate relative to the screen
+
+##### Pointer Events
+
+Pointer events (like `$click`, `$click_outside`, `$pointer_cancel`, `$pointer_down`, `$pointer_move`, `$pointer_up`) include:
+
+- `client_x` - X coordinate relative to the client area (viewport)
+- `client_y` - Y coordinate relative to the client area (viewport)
+- `movement_x` - horizontal movement delta since the last pointer event
+- `movement_y` - vertical movement delta since the last pointer event
+- `offset_x` - X coordinate relative to the target element
+- `offset_y` - Y coordinate relative to the target element
+- `page_x` - X coordinate relative to the page
+- `page_y` - Y coordinate relative to the page
+- `pointer_type` - the type of pointer that triggered the event, as an atom (`:mouse`, `:touch`, or `:pen`), or `nil` if the device type cannot be detected by the browser
+- `screen_x` - X coordinate relative to the screen
+- `screen_y` - Y coordinate relative to the screen
+
+###### Click Event
+
+A `$click` binding fires on a plain click, but not on a modified one - the modifier signals that the user wants the browser's own behavior, such as opening a link in a new tab or window, so Hologram stays out of the way. A click counts as modified when any of these is held:
+
+- `⌥ Alt`
+- `⌃ Ctrl`
+- `⌘ Command`
+- `⇧ Shift`
+
+###### Click-Outside Event
+
+The `$click_outside` event fires when a click lands anywhere outside the bound element and its descendants - the gesture behind dismissible UI like dropdowns, popovers, modals, and menus. A click on the element or inside it does nothing. It is usually rendered only while the element is open, behind a conditional, so it listens for outside clicks just then.
 
 ##### Reach Events
 
