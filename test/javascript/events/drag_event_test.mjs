@@ -273,4 +273,56 @@ describe("DragEvent", () => {
   it("isEventIgnored()", () => {
     assert.isFalse(DragEvent.isEventIgnored(buildEvent("dragover", null)));
   });
+
+  describe("prepareEvent()", () => {
+    it("puts the placeholder on a dragstart that carries no data", () => {
+      const dataTransfer = {setData: sinon.spy(), types: []};
+
+      DragEvent.prepareEvent(buildEvent("dragstart", dataTransfer));
+
+      sinon.assert.calledOnceWithExactly(
+        dataTransfer.setData,
+        "application/x-hologram",
+        "hologram",
+      );
+    });
+
+    it("leaves a dragstart that carries data alone", () => {
+      const dataTransfer = {setData: sinon.spy(), types: ["text/plain"]};
+
+      DragEvent.prepareEvent(buildEvent("dragstart", dataTransfer));
+
+      sinon.assert.notCalled(dataTransfer.setData);
+    });
+
+    it("doesn't throw on a dragstart with no DataTransfer", () => {
+      assert.doesNotThrow(() =>
+        DragEvent.prepareEvent(buildEvent("dragstart", null)),
+      );
+    });
+
+    for (const type of [
+      "drag",
+      "dragend",
+      "dragenter",
+      "dragleave",
+      "dragover",
+      "drop",
+    ]) {
+      it(`leaves a ${type} alone`, () => {
+        // The browser protects the drag data outside dragstart, so a write is ignored, or throws in
+        // Firefox.
+        const dataTransfer = {
+          setData: sinon.spy(() => {
+            throw new Error("protected");
+          }),
+          types: [],
+        };
+
+        DragEvent.prepareEvent(buildEvent(type, dataTransfer));
+
+        sinon.assert.notCalled(dataTransfer.setData);
+      });
+    }
+  });
 });

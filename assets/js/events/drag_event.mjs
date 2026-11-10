@@ -52,6 +52,19 @@ export default class DragEvent {
     return false;
   }
 
+  // Firefox starts a drag only when a dragstart listener puts data on it (Mozilla bug 725156), so a
+  // dragstart that carries none gets the placeholder. The browser lets a page write the drag data
+  // only while dragstart runs. A write during any other drag event is ignored, and Firefox throws.
+  static prepareEvent(event) {
+    if (
+      event.type === "dragstart" &&
+      event.dataTransfer &&
+      event.dataTransfer.types.length === 0
+    ) {
+      event.dataTransfer.setData($.PLACEHOLDER_TYPE, "hologram");
+    }
+  }
+
   // The browser lets a page read the drag data only while dragstart and drop run; any other drag
   // event shows only the types and items. "Files" names the dropped files rather than data a page
   // can get.

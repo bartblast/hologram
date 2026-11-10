@@ -534,6 +534,11 @@ export default class Hologram {
       event.stopPropagation?.();
     }
 
+    // Some events need a change made to them while their listener still runs, like the placeholder
+    // data a drag needs to start in Firefox. It runs after the disabled and ignored checks, so a nil
+    // binding leaves the event alone.
+    eventImpl.prepareEvent?.(event);
+
     const eventParam = eventImpl.buildOperationParam(event);
     const eventTarget = event.target;
 
