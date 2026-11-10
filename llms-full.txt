@@ -4106,7 +4106,13 @@ Returns the element a template names with `$ref`, as a native value the other JS
 
 ##### JS.dispatch_event - Dispatch Events
 
-Dispatches an event on a target. There are several variants:
+Dispatches an event on a target. The examples below target an element a template names with `$ref`:
+
+```holo
+<div $ref="panel"></div>
+```
+
+There are several variants:
 
 ###### dispatch_event/2 - CustomEvent, No Options
 
