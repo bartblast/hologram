@@ -9103,11 +9103,12 @@ describe("Renderer", () => {
       assert.deepStrictEqual(Renderer.dragBindings, []);
     });
 
-    for (const [tagName, listenerTarget] of [
-      ["document", document],
-      ["window", window],
-    ]) {
+    // The global is read when the test runs: some test files replace the window and the document
+    // when they load.
+    for (const tagName of ["document", "window"]) {
       it(`collects the pair for a <${tagName}> tag with a $drop binding`, () => {
+        const listenerTarget = globalThis[tagName];
+
         // <document $drop="my_action" /> or <window $drop="my_action" />
         render(
           tag(tagName, [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
