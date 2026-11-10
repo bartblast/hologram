@@ -99,6 +99,7 @@ import {defineClientOnlyModule10Fixture} from "./support/fixtures/renderer/clien
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import DragEvent from "../../assets/js/events/drag_event.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import FocusEvent from "../../assets/js/events/focus_event.mjs";
@@ -9634,7 +9635,7 @@ describe("Renderer", () => {
               ]),
             ),
           "Hologram.MisuseError",
-          "the $data_transfer attribute takes the :drop_effect key, got :effect",
+          "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
         );
       });
 
@@ -9652,7 +9653,7 @@ describe("Renderer", () => {
               ]),
             ),
           "Hologram.MisuseError",
-          'the $data_transfer attribute takes the :drop_effect key, got "drop_effect"',
+          'the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got "drop_effect"',
         );
       });
 
@@ -9709,7 +9710,7 @@ describe("Renderer", () => {
               ]),
             ),
           "Hologram.MisuseError",
-          "the $data_transfer attribute takes the :drop_effect key, got :effect",
+          "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
         );
       });
 
@@ -9774,6 +9775,531 @@ describe("Renderer", () => {
           "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
         );
       });
+    });
+  });
+
+  describe("drag source", () => {
+    const dataTransferAttr = (value) =>
+      Type.tuple([
+        Type.bitstring("$data_transfer"),
+        Type.list([Type.tuple([Type.atom("expression"), Type.tuple([value])])]),
+      ]);
+
+    const dataEntry = (pairs) => [
+      Type.atom("data"),
+      Type.map(
+        pairs.map(([type, value]) => [
+          Type.bitstring(type),
+          value === null ? Type.nil() : Type.bitstring(value),
+        ]),
+      ),
+    ];
+
+    const effectsEntry = (effects) => [
+      Type.atom("effects_allowed"),
+      Array.isArray(effects)
+        ? Type.list(effects.map((effect) => Type.atom(effect)))
+        : Type.atom(effects),
+    ];
+
+    const tag = (tagName, attrsDom, childrenDom = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(childrenDom),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    // A DataTransfer that keeps its data by type, the way a dragstart's does.
+    const buildStore = () => {
+      const data = new Map();
+
+      return {
+        clearData: sinon.spy((type) => data.delete(type)),
+        data,
+        effectAllowed: "uninitialized",
+        setData: sinon.spy((type, value) => data.set(type, value)),
+        get types() {
+          return [...data.keys()];
+        },
+      };
+    };
+
+    const dispatchDragStart = (element, store) => {
+      const event = new Event("dragstart", {bubbles: true, cancelable: true});
+      Object.defineProperty(event, "dataTransfer", {value: store});
+      element.dispatchEvent(event);
+    };
+
+    let outer;
+
+    // Renders an outer element with the given $data_transfer entries (null for none) around an inner
+    // one with its own (null for none) and a child declaring nothing, attaches them to live
+    // elements and reconciles their listeners. Returns the live inner element and child.
+    const renderNested = (outerEntries, innerEntries) => {
+      const attrs = (entries) =>
+        entries === null ? [] : [dataTransferAttr(Type.keywordList(entries))];
+
+      const outerVdom = render(
+        tag("div", attrs(outerEntries), [
+          tag("div", attrs(innerEntries), [tag("span", [])]),
+        ]),
+      );
+
+      outer = document.createElement("div");
+      const inner = document.createElement("div");
+      const child = document.createElement("span");
+
+      inner.appendChild(child);
+      outer.appendChild(inner);
+      document.body.appendChild(outer);
+
+      outerVdom.elm = outer;
+      outerVdom.children[0].elm = inner;
+      outerVdom.children[0].children[0].elm = child;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      return {child, inner};
+    };
+
+    beforeEach(() => {
+      Renderer.dragBindings = [];
+      Renderer.listenerBindings = [];
+      outer = null;
+    });
+
+    afterEach(() => {
+      EventListenerRegistry.detachAll();
+      outer?.remove();
+    });
+
+    it("collects a capture-phase dragstart listener for an element with data", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}></div>
+      const vdom = render(
+        tag("div", [
+          dataTransferAttr(
+            Type.keywordList([dataEntry([["text/plain", "Buy milk"]])]),
+          ),
+        ]),
+      );
+
+      vdom.elm = document.createElement("div");
+
+      assert.deepStrictEqual(
+        Renderer.resolveDragBindings().map(({target, key}) => [target, key]),
+        [[vdom.elm, "capture:dragstart"]],
+      );
+    });
+
+    it("collects a capture-phase dragstart listener for an element with allowed effects", () => {
+      // <div $data_transfer={effects_allowed: :move}></div>
+      const vdom = render(
+        tag("div", [
+          dataTransferAttr(Type.keywordList([effectsEntry("move")])),
+        ]),
+      );
+
+      vdom.elm = document.createElement("div");
+
+      assert.deepStrictEqual(
+        Renderer.resolveDragBindings().map(({key}) => key),
+        ["capture:dragstart"],
+      );
+    });
+
+    it("collects nothing for an element that declares only a drop effect", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      render(
+        tag("div", [
+          Type.tuple([
+            Type.bitstring("$drop"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+          ]),
+          dataTransferAttr(
+            Type.keywordList([[Type.atom("drop_effect"), Type.atom("move")]]),
+          ),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({eventName}) => eventName),
+        ["dragenter", "dragover"],
+      );
+    });
+
+    it("puts each type's data on the drag and removes a nil type", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk", "text/uri-list" => nil}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([
+          ["text/plain", "Buy milk"],
+          ["text/uri-list", null],
+        ]),
+      ]);
+
+      const store = buildStore();
+      store.data.set("text/uri-list", "https://example.com");
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual([...store.data], [["text/plain", "Buy milk"]]);
+
+      sinon.assert.calledOnceWithExactly(store.clearData, "text/uri-list");
+    });
+
+    it("leaves the allowed effects alone when it declares none", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.equal(store.effectAllowed, "uninitialized");
+    });
+
+    it("leaves the data alone when it declares none", () => {
+      // <div $data_transfer={effects_allowed: :move}></div>
+      const {inner} = renderNested(null, [effectsEntry("move")]);
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      sinon.assert.notCalled(store.setData);
+      sinon.assert.notCalled(store.clearData);
+    });
+
+    for (const [effects, effectAllowed] of [
+      [[], "none"],
+      ["copy", "copy"],
+      ["link", "link"],
+      ["move", "move"],
+      [["copy", "link"], "copyLink"],
+      [["copy", "move"], "copyMove"],
+      [["link", "move"], "linkMove"],
+      [["copy", "link", "move"], "all"],
+      [["move", "copy", "move"], "copyMove"],
+    ]) {
+      it(`allows ${effectAllowed} for ${JSON.stringify(effects)}`, () => {
+        // <div $data_transfer={effects_allowed: ...}></div>
+        const {inner} = renderNested(null, [effectsEntry(effects)]);
+
+        const store = buildStore();
+
+        dispatchDragStart(inner, store);
+
+        assert.equal(store.effectAllowed, effectAllowed);
+      });
+    }
+
+    it("applies to a drag that starts on a child declaring nothing", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}><span></span></div>
+      const {child} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      const store = buildStore();
+
+      dispatchDragStart(child, store);
+
+      assert.deepStrictEqual([...store.data], [["text/plain", "Buy milk"]]);
+    });
+
+    it("applies only the nearest source of nested ones", () => {
+      // <div $data_transfer={data: %{"application/x-task" => "42"}, effects_allowed: :move}>
+      //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+      // </div>
+      const {inner} = renderNested(
+        [dataEntry([["application/x-task", "42"]]), effectsEntry("move")],
+        [dataEntry([["application/x-tag", "urgent"]])],
+      );
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual(
+        [...store.data],
+        [["application/x-tag", "urgent"]],
+      );
+
+      assert.equal(store.effectAllowed, "uninitialized");
+
+      sinon.assert.calledOnceWithExactly(
+        store.setData,
+        "application/x-tag",
+        "urgent",
+      );
+    });
+
+    it("applies the outer source to a drag that starts outside the inner one", () => {
+      // <div $data_transfer={data: %{"application/x-task" => "42"}}>
+      //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+      // </div>
+      renderNested(
+        [dataEntry([["application/x-task", "42"]])],
+        [dataEntry([["application/x-tag", "urgent"]])],
+      );
+
+      const store = buildStore();
+
+      dispatchDragStart(outer, store);
+
+      assert.deepStrictEqual([...store.data], [["application/x-task", "42"]]);
+    });
+
+    it("applies the source before the bindings on the drag's path run", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}>
+      //   <div $drag_start="my_action"></div>
+      // </div>
+      const {inner} = renderNested(
+        [dataEntry([["text/plain", "Buy milk"]])],
+        null,
+      );
+
+      // Stands for the inner element's $drag_start binding, which Snabbdom attaches in the bubble
+      // phase, and which puts the placeholder on a drag that carries no data.
+      let seenTypes = null;
+
+      inner.addEventListener("dragstart", (event) => {
+        DragEvent.prepareEvent(event);
+        seenTypes = event.dataTransfer.types;
+      });
+
+      dispatchDragStart(inner, buildStore());
+
+      assert.deepStrictEqual(seenTypes, ["text/plain"]);
+    });
+
+    it("applies the source before its own bindings run", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}} $drag_start="my_action"></div>
+      const {inner} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      // Stands for the source's own $drag_start binding, which Snabbdom attaches in the bubble
+      // phase.
+      let seenTypes = null;
+
+      inner.addEventListener("dragstart", (event) => {
+        DragEvent.prepareEvent(event);
+        seenTypes = event.dataTransfer.types;
+      });
+
+      dispatchDragStart(inner, buildStore());
+
+      assert.deepStrictEqual(seenTypes, ["text/plain"]);
+    });
+
+    it("forgets a source the last render no longer declares", () => {
+      // <div $data_transfer={data: %{"application/x-task" => "42"}}>
+      //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+      // </div>
+      const {child, inner} = renderNested(
+        [dataEntry([["application/x-task", "42"]])],
+        [dataEntry([["application/x-tag", "urgent"]])],
+      );
+
+      Renderer.dragBindings = [];
+
+      // <div $data_transfer={data: %{"application/x-task" => "42"}}><div></div></div>
+      const outerVdom = render(
+        tag(
+          "div",
+          [
+            dataTransferAttr(
+              Type.keywordList([dataEntry([["application/x-task", "42"]])]),
+            ),
+          ],
+          [tag("div", [], [tag("span", [])])],
+        ),
+      );
+
+      outerVdom.elm = outer;
+      outerVdom.children[0].elm = inner;
+      outerVdom.children[0].children[0].elm = child;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual([...store.data], [["application/x-task", "42"]]);
+    });
+
+    it("puts the data on the drag in the order of its types", () => {
+      // <div $data_transfer={data: %{"text/uri-list" => "https://example.com", "text/plain" => "Example"}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([
+          ["text/uri-list", "https://example.com"],
+          ["text/plain", "Example"],
+        ]),
+      ]);
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual(store.types, ["text/plain", "text/uri-list"]);
+    });
+
+    it("applies what the last render declared", () => {
+      const element = document.createElement("div");
+
+      for (const value of ["Buy milk", "Buy bread"]) {
+        Renderer.dragBindings = [];
+
+        // <div $data_transfer={data: %{"text/plain" => value}}></div>
+        const vdom = render(
+          tag("div", [
+            dataTransferAttr(
+              Type.keywordList([dataEntry([["text/plain", value]])]),
+            ),
+          ]),
+        );
+
+        vdom.elm = element;
+
+        EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+      }
+
+      const store = buildStore();
+
+      dispatchDragStart(element, store);
+
+      assert.deepStrictEqual([...store.data], [["text/plain", "Buy bread"]]);
+    });
+
+    it("doesn't throw on a dragstart with no DataTransfer", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      assert.doesNotThrow(() => dispatchDragStart(inner, null));
+    });
+
+    describe("invalid values", () => {
+      const raises = (entries, message, tagName = "div") =>
+        assertBoxedError(
+          () =>
+            render(tag(tagName, [dataTransferAttr(Type.keywordList(entries))])),
+          "Hologram.MisuseError",
+          message,
+        );
+
+      it("raises for data that isn't a map", () => {
+        raises(
+          [[Type.atom("data"), Type.bitstring("Buy milk")]],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got "Buy milk"',
+        );
+      });
+
+      it("raises for data whose type isn't a string", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([[Type.atom("text"), Type.bitstring("Buy milk")]]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{text: "Buy milk"}',
+        );
+      });
+
+      it("raises for data whose value isn't a string or nil", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([
+                [Type.bitstring("application/x-task"), Type.integer(42)],
+              ]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"application/x-task" => 42}',
+        );
+      });
+
+      it("raises for data that is a struct", () => {
+        const struct = Type.struct("MyStruct", [
+          [Type.bitstring("text/plain"), Type.bitstring("Buy milk")],
+        ]);
+
+        raises(
+          [[Type.atom("data"), struct]],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"text/plain" => "Buy milk", :__struct__ => MyStruct}',
+        );
+      });
+
+      it("raises for data whose type isn't valid UTF-8", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([
+                [Bitstring.fromBytes([255]), Type.bitstring("Buy milk")],
+              ]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{<<255>> => "Buy milk"}',
+        );
+      });
+
+      it("raises for data whose value isn't valid UTF-8", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([
+                [Type.bitstring("text/plain"), Bitstring.fromBytes([255])],
+              ]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"text/plain" => <<255>>}',
+        );
+      });
+
+      it("raises for an allowed effect outside the effects", () => {
+        raises(
+          [effectsEntry("all")],
+          "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got :all",
+        );
+      });
+
+      it("raises for a list of allowed effects holding one outside the effects", () => {
+        raises(
+          [effectsEntry(["move", "none"])],
+          "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got [:move, :none]",
+        );
+      });
+
+      for (const tagName of ["document", "window"]) {
+        it(`raises for data on a <${tagName}> tag before judging it`, () => {
+          raises(
+            [[Type.atom("data"), Type.bitstring("Buy milk")]],
+            `the $data_transfer data goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+            tagName,
+          );
+        });
+
+        it(`raises for allowed effects on a <${tagName}> tag before judging them`, () => {
+          raises(
+            [effectsEntry("all")],
+            `the $data_transfer effects_allowed goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+            tagName,
+          );
+        });
+      }
     });
   });
 
