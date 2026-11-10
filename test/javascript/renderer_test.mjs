@@ -104,6 +104,7 @@ import FocusEvent from "../../assets/js/events/focus_event.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Once from "../../assets/js/once.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -12741,6 +12742,16 @@ describe("Renderer", () => {
           render(refElement(Type.tuple([Type.atom("message"), Type.nil()]))),
         "Hologram.MisuseError",
         "$ref takes an identifier, like :search or {:message, 42}, got: {:message, nil} - nil, true and false can't be in an identifier",
+      );
+    });
+
+    it("raises for an Elixir reference, with a hint", () => {
+      const ref = Type.reference(NodeTable.CLIENT_NODE, 0, [3, 2, 1]);
+
+      assertBoxedError(
+        () => render(refElement(ref)),
+        "Hologram.MisuseError",
+        "$ref takes an identifier, like :search or {:message, 42}, got: #Reference<0.1.2.3> - an element ref is an identifier, not an Elixir reference",
       );
     });
 

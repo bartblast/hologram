@@ -13,6 +13,10 @@ import Type from "../../type.mjs";
 const ELEMENT_EXPECTATION =
   "JS.element/1 takes a ref, like :search or {:message, 42}, or a native value";
 
+// WARNING: must match ELIXIR_REFERENCE_HINT in the client renderer (renderer.mjs).
+const ELIXIR_REFERENCE_HINT =
+  "an element ref is an identifier, not an Elixir reference";
+
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
 
@@ -189,8 +193,10 @@ const Elixir_Hologram_JS = {
     const result = Identifier.check(ref);
 
     if (result !== null) {
+      const hint = Type.isReference(ref) ? ELIXIR_REFERENCE_HINT : result.hint;
+
       Interpreter.raiseMisuseError(
-        Identifier.message(ELEMENT_EXPECTATION, ref, result.hint),
+        Identifier.message(ELEMENT_EXPECTATION, ref, hint),
       );
     }
 

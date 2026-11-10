@@ -1927,6 +1927,14 @@ defmodule Hologram.Template.RendererTest do
                    fn -> render_dom(ref_element({:message, nil}), @env, @server) end
     end
 
+    test "raises for an Elixir reference, with a hint" do
+      ref = make_ref()
+
+      assert_error Hologram.MisuseError,
+                   "$ref takes an identifier, like :search or {:message, 42}, got: #{inspect(ref)} - an element ref is an identifier, not an Elixir reference",
+                   fn -> render_dom(ref_element(ref), @env, @server) end
+    end
+
     test "raises for a built-in ref" do
       for {ref, name} <- [window: "window", document: "document"] do
         assert_error Hologram.MisuseError,

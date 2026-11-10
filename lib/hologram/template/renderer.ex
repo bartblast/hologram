@@ -39,6 +39,12 @@ defmodule Hologram.Template.Renderer do
   # The refs that name the window and the document, which a template can't give an element.
   @built_in_refs [:window, :document]
 
+  # An element ref and an Elixir reference are both called a ref, so a reference passed as one gets
+  # this hint.
+  #
+  # WARNING: must match ELIXIR_REFERENCE_HINT in the client renderer (renderer.mjs).
+  @elixir_reference_hint "an element ref is an identifier, not an Elixir reference"
+
   # WARNING: must match REF_EXPECTATION in the client renderer (renderer.mjs).
   @ref_expectation "$ref takes an identifier, like :search or {:message, 42}"
 
@@ -1852,6 +1858,7 @@ defmodule Hologram.Template.Renderer do
         ref
 
       {:error, hint} ->
+        hint = if is_reference(ref), do: @elixir_reference_hint, else: hint
         raise Hologram.MisuseError, message: Identifier.message(@ref_expectation, ref, hint)
     end
   end

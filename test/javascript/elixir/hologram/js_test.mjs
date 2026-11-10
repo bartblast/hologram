@@ -18,6 +18,7 @@ import ERTS from "../../../../assets/js/erts.mjs";
 import ElementRefRegistry from "../../../../assets/js/element_ref_registry.mjs";
 import HologramInterpreterError from "../../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../../assets/js/interpreter.mjs";
+import NodeTable from "../../../../assets/js/erts/node_table.mjs";
 import Type from "../../../../assets/js/type.mjs";
 
 defineRuntimeGlobals();
@@ -1158,6 +1159,16 @@ describe("Elixir_Hologram_JS", () => {
         () => element(Type.tuple([Type.atom("message"), Type.nil()])),
         "Hologram.MisuseError",
         "JS.element/1 takes a ref, like :search or {:message, 42}, or a native value, got: {:message, nil} - nil, true and false can't be in an identifier",
+      );
+    });
+
+    it("raises for an Elixir reference, with a hint", () => {
+      const ref = Type.reference(NodeTable.CLIENT_NODE, 0, [3, 2, 1]);
+
+      assertBoxedError(
+        () => element(ref),
+        "Hologram.MisuseError",
+        "JS.element/1 takes a ref, like :search or {:message, 42}, or a native value, got: #Reference<0.1.2.3> - an element ref is an identifier, not an Elixir reference",
       );
     });
 

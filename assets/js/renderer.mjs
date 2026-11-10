@@ -22,6 +22,14 @@ import Vdom, {TRUSTED_HTML_SEL} from "./vdom.mjs";
 import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
 
+// An element ref and an Elixir reference are both called a ref, so a reference passed as one gets
+// this hint.
+//
+// WARNING: must match @elixir_reference_hint in Hologram.Template.Renderer, and the copy in
+// Elixir_Hologram_JS (elixir/hologram/js.mjs).
+const ELIXIR_REFERENCE_HINT =
+  "an element ref is an identifier, not an Elixir reference";
+
 // WARNING: must match @ref_expectation in Hologram.Template.Renderer.
 const REF_EXPECTATION =
   "$ref takes an identifier, like :search or {:message, 42}";
@@ -3416,8 +3424,10 @@ export default class Renderer {
     const result = Identifier.check(ref);
 
     if (result !== null) {
+      const hint = Type.isReference(ref) ? ELIXIR_REFERENCE_HINT : result.hint;
+
       Interpreter.raiseMisuseError(
-        Identifier.message(REF_EXPECTATION, ref, result.hint),
+        Identifier.message(REF_EXPECTATION, ref, hint),
       );
     }
 
