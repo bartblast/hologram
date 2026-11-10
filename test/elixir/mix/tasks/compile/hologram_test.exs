@@ -85,6 +85,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # a module it does not name (see the dynamic call gate tests).
   @reflection_closed_page Hologram.Test.Fixtures.Compiler.CallGraph.Module43
   @reflection_open_page Hologram.Test.Fixtures.Compiler.CallGraph.Module44
+  # A component whose template declares keyless refs, and one no template renders.
+  @ref_component Hologram.Test.Fixtures.Compiler.Module41
+  @unrendered_component Hologram.Test.Fixtures.Compiler.Module47
+
   @reflection_schema Hologram.Test.Fixtures.Compiler.CallGraph.Module24
 
   # The cache's state with the kept module infos as a map, nil while they are untrusted (no editable
@@ -186,6 +190,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
       fun.()
       {:call_count, count} = :erlang.trace_info(mfa, :call_count)
       count
+    after
+      :erlang.trace_pattern(mfa, false, [:local, :call_count])
+    end
+  end
+
+  # How many templates have their refs summarized while the given function runs, and what it
+  # returns.
+  defp count_template_summaries(fun) do
+    mfa = {Compiler, :list_template_refs, 1}
+    :erlang.trace_pattern(mfa, true, [:local, :call_count])
+
+    try do
+      result = fun.()
+      {:call_count, count} = :erlang.trace_info(mfa, :call_count)
+      {count, result}
     after
       :erlang.trace_pattern(mfa, false, [:local, :call_count])
     end
@@ -1797,6 +1816,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert compile_state.encoding_inputs == state.encoding_inputs
       assert compile_state.module_metadata == state.module_metadata
       assert compile_state.template_modules == state.template_modules
+      assert compile_state.template_refs == state.template_refs
+      assert compile_state.template_refs != nil
     end
 
     test "dumps the pages a stopped run left pending", %{opts: opts} do
@@ -2974,6 +2995,98 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       PLT.stop(ir_plt)
       PLT.stop(module_info_plt)
+    end
+
+    test "the kept template refs are the ones a full summary finds", %{opts: opts} do
+      run(opts)
+      fake_edit(Module1)
+      run(opts)
+
+      %{module_infos: module_infos, template_refs: template_refs} = cache_state()
+
+      module_info_plt = PLT.start(items: Map.to_list(module_infos))
+
+      templatable_modules =
+        Compiler.list_pages(module_info_plt) ++ Compiler.list_components(module_info_plt)
+
+      # The kept IR PLT holds no IR of a component no page reaches, so the full summary builds its
+      # own.
+      ir_plt = PLT.start()
+      Compiler.build_missing_ir!(ir_plt, templatable_modules)
+
+      assert template_refs == Compiler.list_template_refs_by_module(templatable_modules, ir_plt)
+
+      PLT.stop(ir_plt)
+      PLT.stop(module_info_plt)
+    end
+
+    test "an edit of a page summarizes the refs of the templates it validates", %{opts: opts} do
+      run(opts)
+      fake_edit(Module1)
+
+      {summarized_count, validated_count} =
+        count_template_summaries(fn -> count_validated_templates(fn -> run(opts) end) end)
+
+      assert validated_count > 0
+      assert summarized_count == validated_count
+    end
+
+    test "a run that validates no template still checks the kept refs", %{opts: opts} do
+      run(opts)
+
+      clash = {:seq, [{:ref, :clash, 0}, {:ref, :clash, 0}]}
+
+      # No template renders it, so its own render is the only one the clash fails.
+      cache_state().template_refs
+      |> Map.put(@unrendered_component, clash)
+      |> Cache.put_template_refs()
+
+      fake_edit(@unreached_module)
+
+      expected_msg =
+        "the ref :clash would name two elements in a render of Hologram.Test.Fixtures.Compiler.Module47, " <>
+          "both in the template of Hologram.Test.Fixtures.Compiler.Module47 - " <>
+          "a ref without keys names one element, so give each element a ref of its own, like {:clash, item.id} for the items of a loop"
+
+      assert count_validated_templates(fn ->
+               assert_error Hologram.CompileError, expected_msg, fn -> run(opts) end
+             end) == 0
+    end
+
+    test "a ref the edited component's new summary declares is checked with the page that renders it",
+         %{opts: opts} do
+      run(opts)
+
+      # The page keeps a summary that renders the component twice, and the component's own is
+      # dropped, so only the summary its edit builds from its IR can supply the clashing ref.
+      cache_state().template_refs
+      |> Map.put(Module1, {:seq, [{:component, @ref_component}, {:component, @ref_component}]})
+      |> Map.delete(@ref_component)
+      |> Cache.put_template_refs()
+
+      fake_edit(@ref_component)
+
+      expected_msg =
+        "the ref :label would name two elements in the page #{inspect(Module1)} with its layout " <>
+          "#{inspect(Module1.__layout_module__())}, " <>
+          "both in the template of Hologram.Test.Fixtures.Compiler.Module41 (rendered from #{inspect(Module1)}) - " <>
+          "a ref without keys names one element, so give each element a ref of its own, like {:label, item.id} for the items of a loop"
+
+      assert_error Hologram.CompileError, expected_msg, fn -> run(opts) end
+    end
+
+    test "a compile state without template refs summarizes every template", %{opts: opts} do
+      run(opts)
+
+      num_templatables = map_size(cache_state().template_modules)
+
+      Cache.put_template_refs(nil)
+      fake_edit(@unreached_module)
+
+      {summarized_count, _result} = count_template_summaries(fn -> run(opts) end)
+
+      assert summarized_count == num_templatables
+      assert map_size(cache_state().template_refs) == num_templatables
     end
 
     test "keeps no IR of a component no page reaches", %{opts: opts} do

@@ -323,12 +323,14 @@ defmodule Mix.Tasks.Compile.Hologram do
 
       templatable_modules = page_modules ++ component_modules
 
-      template_modules =
-        validate_prop_usages(
+      {template_modules, template_refs} =
+        validate_templates(
           templatable_modules,
+          page_modules,
           module_digests_diff,
-          cache.template_modules,
-          ir_plt
+          cache,
+          ir_plt,
+          new_module_info_plt
         )
 
       runtime_analysis = runtime_analysis(cache.runtime, call_graph_for_runtime, runtime_kept?)
@@ -565,6 +567,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Cache.put_encoding_inputs(encoding_inputs)
       Cache.put_module_metadata(module_metadata)
       Cache.put_template_modules(template_modules)
+      Cache.put_template_refs(template_refs)
 
       keep_chunk_state(kept_chunk_bundles_info, chunks, chunk_sizes)
       keep_runtime_state(cache.runtime, runtime_entry_files_info, runtime_dynamic_calls)
@@ -1154,7 +1157,8 @@ defmodule Mix.Tasks.Compile.Hologram do
         js_input_paths: MapSet.new(),
         pending_pages: MapSet.new(),
         runtime: nil,
-        template_modules: nil
+        template_modules: nil,
+        template_refs: nil
     }
   end
 
@@ -1234,18 +1238,26 @@ defmodule Mix.Tasks.Compile.Hologram do
   # The first compile in a VM validated every templatable. A later one updates the kept entries with
   # the ones it validated, and drops the entries of modules that are no longer templatables (removed,
   # or edited into something else).
-  defp keep_template_modules(nil, _templatable_modules, validated_template_modules) do
-    validated_template_modules
+  defp keep_template_entries(nil, _templatable_modules, validated_entries) do
+    validated_entries
   end
 
-  defp keep_template_modules(
-         kept_template_modules,
-         templatable_modules,
-         validated_template_modules
-       ) do
-    kept_template_modules
+  defp keep_template_entries(kept_entries, templatable_modules, validated_entries) do
+    kept_entries
     |> Map.take(templatable_modules)
-    |> Map.merge(validated_template_modules)
+    |> Map.merge(validated_entries)
+  end
+
+  # Each page's layout, as the module info PLT records it, or as the page names it when its info
+  # doesn't, the way the call graph's walk looks it up (see
+  # Hologram.Compiler.CallGraph.list_page_entry_mfas/2).
+  defp page_layouts(page_modules, module_info_plt) do
+    Map.new(page_modules, fn page_module ->
+      layout_module =
+        PLT.get!(module_info_plt, page_module).layout_module || page_module.__layout_module__()
+
+      {page_module, layout_module}
+    end)
   end
 
   defp runtime_modules_untouched?(runtime_mfas, reaching_modules) do
@@ -1794,14 +1806,23 @@ defmodule Mix.Tasks.Compile.Hologram do
   # used component's __props__/0 is simply callable, with no compile-time dependency on it and no
   # deadlock when a component renders itself. Only the templates an edit can affect are validated
   # (see Hologram.Compiler.list_templatables_to_validate/3), and the IR of the ones no page reaches is
-  # built for that alone. Returns the modules each templatable's template uses, kept for the next
-  # compile.
-  defp validate_prop_usages(
+  # built for that alone. Returns the modules each templatable's template uses and the refs it
+  # declares, kept for the next compile.
+  #
+  # A template's refs depend on its own IR alone, so the ones it validates are summarized again and
+  # the others kept. Whether they clash depends on every template a page renders, so the check runs
+  # over all of them every compile, which reads no IR. A compile that kept no refs, after a compile
+  # state written before they were kept, validates every template.
+  defp validate_templates(
          templatable_modules,
+         page_modules,
          module_digests_diff,
-         kept_template_modules,
-         ir_plt
+         cache,
+         ir_plt,
+         module_info_plt
        ) do
+    kept_template_modules = if cache.template_refs, do: cache.template_modules
+
     modules_to_validate =
       Compiler.list_templatables_to_validate(
         templatable_modules,
@@ -1812,7 +1833,23 @@ defmodule Mix.Tasks.Compile.Hologram do
     Compiler.build_missing_ir!(ir_plt, modules_to_validate)
     validated_template_modules = Compiler.validate_prop_usages(modules_to_validate, ir_plt)
 
-    keep_template_modules(kept_template_modules, templatable_modules, validated_template_modules)
+    template_refs =
+      keep_template_entries(
+        kept_template_modules && cache.template_refs,
+        templatable_modules,
+        Compiler.list_template_refs_by_module(modules_to_validate, ir_plt)
+      )
+
+    Compiler.check_template_refs(template_refs, page_layouts(page_modules, module_info_plt))
+
+    template_modules =
+      keep_template_entries(
+        kept_template_modules,
+        templatable_modules,
+        validated_template_modules
+      )
+
+    {template_modules, template_refs}
   end
 
   # Runs the given function while it holds the lock at the given path, which the given name names in

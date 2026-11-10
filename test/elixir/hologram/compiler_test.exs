@@ -4495,6 +4495,24 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "list_template_refs_by_module/2" do
+    ir_plt =
+      PLT.start(
+        items: [
+          {Module43, IR.for_module(Module43)},
+          {Module45, IR.for_module(Module45)}
+        ]
+      )
+
+    assert list_template_refs_by_module([Module43, Module45, Module27], ir_plt) == %{
+             Module27 => {:seq, []},
+             Module43 => {:loop, {:ref, :item, 1}},
+             Module45 => {:ref, :box, 0}
+           }
+
+    PLT.stop(ir_plt)
+  end
+
   test "list_components/1" do
     info = fn page?, component? ->
       %{digest: 1, mtime: 1, size: 1, page?: page?, component?: component?}

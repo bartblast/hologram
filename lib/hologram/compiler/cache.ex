@@ -30,15 +30,16 @@ defmodule Hologram.Compiler.Cache do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
+  alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Tracer
 
   # Bumped when the compile state's shape changes: a dump of another version is not loaded. A field
   # added to a part forget_bundles/0 forgets (the runtime state, the chunk state, the page states,
-  # the template modules, the encoding inputs) needs no bump: the compile state holds the bundle
-  # inputs it was written with, which include the digests of Hologram's own modules, so the compile
-  # task forgets those parts of a compile state another Hologram build wrote before it reads them
-  # (see keep_bundle_inputs/2 there).
+  # the template modules and refs, the encoding inputs) needs no bump: the compile state holds the
+  # bundle inputs it was written with, which include the digests of Hologram's own modules, so the
+  # compile task forgets those parts of a compile state another Hologram build wrote before it reads
+  # them (see keep_bundle_inputs/2 there).
   @dump_version 1
 
   # What the chunk bundles were built from: the bundle info of each chunk on disk and the MFAs of
@@ -62,7 +63,8 @@ defmodule Hologram.Compiler.Cache do
           pages: %{module => page_state},
           pending_pages: MapSet.t(module),
           runtime: runtime_state | nil,
-          template_modules: %{module => MapSet.t(module)} | nil
+          template_modules: %{module => MapSet.t(module)} | nil,
+          template_refs: %{module => Compiler.template_refs()} | nil
         }
 
   @type encoding_inputs :: %{async_mfas: MapSet.t(mfa), client_stacktraces?: boolean}
@@ -97,17 +99,18 @@ defmodule Hologram.Compiler.Cache do
           pages_plt: PLT.t(),
           pending_pages: MapSet.t(module),
           runtime: runtime_state | nil,
-          template_modules: %{module => MapSet.t(module)} | nil
+          template_modules: %{module => MapSet.t(module)} | nil,
+          template_refs: %{module => Compiler.template_refs()} | nil
         }
 
   @doc """
   Forgets the dump time and the editable modules, which marks the kept module infos as untrusted,
   while keeping the module info PLT's entries, the IR PLT, the encode PLT, the encoding inputs, the
-  module metadata, the template modules, the bundle inputs, the paths of the files the kept bundles
-  read, whether the compile state changed since it was last dumped or loaded, and the call graph,
-  so that the next compile starts from the build dir. The compile task calls it before it changes
-  the kept state in place: a compile that dies mid-way must not leave a half-patched graph or
-  half-scanned infos that the next compile would trust.
+  module metadata, the template modules and refs, the bundle inputs, the paths of the files the kept
+  bundles read, whether the compile state changed since it was last dumped or loaded, and the call
+  graph, so that the next compile starts from the build dir. The compile task calls it before it
+  changes the kept state in place: a compile that dies mid-way must not leave a half-patched graph
+  or half-scanned infos that the next compile would trust.
   """
   @spec clear_module_infos() :: :ok
   def clear_module_infos do
@@ -132,15 +135,15 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Writes the compile state to the given path: the page states, the pending pages, the runtime state,
-  the chunk state, the app versions, the encoding inputs, the module metadata, the template modules,
-  the bundle inputs and the paths of the files the kept bundles read, which a compile in a new VM
-  needs to keep this VM's bundles (the after picture of a compile, next to the before picture the
-  call graph and module info dumps are). The page MFA lists are left out: they are read only after a
-  change of the runtime's MFAs, and a page without one is rebuilt then. Skipped when nothing in it
-  changed since it was last written or loaded, unless forced: the compile task forces it when the
-  dumps on disk are not this VM's. A change is marked by the functions that change what it holds,
-  and a put of the value already kept marks none, so a compile that changes nothing neither copies
-  the page states out of their PLT nor writes. Returns `:written` or `:unchanged`.
+  the chunk state, the app versions, the encoding inputs, the module metadata, the template modules
+  and refs, the bundle inputs and the paths of the files the kept bundles read, which a compile in a
+  new VM needs to keep this VM's bundles (the after picture of a compile, next to the before picture
+  the call graph and module info dumps are). The page MFA lists are left out: they are read only
+  after a change of the runtime's MFAs, and a page without one is rebuilt then. Skipped when nothing
+  in it changed since it was last written or loaded, unless forced: the compile task forces it when
+  the dumps on disk are not this VM's. A change is marked by the functions that change what it
+  holds, and a put of the value already kept marks none, so a compile that changes nothing neither
+  copies the page states out of their PLT nor writes. Returns `:written` or `:unchanged`.
   """
   @spec dump_compile_state(String.t(), boolean) :: :written | :unchanged
   def dump_compile_state(path, force?) do
@@ -149,13 +152,13 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Forgets every kept bundle and what was derived for it: the page states and MFA lists, the pending
-  pages, the runtime state, the chunk state, the template modules, the encoding inputs, the encoded
-  functions and the paths of the files the kept bundles read. The call graph, the IR PLT, the module
-  infos, the module metadata, the app versions and the bundle inputs describe the modules, not the
-  JavaScript made from them, and stay. The compile task calls it when the bundle inputs changed (see
-  `put_bundle_inputs/1`): the kept bundles were made by another Hologram build, so every page, the
-  runtime and the chunks are built again, as on a fresh build dir. The PLTs are emptied in place, so
-  their references stay valid.
+  pages, the runtime state, the chunk state, the template modules and refs, the encoding inputs, the
+  encoded functions and the paths of the files the kept bundles read. The call graph, the IR PLT,
+  the module infos, the module metadata, the app versions and the bundle inputs describe the
+  modules, not the JavaScript made from them, and stay. The compile task calls it when the bundle
+  inputs changed (see `put_bundle_inputs/1`): the kept bundles were made by another Hologram build,
+  so every page, the runtime and the chunks are built again, as on a fresh build dir. The PLTs are
+  emptied in place, so their references stay valid.
   """
   @spec forget_bundles() :: :ok
   def forget_bundles do
@@ -170,10 +173,10 @@ defmodule Hologram.Compiler.Cache do
   list of each page (apart from the rest of its state, since only a relisting after a change of the
   runtime's MFAs reads it), the modules each template uses and the inputs the bundles were built
   with (the dump time, the editable modules, the encoding inputs, the module metadata, the runtime
-  state, the chunk state, the template modules and the bundle inputs are nil when no compile has
-  finished in this VM, and the module info PLT's entries are then not to be trusted), the paths of
-  the files the kept bundles read, and whether the compile state changed since it was last dumped or
-  loaded. Starts the cache on first use.
+  state, the chunk state, the template modules and refs and the bundle inputs are nil when no
+  compile has finished in this VM, and the module info PLT's entries are then not to be trusted),
+  the paths of the files the kept bundles read, and whether the compile state changed since it was
+  last dumped or loaded. Starts the cache on first use.
   """
   @spec get() :: t
   def get do
@@ -221,7 +224,8 @@ defmodule Hologram.Compiler.Cache do
         js_input_paths: MapSet.new(),
         pending_pages: MapSet.new(),
         runtime: nil,
-        template_modules: nil
+        template_modules: nil,
+        template_refs: nil
     }
 
     {:reply, :ok, new_state}
@@ -250,7 +254,9 @@ defmodule Hologram.Compiler.Cache do
             module_metadata: compile_state.module_metadata,
             pending_pages: compile_state.pending_pages,
             runtime: compile_state.runtime,
-            template_modules: compile_state.template_modules
+            template_modules: compile_state.template_modules,
+            # A dump written before the refs were kept has no such key.
+            template_refs: Map.get(compile_state, :template_refs)
         }
 
         {:reply, :ok, new_state}
@@ -322,6 +328,10 @@ defmodule Hologram.Compiler.Cache do
 
   def handle_call({:put_template_modules, template_modules}, _from, state) do
     {:reply, :ok, put_dumped_field(state, :template_modules, template_modules)}
+  end
+
+  def handle_call({:put_template_refs, template_refs}, _from, state) do
+    {:reply, :ok, put_dumped_field(state, :template_refs, template_refs)}
   end
 
   def handle_call(:reset, _from, state) do
@@ -467,12 +477,22 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
+  Keeps, for each page and component, the literal refs its template declares, as
+  `Hologram.Compiler.list_template_refs/1` summarizes them, so that a compile summarizes only the
+  templates it validates and checks the refs of all of them (see
+  `Hologram.Compiler.check_template_refs/2`).
+  """
+  @spec put_template_refs(%{module => Compiler.template_refs()}) :: :ok
+  def put_template_refs(template_refs) do
+    GenServer.call(server(), {:put_template_refs, template_refs})
+  end
+
+  @doc """
   Replaces the kept call graph, module info PLT, IR PLT, encode PLT, page states and page MFA lists
-  with empty ones
-  and forgets the kept dump time, editable modules, encoding inputs, module metadata, pending pages,
-  application versions, runtime state, chunk state, template modules, bundle inputs and the paths of
-  the files the kept bundles read, and marks the compile state as unchanged, so the next compile
-  starts from the build dir, as the first one in the VM does.
+  with empty ones and forgets the kept dump time, editable modules, encoding inputs, module
+  metadata, pending pages, application versions, runtime state, chunk state, template modules and
+  refs, bundle inputs and the paths of the files the kept bundles read, and marks the compile state
+  as unchanged, so the next compile starts from the build dir, as the first one in the VM does.
   """
   @spec reset() :: :ok
   def reset do
@@ -497,7 +517,8 @@ defmodule Hologram.Compiler.Cache do
       pages: PLT.get_all(state.pages_plt),
       pending_pages: state.pending_pages,
       runtime: state.runtime,
-      template_modules: state.template_modules
+      template_modules: state.template_modules,
+      template_refs: state.template_refs
     }
   end
 
@@ -522,7 +543,8 @@ defmodule Hologram.Compiler.Cache do
       pages_plt: PLT.start(),
       pending_pages: MapSet.new(),
       runtime: nil,
-      template_modules: nil
+      template_modules: nil,
+      template_refs: nil
     }
   end
 

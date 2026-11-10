@@ -1514,6 +1514,21 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Lists the literal refs the template of each given module declares, as `list_template_refs/1`
+  does, by module. A module missing from the IR PLT declares none, as `validate_prop_usages/2`
+  finds it using no component: without a BEAM source it has no IR to walk.
+  """
+  @spec list_template_refs_by_module([module], PLT.t()) :: %{module => template_refs}
+  def list_template_refs_by_module(modules, ir_plt) do
+    Map.new(modules, fn module ->
+      case PLT.get(ir_plt, module) do
+        {:ok, ir} -> {module, list_template_refs(ir)}
+        :error -> {module, {:seq, []}}
+      end
+    end)
+  end
+
+  @doc """
   Lists the templatables whose prop usages a compile validates: every one when no earlier validation
   is kept (`template_modules` nil), else the ones the module digests diff added or edited, and the
   ones whose template uses an added, edited or removed module, as `template_modules` (each
