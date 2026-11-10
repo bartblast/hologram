@@ -267,6 +267,17 @@ defmodule Hologram.TemplateTest do
       end
     end
 
+    test "raises for an imported capture" do
+      assert_error Hologram.CompileError,
+                   element_lookup_message("ElementLookupImportCapture"),
+                   fn ->
+                     compile_template("ElementLookupImportCapture", ~S"""
+                     import Hologram.JS, only: [element: 1]
+                     def template, do: ~HOLO"<div>{inspect(&element/1)}</div>"
+                     """)
+                   end
+    end
+
     test "raises outside a module, naming no module" do
       expected_msg =
         "JS.element/1 can't be called in a template - a template also renders on the server, " <>
@@ -304,6 +315,17 @@ defmodule Hologram.TemplateTest do
 
       assert [{:element, "div", [{"$key", [text: _key]}], [expression: {:feed}]}] =
                template.(%{})
+    end
+
+    test "a variable named element divided by 1 passes with element/1 imported" do
+      {template, _bindings} =
+        Code.eval_string(~S"""
+        import Hologram.Template
+        import Hologram.JS, only: [element: 1]
+        ~HOLO"{%for element <- [4]}{element / 1}{/for}"
+        """)
+
+      assert template.(%{}) == [[{:loop_item, {4}, [expression: {4.0}]}]]
     end
   end
 

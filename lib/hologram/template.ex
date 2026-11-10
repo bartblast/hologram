@@ -109,6 +109,16 @@ defmodule Hologram.Template do
     Macro.expand(alias_ast, env) == Hologram.JS
   end
 
+  # A capture of an imported function holds its name the way a variable is held, so it's matched
+  # with the capture around it, which leaves a variable named element divided by 1 alone.
+  defp element_lookup?(
+         {:&, _meta, [{:/, _slash_meta, [{:element, _name_meta, context}, 1]}]},
+         env
+       )
+       when is_atom(context) do
+    {:function, Hologram.JS} in Macro.Env.lookup_import(env, {:element, 1})
+  end
+
   defp element_lookup?({:element, _meta, args}, env) when is_list(args) do
     {:function, Hologram.JS} in Macro.Env.lookup_import(env, {:element, 1})
   end
