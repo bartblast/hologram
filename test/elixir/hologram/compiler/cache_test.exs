@@ -1055,4 +1055,53 @@ defmodule Hologram.Compiler.CacheTest do
     refute Process.alive?(pages_plt.pid)
     assert :ets.whereis(Tracer) == :undefined
   end
+
+  describe "reset_kept_state/0" do
+    test "forgets the kept state as reset/0 does" do
+      put_pending_pages([Module1])
+
+      assert reset_kept_state() == :ok
+      assert get().pending_pages == MapSet.new()
+    end
+
+    test "keeps the mark that a compile started and the module info dump the VM last saw" do
+      mark_compile_started()
+      put_seen_dumped_at(123)
+
+      reset_kept_state()
+
+      assert %{compile_started?: true, seen_dumped_at: 123} = get()
+    end
+  end
+
+  describe "seen_dumped_at" do
+    test "is nil at first" do
+      assert get().seen_dumped_at == nil
+    end
+
+    test "is set by put_seen_dumped_at/1" do
+      assert put_seen_dumped_at(123) == :ok
+      assert get().seen_dumped_at == 123
+    end
+
+    test "is set by put_module_infos/2" do
+      put_module_infos(123, MapSet.new())
+
+      assert get().seen_dumped_at == 123
+    end
+
+    test "is kept by clear_module_infos/0" do
+      put_module_infos(123, MapSet.new())
+      clear_module_infos()
+
+      assert %{dumped_at: nil, seen_dumped_at: 123} = get()
+    end
+
+    test "is forgotten by reset/0" do
+      put_seen_dumped_at(123)
+      reset()
+
+      assert get().seen_dumped_at == nil
+    end
+  end
 end

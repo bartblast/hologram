@@ -481,6 +481,24 @@ defmodule Mix.Tasks.Compile.HologramTest do
     File.rm!(beam_path)
   end
 
+  # Writes the module info dump again with the given change to its entries, as another OS process's
+  # compile does, with an mtime a second past the one it had.
+  defp rewrite_module_info_dump(opts, fun) do
+    dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+    %File.Stat{mtime: mtime} = File.stat!(dump_path, time: :posix)
+
+    module_infos =
+      opts
+      |> load_module_info_items()
+      |> fun.()
+
+    plt = PLT.start(items: Map.to_list(module_infos))
+    PLT.dump(plt, dump_path)
+    PLT.stop(plt)
+
+    File.touch!(dump_path, mtime + 1)
+  end
+
   # The calls of the given functions this process made while the function ran, in order, as
   # {module, function} pairs. Each function is given with the arguments a call must have, or :_ for
   # any. Collected by another process, since the compile can take messages off this one's mailbox.
@@ -1243,16 +1261,72 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
 
       # A new VM whose first run finds nothing changed and compiles nothing. Then another process
-      # compiles the module, and a live reload pass compiles.
+      # compiles the module, and writes a module info dump that matches its beam. Then a live
+      # reload pass compiles.
       Cache.reset()
       assert run(opts) == :noop
 
-      fake_edit_in_dump(Module8, opts)
       load_code_other_than_beam(Module8)
+      rewrite_module_info_dump(opts, & &1)
 
       run(Keyword.put(opts, :force?, true))
 
       assert Module8.value() == :beam
+    end
+
+    test "unloads the old code of a module another process compiled after a failed compile, against that process's module info dump",
+         %{opts: opts} do
+      run(opts)
+
+      # What a failed compile leaves. Then another process compiles the module, and writes a module
+      # info dump that matches its beam, so the diff against it misses the module.
+      Cache.clear_module_infos()
+      load_code_other_than_beam(Module8)
+      rewrite_module_info_dump(opts, & &1)
+
+      run(opts)
+
+      assert Module8.value() == :beam
+    end
+
+    test "unloads a module whose beam another process deleted after a failed compile, against that process's module info dump",
+         %{opts: opts} do
+      run(opts)
+
+      # What a failed compile leaves. Then another process deletes the module, and writes a module
+      # info dump without it.
+      Cache.clear_module_infos()
+      remove_beam(Module8)
+      rewrite_module_info_dump(opts, &Map.delete(&1, Module8))
+
+      run(opts)
+
+      refute :code.is_loaded(Module8)
+    end
+
+    test "checks only the diff's modules after a run that found nothing changed when the module info dump is the one it saw",
+         %{opts: opts} do
+      run(opts)
+
+      Cache.reset()
+      assert run(opts) == :noop
+
+      load_code_other_than_beam(Module8)
+      run(Keyword.put(opts, :force?, true))
+
+      assert :code.module_status(Module8) == :modified
+    end
+
+    test "checks only the diff's modules after a failed compile when the module info dump is the one it saw",
+         %{opts: opts} do
+      run(opts)
+
+      Cache.clear_module_infos()
+      load_code_other_than_beam(Module8)
+
+      run(opts)
+
+      assert :code.module_status(Module8) == :modified
     end
 
     test "unloads a module whose beam another process deleted", %{opts: opts} do

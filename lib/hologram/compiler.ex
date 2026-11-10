@@ -2634,10 +2634,21 @@ defmodule Hologram.Compiler do
   end
 
   # Not reusable: read it.
+  # A path the VM still names for a loaded module whose file another OS process deleted has nothing
+  # to read, so the module gets no entry, as a deleted one. Checked only when the entry is not
+  # reused, whose check of the beam found no file then.
   defp put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at) do
     info =
-      reusable_module_info(module, beam_source, old_plt, dumped_at) ||
-        Reflection.beam_info(beam_source)
+      cond do
+        reused_info = reusable_module_info(module, beam_source, old_plt, dumped_at) ->
+          reused_info
+
+        is_binary(beam_source) or File.regular?(beam_source) ->
+          Reflection.beam_info(beam_source)
+
+        true ->
+          nil
+      end
 
     put_module_info(new_plt, module, info)
   end

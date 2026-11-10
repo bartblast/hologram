@@ -119,7 +119,13 @@ defmodule Mix.Tasks.Compile.Hologram do
 
         true ->
           opts = put_first_compile(opts)
-          if nothing_changed?(opts), do: :noop, else: compile_with_lock(opts)
+
+          if nothing_changed?(opts) do
+            see_module_info_dump(opts)
+            :noop
+          else
+            compile_with_lock(opts)
+          end
       end
 
     # TODO: Remove this block together with refresh_umbrella_app_manifests/0
@@ -130,6 +136,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
 
     result
+  end
+
+  defp beam_dir(beam_path) do
+    beam_path
+    |> to_string()
+    |> Path.dirname()
+    |> Path.expand()
   end
 
   defp build_default_opts do
@@ -237,7 +250,15 @@ defmodule Mix.Tasks.Compile.Hologram do
         )
 
       # Before anything below calls into the changed modules.
-      unload_replaced_modules(module_digests_diff, compiled_modules, opts[:first_compile?])
+      unload_replaced_modules(module_digests_diff, compiled_modules, %{
+        before_dumped_at: before_dumped_at,
+        cache: cache,
+        editable_modules: editable_modules,
+        first_compile?: opts[:first_compile?]
+      })
+
+      # Seen: a later cold compile that finds this dump needs no check of every loaded module.
+      Cache.put_seen_dumped_at(before_dumped_at)
 
       # Everything a bundle depends on besides its modules. Kept bundles built with other inputs
       # (another Hologram build, another esbuild, client stack traces toggled) are forgotten before
@@ -1545,6 +1566,44 @@ defmodule Mix.Tasks.Compile.Hologram do
     CallGraph.runtime_dynamic_calls(call_graph, runtime_mfas, ir_plt)
   end
 
+  # The modules unload_replaced_modules/3 checks, with the status that makes a module stale: the
+  # diff's added and edited modules if their code is not their beam's, and its removed ones if they
+  # have no beam. When a cold compile took the diff against a module info dump this VM has not seen,
+  # which may be another OS process's that matches its new beams, the loaded modules of every
+  # editable app too: the editable beams', and the ones loaded from an editable app's ebin dir.
+  defp list_unload_candidates(module_digests_diff, context) do
+    diff_statuses =
+      (module_digests_diff.added_modules ++ module_digests_diff.edited_modules)
+      |> Map.new(&{&1, :modified})
+      |> Map.merge(Map.new(module_digests_diff.removed_modules, &{&1, :removed}))
+
+    if context.cache.editable_modules == nil and
+         context.before_dumped_at != context.cache.seen_dumped_at do
+      list_loaded_editable_modules()
+      |> Map.new(&{&1, :removed})
+      |> Map.merge(Map.new(context.editable_modules, &{&1, :modified}))
+      |> Map.merge(diff_statuses)
+    else
+      diff_statuses
+    end
+  end
+
+  # The loaded modules whose beam the VM names is in an editable app's ebin dir (see
+  # Hologram.Reflection.list_editable_apps/0), the ones whose beam is gone included.
+  defp list_loaded_editable_modules do
+    ebin_dirs =
+      for app <- Reflection.list_editable_apps(),
+          lib_dir = :code.lib_dir(app),
+          is_list(lib_dir),
+          into: MapSet.new(),
+          do: Path.expand("ebin", lib_dir)
+
+    for {module, beam_path} <- :code.all_loaded(),
+        is_list(beam_path),
+        MapSet.member?(ebin_dirs, beam_dir(beam_path)),
+        do: module
+  end
+
   # Returns the cache, the module info PLT to diff against (the cache's own on a warm compile, which
   # the scan brings in line in place) and the dump time the module info reuse guard takes. The
   # kept module infos are the proof that the kept IR PLT and call graph are exactly in line with
@@ -1556,12 +1615,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp load_before_state(build_dir, call_graph_dump_path, compile_state_dump_path, sup) do
     case Cache.get() do
       %{editable_modules: nil} ->
-        :ok = Cache.reset()
-
-        # The reset forgets the mark this compile's run set (see put_first_compile/1), so that the
-        # compile leaves it, however it ends.
-        Cache.mark_compile_started()
-
+        :ok = Cache.reset_kept_state()
         cache = Cache.get()
 
         # The two dumps are one before picture, and the graph dump is never written without the
@@ -1743,6 +1797,15 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.rm(lock_path)
   end
 
+  # Keeps the mtime of the module info dump as the one this VM saw in line with the beams, on a run
+  # that found nothing changed (see list_unload_candidates/2).
+  defp see_module_info_dump(opts) do
+    opts[:build_dir]
+    |> Path.join(Reflection.module_info_plt_dump_file_name())
+    |> Compiler.module_info_dumped_at()
+    |> Cache.put_seen_dumped_at()
+  end
+
   # Lists all apps of the enclosing umbrella project, whether the compiler runs in
   # the umbrella root context or in a child app context. Empty in single-app projects.
   # TODO: Remove together with refresh_umbrella_app_manifests/0 (see the removal
@@ -1768,23 +1831,21 @@ defmodule Mix.Tasks.Compile.Hologram do
     |> Enum.map(& &1.app)
   end
 
-  # Unloads the modules of the diff whose loaded code is not their beam's, or that have no beam any
-  # more: another OS process compiled or deleted them, so the VM still runs their old code, which the
-  # server renders with and this compile reads props and routes from. Phoenix's reloader unloads
+  # Unloads the loaded modules of the diff, and of every editable app after another process's module
+  # info dump (see list_unload_candidates/2), whose code is not their beam's, or that have no beam
+  # any more. Another OS process compiled or deleted them, so the VM still runs their old code, which
+  # the server renders with and this compile reads props and routes from. Phoenix's reloader unloads
   # such modules too, but misses some: without its Mix listener it goes by the manifest's mtime in
   # whole seconds, and it covers only its reloadable apps. Unloaded the same way, so that a call
   # loads the new beam. The modules this VM's compiler reported are its own compile's, loaded new.
   # Hologram's own modules are left loaded: this compile runs them, and would run two versions of the
   # compiler at once. Nothing is unloaded on the first compile in a VM: the tracer reports none of
   # the modules Elixir compiled before it, which the VM loaded from the beams Elixir just wrote.
-  defp unload_replaced_modules(_module_digests_diff, _compiled_modules, true = _first_compile?),
+  defp unload_replaced_modules(_module_digests_diff, _compiled_modules, %{first_compile?: true}),
     do: :ok
 
-  defp unload_replaced_modules(module_digests_diff, compiled_modules, false = _first_compile?) do
-    stale_statuses =
-      (module_digests_diff.added_modules ++ module_digests_diff.edited_modules)
-      |> Map.new(&{&1, :modified})
-      |> Map.merge(Map.new(module_digests_diff.removed_modules, &{&1, :removed}))
+  defp unload_replaced_modules(module_digests_diff, compiled_modules, context) do
+    stale_statuses = list_unload_candidates(module_digests_diff, context)
 
     hologram_lib_prefix =
       Compiler

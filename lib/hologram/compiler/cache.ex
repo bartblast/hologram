@@ -98,6 +98,7 @@ defmodule Hologram.Compiler.Cache do
           pages_plt: PLT.t(),
           pending_pages: MapSet.t(module),
           runtime: runtime_state | nil,
+          seen_dumped_at: non_neg_integer | nil,
           template_modules: %{module => MapSet.t(module)} | nil
         }
 
@@ -106,9 +107,10 @@ defmodule Hologram.Compiler.Cache do
   while keeping the module info PLT's entries, the IR PLT, the encode PLT, the encoding inputs, the
   module metadata, the template modules, the bundle inputs, the paths of the files the kept bundles
   read, whether the compile state changed since it was last dumped or loaded, whether a compile
-  started in this VM, and the call graph, so that the next compile starts from the build dir. The
-  compile task calls it before it changes the kept state in place: a compile that dies mid-way must
-  not leave a half-patched graph or half-scanned infos that the next compile would trust.
+  started in this VM, the mtime of the module info dump it last saw, and the call graph, so that the
+  next compile starts from the build dir. The compile task calls it before it changes the kept state
+  in place: a compile that dies mid-way must not leave a half-patched graph or half-scanned infos
+  that the next compile would trust.
   """
   @spec clear_module_infos() :: :ok
   def clear_module_infos do
@@ -292,7 +294,14 @@ defmodule Hologram.Compiler.Cache do
   end
 
   def handle_call({:put_module_infos, dumped_at, editable_modules}, _from, state) do
-    {:reply, :ok, %{state | dumped_at: dumped_at, editable_modules: editable_modules}}
+    new_state = %{
+      state
+      | dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        seen_dumped_at: dumped_at
+    }
+
+    {:reply, :ok, new_state}
   end
 
   def handle_call({:put_module_metadata, module_metadata}, _from, state) do
@@ -326,6 +335,10 @@ defmodule Hologram.Compiler.Cache do
     {:reply, :ok, new_state}
   end
 
+  def handle_call({:put_seen_dumped_at, dumped_at}, _from, state) do
+    {:reply, :ok, %{state | seen_dumped_at: dumped_at}}
+  end
+
   def handle_call({:put_template_modules, template_modules}, _from, state) do
     {:reply, :ok, put_dumped_field(state, :template_modules, template_modules)}
   end
@@ -333,6 +346,18 @@ defmodule Hologram.Compiler.Cache do
   def handle_call(:reset, _from, state) do
     stop_kept(state)
     {:reply, :ok, initial_state()}
+  end
+
+  def handle_call(:reset_kept_state, _from, state) do
+    stop_kept(state)
+
+    new_state = %{
+      initial_state()
+      | compile_started?: state.compile_started?,
+        seen_dumped_at: state.seen_dumped_at
+    }
+
+    {:reply, :ok, new_state}
   end
 
   @impl GenServer
@@ -358,10 +383,10 @@ defmodule Hologram.Compiler.Cache do
 
   @doc """
   Marks that a compile started in this VM, and returns whether one had already. The compile task
-  calls it as a run starts, one that finds nothing changed included, and again after the reset a
-  cold compile does, so that the compile leaves the mark however it ends: the next compile is not
-  the VM's first, even after one that failed and left no module infos it can trust.
-  `clear_module_infos/0` keeps the mark, and `reset/0` forgets it.
+  calls it as a run starts, one that finds nothing changed included, and the compile leaves the mark
+  however it ends: the next compile is not the VM's first, even after one that failed and left no
+  module infos it can trust. `clear_module_infos/0` and `reset_kept_state/0` keep the mark, and
+  `reset/0` forgets it.
   """
   @spec mark_compile_started() :: boolean
   def mark_compile_started do
@@ -422,7 +447,7 @@ defmodule Hologram.Compiler.Cache do
   those and what the same directories hold then, and leaves every other entry as it is (see
   `Hologram.Compiler.patch_module_info_plt!/5`). Kept with the infos because a module among them
   that has no beam any more was removed, which the infos alone cannot tell from a dependency's
-  module.
+  module. The dump time is kept as the one this VM last saw too (see `put_seen_dumped_at/1`).
   """
   @spec put_module_infos(non_neg_integer, MapSet.t(module)) :: :ok
   def put_module_infos(dumped_at, editable_modules) do
@@ -475,6 +500,18 @@ defmodule Hologram.Compiler.Cache do
   end
 
   @doc """
+  Keeps the mtime of the last module info dump this VM wrote, loaded or found the beams in line with
+  (`put_module_infos/2` keeps it too). A compile that starts from the build dir and finds another
+  dump there checks every loaded module of the project, since the dump may be another OS process's
+  (see the compile task's list_unload_candidates/2). Kept by `clear_module_infos/0` and
+  `reset_kept_state/0`, forgotten by `reset/0`.
+  """
+  @spec put_seen_dumped_at(non_neg_integer | nil) :: :ok
+  def put_seen_dumped_at(dumped_at) do
+    GenServer.call(server(), {:put_seen_dumped_at, dumped_at})
+  end
+
+  @doc """
   Keeps, for each page and component, the modules its template uses as components, as
   `Hologram.Compiler.validate_prop_usages/2` returns them, so that a compile validates only the
   templates its edit can affect (see `Hologram.Compiler.list_templatables_to_validate/3`).
@@ -489,13 +526,25 @@ defmodule Hologram.Compiler.Cache do
   with empty ones
   and forgets the kept dump time, editable modules, encoding inputs, module metadata, pending pages,
   application versions, runtime state, chunk state, template modules, bundle inputs and the paths of
-  the files the kept bundles read, and the mark that a compile started (see
-  `mark_compile_started/0`), and marks the compile state as unchanged, so the next compile starts
-  from the build dir, as the first one in the VM does.
+  the files the kept bundles read, the mark that a compile started (see `mark_compile_started/0`)
+  and the mtime of the module info dump this VM last saw (see `put_seen_dumped_at/1`), and marks the
+  compile state as unchanged, so the next compile starts from the build dir, as the first one in a
+  new VM does.
   """
   @spec reset() :: :ok
   def reset do
     GenServer.call(server(), :reset)
+  end
+
+  @doc """
+  Resets the kept state as `reset/0` does, but keeps what the VM knows of its own compiles: the mark
+  that a compile started and the mtime of the module info dump it last saw. The compile task calls
+  it when the module infos are not to be trusted, so that the compile starts from the build dir and
+  is still not taken for the VM's first.
+  """
+  @spec reset_kept_state() :: :ok
+  def reset_kept_state do
+    GenServer.call(server(), :reset_kept_state)
   end
 
   # The call graph's and the PLTs' processes are linked to the cache, but a normal stop does
@@ -542,6 +591,7 @@ defmodule Hologram.Compiler.Cache do
       pages_plt: PLT.start(),
       pending_pages: MapSet.new(),
       runtime: nil,
+      seen_dumped_at: nil,
       template_modules: nil
     }
   end
