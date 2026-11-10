@@ -19,6 +19,21 @@ defmodule Hologram.Compiler do
   @type js_input_fingerprint ::
           {:digest, integer} | {:stat, non_neg_integer, non_neg_integer} | :fresh | :missing
 
+  @typedoc """
+  The literal refs a template declares, laid out the way the template renders them: in sequence,
+  as alternatives only one of which renders (the clauses of the case an `{%if}` expands to, in
+  clause order, so an `{%else}` comes first), or repeated (the body of a `{%for}`), with the
+  components it renders in their places. A ref is its name and the number of key parts after it,
+  so `$ref="search"` is `{:ref, :search, 0}` and `$ref={:message, message.id}` is
+  `{:ref, :message, 1}`.
+  """
+  @type template_refs ::
+          {:seq, [template_refs]}
+          | {:alt, [template_refs]}
+          | {:loop, template_refs}
+          | {:ref, atom, non_neg_integer}
+          | {:component, module}
+
   # A chunk whose rendered definitions are smaller than this many bytes is folded into another
   # chunk (see fold_small_chunks/2), because shipping it as a file of its own costs more than it
   # holds. The measured part: a bundled chunk with no function is 403 bytes, and the response
@@ -1431,6 +1446,24 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Lists the literal refs the template of the given module IR declares, and the components it
+  renders, as `t:template_refs/0`. A ref whose name only an expression knows, like
+  `$ref={@input_ref}`, is left out. So is a component a dynamic tag renders. A component's slot
+  content follows it, since the template that writes the content declares its refs.
+
+  ## Examples
+
+      iex> list_template_refs(IR.for_module(MyComponent))
+      {:seq, [{:ref, :search, 0}, {:loop, {:ref, :item, 1}}, {:component, MyApp.Card}]}
+  """
+  @spec list_template_refs(IR.t()) :: template_refs
+  def list_template_refs(ir) do
+    ir
+    |> template_ir()
+    |> collect_template_refs()
+  end
+
+  @doc """
   Lists the templatables whose prop usages a compile validates: every one when no earlier validation
   is kept (`template_modules` nil), else the ones the module digests diff added or edited, and the
   ones whose template uses an added, edited or removed module, as `template_modules` (each
@@ -1830,6 +1863,16 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  # Branches only one of which renders, in clause order. A branch that declares nothing adds nothing
+  # to what the others do, so it is dropped, but a block with one branch left stays a block: two
+  # blocks that may both render are told apart from refs that always render together.
+  defp alternative_refs(branches) do
+    case Enum.reject(branches, &(&1 == {:seq, []})) do
+      [] -> {:seq, []}
+      branches -> {:alt, branches}
+    end
+  end
+
   # An entry name, a module, tells apart the entries bundled under one bundle name (the pages), so
   # it goes into the file name, without its Elixir prefix like the entry file name; a bundle name
   # with a single entry (the runtime) has none.
@@ -1959,6 +2002,73 @@ defmodule Hologram.Compiler do
   end
 
   defp collect_component_usages(_ir, acc), do: acc
+
+  # A node of the template's DOM: an element or dynamic tag, whose $ref comes before the refs of its
+  # children, or a component, which renders its own template's refs before its slot content.
+  defp collect_template_refs(%IR.TupleType{
+         data: [
+           %IR.AtomType{value: node_type},
+           _name,
+           %IR.ListType{data: attrs},
+           children
+         ]
+       })
+       when node_type in [:element, :dynamic_tag] do
+    sequence_refs([literal_ref(attrs), collect_template_refs(children)])
+  end
+
+  defp collect_template_refs(%IR.TupleType{
+         data: [
+           %IR.AtomType{value: :component},
+           %IR.AtomType{value: module},
+           %IR.ListType{},
+           children
+         ]
+       }) do
+    sequence_refs([{:component, module}, collect_template_refs(children)])
+  end
+
+  # {%if} and {%else} expand to a case, and only one of its clauses renders.
+  defp collect_template_refs(%IR.Case{clauses: clauses}) do
+    clauses
+    |> Enum.map(&collect_template_refs(&1.body))
+    |> alternative_refs()
+  end
+
+  defp collect_template_refs(%IR.Cond{clauses: clauses}) do
+    clauses
+    |> Enum.map(&collect_template_refs(&1.body))
+    |> alternative_refs()
+  end
+
+  # A {%for} is a comprehension, whose body renders once per item.
+  defp collect_template_refs(%IR.Comprehension{mapper: mapper}) do
+    case collect_template_refs(mapper) do
+      {:seq, []} -> {:seq, []}
+      refs -> {:loop, refs}
+    end
+  end
+
+  defp collect_template_refs(list) when is_list(list) do
+    list
+    |> Enum.map(&collect_template_refs/1)
+    |> sequence_refs()
+  end
+
+  # Structs are maps too, so this walks every IR node's fields without naming any of them.
+  defp collect_template_refs(map) when is_map(map) do
+    map
+    |> Map.values()
+    |> collect_template_refs()
+  end
+
+  defp collect_template_refs(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> collect_template_refs()
+  end
+
+  defp collect_template_refs(_ir), do: {:seq, []}
 
   defp component_usage_error!(component_module, name, module) do
     raise Hologram.CompileError,
@@ -2435,6 +2545,28 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # The ref an element's $ref attribute names, when its name is a literal: an atom on its own, or
+  # first in a tuple, with or without the braces that wrap the whole tuple (see expression_value/1
+  # in Hologram.Template.Renderer). An identifier's atoms can't be nil, true or false.
+  defp literal_ref(attrs) do
+    Enum.find_value(attrs, fn
+      %IR.TupleType{
+        data: [
+          %IR.StringType{value: "$ref"},
+          %IR.ListType{
+            data: [
+              %IR.TupleType{data: [%IR.AtomType{value: :expression}, %IR.TupleType{data: parts}]}
+            ]
+          }
+        ]
+      } ->
+        ref_from_parts(parts)
+
+      _attr ->
+        nil
+    end)
+  end
+
   # Any literal is resolved, composites included, as long as every part of it is one too - a single
   # expression anywhere inside makes the whole value unknowable until it runs. Pids, ports and
   # references can't be written in a template at all (they only come from calls, which aren't
@@ -2586,9 +2718,26 @@ defmodule Hologram.Compiler do
     |> Enum.reject(fn {name, _value} -> String.starts_with?(name, "$") end)
   end
 
+  # Refs in the order they render, with nested sequences spliced in and the parts that declare
+  # nothing left out.
+  defp sequence_refs(parts) do
+    spliced_parts =
+      Enum.flat_map(parts, fn
+        nil -> []
+        {:seq, nested} -> nested
+        refs -> [refs]
+      end)
+
+    case spliced_parts do
+      [refs] -> refs
+      spliced_parts -> {:seq, spliced_parts}
+    end
+  end
+
   # Mirrors evaluate_prop_value/1 in the renderer: a lone expression yields its term as it is, and
   # anything else is rendered to a string. So a value is known here only when the expression is a
   # literal, or when the value is text with nothing interpolated into it.
+
   defp static_prop_value([
          %IR.TupleType{data: [%IR.AtomType{value: :expression}, %IR.TupleType{data: [expr]}]}
        ]) do
@@ -2690,6 +2839,25 @@ defmodule Hologram.Compiler do
       put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at)
     end
   end
+
+  # A literal key part that can't be in an identifier makes the ref invalid when it renders, so it
+  # names nothing the build could check.
+  defp ref_from_parts([%IR.TupleType{data: [_name, _key_part | _rest] = parts}]) do
+    ref_from_parts(parts)
+  end
+
+  defp ref_from_parts([%IR.AtomType{value: name} | key_parts])
+       when name not in [nil, true, false] do
+    if Enum.all?(key_parts, &ref_key_part?/1), do: {:ref, name, length(key_parts)}
+  end
+
+  defp ref_from_parts(_parts), do: nil
+
+  defp ref_key_part?(%IR.AtomType{value: value}), do: value not in [nil, true, false]
+
+  defp ref_key_part?(%IR.FloatType{}), do: false
+
+  defp ref_key_part?(_part), do: true
 
   # Travels with the per-module metadata, which is emitted under the same
   # setting - a bundle built without client stacktraces names no application

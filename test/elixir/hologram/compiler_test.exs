@@ -44,6 +44,13 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module39
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module40
+  alias Hologram.Test.Fixtures.Compiler.Module41
+  alias Hologram.Test.Fixtures.Compiler.Module42
+  alias Hologram.Test.Fixtures.Compiler.Module43
+  alias Hologram.Test.Fixtures.Compiler.Module44
+  alias Hologram.Test.Fixtures.Compiler.Module45
+  alias Hologram.Test.Fixtures.Compiler.Module46
+  alias Hologram.Test.Fixtures.Compiler.Module47
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
@@ -4045,6 +4052,101 @@ defmodule Hologram.CompilerTest do
         |> list_component_usages()
 
       assert usages == []
+    end
+  end
+
+  describe "list_template_refs/1" do
+    test "a ref in text form, in braces, as a tuple in its own braces and on a dynamic tag, and none for a ref an expression names" do
+      refs =
+        Module41
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs ==
+               {:seq,
+                [
+                  {:ref, :search, 0},
+                  {:ref, :message, 1},
+                  {:ref, :comment, 1},
+                  {:ref, :label, 0}
+                ]}
+    end
+
+    test "none for a ref whose literal key part can't be in an identifier" do
+      refs =
+        Module47
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:seq, []}
+    end
+
+    test "the branches of an if block are alternatives" do
+      refs =
+        Module42
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs ==
+               {:seq,
+                [
+                  {:alt, [{:ref, :toggle, 0}, {:ref, :toggle, 0}]},
+                  {:alt, [{:ref, :hint, 0}]}
+                ]}
+    end
+
+    test "the clauses of a cond are alternatives" do
+      refs =
+        Module46
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:alt, [{:ref, :wide, 0}, {:ref, :tall, 0}, {:ref, :narrow, 0}]}
+    end
+
+    test "the body of a for block repeats" do
+      refs =
+        Module43
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:loop, {:ref, :item, 1}}
+    end
+
+    test "a component is followed by the slot content the template gives it" do
+      refs =
+        Module44
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:seq, [{:component, Module45}, {:ref, :inside, 0}]}
+    end
+
+    test "a component's template declares the refs of its own elements" do
+      refs =
+        Module45
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:ref, :box, 0}
+    end
+
+    test "a template without refs or components" do
+      refs =
+        Module27
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:seq, []}
+    end
+
+    test "a module without a template" do
+      refs =
+        Module1
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:seq, []}
     end
   end
 
