@@ -9582,6 +9582,33 @@ describe("Renderer", () => {
         );
       });
 
+      it("raises for a list that isn't a keyword list", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(Type.list([Type.atom("move")])),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got [:move]",
+        );
+      });
+
+      it("raises for an improper list", () => {
+        const improperList = Type.improperList([
+          Type.tuple([Type.atom("drop_effect"), Type.atom("move")]),
+          Type.atom("a"),
+        ]);
+
+        assertBoxedError(
+          () => render(tag("div", [dropAttr, dataTransferAttr(improperList)])),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got [{:drop_effect, :move} | :a]",
+        );
+      });
+
       it("raises for a struct", () => {
         const struct = Type.struct("MyStruct", [
           [Type.atom("drop_effect"), Type.atom("move")],
@@ -9644,6 +9671,63 @@ describe("Renderer", () => {
             ),
           "Hologram.MisuseError",
           "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+        );
+      });
+
+      it("raises for a key given twice before judging the entries", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("drop_effect"), Type.atom("all")],
+                    [Type.atom("drop_effect"), Type.atom("move")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+        );
+      });
+
+      it("judges a keyword list's entries in the order written", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("effect"), Type.atom("move")],
+                    [Type.atom("drop_effect"), Type.atom("all")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes the :drop_effect key, got :effect",
+        );
+      });
+
+      it("judges a map's entries in the order of their keys", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.map([
+                    [Type.atom("effect"), Type.atom("move")],
+                    [Type.atom("drop_effect"), Type.atom("all")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
         );
       });
 

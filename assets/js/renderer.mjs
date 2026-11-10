@@ -24,6 +24,8 @@ import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
 
 // The drop effects a $data_transfer drop_effect takes.
+//
+// WARNING: must match Hologram.Template.DataTransfer.drop_effects/0.
 const DROP_EFFECTS = ["none", "copy", "move", "link"];
 
 // An element ref and an Elixir reference are both called a ref, so a reference passed as one gets
@@ -1226,13 +1228,17 @@ export default class Renderer {
     );
   }
 
-  // The entries of a $data_transfer value: a keyword list's, each key once, or a map's.
+  // Based on data_transfer_entries/1
+  // The entries of a $data_transfer value: a keyword list's, each key once, in the order written, or
+  // a map's, in the order of their keys, which both renderers can reproduce.
   static #dataTransferEntries(value) {
     if (Type.isMap(value) && !Type.isStruct(value)) {
-      return Object.values(value.data);
+      return Object.values(value.data).sort(([keyA], [keyB]) =>
+        Interpreter.compareTerms(keyA, keyB),
+      );
     }
 
-    if (!Type.isKeywordList(value)) {
+    if (!Type.isProperList(value) || !Type.isKeywordList(value)) {
       Interpreter.raiseMisuseError(
         `the $data_transfer attribute takes a keyword list or a map, got ${Interpreter.inspect(value)}`,
       );
@@ -2597,10 +2603,14 @@ export default class Renderer {
     }
   }
 
+  // Based on validate_data_transfer/1
   // Returns what the tag's $data_transfer declares, as {dropEffect}, or null when the tag doesn't
   // declare it. The value it renders with must be a keyword list or a map of the keys the attribute
   // takes, each given once, with a drop effect only on a tag with a $drop binding (a disabled one
   // included).
+  //
+  // WARNING: must match validate_data_transfer/1 on the server, and the messages
+  // Hologram.Template.DataTransfer builds.
   static #renderDataTransfer(attrsDom) {
     const attrDom = $.#findAttribute(attrsDom, "$data_transfer");
 

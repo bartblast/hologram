@@ -1900,6 +1900,170 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "render_tree/3, $data_transfer" do
+    test "leaves no attribute in the tree" do
+      # <div $drop="dropped" $data_transfer={drop_effect: :move}></div>
+      node = data_transfer_element(drop_effect: :move)
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a map" do
+      # <div $drop="dropped" $data_transfer={%{drop_effect: :copy}}></div>
+      node = data_transfer_element(%{drop_effect: :copy})
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a drop effect on a disabled drop target" do
+      # <div $drop={nil} $data_transfer={drop_effect: :move}></div>
+      node =
+        {:element, "div",
+         [
+           {"$drop", [expression: {nil}]},
+           {"$data_transfer", [expression: {[drop_effect: :move]}]}
+         ], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a drop effect on a drop target whose $drop binding has modifiers" do
+      # <div $drop.once="dropped" $data_transfer={drop_effect: :move}></div>
+      node =
+        {:element, "div",
+         [
+           {"$drop", [text: "dropped"], %{once: true}},
+           {"$data_transfer", [expression: {[drop_effect: :move]}]}
+         ], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "raises for a value that is neither a keyword list nor a map" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes a keyword list or a map, got :move",
+                   fn -> render_tree(data_transfer_element(:move), @env, @server) end
+    end
+
+    test "raises for a list that isn't a keyword list" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes a keyword list or a map, got [:move]",
+                   fn -> render_tree(data_transfer_element([:move]), @env, @server) end
+    end
+
+    test "raises for a struct" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes a keyword list or a map, got ~D[2026-11-10]",
+                   fn -> render_tree(data_transfer_element(~D[2026-11-10]), @env, @server) end
+    end
+
+    test "raises for an unknown key" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes the :drop_effect key, got :effect",
+                   fn -> render_tree(data_transfer_element(effect: :move), @env, @server) end
+    end
+
+    test "raises for a map key that isn't an atom" do
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer attribute takes the :drop_effect key, got "drop_effect"',
+                   fn ->
+                     render_tree(data_transfer_element(%{"drop_effect" => :move}), @env, @server)
+                   end
+    end
+
+    test "raises for a key given twice" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+                   fn ->
+                     render_tree(
+                       data_transfer_element(drop_effect: :move, drop_effect: :copy),
+                       @env,
+                       @server
+                     )
+                   end
+    end
+
+    test "raises for a key given twice before judging the entries" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+                   fn ->
+                     render_tree(
+                       data_transfer_element(drop_effect: :all, drop_effect: :move),
+                       @env,
+                       @server
+                     )
+                   end
+    end
+
+    test "judges a keyword list's entries in the order written" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes the :drop_effect key, got :effect",
+                   fn ->
+                     render_tree(
+                       data_transfer_element(effect: :move, drop_effect: :all),
+                       @env,
+                       @server
+                     )
+                   end
+    end
+
+    test "judges a map's entries in the order of their keys" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn ->
+                     render_tree(
+                       data_transfer_element(%{effect: :move, drop_effect: :all}),
+                       @env,
+                       @server
+                     )
+                   end
+    end
+
+    test "raises for a drop effect outside the drop effects" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn -> render_tree(data_transfer_element(drop_effect: :all), @env, @server) end
+    end
+
+    test "raises for a drop effect that isn't an atom" do
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer drop_effect takes :none, :copy, :move or :link, got "move"',
+                   fn ->
+                     render_tree(data_transfer_element(drop_effect: "move"), @env, @server)
+                   end
+    end
+
+    test "raises for a drop effect on a tag with no $drop binding" do
+      # <div $data_transfer={drop_effect: :move}></div>
+      node = {:element, "div", [{"$data_transfer", [expression: {[drop_effect: :move]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drop effect on a <window> tag with no $drop binding" do
+      # <window $data_transfer={drop_effect: :move} />
+      node = {:element, "window", [{"$data_transfer", [expression: {[drop_effect: :move]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drop effect outside the drop effects on a <window> tag" do
+      # <window $drop="dropped" $data_transfer={drop_effect: :all} />
+      node =
+        {:element, "window",
+         [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: {[drop_effect: :all]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn -> render_tree(node, @env, @server) end
+    end
+  end
+
   describe "render_tree/3, refs" do
     test "an element's ref leaves no attribute in the tree" do
       assert render_tree(ref_element(:search), @env, @server) ==
@@ -5075,6 +5239,12 @@ defmodule Hologram.Template.RendererTest do
   end
 
   defp collect_script_texts(_node), do: []
+
+  # <div $drop="dropped" $data_transfer={value}></div>
+  defp data_transfer_element(value) do
+    {:element, "div", [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: {value}]}],
+     []}
+  end
 
   # <div $ref={ref}></div>
   defp ref_element(ref, children \\ []) do
