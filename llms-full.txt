@@ -2593,28 +2593,26 @@ A page reached by client-side navigation is shown before its code has finished l
 
 #### Element Refs
 
-Some code needs a DOM element itself, to scroll it into view, measure it or hand it to a JavaScript library. Name the element in the template with `$ref`, and get it in an action with `JS.element/1`:
+`$ref` names an element, so other parts of your app can point at it. Code that needs the element itself, like a JavaScript library you hand it to, gets it with `JS.element/1`:
 
 ```holo
-<ul $ref="messages">...</ul>
-<button $click="scroll_to_top">Back to top</button>
+<canvas $ref="sales_chart"></canvas>
+<button $click="draw_chart">Draw chart</button>
 ```
 
 ```elixir
-def action(:scroll_to_top, _params, component) do
-  :messages
-  |> JS.element()
-  |> JS.call(:scrollTo, [%{top: 0}])
+def action(:draw_chart, _params, component) do
+  JS.new(:Chart, [JS.element(:sales_chart), %{type: "bar"}])
 
   component
 end
 ```
 
-To move focus from your state, use `$focused`, which needs no ref.
+For what Hologram does itself, like moving focus with `$focused`, use that instead of JavaScript.
 
 ##### Naming Elements
 
-A ref is an identifier, the same kind of value channels and `$key` take. An identifier is an atom, like `:search`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:message, 42}`. None of its atoms can be `nil`, `true` or `false`. An element ref is never an Elixir reference, the kind `make_ref/0` returns. The text form `$ref="messages"` is the atom `:messages`, so it takes only a name you can write as an atom without quotes. Write any other ref as an expression. That's also how each element in a loop gets its own:
+A ref is an identifier, the same kind of value channels and `$key` take. An identifier is an atom, like `:search`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:message, 42}`. None of its atoms can be `nil`, `true` or `false`. An element ref is never an Elixir reference, the kind `make_ref/0` returns. The text form `$ref="sales_chart"` is the atom `:sales_chart`, so it takes only a name you can write as an atom without quotes. Write any other ref as an expression. That's also how each element in a loop gets its own:
 
 ```holo
 {%for message <- @messages}
