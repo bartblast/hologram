@@ -659,6 +659,13 @@ export default class Renderer {
       return null;
     }
 
+    // $ref names the element for a lookup rather than something that happens to it, so it binds
+    // nothing either. Without this it would register a listener for an event called "ref", which no
+    // browser fires.
+    if (originalEventName === "ref") {
+      return null;
+    }
+
     // click_outside is not a per-element listener: the dismissing click lands on another element,
     // so it is collected as a document-level "click" binding in #renderElement. Returning null here
     // keeps it out of the element's "on" map.

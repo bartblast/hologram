@@ -1482,6 +1482,249 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, $ref attribute" do
+    test "text form becomes the atom it spells" do
+      # <input $ref="search" />
+      tags = [{:self_closing_tag, {"input", [{"$ref", [text: "search"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "input",
+                  [{"$ref", [expression: {:{}, [line: 1], [:search]}]}, key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+
+    test "text form takes any name an atom can be written with without quotes" do
+      # <input $ref="café?" />
+      tags = [{:self_closing_tag, {"input", [{"$ref", [text: "café?"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "input",
+                  [{"$ref", [expression: {:{}, [line: 1], [:café?]}]}, key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+
+    test "expression form stays as written" do
+      # <li $ref={:message, 42} />
+      tags = [{:self_closing_tag, {"li", [{"$ref", [expression: "{:message, 42}"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [:element, "li", [{"$ref", [expression: {:message, 42}]}, key(tags, 0)], []]}
+             ]
+    end
+
+    test "a tuple wrapped in its own braces stays as written" do
+      # <li $ref={{:message, 42}} />
+      tags = [{:self_closing_tag, {"li", [{"$ref", [expression: "{{:message, 42}}"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "li",
+                  [{"$ref", [expression: {:{}, [line: 1], [{:message, 42}]}]}, key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+
+    test "on a dynamic tag" do
+      # <{"input"} $ref="search" />
+      tags = [
+        {:self_closing_tag, {{:expression, ~s({"input"})}, [{"$ref", [text: "search"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["input"]},
+                  [{"$ref", [expression: {:{}, [line: 1], [:search]}]}, key(tags, 0)],
+                  []
+                ]}
+             ]
+    end
+
+    test "raises for text form that isn't a plain atom name" do
+      for {text, hint} <- [{"my-search", ~s'{:"my-search"}'}, {"Search", "{:Search}"}] do
+        # <input $ref="my-search" />
+        tags = [{:self_closing_tag, {"input", [{"$ref", [text: text]}]}}]
+
+        assert_raise Hologram.TemplateSyntaxError,
+                     ~s'the text form of $ref takes a plain atom name, like $ref="search", got "#{text}" - ' <>
+                       "write any other ref as an expression, like $ref=#{hint}",
+                     fn -> build_ast(tags) end
+      end
+    end
+
+    test "raises for text form that names nil, true or false" do
+      for text <- ["nil", "true", "false"] do
+        # <input $ref="nil" />
+        tags = [{:self_closing_tag, {"input", [{"$ref", [text: text]}]}}]
+
+        assert_raise Hologram.TemplateSyntaxError,
+                     "$ref takes an identifier, like :search or {:message, 42}, got: #{text} - nil, true and false can't be in an identifier",
+                     fn -> build_ast(tags) end
+      end
+    end
+
+    test "raises for a built-in ref in text form" do
+      # <div $ref="window" />
+      tags = [{:self_closing_tag, {"div", [{"$ref", [text: "window"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ":window is a built-in ref, so a template can't name an element with it - JS.element(:window) returns the window",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a built-in ref written as a literal expression" do
+      # <div $ref={:document} />
+      tags = [{:self_closing_tag, {"div", [{"$ref", [expression: "{:document}"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ":document is a built-in ref, so a template can't name an element with it - JS.element(:document) returns the document",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a built-in ref on a dynamic tag" do
+      # <{"div"} $ref="document" />
+      tags = [
+        {:self_closing_tag, {{:expression, ~s({"div"})}, [{"$ref", [text: "document"]}]}}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ":document is a built-in ref, so a template can't name an element with it - JS.element(:document) returns the document",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a missing value and a mixed value" do
+      # <input $ref /> and <input $ref="a{@ref}" />
+      for value_parts <- [[], [text: "a", expression: "{@ref}"]] do
+        tags = [{:self_closing_tag, {"input", [{"$ref", value_parts}]}}]
+
+        assert_raise Hologram.TemplateSyntaxError,
+                     ~s'the $ref attribute takes a name, like $ref="search", or a single expression, like $ref={:message, message.id}',
+                     fn -> build_ast(tags) end
+      end
+    end
+
+    test "raises for an empty text form" do
+      # <input $ref="" />
+      tags = [{:self_closing_tag, {"input", [{"$ref", [text: ""]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the text form of $ref takes a plain atom name, like $ref="search", got "" - ' <>
+                     ~s'write any other ref as an expression, like $ref={:""}',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a quoted expression" do
+      tags = Parser.parse_markup(~s'<input $ref="{@ref}" />')
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the $ref attribute takes a name, like $ref="search", or a single expression, like $ref={:message, message.id}',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a modifier" do
+      # <input $ref.once="search" />
+      tags = [{:self_closing_tag, {"input", [{"$ref.once", [text: "search"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   ~s'the $ref attribute takes no modifiers, got "once"',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for two $ref attributes" do
+      # <input $ref="a" $ref="b" />
+      tags = [
+        {:self_closing_tag, {"input", [{"$ref", [text: "a"]}, {"$ref", [text: "b"]}]}}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "a tag takes one $ref attribute",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for two $ref attributes on a dynamic tag" do
+      # <{"input"} $ref="a" $ref="b" />
+      tags = [
+        {:self_closing_tag,
+         {{:expression, ~s({"input"})}, [{"$ref", [text: "a"]}, {"$ref", [text: "b"]}]}}
+      ]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "a tag takes one $ref attribute",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on a component tag" do
+      # <SearchBox $ref="search" />
+      tags = [{:self_closing_tag, {"SearchBox", [{"$ref", [text: "search"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "$ref can't go on the <SearchBox> component tag - a component renders no element of its own, " <>
+                     "so put $ref on an element in its template and pass the ref as a prop, like input_ref={:search}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the window and document tags" do
+      for tag_name <- ["window", "document"] do
+        # <window $ref="viewport" />
+        tags = [{:self_closing_tag, {tag_name, [{"$ref", [text: "viewport"]}]}}]
+
+        assert_raise Hologram.TemplateSyntaxError,
+                     "$ref can't go on a <#{tag_name}> tag, which renders no element - JS.element(:#{tag_name}) returns the #{tag_name}",
+                     fn -> build_ast(tags) end
+      end
+    end
+
+    test "raises on the slot tag" do
+      # <slot $ref="content" />
+      tags = [{:self_closing_tag, {"slot", [{"$ref", [text: "content"]}]}}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises on the html tag" do
+      # <html $ref="root"></html>
+      tags = [{:start_tag, {"html", [{"$ref", [text: "root"]}]}}, {:end_tag, "html"}]
+
+      assert_raise Hologram.TemplateSyntaxError,
+                   "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element",
+                   fn -> build_ast(tags) end
+    end
+
+    test "can go on the head and body tags" do
+      for tag_name <- ["head", "body"] do
+        # <body $ref="page_part"></body>
+        tags = [{:start_tag, {tag_name, [{"$ref", [text: "page_part"]}]}}, {:end_tag, tag_name}]
+
+        assert build_ast(tags) == [
+                 {:{}, [line: 1],
+                  [
+                    :element,
+                    tag_name,
+                    [{"$ref", [expression: {:{}, [line: 1], [:page_part]}]}],
+                    []
+                  ]}
+               ]
+      end
+    end
+  end
+
   describe "build_ast/1, true event binding value" do
     test "raises for a literal true" do
       # <button $click={true}></button>

@@ -997,6 +997,41 @@ describe("Renderer", () => {
           Hologram.handleUiEvent.restore();
         });
 
+        it("$ref binds no listener", () => {
+          // <button $ref={:save} $click="my_action">Click me</button>
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("button"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("$ref"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.atom("save")])],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$click"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("Click me")]),
+            ]),
+          ]);
+
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["click"]);
+        });
+
         it("multiple event listeners", () => {
           const node = Type.tuple([
             Type.atom("element"),
