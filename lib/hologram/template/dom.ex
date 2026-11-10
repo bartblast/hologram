@@ -301,9 +301,10 @@ defmodule Hologram.Template.DOM do
   defp normalize_newlines(term), do: term
 
   # The text form names the ref the atom spells, so it takes only a name that can be written as an
-  # atom without quotes. Any other identifier is an expression's to give.
+  # atom without quotes. Any other identifier is an expression's to give. It runs when the template
+  # compiles, on text the template author wrote.
+  # sobelow_skip ["DOS.StringToAtom"]
   defp ref_text_atom(text) do
-    # Runs when the template compiles, on text the template author wrote.
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     atom = String.to_atom(text)
 

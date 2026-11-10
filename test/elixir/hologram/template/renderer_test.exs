@@ -2045,7 +2045,7 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module121,
          [{"items", [expression: {[1, 2]}]}, {"open?", [expression: {true}]}], []}
 
-      assert render_dom(node, @env, @server) == {"<li></li><li></li>\n<p></p>", %{}, @server}
+      assert render_dom(node, @env, @server) == {"<li></li><li></li><p></p>", %{}, @server}
     end
 
     test "a render that raised leaves no refs behind" do

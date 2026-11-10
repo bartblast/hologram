@@ -7,8 +7,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module121 do
   @impl Component
   def template do
     ~HOLO"""
-    {%for item <- @items}<li $ref={:item, item}></li>{/for}
-    {%if @open?}<p $ref="toggle"></p>{%else}<div $ref="toggle"></div>{/if}
+    {%for item <- @items}<li $ref={:item, item}></li>{/for}{%if @open?}<p $ref="toggle"></p>{%else}<div $ref="toggle"></div>{/if}
     """
   end
 end
