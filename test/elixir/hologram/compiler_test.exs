@@ -593,10 +593,12 @@ defmodule Hologram.CompilerTest do
       mfas = [{Module22, :my_fun, 0}]
 
       result =
-        build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(),
+        mfas
+        |> build_page_js(ir_plt, PLT.start(), MapSet.new(),
           js_dir: @js_dir,
           ref_names: {MyApp.Page, [{:item, 1}, {:"my-search", 0}]}
         )
+        |> normalize_newlines()
 
       expected =
         ~s'ElementRefRegistry.putPageRefNames("Elixir.MyApp.Page", [["item",1],["my-search",0]]);\n  },'
@@ -627,7 +629,10 @@ defmodule Hologram.CompilerTest do
     test "takes the element ref registry from the deps it is defined with", %{ir_plt: ir_plt} do
       mfas = [{Module22, :my_fun, 0}]
 
-      result = build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+      result =
+        mfas
+        |> build_page_js(ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+        |> normalize_newlines()
 
       assert String.contains?(result, "  ElementRefRegistry,\n")
     end
