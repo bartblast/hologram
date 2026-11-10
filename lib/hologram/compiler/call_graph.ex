@@ -395,6 +395,7 @@ defmodule Hologram.Compiler.CallGraph do
     {Hologram.JS, :call, 4},
     {Hologram.JS, :delete, 3},
     {Hologram.JS, :dispatch_event, 5},
+    {Hologram.JS, :element, 1},
     {Hologram.JS, :eval, 1},
     {Hologram.JS, :exec, 1},
     {Hologram.JS, :get, 3},
@@ -452,6 +453,8 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :put, 3}
     ],
     interpreter_class: [
+      # Interpreter.raiseMisuseError raises this by name, for the reason given at renderer_class.
+      {Hologram.MisuseError, :message, 1},
       {Enum, :into, 2},
       {Enum, :to_list, 1},
       {Exception, :blame, 3},

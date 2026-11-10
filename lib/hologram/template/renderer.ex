@@ -36,6 +36,22 @@ defmodule Hologram.Template.Renderer do
   # whatever the policy stamps, as the client renderer drops it. See print_dom/2.
   @nonce_elems ~w(link script style)
 
+  # The refs that name the window and the document, which a template can't give an element.
+  @built_in_refs [:window, :document]
+
+  # An element ref and an Elixir reference are both called a ref, so a reference passed as one gets
+  # this hint.
+  #
+  # WARNING: must match ELIXIR_REFERENCE_HINT in the client renderer (renderer.mjs).
+  @elixir_reference_hint "an element ref is an identifier, not an Elixir reference"
+
+  # WARNING: must match REF_EXPECTATION in the client renderer (renderer.mjs).
+  @ref_expectation "$ref takes an identifier, like :search or {:message, 42}"
+
+  # Where the refs of the render in progress are kept, each with the module whose template wrote its
+  # element, so that a second element under one of them is caught wherever in the page it renders.
+  @rendered_refs_key {__MODULE__, :rendered_refs}
+
   # The characters a value cannot carry into a script element as the text of a JavaScript string
   # literal, each with the escape sequence it is written as instead. Every sequence is valid
   # inside all three kinds of literal - double-quoted, single-quoted and template - and reads back
@@ -126,6 +142,18 @@ defmodule Hologram.Template.Renderer do
   """
   @type tree :: tree_node | [tree_node] | nil
 
+  @typedoc """
+  Slot content a template passes on through a nested slot, with the module of the template that
+  wrote it. The renderer makes it while it renders and no compiled template holds one.
+  """
+  @type slot_content :: {:slot_content, module, expanded_dom}
+
+  @typedoc """
+  DOM with the slot content passed on through nested slots spliced in. A spliced node can sit in any
+  list of nodes, the children of an element or a component included.
+  """
+  @type expanded_dom :: DOM.t() | slot_content | [DOM.dom_node() | slot_content]
+
   defmodule Env do
     @moduledoc false
 
@@ -144,7 +172,7 @@ defmodule Hologram.Template.Renderer do
             context: %{(atom | {any, atom}) => any},
             key_scope: %{level: String.t() | nil, outer: String.t()} | nil,
             parent_module: module | nil,
-            slots: keyword(DOM.t()),
+            slots: keyword(Hologram.Template.Renderer.expanded_dom()),
             slots_parent_module: module | nil,
             tag_name: String.t() | nil
           }
@@ -324,7 +352,8 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_dom(dom, env, server_struct) do
-    {tree, component_registry, mutated_server_struct} = render_tree(dom, env, server_struct)
+    {tree, component_registry, mutated_server_struct} =
+      with_rendered_refs(fn -> render_tree(dom, env, server_struct) end)
 
     {print_node(tree, env.tag_name, print_opts([])), component_registry, mutated_server_struct}
   end
@@ -385,12 +414,14 @@ defmodule Hologram.Template.Renderer do
       |> maybe_put_csp_nonce_context(opts, initial_page?)
 
     {initial_tree, initial_component_registry, final_server_struct} =
-      render_page_inside_layout(
-        page_module,
-        params,
-        page_component_struct_with_emitted_context_before_rendering,
-        page_server_struct
-      )
+      with_rendered_refs(fn ->
+        render_page_inside_layout(
+          page_module,
+          params,
+          page_component_struct_with_emitted_context_before_rendering,
+          page_server_struct
+        )
+      end)
 
     # The nonce belongs to the one document it was generated for, so it leaves the context before
     # the page struct goes to the client, where nothing reads it and a page snapshot would keep it.
@@ -446,12 +477,12 @@ defmodule Hologram.Template.Renderer do
       iex> render_tree(dom, %Env{}, %Server{})
       {{:element, "div", [{"class", [text: "big"]}], [{:text, "Hologram"}]}, %{}, %Server{}}
   """
-  @spec render_tree(DOM.t(), Env.t(), Server.t()) ::
+  @spec render_tree(expanded_dom, Env.t(), Server.t()) ::
           {tree, %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
   def render_tree(dom, env, server_struct)
 
   def render_tree({:component, module, props_dom, children_dom}, env, server_struct) do
-    expanded_children_dom = expand_slots(children_dom, env.slots)
+    expanded_children_dom = expand_slots(children_dom, env.slots, env.slots_parent_module)
 
     props =
       props_dom
@@ -491,16 +522,27 @@ defmodule Hologram.Template.Renderer do
   # parser would spell it here instead.
   def render_tree({:dynamic_tag, {tag_name}, attrs_dom, children_dom}, env, server_struct)
       when is_binary(tag_name) do
-    render_tree(
-      {:element, Helpers.normalize_tag_name(tag_name), attrs_dom, children_dom},
-      env,
-      server_struct
-    )
+    normalized_tag_name = Helpers.normalize_tag_name(tag_name)
+
+    if List.keymember?(attrs_dom, "$ref", 0) do
+      validate_ref_tag(normalized_tag_name)
+    end
+
+    render_tree({:element, normalized_tag_name, attrs_dom, children_dom}, env, server_struct)
   end
 
   def render_tree({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
       when is_atom(module) do
     if Reflection.component?(module) do
+      # WARNING: must match the client renderer's #renderDynamicTag (renderer.mjs).
+      if List.keymember?(props_dom, "$ref", 0) do
+        raise Hologram.MisuseError,
+          message:
+            "$ref can't go on the #{Reflection.module_name(module)} component a dynamic tag renders - " <>
+              "a component renders no element of its own, so put $ref on an element in its template " <>
+              "and pass the ref as a prop, like input_ref={:search}"
+      end
+
       render_tree({:component, module, props_dom, children_dom}, env, server_struct)
     else
       raise ArgumentError,
@@ -547,6 +589,10 @@ defmodule Hologram.Template.Renderer do
   # children the same way.
   def render_tree({:element, tag_name, attrs_dom, children_dom}, %Env{} = env, server_struct) do
     attributes = render_tree_attributes(attrs_dom, env.key_scope)
+
+    # Before the children, so an element is claimed ahead of the elements inside it, as the client
+    # renderer claims it.
+    put_rendered_ref(attrs_dom, env.parent_module)
 
     children_env = %Env{env | key_scope: nil, tag_name: tag_name}
 
@@ -632,6 +678,13 @@ defmodule Hologram.Template.Renderer do
     end
 
     {{:public_comment, children}, component_registry, mutated_server_struct}
+  end
+
+  # Slot content passed on through a nested slot renders as written by the template that supplied it.
+  #
+  # WARNING: must match the client renderer's slot_content case (renderer.mjs).
+  def render_tree({:slot_content, module, nodes}, %Env{} = env, server_struct) do
+    render_tree(nodes, %Env{env | parent_module: module}, server_struct)
   end
 
   def render_tree({:text, text}, _env, server_struct) do
@@ -750,6 +803,22 @@ defmodule Hologram.Template.Renderer do
     HTMLNormalizer.children_context(tag_name, attributes, namespace)
   end
 
+  defp claim_rendered_ref(ref, module) do
+    refs = Process.get(@rendered_refs_key)
+
+    cond do
+      is_nil(refs) ->
+        :ok
+
+      Map.has_key?(refs, ref) ->
+        raise Hologram.MisuseError, message: duplicate_ref_message(ref, refs[ref], module)
+
+      true ->
+        Process.put(@rendered_refs_key, Map.put(refs, ref, module))
+        :ok
+    end
+  end
+
   # HTML attribute names are dash-separated, while Elixir identifiers can't contain dashes, so each
   # name segment converts to the convention of the namespace it lands in. Nesting composes the
   # segments with hyphens, e.g. %{data: %{user_id: 1}} becomes "data-user-id".
@@ -851,6 +920,13 @@ defmodule Hologram.Template.Renderer do
     }
   end
 
+  # WARNING: must match the client renderer's #duplicateRefMessage (renderer.mjs).
+  defp duplicate_ref_message(ref, first_module, second_module) do
+    "two elements are rendered under the ref #{inspect(ref)}#{ref_writers(first_module, second_module)} - " <>
+      "a ref names one element, so give each element a ref of its own, " <>
+      "like #{ref_example(ref)} for the items of a loop"
+  end
+
   # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,
   # with no escaping. An attribute value lands in the DOM through setAttribute on the client, a
   # prop is a value a component receives rather than markup, and the HTML projection escapes
@@ -943,35 +1019,40 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
-  defp expand_slots(dom, slots)
+  defp expand_slots(dom, slots, supplier)
 
-  defp expand_slots(nodes, slots) when is_list(nodes) do
+  defp expand_slots(nodes, slots, supplier) when is_list(nodes) do
     nodes
-    |> Enum.map(&expand_slots(&1, slots))
+    |> Enum.map(&expand_slots(&1, slots, supplier))
     |> List.flatten()
   end
 
-  defp expand_slots({:component, module, props_dom, children_dom}, slots) do
-    {:component, module, props_dom, expand_slots(children_dom, slots)}
+  defp expand_slots({:component, module, props_dom, children_dom}, slots, supplier) do
+    {:component, module, props_dom, expand_slots(children_dom, slots, supplier)}
   end
 
-  defp expand_slots({:dynamic_tag, {value}, attrs_dom, children_dom}, slots) do
-    {:dynamic_tag, {value}, attrs_dom, expand_slots(children_dom, slots)}
+  defp expand_slots({:dynamic_tag, {value}, attrs_dom, children_dom}, slots, supplier) do
+    {:dynamic_tag, {value}, attrs_dom, expand_slots(children_dom, slots, supplier)}
   end
 
-  defp expand_slots({:element, "slot", _attrs_dom, []}, slots) do
-    slots[:default]
+  # The content goes on rendering as written by the template that supplied it, though it now sits in
+  # the children of a usage another template wrote.
+  defp expand_slots({:element, "slot", _attrs_dom, []}, slots, supplier) do
+    case slots[:default] do
+      nil -> nil
+      content -> {:slot_content, supplier, content}
+    end
   end
 
-  defp expand_slots({:element, tag_name, attrs_dom, children_dom}, slots) do
-    {:element, tag_name, attrs_dom, expand_slots(children_dom, slots)}
+  defp expand_slots({:element, tag_name, attrs_dom, children_dom}, slots, supplier) do
+    {:element, tag_name, attrs_dom, expand_slots(children_dom, slots, supplier)}
   end
 
-  defp expand_slots({:loop_item, source, nodes}, slots) do
-    {:loop_item, source, expand_slots(nodes, slots)}
+  defp expand_slots({:loop_item, source, nodes}, slots, supplier) do
+    {:loop_item, source, expand_slots(nodes, slots, supplier)}
   end
 
-  defp expand_slots(node, _slots), do: node
+  defp expand_slots(node, _slots, _supplier), do: node
 
   defp expand_spread_attribute({key, value}, name_prefix) do
     name = compose_attribute_name(key, name_prefix)
@@ -1393,6 +1474,23 @@ defmodule Hologram.Template.Renderer do
     )
   end
 
+  # Checks the element's ref and claims it for the element in the render in progress. A render
+  # outside render_dom/3 and render_page/4 tracks no refs, so it checks only the values.
+  #
+  # WARNING: must match the client renderer's #putRenderedRef (renderer.mjs).
+  defp put_rendered_ref(attrs_dom, module) do
+    case List.keyfind(attrs_dom, "$ref", 0) do
+      {"$ref", [expression: expression]} ->
+        expression
+        |> expression_value()
+        |> validate_ref()
+        |> claim_rendered_ref(module)
+
+      nil ->
+        :ok
+    end
+  end
+
   # WARNING: must match the client renderer's #raiseInvalidExplicitKey (renderer.mjs).
   defp raise_invalid_explicit_key(value) do
     raise ArgumentError,
@@ -1413,6 +1511,26 @@ defmodule Hologram.Template.Renderer do
     raise ArgumentError,
       message:
         "Phoenix.HTML safe tuples aren't supported in Hologram templates, use trust_html/1 instead"
+  end
+
+  # The ref with a loop item's id added as a part, written as template code, to show how the
+  # elements of a loop get refs of their own.
+  defp ref_example(ref) when is_tuple(ref) do
+    ref
+    |> inspect()
+    |> String.replace_suffix("}", ", item.id}")
+  end
+
+  defp ref_example(ref), do: "{#{inspect(ref)}, item.id}"
+
+  defp ref_writers(nil, _second_module), do: ""
+
+  defp ref_writers(_first_module, nil), do: ""
+
+  defp ref_writers(module, module), do: ~s/, both from "#{Reflection.module_name(module)}"/
+
+  defp ref_writers(first_module, second_module) do
+    ~s/, one from "#{Reflection.module_name(first_module)}" and one from "#{Reflection.module_name(second_module)}"/
   end
 
   # Naming the template the component was rendered from is what turns the error into something
@@ -1478,6 +1596,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   # parent_module is the module whose template holds this usage - it owns the slot content passed in,
+  # except the parts it passed on from its own slot, which keep their writer (see expand_slots/3),
   # while the template about to be rendered owns everything written inside it.
   #
   # A component has no node of its own: the nodes its template renders are what sits in the
@@ -1726,6 +1845,49 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
+  # WARNING: must match the client renderer's #validateRef (renderer.mjs).
+  defp validate_ref(ref) when ref in @built_in_refs do
+    raise Hologram.MisuseError,
+      message:
+        "#{inspect(ref)} is a built-in ref, so a template can't name an element with it - JS.element(#{inspect(ref)}) returns the #{ref}"
+  end
+
+  defp validate_ref(ref) do
+    case Identifier.check(ref) do
+      :ok ->
+        ref
+
+      {:error, hint} ->
+        hint = if is_reference(ref), do: @elixir_reference_hint, else: hint
+        raise Hologram.MisuseError, message: Identifier.message(@ref_expectation, ref, hint)
+    end
+  end
+
+  # A dynamic tag can name a tag the build keeps $ref off, so the build's rule is applied here. The
+  # client patches the <html> element's attributes through a node of its own rather than the
+  # rendered one, so a ref there would name nothing.
+  #
+  # WARNING: must match the client renderer's #validateRefTag (renderer.mjs).
+  defp validate_ref_tag(tag_name) when tag_name in ["window", "document"] do
+    raise Hologram.MisuseError,
+      message:
+        "$ref can't go on a <#{tag_name}> tag, which renders no element - JS.element(:#{tag_name}) returns the #{tag_name}"
+  end
+
+  defp validate_ref_tag("slot") do
+    raise Hologram.MisuseError,
+      message:
+        "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content"
+  end
+
+  defp validate_ref_tag("html") do
+    raise Hologram.MisuseError,
+      message:
+        "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element"
+  end
+
+  defp validate_ref_tag(_tag_name), do: :ok
+
   # Event bindings require compile-time modifier parsing and listener collection, so they can be
   # written only as literal attributes. Silently not binding an intended event would be worse than
   # erroring here.
@@ -1735,4 +1897,20 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp validate_spread_key(key), do: key
+
+  # Each render claims its refs afresh, and a render started inside another leaves the outer one's
+  # refs as they were.
+  defp with_rendered_refs(fun) do
+    outer_refs = Process.put(@rendered_refs_key, %{})
+
+    try do
+      fun.()
+    after
+      if outer_refs do
+        Process.put(@rendered_refs_key, outer_refs)
+      else
+        Process.delete(@rendered_refs_key)
+      end
+    end
+  end
 end

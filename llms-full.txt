@@ -2591,6 +2591,112 @@ A page reached by client-side navigation is shown before its code has finished l
 
 `$focus` is an event and `$focused` is state, so a binding like `$focus={true}` is almost always a typo. A literal `true` fails the build, and a binding that evaluates to `true` raises an error when the event fires.
 
+#### Element Refs
+
+`$ref` names an element, so other parts of your app can point at it. Code that needs the element itself, like a JavaScript library you hand it to, gets it with `JS.element/1`:
+
+```holo
+<canvas $ref="sales_chart"></canvas>
+<button $click="draw_chart">Draw chart</button>
+```
+
+```elixir
+def action(:draw_chart, _params, component) do
+  JS.new(:Chart, [JS.element(:sales_chart), %{type: "bar"}])
+
+  component
+end
+```
+
+For what Hologram does itself, like moving focus with `$focused`, use that instead of JavaScript.
+
+##### Naming Elements
+
+A ref is an identifier, the same kind of value channels and `$key` take. An identifier is an atom, like `:search`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:message, 42}`. None of its atoms can be `nil`, `true` or `false`. A ref that's a single atom is an atom ref, and one that's a tuple is a tuple ref, whose values after the name are its parts. An element ref is never an Elixir reference, the kind `make_ref/0` returns. The text form `$ref="sales_chart"` is the atom `:sales_chart`, so it takes only a name you can write as an atom without quotes. Write any other ref as an expression. That's also how each element in a loop gets its own:
+
+```holo
+{%for message <- @messages}
+  <div $ref={:message, message.id}>{message.text}</div>
+{/for}
+```
+
+```elixir
+{:message, 42}
+|> JS.element()
+|> JS.call(:scrollIntoView, [])
+```
+
+A ref can come from state or props, like `$ref={@list_ref}`. A value that isn't an identifier raises a `Hologram.MisuseError` when the element renders.
+
+`$ref` goes on an HTML element. A component renders no element of its own, so `$ref` on a component tag fails the build. Put it on an element inside the component and pass the ref as a prop. `$ref` on `<slot>`, `<window>`, `<document>` or `<html>` fails the build too.
+
+##### Refs Are Page-Wide
+
+A ref names one element on the whole page, across components. It's plain data, so passing one to a component passes the value, and keeping one in state is safe:
+
+```holo
+<MessageList list_ref={:messages} />
+```
+
+Inside `MessageList`, the element takes the ref from the prop:
+
+```holo
+<ul $ref={@list_ref}>...</ul>
+```
+
+A reusable component shouldn't name its elements with a fixed ref, since the page may render it twice or use the same name itself. Take the ref as a prop, or build one from something unique to each instance, like its cid, and start it with the package's name:
+
+```holo
+<ul $ref={:acme_ui_menu, @cid}>...</ul>
+```
+
+`:window` and `:document` are built-in refs. `JS.element(:window)` returns the window and `JS.element(:document)` the document, so code that takes a ref can be given the window, like `scroll_ref={:window}`. A template can't name an element `:window` or `:document`.
+
+`JS.element/1` also takes a native value and returns it unchanged, so a component that takes a ref prop can pass the prop to `JS.element/1` whether it was given a ref or an element.
+
+Two elements rendered under one ref raise a `Hologram.MisuseError` that names the ref and the components that rendered them. Elements in the branches of one `{%if}` and `{%else}` don't clash, since only one of them renders. An element that takes another's place under the same ref isn't a duplicate either. The build fails for the mistakes it can see in literal refs:
+
+- the same atom ref on two elements of one template, unless they're in the two branches of one `{%if}` and `{%else}`
+- an atom ref inside a `{%for}`, or in a component that renders itself
+- a component whose template has an atom ref, rendered twice or inside a `{%for}`
+- the same atom ref in a page, its layout and the components they render together
+- a ref name used with different numbers of parts on one page
+
+##### Keep the Ref, Not the Element
+
+Keep the ref in state and look the element up when you need it. An element kept in state is the one a past render put on the page, and a later render can replace it.
+
+##### Elements an Action Renders
+
+Hologram renders after an action returns, so an action can't look up an element its own state change adds. Take a reply form that opens with a rich text editor, a JavaScript library that needs the element it runs in:
+
+```holo
+<button $click="open_reply">Reply</button>
+{%if @replying?}
+  <div $ref="reply_editor"></div>
+{/if}
+```
+
+Looking up `:reply_editor` in the action that sets `@replying?` raises, since the `<div>` isn't on the page until that action returns. Look it up in a chained action instead, which runs after that render and before the browser paints:
+
+```elixir
+def action(:open_reply, _params, component) do
+  component
+  |> put_state(:replying?, true)
+  |> put_action(:start_reply_editor)
+end
+
+def action(:start_reply_editor, _params, component) do
+  JS.new(:Editor, [JS.element(:reply_editor)])
+
+  component
+end
+```
+
+When nothing is rendered under a ref, `JS.element/1` raises a `Hologram.MisuseError` that names the ref. If a template declares the ref, the message says nothing renders it right now and points to a chained action. For a misspelled name, it suggests the closest ref the page declares.
+
+A template renders on the server too, where `JS.element/1` returns a placeholder like every JS interop function, and in the browser the element may not exist yet while the template renders. So `JS.element/1` in a template fails the build. Pass the ref itself instead.
+
 #### Changes Made Through JS Interop
 
 Hologram's virtual DOM patching is aware of JS interop. If you manipulate the DOM directly via JS interop (e.g. appending child elements), those changes are preserved across Hologram re-renders, as long as the container element is present in the template:
@@ -3982,14 +4088,36 @@ return x + 4;
 """  # 11
 ```
 
+##### JS.element/1 - Get an Element by Ref
+
+Returns the element a template names with `$ref`, as a native value the other JS interop functions take:
+
+```holo
+<input type="search" $ref="search" />
+```
+
+```elixir
+:search
+|> JS.element()
+|> JS.call(:select, [])
+```
+
+`JS.element(:window)` and `JS.element(:document)` return the window and the document as native values too. A native value is returned unchanged. When nothing is rendered under the ref, it raises a `Hologram.MisuseError`. See the "Element Refs" section in the DOM documentation.
+
 ##### JS.dispatch_event - Dispatch Events
 
-Dispatches an event on a target. There are several variants:
+Dispatches an event on a target. The examples below target an element a template names with `$ref`:
+
+```holo
+<div $ref="panel"></div>
+```
+
+There are several variants:
 
 ###### dispatch_event/2 - CustomEvent, No Options
 
 ```elixir
-target = JS.call(:document, :getElementById, ["my-element"])
+target = JS.element(:panel)
 JS.dispatch_event(target, "my:event")
 ```
 
@@ -4024,7 +4152,7 @@ JS.dispatch_event(:document, "my:event")
 You can combine `dispatch_event` with callback interop to set up listeners:
 
 ```elixir
-target = JS.call(:document, :getElementById, ["my-element"])
+target = JS.element(:panel)
 
 JS.call(target, :addEventListener, [
   "my:event",
@@ -4248,12 +4376,16 @@ Hooks.MyChart = {
 };
 ```
 
-In Hologram, dispatch an event and listen for it with `addEventListener`:
+In Hologram, dispatch an event and listen for it with `addEventListener`. The chart element carries an `id` for the JavaScript side and a `$ref` for the Elixir side:
+
+```holo
+<canvas id="my-chart" $ref="chart"></canvas>
+```
 
 ```elixir
 # Hologram action (runs in the browser)
 def action(:refresh, _params, component) do
-  target = JS.call(:document, :getElementById, ["my-chart"])
+  target = JS.element(:chart)
   JS.dispatch_event(target, "data_updated", detail: %{value: 99})
 
   component
@@ -4271,7 +4403,7 @@ Alternatively, you can set up the listener entirely from Elixir using the low-le
 
 ```elixir
 def action(:setup_chart, _params, component) do
-  target = JS.call(:document, :getElementById, ["my-chart"])
+  target = JS.element(:chart)
 
   JS.call(target, :addEventListener, [
     "data_updated",
@@ -4309,6 +4441,8 @@ Since JS interop functions only work in the browser, functions that use them can
 #### Publishing Packages
 
 Planning to publish a reusable package that wraps a JavaScript library, a Web API, or provides Hologram utilities? Check the Package Naming conventions to help distinguish official and community packages.
+
+A package's components share the page's refs with the app. See the "Refs Are Page-Wide" section in the DOM documentation for how to name their elements.
 
 ### Configuration
 

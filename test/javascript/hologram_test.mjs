@@ -20,6 +20,7 @@ import Config from "../../assets/js/config.mjs";
 import Debouncer from "../../assets/js/debouncer.mjs";
 import Deserializer from "../../assets/js/deserializer.mjs";
 import ERTS from "../../assets/js/erts.mjs";
+import ElementRefRegistry from "../../assets/js/element_ref_registry.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import FocusEvent from "../../assets/js/events/focus_event.mjs";
@@ -3357,6 +3358,20 @@ describe("Hologram", () => {
         }
       });
 
+      it("clears the elements the refs of the page being left named", async () => {
+        const element = document.createElement("div");
+
+        ElementRefRegistry.replace(
+          new Map([[Type.encodeMapKey(Type.atom("search")), element]]),
+          Type.alias("MyLeftPage"),
+        );
+
+        await Hologram.loadNewPage("/target", payloadFor("refs-left"));
+
+        assert.isNull(ElementRefRegistry.get(Type.atom("search")));
+        assert.isNull(ElementRefRegistry.pageModule);
+      });
+
       // A registry listener - a <window>/<document> binding, a click_outside, a reach or resize
       // observer - is attached to a target the patch does not own, so it is the one kind of
       // listener that outlives the markup it was rendered for. One left alive would observe the
@@ -5917,6 +5932,7 @@ describe("Hologram", () => {
       Hologram.isPageShown = false;
       Hologram.isRendering = false;
       Hologram.virtualDocument = null;
+      ElementRefRegistry.clear();
       Renderer.isPageArrival = false;
       Renderer.listenerBindings = [];
       Renderer.resetFocusCandidates();
@@ -6016,6 +6032,62 @@ describe("Hologram", () => {
       // Reach listeners persist, so each is rechecked after reconcile to re-sync and auto-fill.
       sinon.assert.calledOnce(recheckStub);
       sinon.assert.callOrder(reconcileStub, recheckStub);
+    });
+
+    describe("element refs", () => {
+      it("hold the elements the render put under them once the DOM is patched", () => {
+        const elementsByRef = new Map([
+          [
+            Type.encodeMapKey(Type.atom("search")),
+            document.createElement("div"),
+          ],
+        ]);
+
+        sinon.stub(Renderer, "renderPage").returns({
+          sel: "html",
+          data: {},
+          children: [],
+        });
+
+        const patchStub = sinon.stub(Vdom, "patchVirtualDocument");
+        sinon.stub(EventListenerRegistry, "reconcile");
+        sinon.stub(EventListeners, "recheckScrollEdges");
+
+        const resolveStub = sinon
+          .stub(Renderer, "resolveRefBindings")
+          .returns(elementsByRef);
+
+        const pageModule = Type.alias("MyPage");
+        sinon.stub(Hologram, "pageModule").returns(pageModule);
+
+        Hologram.virtualDocument = {sel: "html", data: {}, children: []};
+
+        Hologram.render();
+
+        sinon.assert.callOrder(patchStub, resolveStub);
+        assert.strictEqual(ElementRefRegistry.elements, elementsByRef);
+        assert.strictEqual(ElementRefRegistry.pageModule, pageModule);
+      });
+
+      it("keep the last finished render's elements when a render raises", () => {
+        const elementsByRef = new Map([
+          [
+            Type.encodeMapKey(Type.atom("search")),
+            document.createElement("div"),
+          ],
+        ]);
+
+        const pageModule = Type.alias("MyPage");
+
+        ElementRefRegistry.replace(elementsByRef, pageModule);
+
+        sinon.stub(Renderer, "renderPage").throws(new Error("render failed"));
+
+        assert.throws(() => Hologram.render(), "render failed");
+
+        assert.strictEqual(ElementRefRegistry.elements, elementsByRef);
+        assert.strictEqual(ElementRefRegistry.pageModule, pageModule);
+      });
     });
 
     // A full document load has no previous render to diff against, only the page the server sent,

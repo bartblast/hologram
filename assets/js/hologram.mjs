@@ -10,6 +10,7 @@ import Config from "./config.mjs";
 import Debouncer from "./debouncer.mjs";
 import Deserializer from "./deserializer.mjs";
 import ERTS from "./erts.mjs";
+import ElementRefRegistry from "./element_ref_registry.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
 import EventListeners from "./event_listeners.mjs";
 import GlobalRegistry from "./global_registry.mjs";
@@ -141,6 +142,7 @@ export default class Hologram {
   static #deps = {
     Bitstring: Bitstring,
     ERTS: ERTS,
+    ElementRefRegistry: ElementRefRegistry,
     HologramBoxedError: HologramBoxedError,
     HologramInterpreterError: HologramInterpreterError,
     Interpreter: Interpreter,
@@ -916,6 +918,13 @@ export default class Hologram {
         ...Renderer.resolveResizeBindings(),
       ]);
 
+      // A ref names the element this render put under it, which exists only now that the DOM is
+      // patched.
+      ElementRefRegistry.replace(
+        Renderer.resolveRefBindings(),
+        Hologram.pageModule(),
+      );
+
       // Reach listeners persist across renders, so reconcile alone does not re-run them. Recheck them
       // now that the DOM is patched, so each re-syncs the children it watches and recomputes - firing
       // again as content this render added extends or fills the container.
@@ -1266,6 +1275,13 @@ export default class Hologram {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.JS",
+      "element/1",
+      "public",
+      ManuallyPortedElixirHologramJS["element/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.JS",
       "eval/1",
       "public",
       ManuallyPortedElixirHologramJS["eval/1"],
@@ -1448,17 +1464,20 @@ export default class Hologram {
   }
 
   // Everything the page being left armed is dropped at the boundary: a debounce or throttle
-  // timer, and every registry listener - a <window>/<document> binding, a click_outside, a reach
-  // or resize observer. A timer outlives the page that armed it, and a listener attached to a
-  // target the patch does not own would observe the patch itself: a detached element's observer
-  // reports it at 0x0, a shortened document fires the scroll the browser clamps, and every such
-  // dispatch would carry the destination's epoch. Nothing of the destination exists yet at
-  // either boundary, so nothing of it is taken, and the mount's render attaches its listeners
-  // afresh. Cancel, not flush: a dispatch must never execute on a page the user has left.
+  // timer, every registry listener - a <window>/<document> binding, a click_outside, a reach or
+  // resize observer - and the elements its refs named. A timer outlives the page that armed it,
+  // and a listener attached to a target the patch does not own would observe the patch itself: a
+  // detached element's observer reports it at 0x0, a shortened document fires the scroll the
+  // browser clamps, and every such dispatch would carry the destination's epoch. A ref looked up
+  // before the destination's first render would get an element of the page being left. Nothing of
+  // the destination exists yet at either boundary, so nothing of it is taken, and the mount's
+  // render attaches its listeners afresh. Cancel, not flush: a dispatch must never execute on a
+  // page the user has left.
   static #disarmLeftPage() {
     Debouncer.cancelAll();
     Throttler.cancelAll();
     EventListenerRegistry.detachAll();
+    ElementRefRegistry.clear();
 
     // Nothing of the destination is on screen yet, whichever way it arrives.
     $.isPageShown = false;

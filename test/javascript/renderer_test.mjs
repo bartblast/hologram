@@ -18,6 +18,13 @@ import {defineLayoutFixture} from "./support/fixtures/layout_fixture.mjs";
 import {defineModule1Fixture} from "./support/fixtures/renderer/module_1.mjs";
 import {defineModule10Fixture} from "./support/fixtures/renderer/module_10.mjs";
 import {defineModule11Fixture} from "./support/fixtures/renderer/module_11.mjs";
+import {defineModule114Fixture} from "./support/fixtures/renderer/module_114.mjs";
+import {defineModule115Fixture} from "./support/fixtures/renderer/module_115.mjs";
+import {defineModule116Fixture} from "./support/fixtures/renderer/module_116.mjs";
+import {defineModule117Fixture} from "./support/fixtures/renderer/module_117.mjs";
+import {defineModule118Fixture} from "./support/fixtures/renderer/module_118.mjs";
+import {defineModule119Fixture} from "./support/fixtures/renderer/module_119.mjs";
+import {defineModule120Fixture} from "./support/fixtures/renderer/module_120.mjs";
 import {defineModule12Fixture} from "./support/fixtures/renderer/module_12.mjs";
 import {defineModule14Fixture} from "./support/fixtures/renderer/module_14.mjs";
 import {defineModule15Fixture} from "./support/fixtures/renderer/module_15.mjs";
@@ -97,6 +104,7 @@ import FocusEvent from "../../assets/js/events/focus_event.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Once from "../../assets/js/once.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -108,6 +116,13 @@ defineLayoutFixture();
 defineModule1Fixture();
 defineModule10Fixture();
 defineModule11Fixture();
+defineModule114Fixture();
+defineModule115Fixture();
+defineModule116Fixture();
+defineModule117Fixture();
+defineModule118Fixture();
+defineModule119Fixture();
+defineModule120Fixture();
 defineModule12Fixture();
 defineModule14Fixture();
 defineModule15Fixture();
@@ -182,6 +197,9 @@ defineClientOnlyModule10Fixture();
 describe("Renderer", () => {
   beforeEach(() => {
     ComponentRegistry.clear();
+
+    // Tests render with renderDom directly, which collects refs into bindings only renderPage resets.
+    Renderer.refBindings = new Map();
   });
 
   const cid = Type.bitstring("my_component");
@@ -995,6 +1013,41 @@ describe("Renderer", () => {
           );
 
           Hologram.handleUiEvent.restore();
+        });
+
+        it("$ref binds no listener", () => {
+          // <button $ref={:save} $click="my_action">Click me</button>
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("button"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("$ref"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.atom("save")])],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$click"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("Click me")]),
+            ]),
+          ]);
+
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["click"]);
         });
 
         it("multiple event listeners", () => {
@@ -7429,6 +7482,63 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, ["abc123456xyz"]);
     });
 
+    // A template that puts its own <slot /> inside a component usage passes the content on, and the
+    // content is still the writer's, however many templates pass it on.
+    it("a prop error in slot content passed on through a nested slot names the template that wrote it", () => {
+      for (const passingModule of ["Module114", "Module115"]) {
+        const node = Type.tuple([
+          Type.atom("component"),
+          Type.alias(
+            `Hologram.Test.Fixtures.Template.Renderer.${passingModule}`,
+          ),
+          Type.list(),
+          Type.list([
+            Type.tuple([
+              Type.atom("component"),
+              Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module89"),
+              Type.list(),
+              Type.list(),
+            ]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () =>
+            Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+              Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+              null,
+            ),
+          "Hologram.PropError",
+          'component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", ' +
+            'rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"',
+        );
+      }
+    });
+
+    it("slot content passed on through a nested slot renders in its place", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module115"),
+        Type.list(),
+        Type.keywordList([[Type.atom("text"), Type.bitstring("123")]]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, ["abc123xyz"]);
+    });
+
     it("nested components with slots, no slot tag in the top component template, not using vars", () => {
       const node = Type.tuple([
         Type.atom("component"),
@@ -9697,6 +9807,28 @@ describe("Renderer", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("a prop error in page content its layout passes on through a nested slot names the page", () => {
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module116"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module114"),
+      );
+
+      assertBoxedError(
+        () =>
+          Renderer.renderPage(
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module116"),
+            Type.map(),
+          ),
+        "Hologram.PropError",
+        'component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", ' +
+          'rendered from "Hologram.Test.Fixtures.Template.Renderer.Module116"',
+      );
     });
 
     // This test case doesn't apply to the client renderer, because the client renderer receives already cast page params.
@@ -12366,6 +12498,42 @@ describe("Renderer", () => {
       sinon.assert.notCalled(warnStub);
     });
 
+    // Each place the content is passed on to renders it as a list of its own, so a loop in it is
+    // the same loop rendered twice, as with two slots in the template that was given the content.
+    it("the same loop passed on through two slots of a nested usage isn't logged", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module117"),
+        Type.list(),
+        Type.list([
+          loopItem(itemWithId(908), [keyedElement("li", 0)]),
+          loopItem(itemWithId(909), [keyedElement("li", 0)]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        keyedElement("ul", 9, [node]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        result.children
+          .map((child) => child.key)
+          .filter((key) => key !== undefined),
+        [
+          "1a2b3c:0#i908",
+          "1a2b3c:0#i909",
+          "1a2b3c:0#i908:1",
+          "1a2b3c:0#i909:1",
+        ],
+      );
+
+      sinon.assert.notCalled(warnStub);
+    });
+
     it("two items whose elements carry the same $key are logged", () => {
       const explicitlyKeyedLi = () =>
         Type.tuple([
@@ -12461,6 +12629,387 @@ describe("Renderer", () => {
       Renderer.renderTree(Type.list([li, li]));
 
       sinon.assert.notCalled(warnStub);
+    });
+  });
+
+  describe("refs", () => {
+    const module64 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module64",
+    );
+    const module118 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module118",
+    );
+    const module119 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module119",
+    );
+
+    // <div $ref={ref}></div>
+    const refElement = (ref, children = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$ref"),
+            Type.keywordList([[Type.atom("expression"), Type.tuple([ref])]]),
+          ]),
+        ]),
+        Type.list(children),
+      ]);
+
+    // <Module ref={ref}>children</Module>
+    const refComponent = (module, ref, children = []) =>
+      Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("ref"),
+            Type.keywordList([[Type.atom("expression"), Type.tuple([ref])]]),
+          ]),
+        ]),
+        Type.list(children),
+      ]);
+
+    const render = (dom, parentModule = null) =>
+      Renderer.renderDom(
+        dom,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+        parentModule,
+        null,
+      );
+
+    const duplicateMessage = (refText, writers, example) =>
+      `two elements are rendered under the ref ${refText}${writers} - ` +
+      `a ref names one element, so give each element a ref of its own, like ${example} for the items of a loop`;
+
+    it("an element's ref renders no attribute and binds the element's vnode", () => {
+      const search = Type.atom("search");
+      const vdom = render(refElement(search));
+
+      assert.deepStrictEqual(vdom.data.attrs, {});
+
+      assert.deepStrictEqual(
+        Renderer.refBindings,
+        new Map([
+          [Type.encodeMapKey(search), {ref: search, module: null, vnode: vdom}],
+        ]),
+      );
+    });
+
+    it("a ref of several parts names the same ref as the tuple it makes", () => {
+      // <div $ref={:message, 42}></div>
+      const severalParts = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$ref"),
+            Type.keywordList([
+              [
+                Type.atom("expression"),
+                Type.tuple([Type.atom("message"), Type.integer(42)]),
+              ],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const ref = Type.tuple([Type.atom("message"), Type.integer(42)]);
+
+      assertBoxedError(
+        () => render(Type.list([severalParts, refElement(ref)])),
+        "Hologram.MisuseError",
+        duplicateMessage("{:message, 42}", "", "{:message, 42, item.id}"),
+      );
+    });
+
+    it("raises for a value that isn't an identifier", () => {
+      assertBoxedError(
+        () => render(refElement(Type.bitstring("search"))),
+        "Hologram.MisuseError",
+        '$ref takes an identifier, like :search or {:message, 42}, got: "search"',
+      );
+    });
+
+    it("raises for a value that isn't an identifier, with the reason", () => {
+      assertBoxedError(
+        () =>
+          render(refElement(Type.tuple([Type.atom("message"), Type.nil()]))),
+        "Hologram.MisuseError",
+        "$ref takes an identifier, like :search or {:message, 42}, got: {:message, nil} - nil, true and false can't be in an identifier",
+      );
+    });
+
+    it("raises for an Elixir reference, with a hint", () => {
+      const ref = Type.reference(NodeTable.CLIENT_NODE, 0, [3, 2, 1]);
+
+      assertBoxedError(
+        () => render(refElement(ref)),
+        "Hologram.MisuseError",
+        "$ref takes an identifier, like :search or {:message, 42}, got: #Reference<0.1.2.3> - an element ref is an identifier, not an Elixir reference",
+      );
+    });
+
+    it("raises for a built-in ref", () => {
+      for (const name of ["window", "document"]) {
+        assertBoxedError(
+          () => render(refElement(Type.atom(name))),
+          "Hologram.MisuseError",
+          `:${name} is a built-in ref, so a template can't name an element with it - JS.element(:${name}) returns the ${name}`,
+        );
+      }
+    });
+
+    it("raises for a ref on the component a dynamic tag renders", () => {
+      const node = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+        ]),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$ref"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.atom("search")])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "Hologram.MisuseError",
+        "$ref can't go on the Hologram.Test.Fixtures.Template.Renderer.Module1 component a dynamic tag renders - " +
+          "a component renders no element of its own, so put $ref on an element in its template " +
+          "and pass the ref as a prop, like input_ref={:search}",
+      );
+    });
+
+    it("a ref on the element a dynamic tag renders", () => {
+      const node = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([Type.bitstring("div")]),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$ref"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.atom("search")])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = render(node);
+
+      assert.strictEqual(
+        Renderer.refBindings.get(Type.encodeMapKey(Type.atom("search"))).vnode,
+        vdom,
+      );
+    });
+
+    it("raises for a ref on a tag a dynamic tag renders that the build keeps refs off", () => {
+      const messages = {
+        window:
+          "$ref can't go on a <window> tag, which renders no element - JS.element(:window) returns the window",
+        document:
+          "$ref can't go on a <document> tag, which renders no element - JS.element(:document) returns the document",
+        slot: "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content",
+        html: "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element",
+      };
+
+      for (const [tagName, message] of Object.entries(messages)) {
+        const node = Type.tuple([
+          Type.atom("dynamic_tag"),
+          Type.tuple([Type.bitstring(tagName)]),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("$ref"),
+              Type.keywordList([
+                [Type.atom("expression"), Type.tuple([Type.atom("root")])],
+              ]),
+            ]),
+          ]),
+          Type.list(),
+        ]);
+
+        assertBoxedError(() => render(node), "Hologram.MisuseError", message);
+      }
+    });
+
+    it("raises for two elements of one template under one ref", () => {
+      const search = Type.atom("search");
+
+      assertBoxedError(
+        () =>
+          render(Type.list([refElement(search), refElement(search)]), module64),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":search",
+          ', both from "Hologram.Test.Fixtures.Template.Renderer.Module64"',
+          "{:search, item.id}",
+        ),
+      );
+    });
+
+    it("raises for elements of two components under one ref", () => {
+      const search = Type.atom("search");
+
+      assertBoxedError(
+        () =>
+          render(
+            Type.list([
+              refComponent(module118, search),
+              refComponent(module119, search),
+            ]),
+          ),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":search",
+          ', one from "Hologram.Test.Fixtures.Template.Renderer.Module118" and one from "Hologram.Test.Fixtures.Template.Renderer.Module119"',
+          "{:search, item.id}",
+        ),
+      );
+    });
+
+    it("names slot content after the template that supplied it", () => {
+      const search = Type.atom("search");
+
+      assertBoxedError(
+        () =>
+          render(
+            refComponent(module118, search, [refElement(search)]),
+            module64,
+          ),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":search",
+          ', one from "Hologram.Test.Fixtures.Template.Renderer.Module118" and one from "Hologram.Test.Fixtures.Template.Renderer.Module64"',
+          "{:search, item.id}",
+        ),
+      );
+    });
+
+    it("names an element before the elements inside it", () => {
+      const search = Type.atom("search");
+
+      assertBoxedError(
+        () =>
+          render(
+            refElement(search, [refComponent(module119, search)]),
+            module64,
+          ),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":search",
+          ', one from "Hologram.Test.Fixtures.Template.Renderer.Module64" and one from "Hologram.Test.Fixtures.Template.Renderer.Module119"',
+          "{:search, item.id}",
+        ),
+      );
+    });
+
+    it("elements under refs that differ in their keys", () => {
+      const item = (id) => Type.tuple([Type.atom("item"), Type.integer(id)]);
+
+      render(
+        Type.list([
+          refElement(item(1)),
+          refElement(item(2)),
+          refElement(Type.atom("item")),
+        ]),
+      );
+
+      assert.deepStrictEqual(Array.from(Renderer.refBindings.keys()), [
+        Type.encodeMapKey(item(1)),
+        Type.encodeMapKey(item(2)),
+        Type.encodeMapKey(Type.atom("item")),
+      ]);
+    });
+
+    it("the items of a loop render under refs of their own", () => {
+      const loopItem = (id) =>
+        Type.tuple([
+          Type.atom("loop_item"),
+          Type.tuple([Type.integer(id)]),
+          Type.list([
+            refElement(Type.tuple([Type.atom("item"), Type.integer(id)])),
+          ]),
+        ]);
+
+      render(
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("ul"),
+          Type.list(),
+          Type.list([Type.list([loopItem(1), loopItem(2)])]),
+        ]),
+      );
+
+      assert.deepStrictEqual(Array.from(Renderer.refBindings.keys()), [
+        Type.encodeMapKey(Type.tuple([Type.atom("item"), Type.integer(1)])),
+        Type.encodeMapKey(Type.tuple([Type.atom("item"), Type.integer(2)])),
+      ]);
+    });
+
+    it("raises for an element of the page and one of its layout under one ref", () => {
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module120"),
+      );
+
+      initComponentRegistryEntry(Type.bitstring("layout"), module118);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderPage(
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module120"),
+            Type.map(),
+          ),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":shared",
+          ', one from "Hologram.Test.Fixtures.Template.Renderer.Module118" and one from "Hologram.Test.Fixtures.Template.Renderer.Module120"',
+          "{:shared, item.id}",
+        ),
+      );
+    });
+
+    it("each page render claims its refs afresh", () => {
+      render(refElement(Type.atom("search")));
+
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
+      );
+
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module15"),
+      );
+
+      Renderer.renderPage(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
+        Type.map(),
+      );
+
+      assert.strictEqual(Renderer.refBindings.size, 0);
+    });
+
+    it("resolves each ref to the element its vnode was patched into", () => {
+      const vdom = render(refElement(Type.atom("search")));
+      const element = document.createElement("div");
+      vdom.elm = element;
+
+      assert.deepStrictEqual(
+        Renderer.resolveRefBindings(),
+        new Map([[Type.encodeMapKey(Type.atom("search")), element]]),
+      );
     });
   });
 

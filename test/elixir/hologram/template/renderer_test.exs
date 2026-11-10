@@ -33,7 +33,15 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module110
   alias Hologram.Test.Fixtures.Template.Renderer.Module111
   alias Hologram.Test.Fixtures.Template.Renderer.Module113
+  alias Hologram.Test.Fixtures.Template.Renderer.Module114
+  alias Hologram.Test.Fixtures.Template.Renderer.Module115
+  alias Hologram.Test.Fixtures.Template.Renderer.Module116
+  alias Hologram.Test.Fixtures.Template.Renderer.Module117
+  alias Hologram.Test.Fixtures.Template.Renderer.Module118
+  alias Hologram.Test.Fixtures.Template.Renderer.Module119
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
+  alias Hologram.Test.Fixtures.Template.Renderer.Module120
+  alias Hologram.Test.Fixtures.Template.Renderer.Module121
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
@@ -1464,6 +1472,33 @@ defmodule Hologram.Template.RendererTest do
       end
     end
 
+    # A template that puts its own <slot /> inside a component usage passes the content on, and the
+    # content is still the writer's, however many templates pass it on.
+    test "a prop error in slot content passed on through a nested slot names the template that wrote it" do
+      for passing_module <- [Module114, Module115] do
+        node = {:component, passing_module, [], [{:component, Module89, [], []}]}
+        env = %Renderer.Env{parent_module: Module64}
+
+        expected_msg =
+          ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", / <>
+            ~s/rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"/
+
+        assert_raise Hologram.PropError, expected_msg, fn ->
+          render_dom(node, env, @server)
+        end
+      end
+    end
+
+    test "slot content passed on through a nested slot renders in its place" do
+      node = {:component, Module115, [], [text: "123"]}
+      assert render_tree(node, @env, @server) == {[text: "abc123xyz"], %{}, @server}
+    end
+
+    test "slot content passed on through two slots of a nested usage renders in both" do
+      node = {:component, Module117, [], [text: "123"]}
+      assert render_tree(node, @env, @server) == {[text: "abc123123xyz"], %{}, @server}
+    end
+
     test "with multiple nodes" do
       node = {:component, Module8, [], [text: "123", expression: {456}]}
       assert render_dom(node, @env, @server) == {"abc123456xyz", %{}, @server}
@@ -1865,6 +1900,179 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "render_tree/3, refs" do
+    test "an element's ref leaves no attribute in the tree" do
+      assert render_tree(ref_element(:search), @env, @server) ==
+               {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "a ref of several parts leaves no attribute in the tree" do
+      # <div $ref={:message, 42}></div>
+      node = {:element, "div", [{"$ref", [expression: {:message, 42}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+  end
+
+  describe "render_dom/3, refs" do
+    test "raises for a value that isn't an identifier" do
+      assert_error Hologram.MisuseError,
+                   ~s/$ref takes an identifier, like :search or {:message, 42}, got: "search"/,
+                   fn -> render_dom(ref_element("search"), @env, @server) end
+    end
+
+    test "raises for a value that isn't an identifier, with the reason" do
+      assert_error Hologram.MisuseError,
+                   "$ref takes an identifier, like :search or {:message, 42}, got: {:message, nil} - nil, true and false can't be in an identifier",
+                   fn -> render_dom(ref_element({:message, nil}), @env, @server) end
+    end
+
+    test "raises for an Elixir reference, with a hint" do
+      ref = make_ref()
+
+      assert_error Hologram.MisuseError,
+                   "$ref takes an identifier, like :search or {:message, 42}, got: #{inspect(ref)} - an element ref is an identifier, not an Elixir reference",
+                   fn -> render_dom(ref_element(ref), @env, @server) end
+    end
+
+    test "raises for a built-in ref" do
+      for {ref, name} <- [window: "window", document: "document"] do
+        assert_error Hologram.MisuseError,
+                     ":#{name} is a built-in ref, so a template can't name an element with it - JS.element(:#{name}) returns the #{name}",
+                     fn -> render_dom(ref_element(ref), @env, @server) end
+      end
+    end
+
+    test "raises for a ref on the component a dynamic tag renders" do
+      node = {:dynamic_tag, {Module1}, [{"$ref", [expression: {:search}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "$ref can't go on the Hologram.Test.Fixtures.Template.Renderer.Module1 component a dynamic tag renders - " <>
+                     "a component renders no element of its own, so put $ref on an element in its template " <>
+                     "and pass the ref as a prop, like input_ref={:search}",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a ref on a tag a dynamic tag renders that the build keeps refs off" do
+      messages = %{
+        "window" =>
+          "$ref can't go on a <window> tag, which renders no element - JS.element(:window) returns the window",
+        "document" =>
+          "$ref can't go on a <document> tag, which renders no element - JS.element(:document) returns the document",
+        "slot" =>
+          "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content",
+        "html" =>
+          "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element"
+      }
+
+      for {tag_name, message} <- messages do
+        node = {:dynamic_tag, {tag_name}, [{"$ref", [expression: {:root}]}], []}
+
+        assert_error Hologram.MisuseError, message, fn -> render_dom(node, @env, @server) end
+      end
+    end
+
+    test "a ref on the element a dynamic tag renders" do
+      node = {:dynamic_tag, {"div"}, [{"$ref", [expression: {:search}]}], []}
+
+      assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "raises for two elements of one template under one ref" do
+      env = %Renderer.Env{parent_module: Module64}
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :search, both from "Hologram.Test.Fixtures.Template.Renderer.Module64" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn ->
+                     render_dom([ref_element(:search), ref_element(:search)], env, @server)
+                   end
+    end
+
+    test "raises for elements of two components under one ref" do
+      nodes = [
+        {:component, Module118, [{"ref", [expression: {:search}]}], []},
+        {:component, Module119, [{"ref", [expression: {:search}]}], []}
+      ]
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :search, / <>
+                     ~s/one from "Hologram.Test.Fixtures.Template.Renderer.Module118" / <>
+                     ~s/and one from "Hologram.Test.Fixtures.Template.Renderer.Module119" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn -> render_dom(nodes, @env, @server) end
+    end
+
+    test "names slot content after the template that supplied it" do
+      node = {:component, Module118, [{"ref", [expression: {:search}]}], [ref_element(:search)]}
+      env = %Renderer.Env{parent_module: Module64}
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :search, / <>
+                     ~s/one from "Hologram.Test.Fixtures.Template.Renderer.Module118" / <>
+                     ~s/and one from "Hologram.Test.Fixtures.Template.Renderer.Module64" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn -> render_dom(node, env, @server) end
+    end
+
+    test "names an element before the elements inside it" do
+      node =
+        ref_element(:search, [{:component, Module119, [{"ref", [expression: {:search}]}], []}])
+
+      env = %Renderer.Env{parent_module: Module64}
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :search, / <>
+                     ~s/one from "Hologram.Test.Fixtures.Template.Renderer.Module64" / <>
+                     ~s/and one from "Hologram.Test.Fixtures.Template.Renderer.Module119" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn -> render_dom(node, env, @server) end
+    end
+
+    test "elements under refs that differ in their keys" do
+      nodes = [ref_element({:item, 1}), ref_element({:item, 2}), ref_element(:item)]
+
+      assert render_dom(nodes, @env, @server) ==
+               {"<div></div><div></div><div></div>", %{}, @server}
+    end
+
+    test "a ref of several parts names the same ref as the tuple it makes" do
+      # <div $ref={:message, 42}></div>
+      several_parts = {:element, "div", [{"$ref", [expression: {:message, 42}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "two elements are rendered under the ref {:message, 42} - " <>
+                     "a ref names one element, so give each element a ref of its own, like {:message, 42, item.id} for the items of a loop",
+                   fn ->
+                     render_dom([several_parts, ref_element({:message, 42})], @env, @server)
+                   end
+    end
+
+    test "the items of a loop and the branches of an if block render under refs of their own" do
+      node =
+        {:component, Module121,
+         [{"items", [expression: {[1, 2]}]}, {"open?", [expression: {true}]}], []}
+
+      assert render_dom(node, @env, @server) == {"<li></li><li></li><p></p>", %{}, @server}
+    end
+
+    test "a render that raised leaves no refs behind" do
+      assert_error Hologram.MisuseError,
+                   "two elements are rendered under the ref :search - " <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn ->
+                     render_dom([ref_element(:search), ref_element(:search)], @env, @server)
+                   end
+
+      assert render_dom(ref_element(:search), @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "each render claims its refs afresh" do
+      assert render_dom(ref_element(:search), @env, @server) == {"<div></div>", %{}, @server}
+      assert render_dom(ref_element(:search), @env, @server) == {"<div></div>", %{}, @server}
+    end
+  end
+
   describe "context" do
     setup do
       setup_asset_path_registry(AssetPathRegistryStub)
@@ -2106,6 +2314,29 @@ defmodule Hologram.Template.RendererTest do
       assert_error Hologram.StateError, expected_msg, fn ->
         render_page_without_tree(Module111, @params, @server, @opts)
       end
+    end
+
+    test "a prop error in page content its layout passes on through a nested slot names the page" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module116, :dummy_module_116_digest)
+
+      expected_msg =
+        ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", / <>
+          ~s/rendered from "Hologram.Test.Fixtures.Template.Renderer.Module116"/
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_page_without_tree(Module116, @params, @server, @opts)
+      end
+    end
+
+    test "raises for an element of the page and one of its layout under one ref" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module120, :dummy_module_120_digest)
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :shared, / <>
+                     ~s/one from "Hologram.Test.Fixtures.Template.Renderer.Module118" / <>
+                     ~s/and one from "Hologram.Test.Fixtures.Template.Renderer.Module120" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:shared, item.id} for the items of a loop",
+                   fn -> render_page(Module120, @params, @server, @opts) end
     end
 
     test "inside layout slot" do
@@ -4844,6 +5075,11 @@ defmodule Hologram.Template.RendererTest do
   end
 
   defp collect_script_texts(_node), do: []
+
+  # <div $ref={ref}></div>
+  defp ref_element(ref, children \\ []) do
+    {:element, "div", [{"$ref", [expression: {ref}]}], children}
+  end
 
   # The page printed from its tree, as the controller prints a first page, here with nothing to fill
   # its markers with. Named for the tree it leaves out of what it returns.

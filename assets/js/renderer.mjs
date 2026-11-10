@@ -22,6 +22,18 @@ import Vdom, {TRUSTED_HTML_SEL} from "./vdom.mjs";
 import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
 
+// An element ref and an Elixir reference are both called a ref, so a reference passed as one gets
+// this hint.
+//
+// WARNING: must match @elixir_reference_hint in Hologram.Template.Renderer, and the copy in
+// Elixir_Hologram_JS (elixir/hologram/js.mjs).
+const ELIXIR_REFERENCE_HINT =
+  "an element ref is an identifier, not an Elixir reference";
+
+// WARNING: must match @ref_expectation in Hologram.Template.Renderer.
+const REF_EXPECTATION =
+  "$ref takes an identifier, like :search or {:message, 42}";
+
 // The characters a value cannot carry into a script element as the text of a JavaScript string
 // literal, each with the escape sequence it is written as instead. Every sequence is valid inside
 // all three kinds of literal - double-quoted, single-quoted and template - and reads back as the
@@ -169,6 +181,12 @@ export default class Renderer {
   // this.
   static reachBindings = [];
 
+  // The refs collected during the current render, each a {ref, module, vnode} under the ref's
+  // encoded map key, where module is the one whose template wrote the element. The vnode is set
+  // once the element's vnode exists, and resolveRefBindings reads its live element after the patch.
+  // renderPage() resets this.
+  static refBindings = new Map();
+
   // Deferred resize-observer bindings collected during the current render, each a {vnode, handler}.
   // An element's observer target is its live DOM node, which Snabbdom sets on the vnode only during
   // patch, so the binding is held here until resolveResizeBindings turns it into a registry binding
@@ -265,6 +283,7 @@ export default class Renderer {
           defaultTarget,
           parentTagName,
           parentModule,
+          slotsParentModule,
           keyScope,
         );
 
@@ -326,6 +345,22 @@ export default class Renderer {
           keyScope,
         );
 
+      // Slot content passed on through a nested slot renders as written by the template that
+      // supplied it.
+      //
+      // WARNING: must match render_tree/3's slot_content clause on the server.
+      case "slot_content":
+        return Renderer.renderDom(
+          dom.data[2],
+          context,
+          slots,
+          defaultTarget,
+          parentTagName,
+          dom.data[1],
+          slotsParentModule,
+          keyScope,
+        );
+
       case "dynamic_tag":
         return Renderer.#renderDynamicTag(
           dom,
@@ -365,6 +400,7 @@ export default class Renderer {
   static renderPage(pageModule, pageParams) {
     Renderer.listenerBindings = [];
     Renderer.reachBindings = [];
+    Renderer.refBindings = new Map();
     Renderer.resizeBindings = [];
 
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
@@ -464,6 +500,14 @@ export default class Renderer {
 
         return {target: vnode.elm, key, attach, handler};
       });
+  }
+
+  // Resolves this render's refs into the elements rendered under them, by the ref's encoded map
+  // key, called after Snabbdom has patched so each carried vnode's `.elm` is live.
+  static resolveRefBindings() {
+    return new Map(
+      Array.from($.refBindings, ([key, {vnode}]) => [key, vnode.elm]),
+    );
   }
 
   // Resolves this render's deferred resize bindings into {target, key, attach, handler} registry
@@ -656,6 +700,13 @@ export default class Renderer {
     // so it binds nothing either. Without this it would register a listener for an event called
     // "focused", which no browser fires.
     if (originalEventName === "focused") {
+      return null;
+    }
+
+    // $ref names the element for a lookup rather than something that happens to it, so it binds
+    // nothing either. Without this it would register a listener for an event called "ref", which no
+    // browser fires.
+    if (originalEventName === "ref") {
       return null;
     }
 
@@ -1181,6 +1232,17 @@ export default class Renderer {
     return null;
   }
 
+  // Based on duplicate_ref_message/3
+  //
+  // WARNING: must match duplicate_ref_message/3 on the server.
+  static #duplicateRefMessage(ref, firstModule, secondModule) {
+    return (
+      `two elements are rendered under the ref ${Interpreter.inspect(ref)}${$.#refWriters(firstModule, secondModule)} - ` +
+      "a ref names one element, so give each element a ref of its own, " +
+      `like ${$.#refExample(ref)} for the items of a loop`
+    );
+  }
+
   // Based on escape_key_text/1
   //
   // Backslash-escapes the characters key parts are delimited by. The slot key holds no "#", its
@@ -1282,57 +1344,60 @@ export default class Renderer {
       : propsDom.data;
   }
 
-  // Based on expand_slots/2 (including fallback case)
-  static #expandSlots(dom, slots) {
+  // Based on expand_slots/3 (including fallback case)
+  static #expandSlots(dom, slots, supplier) {
     if (Type.isList(dom)) {
-      return Renderer.#expandSlotsInNodes(dom, slots);
+      return Renderer.#expandSlotsInNodes(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "component") {
-      return Renderer.#expandSlotsInComponentNode(dom, slots);
+      return Renderer.#expandSlotsInComponentNode(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "dynamic_tag") {
-      return Renderer.#expandSlotsInDynamicTagNode(dom, slots);
+      return Renderer.#expandSlotsInDynamicTagNode(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "element") {
-      return Renderer.#expandSlotsInElementNode(dom, slots);
+      return Renderer.#expandSlotsInElementNode(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "loop_item") {
-      return Renderer.#expandSlotsInLoopItemNode(dom, slots);
+      return Renderer.#expandSlotsInLoopItemNode(dom, slots, supplier);
     }
 
     return dom;
   }
 
   // Based on expand_slots/3 (component case)
-  static #expandSlotsInComponentNode(dom, slots) {
+  static #expandSlotsInComponentNode(dom, slots, supplier) {
     const [nodeType, moduleAlias, propsDom, childrenDom] = dom.data;
 
     return Type.tuple([
       nodeType,
       moduleAlias,
       propsDom,
-      Renderer.#expandSlots(childrenDom, slots),
+      Renderer.#expandSlots(childrenDom, slots, supplier),
     ]);
   }
 
   // Based on expand_slots/3 (dynamic tag case)
-  static #expandSlotsInDynamicTagNode(dom, slots) {
+  static #expandSlotsInDynamicTagNode(dom, slots, supplier) {
     const [nodeType, value, attrsDom, childrenDom] = dom.data;
 
     return Type.tuple([
       nodeType,
       value,
       attrsDom,
-      Renderer.#expandSlots(childrenDom, slots),
+      Renderer.#expandSlots(childrenDom, slots, supplier),
     ]);
   }
 
   // Based on expand_slots/3 (element cases)
-  static #expandSlotsInElementNode(dom, slots) {
+  //
+  // The content goes on rendering as written by the template that supplied it, though it now sits
+  // in the children of a usage another template wrote.
+  static #expandSlotsInElementNode(dom, slots, supplier) {
     const [nodeType, tagName, attrsDom, childrenDom] = dom.data;
 
     if (Interpreter.isStrictlyEqual(tagName, Type.bitstring("slot"))) {
@@ -1341,32 +1406,38 @@ export default class Renderer {
         Type.atom("default"),
       );
 
-      return slotDom ? slotDom : Type.nil();
+      return slotDom
+        ? Type.tuple([Type.atom("slot_content"), supplier, slotDom])
+        : Type.nil();
     }
 
     return Type.tuple([
       nodeType,
       tagName,
       attrsDom,
-      Renderer.#expandSlots(childrenDom, slots),
+      Renderer.#expandSlots(childrenDom, slots, supplier),
     ]);
   }
 
-  // Based on expand_slots/2 (loop item case)
-  static #expandSlotsInLoopItemNode(dom, slots) {
+  // Based on expand_slots/3 (loop item case)
+  static #expandSlotsInLoopItemNode(dom, slots, supplier) {
     const [nodeType, source, nodes] = dom.data;
 
-    return Type.tuple([nodeType, source, Renderer.#expandSlots(nodes, slots)]);
+    return Type.tuple([
+      nodeType,
+      source,
+      Renderer.#expandSlots(nodes, slots, supplier),
+    ]);
   }
 
   // Based on expand_slots/3 (list case)
   // Deps: [:lists.flatten/1]
-  static #expandSlotsInNodes(nodes, slots) {
+  static #expandSlotsInNodes(nodes, slots, supplier) {
     return Erlang_Lists["flatten/1"](
       Type.list(
         nodes.data
           .filter((node) => !Type.isNil(node))
-          .map((node) => Renderer.#expandSlots(node, slots)),
+          .map((node) => Renderer.#expandSlots(node, slots, supplier)),
       ),
     );
   }
@@ -1543,6 +1614,16 @@ export default class Renderer {
       allowedPropNames.some((name) =>
         Interpreter.isStrictlyEqual(name, propDom.data[0]),
       ),
+    );
+  }
+
+  // The first "$"-prefixed attribute of the given name a tag carries, or null. Spread entries can't
+  // carry such names, so they are passed over.
+  static #findAttribute(attrsDom, name) {
+    return (
+      attrsDom.data.find(
+        (attrDom) => $.#eventAttributeName(attrDom) === name,
+      ) ?? null
     );
   }
 
@@ -2092,6 +2173,38 @@ export default class Renderer {
     return {level, outer: keyScope ? keyScope.outer : "", loop: keyScope?.loop};
   }
 
+  // Based on put_rendered_ref/2
+  //
+  // Checks the element's ref and claims it for the element in the render in progress, returning the
+  // binding the element's vnode goes into, or null when the element has no ref.
+  //
+  // WARNING: must match put_rendered_ref/2 on the server.
+  static #putRenderedRef(attrsDom, module) {
+    const attrDom = $.#findAttribute(attrsDom, "$ref");
+
+    if (attrDom === null) {
+      return null;
+    }
+
+    const ref = $.#validateRef(
+      $.#expressionValue(attrDom.data[1].data[0].data[1]),
+    );
+
+    const key = Type.encodeMapKey(ref);
+    const claimed = $.refBindings.get(key);
+
+    if (claimed !== undefined) {
+      Interpreter.raiseMisuseError(
+        $.#duplicateRefMessage(ref, claimed.module, module),
+      );
+    }
+
+    const binding = {ref, module, vnode: null};
+    $.refBindings.set(key, binding);
+
+    return binding;
+  }
+
   // Based on raise_invalid_explicit_key/1
   //
   // WARNING: must match raise_invalid_explicit_key/1 on the server.
@@ -2118,6 +2231,15 @@ export default class Renderer {
     );
   }
 
+  // Based on ref_example/1
+  static #refExample(ref) {
+    const text = Interpreter.inspect(ref);
+
+    return Type.isTuple(ref)
+      ? `${text.slice(0, -1)}, item.id}`
+      : `{${text}, item.id}`;
+  }
+
   // Raises for a value that stands for markup where a value becomes text: an attribute value or a
   // prop value made of several parts.
   //
@@ -2132,6 +2254,20 @@ export default class Renderer {
     if ($.#isPhoenixSafeTuple(value)) {
       $.#raisePhoenixSafeTuple();
     }
+  }
+
+  // Based on ref_writers/2
+  static #refWriters(firstModule, secondModule) {
+    if (!firstModule || !secondModule) {
+      return "";
+    }
+
+    const firstName = Interpreter.moduleExName(firstModule);
+    const secondName = Interpreter.moduleExName(secondModule);
+
+    return firstName === secondName
+      ? `, both from "${firstName}"`
+      : `, one from "${firstName}" and one from "${secondName}"`;
   }
 
   // Based on render_tree_attribute/1
@@ -2272,13 +2408,18 @@ export default class Renderer {
     defaultTarget,
     parentTagName,
     parentModule,
+    slotsParentModule,
     keyScope,
   ) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
     const propsDom = dom.data[2];
     let childrenDom = dom.data[3];
 
-    const expandedChildrenDom = Renderer.#expandSlots(childrenDom, slots);
+    const expandedChildrenDom = Renderer.#expandSlots(
+      childrenDom,
+      slots,
+      slotsParentModule,
+    );
 
     let props = Renderer.#injectPropsFromContext(
       Renderer.#castProps(propsDom, moduleProxy),
@@ -2337,9 +2478,13 @@ export default class Renderer {
 
     // Mirrors the server's is_binary/1 guard - a non-binary bitstring is not a tag name.
     if (Type.isBinary(value)) {
-      const tagName = Type.bitstring(
-        Renderer.#normalizeTagName(Bitstring.toText(value)),
-      );
+      const tagNameText = Renderer.#normalizeTagName(Bitstring.toText(value));
+
+      if ($.#findAttribute(attrsDom, "$ref") !== null) {
+        $.#validateRefTag(tagNameText);
+      }
+
+      const tagName = Type.bitstring(tagNameText);
 
       return Renderer.renderDom(
         Type.tuple([Type.atom("element"), tagName, attrsDom, childrenDom]),
@@ -2360,6 +2505,15 @@ export default class Renderer {
     }
 
     Renderer.#validateDynamicTagModule(value);
+
+    // WARNING: must match render_tree/3's dynamic tag component clause on the server.
+    if ($.#findAttribute(attrsDom, "$ref") !== null) {
+      Interpreter.raiseMisuseError(
+        `$ref can't go on the ${Interpreter.moduleExName(value)} component a dynamic tag renders - ` +
+          "a component renders no element of its own, so put $ref on an element in its template " +
+          "and pass the ref as a prop, like input_ref={:search}",
+      );
+    }
 
     return Renderer.renderDom(
       Type.tuple([Type.atom("component"), value, attrsDom, childrenDom]),
@@ -2422,6 +2576,10 @@ export default class Renderer {
     // be a key raises where render_tree_attributes/2 raises on the server - also on an element that
     // takes a resource key instead.
     const slotKey = $.#renderSlotKey(attrsDom, keyScope);
+
+    // Before the children, so an element is claimed ahead of the elements inside it, as the server
+    // claims it.
+    const refBinding = $.#putRenderedRef(attrsDom, parentModule);
 
     // $focused renders as autofocus, the way the server renders it, so the boot patch finds the
     // attribute the server sent and the focus hooks read one attribute either way. An autofocus
@@ -2607,6 +2765,10 @@ export default class Renderer {
     }
 
     const elementVnode = vnode(currentTagName, data, childrenVdom);
+
+    if (refBinding !== null) {
+      refBinding.vnode = elementVnode;
+    }
 
     Renderer.#collectClickOutsideBindings(
       attrsDom,
@@ -3243,6 +3405,57 @@ export default class Renderer {
           );
         }
       }
+    }
+  }
+
+  // Based on validate_ref/1
+  //
+  // WARNING: must match validate_ref/1 on the server.
+  static #validateRef(ref) {
+    if (
+      Type.isAtom(ref) &&
+      (ref.value === "window" || ref.value === "document")
+    ) {
+      Interpreter.raiseMisuseError(
+        `:${ref.value} is a built-in ref, so a template can't name an element with it - JS.element(:${ref.value}) returns the ${ref.value}`,
+      );
+    }
+
+    const result = Identifier.check(ref);
+
+    if (result !== null) {
+      const hint = Type.isReference(ref) ? ELIXIR_REFERENCE_HINT : result.hint;
+
+      Interpreter.raiseMisuseError(
+        Identifier.message(REF_EXPECTATION, ref, hint),
+      );
+    }
+
+    return ref;
+  }
+
+  // Based on validate_ref_tag/1
+  //
+  // WARNING: must match validate_ref_tag/1 on the server.
+  static #validateRefTag(tagName) {
+    switch (tagName) {
+      case "window":
+      case "document":
+        Interpreter.raiseMisuseError(
+          `$ref can't go on a <${tagName}> tag, which renders no element - JS.element(:${tagName}) returns the ${tagName}`,
+        );
+        break;
+
+      case "slot":
+        Interpreter.raiseMisuseError(
+          "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content",
+        );
+        break;
+
+      case "html":
+        Interpreter.raiseMisuseError(
+          "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element",
+        );
     }
   }
 
