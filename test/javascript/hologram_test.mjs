@@ -6165,10 +6165,17 @@ describe("Hologram", () => {
       });
     });
 
-    it("reconciles the global and resolved observer bindings collected during the render", () => {
+    it("reconciles the global, drag and resolved observer bindings collected during the render", () => {
       const listenerBindings = [
         {target: window, eventName: "keydown", handler: () => {}},
       ];
+
+      const dragBinding = {
+        target: {},
+        key: "capture:dragover",
+        attach: () => {},
+        handler: () => {},
+      };
 
       const reachBinding = {
         target: {},
@@ -6183,7 +6190,9 @@ describe("Hologram", () => {
         return {sel: "html", data: {}, children: []};
       });
 
-      // Observer bindings are resolved from their patched elements right before reconciliation.
+      // Drag and observer bindings are resolved from their patched elements right before
+      // reconciliation.
+      sinon.stub(Renderer, "resolveDragBindings").returns([dragBinding]);
       sinon.stub(Renderer, "resolveReachBindings").returns([reachBinding]);
 
       sinon.stub(Vdom, "patchVirtualDocument");
@@ -6193,6 +6202,7 @@ describe("Hologram", () => {
       Hologram.render();
 
       sinon.assert.calledOnceWithExactly(reconcileStub, [
+        dragBinding,
         ...listenerBindings,
         reachBinding,
       ]);

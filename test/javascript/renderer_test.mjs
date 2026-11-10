@@ -99,6 +99,7 @@ import {defineClientOnlyModule10Fixture} from "./support/fixtures/renderer/clien
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import FocusEvent from "../../assets/js/events/focus_event.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
@@ -8976,6 +8977,320 @@ describe("Renderer", () => {
       assert.equal(Renderer.listenerBindings.length, 1);
       assert.equal(Renderer.listenerBindings[0].key, "bubble:resize");
       assert.equal(Renderer.listenerBindings[0].target, window);
+    });
+  });
+
+  describe("drop target", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    // Example: $drop={nil}
+    const disabledSpecDom = Type.list([
+      Type.tuple([Type.atom("expression"), Type.tuple([Type.nil()])]),
+    ]);
+
+    const tag = (tagName, attrsDom) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    beforeEach(() => {
+      Renderer.dragBindings = [];
+      Renderer.listenerBindings = [];
+    });
+
+    afterEach(() => {
+      EventListenerRegistry.detachAll();
+    });
+
+    it("collects a dragenter and a dragover listener for an element with a $drop binding", () => {
+      // <div $drop="my_action"></div>
+      const vdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({vnode, eventName}) => [vnode, eventName]),
+        [
+          [vdom, "dragenter"],
+          [vdom, "dragover"],
+        ],
+      );
+
+      assert.deepStrictEqual(Object.keys(vdom.data.on), ["drop"]);
+    });
+
+    it("prevents the default of the drag over a drop target", () => {
+      // <div $drop="my_action"></div>
+      render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      const prevented = Renderer.dragBindings.map(({eventName, handler}) => {
+        const event = new Event(eventName, {cancelable: true});
+
+        handler(event);
+
+        return [eventName, event.defaultPrevented];
+      });
+
+      assert.deepStrictEqual(prevented, [
+        ["dragenter", true],
+        ["dragover", true],
+      ]);
+    });
+
+    it("collects nothing for a disabled $drop binding", () => {
+      // <div $drop={nil}></div>
+      render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), disabledSpecDom])]),
+      );
+
+      assert.deepStrictEqual(Renderer.dragBindings, []);
+    });
+
+    it("collects one pair for an element with two $drop bindings", () => {
+      // <div $drop="my_action" $drop.once="my_action"></div>
+      render(
+        tag("div", [
+          Type.tuple([Type.bitstring("$drop"), actionSpecDom]),
+          Type.tuple([
+            Type.bitstring("$drop"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({eventName}) => eventName),
+        ["dragenter", "dragover"],
+      );
+    });
+
+    it("collects the pair when one of two $drop bindings is enabled", () => {
+      // <div $drop={nil} $drop.once="my_action"></div>
+      render(
+        tag("div", [
+          Type.tuple([Type.bitstring("$drop"), disabledSpecDom]),
+          Type.tuple([
+            Type.bitstring("$drop"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({eventName}) => eventName),
+        ["dragenter", "dragover"],
+      );
+    });
+
+    it("collects nothing for an element without a $drop binding", () => {
+      // <div $drag_over="my_action"></div>
+      render(
+        tag("div", [Type.tuple([Type.bitstring("$drag_over"), actionSpecDom])]),
+      );
+
+      assert.deepStrictEqual(Renderer.dragBindings, []);
+    });
+
+    for (const [tagName, listenerTarget] of [
+      ["document", document],
+      ["window", window],
+    ]) {
+      it(`collects the pair for a <${tagName}> tag with a $drop binding`, () => {
+        // <document $drop="my_action" /> or <window $drop="my_action" />
+        render(
+          tag(tagName, [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+        );
+
+        assert.deepStrictEqual(
+          Renderer.dragBindings.map(({target, eventName}) => [
+            target,
+            eventName,
+          ]),
+          [
+            [listenerTarget, "dragenter"],
+            [listenerTarget, "dragover"],
+          ],
+        );
+      });
+    }
+
+    it("keeps the <window> tag's listener slot keys when its $drop binding is disabled", () => {
+      // <window $drop={nil} $key_down="my_action" />
+      render(
+        tag("window", [
+          Type.tuple([Type.bitstring("$drop"), disabledSpecDom]),
+          Type.tuple([Type.bitstring("$key_down"), actionSpecDom]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.listenerBindings.map(({slotKey}) => slotKey),
+        [0, 1],
+      );
+    });
+
+    it("keeps the <window> tag's listener slot keys when its $drop binding is enabled", () => {
+      // <window $drop="my_action" $key_down="my_action" />
+      render(
+        tag("window", [
+          Type.tuple([Type.bitstring("$drop"), actionSpecDom]),
+          Type.tuple([Type.bitstring("$key_down"), actionSpecDom]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.listenerBindings.map(({slotKey}) => slotKey),
+        [0, 1],
+      );
+    });
+
+    it("resolves into capture-phase registry bindings on the element", () => {
+      // <div $drop="my_action"></div>
+      const vdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      // Snabbdom sets `.elm` during patch; emulate the element here.
+      const element = {};
+      vdom.elm = element;
+
+      const resolved = Renderer.resolveDragBindings();
+
+      assert.deepStrictEqual(
+        resolved.map(({target, key, handler}) => [target, key, handler]),
+        [
+          [element, "capture:dragenter", Renderer.dragBindings[0].handler],
+          [element, "capture:dragover", Renderer.dragBindings[1].handler],
+        ],
+      );
+    });
+
+    it("resolves into capture-phase registry bindings on the window", () => {
+      // <window $drop="my_action" />
+      render(
+        tag("window", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      const resolved = Renderer.resolveDragBindings();
+
+      assert.deepStrictEqual(
+        resolved.map(({target, key}) => [target, key]),
+        [
+          [window, "capture:dragenter"],
+          [window, "capture:dragover"],
+        ],
+      );
+    });
+
+    describe("a <window> tag's spent once $drop binding", () => {
+      // <window $drop.once="my_action" />
+      const onceDropNode = tag("window", [
+        Type.tuple([
+          Type.bitstring("$drop"),
+          actionSpecDom,
+          Type.map([[Type.atom("once"), Type.boolean(true)]]),
+        ]),
+      ]);
+
+      afterEach(() => {
+        Once.reset();
+      });
+
+      it("keeps the window a drop target before it fires", () => {
+        render(onceDropNode);
+
+        assert.deepStrictEqual(
+          Renderer.resolveDragBindings().map(({key}) => key),
+          ["capture:dragenter", "capture:dragover"],
+        );
+      });
+
+      it("stops the window being a drop target once it fires", () => {
+        render(onceDropNode);
+
+        Once.markFired(window, 0);
+
+        assert.deepStrictEqual(Renderer.resolveDragBindings(), []);
+      });
+
+      it("keeps the window a drop target while another $drop binding is live", () => {
+        // <window $drop.once="my_action" $drop="my_action" />
+        render(
+          tag("window", [
+            ...onceDropNode.data[2].data,
+            Type.tuple([Type.bitstring("$drop"), actionSpecDom]),
+          ]),
+        );
+
+        Once.markFired(window, 0);
+
+        assert.deepStrictEqual(
+          Renderer.resolveDragBindings().map(({key}) => key),
+          ["capture:dragenter", "capture:dragover"],
+        );
+      });
+    });
+
+    it("makes a drag over the element cancelled once reconciled", () => {
+      // <div $drop="my_action"></div>
+      const vdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      const element = document.createElement("div");
+      vdom.elm = element;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      for (const eventName of ["dragenter", "dragover"]) {
+        const event = new Event(eventName, {bubbles: true, cancelable: true});
+
+        assert.isFalse(element.dispatchEvent(event));
+      }
+    });
+
+    it("leaves a drag over the element alone once its $drop binding is disabled", () => {
+      const element = document.createElement("div");
+
+      // <div $drop="my_action"></div>
+      const enabledVdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      enabledVdom.elm = element;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      Renderer.dragBindings = [];
+
+      // <div $drop={nil}></div>
+      const disabledVdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), disabledSpecDom])]),
+      );
+
+      disabledVdom.elm = element;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      const notCancelled = ["dragenter", "dragover"].map((eventName) =>
+        element.dispatchEvent(
+          new Event(eventName, {bubbles: true, cancelable: true}),
+        ),
+      );
+
+      assert.deepStrictEqual(notCancelled, [true, true]);
     });
   });
 

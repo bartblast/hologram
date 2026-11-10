@@ -910,16 +910,19 @@ export default class Hologram {
         newVirtualDocument,
       );
 
-      // renderPage() collected this render's <window>/<document> bindings into Renderer.listenerBindings
-      // and its deferred element bindings (reach, resize) into Renderer.reachBindings and
+      // renderPage() collected this render's <window>/<document> bindings into
+      // Renderer.listenerBindings, its capture-phase drag listeners into Renderer.dragBindings, and
+      // its deferred element bindings (reach, resize) into Renderer.reachBindings and
       // Renderer.resizeBindings. Now that the DOM is patched, reconcile them into real listeners on
       // their targets. The deferred bindings are resolved here because their target is a live DOM
       // element, which exists only after patch. Each resolve also drops a binding whose once modifier
-      // has fired, so reconcile tears it down. A navigation has already detached the previous
+      // has fired (for the drag bindings, a <window>/<document> drop target whose $drop bindings have
+      // all fired), so reconcile tears it down. A navigation has already detached the previous
       // page's listeners at its boundary, so a mount's reconcile attaches against an empty
       // registry: every mount attaches fresh, and no listener's private state crosses from one
       // page to the next.
       EventListenerRegistry.reconcile([
+        ...Renderer.resolveDragBindings(),
         ...Renderer.resolveListenerBindings(),
         ...Renderer.resolveReachBindings(),
         ...Renderer.resolveResizeBindings(),

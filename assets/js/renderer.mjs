@@ -13,6 +13,7 @@ import Identifier from "./identifier.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
 import Once from "./once.mjs";
+import Operation from "./operation.mjs";
 import StringOrder from "./string_order.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
@@ -168,6 +169,16 @@ const TRUSTED_HTML_REFUSED_PARENTS = new Set([
 ]);
 
 export default class Renderer {
+  // Capture-phase drag listeners collected during the current render: an element's is a
+  // {vnode, eventName, handler}, since its live DOM node exists only after the patch, and a
+  // <window>/<document> tag's is a {target, eventName, handler, dropSlots}, where dropSlots holds the
+  // slot key and once flag of each of the tag's enabled $drop bindings. They run as the event travels
+  // down from the window to the element, before any event binding on its path. They are kept apart
+  // from listenerBindings, whose positional slot keys must not shift when a $drop binding is enabled
+  // or disabled. resolveDragBindings turns them into registry bindings after the patch, and
+  // renderPage() resets this.
+  static dragBindings = [];
+
   // Event listener bindings collected during the current render, each a {target, key, attach,
   // handler} descriptor (see EventListenerRegistry). A <window> or <document> tag pushes here (with
   // the window or document target) instead of producing a vnode. renderPage() resets this, and the
@@ -398,6 +409,7 @@ export default class Renderer {
 
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
+    Renderer.dragBindings = [];
     Renderer.listenerBindings = [];
     Renderer.reachBindings = [];
     Renderer.refBindings = new Map();
@@ -465,6 +477,36 @@ export default class Renderer {
   static resetFocusCandidates() {
     $.focusCandidates = [];
     $.blurCandidates = [];
+  }
+
+  // Resolves this render's capture-phase drag listeners into {target, key, attach, handler} registry
+  // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. A target's
+  // bindings for one event share one registry listener, which reconcile keeps across renders and
+  // only swaps its handlers.
+  //
+  // A <window>/<document> tag whose $drop bindings are all spent once bindings is no longer a drop
+  // target: resolveListenerBindings drops those bindings, so nothing would prevent the drop's
+  // default, and a drag the page accepts would then open the dropped file or link. An element keeps
+  // its spent once binding, which goes on preventing the drop's default, so it stays a drop target.
+  static resolveDragBindings() {
+    return $.dragBindings
+      .filter(
+        ({target, dropSlots}) =>
+          !dropSlots?.every(
+            ({once, slotKey}) => once && Once.hasFired(target, slotKey),
+          ),
+      )
+      .map(({vnode, target, eventName, handler}) => {
+        const bindingTarget = vnode ? vnode.elm : target;
+
+        const {key, attach} = EventListeners.domEvent(
+          bindingTarget,
+          eventName,
+          true,
+        );
+
+        return {target: bindingTarget, key, attach, handler};
+      });
   }
 
   // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
@@ -929,6 +971,21 @@ export default class Renderer {
     });
   }
 
+  // An element or a <window>/<document> tag with an enabled $drop binding is a drop target. The
+  // browser fires drop only on an element whose dragenter and dragover defaults were prevented, so
+  // both are, by one pair of capture-phase listeners however many $drop bindings the tag has. A
+  // disabled $drop leaves the drag alone. The drop's own default is the $drop binding's to prevent
+  // (see DropEvent), so allow_default can let it through.
+  static #collectDropTargetBindings(attrsDom, place) {
+    if (!attrsDom.data.some((attrDom) => $.#isEnabledDropBinding(attrDom))) {
+      return;
+    }
+
+    for (const eventName of ["dragenter", "dragover"]) {
+      $.dragBindings.push({...place, eventName, handler: $.#preventDefault});
+    }
+  }
+
   // Snabbdom insert hook: runs once the whole patch is in the document, where .focus() can work -
   // the create hook runs before the element is attached. An element that enters the page carrying
   // autofocus takes focus, whether $focused put it there or the template wrote it, on a mount and
@@ -946,6 +1003,8 @@ export default class Renderer {
   // target share a currentTarget. A bare tag (no attributes) records nothing. A listener target has
   // no element tag name, so event-name mapping is skipped (passed null).
   static #collectListenerBindings(target, attrsDom, defaultTarget) {
+    const dropSlots = [];
+
     attrsDom.data.forEach((attrDom) => {
       const slotKey = $.listenerBindings.length;
 
@@ -963,16 +1022,24 @@ export default class Renderer {
           binding.eventName,
         );
 
+        const once = $.#onceFromModifiers(attrDom.data[2]);
+
         $.listenerBindings.push({
           target,
           key,
           attach,
           handler: binding.handler,
           slotKey,
-          once: $.#onceFromModifiers(attrDom.data[2]),
+          once,
         });
+
+        if ($.#isEnabledDropBinding(attrDom)) {
+          dropSlots.push({once, slotKey});
+        }
       }
     });
+
+    $.#collectDropTargetBindings(attrsDom, {target, dropSlots});
   }
 
   // Records each $reach_<edge> attribute on the element as a deferred scroll-edge binding. A reach
@@ -1802,6 +1869,14 @@ export default class Renderer {
   // Based on nested_spread_value?/1
   // Maps and keyword lists compose nested attribute names, everything else is a leaf value. Structs
   // are excluded, since they are ordinary values which stringify through String.Chars, e.g. Date.
+  // Whether the attribute is a $drop binding that isn't disabled ($drop={nil}).
+  static #isEnabledDropBinding(attrDom) {
+    return (
+      $.#eventAttributeName(attrDom) === "$drop" &&
+      !Operation.isDisabled(attrDom.data[1])
+    );
+  }
+
   static #isModuleRegisteredForCid(cid, moduleProxy) {
     const registeredModule = ComponentRegistry.getComponentModule(cid);
 
@@ -2150,6 +2225,11 @@ export default class Renderer {
     }
 
     return htmlVnode;
+  }
+
+  // One handler for every drop target, so a re-render hands the registry the same function.
+  static #preventDefault(event) {
+    event.preventDefault();
   }
 
   // Returns true when the modifiers map carries a prevent_default modifier, which forces the
@@ -2775,6 +2855,8 @@ export default class Renderer {
       elementVnode,
       defaultTarget,
     );
+
+    Renderer.#collectDropTargetBindings(attrsDom, {vnode: elementVnode});
 
     Renderer.#collectReachBindings(attrsDom, elementVnode, defaultTarget);
 
