@@ -5,6 +5,7 @@
 import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
+import ElementRefRegistry from "./element_ref_registry.mjs";
 import EventListeners from "./event_listeners.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import Hologram from "./hologram.mjs";
@@ -749,8 +750,41 @@ export default class Renderer {
     );
   }
 
+  // Puts the element rendered under the drag image's ref on the drag, at its offset from the
+  // pointer. What's on the page decides whether there is one, and a drag shouldn't fail over its
+  // preview, so a ref with nothing under it logs an error and leaves the browser's default image.
+  static #applyDragImage(store, {ref, x, y}) {
+    if (ref === null) {
+      return;
+    }
+
+    if (
+      Type.isAtom(ref) &&
+      (ref.value === "window" || ref.value === "document")
+    ) {
+      console.error(
+        `Hologram: the drag image needs an element, but :${ref.value} names the ${ref.value}, so the browser's default drag image is used`,
+      );
+
+      return;
+    }
+
+    const element = ElementRefRegistry.get(ref);
+
+    if (element === null) {
+      console.error(
+        `Hologram: no element is rendered under the drag image's ref ${Interpreter.inspect(ref)}${ElementRefRegistry.missingElementHint(ref, null)}, so the browser's default drag image is used`,
+      );
+
+      return;
+    }
+
+    store.setDragImage(element, x, y);
+  }
+
   // Puts a drag source's declaration on the drag: each data type's string, a nil removing its type,
-  // and the allowed effects when declared. Other data the browser put on a link or an image stays.
+  // and the allowed effects and the drag image when declared. Other data the browser put on a link
+  // or an image stays.
   static #applyDragSource(event, dataTransfer) {
     const store = event.dataTransfer;
 
@@ -768,6 +802,10 @@ export default class Renderer {
 
     if (dataTransfer.effectsAllowed !== null) {
       store.effectAllowed = dataTransfer.effectsAllowed;
+    }
+
+    if (dataTransfer.image !== null) {
+      $.#applyDragImage(store, dataTransfer.image);
     }
   }
 
@@ -1056,13 +1094,13 @@ export default class Renderer {
     });
   }
 
-  // An element whose $data_transfer declares data or allowed effects is a drag source. A drag that
-  // starts in it, on it or on an element inside it that declares none, carries what it declares.
-  // Nested sources would each put theirs on the same drag, so only the one nearest to where the
-  // drag starts does: every source gets a capture-phase dragstart listener, and the first to run,
-  // the outermost, looks up the nearest source on the event's path and applies it for all of them.
-  // Running in the capture phase, it applies before any $drag_start binding on the path reads the
-  // drag.
+  // An element whose $data_transfer declares data, allowed effects or a drag image is a drag
+  // source. A drag that starts in it, on it or on an element inside it that declares none, carries
+  // what it declares. Nested sources would each put theirs on the same drag, so only the one
+  // nearest to where the drag starts does: every source gets a capture-phase dragstart listener,
+  // and the first to run, the outermost, looks up the nearest source on the event's path and
+  // applies it for all of them. Running in the capture phase, it applies before any $drag_start
+  // binding on the path reads the drag.
   static #collectDragSourceBinding(elementVnode, dataTransfer) {
     if (!dataTransfer?.isSource) {
       return;
@@ -1337,7 +1375,7 @@ export default class Renderer {
 
     if (!Type.isProperList(value) || !Type.isKeywordList(value)) {
       Interpreter.raiseMisuseError(
-        `the $data_transfer attribute takes a keyword list or a map, got ${Interpreter.inspect(value)}`,
+        `the $data_transfer attribute takes a keyword list or a map, got ${$.#inspectDataTransferValue(value)}`,
       );
     }
 
@@ -1347,7 +1385,7 @@ export default class Renderer {
     for (const [key] of entries) {
       if (seenKeys.has(key.value)) {
         Interpreter.raiseMisuseError(
-          `the $data_transfer attribute takes each key once, but got the ${Interpreter.inspect(key)} key twice`,
+          `the $data_transfer attribute takes each key once, but got the ${$.#inspectDataTransferValue(key)} key twice`,
         );
       }
 
@@ -2015,6 +2053,21 @@ export default class Renderer {
   // Based on invalid_dynamic_tag_value_message/1
   static #invalidDynamicTagValueMessage(value) {
     return `dynamic tag expression must evaluate to a component module or an HTML tag name string, got: ${Interpreter.inspect(value)}`;
+  }
+
+  // Based on Hologram.Commons.KernelUtils.inspect/1
+  // Inspects a value for a $data_transfer message with its maps sorted, so the message reads the
+  // same on the client and the server, whatever order a map's keys come in.
+  static #inspectDataTransferValue(value) {
+    return Interpreter.inspect(
+      value,
+      Type.keywordList([
+        [
+          Type.atom("custom_options"),
+          Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+        ],
+      ]),
+    );
   }
 
   static #isControlledValueInputType(inputType) {
@@ -2702,11 +2755,13 @@ export default class Renderer {
 
   // Based on validate_data_transfer/2
   // Returns null when the tag has no $data_transfer, otherwise {data, dropEffect, effectsAllowed,
-  // isSource}, where data holds [type, string or null] pairs and effectsAllowed is the effectAllowed
-  // value. The value it renders with must be a keyword list or a map
-  // of the keys the attribute takes, each given once, with a drop effect only on a tag with a $drop
-  // binding (a disabled one included), and data and allowed effects only on an element, where a
-  // drag can start. tagName is "window" or "document" for those tags, and null for an element.
+  // image, isSource}, where data holds [type, string or null] pairs, effectsAllowed is the
+  // effectAllowed value and image is null or {ref, x, y}, with a null ref for nil.
+  //
+  // The value it renders with must be a keyword list or a map of the keys the attribute takes,
+  // each given once, with a drop effect only on a tag with a $drop binding (a disabled one
+  // included), and data, allowed effects and a drag image only on an element, where a drag can
+  // start. tagName is "window" or "document" for those tags, and null for an element.
   //
   // WARNING: must match Hologram.Template.DataTransfer.
   static #renderDataTransfer(attrsDom, tagName = null) {
@@ -2722,15 +2777,18 @@ export default class Renderer {
       data: [],
       dropEffect: null,
       effectsAllowed: null,
+      image: null,
       isSource: false,
     };
 
     for (const [key, entryValue] of $.#dataTransferEntries(value)) {
       const keyName = Type.isAtom(key) ? key.value : null;
 
-      if (!["data", "drop_effect", "effects_allowed"].includes(keyName)) {
+      if (
+        !["data", "drop_effect", "effects_allowed", "image"].includes(keyName)
+      ) {
         Interpreter.raiseMisuseError(
-          `the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got ${Interpreter.inspect(key)}`,
+          `the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got ${$.#inspectDataTransferValue(key)}`,
         );
       }
 
@@ -2752,6 +2810,11 @@ export default class Renderer {
 
         case "effects_allowed":
           dataTransfer.effectsAllowed = $.#renderEffectsAllowed(entryValue);
+          dataTransfer.isSource = true;
+          break;
+
+        case "image":
+          dataTransfer.image = $.#renderDragImage(entryValue);
           dataTransfer.isSource = true;
           break;
       }
@@ -2778,7 +2841,7 @@ export default class Renderer {
       )
     ) {
       Interpreter.raiseMisuseError(
-        `the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got ${Interpreter.inspect(value)}`,
+        `the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got ${$.#inspectDataTransferValue(value)}`,
       );
     }
 
@@ -2788,11 +2851,47 @@ export default class Renderer {
     ]);
   }
 
+  // A $data_transfer image: a map with the ref of the element to show, or nil for none, and its
+  // optional integer x and y offsets from the pointer, which default to 0. The element is looked up
+  // when the drag starts, since only then is it known what the page renders.
+  static #renderDragImage(value) {
+    const entries =
+      Type.isMap(value) && !Type.isStruct(value)
+        ? Object.values(value.data)
+        : [];
+
+    const image = Object.fromEntries(
+      entries
+        .filter(([key]) => Type.isAtom(key))
+        .map(([key, entryValue]) => [key.value, entryValue]),
+    );
+
+    const isImage =
+      entries.length > 0 &&
+      Object.keys(image).length === entries.length &&
+      Object.keys(image).every((key) => ["ref", "x", "y"].includes(key)) &&
+      "ref" in image &&
+      (Type.isNil(image.ref) || Identifier.check(image.ref) === null) &&
+      ["x", "y"].every((key) => !(key in image) || Type.isInteger(image[key]));
+
+    if (!isImage) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    return {
+      ref: Type.isNil(image.ref) ? null : image.ref,
+      x: "x" in image ? Number(image.x.value) : 0,
+      y: "y" in image ? Number(image.y.value) : 0,
+    };
+  }
+
   // A $data_transfer drop_effect: one of the drop effects, on a tag with a $drop binding.
   static #renderDropEffect(value, attrsDom) {
     if (!Type.isAtom(value) || !DROP_EFFECTS.includes(value.value)) {
       Interpreter.raiseMisuseError(
-        `the $data_transfer drop_effect takes :none, :copy, :move or :link, got ${Interpreter.inspect(value)}`,
+        `the $data_transfer drop_effect takes :none, :copy, :move or :link, got ${$.#inspectDataTransferValue(value)}`,
       );
     }
 
@@ -2892,7 +2991,7 @@ export default class Renderer {
       )
     ) {
       Interpreter.raiseMisuseError(
-        `the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got ${Interpreter.inspect(value)}`,
+        `the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got ${$.#inspectDataTransferValue(value)}`,
       );
     }
 

@@ -1855,6 +1855,69 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
+    test "with a drag image" do
+      # <div $data_transfer={image: %{ref: :task_preview, x: 16}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: :task_preview, x: 16}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [[image: {:%{}, [line: 1], [ref: :task_preview, x: 16]}]]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drag image whose ref only the render knows" do
+      # <div $data_transfer={image: %{ref: {:task_preview, @id}}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: {:task_preview, @id}}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              image:
+                                {:%{}, [line: 1],
+                                 [
+                                   ref:
+                                     {:task_preview,
+                                      {{:., [line: 1], [{:vars, [line: 1], nil}, :id]},
+                                       [no_parens: true, line: 1], []}}
+                                 ]}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
     test "raises for modifiers" do
       # <div $drop="dropped" $data_transfer.once={drop_effect: :move} />
       tags = [
@@ -1955,7 +2018,7 @@ defmodule Hologram.Template.DOMTest do
       tags = [{:self_closing_tag, {"div", [{"$data_transfer", [expression: "{effect: :move}"]}]}}]
 
       assert_error Hologram.TemplateSyntaxError,
-                   "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
                    fn -> build_ast(tags) end
     end
 
@@ -1966,7 +2029,7 @@ defmodule Hologram.Template.DOMTest do
       ]
 
       assert_error Hologram.TemplateSyntaxError,
-                   "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
                    fn -> build_ast(tags) end
     end
 
@@ -1982,7 +2045,7 @@ defmodule Hologram.Template.DOMTest do
       ]
 
       assert_error Hologram.TemplateSyntaxError,
-                   "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
                    fn -> build_ast(tags) end
     end
 
@@ -2240,6 +2303,53 @@ defmodule Hologram.Template.DOMTest do
 
       assert_error Hologram.TemplateSyntaxError,
                    "the $data_transfer effects_allowed goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image with no ref" do
+      # <div $data_transfer={image: %{x: 16}} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{image: %{x: 16}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{x: 16}',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image ref that isn't an identifier" do
+      # <div $data_transfer={image: %{ref: "task_preview"}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: \"task_preview\"}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: "task_preview"}',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image on a <document> tag" do
+      # <document $data_transfer={image: %{ref: :task_preview}} />
+      tags = [
+        {:self_closing_tag,
+         {"document", [{"$data_transfer", [expression: "{image: %{ref: :task_preview}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer image goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image on a <window> tag" do
+      # <window $data_transfer={image: %{ref: :task_preview}} />
+      tags = [
+        {:self_closing_tag,
+         {"window", [{"$data_transfer", [expression: "{image: %{ref: :task_preview}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer image goes on the element a drag starts from, so a <window> tag can't take it",
                    fn -> build_ast(tags) end
     end
   end

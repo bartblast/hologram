@@ -1,12 +1,18 @@
 defmodule Hologram.Template.DataTransfer do
   @moduledoc false
 
+  alias Hologram.Commons.KernelUtils
+  alias Hologram.Identifier
+
   # What the $data_transfer attribute takes, judged by the build for a literal value and by the
   # server renderer for the value the attribute renders with, so both refuse a value with the same
   # message.
   #
-  # WARNING: must match the client renderer's #renderDataTransfer, #dataTransferEntries,
-  # #renderDragData, #renderDropEffect and #renderEffectsAllowed (renderer.mjs).
+  # Values are inspected with their maps sorted, so a message reads the same on the server and the
+  # client, whatever order a map's keys come in.
+  #
+  # WARNING: must match the client renderer's #dataTransferEntries, #renderDataTransfer,
+  # #renderDragData, #renderDragImage, #renderDropEffect and #renderEffectsAllowed (renderer.mjs).
 
   defmodule Unknown do
     @moduledoc false
@@ -21,18 +27,20 @@ defmodule Hologram.Template.DataTransfer do
 
   @effects_allowed [:copy, :move, :link]
 
-  @keys [:data, :drop_effect, :effects_allowed]
+  @image_keys [:ref, :x, :y]
+
+  @keys [:data, :drop_effect, :effects_allowed, :image]
 
   @doc """
-  Judges a $data_transfer value on the given tag: a keyword list or a map of the keys the attribute
-  takes, each given once, with a drop effect only on a tag with a $drop binding, and data and
-  allowed effects only on an element, where a drag can start. The tag is "window" or "document"
-  for those tags, nil for an element, and `%Unknown{}` for a dynamic tag, which stops the judging at
-  data or allowed effects, since only the render knows whether the tag is an element. A map's entries are judged in the order of their keys, a
-  keyword list's in the order written.
+  Judges a $data_transfer value on the given tag: a keyword list or a map of the keys the
+  attribute takes, each given once, with a drop effect only on a tag with a $drop binding, and
+  data, allowed effects and a drag image only on an element, where a drag can start. A map's
+  entries are judged in the order of their keys, a keyword list's in the order written.
 
-  A `%Unknown{}` value stops the judging, since what comes after it depends on what it turns out
-  to be. Returns `:ok`, or `{:error, message}`.
+  The tag is "window" or "document" for those tags, nil for an element, and `%Unknown{}` for a
+  dynamic tag, which stops the judging at data, allowed effects or a drag image, since only the
+  render knows whether the tag is an element. A `%Unknown{}` value stops the judging too, since
+  what comes after it depends on what it turns out to be. Returns `:ok`, or `{:error, message}`.
   """
   @spec check(any, boolean, String.t() | nil | Unknown.t()) :: :ok | {:error, String.t()}
   def check(value, has_drop?, tag) do
@@ -47,7 +55,7 @@ defmodule Hologram.Template.DataTransfer do
     cond do
       key not in @keys ->
         {:error,
-         "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got #{inspect(key)}"}
+         "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got #{KernelUtils.inspect(key)}"}
 
       key != :drop_effect and match?(%Unknown{}, tag) ->
         :ok
@@ -71,7 +79,7 @@ defmodule Hologram.Template.DataTransfer do
       :ok
     else
       {:error,
-       ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got #{inspect(value)}'}
+       ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got #{KernelUtils.inspect(value)}'}
     end
   end
 
@@ -79,7 +87,7 @@ defmodule Hologram.Template.DataTransfer do
     cond do
       value not in @drop_effects ->
         {:error,
-         "the $data_transfer drop_effect takes :none, :copy, :move or :link, got #{inspect(value)}"}
+         "the $data_transfer drop_effect takes :none, :copy, :move or :link, got #{KernelUtils.inspect(value)}"}
 
       not has_drop? ->
         {:error,
@@ -95,7 +103,16 @@ defmodule Hologram.Template.DataTransfer do
       :ok
     else
       {:error,
-       "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got #{inspect(value)}"}
+       "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got #{KernelUtils.inspect(value)}"}
+    end
+  end
+
+  defp check_entry(:image, value, _has_drop?) do
+    if drag_image?(value) do
+      :ok
+    else
+      {:error,
+       "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got #{KernelUtils.inspect(value)}"}
     end
   end
 
@@ -108,6 +125,18 @@ defmodule Hologram.Template.DataTransfer do
   end
 
   defp drag_data?(_value), do: false
+
+  defp drag_image?(%_struct{}), do: false
+
+  defp drag_image?(%{ref: ref} = value) do
+    value
+    |> Map.keys()
+    |> Enum.all?(&(&1 in @image_keys)) and
+      (is_nil(ref) or Identifier.check(ref) == :ok) and
+      Enum.all?([:x, :y], &(not Map.has_key?(value, &1) or is_integer(value[&1])))
+  end
+
+  defp drag_image?(_value), do: false
 
   defp duplicate_key(keys) do
     Enum.reduce_while(keys, MapSet.new(), fn key, seen_keys ->
@@ -143,7 +172,7 @@ defmodule Hologram.Template.DataTransfer do
            |> duplicate_key() do
         {:duplicate, key} ->
           {:error,
-           "the $data_transfer attribute takes each key once, but got the #{inspect(key)} key twice"}
+           "the $data_transfer attribute takes each key once, but got the #{KernelUtils.inspect(key)} key twice"}
 
         _seen_keys ->
           {:ok, value}
@@ -156,7 +185,8 @@ defmodule Hologram.Template.DataTransfer do
   defp entries(value), do: invalid_value_error(value)
 
   defp invalid_value_error(value) do
-    {:error, "the $data_transfer attribute takes a keyword list or a map, got #{inspect(value)}"}
+    {:error,
+     "the $data_transfer attribute takes a keyword list or a map, got #{KernelUtils.inspect(value)}"}
   end
 
   defp text?(value), do: is_binary(value) and String.valid?(value)

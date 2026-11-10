@@ -100,6 +100,7 @@ import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import DragEvent from "../../assets/js/events/drag_event.mjs";
+import ElementRefRegistry from "../../assets/js/element_ref_registry.mjs";
 import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import FocusEvent from "../../assets/js/events/focus_event.mjs";
@@ -9619,7 +9620,7 @@ describe("Renderer", () => {
         assertBoxedError(
           () => render(tag("div", [dropAttr, dataTransferAttr(struct)])),
           "Hologram.MisuseError",
-          "the $data_transfer attribute takes a keyword list or a map, got %{drop_effect: :move, __struct__: MyStruct}",
+          "the $data_transfer attribute takes a keyword list or a map, got %{__struct__: MyStruct, drop_effect: :move}",
         );
       });
 
@@ -9635,7 +9636,7 @@ describe("Renderer", () => {
               ]),
             ),
           "Hologram.MisuseError",
-          "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
+          "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
         );
       });
 
@@ -9653,7 +9654,7 @@ describe("Renderer", () => {
               ]),
             ),
           "Hologram.MisuseError",
-          'the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got "drop_effect"',
+          'the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got "drop_effect"',
         );
       });
 
@@ -9710,7 +9711,7 @@ describe("Renderer", () => {
               ]),
             ),
           "Hologram.MisuseError",
-          "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
+          "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
         );
       });
 
@@ -9822,6 +9823,7 @@ describe("Renderer", () => {
         data,
         effectAllowed: "uninitialized",
         setData: sinon.spy((type, value) => data.set(type, value)),
+        setDragImage: sinon.spy(),
         get types() {
           return [...data.keys()];
         },
@@ -9900,6 +9902,29 @@ describe("Renderer", () => {
       const vdom = render(
         tag("div", [
           dataTransferAttr(Type.keywordList([effectsEntry("move")])),
+        ]),
+      );
+
+      vdom.elm = document.createElement("div");
+
+      assert.deepStrictEqual(
+        Renderer.resolveDragBindings().map(({key}) => key),
+        ["capture:dragstart"],
+      );
+    });
+
+    it("collects a capture-phase dragstart listener for an element with a drag image", () => {
+      // <div $data_transfer={image: %{ref: :task_preview}}></div>
+      const vdom = render(
+        tag("div", [
+          dataTransferAttr(
+            Type.keywordList([
+              [
+                Type.atom("image"),
+                Type.map([[Type.atom("ref"), Type.atom("task_preview")]]),
+              ],
+            ]),
+          ),
         ]),
       );
 
@@ -10237,7 +10262,7 @@ describe("Renderer", () => {
 
         raises(
           [[Type.atom("data"), struct]],
-          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"text/plain" => "Buy milk", :__struct__ => MyStruct}',
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{:__struct__ => MyStruct, "text/plain" => "Buy milk"}',
         );
       });
 
@@ -10300,6 +10325,233 @@ describe("Renderer", () => {
           );
         });
       }
+    });
+
+    describe("drag image", () => {
+      const imageEntry = (pairs) => [Type.atom("image"), Type.map(pairs)];
+
+      const preview = Type.tuple([Type.atom("task_preview"), Type.integer(42)]);
+
+      let consoleErrorStub, previewElement;
+
+      // Drags the inner element of renderNested with the given entries on it, and returns the
+      // drag's DataTransfer.
+      const drag = (outerEntries, innerEntries) => {
+        const {inner} = renderNested(outerEntries, innerEntries);
+        const store = buildStore();
+
+        dispatchDragStart(inner, store);
+
+        return store;
+      };
+
+      beforeEach(() => {
+        previewElement = document.createElement("img");
+
+        ElementRefRegistry.replace(
+          new Map([[Type.encodeMapKey(preview), previewElement]]),
+          Type.alias("MyPage"),
+        );
+
+        consoleErrorStub = sinon.stub(console, "error");
+      });
+
+      afterEach(() => {
+        consoleErrorStub.restore();
+        ElementRefRegistry.clear();
+        ElementRefRegistry.pageRefNames = new Map();
+      });
+
+      it("puts the element rendered under the ref on the drag at its offsets", () => {
+        // <div $data_transfer={image: %{ref: {:task_preview, 42}, x: 16, y: 8}}></div>
+        const store = drag(null, [
+          imageEntry([
+            [Type.atom("ref"), preview],
+            [Type.atom("x"), Type.integer(16)],
+            [Type.atom("y"), Type.integer(8)],
+          ]),
+        ]);
+
+        sinon.assert.calledOnceWithExactly(
+          store.setDragImage,
+          previewElement,
+          16,
+          8,
+        );
+      });
+
+      it("puts the image at no offset by default", () => {
+        // <div $data_transfer={image: %{ref: {:task_preview, 42}}}></div>
+        const store = drag(null, [imageEntry([[Type.atom("ref"), preview]])]);
+
+        sinon.assert.calledOnceWithExactly(
+          store.setDragImage,
+          previewElement,
+          0,
+          0,
+        );
+      });
+
+      it("leaves the browser's image for a nil ref", () => {
+        // <div $data_transfer={image: %{ref: nil}}></div>
+        const store = drag(null, [
+          imageEntry([[Type.atom("ref"), Type.nil()]]),
+        ]);
+
+        sinon.assert.notCalled(store.setDragImage);
+        sinon.assert.notCalled(consoleErrorStub);
+      });
+
+      it("logs and leaves the browser's image for a ref nothing is rendered under", () => {
+        // <div $data_transfer={image: %{ref: :missing}}></div>
+        const store = drag(null, [
+          imageEntry([[Type.atom("ref"), Type.atom("missing")]]),
+        ]);
+
+        sinon.assert.notCalled(store.setDragImage);
+
+        sinon.assert.calledOnceWithExactly(
+          consoleErrorStub,
+          "Hologram: no element is rendered under the drag image's ref :missing, so the browser's default drag image is used",
+        );
+      });
+
+      it("says a template declares the ref nothing renders, without advice for actions", () => {
+        ElementRefRegistry.putPageRefNames("Elixir.MyPage", [["missing", 0]]);
+
+        // <div $data_transfer={image: %{ref: :missing}}></div>
+        drag(null, [imageEntry([[Type.atom("ref"), Type.atom("missing")]])]);
+
+        sinon.assert.calledOnceWithExactly(
+          consoleErrorStub,
+          "Hologram: no element is rendered under the drag image's ref :missing - a template declares the ref, but nothing renders it right now, so the browser's default drag image is used",
+        );
+      });
+
+      for (const builtIn of ["document", "window"]) {
+        it(`logs and leaves the browser's image for the :${builtIn} ref`, () => {
+          // <div $data_transfer={image: %{ref: :document}}></div> or the same with :window
+          const store = drag(null, [
+            imageEntry([[Type.atom("ref"), Type.atom(builtIn)]]),
+          ]);
+
+          sinon.assert.notCalled(store.setDragImage);
+
+          sinon.assert.calledOnceWithExactly(
+            consoleErrorStub,
+            `Hologram: the drag image needs an element, but :${builtIn} names the ${builtIn}, so the browser's default drag image is used`,
+          );
+        });
+      }
+
+      it("leaves the browser's image for an inner source declaring none", () => {
+        // <div $data_transfer={image: %{ref: {:task_preview, 42}}}>
+        //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+        // </div>
+        const store = drag(
+          [imageEntry([[Type.atom("ref"), preview]])],
+          [dataEntry([["application/x-tag", "urgent"]])],
+        );
+
+        sinon.assert.notCalled(store.setDragImage);
+      });
+
+      describe("invalid values", () => {
+        const raises = (image, message) =>
+          assertBoxedError(
+            () =>
+              render(
+                tag("div", [
+                  dataTransferAttr(
+                    Type.keywordList([[Type.atom("image"), image]]),
+                  ),
+                ]),
+              ),
+            "Hologram.MisuseError",
+            message,
+          );
+
+        it("raises for an image that isn't a map", () => {
+          raises(
+            Type.atom("task_preview"),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got :task_preview",
+          );
+        });
+
+        it("raises for an image with no ref", () => {
+          raises(
+            Type.map([[Type.atom("x"), Type.integer(16)]]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{x: 16}",
+          );
+        });
+
+        it("raises for an image with a key it doesn't take", () => {
+          raises(
+            Type.map([
+              [Type.atom("width"), Type.integer(16)],
+              [Type.atom("ref"), Type.atom("task_preview")],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, width: 16}",
+          );
+        });
+
+        it("raises for an offset that isn't an integer", () => {
+          raises(
+            Type.map([
+              [Type.atom("x"), Type.float(16.5)],
+              [Type.atom("ref"), Type.atom("task_preview")],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, x: 16.5}",
+          );
+        });
+
+        it("raises for a ref that isn't an identifier", () => {
+          raises(
+            Type.map([[Type.atom("ref"), Type.bitstring("task_preview")]]),
+            'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: "task_preview"}',
+          );
+        });
+
+        it("raises for a native value as the ref", () => {
+          raises(
+            Type.map([
+              [
+                Type.atom("ref"),
+                Type.nativeValueStruct("object", Type.integer(1)),
+              ],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: %{__struct__: Hologram.JS.NativeValue, type: :object, value: 1}}",
+          );
+        });
+
+        it("raises for an image that is a struct", () => {
+          raises(
+            Type.struct("MyStruct", [
+              [Type.atom("ref"), Type.atom("task_preview")],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{__struct__: MyStruct, ref: :task_preview}",
+          );
+        });
+
+        for (const tagName of ["document", "window"]) {
+          it(`raises for a drag image on a <${tagName}> tag`, () => {
+            assertBoxedError(
+              () =>
+                render(
+                  tag(tagName, [
+                    dataTransferAttr(
+                      Type.keywordList([
+                        imageEntry([[Type.atom("ref"), preview]]),
+                      ]),
+                    ),
+                  ]),
+                ),
+              "Hologram.MisuseError",
+              `the $data_transfer image goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+            );
+          });
+        }
+      });
     });
   });
 

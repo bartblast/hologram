@@ -1974,6 +1974,32 @@ defmodule Hologram.Template.RendererTest do
       assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
     end
 
+    test "takes a drag image" do
+      # <div $data_transfer={image: %{ref: {:task_preview, 42}, x: 16, y: 8}}></div>
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[image: %{ref: {:task_preview, 42}, x: 16, y: 8}]}]}],
+         []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a drag image with no offsets" do
+      # <div $data_transfer={image: %{ref: :task_preview}}></div>
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[image: %{ref: :task_preview}]}]}],
+         []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a drag image with a nil ref" do
+      # <div $data_transfer={image: %{ref: nil}}></div>
+      node = {:element, "div", [{"$data_transfer", [expression: {[image: %{ref: nil}]}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
     test "raises for a value that is neither a keyword list nor a map" do
       assert_error Hologram.MisuseError,
                    "the $data_transfer attribute takes a keyword list or a map, got :move",
@@ -1994,13 +2020,13 @@ defmodule Hologram.Template.RendererTest do
 
     test "raises for an unknown key" do
       assert_error Hologram.MisuseError,
-                   "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
                    fn -> render_tree(data_transfer_element(effect: :move), @env, @server) end
     end
 
     test "raises for a map key that isn't an atom" do
       assert_error Hologram.MisuseError,
-                   ~s'the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got "drop_effect"',
+                   ~s'the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got "drop_effect"',
                    fn ->
                      render_tree(data_transfer_element(%{"drop_effect" => :move}), @env, @server)
                    end
@@ -2032,7 +2058,7 @@ defmodule Hologram.Template.RendererTest do
 
     test "judges a keyword list's entries in the order written" do
       assert_error Hologram.MisuseError,
-                   "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
                    fn ->
                      render_tree(
                        data_transfer_element(effect: :move, drop_effect: :all),
@@ -2212,6 +2238,80 @@ defmodule Hologram.Template.RendererTest do
 
       assert_error Hologram.MisuseError,
                    "the $data_transfer effects_allowed goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image that isn't a map" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[image: :task_preview]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got :task_preview',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image with no ref" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[image: %{x: 16}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{x: 16}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image with a key it doesn't take" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[image: %{ref: :task_preview, width: 16}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, width: 16}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image offset that isn't an integer" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[image: %{ref: :task_preview, x: 16.5}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, x: 16.5}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image ref that isn't an identifier" do
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[image: %{ref: "task_preview"}]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: "task_preview"}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image that is a struct" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[image: ~D[2026-11-10]]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got ~D[2026-11-10]',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image on a <document> tag" do
+      node =
+        {:element, "document",
+         [{"$data_transfer", [expression: {[image: %{ref: :task_preview}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer image goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image on a <window> tag" do
+      node =
+        {:element, "window", [{"$data_transfer", [expression: {[image: %{ref: :task_preview}]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer image goes on the element a drag starts from, so a <window> tag can't take it",
                    fn -> render_tree(node, @env, @server) end
     end
   end
