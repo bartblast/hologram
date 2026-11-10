@@ -1754,10 +1754,14 @@ export default class Hologram {
 
     window.addEventListener("popstate", Hologram.handlePopstateEvent);
 
+    // The page is being left, for good or into the browser's back/forward cache.
+    window.addEventListener("pagehide", () => Sse.suspend());
+
     window.addEventListener("pageshow", (event) => {
       // A page the browser brings back from its back/forward cache.
       if (event.persisted) {
         Hologram.checkIdentity();
+        Sse.resume();
       }
 
       // Reconnect when page is restored from bfcache OR when navigating back from external page
@@ -2181,9 +2185,7 @@ export default class Hologram {
       // SSE must open AFTER `#mountPage()` because the handshake payload
       // includes the receipts merged from `pageMountData.subReceiptAdds` -
       // connecting earlier would send an empty receipts list.
-      if (Sse.eventSource === null) {
-        Sse.connect();
-      }
+      Sse.start();
     });
   }
 
