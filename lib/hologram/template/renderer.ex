@@ -36,6 +36,15 @@ defmodule Hologram.Template.Renderer do
   # whatever the policy stamps, as the client renderer drops it. See print_dom/2.
   @nonce_elems ~w(link script style)
 
+  # The refs that name the window and the document, which a template can't give an element.
+  @built_in_refs [:window, :document]
+
+  @ref_expectation "$ref takes an identifier, like :search or {:message, 42}"
+
+  # Where the refs of the render in progress are kept, each with the module whose template wrote its
+  # element, so that a second element under one of them is caught wherever in the page it renders.
+  @rendered_refs_key {__MODULE__, :rendered_refs}
+
   # The characters a value cannot carry into a script element as the text of a JavaScript string
   # literal, each with the escape sequence it is written as instead. Every sequence is valid
   # inside all three kinds of literal - double-quoted, single-quoted and template - and reads back
@@ -336,7 +345,8 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_dom(dom, env, server_struct) do
-    {tree, component_registry, mutated_server_struct} = render_tree(dom, env, server_struct)
+    {tree, component_registry, mutated_server_struct} =
+      with_rendered_refs(fn -> render_tree(dom, env, server_struct) end)
 
     {print_node(tree, env.tag_name, print_opts([])), component_registry, mutated_server_struct}
   end
@@ -397,12 +407,14 @@ defmodule Hologram.Template.Renderer do
       |> maybe_put_csp_nonce_context(opts, initial_page?)
 
     {initial_tree, initial_component_registry, final_server_struct} =
-      render_page_inside_layout(
-        page_module,
-        params,
-        page_component_struct_with_emitted_context_before_rendering,
-        page_server_struct
-      )
+      with_rendered_refs(fn ->
+        render_page_inside_layout(
+          page_module,
+          params,
+          page_component_struct_with_emitted_context_before_rendering,
+          page_server_struct
+        )
+      end)
 
     # The nonce belongs to the one document it was generated for, so it leaves the context before
     # the page struct goes to the client, where nothing reads it and a page snapshot would keep it.
@@ -513,6 +525,15 @@ defmodule Hologram.Template.Renderer do
   def render_tree({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
       when is_atom(module) do
     if Reflection.component?(module) do
+      # WARNING: must match the client renderer's #renderDynamicTag (renderer.mjs).
+      if List.keymember?(props_dom, "$ref", 0) do
+        raise Hologram.MisuseError,
+          message:
+            "$ref can't go on the #{Reflection.module_name(module)} component a dynamic tag renders - " <>
+              "a component renders no element of its own, so put $ref on an element in its template " <>
+              "and pass the ref as a prop, like input_ref={:search}"
+      end
+
       render_tree({:component, module, props_dom, children_dom}, env, server_struct)
     else
       raise ArgumentError,
@@ -559,6 +580,10 @@ defmodule Hologram.Template.Renderer do
   # children the same way.
   def render_tree({:element, tag_name, attrs_dom, children_dom}, %Env{} = env, server_struct) do
     attributes = render_tree_attributes(attrs_dom, env.key_scope)
+
+    # Before the children, so an element is claimed ahead of the elements inside it, as the client
+    # renderer claims it.
+    put_rendered_ref(attrs_dom, env.parent_module)
 
     children_env = %Env{env | key_scope: nil, tag_name: tag_name}
 
@@ -769,6 +794,22 @@ defmodule Hologram.Template.Renderer do
     HTMLNormalizer.children_context(tag_name, attributes, namespace)
   end
 
+  defp claim_rendered_ref(ref, module) do
+    refs = Process.get(@rendered_refs_key)
+
+    cond do
+      is_nil(refs) ->
+        :ok
+
+      Map.has_key?(refs, ref) ->
+        raise Hologram.MisuseError, message: duplicate_ref_message(ref, refs[ref], module)
+
+      true ->
+        Process.put(@rendered_refs_key, Map.put(refs, ref, module))
+        :ok
+    end
+  end
+
   # HTML attribute names are dash-separated, while Elixir identifiers can't contain dashes, so each
   # name segment converts to the convention of the namespace it lands in. Nesting composes the
   # segments with hyphens, e.g. %{data: %{user_id: 1}} becomes "data-user-id".
@@ -868,6 +909,13 @@ defmodule Hologram.Template.Renderer do
       page_component_struct
       | emitted_context: Map.delete(context, {Hologram.Runtime, :csp_nonce})
     }
+  end
+
+  # WARNING: must match the client renderer's #duplicateRefMessage (renderer.mjs).
+  defp duplicate_ref_message(ref, first_module, second_module) do
+    "two elements are rendered under the ref #{inspect(ref)}#{ref_writers(first_module, second_module)} - " <>
+      "a ref names one element, so give each element a ref of its own, " <>
+      "like #{ref_example(ref)} for the items of a loop"
   end
 
   # WARNING: must match the client renderer's #valueDomToText: parts evaluate raw and concatenate,
@@ -1417,6 +1465,23 @@ defmodule Hologram.Template.Renderer do
     )
   end
 
+  # Checks the element's ref and claims it for the element in the render in progress. A render
+  # outside render_dom/3 and render_page/4 tracks no refs, so it checks only the values.
+  #
+  # WARNING: must match the client renderer's #putRenderedRef (renderer.mjs).
+  defp put_rendered_ref(attrs_dom, module) do
+    case List.keyfind(attrs_dom, "$ref", 0) do
+      {"$ref", [expression: expression]} ->
+        expression
+        |> expression_value()
+        |> validate_ref()
+        |> claim_rendered_ref(module)
+
+      nil ->
+        :ok
+    end
+  end
+
   # WARNING: must match the client renderer's #raiseInvalidExplicitKey (renderer.mjs).
   defp raise_invalid_explicit_key(value) do
     raise ArgumentError,
@@ -1437,6 +1502,26 @@ defmodule Hologram.Template.Renderer do
     raise ArgumentError,
       message:
         "Phoenix.HTML safe tuples aren't supported in Hologram templates, use trust_html/1 instead"
+  end
+
+  # The ref with a loop item's id added as a key part, written as template code, to show how the
+  # elements of a loop get refs of their own.
+  defp ref_example(ref) when is_tuple(ref) do
+    ref
+    |> inspect()
+    |> String.replace_suffix("}", ", item.id}")
+  end
+
+  defp ref_example(ref), do: "{#{inspect(ref)}, item.id}"
+
+  defp ref_writers(nil, _second_module), do: ""
+
+  defp ref_writers(_first_module, nil), do: ""
+
+  defp ref_writers(module, module), do: ~s/, both from "#{Reflection.module_name(module)}"/
+
+  defp ref_writers(first_module, second_module) do
+    ~s/, one from "#{Reflection.module_name(first_module)}" and one from "#{Reflection.module_name(second_module)}"/
   end
 
   # Naming the template the component was rendered from is what turns the error into something
@@ -1751,6 +1836,23 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
+  # WARNING: must match the client renderer's #validateRef (renderer.mjs).
+  defp validate_ref(ref) when ref in @built_in_refs do
+    raise Hologram.MisuseError,
+      message:
+        "#{inspect(ref)} is a built-in ref, so a template can't name an element with it - JS.element(#{inspect(ref)}) returns the #{ref}"
+  end
+
+  defp validate_ref(ref) do
+    case Identifier.check(ref) do
+      :ok ->
+        ref
+
+      {:error, hint} ->
+        raise Hologram.MisuseError, message: Identifier.message(@ref_expectation, ref, hint)
+    end
+  end
+
   # Event bindings require compile-time modifier parsing and listener collection, so they can be
   # written only as literal attributes. Silently not binding an intended event would be worse than
   # erroring here.
@@ -1760,4 +1862,20 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp validate_spread_key(key), do: key
+
+  # Each render claims its refs afresh, and a render started inside another leaves the outer one's
+  # refs as they were.
+  defp with_rendered_refs(fun) do
+    outer_refs = Process.put(@rendered_refs_key, %{})
+
+    try do
+      fun.()
+    after
+      if outer_refs do
+        Process.put(@rendered_refs_key, outer_refs)
+      else
+        Process.delete(@rendered_refs_key)
+      end
+    end
+  end
 end
