@@ -2431,6 +2431,72 @@ describe("Hologram", () => {
       sinon.assert.calledOnce(executeActionStub);
     });
 
+    it("prevents the default of a drop", () => {
+      // DropEvent.isDefaultAllowed is false, so the browser doesn't open the dropped file or link
+
+      const preventDefault = sinon.spy();
+
+      const dropEvent = {
+        type: "drop",
+        dataTransfer: null,
+        preventDefault,
+        target: {id: "dummy_node"},
+      };
+
+      Hologram.handleUiEvent(dropEvent, "drop", actionSpecDom, defaultTarget);
+
+      sinon.assert.calledOnce(preventDefault);
+    });
+
+    it("allows the default of a drop when allowDefault is set", () => {
+      const preventDefault = sinon.spy();
+
+      const dropEvent = {
+        type: "drop",
+        dataTransfer: null,
+        preventDefault,
+        target: {id: "dummy_node"},
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        dropEvent,
+        "drop",
+        actionSpecDom,
+        defaultTarget,
+        true,
+      );
+
+      dispatch();
+
+      sinon.assert.notCalled(preventDefault);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
+    it("doesn't prevent the default of a dragstart", () => {
+      // DragEvent.isDefaultAllowed is true, since a dragstart's default starts the drag
+
+      const preventDefault = sinon.spy();
+
+      const dragStartEvent = {
+        type: "dragstart",
+        dataTransfer: null,
+        preventDefault,
+        target: {id: "dummy_node"},
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        dragStartEvent,
+        "dragstart",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      dispatch();
+
+      sinon.assert.notCalled(preventDefault);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
     it("prevents the default when forcePreventDefault is set", () => {
       // The binding's prevent_default modifier forces the framework preventDefault, even for an
       // isDefaultAllowed: true event like keydown.

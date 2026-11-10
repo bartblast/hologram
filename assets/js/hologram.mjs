@@ -39,6 +39,8 @@ import Vdom from "./vdom.mjs";
 import ChangeEvent from "./events/change_event.mjs";
 import ClickEvent from "./events/click_event.mjs";
 import ClickOutsideEvent from "./events/click_outside_event.mjs";
+import DragEvent from "./events/drag_event.mjs";
+import DropEvent from "./events/drop_event.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import InputEvent from "./events/input_event.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
@@ -1553,6 +1555,17 @@ export default class Hologram {
 
       case "click_outside":
         return ClickOutsideEvent;
+
+      case "drag":
+      case "dragend":
+      case "dragenter":
+      case "dragleave":
+      case "dragover":
+      case "dragstart":
+        return DragEvent;
+
+      case "drop":
+        return DropEvent;
 
       case "input":
         return InputEvent;

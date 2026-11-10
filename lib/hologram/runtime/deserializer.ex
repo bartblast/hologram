@@ -14,6 +14,23 @@ defmodule Hologram.Runtime.Deserializer do
     # client-side ERTS node name
     :hologram_client,
 
+    # drag event
+    :copy,
+    :data,
+    :data_transfer,
+    :drop_effect,
+    :effects_allowed,
+    :file,
+    :files,
+    :items,
+    :kind,
+    :link,
+    :move,
+    :none,
+    :string,
+    :type,
+    :types,
+
     # keyboard event
     :alt_key,
     :code,
