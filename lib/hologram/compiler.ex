@@ -789,6 +789,56 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Checks the literal refs the given templates declare, as `list_template_refs/1` summarizes them,
+  and raises `Hologram.CompileError` for the first mistake it finds. A ref without keys names one
+  element, so one that renders twice, inside a `{%for}` or in a component that renders itself is a
+  mistake, and so is a ref name used with different numbers of key parts. Every template is checked
+  with what it renders, and each page also with its layout, since the two render together.
+
+  Only one branch of an `{%if}` and `{%else}` renders, so refs in two branches don't clash. A
+  component the summaries don't hold, like a dependency's component or one without IR, adds
+  nothing. A component only a dynamic tag renders is never a usage, so it adds nothing either.
+
+  Returns, for each page, the literal refs it renders with its layout, as names with their numbers
+  of key parts, sorted.
+
+  ## Examples
+
+      iex> check_template_refs(%{MyPage => {:ref, :search, 0}, MyLayout => {:seq, []}}, %{MyPage => MyLayout})
+      %{MyPage => [{:search, 0}]}
+  """
+  @spec check_template_refs(%{module => template_refs}, %{module => module}) ::
+          %{module => [{atom, non_neg_integer}]}
+  def check_template_refs(summaries, layouts) do
+    context = %{cycles: list_ref_cycles(summaries), summaries: summaries}
+
+    {refs_by_module, _memo} =
+      summaries
+      |> Map.keys()
+      |> Enum.sort()
+      |> Enum.map_reduce(%{}, fn module, memo ->
+        {refs, memo} = root_template_refs(module, layouts, context, memo)
+        {{module, refs}, memo}
+      end)
+
+    Enum.each(refs_by_module, fn {module, refs} ->
+      validate_root_refs(refs, root_label(module, layouts))
+    end)
+
+    refs_by_module
+    |> Enum.filter(fn {module, _refs} -> Map.has_key?(layouts, module) end)
+    |> Map.new(fn {page_module, refs} ->
+      names =
+        refs
+        |> Enum.map(&{&1.name, &1.key_count})
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      {page_module, names}
+    end)
+  end
+
+  @doc """
   Returns the digest of a chunk's signature (see `group_mfas_by_signature/1`): the first 8 hex
   digits of the MD5 of its type names, sorted. It names the chunk while it is built, its entry
   file and its output dir, and not the file that is served (see `bundle/4`). The same signature
@@ -1863,6 +1913,44 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  # One branch of a block renders, so a keyless ref counts as often as the branch that renders it the
+  # most times. The other branches' refs still name refs the page can render, so they stay for the
+  # key-count check and the names, uncounted. A tie goes to the branch whose occurrences come first
+  # in term order, which doesn't depend on the order the clauses were written in.
+  defp alternative_ref_occurrences(branches) do
+    # Names the block, so two refs can be told to be in separate blocks rather than one, and in
+    # which of its branches each one is.
+    block = System.unique_integer()
+
+    occurrences =
+      branches
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {branch, index} -> Enum.map(branch, &{index, &1}) end)
+
+    counted_branch_by_name =
+      occurrences
+      |> Enum.filter(fn {_index, occurrence} -> counted_keyless?(occurrence) end)
+      |> Enum.group_by(fn {_index, occurrence} -> occurrence.name end)
+      |> Map.new(fn {name, named} ->
+        {index, _paths} =
+          named
+          |> Enum.group_by(fn {index, _occurrence} -> index end, fn {_index, occurrence} ->
+            occurrence.path
+          end)
+          |> Enum.min_by(fn {_index, paths} -> {-length(paths), paths} end)
+
+        {name, index}
+      end)
+
+    Enum.map(occurrences, fn {index, occurrence} ->
+      counted? =
+        occurrence.counted? and
+          (occurrence.key_count > 0 or counted_branch_by_name[occurrence.name] == index)
+
+      %{occurrence | blocks: [{block, index} | occurrence.blocks], counted?: counted?}
+    end)
+  end
+
   # Branches only one of which renders, in clause order. A branch that declares nothing adds nothing
   # to what the others do, so it is dropped, but a block with one branch left stays a block: two
   # blocks that may both render are told apart from refs that always render together.
@@ -2085,6 +2173,8 @@ defmodule Hologram.Compiler do
           "in #{Reflection.module_name(module)}'s template"
   end
 
+  defp counted_keyless?(occurrence), do: occurrence.counted? and occurrence.key_count == 0
+
   defp create_entry_file(js, entry_name, tmp_dir) do
     entry_file_path = Path.join(tmp_dir, "#{entry_name}.entry.js")
     File.write!(entry_file_path, js)
@@ -2200,6 +2290,108 @@ defmodule Hologram.Compiler do
         "--sources-content=true",
         "--target=es2021"
       ]
+  end
+
+  # The refs a component renders, each with the path of templates it is reached through, starting
+  # with the component's own. Templates that render one another, or one that renders itself, are
+  # evaluated together (see evaluate_cycle_refs/3).
+  defp evaluate_component_refs(module, context, memo) do
+    cond do
+      Map.has_key?(memo, module) ->
+        {memo[module], memo}
+
+      not Map.has_key?(context.summaries, module) ->
+        {[], memo}
+
+      Map.has_key?(context.cycles, module) ->
+        cycle_memo = evaluate_cycle_refs(context.cycles[module], context, memo)
+        {cycle_memo[module], cycle_memo}
+
+      true ->
+        {occurrences, refs_memo} =
+          evaluate_refs(context.summaries[module], module, context, [], memo)
+
+        {occurrences, Map.put(refs_memo, module, occurrences)}
+    end
+  end
+
+  # Once the recursion goes a level deep, each template of a cycle renders the others and itself
+  # through them, so a ref that renders next to the usage that recurses repeats like a loop's. One in
+  # a branch the usage isn't in, like a list's end marker, renders at one level only. A usage of a
+  # template of the same cycle adds nothing on the spot: each template renders what all of them
+  # declare, which takes one pass over the cycle whatever its shape.
+  defp evaluate_cycle_refs(cycle, context, memo) do
+    {own_refs, own_memo} =
+      Enum.map_reduce(cycle.members, memo, fn member, acc_memo ->
+        {occurrences, refs_memo} =
+          evaluate_refs(context.summaries[member], member, context, cycle.members, acc_memo)
+
+        {usages, refs} = Enum.split_with(occurrences, & &1.cycle_usage?)
+        loop = {:recursion, member, context.cycles[member].through}
+
+        {{member, Enum.map(refs, &put_recursion_loop(&1, usages, loop))}, refs_memo}
+      end)
+
+    Enum.reduce(own_refs, own_memo, fn {member, occurrences}, acc_memo ->
+      others =
+        for {other, other_occurrences} <- own_refs,
+            other != member,
+            occurrence <- other_occurrences do
+          %{
+            occurrence
+            | path: Enum.drop(context.cycles[member].paths[other], -1) ++ occurrence.path
+          }
+        end
+
+      Map.put(acc_memo, member, occurrences ++ others)
+    end)
+  end
+
+  defp evaluate_ref_parts(parts, module, context, cycle, memo) do
+    Enum.map_reduce(parts, memo, &evaluate_refs(&1, module, context, cycle, &2))
+  end
+
+  defp evaluate_refs({:ref, name, key_count}, module, _context, _cycle, memo) do
+    occurrence = %{
+      blocks: [],
+      counted?: true,
+      cycle_usage?: false,
+      key_count: key_count,
+      loop: nil,
+      name: name,
+      path: [module]
+    }
+
+    {[occurrence], memo}
+  end
+
+  # A usage of a template of the cycle being evaluated is kept as a marker, so the cycle's
+  # evaluation can tell which refs render next to it.
+  defp evaluate_refs({:component, component_module}, module, context, cycle, memo) do
+    if component_module in cycle do
+      usage = %{blocks: [], counted?: false, cycle_usage?: true, path: [module]}
+      {[usage], memo}
+    else
+      {occurrences, component_memo} =
+        evaluate_component_refs(component_module, context, memo)
+
+      {Enum.map(occurrences, &%{&1 | path: [module | &1.path]}), component_memo}
+    end
+  end
+
+  defp evaluate_refs({:seq, parts}, module, context, cycle, memo) do
+    {results, parts_memo} = evaluate_ref_parts(parts, module, context, cycle, memo)
+    {Enum.concat(results), parts_memo}
+  end
+
+  defp evaluate_refs({:alt, branches}, module, context, cycle, memo) do
+    {results, branches_memo} = evaluate_ref_parts(branches, module, context, cycle, memo)
+    {alternative_ref_occurrences(results), branches_memo}
+  end
+
+  defp evaluate_refs({:loop, body}, module, context, cycle, memo) do
+    {occurrences, body_memo} = evaluate_refs(body, module, context, cycle, memo)
+    {Enum.map(occurrences, &put_ref_loop(&1, {:for, module})), body_memo}
   end
 
   defp extract_erlang_function_js(file_path, function, arity) do
@@ -2400,6 +2592,17 @@ defmodule Hologram.Compiler do
     end
   end
 
+  defp key_parts_text(0), do: "no key parts"
+
+  defp key_parts_text(1), do: "1 key part"
+
+  defp key_parts_text(key_count), do: "#{key_count} key parts"
+
+  defp keyless_ref_advice(name) do
+    "a ref without keys names one element, so give each element a ref of its own, " <>
+      "like {#{inspect(name)}, item.id} for the items of a loop"
+  end
+
   # The files esbuild read for a bundle, given as its metafile lists them relative to the working
   # dir, with their fingerprints taken against the time esbuild started (see fingerprint_js_inputs/2).
   # The entry file (under the tmp dir), Hologram's own sources (under the js dir) and the packages
@@ -2476,6 +2679,48 @@ defmodule Hologram.Compiler do
     module_info_plt
     |> PLT.keys(%{flag => true})
     |> Enum.sort()
+  end
+
+  # The templates that render one another, directly or through others, each with its cycle: the
+  # cycle's templates, sorted, the shortest chain of templates it renders each of the others through,
+  # and the templates it renders itself through. A template that renders itself is a cycle of one.
+  defp list_ref_cycles(summaries) do
+    graph = :digraph.new()
+
+    try do
+      Enum.each(summaries, fn {module, _refs} -> :digraph.add_vertex(graph, module) end)
+
+      Enum.each(summaries, fn {module, refs} ->
+        refs
+        |> template_ref_components()
+        |> Enum.filter(&Map.has_key?(summaries, &1))
+        |> Enum.each(&:digraph.add_edge(graph, module, &1))
+      end)
+
+      graph
+      |> :digraph_utils.cyclic_strong_components()
+      |> Enum.flat_map(fn component ->
+        members = Enum.sort(component)
+
+        Enum.map(members, fn member ->
+          paths =
+            for other <- members, other != member, into: %{} do
+              {other, :digraph.get_short_path(graph, member, other)}
+            end
+
+          through =
+            graph
+            |> :digraph.get_short_cycle(member)
+            |> Enum.drop(1)
+            |> Enum.drop(-1)
+
+          {member, %{members: members, paths: paths, through: through}}
+        end)
+      end)
+      |> Map.new()
+    after
+      :digraph.delete(graph)
+    end
   end
 
   # The modules of the given kind among the results of patch_module_info_plt_entry!/5, sorted.
@@ -2718,6 +2963,79 @@ defmodule Hologram.Compiler do
     |> Enum.reject(fn {name, _value} -> String.starts_with?(name, "$") end)
   end
 
+  defp put_recursion_loop(ref, usages, loop) do
+    if Enum.any?(usages, &render_together?(&1, ref)), do: put_ref_loop(ref, loop), else: ref
+  end
+
+  # The innermost loop around a ref is the one it repeats with, so an outer one leaves it alone.
+  defp put_ref_loop(%{loop: nil} = occurrence, loop), do: %{occurrence | loop: loop}
+
+  defp put_ref_loop(occurrence, _loop), do: occurrence
+
+  defp ref_loop_text({:for, module}),
+    do: "for each item of a {%for} in the template of #{inspect(module)}"
+
+  defp ref_loop_text({:recursion, module, []}),
+    do: "for each level of #{inspect(module)}, which renders itself"
+
+  defp ref_loop_text({:recursion, module, through}) do
+    "for each level of #{inspect(module)}, which renders itself through " <>
+      Enum.map_join(through, " > ", &inspect/1)
+  end
+
+  # Where a ref renders from, as a message names it: the template that declares it, and the
+  # templates it is rendered through from the root.
+  defp ref_place(%{path: [module]}), do: "in the template of #{inspect(module)}"
+
+  defp ref_place(%{path: path}) do
+    {through, [module]} = Enum.split(path, -1)
+
+    "in the template of #{inspect(module)} (rendered from #{Enum.map_join(through, " > ", &inspect/1)})"
+  end
+
+  # Two occurrences render together unless a block they are both in renders each in another branch.
+  defp render_together?(first, second) do
+    first_branches = Map.new(first.blocks)
+
+    Enum.all?(second.blocks, fn {block, branch} ->
+      Map.get(first_branches, block, branch) == branch
+    end)
+  end
+
+  defp root_label(module, layouts) do
+    case layouts do
+      %{^module => layout_module} ->
+        "the page #{inspect(module)} with its layout #{inspect(layout_module)}"
+
+      %{} ->
+        "a render of #{inspect(module)}"
+    end
+  end
+
+  # A page renders inside its layout, as the layout's slot content, so the layout's refs come first.
+  defp root_template_refs(module, layouts, context, memo) do
+    {layout_refs, layout_memo} =
+      case layouts do
+        %{^module => layout_module} -> evaluate_component_refs(layout_module, context, memo)
+        %{} -> {[], memo}
+      end
+
+    {module_refs, module_memo} = evaluate_component_refs(module, context, layout_memo)
+
+    {layout_refs ++ module_refs, module_memo}
+  end
+
+  # Two refs each inside a block of its own, past the blocks they share, can both render only when
+  # separate blocks both take a branch that renders them. Blocks are listed outermost first, since
+  # each one is added on the way out of it, so the blocks they share come first.
+  defp separate_blocks?(first, second) do
+    first_blocks = Enum.map(first.blocks, &elem(&1, 0))
+    second_blocks = Enum.map(second.blocks, &elem(&1, 0))
+    shared_count = shared_prefix_length(first_blocks, second_blocks)
+
+    length(first_blocks) > shared_count and length(second_blocks) > shared_count
+  end
+
   # Refs in the order they render, with nested sequences spliced in and the parts that declare
   # nothing left out.
   defp sequence_refs(parts) do
@@ -2737,6 +3055,12 @@ defmodule Hologram.Compiler do
   # Mirrors evaluate_prop_value/1 in the renderer: a lone expression yields its term as it is, and
   # anything else is rendered to a string. So a value is known here only when the expression is a
   # literal, or when the value is text with nothing interpolated into it.
+
+  defp shared_prefix_length([head | first_rest], [head | second_rest]) do
+    1 + shared_prefix_length(first_rest, second_rest)
+  end
+
+  defp shared_prefix_length(_first, _second), do: 0
 
   defp static_prop_value([
          %IR.TupleType{data: [%IR.AtomType{value: :expression}, %IR.TupleType{data: [expr]}]}
@@ -3196,6 +3520,49 @@ defmodule Hologram.Compiler do
     started_at
   end
 
+  defp template_ref_components({:component, module}), do: [module]
+
+  defp template_ref_components({:ref, _name, _key_count}), do: []
+
+  defp template_ref_components({:loop, body}), do: template_ref_components(body)
+
+  defp template_ref_components({_kind, parts}),
+    do: Enum.flat_map(parts, &template_ref_components/1)
+
+  defp validate_keyless_ref(name, occurrences, root_label) do
+    # A loop in a branch that doesn't count still repeats the ref whenever that branch renders.
+    case {Enum.find(occurrences, & &1.loop), Enum.filter(occurrences, & &1.counted?)} do
+      {nil, [first, second | _rest]} ->
+        hint =
+          if separate_blocks?(first, second) do
+            " - two {%if} blocks can both render, so elements that take turns go in the branches of one {%if} and {%else}"
+          else
+            ""
+          end
+
+        places =
+          if ref_place(first) == ref_place(second) do
+            "both #{ref_place(first)}"
+          else
+            "one #{ref_place(first)} and one #{ref_place(second)}"
+          end
+
+        raise Hologram.CompileError,
+          message:
+            "the ref #{inspect(name)} would name two elements in #{root_label}, #{places} - " <>
+              "#{keyless_ref_advice(name)}#{hint}"
+
+      {nil, _occurrences} ->
+        :ok
+
+      {occurrence, _occurrences} ->
+        raise Hologram.CompileError,
+          message:
+            "the ref #{inspect(name)}, #{ref_place(occurrence)}, would name an element " <>
+              "#{ref_loop_text(occurrence.loop)} - #{keyless_ref_advice(name)}"
+    end
+  end
+
   defp validate_module_prop_usages(module, ir) do
     usages =
       ir
@@ -3271,6 +3638,20 @@ defmodule Hologram.Compiler do
     end
   end
 
+  defp validate_ref_key_counts(name, [first | _rest] = occurrences, root_label) do
+    case Enum.find(occurrences, &(&1.key_count != first.key_count)) do
+      nil ->
+        :ok
+
+      other ->
+        raise Hologram.CompileError,
+          message:
+            "the ref #{inspect(name)} takes #{key_parts_text(first.key_count)} #{ref_place(first)}, " <>
+              "and #{key_parts_text(other.key_count)} #{ref_place(other)}, both in #{root_label} - " <>
+              "a ref name takes the same number of key parts everywhere it can render"
+    end
+  end
+
   # A spread could supply any prop, so nothing can be proven missing at a usage carrying one.
   defp validate_required_props(_component_module, _prop_entries, true, _module), do: :ok
 
@@ -3281,5 +3662,18 @@ defmodule Hologram.Compiler do
       [] -> :ok
       [name | _rest] -> component_usage_error!(component_module, name, module)
     end
+  end
+
+  # The first mistake by name, so the message doesn't depend on the order the templates render in:
+  # a name used with different numbers of key parts, then a keyless ref that a loop or a recursion
+  # repeats, then one rendered twice.
+  defp validate_root_refs(refs, root_label) do
+    refs
+    |> Enum.group_by(& &1.name)
+    |> Enum.sort()
+    |> Enum.each(fn {name, occurrences} ->
+      validate_ref_key_counts(name, occurrences, root_label)
+      validate_keyless_ref(name, Enum.filter(occurrences, &(&1.key_count == 0)), root_label)
+    end)
   end
 end

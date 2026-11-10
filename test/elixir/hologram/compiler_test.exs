@@ -2757,6 +2757,351 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "check_template_refs/2" do
+    test "returns each page's refs with its layout's, by name and number of key parts, sorted" do
+      summaries = %{
+        MyApp.Card => {:ref, :card, 0},
+        MyApp.Layout => {:seq, [{:ref, :menu, 0}, {:ref, :item, 1}]},
+        MyApp.Page => {:seq, [{:component, MyApp.Card}, {:loop, {:ref, :item, 1}}]}
+      }
+
+      assert check_template_refs(summaries, %{MyApp.Page => MyApp.Layout}) == %{
+               MyApp.Page => [{:card, 0}, {:item, 1}, {:menu, 0}]
+             }
+    end
+
+    test "a page without refs" do
+      summaries = %{MyApp.Layout => {:seq, []}, MyApp.Page => {:seq, []}}
+
+      assert check_template_refs(summaries, %{MyApp.Page => MyApp.Layout}) == %{MyApp.Page => []}
+    end
+
+    test "raises for a keyless ref twice in one template" do
+      summaries = %{MyApp.Card => {:seq, [{:ref, :title, 0}, {:ref, :title, 0}]}}
+
+      assert_error Hologram.CompileError,
+                   "the ref :title would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a component with a keyless ref rendered twice" do
+      summaries = %{
+        MyApp.Card => {:ref, :title, 0},
+        MyApp.Feed => {:seq, [{:component, MyApp.Card}, {:component, MyApp.Card}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title would name two elements in a render of MyApp.Feed, " <>
+                     "both in the template of MyApp.Card (rendered from MyApp.Feed) - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "names every template a ref is rendered through" do
+      summaries = %{
+        MyApp.Card => {:ref, :title, 0},
+        MyApp.Feed => {:seq, [{:component, MyApp.List}, {:ref, :title, 0}]},
+        MyApp.List => {:component, MyApp.Card}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title would name two elements in a render of MyApp.Feed, " <>
+                     "one in the template of MyApp.Card (rendered from MyApp.Feed > MyApp.List) " <>
+                     "and one in the template of MyApp.Feed - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a keyless ref inside a for block" do
+      summaries = %{MyApp.Feed => {:loop, {:ref, :post, 0}}}
+
+      assert_error Hologram.CompileError,
+                   "the ref :post, in the template of MyApp.Feed, would name an element " <>
+                     "for each item of a {%for} in the template of MyApp.Feed - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:post, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a component with a keyless ref rendered inside a for block" do
+      summaries = %{
+        MyApp.Card => {:ref, :title, 0},
+        MyApp.Feed => {:loop, {:component, MyApp.Card}}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title, in the template of MyApp.Card (rendered from MyApp.Feed), " <>
+                     "would name an element for each item of a {%for} in the template of MyApp.Feed - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a keyless ref of a component that renders itself" do
+      summaries = %{
+        MyApp.Tree => {:seq, [{:ref, :toggle, 0}, {:alt, [{:component, MyApp.Tree}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle, in the template of MyApp.Tree, would name an element " <>
+                     "for each level of MyApp.Tree, which renders itself - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a keyless ref of components that render each other, naming the one that declares it" do
+      for {renderer, declarer, expected_place} <- [
+            {MyApp.Branch, MyApp.Leaf,
+             "in the template of MyApp.Leaf (rendered from MyApp.Branch), would name an element " <>
+               "for each level of MyApp.Leaf, which renders itself through MyApp.Branch"},
+            {MyApp.Leaf, MyApp.Branch,
+             "in the template of MyApp.Branch, would name an element " <>
+               "for each level of MyApp.Branch, which renders itself through MyApp.Leaf"}
+          ] do
+        summaries = %{
+          renderer => {:alt, [{:component, declarer}]},
+          declarer => {:seq, [{:ref, :node, 0}, {:alt, [{:component, renderer}]}]}
+        }
+
+        assert_error Hologram.CompileError,
+                     "the ref :node, #{expected_place} - " <>
+                       "a ref without keys names one element, so give each element a ref of its own, like {:node, item.id} for the items of a loop",
+                     fn -> check_template_refs(summaries, %{}) end
+      end
+    end
+
+    test "names every template of a cycle a ref is rendered through" do
+      summaries = %{
+        MyApp.A => {:alt, [{:component, MyApp.B}]},
+        MyApp.B => {:alt, [{:component, MyApp.C}]},
+        MyApp.C => {:seq, [{:ref, :x, 0}, {:alt, [{:component, MyApp.A}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :x, in the template of MyApp.C (rendered from MyApp.A > MyApp.B), " <>
+                     "would name an element for each level of MyApp.C, which renders itself through MyApp.A > MyApp.B - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:x, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    # A list's end marker renders only where the list stops, never next to the usage that recurses.
+    test "a keyless ref in a branch the recursive usage isn't in passes" do
+      summaries = %{MyApp.Node => {:alt, [{:ref, :last, 0}, {:component, MyApp.Node}]}}
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+
+    # Each template of a cycle is evaluated once, so a cycle where every template renders every
+    # other one takes one pass rather than one per path through it.
+    test "templates that all render one another" do
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      modules = for index <- 1..30, do: :"Elixir.MyApp.Node#{index}"
+
+      summaries =
+        Map.new(modules, fn module ->
+          usages = for other <- modules, other != module, do: {:alt, [{:component, other}]}
+          {module, {:seq, [{:ref, :node, 1} | usages]}}
+        end)
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+
+    test "keyed refs inside a for block and a recursion pass" do
+      summaries = %{
+        MyApp.Feed => {:loop, {:ref, :post, 1}},
+        MyApp.Tree => {:seq, [{:ref, :node, 1}, {:alt, [{:component, MyApp.Tree}]}]}
+      }
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+
+    test "raises for a keyless ref in a page and in its layout" do
+      summaries = %{MyApp.Layout => {:ref, :search, 0}, MyApp.Page => {:ref, :search, 0}}
+
+      assert_error Hologram.CompileError,
+                   "the ref :search would name two elements in the page MyApp.Page with its layout MyApp.Layout, " <>
+                     "one in the template of MyApp.Layout and one in the template of MyApp.Page - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{MyApp.Page => MyApp.Layout}) end
+    end
+
+    test "raises for a keyless ref inside a for block in a branch that doesn't count" do
+      summaries = %{
+        MyApp.Card => {:alt, [{:loop, {:component, MyApp.Zeta}}, {:ref, :title, 0}]},
+        MyApp.Zeta => {:ref, :title, 0}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title, in the template of MyApp.Zeta (rendered from MyApp.Card), " <>
+                     "would name an element for each item of a {%for} in the template of MyApp.Card - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "the same keyless ref in the branches of an if block passes" do
+      summaries = %{MyApp.Card => {:alt, [{:ref, :toggle, 0}, {:ref, :toggle, 0}]}}
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+
+    test "raises for a keyless ref in one branch of an if block and next to it" do
+      summaries = %{
+        MyApp.Card => {:seq, [{:alt, [{:ref, :toggle, 0}, {:seq, []}]}, {:ref, :toggle, 0}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a keyless ref twice in one branch of an if block, with no hint" do
+      summaries = %{
+        MyApp.Card => {:alt, [{:seq, [{:ref, :toggle, 0}, {:ref, :toggle, 0}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a keyless ref in two separate if blocks, with a hint" do
+      summaries = %{
+        MyApp.Card => {:seq, [{:alt, [{:ref, :toggle, 0}]}, {:alt, [{:ref, :toggle, 0}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop" <>
+                     " - two {%if} blocks can both render, so elements that take turns go in the branches of one {%if} and {%else}",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a keyless ref in two separate if blocks inside an if block, with a hint" do
+      summaries = %{
+        MyApp.Card =>
+          {:alt, [{:seq, [{:alt, [{:ref, :toggle, 0}]}, {:alt, [{:ref, :toggle, 0}]}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop" <>
+                     " - two {%if} blocks can both render, so elements that take turns go in the branches of one {%if} and {%else}",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a component with a keyless ref in its own if block, rendered in two separate if blocks, with a hint" do
+      summaries = %{
+        MyApp.Alpha => {:alt, [{:ref, :title, 0}]},
+        MyApp.Card =>
+          {:seq, [{:alt, [{:component, MyApp.Alpha}]}, {:alt, [{:component, MyApp.Alpha}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Alpha (rendered from MyApp.Card) - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop" <>
+                     " - two {%if} blocks can both render, so elements that take turns go in the branches of one {%if} and {%else}",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "a tie between branches names the same templates whichever branch comes first" do
+      for branches <- [
+            [{:component, MyApp.Alpha}, {:component, MyApp.Beta}],
+            [{:component, MyApp.Beta}, {:component, MyApp.Alpha}]
+          ] do
+        summaries = %{
+          MyApp.Alpha => {:ref, :title, 0},
+          MyApp.Beta => {:ref, :title, 0},
+          MyApp.Card => {:seq, [{:alt, branches}, {:ref, :title, 0}]}
+        }
+
+        assert_error Hologram.CompileError,
+                     "the ref :title would name two elements in a render of MyApp.Card, " <>
+                       "one in the template of MyApp.Alpha (rendered from MyApp.Card) " <>
+                       "and one in the template of MyApp.Card - " <>
+                       "a ref without keys names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                     fn -> check_template_refs(summaries, %{}) end
+      end
+    end
+
+    test "raises for a ref name with different numbers of key parts" do
+      summaries = %{
+        MyApp.Card => {:ref, :item, 2},
+        MyApp.Feed => {:seq, [{:ref, :item, 1}, {:component, MyApp.Card}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :item takes 1 key part in the template of MyApp.Feed, " <>
+                     "and 2 key parts in the template of MyApp.Card (rendered from MyApp.Feed), " <>
+                     "both in a render of MyApp.Feed - " <>
+                     "a ref name takes the same number of key parts everywhere it can render",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a ref name with and without key parts in the branches of an if block" do
+      summaries = %{MyApp.Card => {:alt, [{:ref, :item, 0}, {:ref, :item, 1}]}}
+
+      assert_error Hologram.CompileError,
+                   "the ref :item takes no key parts in the template of MyApp.Card, " <>
+                     "and 1 key part in the template of MyApp.Card, " <>
+                     "both in a render of MyApp.Card - " <>
+                     "a ref name takes the same number of key parts everywhere it can render",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "a ref name with different numbers of key parts on two pages passes" do
+      summaries = %{
+        MyApp.Layout => {:seq, []},
+        MyApp.PageA => {:ref, :item, 1},
+        MyApp.PageB => {:ref, :item, 2}
+      }
+
+      layouts = %{MyApp.PageA => MyApp.Layout, MyApp.PageB => MyApp.Layout}
+
+      assert check_template_refs(summaries, layouts) == %{
+               MyApp.PageA => [{:item, 1}],
+               MyApp.PageB => [{:item, 2}]
+             }
+    end
+
+    test "raises for the mistake of the first template in module order" do
+      summaries = %{
+        MyApp.Alpha => {:loop, {:ref, :post, 0}},
+        MyApp.Beta => {:seq, [{:ref, :title, 0}, {:ref, :title, 0}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :post, in the template of MyApp.Alpha, would name an element " <>
+                     "for each item of a {%for} in the template of MyApp.Alpha - " <>
+                     "a ref without keys names one element, so give each element a ref of its own, like {:post, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for different numbers of key parts before a keyless ref rendered twice" do
+      summaries = %{
+        MyApp.Card => {:seq, [{:ref, :item, 0}, {:ref, :item, 0}, {:ref, :item, 1}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :item takes no key parts in the template of MyApp.Card, " <>
+                     "and 1 key part in the template of MyApp.Card, both in a render of MyApp.Card - " <>
+                     "a ref name takes the same number of key parts everywhere it can render",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "a component the summaries don't hold adds nothing" do
+      summaries = %{MyApp.Feed => {:seq, [{:component, MyApp.Unknown}, {:ref, :post, 0}]}}
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+  end
+
   describe "chunk_signature_digest/1" do
     test "is the first 8 hex digits of the MD5 of the sorted type names" do
       assert chunk_signature_digest(MapSet.new([Date])) == "59b80f19"
