@@ -126,6 +126,18 @@ defmodule Hologram.Template.Renderer do
   """
   @type tree :: tree_node | [tree_node] | nil
 
+  @typedoc """
+  Slot content a template passes on through a nested slot, with the module of the template that
+  wrote it. The renderer makes it while it renders and no compiled template holds one.
+  """
+  @type slot_content :: {:slot_content, module, expanded_dom}
+
+  @typedoc """
+  DOM with the slot content passed on through nested slots spliced in. A spliced node can sit in any
+  list of nodes, the children of an element or a component included.
+  """
+  @type expanded_dom :: DOM.t() | slot_content | [DOM.dom_node() | slot_content]
+
   defmodule Env do
     @moduledoc false
 
@@ -144,7 +156,7 @@ defmodule Hologram.Template.Renderer do
             context: %{(atom | {any, atom}) => any},
             key_scope: %{level: String.t() | nil, outer: String.t()} | nil,
             parent_module: module | nil,
-            slots: keyword(DOM.t()),
+            slots: keyword(Hologram.Template.Renderer.expanded_dom()),
             slots_parent_module: module | nil,
             tag_name: String.t() | nil
           }
@@ -446,12 +458,12 @@ defmodule Hologram.Template.Renderer do
       iex> render_tree(dom, %Env{}, %Server{})
       {{:element, "div", [{"class", [text: "big"]}], [{:text, "Hologram"}]}, %{}, %Server{}}
   """
-  @spec render_tree(DOM.t(), Env.t(), Server.t()) ::
+  @spec render_tree(expanded_dom, Env.t(), Server.t()) ::
           {tree, %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
   def render_tree(dom, env, server_struct)
 
   def render_tree({:component, module, props_dom, children_dom}, env, server_struct) do
-    expanded_children_dom = expand_slots(children_dom, env.slots)
+    expanded_children_dom = expand_slots(children_dom, env.slots, env.slots_parent_module)
 
     props =
       props_dom
@@ -632,6 +644,13 @@ defmodule Hologram.Template.Renderer do
     end
 
     {{:public_comment, children}, component_registry, mutated_server_struct}
+  end
+
+  # Slot content passed on through a nested slot renders as written by the template that supplied it.
+  #
+  # WARNING: must match the client renderer's slot_content case (renderer.mjs).
+  def render_tree({:slot_content, module, nodes}, %Env{} = env, server_struct) do
+    render_tree(nodes, %Env{env | parent_module: module}, server_struct)
   end
 
   def render_tree({:text, text}, _env, server_struct) do
@@ -943,35 +962,40 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
-  defp expand_slots(dom, slots)
+  defp expand_slots(dom, slots, supplier)
 
-  defp expand_slots(nodes, slots) when is_list(nodes) do
+  defp expand_slots(nodes, slots, supplier) when is_list(nodes) do
     nodes
-    |> Enum.map(&expand_slots(&1, slots))
+    |> Enum.map(&expand_slots(&1, slots, supplier))
     |> List.flatten()
   end
 
-  defp expand_slots({:component, module, props_dom, children_dom}, slots) do
-    {:component, module, props_dom, expand_slots(children_dom, slots)}
+  defp expand_slots({:component, module, props_dom, children_dom}, slots, supplier) do
+    {:component, module, props_dom, expand_slots(children_dom, slots, supplier)}
   end
 
-  defp expand_slots({:dynamic_tag, {value}, attrs_dom, children_dom}, slots) do
-    {:dynamic_tag, {value}, attrs_dom, expand_slots(children_dom, slots)}
+  defp expand_slots({:dynamic_tag, {value}, attrs_dom, children_dom}, slots, supplier) do
+    {:dynamic_tag, {value}, attrs_dom, expand_slots(children_dom, slots, supplier)}
   end
 
-  defp expand_slots({:element, "slot", _attrs_dom, []}, slots) do
-    slots[:default]
+  # The content goes on rendering as written by the template that supplied it, though it now sits in
+  # the children of a usage another template wrote.
+  defp expand_slots({:element, "slot", _attrs_dom, []}, slots, supplier) do
+    case slots[:default] do
+      nil -> nil
+      content -> {:slot_content, supplier, content}
+    end
   end
 
-  defp expand_slots({:element, tag_name, attrs_dom, children_dom}, slots) do
-    {:element, tag_name, attrs_dom, expand_slots(children_dom, slots)}
+  defp expand_slots({:element, tag_name, attrs_dom, children_dom}, slots, supplier) do
+    {:element, tag_name, attrs_dom, expand_slots(children_dom, slots, supplier)}
   end
 
-  defp expand_slots({:loop_item, source, nodes}, slots) do
-    {:loop_item, source, expand_slots(nodes, slots)}
+  defp expand_slots({:loop_item, source, nodes}, slots, supplier) do
+    {:loop_item, source, expand_slots(nodes, slots, supplier)}
   end
 
-  defp expand_slots(node, _slots), do: node
+  defp expand_slots(node, _slots, _supplier), do: node
 
   defp expand_spread_attribute({key, value}, name_prefix) do
     name = compose_attribute_name(key, name_prefix)
@@ -1478,6 +1502,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   # parent_module is the module whose template holds this usage - it owns the slot content passed in,
+  # except the parts it passed on from its own slot, which keep their writer (see expand_slots/3),
   # while the template about to be rendered owns everything written inside it.
   #
   # A component has no node of its own: the nodes its template renders are what sits in the

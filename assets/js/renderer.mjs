@@ -265,6 +265,7 @@ export default class Renderer {
           defaultTarget,
           parentTagName,
           parentModule,
+          slotsParentModule,
           keyScope,
         );
 
@@ -322,6 +323,22 @@ export default class Renderer {
           Type.bitstring("page"),
           parentTagName,
           parentModule,
+          slotsParentModule,
+          keyScope,
+        );
+
+      // Slot content passed on through a nested slot renders as written by the template that
+      // supplied it.
+      //
+      // WARNING: must match render_tree/3's slot_content clause on the server.
+      case "slot_content":
+        return Renderer.renderDom(
+          dom.data[2],
+          context,
+          slots,
+          defaultTarget,
+          parentTagName,
+          dom.data[1],
           slotsParentModule,
           keyScope,
         );
@@ -1289,57 +1306,60 @@ export default class Renderer {
       : propsDom.data;
   }
 
-  // Based on expand_slots/2 (including fallback case)
-  static #expandSlots(dom, slots) {
+  // Based on expand_slots/3 (including fallback case)
+  static #expandSlots(dom, slots, supplier) {
     if (Type.isList(dom)) {
-      return Renderer.#expandSlotsInNodes(dom, slots);
+      return Renderer.#expandSlotsInNodes(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "component") {
-      return Renderer.#expandSlotsInComponentNode(dom, slots);
+      return Renderer.#expandSlotsInComponentNode(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "dynamic_tag") {
-      return Renderer.#expandSlotsInDynamicTagNode(dom, slots);
+      return Renderer.#expandSlotsInDynamicTagNode(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "element") {
-      return Renderer.#expandSlotsInElementNode(dom, slots);
+      return Renderer.#expandSlotsInElementNode(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "loop_item") {
-      return Renderer.#expandSlotsInLoopItemNode(dom, slots);
+      return Renderer.#expandSlotsInLoopItemNode(dom, slots, supplier);
     }
 
     return dom;
   }
 
   // Based on expand_slots/3 (component case)
-  static #expandSlotsInComponentNode(dom, slots) {
+  static #expandSlotsInComponentNode(dom, slots, supplier) {
     const [nodeType, moduleAlias, propsDom, childrenDom] = dom.data;
 
     return Type.tuple([
       nodeType,
       moduleAlias,
       propsDom,
-      Renderer.#expandSlots(childrenDom, slots),
+      Renderer.#expandSlots(childrenDom, slots, supplier),
     ]);
   }
 
   // Based on expand_slots/3 (dynamic tag case)
-  static #expandSlotsInDynamicTagNode(dom, slots) {
+  static #expandSlotsInDynamicTagNode(dom, slots, supplier) {
     const [nodeType, value, attrsDom, childrenDom] = dom.data;
 
     return Type.tuple([
       nodeType,
       value,
       attrsDom,
-      Renderer.#expandSlots(childrenDom, slots),
+      Renderer.#expandSlots(childrenDom, slots, supplier),
     ]);
   }
 
   // Based on expand_slots/3 (element cases)
-  static #expandSlotsInElementNode(dom, slots) {
+  //
+  // The content goes on rendering as written by the template that supplied it, though it now sits
+  // in the children of a usage another template wrote.
+  static #expandSlotsInElementNode(dom, slots, supplier) {
     const [nodeType, tagName, attrsDom, childrenDom] = dom.data;
 
     if (Interpreter.isStrictlyEqual(tagName, Type.bitstring("slot"))) {
@@ -1348,32 +1368,38 @@ export default class Renderer {
         Type.atom("default"),
       );
 
-      return slotDom ? slotDom : Type.nil();
+      return slotDom
+        ? Type.tuple([Type.atom("slot_content"), supplier, slotDom])
+        : Type.nil();
     }
 
     return Type.tuple([
       nodeType,
       tagName,
       attrsDom,
-      Renderer.#expandSlots(childrenDom, slots),
+      Renderer.#expandSlots(childrenDom, slots, supplier),
     ]);
   }
 
-  // Based on expand_slots/2 (loop item case)
-  static #expandSlotsInLoopItemNode(dom, slots) {
+  // Based on expand_slots/3 (loop item case)
+  static #expandSlotsInLoopItemNode(dom, slots, supplier) {
     const [nodeType, source, nodes] = dom.data;
 
-    return Type.tuple([nodeType, source, Renderer.#expandSlots(nodes, slots)]);
+    return Type.tuple([
+      nodeType,
+      source,
+      Renderer.#expandSlots(nodes, slots, supplier),
+    ]);
   }
 
   // Based on expand_slots/3 (list case)
   // Deps: [:lists.flatten/1]
-  static #expandSlotsInNodes(nodes, slots) {
+  static #expandSlotsInNodes(nodes, slots, supplier) {
     return Erlang_Lists["flatten/1"](
       Type.list(
         nodes.data
           .filter((node) => !Type.isNil(node))
-          .map((node) => Renderer.#expandSlots(node, slots)),
+          .map((node) => Renderer.#expandSlots(node, slots, supplier)),
       ),
     );
   }
@@ -2279,13 +2305,18 @@ export default class Renderer {
     defaultTarget,
     parentTagName,
     parentModule,
+    slotsParentModule,
     keyScope,
   ) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
     const propsDom = dom.data[2];
     let childrenDom = dom.data[3];
 
-    const expandedChildrenDom = Renderer.#expandSlots(childrenDom, slots);
+    const expandedChildrenDom = Renderer.#expandSlots(
+      childrenDom,
+      slots,
+      slotsParentModule,
+    );
 
     let props = Renderer.#injectPropsFromContext(
       Renderer.#castProps(propsDom, moduleProxy),

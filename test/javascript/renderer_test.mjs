@@ -18,6 +18,10 @@ import {defineLayoutFixture} from "./support/fixtures/layout_fixture.mjs";
 import {defineModule1Fixture} from "./support/fixtures/renderer/module_1.mjs";
 import {defineModule10Fixture} from "./support/fixtures/renderer/module_10.mjs";
 import {defineModule11Fixture} from "./support/fixtures/renderer/module_11.mjs";
+import {defineModule114Fixture} from "./support/fixtures/renderer/module_114.mjs";
+import {defineModule115Fixture} from "./support/fixtures/renderer/module_115.mjs";
+import {defineModule116Fixture} from "./support/fixtures/renderer/module_116.mjs";
+import {defineModule117Fixture} from "./support/fixtures/renderer/module_117.mjs";
 import {defineModule12Fixture} from "./support/fixtures/renderer/module_12.mjs";
 import {defineModule14Fixture} from "./support/fixtures/renderer/module_14.mjs";
 import {defineModule15Fixture} from "./support/fixtures/renderer/module_15.mjs";
@@ -108,6 +112,10 @@ defineLayoutFixture();
 defineModule1Fixture();
 defineModule10Fixture();
 defineModule11Fixture();
+defineModule114Fixture();
+defineModule115Fixture();
+defineModule116Fixture();
+defineModule117Fixture();
 defineModule12Fixture();
 defineModule14Fixture();
 defineModule15Fixture();
@@ -7464,6 +7472,63 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, ["abc123456xyz"]);
     });
 
+    // A template that puts its own <slot /> inside a component usage passes the content on, and the
+    // content is still the writer's, however many templates pass it on.
+    it("a prop error in slot content passed on through a nested slot names the template that wrote it", () => {
+      for (const passingModule of ["Module114", "Module115"]) {
+        const node = Type.tuple([
+          Type.atom("component"),
+          Type.alias(
+            `Hologram.Test.Fixtures.Template.Renderer.${passingModule}`,
+          ),
+          Type.list(),
+          Type.list([
+            Type.tuple([
+              Type.atom("component"),
+              Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module89"),
+              Type.list(),
+              Type.list(),
+            ]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () =>
+            Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+              Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+              null,
+            ),
+          "Hologram.PropError",
+          'component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", ' +
+            'rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"',
+        );
+      }
+    });
+
+    it("slot content passed on through a nested slot renders in its place", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module115"),
+        Type.list(),
+        Type.keywordList([[Type.atom("text"), Type.bitstring("123")]]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, ["abc123xyz"]);
+    });
+
     it("nested components with slots, no slot tag in the top component template, not using vars", () => {
       const node = Type.tuple([
         Type.atom("component"),
@@ -9732,6 +9797,28 @@ describe("Renderer", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("a prop error in page content its layout passes on through a nested slot names the page", () => {
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module116"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module114"),
+      );
+
+      assertBoxedError(
+        () =>
+          Renderer.renderPage(
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module116"),
+            Type.map(),
+          ),
+        "Hologram.PropError",
+        'component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", ' +
+          'rendered from "Hologram.Test.Fixtures.Template.Renderer.Module116"',
+      );
     });
 
     // This test case doesn't apply to the client renderer, because the client renderer receives already cast page params.
@@ -12395,6 +12482,42 @@ describe("Renderer", () => {
           "1a2b3c:0#i907",
           "1a2b3c:0#i906:1",
           "1a2b3c:0#i907:1",
+        ],
+      );
+
+      sinon.assert.notCalled(warnStub);
+    });
+
+    // Each place the content is passed on to renders it as a list of its own, so a loop in it is
+    // the same loop rendered twice, as with two slots in the template that was given the content.
+    it("the same loop passed on through two slots of a nested usage isn't logged", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module117"),
+        Type.list(),
+        Type.list([
+          loopItem(itemWithId(908), [keyedElement("li", 0)]),
+          loopItem(itemWithId(909), [keyedElement("li", 0)]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        keyedElement("ul", 9, [node]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        result.children
+          .map((child) => child.key)
+          .filter((key) => key !== undefined),
+        [
+          "1a2b3c:0#i908",
+          "1a2b3c:0#i909",
+          "1a2b3c:0#i908:1",
+          "1a2b3c:0#i909:1",
         ],
       );
 

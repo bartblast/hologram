@@ -33,6 +33,10 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module110
   alias Hologram.Test.Fixtures.Template.Renderer.Module111
   alias Hologram.Test.Fixtures.Template.Renderer.Module113
+  alias Hologram.Test.Fixtures.Template.Renderer.Module114
+  alias Hologram.Test.Fixtures.Template.Renderer.Module115
+  alias Hologram.Test.Fixtures.Template.Renderer.Module116
+  alias Hologram.Test.Fixtures.Template.Renderer.Module117
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
@@ -1464,6 +1468,33 @@ defmodule Hologram.Template.RendererTest do
       end
     end
 
+    # A template that puts its own <slot /> inside a component usage passes the content on, and the
+    # content is still the writer's, however many templates pass it on.
+    test "a prop error in slot content passed on through a nested slot names the template that wrote it" do
+      for passing_module <- [Module114, Module115] do
+        node = {:component, passing_module, [], [{:component, Module89, [], []}]}
+        env = %Renderer.Env{parent_module: Module64}
+
+        expected_msg =
+          ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", / <>
+            ~s/rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"/
+
+        assert_raise Hologram.PropError, expected_msg, fn ->
+          render_dom(node, env, @server)
+        end
+      end
+    end
+
+    test "slot content passed on through a nested slot renders in its place" do
+      node = {:component, Module115, [], [text: "123"]}
+      assert render_tree(node, @env, @server) == {[text: "abc123xyz"], %{}, @server}
+    end
+
+    test "slot content passed on through two slots of a nested usage renders in both" do
+      node = {:component, Module117, [], [text: "123"]}
+      assert render_tree(node, @env, @server) == {[text: "abc123123xyz"], %{}, @server}
+    end
+
     test "with multiple nodes" do
       node = {:component, Module8, [], [text: "123", expression: {456}]}
       assert render_dom(node, @env, @server) == {"abc123456xyz", %{}, @server}
@@ -2105,6 +2136,18 @@ defmodule Hologram.Template.RendererTest do
 
       assert_error Hologram.StateError, expected_msg, fn ->
         render_page_without_tree(Module111, @params, @server, @opts)
+      end
+    end
+
+    test "a prop error in page content its layout passes on through a nested slot names the page" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module116, :dummy_module_116_digest)
+
+      expected_msg =
+        ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", / <>
+          ~s/rendered from "Hologram.Test.Fixtures.Template.Renderer.Module116"/
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_page_without_tree(Module116, @params, @server, @opts)
       end
     end
 
