@@ -978,6 +978,31 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Writes the module info PLT to the dump at the given path, with a new random token next to it that
+  tells this dump from any other (see `module_info_dump_stamp/1`). The token is written first, so
+  that a compile that dies between the two leaves a token no dump was written with.
+  """
+  @spec dump_module_info_plt(PLT.t(), T.file_path()) :: :ok
+  def dump_module_info_plt(plt, dump_path) do
+    token =
+      12
+      |> :crypto.strong_rand_bytes()
+      |> Base.url_encode64(padding: false)
+
+    dump_path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
+    dump_path
+    |> module_info_dump_token_path()
+    |> FileUtils.write_atomically!(token)
+
+    PLT.dump(plt, dump_path)
+
+    :ok
+  end
+
+  @doc """
   Encodes into the encode PLT every function of the given MFAs that is not there yet, reading each
   module's IR once however many entry files reach it. Erlang modules are skipped, and so are
   protocol modules, whose dispatcher functions depend on the entry file and are encoded per entry
@@ -1511,15 +1536,16 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns what tells the module info dump at the given path from another one: its mtime in posix
-  seconds and its inode, or nil when there is no dump. The dump is written to a new file that
-  replaces the old one, so another compile's dump written within the same second gets another inode,
-  unless the file system hands a freed inode back out within that second. On Windows the inode is 0,
-  so only the mtime is compared there.
+  seconds and the token `dump_module_info_plt/2` wrote with it, or nil when there is no dump. Each
+  dump gets a new random token, so another compile's dump written within the same second has
+  another stamp. The token is nil when there is none, as in a build dir only an older Hologram
+  wrote to. An older Hologram that rewrites the dump leaves the token there, and the mtime alone
+  tells its dump apart then.
   """
-  @spec module_info_dump_stamp(T.file_path()) :: {non_neg_integer, non_neg_integer} | nil
+  @spec module_info_dump_stamp(T.file_path()) :: {non_neg_integer, String.t() | nil} | nil
   def module_info_dump_stamp(dump_path) do
     case File.stat(dump_path, time: :posix) do
-      {:ok, %File.Stat{inode: inode, mtime: mtime}} -> {mtime, inode}
+      {:ok, %File.Stat{mtime: mtime}} -> {mtime, read_module_info_dump_token(dump_path)}
       {:error, _reason} -> nil
     end
   end
@@ -2544,6 +2570,10 @@ defmodule Hologram.Compiler do
     {static_bundle_path, static_source_map_path}
   end
 
+  # The file holding the token of the module info dump at the given path (see
+  # dump_module_info_plt/2).
+  defp module_info_dump_token_path(dump_path), do: dump_path <> ".token"
+
   # The record of the last JS deps install, in the node_modules dir it filled. npm leaves files it
   # doesn't know there alone, on a reinstall and on an install after package.json changed.
   defp package_json_digest_path(assets_dir) do
@@ -2648,10 +2678,9 @@ defmodule Hologram.Compiler do
     if info, do: PLT.put(new_plt, module, info)
   end
 
-  # Not reusable: read it.
-  # A path the VM still names for a loaded module whose file another OS process deleted has nothing
-  # to read, so the module gets no entry, as a deleted one. Checked only when the entry is not
-  # reused, whose check of the beam found no file then.
+  # Read unless reusable. A path the VM still names for a loaded module whose file another OS
+  # process deleted has nothing to read, so the module gets no entry, as a deleted one. Checked only
+  # when the entry is not reused, whose check of the beam found no file then.
   defp put_module_info_plt_entry!(new_plt, module, beam_source, old_plt, dumped_at) do
     info =
       cond do
@@ -2673,6 +2702,16 @@ defmodule Hologram.Compiler do
     metafile_path
     |> File.read!()
     |> JSON.decode!()
+  end
+
+  # nil when the dump has no token: an older Hologram wrote it.
+  defp read_module_info_dump_token(dump_path) do
+    case dump_path
+         |> module_info_dump_token_path()
+         |> File.read() do
+      {:ok, token} -> token
+      {:error, _reason} -> nil
+    end
   end
 
   # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states. A

@@ -234,7 +234,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     edited_info = %{info | digest: "edited", mtime: info.mtime - 100}
 
     plt = PLT.start(items: Map.to_list(%{module_infos | module => edited_info}))
-    PLT.dump(plt, dump_path)
+    Compiler.dump_module_info_plt(plt, dump_path)
     PLT.stop(plt)
   end
 
@@ -414,9 +414,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     |> PLT.reset()
     |> PLT.put(Map.to_list(module_infos))
 
-    # The dump this VM saw, whose inode the cache keeps beside the dump time.
-    %{dump_inode: dump_inode} = Cache.get()
-    Cache.put_module_infos(dumped_at && {dumped_at, dump_inode}, editable_modules)
+    # The dump this VM saw, whose token the cache keeps beside the dump time.
+    %{dump_token: dump_token} = Cache.get()
+    Cache.put_module_infos(dumped_at && {dumped_at, dump_token}, editable_modules)
   end
 
   # Moves the kept runtime bundle, its gzip copy and its source map to the names of an older build,
@@ -496,7 +496,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> fun.()
 
     plt = PLT.start(items: Map.to_list(module_infos))
-    PLT.dump(plt, dump_path)
+    Compiler.dump_module_info_plt(plt, dump_path)
     PLT.stop(plt)
 
     File.touch!(dump_path, mtime + seconds_later)

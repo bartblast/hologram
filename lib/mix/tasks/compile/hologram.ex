@@ -1015,7 +1015,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
 
     if opts[:infos_changed?] or not own_dumps? do
-      PLT.dump(module_info_plt, opts[:module_info_plt_dump_path])
+      Compiler.dump_module_info_plt(module_info_plt, opts[:module_info_plt_dump_path])
     end
   end
 
@@ -1380,7 +1380,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # Whether the module info dump on disk is the one the given stamp belongs to (see
   # Hologram.Compiler.module_info_dump_stamp/1): the one this VM wrote last, or the one the first
   # compile in a VM loaded, under the compiler lock, so that nothing wrote it since. A dump another
-  # VM wrote within the same second has another inode. No dump and no stamp count as the same.
+  # VM wrote within the same second has another token. No dump and no stamp count as the same.
   defp own_dumps?(dump_stamp, module_info_plt_dump_path) do
     Compiler.module_info_dump_stamp(module_info_plt_dump_path) == dump_stamp
   end
@@ -1657,7 +1657,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         # graph. The infos are marked as kept again last, after the dumps.
         :ok = Cache.clear_module_infos()
 
-        {cache, cache.module_info_plt, cache.dumped_at && {cache.dumped_at, cache.dump_inode}}
+        {cache, cache.module_info_plt, cache.dumped_at && {cache.dumped_at, cache.dump_token}}
     end
   end
 
@@ -1813,7 +1813,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp stamp_mtime(nil), do: nil
 
-  defp stamp_mtime({mtime, _inode}), do: mtime
+  defp stamp_mtime({mtime, _token}), do: mtime
 
   # Lists all apps of the enclosing umbrella project, whether the compiler runs in
   # the umbrella root context or in a child app context. Empty in single-app projects.

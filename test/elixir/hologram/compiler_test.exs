@@ -3212,6 +3212,41 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
   end
 
+  describe "dump_module_info_plt/2" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "dump_module_info_plt_2"])
+      clean_dir(test_tmp_dir)
+
+      [dump_path: Path.join([test_tmp_dir, "build", Reflection.module_info_plt_dump_file_name()])]
+    end
+
+    test "writes the PLT and a token", %{dump_path: dump_path} do
+      plt = PLT.put(PLT.start(), :module_1, %{digest: 1})
+
+      assert dump_module_info_plt(plt, dump_path) == :ok
+
+      loaded_plt = PLT.start()
+      PLT.maybe_load(loaded_plt, dump_path)
+
+      assert PLT.get_all(loaded_plt) == %{module_1: %{digest: 1}}
+      assert {_mtime, token} = module_info_dump_stamp(dump_path)
+      assert is_binary(token)
+    end
+
+    test "gives a dump written again within the same second another stamp", %{
+      dump_path: dump_path
+    } do
+      plt = PLT.start()
+      dump_module_info_plt(plt, dump_path)
+      {mtime, _token} = old_stamp = module_info_dump_stamp(dump_path)
+
+      dump_module_info_plt(plt, dump_path)
+      File.touch!(dump_path, mtime)
+
+      assert module_info_dump_stamp(dump_path) != old_stamp
+    end
+  end
+
   describe "encode_reachable_functions/5" do
     setup do
       # A PLT per test, so one test's cache can never stand in for another's encoding.
@@ -4676,26 +4711,24 @@ defmodule Hologram.CompilerTest do
       [dump_path: Path.join(test_tmp_dir, Reflection.module_info_plt_dump_file_name())]
     end
 
-    test "dump file exists", %{dump_path: dump_path} do
+    test "dump with a token", %{dump_path: dump_path} do
       File.write!(dump_path, "dump")
-      stat = File.stat!(dump_path, time: :posix)
+      File.write!(dump_path <> ".token", "token")
 
-      assert module_info_dump_stamp(dump_path) == {stat.mtime, stat.inode}
+      assert module_info_dump_stamp(dump_path) ==
+               {File.stat!(dump_path, time: :posix).mtime, "token"}
     end
 
-    test "dump file doesn't exist", %{dump_path: dump_path} do
+    test "dump with no token", %{dump_path: dump_path} do
+      File.write!(dump_path, "dump")
+
+      assert module_info_dump_stamp(dump_path) == {File.stat!(dump_path, time: :posix).mtime, nil}
+    end
+
+    test "no dump", %{dump_path: dump_path} do
+      File.write!(dump_path <> ".token", "token")
+
       assert module_info_dump_stamp(dump_path) == nil
-    end
-
-    test "a dump written again within the same second has another stamp", %{dump_path: dump_path} do
-      plt = PLT.start()
-      PLT.dump(plt, dump_path)
-      {mtime, _inode} = old_stamp = module_info_dump_stamp(dump_path)
-
-      PLT.dump(plt, dump_path)
-      File.touch!(dump_path, mtime)
-
-      assert module_info_dump_stamp(dump_path) != old_stamp
     end
   end
 
