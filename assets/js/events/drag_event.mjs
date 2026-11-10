@@ -48,8 +48,32 @@ export default class DragEvent {
     return Erlang_Maps["merge/2"](mouseEventDetails, dragEventDetails);
   }
 
-  static isEventIgnored(_event) {
-    return false;
+  // Each time a drag crosses between an element and one of its children, the element gets a
+  // dragenter and a dragleave, its own or bubbled up from the child. Both are ignored when the
+  // element contains the relatedTarget, which is the node the drag came from on dragenter and the
+  // one it goes to on dragleave. The window and the document ignore every crossing inside the page.
+  // A drag from outside the page, or a browser that leaves relatedTarget unset (Safari before the
+  // WebKit bug 66547 fix), has a null relatedTarget and fires.
+  static isEventIgnored(event) {
+    if (event.type !== "dragenter" && event.type !== "dragleave") {
+      return false;
+    }
+
+    const currentTarget = event.currentTarget;
+    const relatedTarget = event.relatedTarget ?? null;
+
+    if (relatedTarget === null) {
+      return false;
+    }
+
+    if (
+      currentTarget === globalThis.window ||
+      currentTarget === globalThis.document
+    ) {
+      return true;
+    }
+
+    return currentTarget.contains(relatedTarget);
   }
 
   // Firefox starts a drag only when a dragstart listener puts data on it (Mozilla bug 725156), so a

@@ -270,8 +270,102 @@ describe("DragEvent", () => {
     });
   });
 
-  it("isEventIgnored()", () => {
-    assert.isFalse(DragEvent.isEventIgnored(buildEvent("dragover", null)));
+  describe("isEventIgnored()", () => {
+    let child, element, outside;
+
+    beforeEach(() => {
+      element = document.createElement("div");
+      child = document.createElement("span");
+      outside = document.createElement("p");
+
+      element.appendChild(child);
+      document.body.append(element, outside);
+    });
+
+    afterEach(() => {
+      element.remove();
+      outside.remove();
+    });
+
+    function buildCrossing(type, currentTarget, relatedTarget) {
+      return {type, currentTarget, relatedTarget};
+    }
+
+    for (const type of ["dragenter", "dragleave"]) {
+      describe(type, () => {
+        it("is ignored when the relatedTarget is a child", () => {
+          assert.isTrue(
+            DragEvent.isEventIgnored(buildCrossing(type, element, child)),
+          );
+        });
+
+        it("is ignored when the relatedTarget is the element itself", () => {
+          assert.isTrue(
+            DragEvent.isEventIgnored(buildCrossing(type, element, element)),
+          );
+        });
+
+        it("fires when the relatedTarget is outside the element", () => {
+          assert.isFalse(
+            DragEvent.isEventIgnored(buildCrossing(type, element, outside)),
+          );
+        });
+
+        it("fires when there's no relatedTarget", () => {
+          assert.isFalse(
+            DragEvent.isEventIgnored(buildCrossing(type, element, null)),
+          );
+        });
+
+        it("is ignored on the document when the drag crosses between elements", () => {
+          assert.isTrue(
+            DragEvent.isEventIgnored(buildCrossing(type, document, outside)),
+          );
+        });
+
+        it("fires on the document when the drag crosses the page's edge", () => {
+          assert.isFalse(
+            DragEvent.isEventIgnored(buildCrossing(type, document, null)),
+          );
+        });
+
+        it("is ignored on the window when the drag crosses between elements", () => {
+          assert.isTrue(
+            DragEvent.isEventIgnored(buildCrossing(type, window, outside)),
+          );
+        });
+
+        it("is ignored on the document when the relatedTarget was removed from the page", () => {
+          const removed = document.createElement("p");
+
+          assert.isTrue(
+            DragEvent.isEventIgnored(buildCrossing(type, document, removed)),
+          );
+        });
+
+        it("is ignored on the window when the relatedTarget was removed from the page", () => {
+          const removed = document.createElement("p");
+
+          assert.isTrue(
+            DragEvent.isEventIgnored(buildCrossing(type, window, removed)),
+          );
+        });
+
+        it("fires on the window when the drag crosses the page's edge", () => {
+          assert.isFalse(
+            DragEvent.isEventIgnored(buildCrossing(type, window, null)),
+          );
+        });
+      });
+    }
+
+    for (const type of ["drag", "dragend", "dragover", "dragstart", "drop"]) {
+      it(`fires a ${type} whatever its relatedTarget`, () => {
+        assert.isFalse(
+          DragEvent.isEventIgnored(buildCrossing(type, element, child)),
+        );
+      });
+    }
   });
 
   describe("prepareEvent()", () => {
