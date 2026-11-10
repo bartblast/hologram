@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   defineRuntimeGlobals,
   registerWebApis,
 } from "../../support/helpers.mjs";
@@ -14,6 +15,7 @@ import Elixir_Hologram_JS, {
 import {box} from "../../../../assets/js/js_interop.mjs";
 
 import ERTS from "../../../../assets/js/erts.mjs";
+import ElementRefRegistry from "../../../../assets/js/element_ref_registry.mjs";
 import HologramInterpreterError from "../../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../../assets/js/interpreter.mjs";
 import Type from "../../../../assets/js/type.mjs";
@@ -1085,6 +1087,87 @@ describe("Elixir_Hologram_JS", () => {
       );
 
       assert.deepStrictEqual(result, Type.atom("false"));
+    });
+  });
+
+  describe("element/1", () => {
+    const element = Elixir_Hologram_JS["element/1"];
+
+    // The native object a native value struct holds.
+    const nativeObject = (nativeValue) =>
+      ERTS.nativeObjectRegistry.get(
+        nativeValue.data[Type.encodeMapKey(Type.atom("value"))][1],
+      );
+
+    const putElement = (ref, domElement) =>
+      ElementRefRegistry.replace(
+        new Map([[Type.encodeMapKey(ref), domElement]]),
+        Type.alias("MyPage"),
+      );
+
+    afterEach(() => {
+      ElementRefRegistry.clear();
+    });
+
+    it("returns the element rendered under an atom ref", () => {
+      const domElement = document.createElement("input");
+      putElement(Type.atom("search"), domElement);
+
+      const result = element(Type.atom("search"));
+
+      assert.isTrue(Type.isNativeValueStruct(result));
+      assert.strictEqual(nativeObject(result), domElement);
+    });
+
+    it("returns the element rendered under a tuple ref", () => {
+      const domElement = document.createElement("li");
+      const ref = Type.tuple([Type.atom("message"), Type.integer(42)]);
+      putElement(ref, domElement);
+
+      assert.strictEqual(nativeObject(element(ref)), domElement);
+    });
+
+    it("returns a native value unchanged", () => {
+      const nativeValue = box(document.createElement("div"));
+
+      assert.strictEqual(element(nativeValue), nativeValue);
+    });
+
+    it("returns the window for :window", () => {
+      assert.strictEqual(nativeObject(element(Type.atom("window"))), window);
+    });
+
+    it("returns the document for :document", () => {
+      assert.strictEqual(
+        nativeObject(element(Type.atom("document"))),
+        document,
+      );
+    });
+
+    it("raises for a value that is neither a ref nor a native value", () => {
+      assertBoxedError(
+        () => element(Type.bitstring("search")),
+        "Hologram.MisuseError",
+        'JS.element/1 takes a ref, like :search or {:message, 42}, or a native value, got: "search"',
+      );
+    });
+
+    it("raises for a value that isn't a ref, with the reason", () => {
+      assertBoxedError(
+        () => element(Type.tuple([Type.atom("message"), Type.nil()])),
+        "Hologram.MisuseError",
+        "JS.element/1 takes a ref, like :search or {:message, 42}, or a native value, got: {:message, nil} - nil, true and false can't be in an identifier",
+      );
+    });
+
+    it("raises when nothing is rendered under the ref", () => {
+      putElement(Type.atom("search"), document.createElement("input"));
+
+      assertBoxedError(
+        () => element(Type.tuple([Type.atom("message"), Type.integer(42)])),
+        "Hologram.MisuseError",
+        "no element is rendered under the ref {:message, 42}",
+      );
     });
   });
 

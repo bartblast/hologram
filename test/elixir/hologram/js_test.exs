@@ -1,5 +1,6 @@
 defmodule Hologram.JSTest do
   use Hologram.Test.BasicCase, async: true
+  import Hologram.JS, only: [element: 1]
 
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.JS.Module1
@@ -7,6 +8,14 @@ defmodule Hologram.JSTest do
   alias Hologram.Test.Fixtures.JS.Module3
   alias Hologram.Test.Fixtures.JS.Module4
   alias Hologram.Test.Fixtures.JS.Module6
+
+  describe "element/1" do
+    # The browser looks the element up. A server render gets the placeholder every JS function
+    # returns there.
+    test "returns the placeholder on the server" do
+      assert element(:search) == :ok
+    end
+  end
 
   describe "js_import/1" do
     test "imports default export with :as binding" do
