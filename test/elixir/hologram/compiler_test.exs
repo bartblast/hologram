@@ -4668,6 +4668,37 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "module_info_dump_stamp/1" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "module_info_dump_stamp_1"])
+      clean_dir(test_tmp_dir)
+
+      [dump_path: Path.join(test_tmp_dir, Reflection.module_info_plt_dump_file_name())]
+    end
+
+    test "dump file exists", %{dump_path: dump_path} do
+      File.write!(dump_path, "dump")
+      stat = File.stat!(dump_path, time: :posix)
+
+      assert module_info_dump_stamp(dump_path) == {stat.mtime, stat.inode}
+    end
+
+    test "dump file doesn't exist", %{dump_path: dump_path} do
+      assert module_info_dump_stamp(dump_path) == nil
+    end
+
+    test "a dump written again within the same second has another stamp", %{dump_path: dump_path} do
+      plt = PLT.start()
+      PLT.dump(plt, dump_path)
+      {mtime, _inode} = old_stamp = module_info_dump_stamp(dump_path)
+
+      PLT.dump(plt, dump_path)
+      File.touch!(dump_path, mtime)
+
+      assert module_info_dump_stamp(dump_path) != old_stamp
+    end
+  end
+
   describe "partition_affected_pages/6" do
     setup do
       test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_6"])

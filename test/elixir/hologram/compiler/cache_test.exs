@@ -113,10 +113,17 @@ defmodule Hologram.Compiler.CacheTest do
     test "forgets the dump time and the editable modules, and keeps the module infos" do
       %{module_info_plt: module_info_plt} = get()
       PLT.put(module_info_plt, Module1, %{digest: "a"})
-      put_module_infos(123, MapSet.new([Module1]))
+      put_module_infos({123, 7}, MapSet.new([Module1]))
 
       assert clear_module_infos() == :ok
-      assert %{dumped_at: nil, editable_modules: nil, module_info_plt: ^module_info_plt} = get()
+
+      assert %{
+               dump_inode: nil,
+               dumped_at: nil,
+               editable_modules: nil,
+               module_info_plt: ^module_info_plt
+             } = get()
+
       assert PLT.get(module_info_plt, Module1) == {:ok, %{digest: "a"}}
     end
 
@@ -281,7 +288,7 @@ defmodule Hologram.Compiler.CacheTest do
     test "is left clear by put_module_infos/2", %{path: path} do
       dump_compile_state(path, false)
 
-      put_module_infos(123, MapSet.new([Module1]))
+      put_module_infos({123, 7}, MapSet.new([Module1]))
 
       refute get().compile_state_changed?
     end
@@ -500,7 +507,7 @@ defmodule Hologram.Compiler.CacheTest do
       CallGraph.add_vertex(call_graph, {Module1, :fun_1, 0})
       PLT.put(ir_plt, Module1, :ir_1)
       PLT.put(module_info_plt, Module1, %{digest: "a"})
-      put_module_infos(123, MapSet.new([Module1]))
+      put_module_infos({123, 7}, MapSet.new([Module1]))
       put_app_versions(hologram: "1.0.0")
       bundle_inputs = %{client_stacktraces?: true}
       put_bundle_inputs(bundle_inputs)
@@ -875,8 +882,15 @@ defmodule Hologram.Compiler.CacheTest do
   test "put_module_infos/2" do
     editable_modules = MapSet.new([Module1])
 
-    assert put_module_infos(123, editable_modules) == :ok
-    assert %{dumped_at: 123, editable_modules: ^editable_modules} = get()
+    assert put_module_infos({123, 7}, editable_modules) == :ok
+
+    assert %{dump_inode: 7, dumped_at: 123, editable_modules: ^editable_modules} = get()
+  end
+
+  test "put_module_infos/2 with no dump" do
+    put_module_infos(nil, MapSet.new())
+
+    assert %{dump_inode: nil, dumped_at: nil, seen_dump_stamp: nil} = get()
   end
 
   test "put_module_metadata/1" do
@@ -970,16 +984,21 @@ defmodule Hologram.Compiler.CacheTest do
     test "stops the kept module info PLT and starts an empty one, and forgets the dump time and the editable modules" do
       old_module_info_plt = get().module_info_plt
       PLT.put(old_module_info_plt, Module1, %{digest: "a"})
-      put_module_infos(123, MapSet.new([Module1]))
+      put_module_infos({123, 7}, MapSet.new([Module1]))
 
       reset()
 
-      %{dumped_at: dumped_at, editable_modules: editable_modules, module_info_plt: new_plt} =
-        get()
+      %{
+        dump_inode: dump_inode,
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_info_plt: new_plt
+      } = get()
 
       refute Process.alive?(old_module_info_plt.pid)
       assert new_plt.table_ref != old_module_info_plt.table_ref
       assert PLT.keys(new_plt) == []
+      assert dump_inode == nil
       assert dumped_at == nil
       assert editable_modules == nil
     end
@@ -1066,42 +1085,42 @@ defmodule Hologram.Compiler.CacheTest do
 
     test "keeps the mark that a compile started and the module info dump the VM last saw" do
       mark_compile_started()
-      put_seen_dumped_at(123)
+      put_seen_dump_stamp({123, 7})
 
       reset_kept_state()
 
-      assert %{compile_started?: true, seen_dumped_at: 123} = get()
+      assert %{compile_started?: true, seen_dump_stamp: {123, 7}} = get()
     end
   end
 
-  describe "seen_dumped_at" do
+  describe "seen_dump_stamp" do
     test "is nil at first" do
-      assert get().seen_dumped_at == nil
+      assert get().seen_dump_stamp == nil
     end
 
-    test "is set by put_seen_dumped_at/1" do
-      assert put_seen_dumped_at(123) == :ok
-      assert get().seen_dumped_at == 123
+    test "is set by put_seen_dump_stamp/1" do
+      assert put_seen_dump_stamp({123, 7}) == :ok
+      assert get().seen_dump_stamp == {123, 7}
     end
 
     test "is set by put_module_infos/2" do
-      put_module_infos(123, MapSet.new())
+      put_module_infos({123, 7}, MapSet.new())
 
-      assert get().seen_dumped_at == 123
+      assert get().seen_dump_stamp == {123, 7}
     end
 
     test "is kept by clear_module_infos/0" do
-      put_module_infos(123, MapSet.new())
+      put_module_infos({123, 7}, MapSet.new())
       clear_module_infos()
 
-      assert %{dumped_at: nil, seen_dumped_at: 123} = get()
+      assert %{dumped_at: nil, seen_dump_stamp: {123, 7}} = get()
     end
 
     test "is forgotten by reset/0" do
-      put_seen_dumped_at(123)
+      put_seen_dump_stamp({123, 7})
       reset()
 
-      assert get().seen_dumped_at == nil
+      assert get().seen_dump_stamp == nil
     end
   end
 end

@@ -414,7 +414,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     |> PLT.reset()
     |> PLT.put(Map.to_list(module_infos))
 
-    Cache.put_module_infos(dumped_at, editable_modules)
+    # The dump this VM saw, whose inode the cache keeps beside the dump time.
+    %{dump_inode: dump_inode} = Cache.get()
+    Cache.put_module_infos(dumped_at && {dumped_at, dump_inode}, editable_modules)
   end
 
   # Moves the kept runtime bundle, its gzip copy and its source map to the names of an older build,
@@ -482,8 +484,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   # Writes the module info dump again with the given change to its entries, as another OS process's
-  # compile does, with an mtime a second past the one it had.
-  defp rewrite_module_info_dump(opts, fun) do
+  # compile does, with an mtime the given number of seconds past the one it had: 0 for a dump
+  # written in the same second.
+  defp rewrite_module_info_dump(opts, fun, seconds_later \\ 1) do
     dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
     %File.Stat{mtime: mtime} = File.stat!(dump_path, time: :posix)
 
@@ -496,7 +499,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.dump(plt, dump_path)
     PLT.stop(plt)
 
-    File.touch!(dump_path, mtime + 1)
+    File.touch!(dump_path, mtime + seconds_later)
   end
 
   # The calls of the given functions this process made while the function ran, in order, as
@@ -1315,6 +1318,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(Keyword.put(opts, :force?, true))
 
       assert :code.module_status(Module8) == :modified
+    end
+
+    test "unloads the old code of a module another process compiled after a failed compile, against that process's module info dump written in the same second",
+         %{opts: opts} do
+      run(opts)
+
+      Cache.clear_module_infos()
+      load_code_other_than_beam(Module8)
+      rewrite_module_info_dump(opts, & &1, 0)
+
+      run(opts)
+
+      assert Module8.value() == :beam
     end
 
     test "checks only the diff's modules after a failed compile when the module info dump is the one it saw",
@@ -3376,6 +3392,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       %File.Stat{mtime: mtime} = File.stat!(module_info_dump_path, time: :posix)
       File.touch!(module_info_dump_path, mtime - 10)
+
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
+    test "a run with no changes writes both dumps when another VM rewrote the module info dump in the same second",
+         %{opts: opts} do
+      run(opts)
+
+      rewrite_module_info_dump(opts, & &1, 0)
 
       assert count_dumps(fn -> run(opts) end) == [1, 1]
     end

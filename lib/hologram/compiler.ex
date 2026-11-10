@@ -1510,6 +1510,21 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns what tells the module info dump at the given path from another one: its mtime in posix
+  seconds and its inode, or nil when there is no dump. The dump is written to a new file that
+  replaces the old one, so another compile's dump written within the same second gets another inode,
+  unless the file system hands a freed inode back out within that second. On Windows the inode is 0,
+  so only the mtime is compared there.
+  """
+  @spec module_info_dump_stamp(T.file_path()) :: {non_neg_integer, non_neg_integer} | nil
+  def module_info_dump_stamp(dump_path) do
+    case File.stat(dump_path, time: :posix) do
+      {:ok, %File.Stat{inode: inode, mtime: mtime}} -> {mtime, inode}
+      {:error, _reason} -> nil
+    end
+  end
+
+  @doc """
   Splits the given pages into the ones a compile must rebuild and the ones whose bundle it can reuse.
 
   A page is rebuilt when the pages PLT holds no state for it (a new page, or the first compile in a
