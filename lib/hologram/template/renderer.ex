@@ -904,46 +904,6 @@ defmodule Hologram.Template.Renderer do
     if csp_nonce && nonced_elements != [], do: {csp_nonce, nonced_elements}, else: nil
   end
 
-  # The entries of a $data_transfer value: a keyword list's, each key once, in the order written, or
-  # a map's, in the order of their keys, which both renderers can reproduce.
-  #
-  # WARNING: must match the client renderer's #dataTransferEntries (renderer.mjs).
-  defp data_transfer_entries(%_struct{} = value), do: raise_invalid_data_transfer(value)
-
-  defp data_transfer_entries(value) when is_map(value) do
-    value
-    |> Map.to_list()
-    |> List.keysort(0)
-  end
-
-  defp data_transfer_entries(value) when is_list(value) do
-    unless Keyword.keyword?(value) do
-      raise_invalid_data_transfer(value)
-    end
-
-    duplicate_key =
-      value
-      |> Keyword.keys()
-      |> Enum.reduce_while(MapSet.new(), fn key, seen_keys ->
-        if MapSet.member?(seen_keys, key) do
-          {:halt, {:duplicate, key}}
-        else
-          {:cont, MapSet.put(seen_keys, key)}
-        end
-      end)
-
-    with {:duplicate, key} <- duplicate_key do
-      raise Hologram.MisuseError, message: DataTransfer.duplicate_key_message(key)
-    end
-
-    value
-  end
-
-  defp data_transfer_entries(value), do: raise_invalid_data_transfer(value)
-
-  # Event attributes are exempt from deduplication, because a tag may carry multiple bindings which
-  # share a base name once their modifiers are decomposed at compile time, e.g. both
-  # $key_down.enter and $key_down.escape are named "$key_down".
   defp dedupe_attributes(attrs_dom) do
     attrs_dom
     |> Enum.with_index()
@@ -1534,15 +1494,6 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
-  defp raise_invalid_data_transfer(value) do
-    message =
-      value
-      |> inspect()
-      |> DataTransfer.invalid_value_message()
-
-    raise Hologram.MisuseError, message: message
-  end
-
   # WARNING: must match the client renderer's #raiseInvalidExplicitKey (renderer.mjs).
   defp raise_invalid_explicit_key(value) do
     raise ArgumentError,
@@ -1835,45 +1786,20 @@ defmodule Hologram.Template.Renderer do
       ~s/"#{Reflection.module_name(module)}" - state is declared with atom names/
   end
 
-  # Judges the value a $data_transfer renders with: a keyword list or a map of the keys the attribute
-  # takes, each given once, with a drop effect only on a tag with a $drop binding.
+  # The build judges a literal $data_transfer. This judges the value it renders with, literal or not.
   #
   # WARNING: must match the client renderer's #renderDataTransfer (renderer.mjs).
   defp validate_data_transfer(attrs_dom) do
-    case List.keyfind(attrs_dom, "$data_transfer", 0) do
-      {"$data_transfer", [expression: expression]} ->
-        expression
-        |> expression_value()
-        |> data_transfer_entries()
-        |> Enum.each(&validate_data_transfer_entry(&1, attrs_dom))
-
-      nil ->
-        :ok
-    end
-  end
-
-  defp validate_data_transfer_entry({:drop_effect, value}, attrs_dom) do
-    if value not in DataTransfer.drop_effects() do
-      message =
-        value
-        |> inspect()
-        |> DataTransfer.invalid_drop_effect_message()
-
+    with {"$data_transfer", [expression: expression]} <-
+           List.keyfind(attrs_dom, "$data_transfer", 0),
+         {:error, message} <-
+           expression
+           |> expression_value()
+           |> DataTransfer.check(List.keymember?(attrs_dom, "$drop", 0)) do
       raise Hologram.MisuseError, message: message
     end
 
-    unless List.keymember?(attrs_dom, "$drop", 0) do
-      raise Hologram.MisuseError, message: DataTransfer.drop_effect_without_drop_message()
-    end
-  end
-
-  defp validate_data_transfer_entry({key, _value}, _attrs_dom) do
-    message =
-      key
-      |> inspect()
-      |> DataTransfer.unknown_key_message()
-
-    raise Hologram.MisuseError, message: message
+    :ok
   end
 
   # put_state/2,3 can't tell which module it runs in, so the state is checked where the struct comes
