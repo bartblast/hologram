@@ -23,7 +23,7 @@ defmodule Hologram.Compiler do
   The literal refs a template declares, laid out the way the template renders them: in sequence,
   as alternatives only one of which renders (the clauses of the case an `{%if}` expands to, in
   clause order, so an `{%else}` comes first), or repeated (the body of a `{%for}`), with the
-  components it renders in their places. A ref is its name and the number of key parts after it,
+  components it renders in their places. A ref is its name and the number of parts after it,
   so `$ref="search"` is `{:ref, :search, 0}` and `$ref={:message, message.id}` is
   `{:ref, :message, 1}`.
   """
@@ -482,7 +482,7 @@ defmodule Hologram.Compiler do
     * `:module_metadata` - the stack trace metadata of modules, as `build_module_metadata/1` returns
       it; the modules it does not hold are read from the loaded modules (default: none).
     * `:ref_names` - the page module and the literal refs it renders with its layout, as names with
-      their numbers of key parts, as `check_template_refs/2` returns them, which the script puts in
+      their numbers of parts, as `check_template_refs/2` returns them, which the script puts in
       the runtime's element ref registry (default: none).
     * `:runtime_js_binding_modules` - modules whose JS imports are skipped when the imports are
       aggregated, because the runtime script, which every page loads, already registers their
@@ -793,9 +793,9 @@ defmodule Hologram.Compiler do
 
   @doc """
   Checks the literal refs the given templates declare, as `list_template_refs/1` summarizes them,
-  and raises `Hologram.CompileError` for the first mistake it finds. A ref without keys names one
+  and raises `Hologram.CompileError` for the first mistake it finds. An atom ref names one
   element, so one that renders twice, inside a `{%for}` or in a component that renders itself is a
-  mistake, and so is a ref name used with different numbers of key parts. Every template is checked
+  mistake, and so is a ref name used with different numbers of parts. Every template is checked
   with what it renders, and each page also with its layout, since the two render together.
 
   Only one branch of an `{%if}` and `{%else}` renders, so refs in two branches don't clash. A
@@ -803,7 +803,7 @@ defmodule Hologram.Compiler do
   nothing. A component only a dynamic tag renders is never a usage, so it adds nothing either.
 
   Returns, for each page, the literal refs it renders with its layout, as names with their numbers
-  of key parts, sorted.
+  of parts, sorted.
 
   ## Examples
 
@@ -833,7 +833,7 @@ defmodule Hologram.Compiler do
     |> Map.new(fn {page_module, refs} ->
       names =
         refs
-        |> Enum.map(&{&1.name, &1.key_count})
+        |> Enum.map(&{&1.name, &1.part_count})
         |> Enum.uniq()
         |> Enum.sort()
 
@@ -1934,9 +1934,9 @@ defmodule Hologram.Compiler do
     end)
   end
 
-  # One branch of a block renders, so a keyless ref counts as often as the branch that renders it the
+  # One branch of a block renders, so an atom ref counts as often as the branch that renders it the
   # most times. The other branches' refs still name refs the page can render, so they stay for the
-  # key-count check and the names, uncounted. A tie goes to the branch whose occurrences come first
+  # part-count check and the names, uncounted. A tie goes to the branch whose occurrences come first
   # in term order, which doesn't depend on the order the clauses were written in.
   defp alternative_ref_occurrences(branches) do
     # Names the block, so two refs can be told to be in separate blocks rather than one, and in
@@ -1950,7 +1950,7 @@ defmodule Hologram.Compiler do
 
     counted_branch_by_name =
       occurrences
-      |> Enum.filter(fn {_index, occurrence} -> counted_keyless?(occurrence) end)
+      |> Enum.filter(fn {_index, occurrence} -> counted_atom_ref?(occurrence) end)
       |> Enum.group_by(fn {_index, occurrence} -> occurrence.name end)
       |> Map.new(fn {name, named} ->
         {index, _paths} =
@@ -1966,7 +1966,7 @@ defmodule Hologram.Compiler do
     Enum.map(occurrences, fn {index, occurrence} ->
       counted? =
         occurrence.counted? and
-          (occurrence.key_count > 0 or counted_branch_by_name[occurrence.name] == index)
+          (occurrence.part_count > 0 or counted_branch_by_name[occurrence.name] == index)
 
       %{occurrence | blocks: [{block, index} | occurrence.blocks], counted?: counted?}
     end)
@@ -1982,9 +1982,11 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # An entry name, a module, tells apart the entries bundled under one bundle name (the pages), so
-  # it goes into the file name, without its Elixir prefix like the entry file name; a bundle name
-  # with a single entry (the runtime) has none.
+  defp atom_ref_advice(name) do
+    "an atom ref names one element, so give each element a ref of its own, " <>
+      "like {#{inspect(name)}, item.id} for the items of a loop"
+  end
+
   # Builds the IR of the given modules into the IR PLT, then the modules into the call graph.
   defp build_graph_modules!(call_graph, ir_plt, modules) do
     build_missing_ir!(ir_plt, modules)
@@ -2007,7 +2009,10 @@ defmodule Hologram.Compiler do
     bundle_output_name(bundle_name, entry_name)
   end
 
-  # The name esbuild puts in front of the hash in a bundle's file name.
+  # The name esbuild puts in front of the hash in a bundle's file name. An entry name, a module,
+  # tells apart the entries bundled under one bundle name (the pages), so it goes into the file
+  # name, without its Elixir prefix like the entry file name; a bundle name with a single entry (the
+  # runtime) has none.
   defp bundle_output_name(bundle_name, entry_name)
        when is_nil(entry_name) or is_binary(entry_name) do
     bundle_name
@@ -2194,7 +2199,7 @@ defmodule Hologram.Compiler do
           "in #{Reflection.module_name(module)}'s template"
   end
 
-  defp counted_keyless?(occurrence), do: occurrence.counted? and occurrence.key_count == 0
+  defp counted_atom_ref?(occurrence), do: occurrence.counted? and occurrence.part_count == 0
 
   defp create_entry_file(js, entry_name, tmp_dir) do
     entry_file_path = Path.join(tmp_dir, "#{entry_name}.entry.js")
@@ -2372,12 +2377,12 @@ defmodule Hologram.Compiler do
     Enum.map_reduce(parts, memo, &evaluate_refs(&1, module, context, cycle, &2))
   end
 
-  defp evaluate_refs({:ref, name, key_count}, module, _context, _cycle, memo) do
+  defp evaluate_refs({:ref, name, part_count}, module, _context, _cycle, memo) do
     occurrence = %{
       blocks: [],
       counted?: true,
       cycle_usage?: false,
-      key_count: key_count,
+      part_count: part_count,
       loop: nil,
       name: name,
       path: [module]
@@ -2611,17 +2616,6 @@ defmodule Hologram.Compiler do
     else
       _fallback -> nil
     end
-  end
-
-  defp key_parts_text(0), do: "no key parts"
-
-  defp key_parts_text(1), do: "1 key part"
-
-  defp key_parts_text(key_count), do: "#{key_count} key parts"
-
-  defp keyless_ref_advice(name) do
-    "a ref without keys names one element, so give each element a ref of its own, " <>
-      "like {#{inspect(name)}, item.id} for the items of a loop"
   end
 
   # The files esbuild read for a bundle, given as its metafile lists them relative to the working
@@ -2932,6 +2926,12 @@ defmodule Hologram.Compiler do
     Path.join([assets_dir, "node_modules", ".package_json_digest.bin"])
   end
 
+  defp parts_text(0), do: "no parts"
+
+  defp parts_text(1), do: "1 part"
+
+  defp parts_text(part_count), do: "#{part_count} parts"
+
   # A compiled module is read. The entry of any other module is left as it is, unless it is a
   # protocol's, whose consolidated beam a new implementation rewrites without a compile; that one,
   # and a beam with no entry, is checked against its mtime and size first.
@@ -3023,7 +3023,7 @@ defmodule Hologram.Compiler do
   defp render_page_ref_names({page_module, names}) do
     names_json =
       names
-      |> Enum.map(fn {name, key_count} -> [Atom.to_string(name), key_count] end)
+      |> Enum.map(fn {name, part_count} -> [Atom.to_string(name), part_count] end)
       |> Jason.encode!()
 
     render_block(
@@ -3202,24 +3202,24 @@ defmodule Hologram.Compiler do
     end
   end
 
-  # A literal key part that can't be in an identifier makes the ref invalid when it renders, so it
+  # A literal part that can't be in an identifier makes the ref invalid when it renders, so it
   # names nothing the build could check.
-  defp ref_from_parts([%IR.TupleType{data: [_name, _key_part | _rest] = parts}]) do
+  defp ref_from_parts([%IR.TupleType{data: [_name, _part | _rest] = parts}]) do
     ref_from_parts(parts)
   end
 
-  defp ref_from_parts([%IR.AtomType{value: name} | key_parts])
+  defp ref_from_parts([%IR.AtomType{value: name} | parts])
        when name not in [nil, true, false] do
-    if Enum.all?(key_parts, &ref_key_part?/1), do: {:ref, name, length(key_parts)}
+    if Enum.all?(parts, &ref_part?/1), do: {:ref, name, length(parts)}
   end
 
   defp ref_from_parts(_parts), do: nil
 
-  defp ref_key_part?(%IR.AtomType{value: value}), do: value not in [nil, true, false]
+  defp ref_part?(%IR.AtomType{value: value}), do: value not in [nil, true, false]
 
-  defp ref_key_part?(%IR.FloatType{}), do: false
+  defp ref_part?(%IR.FloatType{}), do: false
 
-  defp ref_key_part?(_part), do: true
+  defp ref_part?(_part), do: true
 
   # Travels with the per-module metadata, which is emitted under the same
   # setting - a bundle built without client stacktraces names no application
@@ -3561,14 +3561,14 @@ defmodule Hologram.Compiler do
 
   defp template_ref_components({:component, module}), do: [module]
 
-  defp template_ref_components({:ref, _name, _key_count}), do: []
+  defp template_ref_components({:ref, _name, _part_count}), do: []
 
   defp template_ref_components({:loop, body}), do: template_ref_components(body)
 
   defp template_ref_components({_kind, parts}),
     do: Enum.flat_map(parts, &template_ref_components/1)
 
-  defp validate_keyless_ref(name, occurrences, root_label) do
+  defp validate_atom_ref(name, occurrences, root_label) do
     # A loop in a branch that doesn't count still repeats the ref whenever that branch renders.
     case {Enum.find(occurrences, & &1.loop), Enum.filter(occurrences, & &1.counted?)} do
       {nil, [first, second | _rest]} ->
@@ -3589,7 +3589,7 @@ defmodule Hologram.Compiler do
         raise Hologram.CompileError,
           message:
             "the ref #{inspect(name)} would name two elements in #{root_label}, #{places} - " <>
-              "#{keyless_ref_advice(name)}#{hint}"
+              "#{atom_ref_advice(name)}#{hint}"
 
       {nil, _occurrences} ->
         :ok
@@ -3598,7 +3598,7 @@ defmodule Hologram.Compiler do
         raise Hologram.CompileError,
           message:
             "the ref #{inspect(name)}, #{ref_place(occurrence)}, would name an element " <>
-              "#{ref_loop_text(occurrence.loop)} - #{keyless_ref_advice(name)}"
+              "#{ref_loop_text(occurrence.loop)} - #{atom_ref_advice(name)}"
     end
   end
 
@@ -3677,17 +3677,17 @@ defmodule Hologram.Compiler do
     end
   end
 
-  defp validate_ref_key_counts(name, [first | _rest] = occurrences, root_label) do
-    case Enum.find(occurrences, &(&1.key_count != first.key_count)) do
+  defp validate_ref_part_counts(name, [first | _rest] = occurrences, root_label) do
+    case Enum.find(occurrences, &(&1.part_count != first.part_count)) do
       nil ->
         :ok
 
       other ->
         raise Hologram.CompileError,
           message:
-            "the ref #{inspect(name)} takes #{key_parts_text(first.key_count)} #{ref_place(first)}, " <>
-              "and #{key_parts_text(other.key_count)} #{ref_place(other)}, both in #{root_label} - " <>
-              "a ref name takes the same number of key parts everywhere it can render"
+            "the ref #{inspect(name)} takes #{parts_text(first.part_count)} after its name #{ref_place(first)}, " <>
+              "and #{parts_text(other.part_count)} #{ref_place(other)}, both in #{root_label} - " <>
+              "a ref name takes the same number of parts everywhere it can render"
     end
   end
 
@@ -3704,15 +3704,15 @@ defmodule Hologram.Compiler do
   end
 
   # The first mistake by name, so the message doesn't depend on the order the templates render in:
-  # a name used with different numbers of key parts, then a keyless ref that a loop or a recursion
+  # a name used with different numbers of parts, then an atom ref that a loop or a recursion
   # repeats, then one rendered twice.
   defp validate_root_refs(refs, root_label) do
     refs
     |> Enum.group_by(& &1.name)
     |> Enum.sort()
     |> Enum.each(fn {name, occurrences} ->
-      validate_ref_key_counts(name, occurrences, root_label)
-      validate_keyless_ref(name, Enum.filter(occurrences, &(&1.key_count == 0)), root_label)
+      validate_ref_part_counts(name, occurrences, root_label)
+      validate_atom_ref(name, Enum.filter(occurrences, &(&1.part_count == 0)), root_label)
     end)
   end
 end

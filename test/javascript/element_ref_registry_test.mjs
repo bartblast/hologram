@@ -84,7 +84,7 @@ describe("ElementRefRegistry", () => {
       ElementRefRegistry.pageRefNames = new Map();
     });
 
-    it("says a template declares a keyless ref nothing renders", () => {
+    it("says a template declares an atom ref nothing renders", () => {
       showPage([["search", 0]]);
 
       assert.equal(
@@ -93,7 +93,7 @@ describe("ElementRefRegistry", () => {
       );
     });
 
-    it("says a template declares a keyed ref nothing renders", () => {
+    it("says a template declares a tuple ref nothing renders", () => {
       showPage([["message", 1]]);
 
       assert.equal(
@@ -102,21 +102,21 @@ describe("ElementRefRegistry", () => {
       );
     });
 
-    it("says how many key parts the refs of the name take", () => {
+    it("says how many parts the refs of the name take", () => {
       showPage([["item", 1]]);
 
       assert.equal(
         ElementRefRegistry.missingElementHint(tuple("item", 1, 2)),
-        " - refs named :item take 1 key part",
+        " - refs named :item take 1 part after the name",
       );
     });
 
-    it("says the refs of the name take no key parts", () => {
+    it("says the refs of the name take no parts", () => {
       showPage([["search", 0]]);
 
       assert.equal(
         ElementRefRegistry.missingElementHint(tuple("search", 1)),
-        " - refs named :search take no key parts",
+        " - refs named :search take no parts after the name",
       );
     });
 
@@ -133,7 +133,7 @@ describe("ElementRefRegistry", () => {
       );
     });
 
-    it("suggests a keyed ref as a template writes it", () => {
+    it("suggests a tuple ref as a template writes it", () => {
       showPage([["cell", 2]]);
 
       assert.equal(

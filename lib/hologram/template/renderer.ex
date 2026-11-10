@@ -1507,7 +1507,7 @@ defmodule Hologram.Template.Renderer do
         "Phoenix.HTML safe tuples aren't supported in Hologram templates, use trust_html/1 instead"
   end
 
-  # The ref with a loop item's id added as a key part, written as template code, to show how the
+  # The ref with a loop item's id added as a part, written as template code, to show how the
   # elements of a loop get refs of their own.
   defp ref_example(ref) when is_tuple(ref) do
     ref

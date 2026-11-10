@@ -20,7 +20,7 @@ export default class ElementRefRegistry {
   static pageModule = null;
 
   // Made public to make tests easier
-  // The literal refs each page renders, as [name, key count] pairs, by the page module's name. Each
+  // The literal refs each page renders, as [name, part count] pairs, by the page module's name. Each
   // page's bundle puts its own when it is defined, so the registry holds the names of every page
   // the tab has loaded.
   static pageRefNames = new Map();
@@ -36,17 +36,17 @@ export default class ElementRefRegistry {
   }
 
   // What a message about a ref nothing is rendered under adds, from the literal refs the current
-  // page renders: that a template declares the ref, how many key parts refs of its name take, or the
+  // page renders: that a template declares the ref, how many parts refs of its name take, or the
   // closest declared name. A ref only an expression names, like $ref={@input_ref}, is declared by
   // no template, so a miss for one adds nothing.
   static missingElementHint(ref) {
     const name = Type.isAtom(ref) ? ref.value : ref.data[0].value;
-    const keyCount = Type.isAtom(ref) ? 0 : ref.data.length - 1;
+    const partCount = Type.isAtom(ref) ? 0 : ref.data.length - 1;
     const names = $.refNames();
 
     if (
       names.some(
-        ([declaredName, count]) => declaredName === name && count === keyCount,
+        ([declaredName, count]) => declaredName === name && count === partCount,
       )
     ) {
       return (
@@ -59,7 +59,7 @@ export default class ElementRefRegistry {
     const sameName = names.find(([declaredName]) => declaredName === name);
 
     if (sameName !== undefined) {
-      return ` - refs named ${Interpreter.inspect(Type.atom(name))} take ${$.#keyPartsText(sameName[1])}`;
+      return ` - refs named ${Interpreter.inspect(Type.atom(name))} take ${$.#partsText(sameName[1])} after the name`;
     }
 
     const closest = names.reduce(
@@ -78,13 +78,13 @@ export default class ElementRefRegistry {
       : ` - did you mean ${$.#refPattern(closest.entry)}?`;
   }
 
-  // Puts the literal refs the given page renders, as [name, key count] pairs, by the page module's
+  // Puts the literal refs the given page renders, as [name, part count] pairs, by the page module's
   // name.
   static putPageRefNames(pageModuleName, names) {
     $.pageRefNames.set(pageModuleName, names);
   }
 
-  // The literal refs the current page renders, as [name, key count] pairs, or none when no page is
+  // The literal refs the current page renders, as [name, part count] pairs, or none when no page is
   // shown or its bundle carries none.
   static refNames() {
     return $.pageModule === null
@@ -151,26 +151,26 @@ export default class ElementRefRegistry {
     );
   }
 
-  static #keyPartsText(keyCount) {
-    switch (keyCount) {
+  static #partsText(partCount) {
+    switch (partCount) {
       case 0:
-        return "no key parts";
+        return "no parts";
 
       case 1:
-        return "1 key part";
+        return "1 part";
 
       default:
-        return `${keyCount} key parts`;
+        return `${partCount} parts`;
     }
   }
 
-  // A declared ref as a template writes it, with its key parts left out.
-  static #refPattern([name, keyCount]) {
+  // A declared ref as a template writes it, with its parts left out.
+  static #refPattern([name, partCount]) {
     const nameText = Interpreter.inspect(Type.atom(name));
 
-    return keyCount === 0
+    return partCount === 0
       ? nameText
-      : `{${[nameText, ...Array(keyCount).fill("...")].join(", ")}}`;
+      : `{${[nameText, ...Array(partCount).fill("...")].join(", ")}}`;
   }
 }
 

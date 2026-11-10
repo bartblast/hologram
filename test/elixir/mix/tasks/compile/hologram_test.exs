@@ -86,7 +86,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # a module it does not name (see the dynamic call gate tests).
   @reflection_closed_page Hologram.Test.Fixtures.Compiler.CallGraph.Module43
   @reflection_open_page Hologram.Test.Fixtures.Compiler.CallGraph.Module44
-  # A component whose template declares keyless refs, and one no template renders.
+  # A component whose template declares atom refs, and one no template renders.
   @ref_component Hologram.Test.Fixtures.Compiler.Module41
   @unrendered_component Hologram.Test.Fixtures.Compiler.Module47
 
@@ -3062,7 +3062,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       expected_msg =
         "the ref :clash would name two elements in a render of Hologram.Test.Fixtures.Compiler.Module47, " <>
           "both in the template of Hologram.Test.Fixtures.Compiler.Module47 - " <>
-          "a ref without keys names one element, so give each element a ref of its own, like {:clash, item.id} for the items of a loop"
+          "an atom ref names one element, so give each element a ref of its own, like {:clash, item.id} for the items of a loop"
 
       assert count_validated_templates(fn ->
                assert_error Hologram.CompileError, expected_msg, fn -> run(opts) end
@@ -3086,7 +3086,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         "the ref :label would name two elements in the page #{inspect(Module1)} with its layout " <>
           "#{inspect(Module1.__layout_module__())}, " <>
           "both in the template of Hologram.Test.Fixtures.Compiler.Module41 (rendered from #{inspect(Module1)}) - " <>
-          "a ref without keys names one element, so give each element a ref of its own, like {:label, item.id} for the items of a loop"
+          "an atom ref names one element, so give each element a ref of its own, like {:label, item.id} for the items of a loop"
 
       assert_error Hologram.CompileError, expected_msg, fn -> run(opts) end
     end

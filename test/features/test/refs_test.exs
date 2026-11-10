@@ -17,7 +17,7 @@ defmodule HologramFeatureTests.RefsTest do
       |> assert_has(css("#page_1_search:focus"))
     end
 
-    feature "returns the element under a keyed ref of a loop item", %{session: session} do
+    feature "returns the element under a tuple ref of a loop item", %{session: session} do
       session
       |> visit(Page1)
       |> click(button("Read item"))
