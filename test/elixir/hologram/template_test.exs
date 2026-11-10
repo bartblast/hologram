@@ -213,6 +213,100 @@ defmodule Hologram.TemplateTest do
     end
   end
 
+  describe "HOLO sigil, element lookups" do
+    test "raises for a call through the JS alias" do
+      assert_error Hologram.CompileError, element_lookup_message("ElementLookupAlias"), fn ->
+        compile_template("ElementLookupAlias", ~S"""
+        alias Hologram.JS
+        def template, do: ~HOLO"<div>{JS.element(:feed)}</div>"
+        """)
+      end
+    end
+
+    test "raises for a call through the full module name" do
+      assert_error Hologram.CompileError, element_lookup_message("ElementLookupFullName"), fn ->
+        compile_template("ElementLookupFullName", ~S"""
+        def template, do: ~HOLO"<div>{Hologram.JS.element(:feed)}</div>"
+        """)
+      end
+    end
+
+    test "raises for an imported call" do
+      assert_error Hologram.CompileError, element_lookup_message("ElementLookupImport"), fn ->
+        compile_template("ElementLookupImport", ~S"""
+        import Hologram.JS, only: [element: 1]
+        def template, do: ~HOLO"<div>{element(:feed)}</div>"
+        """)
+      end
+    end
+
+    test "raises for a call in an attribute value" do
+      assert_error Hologram.CompileError, element_lookup_message("ElementLookupAttribute"), fn ->
+        compile_template("ElementLookupAttribute", ~S"""
+        alias Hologram.JS
+        def template, do: ~HOLO"<div data-feed={JS.element(:feed)}></div>"
+        """)
+      end
+    end
+
+    test "raises for a pipe into it" do
+      assert_error Hologram.CompileError, element_lookup_message("ElementLookupPipe"), fn ->
+        compile_template("ElementLookupPipe", ~S"""
+        alias Hologram.JS
+        def template, do: ~HOLO"<div>{@feed_ref |> JS.element()}</div>"
+        """)
+      end
+    end
+
+    test "raises for a capture of it" do
+      assert_error Hologram.CompileError, element_lookup_message("ElementLookupCapture"), fn ->
+        compile_template("ElementLookupCapture", ~S"""
+        alias Hologram.JS
+        def template, do: ~HOLO"<div>{inspect(&JS.element/1)}</div>"
+        """)
+      end
+    end
+
+    test "raises outside a module, naming no module" do
+      expected_msg =
+        "JS.element/1 can't be called in a template - a template also renders on the server, " <>
+          "and in the browser the element it names may not exist yet, so pass the ref itself, " <>
+          "like scroll_ref={:feed}, and look the element up in an action"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string(~S"""
+        import Hologram.Template
+        alias Hologram.JS
+        ~HOLO"<div>{JS.element(:feed)}</div>"
+        """)
+      end
+    end
+
+    test "other JS functions pass" do
+      {template, _bindings} =
+        Code.eval_string(~S"""
+        import Hologram.Template
+        require Hologram.JS
+        alias Hologram.JS
+        ~HOLO"<div>{JS.call(:feed, [])}</div>"
+        """)
+
+      assert [{:element, "div", [{"$key", [text: _key]}], [expression: {:ok}]}] = template.(%{})
+    end
+
+    test "an element function of another module aliased as JS passes" do
+      {template, _bindings} =
+        Code.eval_string(~S"""
+        import Hologram.Template
+        alias Hologram.Test.Fixtures.Template.Module5, as: JS
+        ~HOLO"<div>{JS.element(:feed)}</div>"
+        """)
+
+      assert [{:element, "div", [{"$key", [text: _key]}], [expression: {:feed}]}] =
+               template.(%{})
+    end
+  end
+
   describe "trust_html/1" do
     test "string" do
       assert trust_html("<p>Hello</p>") == %TrustedHTML{html: "<p>Hello</p>"}
@@ -253,5 +347,21 @@ defmodule Hologram.TemplateTest do
     test "imported into pages" do
       assert Module4.trusted_html() == %TrustedHTML{html: "<b>page</b>"}
     end
+  end
+
+  # Compiles a module under the given name whose body holds the given code, with the sigil imported.
+  defp compile_template(name, code) do
+    Code.compile_string("""
+    defmodule Hologram.Test.Fixtures.Template.#{name} do
+      import Hologram.Template
+      #{code}
+    end
+    """)
+  end
+
+  defp element_lookup_message(name) do
+    "JS.element/1 can't be called in the template of Hologram.Test.Fixtures.Template.#{name} - " <>
+      "a template also renders on the server, and in the browser the element it names may not exist yet, " <>
+      "so pass the ref itself, like scroll_ref={:feed}, and look the element up in an action"
   end
 end
