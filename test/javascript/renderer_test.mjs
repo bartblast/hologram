@@ -9294,6 +9294,404 @@ describe("Renderer", () => {
     });
   });
 
+  describe("$data_transfer", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    // Example: $drop={nil}
+    const disabledSpecDom = Type.list([
+      Type.tuple([Type.atom("expression"), Type.tuple([Type.nil()])]),
+    ]);
+
+    const dropAttr = Type.tuple([Type.bitstring("$drop"), actionSpecDom]);
+
+    const dataTransferAttr = (value) =>
+      Type.tuple([
+        Type.bitstring("$data_transfer"),
+        Type.list([Type.tuple([Type.atom("expression"), Type.tuple([value])])]),
+      ]);
+
+    const dropEffect = (effect) =>
+      Type.keywordList([[Type.atom("drop_effect"), Type.atom(effect)]]);
+
+    const tag = (tagName, attrsDom, childrenDom = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(childrenDom),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    // Runs the tag's drop-target listener for the given event on a new drag event, and returns the
+    // event.
+    const runDropTargetListener = (eventName) => {
+      const binding = Renderer.dragBindings.find(
+        (dragBinding) => dragBinding.eventName === eventName,
+      );
+
+      const event = dragEvent(eventName);
+
+      binding.handler(event);
+
+      return event;
+    };
+
+    // A drag event carrying a DataTransfer that only tracks its drop effect.
+    const dragEvent = (eventName) => {
+      const event = new Event(eventName, {bubbles: true, cancelable: true});
+
+      Object.defineProperty(event, "dataTransfer", {
+        value: {dropEffect: "none"},
+      });
+
+      return event;
+    };
+
+    beforeEach(() => {
+      Renderer.dragBindings = [];
+      Renderer.listenerBindings = [];
+    });
+
+    afterEach(() => {
+      EventListenerRegistry.detachAll();
+    });
+
+    it("binds nothing", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      const vdom = render(
+        tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]),
+      );
+
+      assert.deepStrictEqual(Object.keys(vdom.data.on), ["drop"]);
+    });
+
+    it("renders no attribute", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      const vdom = render(
+        tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]),
+      );
+
+      assert.deepStrictEqual(vdom.data.attrs, {});
+    });
+
+    for (const eventName of ["dragenter", "dragover"]) {
+      it(`sets the drop effect on ${eventName}`, () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        render(tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]));
+
+        const event = runDropTargetListener(eventName);
+
+        assert.isTrue(event.defaultPrevented);
+        assert.equal(event.dataTransfer.dropEffect, "move");
+      });
+    }
+
+    it("takes a map", () => {
+      // <div $drop="my_action" $data_transfer={%{drop_effect: :copy}}></div>
+      render(
+        tag("div", [
+          dropAttr,
+          dataTransferAttr(
+            Type.map([[Type.atom("drop_effect"), Type.atom("copy")]]),
+          ),
+        ]),
+      );
+
+      const event = runDropTargetListener("dragover");
+
+      assert.equal(event.dataTransfer.dropEffect, "copy");
+    });
+
+    it("takes a drop effect on a tag whose $drop binding has modifiers", () => {
+      // <div $drop.once="my_action" $data_transfer={drop_effect: :move}></div>
+      render(
+        tag("div", [
+          Type.tuple([
+            Type.bitstring("$drop"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+          dataTransferAttr(dropEffect("move")),
+        ]),
+      );
+
+      const event = runDropTargetListener("dragover");
+
+      assert.equal(event.dataTransfer.dropEffect, "move");
+    });
+
+    it("leaves the drop effect alone when it declares no drop effect", () => {
+      // <div $drop="my_action" $data_transfer={[]}></div>
+      render(tag("div", [dropAttr, dataTransferAttr(Type.keywordList([]))]));
+
+      const event = runDropTargetListener("dragover");
+
+      assert.isTrue(event.defaultPrevented);
+      assert.equal(event.dataTransfer.dropEffect, "none");
+    });
+
+    it("doesn't throw on a drag event with no DataTransfer", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      render(tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]));
+
+      const binding = Renderer.dragBindings.find(
+        (dragBinding) => dragBinding.eventName === "dragover",
+      );
+
+      const event = new Event("dragover", {cancelable: true});
+
+      assert.doesNotThrow(() => binding.handler(event));
+      assert.isTrue(event.defaultPrevented);
+    });
+
+    it("ignores the drop effect of a disabled $drop binding", () => {
+      // <div $drop={nil} $data_transfer={drop_effect: :move}></div>
+      render(
+        tag("div", [
+          Type.tuple([Type.bitstring("$drop"), disabledSpecDom]),
+          dataTransferAttr(dropEffect("move")),
+        ]),
+      );
+
+      assert.deepStrictEqual(Renderer.dragBindings, []);
+    });
+
+    for (const tagName of ["document", "window"]) {
+      it(`sets the drop effect on the ${tagName}`, () => {
+        // <document $drop="my_action" $data_transfer={drop_effect: :link} /> or the same <window>
+        render(tag(tagName, [dropAttr, dataTransferAttr(dropEffect("link"))]));
+
+        const event = runDropTargetListener("dragover");
+
+        assert.equal(event.dataTransfer.dropEffect, "link");
+      });
+    }
+
+    describe("nested drop targets", () => {
+      let inner, outer;
+
+      // Renders the outer and inner drop targets with the given $data_transfer values (null for
+      // none), attaches them to live elements and reconciles their listeners.
+      const renderNested = (outerValue, innerValue) => {
+        const attrs = (value) =>
+          value === null ? [dropAttr] : [dropAttr, dataTransferAttr(value)];
+
+        const outerVdom = render(
+          tag("div", attrs(outerValue), [tag("div", attrs(innerValue))]),
+        );
+
+        outer = document.createElement("div");
+        inner = document.createElement("div");
+        outer.appendChild(inner);
+        document.body.appendChild(outer);
+
+        outerVdom.elm = outer;
+        outerVdom.children[0].elm = inner;
+
+        EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+      };
+
+      afterEach(() => {
+        outer.remove();
+      });
+
+      it("takes the inner drop target's drop effect", () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :copy}>
+        //   <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        // </div>
+        renderNested(dropEffect("copy"), dropEffect("move"));
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "move");
+      });
+
+      it("lets the inner drop target refuse the drop the outer one accepts", () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :copy}>
+        //   <div $drop="my_action" $data_transfer={drop_effect: :none}></div>
+        // </div>
+        renderNested(dropEffect("copy"), dropEffect("none"));
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "none");
+      });
+
+      it("takes the outer drop target's drop effect when the inner one declares no drop effect", () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :copy}>
+        //   <div $drop="my_action"></div>
+        // </div>
+        renderNested(dropEffect("copy"), null);
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "copy");
+      });
+
+      it("takes the element's drop effect over the window's", () => {
+        // <window $drop="my_action" $data_transfer={drop_effect: :link} />
+        // <div $drop="my_action">
+        //   <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        // </div>
+        renderNested(null, dropEffect("move"));
+
+        render(tag("window", [dropAttr, dataTransferAttr(dropEffect("link"))]));
+
+        EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "move");
+      });
+
+      it("sets the drop effect before the element's own bindings run", () => {
+        // <div $drop="my_action">
+        //   <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        // </div>
+        renderNested(null, dropEffect("move"));
+
+        // Stands for the inner element's $drag_over binding, which Snabbdom attaches in the bubble
+        // phase.
+        let seenDropEffect = null;
+
+        inner.addEventListener("dragover", (event) => {
+          seenDropEffect = event.dataTransfer.dropEffect;
+        });
+
+        inner.dispatchEvent(dragEvent("dragover"));
+
+        assert.equal(seenDropEffect, "move");
+      });
+    });
+
+    describe("invalid values", () => {
+      it("raises for a value that is neither a keyword list nor a map", () => {
+        assertBoxedError(
+          () =>
+            render(tag("div", [dropAttr, dataTransferAttr(Type.atom("move"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got :move",
+        );
+      });
+
+      it("raises for a struct", () => {
+        const struct = Type.struct("MyStruct", [
+          [Type.atom("drop_effect"), Type.atom("move")],
+        ]);
+
+        assertBoxedError(
+          () => render(tag("div", [dropAttr, dataTransferAttr(struct)])),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got %{drop_effect: :move, __struct__: MyStruct}",
+        );
+      });
+
+      it("raises for an unknown key", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([[Type.atom("effect"), Type.atom("move")]]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes the :drop_effect key, got :effect",
+        );
+      });
+
+      it("raises for a map key that isn't an atom", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.map([
+                    [Type.bitstring("drop_effect"), Type.atom("move")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          'the $data_transfer attribute takes the :drop_effect key, got "drop_effect"',
+        );
+      });
+
+      it("raises for a key given twice", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("drop_effect"), Type.atom("move")],
+                    [Type.atom("drop_effect"), Type.atom("copy")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+        );
+      });
+
+      it("raises for a drop effect outside the drop effects", () => {
+        assertBoxedError(
+          () =>
+            render(tag("div", [dropAttr, dataTransferAttr(dropEffect("all"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+        );
+      });
+
+      it("raises for a drop effect that isn't an atom", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("drop_effect"), Type.bitstring("move")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          'the $data_transfer drop_effect takes :none, :copy, :move or :link, got "move"',
+        );
+      });
+
+      it("raises for a drop effect on a tag with no $drop binding", () => {
+        assertBoxedError(
+          () => render(tag("div", [dataTransferAttr(dropEffect("move"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+        );
+      });
+
+      it("raises for a drop effect on a <window> tag with no $drop binding", () => {
+        assertBoxedError(
+          () => render(tag("window", [dataTransferAttr(dropEffect("move"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+        );
+      });
+    });
+  });
+
   describe("focus", () => {
     const boolAttr = (name) =>
       Type.tuple([Type.bitstring(name), Type.keywordList()]);

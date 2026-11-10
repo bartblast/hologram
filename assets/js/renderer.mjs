@@ -23,6 +23,9 @@ import Vdom, {TRUSTED_HTML_SEL} from "./vdom.mjs";
 import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
 
+// The drop effects a $data_transfer drop_effect takes.
+const DROP_EFFECTS = ["none", "copy", "move", "link"];
+
 // An element ref and an Elixir reference are both called a ref, so a reference passed as one gets
 // this hint.
 //
@@ -738,6 +741,13 @@ export default class Renderer {
       return null;
     }
 
+    // $data_transfer declares what a drag carries and how a drop target takes it, which the drag
+    // listeners apply, so it binds nothing either. Without this it would register a listener for an
+    // event called "datatransfer", which no browser fires.
+    if (originalEventName === "data_transfer") {
+      return null;
+    }
+
     // $focused says whether the element should have focus rather than something that happens to it,
     // so it binds nothing either. Without this it would register a listener for an event called
     // "focused", which no browser fires.
@@ -976,13 +986,29 @@ export default class Renderer {
   // both are, by one pair of capture-phase listeners however many $drop bindings the tag has. A
   // disabled $drop leaves the drag alone. The drop's own default is the $drop binding's to prevent
   // (see DropEvent), so allow_default can let it through.
-  static #collectDropTargetBindings(attrsDom, place) {
+  //
+  // A drop target's declared drop effect is set by the same listeners. They run from the window
+  // inward, so the nearest drop target that declares one has the last word.
+  static #collectDropTargetBindings(attrsDom, place, dataTransfer) {
     if (!attrsDom.data.some((attrDom) => $.#isEnabledDropBinding(attrDom))) {
       return;
     }
 
+    const dropEffect = dataTransfer?.dropEffect ?? null;
+
+    const handler =
+      dropEffect === null
+        ? $.#preventDefault
+        : (event) => {
+            $.#preventDefault(event);
+
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = dropEffect;
+            }
+          };
+
     for (const eventName of ["dragenter", "dragover"]) {
-      $.dragBindings.push({...place, eventName, handler: $.#preventDefault});
+      $.dragBindings.push({...place, eventName, handler});
     }
   }
 
@@ -1003,6 +1029,7 @@ export default class Renderer {
   // target share a currentTarget. A bare tag (no attributes) records nothing. A listener target has
   // no element tag name, so event-name mapping is skipped (passed null).
   static #collectListenerBindings(target, attrsDom, defaultTarget) {
+    const dataTransfer = $.#renderDataTransfer(attrsDom);
     const dropSlots = [];
 
     attrsDom.data.forEach((attrDom) => {
@@ -1039,7 +1066,7 @@ export default class Renderer {
       }
     });
 
-    $.#collectDropTargetBindings(attrsDom, {target, dropSlots});
+    $.#collectDropTargetBindings(attrsDom, {target, dropSlots}, dataTransfer);
   }
 
   // Records each $reach_<edge> attribute on the element as a deferred scroll-edge binding. A reach
@@ -1197,6 +1224,34 @@ export default class Renderer {
       opts,
       Type.atom("from_context"),
     );
+  }
+
+  // The entries of a $data_transfer value: a keyword list's, each key once, or a map's.
+  static #dataTransferEntries(value) {
+    if (Type.isMap(value) && !Type.isStruct(value)) {
+      return Object.values(value.data);
+    }
+
+    if (!Type.isKeywordList(value)) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer attribute takes a keyword list or a map, got ${Interpreter.inspect(value)}`,
+      );
+    }
+
+    const entries = value.data.map((entry) => entry.data);
+    const seenKeys = new Set();
+
+    for (const [key] of entries) {
+      if (seenKeys.has(key.value)) {
+        Interpreter.raiseMisuseError(
+          `the $data_transfer attribute takes each key once, but got the ${Interpreter.inspect(key)} key twice`,
+        );
+      }
+
+      seenKeys.add(key.value);
+    }
+
+    return entries;
   }
 
   // Returns the debounce window in milliseconds from a modifiers map, or null when there is no
@@ -2227,7 +2282,8 @@ export default class Renderer {
     return htmlVnode;
   }
 
-  // One handler for every drop target, so a re-render hands the registry the same function.
+  // One handler for every drop target that declares no drop effect, so a re-render hands the
+  // registry the same function.
   static #preventDefault(event) {
     event.preventDefault();
   }
@@ -2541,6 +2597,50 @@ export default class Renderer {
     }
   }
 
+  // Returns what the tag's $data_transfer declares, as {dropEffect}, or null when the tag doesn't
+  // declare it. The value it renders with must be a keyword list or a map of the keys the attribute
+  // takes, each given once, with a drop effect only on a tag with a $drop binding (a disabled one
+  // included).
+  static #renderDataTransfer(attrsDom) {
+    const attrDom = $.#findAttribute(attrsDom, "$data_transfer");
+
+    if (attrDom === null) {
+      return null;
+    }
+
+    const value = $.#expressionValue(attrDom.data[1].data[0].data[1]);
+    const dataTransfer = {dropEffect: null};
+
+    for (const [key, entryValue] of $.#dataTransferEntries(value)) {
+      if (Type.isAtom(key) && key.value === "drop_effect") {
+        if (
+          !Type.isAtom(entryValue) ||
+          !DROP_EFFECTS.includes(entryValue.value)
+        ) {
+          Interpreter.raiseMisuseError(
+            `the $data_transfer drop_effect takes :none, :copy, :move or :link, got ${Interpreter.inspect(entryValue)}`,
+          );
+        }
+
+        if (
+          !attrsDom.data.some((attr) => $.#eventAttributeName(attr) === "$drop")
+        ) {
+          Interpreter.raiseMisuseError(
+            "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+          );
+        }
+
+        dataTransfer.dropEffect = entryValue.value;
+      } else {
+        Interpreter.raiseMisuseError(
+          `the $data_transfer attribute takes the :drop_effect key, got ${Interpreter.inspect(key)}`,
+        );
+      }
+    }
+
+    return dataTransfer;
+  }
+
   // Based on render_tree/3 (dynamic tag cases)
   static #renderDynamicTag(
     dom,
@@ -2673,6 +2773,8 @@ export default class Renderer {
     } else if (focused === false) {
       delete attrsVdom.autofocus;
     }
+
+    const dataTransfer = Renderer.#renderDataTransfer(attrsDom);
 
     const eventListenersVdom = Renderer.#renderEventListeners(
       attrsDom,
@@ -2856,7 +2958,11 @@ export default class Renderer {
       defaultTarget,
     );
 
-    Renderer.#collectDropTargetBindings(attrsDom, {vnode: elementVnode});
+    Renderer.#collectDropTargetBindings(
+      attrsDom,
+      {vnode: elementVnode},
+      dataTransfer,
+    );
 
     Renderer.#collectReachBindings(attrsDom, elementVnode, defaultTarget);
 
