@@ -1285,6 +1285,10 @@ export default class Interpreter {
     ]);
   }
 
+  static raiseMisuseError(message) {
+    Interpreter.raiseError("Hologram.MisuseError", message);
+  }
+
   static raiseTryClauseError(term) {
     Interpreter.#raiseFieldBearingError("TryClauseError", [
       [Type.atom("term"), term],

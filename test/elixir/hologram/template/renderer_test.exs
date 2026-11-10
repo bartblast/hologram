@@ -1945,6 +1945,25 @@ defmodule Hologram.Template.RendererTest do
                    fn -> render_dom(node, @env, @server) end
     end
 
+    test "raises for a ref on a tag a dynamic tag renders that the build keeps refs off" do
+      messages = %{
+        "window" =>
+          "$ref can't go on a <window> tag, which renders no element - JS.element(:window) returns the window",
+        "document" =>
+          "$ref can't go on a <document> tag, which renders no element - JS.element(:document) returns the document",
+        "slot" =>
+          "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content",
+        "html" =>
+          "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element"
+      }
+
+      for {tag_name, message} <- messages do
+        node = {:dynamic_tag, {tag_name}, [{"$ref", [expression: {:root}]}], []}
+
+        assert_error Hologram.MisuseError, message, fn -> render_dom(node, @env, @server) end
+      end
+    end
+
     test "a ref on the element a dynamic tag renders" do
       node = {:dynamic_tag, {"div"}, [{"$ref", [expression: {:search}]}], []}
 

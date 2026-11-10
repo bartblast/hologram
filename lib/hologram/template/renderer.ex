@@ -39,6 +39,7 @@ defmodule Hologram.Template.Renderer do
   # The refs that name the window and the document, which a template can't give an element.
   @built_in_refs [:window, :document]
 
+  # WARNING: must match REF_EXPECTATION in the client renderer (renderer.mjs).
   @ref_expectation "$ref takes an identifier, like :search or {:message, 42}"
 
   # Where the refs of the render in progress are kept, each with the module whose template wrote its
@@ -515,11 +516,13 @@ defmodule Hologram.Template.Renderer do
   # parser would spell it here instead.
   def render_tree({:dynamic_tag, {tag_name}, attrs_dom, children_dom}, env, server_struct)
       when is_binary(tag_name) do
-    render_tree(
-      {:element, Helpers.normalize_tag_name(tag_name), attrs_dom, children_dom},
-      env,
-      server_struct
-    )
+    normalized_tag_name = Helpers.normalize_tag_name(tag_name)
+
+    if List.keymember?(attrs_dom, "$ref", 0) do
+      validate_ref_tag(normalized_tag_name)
+    end
+
+    render_tree({:element, normalized_tag_name, attrs_dom, children_dom}, env, server_struct)
   end
 
   def render_tree({:dynamic_tag, {module}, props_dom, children_dom}, env, server_struct)
@@ -1852,6 +1855,31 @@ defmodule Hologram.Template.Renderer do
         raise Hologram.MisuseError, message: Identifier.message(@ref_expectation, ref, hint)
     end
   end
+
+  # A dynamic tag can name a tag the build keeps $ref off, so the build's rule is applied here. The
+  # client patches the <html> element's attributes through a node of its own rather than the
+  # rendered one, so a ref there would name nothing.
+  #
+  # WARNING: must match the client renderer's #validateRefTag (renderer.mjs).
+  defp validate_ref_tag(tag_name) when tag_name in ["window", "document"] do
+    raise Hologram.MisuseError,
+      message:
+        "$ref can't go on a <#{tag_name}> tag, which renders no element - JS.element(:#{tag_name}) returns the #{tag_name}"
+  end
+
+  defp validate_ref_tag("slot") do
+    raise Hologram.MisuseError,
+      message:
+        "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content"
+  end
+
+  defp validate_ref_tag("html") do
+    raise Hologram.MisuseError,
+      message:
+        "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element"
+  end
+
+  defp validate_ref_tag(_tag_name), do: :ok
 
   # Event bindings require compile-time modifier parsing and listener collection, so they can be
   # written only as literal attributes. Silently not binding an intended event would be worse than
