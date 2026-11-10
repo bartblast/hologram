@@ -2700,7 +2700,7 @@ export default class Renderer {
     }
   }
 
-  // Based on validate_data_transfer/1
+  // Based on validate_data_transfer/2
   // Returns null when the tag has no $data_transfer, otherwise {data, dropEffect, effectsAllowed,
   // isSource}, where data holds [type, string or null] pairs and effectsAllowed is the effectAllowed
   // value. The value it renders with must be a keyword list or a map

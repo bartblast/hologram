@@ -548,7 +548,7 @@ defmodule Hologram.Template.DOM do
   # holding the runtime value. Attributes use element-style event decomposition, since the element
   # branch is the only one that can consume events - the component branch filters them out anyway.
   defp render_code({:start_tag, {{:expression, templ_expr}, attributes}}) do
-    validate_data_transfer_attributes(attributes)
+    validate_data_transfer_attributes(%DataTransfer.Unknown{}, attributes)
     validate_focus_attributes(attributes)
     validate_ref_attributes(attributes)
 
@@ -571,7 +571,9 @@ defmodule Hologram.Template.DOM do
     end
 
     if tag_type == :element do
-      validate_data_transfer_attributes(attributes)
+      reserved_tag = if tag_name in ["window", "document"], do: tag_name
+      validate_data_transfer_attributes(reserved_tag, attributes)
+
       validate_focus_attributes(attributes)
     end
 
@@ -700,8 +702,9 @@ defmodule Hologram.Template.DOM do
 
   # One attribute declares it all, so a second would leave the renderers to pick between them. A
   # literal value is judged here, the way the renderers judge it, with whether the tag has a $drop
-  # binding, which the value's drop effect needs.
-  defp validate_data_transfer_attributes(attributes) do
+  # binding, which the value's drop effect needs, and the <window> or <document> tag it is on,
+  # where no drag starts (nil for an element, %DataTransfer.Unknown{} for a dynamic tag).
+  defp validate_data_transfer_attributes(tag, attributes) do
     if Enum.count(attributes, &data_transfer_attribute?/1) > 1 do
       raise TemplateSyntaxError, message: "a tag takes one $data_transfer attribute"
     end
@@ -711,7 +714,7 @@ defmodule Hologram.Template.DOM do
     with {"$data_transfer", [expression: expr_str]} <-
            List.keyfind(attributes, "$data_transfer", 0),
          {:ok, value} <- data_transfer_literal(expr_str),
-         {:error, message} <- DataTransfer.check(value, has_drop?) do
+         {:error, message} <- DataTransfer.check(value, has_drop?, tag) do
       raise TemplateSyntaxError, message: message
     end
 

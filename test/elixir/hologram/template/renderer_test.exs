@@ -1939,6 +1939,41 @@ defmodule Hologram.Template.RendererTest do
       assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
     end
 
+    test "takes drag data" do
+      # <div $data_transfer={data: %{"text/plain" => "Buy milk", "text/uri-list" => nil}}></div>
+      node =
+        {:element, "div",
+         [
+           {"$data_transfer",
+            [expression: {[data: %{"text/plain" => "Buy milk", "text/uri-list" => nil}]}]}
+         ], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes an allowed effect" do
+      # <div $data_transfer={effects_allowed: :move}></div>
+      node = {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: :move]}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a list of allowed effects" do
+      # <div $data_transfer={effects_allowed: [:copy, :move]}></div>
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: [:copy, :move]]}]}],
+         []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes an empty list of allowed effects" do
+      # <div $data_transfer={effects_allowed: []}></div>
+      node = {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: []]}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
     test "raises for a value that is neither a keyword list nor a map" do
       assert_error Hologram.MisuseError,
                    "the $data_transfer attribute takes a keyword list or a map, got :move",
@@ -1959,13 +1994,13 @@ defmodule Hologram.Template.RendererTest do
 
     test "raises for an unknown key" do
       assert_error Hologram.MisuseError,
-                   "the $data_transfer attribute takes the :drop_effect key, got :effect",
+                   "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
                    fn -> render_tree(data_transfer_element(effect: :move), @env, @server) end
     end
 
     test "raises for a map key that isn't an atom" do
       assert_error Hologram.MisuseError,
-                   ~s'the $data_transfer attribute takes the :drop_effect key, got "drop_effect"',
+                   ~s'the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got "drop_effect"',
                    fn ->
                      render_tree(data_transfer_element(%{"drop_effect" => :move}), @env, @server)
                    end
@@ -1997,7 +2032,7 @@ defmodule Hologram.Template.RendererTest do
 
     test "judges a keyword list's entries in the order written" do
       assert_error Hologram.MisuseError,
-                   "the $data_transfer attribute takes the :drop_effect key, got :effect",
+                   "the $data_transfer attribute takes the :data, :drop_effect and :effects_allowed keys, got :effect",
                    fn ->
                      render_tree(
                        data_transfer_element(effect: :move, drop_effect: :all),
@@ -2060,6 +2095,123 @@ defmodule Hologram.Template.RendererTest do
 
       assert_error Hologram.MisuseError,
                    "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data that isn't a map" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[data: "Buy milk"]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got "Buy milk"',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data that is a struct" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[data: ~D[2026-11-10]]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got ~D[2026-11-10]',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data whose type isn't a string" do
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[data: %{text: "Buy milk"}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{text: "Buy milk"}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data whose value isn't a string or nil" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[data: %{"application/x-task" => 42}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"application/x-task" => 42}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data whose type isn't valid UTF-8" do
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[data: %{<<255>> => "Buy milk"}]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{<<255>> => "Buy milk"}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data whose value isn't valid UTF-8" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[data: %{"text/plain" => <<255>>}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"text/plain" => <<255>>}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for an allowed effect outside the effects" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: :all]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got :all",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a list of allowed effects holding one outside the effects" do
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: [:move, :none]]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got [:move, :none]",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for an improper list of allowed effects" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[effects_allowed: [:move | :copy]]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got [:move | :copy]",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data on a <document> tag before judging it" do
+      node = {:element, "document", [{"$data_transfer", [expression: {[data: "Buy milk"]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer data goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for allowed effects on a <document> tag before judging them" do
+      node =
+        {:element, "document", [{"$data_transfer", [expression: {[effects_allowed: :all]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data on a <window> tag before judging it" do
+      node = {:element, "window", [{"$data_transfer", [expression: {[data: "Buy milk"]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer data goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for allowed effects on a <window> tag before judging them" do
+      node =
+        {:element, "window", [{"$data_transfer", [expression: {[effects_allowed: :all]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed goes on the element a drag starts from, so a <window> tag can't take it",
                    fn -> render_tree(node, @env, @server) end
     end
   end

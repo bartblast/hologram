@@ -577,7 +577,7 @@ defmodule Hologram.Template.Renderer do
   # judged all the same, as the client judges it.
   def render_tree({:element, tag_name, attrs_dom, []}, _env, server_struct)
       when tag_name in ["window", "document"] do
-    validate_data_transfer(attrs_dom)
+    validate_data_transfer(attrs_dom, tag_name)
 
     {nil, %{}, server_struct}
   end
@@ -598,7 +598,7 @@ defmodule Hologram.Template.Renderer do
     # renderer claims it.
     put_rendered_ref(attrs_dom, env.parent_module)
 
-    validate_data_transfer(attrs_dom)
+    validate_data_transfer(attrs_dom, nil)
 
     children_env = %Env{env | key_scope: nil, tag_name: tag_name}
 
@@ -1789,13 +1789,13 @@ defmodule Hologram.Template.Renderer do
   # The build judges a literal $data_transfer. This judges the value it renders with, literal or not.
   #
   # WARNING: must match the client renderer's #renderDataTransfer (renderer.mjs).
-  defp validate_data_transfer(attrs_dom) do
+  defp validate_data_transfer(attrs_dom, tag) do
     with {"$data_transfer", [expression: expression]} <-
            List.keyfind(attrs_dom, "$data_transfer", 0),
          {:error, message} <-
            expression
            |> expression_value()
-           |> DataTransfer.check(List.keymember?(attrs_dom, "$drop", 0)) do
+           |> DataTransfer.check(List.keymember?(attrs_dom, "$drop", 0), tag) do
       raise Hologram.MisuseError, message: message
     end
 
