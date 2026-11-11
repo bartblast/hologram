@@ -78,6 +78,11 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
   alias Hologram.Test.Fixtures.Template.Renderer.Module92
   alias Hologram.Test.Fixtures.Template.Renderer.Module93
+  alias Hologram.Test.Fixtures.Template.Renderer.Module94
+  alias Hologram.Test.Fixtures.Template.Renderer.Module95
+  alias Hologram.Test.Fixtures.Template.Renderer.Module96
+  alias Hologram.Test.Fixtures.Template.Renderer.Module97
+  alias Hologram.Test.Fixtures.Template.Renderer.Module98
 
   @csrf_token "test-csrf-token"
   @env %Renderer.Env{}
@@ -773,21 +778,22 @@ defmodule Hologram.Template.RendererTest do
            {"prop_4", [text: "value_4"]}
          ], []}
 
-      assert {~s'component vars = %{cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;}',
+      assert {~s'component vars = %{__hologram_vars__: true, cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;}',
               _component_registry, _server_struct} = render_dom(node, @env, @server)
     end
 
     test "default value specified" do
       node = {:component, Module65, [{"prop_2", [expression: {:xyz}]}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;abc&quot;, prop_2: :xyz, prop_3: 123}',
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;abc&quot;, prop_2: :xyz, prop_3: 123}',
               _component_registry, _server_struct} = render_dom(node, @env, @server)
     end
 
     test "default value not specified" do
       node = {:component, Module66, [{"prop_2", [expression: {:xyz}]}], []}
 
-      assert {~s'component vars = %{prop_2: :xyz}', _component_registry, _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, prop_2: :xyz}', _component_registry,
+              _server_struct} =
                render_dom(node, @env, @server)
     end
 
@@ -801,7 +807,10 @@ defmodule Hologram.Template.RendererTest do
     test "declared to take value from context, value not in context, default value not specified" do
       node = {:component, Module76, [{"cid", [text: "component_76"]}], []}
 
-      assert_raise KeyError, build_key_error_msg(:aaa, %{}), fn ->
+      expected_msg =
+        ~s'undefined var @aaa in the template of "#{inspect(Module38)}", no vars are available'
+
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
         render_dom(node, @env, @server)
       end
     end
@@ -864,7 +873,8 @@ defmodule Hologram.Template.RendererTest do
     test "prop value in the :values list" do
       node = {:component, Module91, [{"aaa", [expression: {:small}]}], []}
 
-      assert render_dom(node, @env, @server) == {"component vars = %{aaa: :small}", %{}, @server}
+      assert render_dom(node, @env, @server) ==
+               {"component vars = %{__hologram_vars__: true, aaa: :small}", %{}, @server}
     end
 
     # A value written in a template is rejected by the compiler, so what reaches this check comes
@@ -911,7 +921,8 @@ defmodule Hologram.Template.RendererTest do
     test "absent prop with a :values list doesn't raise" do
       node = {:component, Module91, [], []}
 
-      assert render_dom(node, @env, @server) == {"component vars = %{}", %{}, @server}
+      assert render_dom(node, @env, @server) ==
+               {"component vars = %{__hologram_vars__: true}", %{}, @server}
     end
   end
 
@@ -919,21 +930,22 @@ defmodule Hologram.Template.RendererTest do
     test "map value" do
       node = {:component, Module16, [{:spread, {%{prop_1: "my_value_1", prop_2: 2}}}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;, prop_2: 2}', _registry,
-              _server_struct} = render_dom(node, @env, @server)
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;my_value_1&quot;, prop_2: 2}',
+              _registry, _server_struct} = render_dom(node, @env, @server)
     end
 
     test "keyword list value" do
       node = {:component, Module16, [{:spread, {[prop_1: "my_value_1", prop_2: 2]}}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;, prop_2: 2}', _registry,
-              _server_struct} = render_dom(node, @env, @server)
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;my_value_1&quot;, prop_2: 2}',
+              _registry, _server_struct} = render_dom(node, @env, @server)
     end
 
     test "string keys" do
       node = {:component, Module16, [{:spread, {%{"prop_1" => "my_value_1"}}}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;}', _registry, _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;my_value_1&quot;}',
+              _registry, _server_struct} =
                render_dom(node, @env, @server)
     end
 
@@ -941,8 +953,8 @@ defmodule Hologram.Template.RendererTest do
     test "underscores in names are kept verbatim" do
       node = {:component, Module86, [{:spread, {%{my_prop_1: "my_value_1"}}}], []}
 
-      assert {~s'component vars = %{my_prop_1: &quot;my_value_1&quot;}', _registry,
-              _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, my_prop_1: &quot;my_value_1&quot;}',
+              _registry, _server_struct} =
                render_dom(node, @env, @server)
     end
 
@@ -951,7 +963,8 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module16, [{:spread, {%{prop_1: "my_value_1", undeclared: "my_value_2"}}}],
          []}
 
-      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;}', _registry, _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;my_value_1&quot;}',
+              _registry, _server_struct} =
                render_dom(node, @env, @server)
     end
 
@@ -965,28 +978,32 @@ defmodule Hologram.Template.RendererTest do
     test "map value of an entry is a raw prop value" do
       node = {:component, Module86, [{:spread, {%{my_prop_2: %{my_nested_key: 1}}}}], []}
 
-      assert {~s'component vars = %{my_prop_2: %{my_nested_key: 1}}', _registry, _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, my_prop_2: %{my_nested_key: 1}}',
+              _registry, _server_struct} =
                render_dom(node, @env, @server)
     end
 
     test "keyword list value of an entry is a raw prop value" do
       node = {:component, Module86, [{:spread, {%{my_prop_3: [my_nested_key: 1]}}}], []}
 
-      assert {~s'component vars = %{my_prop_3: [my_nested_key: 1]}', _registry, _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, my_prop_3: [my_nested_key: 1]}',
+              _registry, _server_struct} =
                render_dom(node, @env, @server)
     end
 
     test "nil value is passed as-is" do
       node = {:component, Module86, [{:spread, {%{my_prop_1: nil}}}], []}
 
-      assert {"component vars = %{my_prop_1: nil}", _registry, _server_struct} =
+      assert {"component vars = %{__hologram_vars__: true, my_prop_1: nil}", _registry,
+              _server_struct} =
                render_dom(node, @env, @server)
     end
 
     test "false value is passed as-is" do
       node = {:component, Module86, [{:spread, {%{my_prop_1: false}}}], []}
 
-      assert {"component vars = %{my_prop_1: false}", _registry, _server_struct} =
+      assert {"component vars = %{__hologram_vars__: true, my_prop_1: false}", _registry,
+              _server_struct} =
                render_dom(node, @env, @server)
     end
 
@@ -995,7 +1012,8 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module16,
          [{"prop_1", [text: "my_value_1"]}, {:spread, {%{prop_1: "my_value_2"}}}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;my_value_2&quot;}', _registry, _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;my_value_2&quot;}',
+              _registry, _server_struct} =
                render_dom(node, @env, @server)
     end
 
@@ -1004,7 +1022,8 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module16,
          [{:spread, {%{prop_1: "my_value_1"}}}, {"prop_1", [text: "my_value_2"]}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;my_value_2&quot;}', _registry, _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;my_value_2&quot;}',
+              _registry, _server_struct} =
                render_dom(node, @env, @server)
     end
 
@@ -1013,14 +1032,15 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module16,
          [{:spread, {%{prop_1: "my_value_1"}}}, {:spread, {%{prop_1: "my_value_2"}}}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;my_value_2&quot;}', _registry, _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;my_value_2&quot;}',
+              _registry, _server_struct} =
                render_dom(node, @env, @server)
     end
 
     test "cid supplied through a spread initializes a stateful component" do
       node = {:component, Module16, [{:spread, {%{cid: "my_component", prop_1: "my_value"}}}], []}
 
-      assert {~s'component vars = %{cid: &quot;my_component&quot;, prop_1: &quot;my_value&quot;}',
+      assert {~s'component vars = %{__hologram_vars__: true, cid: &quot;my_component&quot;, prop_1: &quot;my_value&quot;}',
               %{"my_component" => %{module: Module16, struct: %Component{}}}, _server_struct} =
                render_dom(node, @env, @server)
     end
@@ -1028,14 +1048,15 @@ defmodule Hologram.Template.RendererTest do
     test "declared default value is applied for a key not supplied by the spread" do
       node = {:component, Module65, [{:spread, {%{prop_2: :my_value}}}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;abc&quot;, prop_2: :my_value, prop_3: 123}',
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;abc&quot;, prop_2: :my_value, prop_3: 123}',
               _registry, _server_struct} = render_dom(node, @env, @server)
     end
 
     test "empty map value supplies no props" do
       node = {:component, Module16, [{"prop_1", [text: "my_value_1"]}, {:spread, {%{}}}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;my_value_1&quot;}', _registry, _server_struct} =
+      assert {~s'component vars = %{__hologram_vars__: true, prop_1: &quot;my_value_1&quot;}',
+              _registry, _server_struct} =
                render_dom(node, @env, @server)
     end
 
@@ -1102,9 +1123,34 @@ defmodule Hologram.Template.RendererTest do
     test "with unregistered var used" do
       node = {:component, Module17, [{"a", [text: "111"]}, {"b", [text: "222"]}], []}
 
-      expected_msg = build_key_error_msg(:b, %{a: "111"})
+      expected_msg =
+        ~s'undefined var @b in the template of "#{inspect(Module17)}", available vars: @a'
 
-      assert_raise KeyError, expected_msg, fn ->
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with a missing key read from a var's value" do
+      node = {:component, Module95, [{"a", [expression: {%{}}]}], []}
+
+      assert_raise KeyError, build_key_error_msg(:b, %{}), fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with a missing key read from a map the template builds, template without vars" do
+      node = {:component, Module98, [], []}
+
+      assert_raise KeyError, build_key_error_msg(:b, %{}), fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with a missing key read by a helper the template calls, template without vars" do
+      node = {:component, Module97, [], []}
+
+      assert_raise KeyError, build_key_error_msg(:b, %{}), fn ->
         render_dom(node, @env, @server)
       end
     end
@@ -1285,11 +1331,25 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module18,
          [{"cid", [text: "my_component"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
 
-      assert_raise KeyError,
-                   ~r/^key :c not found in:\s+%\{.+\}$/s,
-                   fn ->
-                     render_dom(node, @env, @server)
-                   end
+      expected_msg =
+        ~s'undefined var @c in the template of "#{inspect(Module18)}", ' <>
+          "available vars: @a, @b, @cid"
+
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with unregistered var used, state with nil and non-atom keys" do
+      node = {:component, Module96, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg =
+        ~s'undefined var @c in the template of "#{inspect(Module96)}", ' <>
+          "available vars: @b, @cid, @nil"
+
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
     end
 
     test "framework sets server.cid to the component's cid during init/3" do
@@ -1612,9 +1672,10 @@ defmodule Hologram.Template.RendererTest do
     test "event attributes are not passed as props" do
       node = {:dynamic_tag, {Module2}, [{"$click", [text: "my_action"]}], []}
 
-      expected_msg = build_key_error_msg(:a, %{})
+      expected_msg =
+        ~s'undefined var @a in the template of "#{inspect(Module2)}", no vars are available'
 
-      assert_raise KeyError, expected_msg, fn ->
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
         render_dom(node, @env, @server)
       end
     end
@@ -1925,20 +1986,31 @@ defmodule Hologram.Template.RendererTest do
                render_page_without_tree(Module14, @params, @server, @opts)
     end
 
+    test "with unregistered var used" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module94, :dummy_module_94_digest)
+
+      expected_msg =
+        ~s'undefined var @c in the template of "#{inspect(Module94)}", available vars: @b'
+
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
+        render_page(Module94, @params, @server, @opts)
+      end
+    end
+
     test "cast page param values to correct type" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module19, :dummy_module_19_digest)
 
       params = %{param_1: "abc", param_3: 123}
 
-      assert {~s'page vars = %{param_1: &quot;abc&quot;, param_3: 123}', _component_registry,
-              _server_struct} =
+      assert {~s'page vars = %{__hologram_vars__: true, param_1: &quot;abc&quot;, param_3: 123}',
+              _component_registry, _server_struct} =
                render_page_without_tree(Module19, params, @server, @opts)
     end
 
     test "cast layout explicit static props" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
 
-      assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
+      assert {~s'layout vars = %{__hologram_vars__: true, cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
               _component_registry, _server_struct} =
                render_page_without_tree(Module25, @params, @server, @opts)
     end
@@ -1946,7 +2018,7 @@ defmodule Hologram.Template.RendererTest do
     test "cast layout props passed implicitely from page state" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module27, :dummy_module_27_digest)
 
-      assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
+      assert {~s'layout vars = %{__hologram_vars__: true, cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
               _component_registry, _server_struct} =
                render_page_without_tree(Module27, @params, @server, @opts)
     end
@@ -1956,7 +2028,7 @@ defmodule Hologram.Template.RendererTest do
 
       params = %{key_1: "param_value_1", key_2: "param_value_2"}
 
-      assert {~s'page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
+      assert {~s'page vars = %{__hologram_vars__: true, key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _component_registry, _server_struct} =
                render_page_without_tree(Module21, params, @server, @opts)
     end
@@ -1964,7 +2036,7 @@ defmodule Hologram.Template.RendererTest do
     test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
 
-      assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
+      assert {~s'layout vars = %{__hologram_vars__: true, cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _component_registry, _server_struct} =
                render_page_without_tree(Module24, @params, @server, @opts)
     end

@@ -449,6 +449,8 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :put, 3}
     ],
     interpreter_class: [
+      # Interpreter.raiseMisuseError raises this by name, for the reason given at renderer_class.
+      {Hologram.MisuseError, :message, 1},
       {Enum, :into, 2},
       {Enum, :to_list, 1},
       {Exception, :blame, 3},
