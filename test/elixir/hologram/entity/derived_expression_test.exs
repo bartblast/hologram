@@ -72,11 +72,12 @@ defmodule Hologram.Entity.DerivedExpressionTest do
 
       assert builder_call?
 
-      assert Macro.to_string(body) == """
-             #{inspect(Module53)}.member_messages(
-               Derived.field(MyApp.Channel, [:member])
-             )\
-             """
+      assert Macro.to_string(body) ==
+               normalize_newlines("""
+               #{inspect(Module53)}.member_messages(
+                 Derived.field(MyApp.Channel, [:member])
+               )\
+               """)
     end
 
     test "reports no query builder for a body of stages" do

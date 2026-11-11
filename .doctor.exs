@@ -3,6 +3,9 @@
   # False positives are reported for these modules:
   ignore_modules: [
     Hologram.Component,
+    # Doctor counts the defs a quote block builds as the module's own - here the function each
+    # derived field's body is hoisted into, and __derived__/0, which go into a component's module.
+    Hologram.Component.Derived,
     Hologram.Entity,
     Hologram.JS,
     Hologram.Layout,

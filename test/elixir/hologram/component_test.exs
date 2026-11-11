@@ -354,6 +354,8 @@ defmodule Hologram.ComponentTest do
 
           @limit 2
 
+          def later_limit, do: @limit
+
           def template do
             ~HOLO""
           end
