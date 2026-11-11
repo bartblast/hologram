@@ -8,6 +8,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
+  alias Hologram.Component.Vars
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
@@ -738,19 +739,22 @@ defmodule Hologram.Template.Renderer do
   # WARNING: must match the client renderer's #evaluateTemplate.
   #
   # A template reads `@name` as `vars.name`, so a var the template doesn't have fails as a KeyError
-  # on the vars map, which names neither the var nor the template. Translating it here, where the
-  # template runs, costs nothing on the happy path. See undefined_var_error?/4 for how the
-  # undefined var is told apart from any other KeyError.
+  # on the vars map, which names neither the var nor the template. The template gets the map
+  # tagged as a Vars struct, which is what tells that KeyError apart from one raised on any other
+  # map. The tag costs a copy of the map per render, the rescue nothing until something raises.
   defp evaluate_template(module, vars) do
-    module.template().(vars)
+    tagged_vars = Map.put(vars, :__struct__, Vars)
+    module.template().(tagged_vars)
   rescue
     error in KeyError ->
-      if undefined_var_error?(error, __STACKTRACE__, module, vars) do
-        reraise Hologram.MisuseError,
-                [message: undefined_var_message(error.key, module, vars)],
-                __STACKTRACE__
-      else
-        reraise error, __STACKTRACE__
+      case error do
+        %KeyError{key: key, term: %Vars{}} when is_atom(key) ->
+          reraise Hologram.MisuseError,
+                  [message: undefined_var_message(key, module, vars)],
+                  __STACKTRACE__
+
+        _error ->
+          reraise error, __STACKTRACE__
       end
   end
 
@@ -1206,26 +1210,6 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp spread_entries(value), do: raise_invalid_spread_value(value)
-
-  # The term has to be the vars map and the top frame the template's own anonymous function, so a
-  # KeyError from inside an expression - a field read on a map the template holds, a helper it
-  # calls, even one in the same module - is left alone. The function is named after template/0,
-  # which every template's function is, nested ones and comprehension bodies included. One case
-  # still matches: a field read on an empty map written in the template itself, while the
-  # template has no vars either. The client compares by identity there and keeps the KeyError.
-  defp undefined_var_error?(
-         %KeyError{key: key, term: vars},
-         [{module, fun, _arity, _location} | _frames],
-         module,
-         vars
-       )
-       when is_atom(key) do
-    fun
-    |> Atom.to_string()
-    |> String.starts_with?("-template/0-fun-")
-  end
-
-  defp undefined_var_error?(_error, _stacktrace, _module, _vars), do: false
 
   # WARNING: must match the client renderer's #undefinedVarMessage.
   # Only atom keys are listed, since only those can be read with `@`.

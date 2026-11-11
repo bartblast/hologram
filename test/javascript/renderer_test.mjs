@@ -80,6 +80,7 @@ import {defineModule94Fixture} from "./support/fixtures/renderer/module_94.mjs";
 import {defineModule95Fixture} from "./support/fixtures/renderer/module_95.mjs";
 import {defineModule96Fixture} from "./support/fixtures/renderer/module_96.mjs";
 import {defineModule97Fixture} from "./support/fixtures/renderer/module_97.mjs";
+import {defineModule98Fixture} from "./support/fixtures/renderer/module_98.mjs";
 import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
 import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client_only/module_2.mjs";
 import {defineClientOnlyModule3Fixture} from "./support/fixtures/renderer/client_only/module_3.mjs";
@@ -164,6 +165,7 @@ defineModule94Fixture();
 defineModule95Fixture();
 defineModule96Fixture();
 defineModule97Fixture();
+defineModule98Fixture();
 defineModule9Fixture();
 defineClientOnlyModule1Fixture();
 defineClientOnlyModule2Fixture();
@@ -5731,7 +5733,7 @@ describe("Renderer", () => {
       );
 
       const expected = [
-        'component vars = %{prop_1: "abc", prop_2: :xyz, prop_3: 123}',
+        'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "abc", prop_2: :xyz, prop_3: 123}',
       ];
 
       assert.deepStrictEqual(result, expected);
@@ -5760,7 +5762,9 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      const expected = ["component vars = %{prop_2: :xyz}"];
+      const expected = [
+        "component vars = %{__struct__: Hologram.Component.Vars, prop_2: :xyz}",
+      ];
 
       assert.deepStrictEqual(result, expected);
     });
@@ -5967,7 +5971,9 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      assert.deepStrictEqual(result, ["component vars = %{aaa: :small}"]);
+      assert.deepStrictEqual(result, [
+        "component vars = %{__struct__: Hologram.Component.Vars, aaa: :small}",
+      ]);
     });
 
     it("prop value not in the :values list", () => {
@@ -6016,7 +6022,9 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      assert.deepStrictEqual(result, ["component vars = %{}"]);
+      assert.deepStrictEqual(result, [
+        "component vars = %{__struct__: Hologram.Component.Vars}",
+      ]);
     });
   });
 
@@ -6070,7 +6078,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+        'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "my_value_1", prop_2: 2}',
       ]);
     });
 
@@ -6085,7 +6093,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+        'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "my_value_1", prop_2: 2}',
       ]);
     });
 
@@ -6097,7 +6105,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1"}',
+        'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "my_value_1"}',
       ]);
     });
 
@@ -6110,7 +6118,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        'component vars = %{my_prop_1: "my_value_1"}',
+        'component vars = %{__struct__: Hologram.Component.Vars, my_prop_1: "my_value_1"}',
       ]);
     });
 
@@ -6125,7 +6133,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1"}',
+        'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "my_value_1"}',
       ]);
     });
 
@@ -6164,7 +6172,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        "component vars = %{my_prop_2: %{my_nested_key: 1}}",
+        "component vars = %{__struct__: Hologram.Component.Vars, my_prop_2: %{my_nested_key: 1}}",
       ]);
     });
 
@@ -6181,7 +6189,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        "component vars = %{my_prop_3: [my_nested_key: 1]}",
+        "component vars = %{__struct__: Hologram.Component.Vars, my_prop_3: [my_nested_key: 1]}",
       ]);
     });
 
@@ -6191,7 +6199,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        "component vars = %{my_prop_1: nil}",
+        "component vars = %{__struct__: Hologram.Component.Vars, my_prop_1: nil}",
       ]);
     });
 
@@ -6201,7 +6209,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        "component vars = %{my_prop_1: false}",
+        "component vars = %{__struct__: Hologram.Component.Vars, my_prop_1: false}",
       ]);
     });
 
@@ -6212,7 +6220,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_2"}',
+        'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "my_value_2"}',
       ]);
     });
 
@@ -6223,7 +6231,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_2"}',
+        'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "my_value_2"}',
       ]);
     });
 
@@ -6234,7 +6242,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_2"}',
+        'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "my_value_2"}',
       ]);
     });
 
@@ -6254,7 +6262,7 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{cid: "my_component", prop_1: "my_value"}',
+        'component vars = %{__struct__: Hologram.Component.Vars, cid: "my_component", prop_1: "my_value"}',
       ]);
     });
 
@@ -6300,7 +6308,9 @@ describe("Renderer", () => {
           Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module65"),
           propsDom,
         ),
-        ['component vars = %{prop_1: "abc", prop_2: :my_value, prop_3: 123}'],
+        [
+          'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "abc", prop_2: :my_value, prop_3: 123}',
+        ],
       );
     });
 
@@ -6308,7 +6318,7 @@ describe("Renderer", () => {
       const propsDom = [namedProp("prop_1", "my_value_1"), spread(Type.map())];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1"}',
+        'component vars = %{__struct__: Hologram.Component.Vars, prop_1: "my_value_1"}',
       ]);
     });
 
@@ -6480,6 +6490,28 @@ describe("Renderer", () => {
             ]),
           ]),
         ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "KeyError",
+        buildKeyErrorMsg(Type.atom("b"), Type.map()),
+      );
+    });
+
+    it("with a missing key read from a map the template builds, template without vars", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module98"),
+        Type.list(),
         Type.list(),
       ]);
 
@@ -6954,7 +6986,7 @@ describe("Renderer", () => {
       );
 
       const expected =
-        'component vars = %{cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"}';
+        'component vars = %{__struct__: Hologram.Component.Vars, cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"}';
 
       assert.equal(result, expected);
     });
@@ -7064,6 +7096,7 @@ describe("Renderer", () => {
       ComponentRegistry.putEntry(cid, entry);
 
       const vars = Type.map([
+        [Type.atom("__struct__"), Type.alias("Hologram.Component.Vars")],
         [Type.atom("b"), Type.integer(222)],
         [Type.atom("cid"), cid],
       ]);
@@ -9018,7 +9051,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
+          'layout vars = %{__struct__: Hologram.Component.Vars, cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
         ]),
       ]);
 
@@ -9049,7 +9082,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
+          'layout vars = %{__struct__: Hologram.Component.Vars, cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
         ]),
       ]);
 
@@ -9082,7 +9115,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'page vars = %{key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
+          'page vars = %{__struct__: Hologram.Component.Vars, key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
@@ -9147,7 +9180,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
+          'layout vars = %{__struct__: Hologram.Component.Vars, cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 

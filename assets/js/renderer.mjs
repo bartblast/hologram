@@ -1177,21 +1177,26 @@ export default class Renderer {
   // Hologram.MisuseError, every other error passes through untouched.
   //
   // A template reads `@name` as `vars.name`, so a var the template doesn't have fails as a
-  // KeyError on the vars map, which names neither the var nor the template. Translating it here,
-  // where the template runs, costs nothing on the happy path. The error's term has to be this very
-  // vars map, so a KeyError from inside an expression - a field read on a map the template holds,
-  // a helper it calls - is left alone. Comparing by identity makes that exact, where the server
-  // has to compare by value and look at the frame the error was raised in.
+  // KeyError on the vars map, which names neither the var nor the template. The template gets the
+  // map tagged as a Vars struct, which is what tells that KeyError apart from one raised on any
+  // other map. The tag costs a copy of the map per render, the catch nothing until something
+  // raises.
   // The new error carries the KeyError's stacktrace, as the server's reraise does, since that's
   // where the template's own frame is - a raise from here would only see the renderer's.
-  // Deps: [:maps.get/2]
+  // Deps: [:maps.get/2, :maps.put/3]
   static #evaluateTemplate(moduleProxy, vars) {
+    const taggedVars = Erlang_Maps["put/3"](
+      Type.atom("__struct__"),
+      Type.alias("Hologram.Component.Vars"),
+      vars,
+    );
+
     try {
       return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
-        vars,
+        taggedVars,
       ]);
     } catch (error) {
-      if (!Renderer.#isUndefinedVarError(error, vars)) {
+      if (!Renderer.#isUndefinedVarError(error)) {
         throw error;
       }
 
@@ -1386,8 +1391,8 @@ export default class Renderer {
 
   // Tells apart the KeyError a template raises for a var it doesn't have, see #evaluateTemplate.
   // A struct is null when its derivation was skipped or faulted.
-  // Deps: [:maps.get/2]
-  static #isUndefinedVarError(error, vars) {
+  // Deps: [:maps.get/2, :maps.get/3]
+  static #isUndefinedVarError(error) {
     if (
       !(error instanceof HologramBoxedError) ||
       error.kind.value !== "error" ||
@@ -1407,9 +1412,15 @@ export default class Renderer {
       return false;
     }
 
+    const term = Erlang_Maps["get/2"](Type.atom("term"), struct);
+
     return (
       Type.isAtom(Erlang_Maps["get/2"](Type.atom("key"), struct)) &&
-      Erlang_Maps["get/2"](Type.atom("term"), struct) === vars
+      Type.isMap(term) &&
+      Interpreter.isStrictlyEqual(
+        Erlang_Maps["get/3"](Type.atom("__struct__"), term, Type.nil()),
+        Type.alias("Hologram.Component.Vars"),
+      )
     );
   }
 
