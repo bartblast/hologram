@@ -1918,6 +1918,186 @@ defmodule Hologram.Template.DOMTest do
              ]
     end
 
+    test "with a struct, which only the render can build" do
+      # <div $data_transfer={%MyStruct{}} />
+      tags = [{:self_closing_tag, {"div", [{"$data_transfer", [expression: "{%MyStruct{}}"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            {:%, [line: 1],
+                             [{:__aliases__, [line: 1], [:MyStruct]}, {:%{}, [line: 1], []}]}
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with drag data holding a struct, which only the render can build" do
+      # <div $data_transfer={data: %MyStruct{}} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{data: %MyStruct{}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              data:
+                                {:%, [line: 1],
+                                 [{:__aliases__, [line: 1], [:MyStruct]}, {:%{}, [line: 1], []}]}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a struct nested in a drag image, which only the render can build" do
+      # <div $data_transfer={image: %{ref: %MyStruct{}}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: %MyStruct{}}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              image:
+                                {:%{}, [line: 1],
+                                 [
+                                   ref:
+                                     {:%, [line: 1],
+                                      [
+                                        {:__aliases__, [line: 1], [:MyStruct]},
+                                        {:%{}, [line: 1], []}
+                                      ]}
+                                 ]}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a map holding a struct, which only the render can build" do
+      # <div $data_transfer={%{data: %MyStruct{}}} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{%{data: %MyStruct{}}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            {:%{}, [line: 1],
+                             [
+                               data:
+                                 {:%, [line: 1],
+                                  [{:__aliases__, [line: 1], [:MyStruct]}, {:%{}, [line: 1], []}]}
+                             ]}
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a value only the render knows, like __MODULE__" do
+      # <div $data_transfer={data: __MODULE__} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{data: __MODULE__}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [expression: {:{}, [line: 1], [[data: {:__MODULE__, [line: 1], nil}]]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drag image at a negative offset" do
+      # <div $data_transfer={image: %{ref: :task_preview, x: -16}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: :task_preview, x: -16}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              image:
+                                {:%{}, [line: 1], [ref: :task_preview, x: {:-, [line: 1], [16]}]}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
     test "raises for modifiers" do
       # <div $drop="dropped" $data_transfer.once={drop_effect: :move} />
       tags = [
@@ -2303,6 +2483,19 @@ defmodule Hologram.Template.DOMTest do
 
       assert_error Hologram.TemplateSyntaxError,
                    "the $data_transfer effects_allowed goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image at a negative offset with a key it doesn't take" do
+      # <div $data_transfer={image: %{ref: :task_preview, x: -16, width: 1}} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [{"$data_transfer", [expression: "{image: %{ref: :task_preview, x: -16, width: 1}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, width: 1, x: -16}",
                    fn -> build_ast(tags) end
     end
 

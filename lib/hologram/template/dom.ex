@@ -150,6 +150,23 @@ defmodule Hologram.Template.DOM do
     code_acc <> code
   end
 
+  # Whether the quoted expression is plain data: atoms, numbers, negative numbers, strings, and
+  # lists, tuples and maps of them. A struct is left out, since building it needs its module, which
+  # only the template's aliases may name, and so is a module name, for the same reason.
+  defp data_literal?(ast) when is_atom(ast) or is_number(ast) or is_binary(ast), do: true
+
+  defp data_literal?(ast) when is_list(ast), do: Enum.all?(ast, &data_literal?/1)
+
+  defp data_literal?({:-, _meta, [number]}) when is_number(number), do: true
+
+  defp data_literal?({left, right}), do: data_literal?(left) and data_literal?(right)
+
+  defp data_literal?({:{}, _meta, elements}), do: data_literal?(elements)
+
+  defp data_literal?({:%{}, _meta, pairs}), do: data_literal?(pairs)
+
+  defp data_literal?(_ast), do: false
+
   # Whether the attribute is a $data_transfer, with modifiers or without.
   defp data_transfer_attribute?({name, _value_parts}) when is_binary(name) do
     match?({"$data_transfer", _modifiers}, decompose_event_attribute_name(name))
@@ -158,7 +175,7 @@ defmodule Hologram.Template.DOM do
   defp data_transfer_attribute?(_spread), do: false
 
   defp data_transfer_entry({key, value_ast}) do
-    if Macro.quoted_literal?(value_ast) do
+    if data_literal?(value_ast) do
       {key, literal_value(value_ast)}
     else
       {key, %DataTransfer.Unknown{}}
@@ -198,7 +215,7 @@ defmodule Hologram.Template.DOM do
 
         {:ok, entries}
 
-      Macro.quoted_literal?(ast) ->
+      data_literal?(ast) ->
         {:ok, literal_value(ast)}
 
       data_transfer_pairs?(ast) ->
@@ -330,14 +347,25 @@ defmodule Hologram.Template.DOM do
 
   defp generator?(_qualifier), do: false
 
-  # The value a quoted literal stands for. A literal holds no calls or variables, so evaluating it
-  # runs nothing.
-  # sobelow_skip ["RCE.CodeModule"]
-  defp literal_value(ast) do
-    ast
-    |> Code.eval_quoted()
-    |> elem(0)
+  # The value a quoted data literal stands for, built from its source without evaluating it. A map
+  # keeps the last value of a repeated key, as the map does when it renders.
+  defp literal_value(ast) when is_list(ast), do: Enum.map(ast, &literal_value/1)
+
+  defp literal_value({:-, _meta, [number]}), do: -number
+
+  defp literal_value({left, right}), do: {literal_value(left), literal_value(right)}
+
+  defp literal_value({:{}, _meta, elements}) do
+    elements
+    |> Enum.map(&literal_value/1)
+    |> List.to_tuple()
   end
+
+  defp literal_value({:%{}, _meta, pairs}) do
+    Map.new(pairs, fn {key, value} -> {literal_value(key), literal_value(value)} end)
+  end
+
+  defp literal_value(ast), do: ast
 
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
