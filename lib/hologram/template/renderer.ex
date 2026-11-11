@@ -735,6 +735,25 @@ defmodule Hologram.Template.Renderer do
     {name, value_dom_to_text(value_dom)}
   end
 
+  # WARNING: must match the client renderer's #evaluateTemplate.
+  #
+  # A template reads `@name` as `vars.name`, so a var the template doesn't have fails as a KeyError
+  # on the vars map, which names neither the var nor the template. Translating it here, where the
+  # template runs, costs nothing on the happy path. See undefined_var_error?/4 for how the
+  # undefined var is told apart from any other KeyError.
+  defp evaluate_template(module, vars) do
+    module.template().(vars)
+  rescue
+    error in KeyError ->
+      if undefined_var_error?(error, __STACKTRACE__, module, vars) do
+        reraise Hologram.MisuseError,
+                [message: undefined_var_message(error.key, module, vars)],
+                __STACKTRACE__
+      else
+        reraise error, __STACKTRACE__
+      end
+  end
+
   defp expand_attribute(attr_dom)
 
   # A spread's own entries are sorted by name, so that rendering is reproducible: map key order is
@@ -1083,7 +1102,7 @@ defmodule Hologram.Template.Renderer do
          server_struct
        ) do
     vars = Map.merge(params, page_state)
-    page_dom = page_module.template().(vars)
+    page_dom = evaluate_template(page_module, vars)
 
     layout_module = page_module.__layout_module__()
     layout_props_dom = build_layout_props_dom(page_module, page_state)
@@ -1136,8 +1155,8 @@ defmodule Hologram.Template.Renderer do
       slots_parent_module: parent_module
     }
 
-    vars
-    |> module.template().()
+    module
+    |> evaluate_template(vars)
     |> render_tree(env, server_struct)
   end
 
@@ -1187,6 +1206,44 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp spread_entries(value), do: raise_invalid_spread_value(value)
+
+  # The term has to be the vars map and the top frame the template's own anonymous function, so a
+  # KeyError from inside an expression - a field read on a map the template holds, a helper it
+  # calls, even one in the same module - is left alone. The function is named after template/0,
+  # which every template's function is, nested ones and comprehension bodies included. One case
+  # still matches: a field read on an empty map written in the template itself, while the
+  # template has no vars either. The client compares by identity there and keeps the KeyError.
+  defp undefined_var_error?(
+         %KeyError{key: key, term: vars},
+         [{module, fun, _arity, _location} | _frames],
+         module,
+         vars
+       )
+       when is_atom(key) do
+    fun
+    |> Atom.to_string()
+    |> String.starts_with?("-template/0-fun-")
+  end
+
+  defp undefined_var_error?(_error, _stacktrace, _module, _vars), do: false
+
+  # WARNING: must match the client renderer's #undefinedVarMessage.
+  # Only atom keys are listed, since only those can be read with `@`.
+  defp undefined_var_message(key, module, vars) do
+    names =
+      vars
+      |> Map.keys()
+      |> Enum.filter(&is_atom/1)
+      |> Enum.sort()
+
+    available_vars =
+      case names do
+        [] -> "no vars are available"
+        names -> "available vars: " <> Enum.map_join(names, ", ", &"@#{&1}")
+      end
+
+    ~s/undefined var @#{key} in the template of "#{Reflection.module_name(module)}", #{available_vars}/
+  end
 
   # Runs last in the props pipeline, so the map it sees is exactly what the component's template
   # will see - defaults filled and context injected. The compiler already rejects a required prop

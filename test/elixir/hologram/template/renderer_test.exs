@@ -78,6 +78,10 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module91
   alias Hologram.Test.Fixtures.Template.Renderer.Module92
   alias Hologram.Test.Fixtures.Template.Renderer.Module93
+  alias Hologram.Test.Fixtures.Template.Renderer.Module94
+  alias Hologram.Test.Fixtures.Template.Renderer.Module95
+  alias Hologram.Test.Fixtures.Template.Renderer.Module96
+  alias Hologram.Test.Fixtures.Template.Renderer.Module97
 
   @csrf_token "test-csrf-token"
   @env %Renderer.Env{}
@@ -801,7 +805,10 @@ defmodule Hologram.Template.RendererTest do
     test "declared to take value from context, value not in context, default value not specified" do
       node = {:component, Module76, [{"cid", [text: "component_76"]}], []}
 
-      assert_raise KeyError, build_key_error_msg(:aaa, %{}), fn ->
+      expected_msg =
+        ~s'undefined var @aaa in the template of "#{inspect(Module38)}", no vars are available'
+
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
         render_dom(node, @env, @server)
       end
     end
@@ -1102,9 +1109,26 @@ defmodule Hologram.Template.RendererTest do
     test "with unregistered var used" do
       node = {:component, Module17, [{"a", [text: "111"]}, {"b", [text: "222"]}], []}
 
-      expected_msg = build_key_error_msg(:b, %{a: "111"})
+      expected_msg =
+        ~s'undefined var @b in the template of "#{inspect(Module17)}", available vars: @a'
 
-      assert_raise KeyError, expected_msg, fn ->
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with a missing key read from a var's value" do
+      node = {:component, Module95, [{"a", [expression: {%{}}]}], []}
+
+      assert_raise KeyError, build_key_error_msg(:b, %{}), fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with a missing key read by a helper the template calls, template without vars" do
+      node = {:component, Module97, [], []}
+
+      assert_raise KeyError, build_key_error_msg(:b, %{}), fn ->
         render_dom(node, @env, @server)
       end
     end
@@ -1285,11 +1309,24 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module18,
          [{"cid", [text: "my_component"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
 
-      assert_raise KeyError,
-                   ~r/^key :c not found in:\s+%\{.+\}$/s,
-                   fn ->
-                     render_dom(node, @env, @server)
-                   end
+      expected_msg =
+        ~s'undefined var @c in the template of "#{inspect(Module18)}", ' <>
+          "available vars: @a, @b, @cid"
+
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with unregistered var used, state with a key that isn't an atom" do
+      node = {:component, Module96, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg =
+        ~s'undefined var @c in the template of "#{inspect(Module96)}", available vars: @b, @cid'
+
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
     end
 
     test "framework sets server.cid to the component's cid during init/3" do
@@ -1612,9 +1649,10 @@ defmodule Hologram.Template.RendererTest do
     test "event attributes are not passed as props" do
       node = {:dynamic_tag, {Module2}, [{"$click", [text: "my_action"]}], []}
 
-      expected_msg = build_key_error_msg(:a, %{})
+      expected_msg =
+        ~s'undefined var @a in the template of "#{inspect(Module2)}", no vars are available'
 
-      assert_raise KeyError, expected_msg, fn ->
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
         render_dom(node, @env, @server)
       end
     end
@@ -1923,6 +1961,17 @@ defmodule Hologram.Template.RendererTest do
       assert {"layout template start, page template, layout template end", _component_registry,
               _server_struct} =
                render_page_without_tree(Module14, @params, @server, @opts)
+    end
+
+    test "with unregistered var used" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module94, :dummy_module_94_digest)
+
+      expected_msg =
+        ~s'undefined var @c in the template of "#{inspect(Module94)}", available vars: @b'
+
+      assert_raise Hologram.MisuseError, expected_msg, fn ->
+        render_page(Module94, @params, @server, @opts)
+      end
     end
 
     test "cast page param values to correct type" do
