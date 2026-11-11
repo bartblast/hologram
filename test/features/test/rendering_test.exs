@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.RenderingTest do
   use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.Components.Rendering.PropValidationComponent
+  alias HologramFeatureTests.Components.Rendering.UndefinedVarComponent
   alias HologramFeatureTests.Rendering.DefaultInitPage
   alias HologramFeatureTests.Rendering.Page1
   alias HologramFeatureTests.Rendering.Page2
@@ -9,6 +10,7 @@ defmodule HologramFeatureTests.RenderingTest do
   alias HologramFeatureTests.Rendering.Page4
   alias HologramFeatureTests.Rendering.PropsOnStructPage
   alias HologramFeatureTests.Rendering.PropValidationPage
+  alias HologramFeatureTests.Rendering.UndefinedVarPage
 
   feature "root element without attributes", %{session: session} do
     session
@@ -127,6 +129,18 @@ defmodule HologramFeatureTests.RenderingTest do
         |> visit(PropValidationPage)
         |> click(button("Render with invalid value"))
       end
+    end
+  end
+
+  feature "raises when a template uses a var it doesn't have", %{session: session} do
+    expected_msg =
+      ~s/undefined var @missing in the template of "#{inspect(UndefinedVarComponent)}", / <>
+        "available vars: @label"
+
+    assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
+      session
+      |> visit(UndefinedVarPage)
+      |> click(button("Show"))
     end
   end
 end
