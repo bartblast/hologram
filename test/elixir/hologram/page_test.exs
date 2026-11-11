@@ -164,9 +164,9 @@ defmodule Hologram.PageTest do
   end
 
   describe "derived/3" do
-    test "raises on a head naming what is no param, state entry or derived field" do
+    test "raises on a head naming what is no field" do
       expected_msg =
-        "nofile:10: total is not a param, state entry or derived field of Hologram.Test.Fixtures.Page.DerivedUnknownName - the arguments of derived field :double's function name the fields it reads: b"
+        "nofile:10: total is not a field of Hologram.Test.Fixtures.Page.DerivedUnknownName - the arguments of derived field :double's function name the fields it reads: b"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.eval_string("""

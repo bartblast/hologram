@@ -574,9 +574,9 @@ defmodule Hologram.ComponentTest do
       end
     end
 
-    test "raises on a head naming what is no prop, state entry or derived field" do
+    test "raises on a head naming what is no field" do
       expected_msg =
-        "nofile:8: total is not a prop, state entry or derived field of Hologram.Test.Fixtures.Component.DerivedUnknownName - the arguments of derived field :double's function name the fields it reads: count, step"
+        "nofile:8: total is not a field of Hologram.Test.Fixtures.Component.DerivedUnknownName - the arguments of derived field :double's function name the fields it reads: count, step"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.eval_string("""
@@ -599,7 +599,7 @@ defmodule Hologram.ComponentTest do
 
     test "raises on a head naming a field of a component declaring none" do
       expected_msg =
-        "nofile:4: total is not a prop, state entry or derived field of Hologram.Test.Fixtures.Component.DerivedNothingToRead - the arguments of derived field :double's function name the fields it reads, and Hologram.Test.Fixtures.Component.DerivedNothingToRead declares none"
+        "nofile:4: total is not a field of Hologram.Test.Fixtures.Component.DerivedNothingToRead - the arguments of derived field :double's function name the fields it reads, and Hologram.Test.Fixtures.Component.DerivedNothingToRead declares none"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.eval_string("""

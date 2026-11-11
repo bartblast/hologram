@@ -9,7 +9,6 @@ defmodule Hologram.Component.Derived do
   # the client, which the call graph reaches through the capture __derived__/0 holds.
 
   alias Hologram.Compiler.AST
-  alias Hologram.Entity.Validator, as: EntityValidator
 
   # The query macros whose arguments after the source are query vocabulary, where a bare name is the
   # queried row's and only a pinned expression reads the surrounding Elixir.
@@ -33,7 +32,7 @@ defmodule Hologram.Component.Derived do
 
     definition = Hologram.Derived.function(name, definition, env)
 
-    EntityValidator.validate_derived_function!(name, definition, env)
+    Hologram.Derived.validate_function!(name, definition, env)
 
     {:fn, _meta, [{:->, _arrow_meta, [args, body]}]} = definition
     arg_names = Enum.map(args, fn {arg_name, _meta, _context} -> arg_name end)
@@ -71,13 +70,13 @@ defmodule Hologram.Component.Derived do
       |> Module.get_attribute(:__derived__)
       |> Enum.reverse()
 
-    {holder, inputs} = inputs(module)
+    inputs = inputs(module)
 
     validate_names!(declarations, inputs, env)
 
     fields = Map.merge(inputs, Map.new(declarations, &{declaration_name(&1), "derived field"}))
 
-    Enum.each(declarations, &validate_head!(&1, fields, holder, env))
+    Enum.each(declarations, &validate_head!(&1, fields, env))
     Enum.each(declarations, &validate_body!(&1, fields, env))
 
     ordered = order!(declarations, env)
@@ -153,13 +152,10 @@ defmodule Hologram.Component.Derived do
 
     state = Module.get_attribute(module, :__state__)
 
-    inputs =
-      holders
-      |> Enum.map(fn {name, _type, _opts} -> {name, holder} end)
-      |> Enum.concat(Enum.map(state, fn {name, _type, _opts} -> {name, "state entry"} end))
-      |> Map.new()
-
-    {holder, inputs}
+    holders
+    |> Enum.map(fn {name, _type, _opts} -> {name, holder} end)
+    |> Enum.concat(Enum.map(state, fn {name, _type, _opts} -> {name, "state entry"} end))
+    |> Map.new()
   end
 
   defp module_label(env), do: inspect(env.module)
@@ -227,42 +223,26 @@ defmodule Hologram.Component.Derived do
 
   @spec raise_cycle!(list, %{atom => [atom]}, Macro.Env.t()) :: no_return
   defp raise_cycle!(left, reads, env) do
-    graph = :digraph.new()
+    cycles =
+      reads
+      |> Map.take(Enum.map(left, &declaration_name/1))
+      |> Hologram.Derived.cycles()
 
-    try do
-      Enum.each(left, &:digraph.add_vertex(graph, declaration_name(&1)))
-
-      Enum.each(left, fn declaration ->
-        name = declaration_name(declaration)
-
-        reads
-        |> Map.fetch!(name)
-        |> Enum.each(&:digraph.add_edge(graph, name, &1))
+    members =
+      Enum.find_value(left, fn declaration ->
+        Enum.find(cycles, &(declaration_name(declaration) in &1))
       end)
 
-      cycles =
-        graph
-        |> :digraph_utils.strong_components()
-        |> Enum.filter(&(length(&1) > 1))
+    [{{_name, _args, _arg_names, _body, line}, _type} | _rest] =
+      cycle = Enum.filter(left, &(declaration_name(&1) in members))
 
-      members =
-        Enum.find_value(left, fn declaration ->
-          Enum.find(cycles, &(declaration_name(declaration) in &1))
-        end)
+    spelled = Enum.map_join(cycle, ", ", &inspect(declaration_name(&1)))
 
-      [{{_name, _args, _arg_names, _body, line}, _type} | _rest] =
-        cycle = Enum.filter(left, &(declaration_name(&1) in members))
-
-      spelled = Enum.map_join(cycle, ", ", &inspect(declaration_name(&1)))
-
-      compile_error!(
-        "derived fields in #{module_label(env)} read each other in a cycle: #{spelled}",
-        env,
-        line
-      )
-    after
-      :digraph.delete(graph)
-    end
+    compile_error!(
+      "derived fields in #{module_label(env)} read each other in a cycle: #{spelled}",
+      env,
+      line
+    )
   end
 
   # The fields whose function reads a state entry, directly or through a field that does - in the
@@ -306,22 +286,6 @@ defmodule Hologram.Component.Derived do
   # The body names only what its head binds of the module's fields, whether it reads one or binds a
   # local under one's name. Inside a query macro's arguments after the source a bare name is the
   # queried row's, so only what is pinned there is read.
-  defp unknown_input_message(arg_name, name, fields, holder, env) do
-    readable =
-      fields
-      |> Map.keys()
-      |> List.delete(name)
-      |> Enum.sort()
-      |> Enum.join(", ")
-
-    listed =
-      if readable == "",
-        do: ", and #{module_label(env)} declares none",
-        else: ": #{readable}"
-
-    "#{arg_name} is not a #{holder}, state entry or derived field of #{module_label(env)} - the arguments of derived field #{inspect(name)}'s function name the fields it reads#{listed}"
-  end
-
   defp validate_body!({{name, _args, arg_names, body, line}, _type}, fields, env) do
     state = %{
       arg_names: arg_names,
@@ -371,23 +335,14 @@ defmodule Hologram.Component.Derived do
     :ok
   end
 
-  defp validate_head!({{name, _args, arg_names, _body, line}, _type}, fields, holder, env) do
-    Enum.each(arg_names, fn arg_name ->
-      cond do
-        arg_name == name ->
-          compile_error!(
-            "derived field #{inspect(name)} in #{module_label(env)} reads itself - a derived field is computed from other fields",
-            env,
-            line
-          )
-
-        not Map.has_key?(fields, arg_name) ->
-          compile_error!(unknown_input_message(arg_name, name, fields, holder, env), env, line)
-
-        true ->
-          :ok
-      end
-    end)
+  defp validate_head!({{name, _args, arg_names, _body, line}, _type}, fields, env) do
+    Hologram.Derived.validate_head!(
+      env.module,
+      name,
+      arg_names,
+      Map.keys(fields),
+      {env.file, line}
+    )
   end
 
   defp validate_names!(declarations, inputs, env) do

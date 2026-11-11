@@ -957,7 +957,7 @@ defmodule Hologram.Entity do
 
     definition = Hologram.Derived.function(name, definition, env)
 
-    Validator.validate_derived_function!(name, definition, env)
+    Hologram.Derived.validate_function!(name, definition, env)
 
     {args, body, builder_call?} = DerivedExpression.function(name, definition, env)
     location = {env.file, env.line}

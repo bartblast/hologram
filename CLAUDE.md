@@ -29,7 +29,7 @@ Run these for each project a change touches: the library from the repo root, a t
 - Elixir lint: `mix credo --strict <files>`.
 - JavaScript lint: `mix eslint`, from the repo root. It lints the whole tree, which takes a few seconds.
 - Dialyzer: `mix dialyzer`, when the change touches the project's Elixir code. It always checks the whole project.
-- New Elixir test files: `mix holo.test.check_file_names test/elixir` in the library, `mix holo.test.check_file_names test` in a test app.
+- New Elixir test files: `mix holo.check.test_file_names test/elixir` in the library, `mix holo.check.test_file_names test` in a test app.
 
 ## Bug fixes
 

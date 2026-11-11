@@ -126,34 +126,21 @@ defmodule Hologram.Entity.Derived.Validator do
     {first_type, first_name, "derived fields read each other in a cycle: #{spelled}"}
   end
 
-  # Edges from every derived field to the derived fields its definition reads, on any type - cycles
-  # are the strongly connected components with more than one field, or a field reading itself through
-  # a related row. Each is reported once, at its first field, naming every field on it.
+  # What every derived field's definition reads of other derived fields, on any type - a cycle among
+  # them, more than one field or a field reading itself through a related row, is reported once, at
+  # its first field, naming every field on it.
   defp cycle_violations(fields, definitions) do
-    graph = :digraph.new()
-
-    try do
-      Enum.each(fields, fn {entity_type, name, _type, _opts} ->
-        :digraph.add_vertex(graph, {entity_type, name})
-      end)
-
-      Enum.each(fields, fn {entity_type, name, _type, _opts} ->
+    fields
+    |> Map.new(fn {entity_type, name, _type, _opts} ->
+      read_fields =
         entity_type
         |> read_names(Map.fetch!(definitions, {entity_type, name}))
         |> Enum.filter(fn {type, read_name} -> Derived.declared?(type, read_name) end)
-        |> Enum.each(&:digraph.add_edge(graph, {entity_type, name}, &1))
-      end)
 
-      graph
-      |> :digraph_utils.strong_components()
-      |> Enum.filter(fn component ->
-        match?([_first, _second | _rest], component) or
-          {hd(component), hd(component)} in edges_of(graph, hd(component))
-      end)
-      |> Enum.map(&cycle_violation/1)
-    after
-      :digraph.delete(graph)
-    end
+      {{entity_type, name}, read_fields}
+    end)
+    |> Hologram.Derived.cycles()
+    |> Enum.map(&cycle_violation/1)
   end
 
   defp declaration_location(entity_type, name) do
@@ -161,16 +148,6 @@ defmodule Hologram.Entity.Derived.Validator do
       {:ok, {file, line}} -> "#{Path.relative_to_cwd(file)}:#{line}: "
       :error -> ""
     end
-  end
-
-  defp edges_of(graph, vertex) do
-    graph
-    |> :digraph.out_edges(vertex)
-    |> Enum.map(fn edge ->
-      {_edge, from, to, _label} = :digraph.edge(graph, edge)
-
-      {from, to}
-    end)
   end
 
   defp element_type_violations(entity_type, name, type) do
