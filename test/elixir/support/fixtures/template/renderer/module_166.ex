@@ -1,11 +1,11 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Template.Renderer.Module141 do
+defmodule Hologram.Test.Fixtures.Template.Renderer.Module166 do
   use Hologram.Component
   use Hologram.DB
 
   alias Hologram.Test.Fixtures.Entity.Module3
 
-  prop :entities, [Module3], from_query: &entities_query/0
+  derived :entities, [Module3], fn -> include(Module3, a) end
 
   @impl Component
   def template do
@@ -16,9 +16,5 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module141 do
 
   defp embedded_titles(entity) do
     Enum.map_join(entity.a, "+", & &1.c)
-  end
-
-  defp entities_query do
-    include(Module3, a)
   end
 end

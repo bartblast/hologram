@@ -1,11 +1,11 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Template.Renderer.Module139 do
+defmodule Hologram.Test.Fixtures.Template.Renderer.Module162 do
   use Hologram.Component
   use Hologram.DB
 
   alias Hologram.Test.Fixtures.Entity.Module15
 
-  prop :entities, [Module15], from_query: &entities_query/0
+  derived :entities, [Module15], fn -> sort(Module15, label) end
 
   @impl Component
   def template do
@@ -14,9 +14,5 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module139 do
     secret_note = {inspect(hd(@entities).secret_note)}
     token = {inspect(hd(@entities).token)}
     """
-  end
-
-  defp entities_query do
-    sort(Module15, label)
   end
 end

@@ -37,7 +37,9 @@ describe("Renderer derived fields", () => {
 
   const count = ManuallyPortedElixirHologramQueryStage["count/1"];
   const filter = ManuallyPortedElixirHologramQueryStage["filter/2"];
+  const include = ManuallyPortedElixirHologramQueryStage["include/2"];
   const one = ManuallyPortedElixirHologramQueryStage["one/1"];
+  const sort = ManuallyPortedElixirHologramQueryStage["sort/2"];
 
   // What the template was rendered with, and what each module's template was rendered with.
   let renderedVars = null;
@@ -604,6 +606,11 @@ describe("Renderer derived fields", () => {
       render(componentNode("MyApp.FirstRow"));
 
       assert.deepStrictEqual(
+        fieldOf(renderedVar("first"), "__struct__"),
+        Type.alias(ROW),
+      );
+
+      assert.deepStrictEqual(
         Bitstring.toText(fieldOf(renderedVar("first"), "c")),
         "banana",
       );
@@ -672,6 +679,339 @@ describe("Renderer derived fields", () => {
         "Hologram.MisuseError",
         "derived field :total in MyApp.WrongShape is declared :integer, but its query is a set of Hologram.Test.Fixtures.Entity.Module2 rows",
       );
+    });
+
+    it("answers a query built from a prop the field reads", () => {
+      defineComponent("MyApp.DerivedWanted", {
+        queries: ["rows"],
+        derived: [
+          derivedEntry(
+            "rows",
+            Type.list([Type.alias(ROW)]),
+            ["wanted"],
+            (wanted) =>
+              filter(
+                Type.alias(ROW),
+                Type.list([Type.tuple([Type.atom("a"), wanted])]),
+              ),
+          ),
+        ],
+        props: [declaration("wanted")],
+      });
+
+      render(
+        componentNode("MyApp.DerivedWanted", [
+          propDom("wanted", Type.boolean(false)),
+        ]),
+      );
+
+      assert.deepStrictEqual(names(renderedVar("rows")), ["apple"]);
+    });
+
+    it("computes a field over a value the template passes under its name", () => {
+      defineRipe("MyApp.DerivedTemplatePassed");
+
+      render(
+        componentNode("MyApp.DerivedTemplatePassed", [
+          propDom("ripe", Type.atom("from_template")),
+        ]),
+      );
+
+      assert.deepStrictEqual(names(renderedVar("ripe")), ["banana", "cherry"]);
+    });
+
+    // The rows come back in the order the term names, which normalization gives a total one by
+    // appending the id tiebreaker - the same order the server's executor returns.
+    it("answers the rows in the order the normalized term names", () => {
+      defineComponent("MyApp.DerivedSorted", {
+        queries: ["rows"],
+        derived: [
+          derivedEntry("rows", Type.list([Type.alias(ROW)]), [], () =>
+            sort(Type.alias(ROW), Type.atom("c")),
+          ),
+        ],
+      });
+
+      render(componentNode("MyApp.DerivedSorted"));
+
+      assert.deepStrictEqual(names(renderedVar("rows")), [
+        "apple",
+        "banana",
+        "cherry",
+      ]);
+    });
+
+    it("answers nil for a query of one row matching no row", () => {
+      defineComponent("MyApp.DerivedNoRow", {
+        queries: ["row"],
+        derived: [
+          derivedEntry("row", Type.alias(ROW), [], () =>
+            one(
+              filter(
+                Type.alias(ROW),
+                Type.list([
+                  Type.tuple([Type.atom("id"), Type.bitstring("absent")]),
+                ]),
+              ),
+            ),
+          ),
+        ],
+      });
+
+      render(componentNode("MyApp.DerivedNoRow"));
+
+      assert.deepStrictEqual(renderedVar("row"), Type.nil());
+    });
+
+    it("binds the actor leaf to the acting user", () => {
+      LocalDatabase.actorUserId = "r1";
+
+      defineComponent("MyApp.DerivedActorBound", {
+        queries: ["rows"],
+        derived: [
+          derivedEntry("rows", Type.list([Type.alias(ROW)]), [], () =>
+            filter(
+              Type.alias(ROW),
+              Type.list([
+                Type.tuple([
+                  Type.atom("id"),
+                  Type.tuple([
+                    Type.atom("=="),
+                    Type.tuple([Type.atom("actor")]),
+                  ]),
+                ]),
+              ]),
+            ),
+          ),
+        ],
+      });
+
+      render(componentNode("MyApp.DerivedActorBound"));
+
+      assert.deepStrictEqual(names(renderedVar("rows")), ["banana"]);
+    });
+
+    // A count has no rows behind it, so carried rows cannot re-derive one - the number the render
+    // answered with is held until this client can count for itself.
+    describe("a count the page carried", () => {
+      const defineCounting = (moduleName) =>
+        defineComponent(moduleName, {
+          queries: ["total"],
+          derived: [
+            derivedEntry("total", Type.atom("integer"), ["wanted"], (wanted) =>
+              count(
+                filter(
+                  Type.alias(ROW),
+                  Type.list([Type.tuple([Type.atom("a"), wanted])]),
+                ),
+              ),
+            ),
+          ],
+          props: [declaration("wanted")],
+        });
+
+      const renderCounting = (moduleName) =>
+        render(
+          componentNode(moduleName, [propDom("wanted", Type.boolean(false))]),
+        );
+
+      it("counts locally once the whole pot is complete", () => {
+        defineCounting("MyApp.DerivedComplete");
+
+        LocalDatabase.syncCounts = {"MyApp.DerivedComplete/total/false": 42};
+        LocalDatabase.markSynced("all");
+
+        renderCounting("MyApp.DerivedComplete");
+
+        assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
+      });
+
+      // The page scope covers the page this client connected on, and nothing else - a component
+      // on any other page is only promised its rows at "all".
+      it("counts locally at the page marker on the page it connected with", () => {
+        defineCounting("MyApp.DerivedConnectPage");
+
+        GlobalRegistry.set("connectPageModule", "MyApp.DerivedConnectPage");
+        LocalDatabase.syncCounts = {"MyApp.DerivedConnectPage/total/false": 42};
+        LocalDatabase.markSynced("page");
+
+        renderCounting("MyApp.DerivedConnectPage");
+
+        assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
+      });
+
+      it("keeps carrying at the page marker for a page reached since", () => {
+        defineCounting("MyApp.DerivedNavigatedTo");
+
+        GlobalRegistry.set("connectPageModule", "MyApp.SomeOtherPage");
+        LocalDatabase.syncCounts = {"MyApp.DerivedNavigatedTo/total/false": 42};
+        LocalDatabase.markSynced("page");
+
+        renderCounting("MyApp.DerivedNavigatedTo");
+
+        assert.deepStrictEqual(renderedVar("total"), Type.integer(42));
+      });
+
+      // Two instances of one component answer two counts, and the arguments their fields were
+      // computed from are what tell them apart.
+      it("reads the count of the instance that asked", () => {
+        defineCounting("MyApp.DerivedTwoInstances");
+
+        LocalDatabase.syncCounts = {
+          "MyApp.DerivedTwoInstances/total/false": 42,
+          "MyApp.DerivedTwoInstances/total/true": 7,
+        };
+
+        renderCounting("MyApp.DerivedTwoInstances");
+
+        assert.deepStrictEqual(renderedVar("total"), Type.integer(42));
+      });
+
+      // Nothing carried is not zero carried: a count the page never answered is one this client
+      // has to work out for itself, however incomplete its answer.
+      it("counts locally when the page carried nothing for it", () => {
+        defineCounting("MyApp.DerivedNothingCarried");
+
+        renderCounting("MyApp.DerivedNothingCarried");
+
+        assert.deepStrictEqual(renderedVar("total"), Type.integer(1));
+      });
+
+      // Two arguments are two values, not their concatenation: 1 and 23 must not read the key
+      // 12 and 3 wrote.
+      it("separates the arguments of a field reading two fields", () => {
+        defineComponent("MyApp.DerivedTwoArgs", {
+          queries: ["total"],
+          derived: [
+            derivedEntry(
+              "total",
+              Type.atom("integer"),
+              ["from", "to"],
+              (_from, _to) => count(Type.alias(ROW)),
+            ),
+          ],
+          props: [declaration("from"), declaration("to")],
+        });
+
+        LocalDatabase.syncCounts = {
+          "MyApp.DerivedTwoArgs/total/1,23": 42,
+          "MyApp.DerivedTwoArgs/total/123": 7,
+        };
+
+        render(
+          componentNode("MyApp.DerivedTwoArgs", [
+            propDom("from", Type.integer(1)),
+            propDom("to", Type.integer(23)),
+          ]),
+        );
+
+        assert.deepStrictEqual(renderedVar("total"), Type.integer(42));
+      });
+
+      it("leaves a field holding rows alone", () => {
+        defineRipe("MyApp.DerivedNotCounting");
+
+        LocalDatabase.syncCounts = {"MyApp.DerivedNotCounting/ripe/": 42};
+
+        render(componentNode("MyApp.DerivedNotCounting"));
+
+        assert.deepStrictEqual(names(renderedVar("ripe")), [
+          "banana",
+          "cherry",
+        ]);
+      });
+    });
+
+    describe("includes", () => {
+      const PROJECT = "MyApp.DerivedProject";
+      const TASK = "MyApp.DerivedTask";
+
+      beforeEach(() => {
+        globalThis.Hologram.sync.model[PROJECT] = {
+          attributes: {id: "uuid", name: "string"},
+          relationships: {tasks: {toMany: true, type: TASK}},
+          serverOnly: [],
+        };
+
+        globalThis.Hologram.sync.model[TASK] = {
+          attributes: {done: "boolean", id: "uuid", title: "string"},
+          relationships: {project: {toMany: false, type: PROJECT}},
+          serverOnly: [],
+        };
+
+        Model.reset();
+
+        LocalDatabase.putRow(TASK, {
+          done: false,
+          id: "t1",
+          project_id: null,
+          title: "Buy milk",
+          title$sort: "buy milk",
+        });
+
+        LocalDatabase.putRow(TASK, {
+          done: true,
+          id: "t2",
+          project_id: null,
+          title: "Call Ann",
+          title$sort: "call ann",
+        });
+
+        LocalDatabase.putRow(TASK, {
+          done: false,
+          id: "t3",
+          project_id: null,
+          title: "Draft memo",
+          title$sort: "draft memo",
+        });
+      });
+
+      it("boxes the entities an included relationship embeds", () => {
+        LocalDatabase.putRow(PROJECT, {id: "p1", name: "Board"});
+        LocalDatabase.replaceFacts(PROJECT, "tasks", "p1", ["t1", "t3"]);
+
+        defineComponent("MyApp.DerivedIncluding", {
+          queries: ["projects"],
+          derived: [
+            derivedEntry("projects", Type.list([Type.alias(PROJECT)]), [], () =>
+              include(Type.alias(PROJECT), Type.atom("tasks")),
+            ),
+          ],
+        });
+
+        render(componentNode("MyApp.DerivedIncluding"));
+
+        const tasks = fieldOf(renderedVar("projects").data[0], "tasks");
+
+        assert.equal(tasks.data.length, 2);
+
+        assert.deepStrictEqual(
+          fieldOf(tasks.data[0], "__struct__"),
+          Type.alias(TASK),
+        );
+      });
+
+      // A relationship the query did not ask about is not one it found empty - which is what the
+      // sentinel says, and what a read of it reports.
+      it("leaves a relationship the query did not include unasked-for", () => {
+        defineComponent("MyApp.DerivedNotIncluding", {
+          queries: ["tasks"],
+          derived: [
+            derivedEntry("tasks", Type.list([Type.alias(TASK)]), [], () =>
+              Type.alias(TASK),
+            ),
+          ],
+        });
+
+        render(componentNode("MyApp.DerivedNotIncluding"));
+
+        const project = fieldOf(renderedVar("tasks").data[0], "project");
+
+        assert.deepStrictEqual(
+          fieldOf(project, "__struct__"),
+          Type.alias("Hologram.Entity.NotIncluded"),
+        );
+      });
     });
   });
 

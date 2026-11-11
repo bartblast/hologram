@@ -1,10 +1,10 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Template.Renderer.Module125 do
+defmodule Hologram.Test.Fixtures.Template.Renderer.Module175 do
   use Hologram.Page
 
-  alias Hologram.Test.Fixtures.Template.Renderer.Module124
+  alias Hologram.Test.Fixtures.Template.Renderer.Module174
 
-  route "/hologram-test-fixtures-template-renderer-module125"
+  route "/hologram-test-fixtures-template-renderer-module175"
 
   # The layout that renders Hologram.UI.Runtime, which is what puts the mount data - the counts
   # among it - into the page.
@@ -13,8 +13,8 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module125 do
   @impl Page
   def template do
     ~HOLO"""
-    <Module124 a={true} />
-    <Module124 a={false} />
+    <Module174 a={true} />
+    <Module174 a={false} />
     """
   end
 end
