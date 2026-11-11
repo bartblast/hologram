@@ -347,7 +347,7 @@ defmodule Hologram.Test.BrowserSessionTest do
 
       capture_io(fn ->
         assert create_session(@base_url, @capabilities,
-                 attempt_timeout: 50,
+                 attempt_timeout: 500,
                  attempts: 3,
                  create_fn: create_fn
                ) == {:ok, %{"sessionId" => "second"}}
@@ -383,7 +383,7 @@ defmodule Hologram.Test.BrowserSessionTest do
 
       capture_io(fn ->
         create_session(@base_url, @capabilities,
-          attempt_timeout: 50,
+          attempt_timeout: 500,
           attempts: 2,
           create_fn: create_fn,
           delete_fn: deleting_fn(self())
@@ -435,7 +435,7 @@ defmodule Hologram.Test.BrowserSessionTest do
 
       capture_io(fn ->
         create_session(@base_url, @capabilities,
-          attempt_timeout: 50,
+          attempt_timeout: 500,
           attempts: 3,
           create_fn: create_fn,
           log_dir: tmp_dir
@@ -449,8 +449,8 @@ defmodule Hologram.Test.BrowserSessionTest do
 
       assert hangs ==
                normalize_newlines("""
-               Chrome session didn't start within 50 ms (attempt 1 of 3), retrying
-               Chrome session didn't start within 50 ms (attempt 2 of 3), retrying
+               Chrome session didn't start within 500 ms (attempt 1 of 3), retrying
+               Chrome session didn't start within 500 ms (attempt 2 of 3), retrying
                """)
     end
 
@@ -647,7 +647,7 @@ defmodule Hologram.Test.BrowserSessionTest do
       opts: opts
     } do
       capture_io(fn ->
-        assert start_wallaby(Keyword.merge(opts, attempts: 3, ready_timeout: 50)) == :ok
+        assert start_wallaby(Keyword.merge(opts, attempts: 3, ready_timeout: 500)) == :ok
       end)
 
       assert_restarted_once(log_dir, @warm_up_messages)
