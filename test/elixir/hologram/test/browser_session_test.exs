@@ -58,6 +58,22 @@ defmodule Hologram.Test.BrowserSessionTest do
               ] ++ messages_after_start}
   end
 
+  # A crashed stand-in is restarted by its supervisor in the background, while a
+  # real Wallaby start returns with every ChromeDriver server up.
+  defp await_chromedrivers do
+    children = PartitionSupervisor.which_children(:browser_session_test_chromedrivers)
+
+    all_alive? =
+      Enum.all?(children, fn {_partition, pid, _type, _modules} ->
+        is_pid(pid) and Process.alive?(pid)
+      end)
+
+    if !all_alive? do
+      Process.sleep(1)
+      await_chromedrivers()
+    end
+  end
+
   defp blocking_create_fn(test_pid, session_id) do
     fn _base_url, _capabilities ->
       send(test_pid, {:attempt_started, self()})
@@ -531,6 +547,7 @@ defmodule Hologram.Test.BrowserSessionTest do
         put_env_fn: fn app, key, value -> send(self(), {:put_env, app, key, value}) end,
         ready_timeout: 5_000,
         start_fn: fn ->
+          await_chromedrivers()
           :counters.add(starts, 1, 1)
           send(self(), :started)
         end,
