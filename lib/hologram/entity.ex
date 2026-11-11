@@ -96,6 +96,7 @@ defmodule Hologram.Entity do
   defmacro __before_compile__(env) do
     Validator.validate_roles!(env.module)
     Validator.validate_derived_heads!(env.module)
+    DerivedExpression.validate_own_builders!(env.module)
 
     system_attributes =
       @system_attributes
@@ -287,6 +288,16 @@ defmodule Hologram.Entity do
         |> filter(created_at > ^last_read_at)
         |> count()
       end
+
+  A query builder computes the field when the body calls it where a query goes, a function of
+  another module or of the entity type's own, the fields passed in by position. A local call named
+  like a query stage is that stage:
+
+      derived :recent_messages, [MyApp.Message], fn messages -> recent(messages) end
+
+  A capture of a zero-arity function stands for the function calling it, `&recent/0` for
+  `fn -> recent() end`, as on a component. Reading no field, such a builder can't start its query
+  from the row, so the build refuses what it returns.
 
   The options go between the type and the function, bracketed, since the function comes last:
   `values:` names an enum's values, in the order sorts and comparisons read them.
@@ -943,6 +954,8 @@ defmodule Hologram.Entity do
   end
 
   defp derived_declaration(name, type, opts, definition, env) do
+    definition = Hologram.Derived.function(name, definition, env)
+
     Validator.validate_derived_function!(name, definition, env)
 
     {args, body, builder_call?} = DerivedExpression.function(name, definition, env)
@@ -1005,8 +1018,8 @@ defmodule Hologram.Entity do
       @spec __derived__() :: list({atom, atom | module | list(module), keyword})
       def __derived__, do: Enum.sort(@__derived__)
 
-      # The derived fields whose function calls a query builder of another module - the build
-      # resolves those by following the builder.
+      # The derived fields whose function calls a query builder - the build resolves those by
+      # following the builder.
       @doc false
       @spec __derived_builder_calls__() :: list(atom)
       def __derived_builder_calls__, do: Enum.sort(@__derived_builder_calls__)

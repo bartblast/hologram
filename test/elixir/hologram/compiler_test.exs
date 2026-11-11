@@ -63,6 +63,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module39, as: Entity39
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module40, as: Entity40
+  alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
@@ -9514,6 +9515,38 @@ defmodule Hologram.CompilerTest do
                     }}
                },
                read_modules: [DerivedModule2]
+             }
+    end
+
+    test "resolves definitions calling query builders of the entity type's own" do
+      assert resolve_derived_definitions([Entity43], PLT.start()) == %{
+               definitions: %{
+                 {Entity43, :piped_recent} =>
+                   {:query,
+                    %Query{
+                      entity: Entity33,
+                      sort: [position: :asc, id: :asc],
+                      source: {Entity43, [:channel, :messages]},
+                      take: 1
+                    }},
+                 {Entity43, :recent} =>
+                   {:query,
+                    %Query{
+                      entity: Entity33,
+                      sort: [position: :asc, id: :asc],
+                      source: {Entity43, [:channel, :messages]},
+                      take: 2
+                    }},
+                 {Entity43, :unread} =>
+                   {:query,
+                    %Query{
+                      entity: Entity33,
+                      filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
+                      sort: [position: :asc, id: :asc],
+                      source: {Entity43, [:channel, :messages]}
+                    }}
+               },
+               read_modules: [Entity43]
              }
     end
 

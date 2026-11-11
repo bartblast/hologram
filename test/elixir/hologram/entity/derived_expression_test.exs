@@ -3,9 +3,11 @@ defmodule Hologram.Entity.DerivedExpressionTest do
 
   import Hologram.Entity.DerivedExpression
 
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
+
   @field "derived field :unread_count in MyApp.Channel"
 
-  @vocabulary_reason "a derived field is query vocabulary, evaluated by the database - Elixir over a row is a plain def in the module"
+  @vocabulary_reason "a derived field is query vocabulary, evaluated by the database - Elixir over a row is a plain def in the module, called where the row is used"
 
   defp env do
     %{
@@ -48,6 +50,33 @@ defmodule Hologram.Entity.DerivedExpressionTest do
         lower("fn channel -> count(MyApp.Queries.recent(channel.messages)) end")
 
       assert builder_call?
+    end
+
+    test "reports a local call that is no query stage as a query builder of the module's own" do
+      {_names, _body, builder_call?} = lower("fn messages -> recent(messages) end")
+
+      assert builder_call?
+    end
+
+    test "reports a zero-arity local call as a query builder of the module's own" do
+      {_names, _body, builder_call?} = lower("fn -> featured() end")
+
+      assert builder_call?
+    end
+
+    test "reports a local call the module imports from another module of the project as a query builder" do
+      env = %{env() | functions: [{Module53, [member_messages: 1]}]}
+      definition = Code.string_to_quoted!("fn member -> member_messages(member) end", line: 12)
+
+      {_names, body, builder_call?} = function(:unread_count, definition, env)
+
+      assert builder_call?
+
+      assert Macro.to_string(body) == """
+             #{inspect(Module53)}.member_messages(
+               Derived.field(MyApp.Channel, [:member])
+             )\
+             """
     end
 
     test "reports no query builder for a body of stages" do
@@ -130,11 +159,46 @@ defmodule Hologram.Entity.DerivedExpressionTest do
       end
     end
 
-    test "raises on a local call that is no query stage" do
-      expected_msg = "lib/my_app/channel.ex:12: #{@field} calls recent/1 - #{@vocabulary_reason}"
+    test "raises on a local call into Kernel" do
+      expected_msg = "lib/my_app/channel.ex:12: #{@field} calls length/1 - #{@vocabulary_reason}"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        lower("fn messages -> recent(messages) end")
+        lower("fn messages -> length(messages) end")
+      end
+    end
+
+    test "raises on a query function the module imports that is no stage a derived body calls" do
+      env = %{env() | functions: [{Hologram.Query, [trust: 1]}]}
+      definition = Code.string_to_quoted!("fn messages -> trust(messages) end", line: 12)
+
+      expected_msg = "lib/my_app/channel.ex:12: #{@field} calls trust/1 - #{@vocabulary_reason}"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        function(:unread_count, definition, env)
+      end
+    end
+
+    test "raises on a query builder the module imports where a value goes" do
+      env = %{env() | functions: [{Module53, [capitalized: 1]}]}
+      definition = Code.string_to_quoted!("fn name -> name <> capitalized(name) end", line: 12)
+
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} calls #{inspect(Module53)}.capitalized/1 where a value goes - a call to another module builds a query, so it stands where a query goes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        function(:unread_count, definition, env)
+      end
+    end
+
+    test "raises on a query builder the module imports compared with a field" do
+      env = %{env() | functions: [{Module53, [constant: 0]}]}
+      definition = Code.string_to_quoted!("fn score -> score == constant() end", line: 12)
+
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} calls #{inspect(Module53)}.constant/0 where a value goes - a call to another module builds a query, so it stands where a query goes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        function(:unread_count, definition, env)
       end
     end
 
@@ -291,6 +355,120 @@ defmodule Hologram.Entity.DerivedExpressionTest do
           count(messages)
         end
         """)
+      end
+    end
+  end
+
+  describe "validate_own_builders!/1" do
+    test "accepts a call to a function the module defines" do
+      defmodule InlineEntityFixture165 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :channel, Module32, optional: true
+
+        derived :recent, [Module33], fn channel -> recent(channel.messages) end
+
+        @spec recent(Hologram.Query.t()) :: Hologram.Query.t()
+        def recent(messages), do: Hologram.Query.take(messages, 2)
+      end
+
+      assert InlineEntityFixture165.__derived_builder_calls__() == [:recent]
+    end
+
+    test "accepts a call to a private function the module defines" do
+      defmodule InlineEntityFixture166 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module32
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        relationship :channel, Module32, optional: true
+
+        derived :recent, [Module33], fn channel -> recent(channel.messages) end
+
+        defp recent(messages), do: Hologram.Query.take(messages, 2)
+      end
+
+      assert InlineEntityFixture166.__derived_builder_calls__() == [:recent]
+    end
+
+    test "raises on a call to a function the module doesn't define" do
+      line = __ENV__.line + 14
+
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :recent in Hologram.Entity.DerivedExpressionTest.InlineEntityFixture168 calls recent/1 - #{@vocabulary_reason}"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture168 do
+          use Hologram.Entity
+
+          alias Hologram.Test.Fixtures.Entity.Module32
+          alias Hologram.Test.Fixtures.Entity.Module33
+
+          relationship :channel, Module32, optional: true
+
+          derived :recent, [Module33], fn channel -> recent(channel.messages) end
+        end
+      end
+    end
+
+    test "raises on a call to the module's own function where a value goes" do
+      line = __ENV__.line + 12
+
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :label in Hologram.Entity.DerivedExpressionTest.InlineEntityFixture169 calls suffix/1 where a value goes - a call to a query builder builds a query, so it stands where a query goes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture169 do
+          use Hologram.Entity
+
+          attribute :title, :string
+
+          derived :label, :string, fn title ->
+            title <> suffix(title)
+          end
+
+          defp suffix(_title), do: "!"
+        end
+      end
+    end
+
+    test "raises on a call to the module's own function compared with a field" do
+      line = __ENV__.line + 11
+
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :defaulted in Hologram.Entity.DerivedExpressionTest.InlineEntityFixture172 calls default_score/0 where a value goes - a call to a query builder builds a query, so it stands where a query goes"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture172 do
+          use Hologram.Entity
+
+          attribute :score, :integer
+
+          derived :defaulted, :boolean, fn score -> score == default_score() end
+
+          defp default_score, do: 0
+        end
+      end
+    end
+
+    test "raises on a call compared with a field to a function the module doesn't define" do
+      line = __ENV__.line + 11
+
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :defaulted in Hologram.Entity.DerivedExpressionTest.InlineEntityFixture173 calls default_score/0 - #{@vocabulary_reason}"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture173 do
+          use Hologram.Entity
+
+          attribute :score, :integer
+
+          derived :defaulted, :boolean, fn score -> score == default_score() end
+        end
       end
     end
   end

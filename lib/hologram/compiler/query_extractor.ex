@@ -51,13 +51,13 @@ defmodule Hologram.Compiler.QueryExtractor do
   @doc """
   Resolves the definition of the given derived field of the given entity type by walking the
   field's clause of the type's `__derived_definition__/1` over its IR - the way a body calling a
-  query builder of another module is resolved, since the builder is written for the values it will
-  be given, and a field of the row has none while the definition is built.
+  query builder is resolved, since the builder is written for the values it will be given, and a
+  field of the row has none while the definition is built.
 
   What the walk reads stands in for the row's fields as `Hologram.Entity.Derived.field/2` builds
   them - a query over a set, a row field, a related row - and goes where a query goes: query stages
-  and `Hologram.Entity.Derived` run natively over them, a call into another module of the project is
-  followed into its IR with them, and a dot on a related row reads the longer path. The result is
+  and `Hologram.Entity.Derived` run natively over them, a call into the entity type's own functions or
+  another module of the project is followed into its IR with them, and a dot on a related row reads the longer path. The result is
   normalized as `Hologram.Entity.Derived.resolve/2` normalizes it, and returned with the modules
   whose functions the walk followed - the ones whose edits can change it besides the entity types'.
   A branch on a value the build knows takes the clause that value takes, as an extraction's does.
@@ -369,9 +369,9 @@ defmodule Hologram.Compiler.QueryExtractor do
     end)
   end
 
-  # A call the field's own clause makes into another module is a query builder: followed into its
-  # IR, whatever it is given, since it builds the query the definition is - so it returns a query
-  # term.
+  # A call the field's own clause makes, local or into another module, is a query builder: followed
+  # into its IR, whatever it is given, since it builds the query the definition is - so it returns a
+  # query term.
   defp builder_call!(module, function, arg_values, state, context) do
     spelled = "#{inspect(module)}.#{function}/#{length(arg_values)}"
 
@@ -737,7 +737,13 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     {arg_values, state_after_args} = evaluate_enum!(args, state, context)
 
-    interpret_call!(context.current_module, function, arg_values, state_after_args, context)
+    # In a derived field's own clause a local call is the entity type's own query builder, held to
+    # what a builder of another module is.
+    if derived_level?(context) do
+      builder_call!(context.current_module, function, arg_values, state_after_args, context)
+    else
+      interpret_call!(context.current_module, function, arg_values, state_after_args, context)
+    end
   end
 
   defp evaluate!(%IR.MapType{data: data}, state, context) do

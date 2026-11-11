@@ -2630,7 +2630,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Resolves the definition of every derived field of the given entity types: natively when the
-  field's function calls no query builder of another module (see
+  field's function calls no query builder (see
   `Hologram.Entity.Derived.resolve/2`), and by walking its IR, from the given IR PLT, when it does
   (see `Hologram.Compiler.QueryExtractor.derived_definition/3`).
 

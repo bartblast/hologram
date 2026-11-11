@@ -430,6 +430,49 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "derived/3" do
+    test "takes a capture of a zero-arity function of the entity type's own as a query builder call" do
+      defmodule InlineEntityFixture167 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Entity.Module33
+
+        derived :every_message, [Module33], &every_message/0
+
+        defp every_message, do: Module33
+      end
+
+      assert InlineEntityFixture167.__derived_builder_calls__() == [:every_message]
+    end
+
+    test "takes a capture of a zero-arity function of another module as a query builder call" do
+      defmodule InlineEntityFixture170 do
+        use Hologram.Entity
+
+        alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
+
+        derived :constant, :integer, &Module53.constant/0
+      end
+
+      assert InlineEntityFixture170.__derived_builder_calls__() == [:constant]
+    end
+
+    test "raises on a capture of a function with arguments" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :recent in Hologram.EntityTest.InlineEntityFixture171 is a capture of recent/1, which hides the fields it reads - write fn ... -> recent(...) end, naming them in the head"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture171 do
+          use Hologram.Entity
+
+          derived :recent, :integer, &recent/1
+        end
+      end
+    end
+  end
+
   describe "describe_inverse/2" do
     test "names the reference column an inverse of a to-one reads" do
       assert describe_inverse(Module26, :messages) ==

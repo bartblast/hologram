@@ -15,7 +15,8 @@ defmodule Hologram.Entity.DerivedExpression do
   # written.
   #
   # A derived field is computed by the database, so anything else is refused at its line: Elixir
-  # over a row is a plain def in the module.
+  # over a row is a plain def in the module. A def a derived body calls is a query builder, held to
+  # the query vocabulary by the build's walk.
 
   alias Hologram.Entity.Derived
   alias Hologram.Query.Expression
@@ -47,14 +48,20 @@ defmodule Hologram.Entity.DerivedExpression do
     :{}
   ]
 
+  # The meta key marking a call to the module's own function, a query builder the module must
+  # define - whether it does is known only once the module body has run, so the mark is what
+  # validate_own_builders!/1 looks for then. Its value is where the call stands, :query or :scalar.
+  @own_builder_key :hologram_own_builder
+
   # The query stages a derived body reads its rows with, by the number of arguments each takes.
   @stages [count: 1, filter: 2, include: 2, one: 1, skip: 2, sort: 2, take: 2]
 
-  @vocabulary_reason "a derived field is query vocabulary, evaluated by the database - Elixir over a row is a plain def in the module"
+  @vocabulary_reason "a derived field is query vocabulary, evaluated by the database - Elixir over a row is a plain def in the module, called where the row is used"
 
   @doc """
   Lowers the given derived field's function to the names its head binds, the body its definition
-  function runs and whether that body calls a query builder of another module.
+  function runs and whether that body calls a query builder - a function of another module, of a
+  module the entity type imports it from, or of the entity type's own.
 
   An argument read in the body becomes a `Hologram.Entity.Derived.field/2` call naming the field, a
   dot chain on one names the path, a pipe is unpiped, a module attribute an unquote fragment reading
@@ -63,11 +70,14 @@ defmodule Hologram.Entity.DerivedExpression do
   - the whole body, or the condition of `if` - becomes `Derived.condition/2` over its comparisons in
   the filter data form.
 
+  A local call named like a query stage is that stage, and any other is a query builder of the
+  entity type's own, which validate_own_builders!/1 checks the module defines once its body has run.
+
   Raises Hologram.CompileError, located at the offending node, on anything else: a local binding, a
-  call that is neither a query stage nor a query builder of another module - a call into Elixir's or
-  Erlang's own modules included - a query builder where a value goes, a query starting from an
-  entity type, a condition anywhere but the body and `if`, a comparison of something that is no
-  field, and a name no argument binds, located at the head.
+  call into Elixir's or Erlang's own modules, an imported one included, a function of
+  Hologram.Query that is no stage a derived body calls, a query builder of another module where a
+  value goes, a query starting from an entity type, a condition anywhere but the body and `if`, a
+  comparison of something that is no field, and a name no argument binds, located at the head.
   """
   @spec function(Macro.t(), Macro.t(), Macro.Env.t()) :: {list(atom), Macro.t(), boolean}
   def function(name, {:fn, meta, [{:->, arrow_meta, [args, body]}]}, env) do
@@ -80,7 +90,9 @@ defmodule Hologram.Entity.DerivedExpression do
       names: names
     }
 
-    {names, body(body, state), builder_call?(body)}
+    lowered_body = body(body, state)
+
+    {names, lowered_body, builder_call?(lowered_body)}
   end
 
   @doc """
@@ -88,6 +100,37 @@ defmodule Hologram.Entity.DerivedExpression do
   """
   @spec stages() :: keyword(pos_integer)
   def stages, do: @stages
+
+  @doc """
+  Validates that every call the given module's derived bodies make to the module's own functions
+  calls one it defines, and stands where a query goes. Run once the module body is evaluated, since
+  the functions are usually defined below the fields that call them.
+
+  Returns :ok, or raises Hologram.CompileError located at the call: a function the module neither
+  defines nor imports is Elixir the body can't compute, and one standing where a value goes is a
+  query builder in the wrong place.
+  """
+  @spec validate_own_builders!(module) :: :ok
+  def validate_own_builders!(module) do
+    locations =
+      module
+      |> Module.get_attribute(:__derived_locations__)
+      |> Map.new()
+
+    module
+    |> Module.get_attribute(:__derived_bodies__)
+    |> Enum.reverse()
+    |> Enum.each(fn {name, _args, body} ->
+      {file, line} = Map.fetch!(locations, name)
+
+      state = %{
+        env: %{file: file, line: line},
+        field: "derived field #{inspect(name)} in #{inspect(module)}"
+      }
+
+      Macro.prewalk(body, &validate_own_builder!(&1, module, state))
+    end)
+  end
 
   # The whole body: a condition, which makes a boolean field, or anything an Elixir position takes.
   defp body(ast, state) do
@@ -98,17 +141,19 @@ defmodule Hologram.Entity.DerivedExpression do
     end
   end
 
-  # Whether the given body calls a query builder of another module - the build resolves such a body
-  # by following the builder, so it is told which fields need that. Every call into another module
-  # left after the walk refused the rest is one.
-  defp builder_call?(body) do
+  # Whether the given lowered body calls a query builder - the build resolves such a body by
+  # following the builder, so it is told which fields need that. The lowering names a builder of
+  # another module by the module itself, an imported one included, where the calls it writes itself
+  # name Hologram.Entity.Derived by its alias, and it marks a call to the module's own function.
+  defp builder_call?(lowered_body) do
     {_body, found?} =
-      Macro.prewalk(body, false, fn
-        {{:., _dot_meta, [{:__aliases__, _alias_meta, _segments}, _function]}, _meta, args} =
-            ast,
-        _found?
-        when is_list(args) ->
+      Macro.prewalk(lowered_body, false, fn
+        {{:., _dot_meta, [module, _function]}, _meta, args} = ast, _found?
+        when is_atom(module) and is_list(args) ->
           {ast, true}
+
+        {_name, meta, args} = ast, found? when is_list(meta) and is_list(args) ->
+          {ast, found? or Keyword.has_key?(meta, @own_builder_key)}
 
         ast, found? ->
           {ast, found?}
@@ -205,6 +250,9 @@ defmodule Hologram.Entity.DerivedExpression do
 
       remote_call?(ast) ->
         scalar_builder_error!(ast, state)
+
+      local_call?(ast) ->
+        local_call(ast, :scalar, state)
 
       true ->
         compile_error!(
@@ -342,14 +390,18 @@ defmodule Hologram.Entity.DerivedExpression do
        when sign in [:+, :-] and is_number(number),
        do: ast
 
-  defp elixir_position({stage, meta, [source | rest] = args} = ast, _where, state)
+  defp elixir_position({stage, meta, [source | rest] = args} = ast, where, state)
        when is_atom(stage) and is_list(args) do
     if {stage, length(args)} in @stages do
       {stage, meta,
        [elixir_position(source, :query, state) | Enum.map(rest, &query_position(&1, state))]}
     else
-      vocabulary_error!(described_use(ast), ast, state)
+      local_call(ast, where, state)
     end
+  end
+
+  defp elixir_position({name, _meta, []} = ast, where, state) when is_atom(name) do
+    local_call(ast, where, state)
   end
 
   defp elixir_position(ast, _where, _state)
@@ -391,6 +443,13 @@ defmodule Hologram.Entity.DerivedExpression do
 
   defp field_path(_ast, _state), do: nil
 
+  defp imported_module(name, arity, state) do
+    case Macro.Env.lookup_import(state.env, {name, arity}) do
+      [{_kind, module} | _rest] -> module
+      [] -> nil
+    end
+  end
+
   # The node's line, or the declaration's for a node that carries none - a literal list or tuple.
   defp line({_head, meta, _args}, state) when is_list(meta), do: meta[:line] || state.env.line
 
@@ -401,6 +460,42 @@ defmodule Hologram.Entity.DerivedExpression do
   defp literal?({sign, _meta, [number]}) when sign in [:+, :-], do: is_number(number)
 
   defp literal?(ast), do: is_atom(ast) or is_number(ast) or is_binary(ast)
+
+  # A local call that is no query stage calls a function the module imports or its own. An import
+  # from another module of the project is a query builder like any call into it, one from Elixir or
+  # Erlang computes in Elixir, and a stage the module imports from Hologram.Query but a derived body
+  # can't call stays refused. A call to the module's own function is a query builder too, marked for
+  # validate_own_builders!/1, which knows once the module body has run whether the module defines it.
+  defp local_call({name, meta, args} = ast, where, state) do
+    arity = length(args)
+
+    cond do
+      name in @special_forms or sigil?(name) or Macro.operator?(name, arity) ->
+        vocabulary_error!(described_use(ast), ast, state)
+
+      module = imported_module(name, arity, state) ->
+        if module == Hologram.Query or own_module?(module) do
+          vocabulary_error!(described_use(ast), ast, state)
+        end
+
+        elixir_position({{:., meta, [module, name]}, meta, args}, where, state)
+
+      true ->
+        {name, Keyword.put(meta, @own_builder_key, where),
+         Enum.map(args, &elixir_position(&1, :query, state))}
+    end
+  end
+
+  # A call written without a module that local_call/3 judges: what the AST spells as a call but is
+  # a stage, an operator, a special form, a sigil or an alias is judged where it is met.
+  defp local_call?({name, _meta, args}) when is_atom(name) and is_list(args) do
+    arity = length(args)
+
+    name not in [:__aliases__ | @special_forms] and {name, arity} not in @stages and
+      not sigil?(name) and not Macro.operator?(name, arity)
+  end
+
+  defp local_call?(_ast), do: false
 
   # The right side of in: a list of values and @attributes, or an @attribute holding the list.
   defp membership!(ast, comparison, state) when is_list(ast) do
@@ -589,6 +684,12 @@ defmodule Hologram.Entity.DerivedExpression do
     )
   end
 
+  defp sigil?(name) do
+    name
+    |> Atom.to_string()
+    |> String.starts_with?("sigil_")
+  end
+
   # A name no argument binds is a field the head forgot, so the refusal is located at the head.
   @spec unbound_error!(atom, map) :: no_return
   defp unbound_error!(name, state) do
@@ -598,6 +699,35 @@ defmodule Hologram.Entity.DerivedExpression do
       file: state.env.file,
       line: state.head_line
   end
+
+  # Returns the node as given, as Macro.prewalk/2 takes it.
+  defp validate_own_builder!({name, meta, args} = ast, module, state)
+       when is_list(meta) and is_list(args) do
+    arity = length(args)
+
+    case Keyword.fetch(meta, @own_builder_key) do
+      {:ok, where} ->
+        cond do
+          not Module.defines?(module, {name, arity}) ->
+            vocabulary_error!("calls #{name}/#{arity}", ast, state)
+
+          where == :scalar ->
+            compile_error!(
+              "#{state.field} calls #{name}/#{arity} where a value goes - a call to a query builder builds a query, so it stands where a query goes",
+              ast,
+              state
+            )
+
+          true ->
+            ast
+        end
+
+      :error ->
+        ast
+    end
+  end
+
+  defp validate_own_builder!(ast, _module, _state), do: ast
 
   @spec vocabulary_error!(String.t(), Macro.t(), map) :: no_return
   defp vocabulary_error!(what, ast, state) do

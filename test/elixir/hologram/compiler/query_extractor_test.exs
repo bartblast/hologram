@@ -78,6 +78,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module74
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module75
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module76
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module77
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
   alias Hologram.Test.Fixtures.Component.Module10, as: Component10
@@ -96,6 +97,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
   alias Hologram.Test.Fixtures.Entity.Module36, as: Entity36
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
+  alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
   alias Hologram.Test.Fixtures.Entity.Module5, as: Entity5
 
   # A frame opens with the application it came from, which carries the framework's version - the
@@ -205,6 +207,83 @@ defmodule Hologram.Compiler.QueryExtractorTest do
                 }}
 
       assert read_modules == [Module53]
+    end
+
+    test "follows a query builder of the entity type's own", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Entity43, :recent, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity43, [:channel, :messages]},
+                  take: 2
+                }}
+
+      assert read_modules == [Entity43]
+    end
+
+    test "follows a private query builder of the entity type's own", %{ir_plt: ir_plt} do
+      {definition, read_modules} = derived_definition(Entity43, :unread, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  filter: [{:created_at, :>, {:attribute, {:outer, 1, :last_read_at}}}],
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity43, [:channel, :messages]}
+                }}
+
+      assert read_modules == [Entity43]
+    end
+
+    test "follows a query builder of the entity type's own piped into a stage", %{
+      ir_plt: ir_plt
+    } do
+      {definition, read_modules} = derived_definition(Entity43, :piped_recent, ir_plt)
+
+      assert definition ==
+               {:query,
+                %Query{
+                  entity: Entity33,
+                  sort: [position: :asc, id: :asc],
+                  source: {Entity43, [:channel, :messages]},
+                  take: 1
+                }}
+
+      assert read_modules == [Entity43]
+    end
+
+    test "raises on a query builder of the entity type's own returning a value", %{
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:7: derived field :counted in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module77 calls Hologram.Test.Fixtures.Compiler.QueryExtractor.Module77.message_total/1, which returns 3 - a builder builds a query, and a value computed from fields is written in the derived field's own body
+
+            #{@app} lib/my_app/member.ex:7: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module77.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module77, :counted, ir_plt)
+      end
+    end
+
+    test "raises on a query builder of the entity type's own reading every row of a type", %{
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        lib/my_app/member.ex:9: derived field :every_message in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module77 builds an invalid definition - a derived field's query starts from a relationship of the row, got a query of every Hologram.Test.Fixtures.Entity.Module33 - read the rows through an argument naming the relationship
+
+            #{@app} lib/my_app/member.ex:9: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module77.__derived_definition__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derived_definition(Module77, :every_message, ir_plt)
+      end
     end
 
     test "raises on a query builder guard reading a field of the row", %{ir_plt: ir_plt} do
