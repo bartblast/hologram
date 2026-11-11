@@ -20,7 +20,7 @@ export default class ChangeEvent {
     const type = target.type;
     let value;
 
-    if (tagName === "INPUT" && (type === "checkbox" || type === "radio")) {
+    if (tagName === "INPUT" && type === "checkbox") {
       value = Type.boolean(target.checked);
     } else if (tagName === "SELECT") {
       if (target.multiple) {
