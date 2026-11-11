@@ -3,11 +3,13 @@ defmodule Hologram.Component do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
+  alias Hologram.Component.Derived
   alias Hologram.Realtime.Channel
   alias Hologram.Server
   alias Hologram.Server.Broadcast
 
-  defstruct emitted_context: %{},
+  defstruct derived: %{},
+            emitted_context: %{},
             next_action: nil,
             next_command: nil,
             next_page: nil,
@@ -32,6 +34,7 @@ defmodule Hologram.Component do
   end
 
   @type t :: %__MODULE__{
+          derived: %{atom => any},
           emitted_context: %{atom => any} | %{{module, atom} => any},
           next_action: Action.t() | nil,
           next_command: Command.t() | nil,
@@ -106,7 +109,8 @@ defmodule Hologram.Component do
         import Hologram.Auth, only: [can?: 3, has_role?: 2, has_role?: 3]
 
         import Hologram.Component,
-          only: unquote([prop: 2, prop: 3, state: 2, state: 3] ++ __helper_imports__())
+          only:
+            unquote([derived: 3, prop: 2, prop: 3, state: 2, state: 3] ++ __helper_imports__())
 
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
@@ -140,6 +144,7 @@ defmodule Hologram.Component do
         defoverridable init: 2, init: 3
       end,
       maybe_register_colocated_template_markup(template_path),
+      Derived.register_accumulator(),
       register_from_query_shims_accumulator(),
       register_props_accumulator(),
       register_state_accumulator()
@@ -162,7 +167,11 @@ defmodule Hologram.Component do
     delegations_clause = build_from_query_delegations_clause(env)
     shim_clauses = build_from_query_shim_clauses(env)
 
-    [template_clause, props_clause, state_clause, delegations_clause | shim_clauses]
+    Enum.concat([
+      [template_clause, props_clause, state_clause, delegations_clause],
+      shim_clauses,
+      Derived.reflection(env)
+    ])
   end
 
   @doc """
@@ -287,6 +296,33 @@ defmodule Hologram.Component do
     else
       accumulate_prop
     end
+  end
+
+  @doc """
+  Declares a derived field: a value computed from the component's other fields, read-only, and
+  computed again when what it reads changes. A page declares them too, from its params.
+
+  The definition is a function whose arguments name what it reads - props (params on a page), state
+  entries and other derived fields - and whose body reads only them. The body is any Elixir, and
+  inside a query a bare name is the queried row's and `^name` pins an argument:
+
+      derived :open_tasks, [Task], fn project_id, only_mine ->
+        query = filter(Task, project_id == ^project_id)
+
+        if only_mine, do: filter(query, mine == true), else: query
+      end
+
+      derived :summary, :string, fn open_tasks -> "\#{length(open_tasks)} open" end
+
+  A capture of a zero-arity function stands for the function calling it, `&tags_query/0` for
+  `fn -> tags_query() end`.
+
+  The template reads a derived field like any other value, `{@summary}`, and a handler reads it as
+  `component.derived.summary`.
+  """
+  @spec derived(atom, any, Macro.t()) :: Macro.t()
+  defmacro derived(name, type, definition) do
+    Derived.declaration(name, type, definition, __CALLER__)
   end
 
   @doc """

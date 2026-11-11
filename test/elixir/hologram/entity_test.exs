@@ -431,30 +431,34 @@ defmodule Hologram.EntityTest do
   end
 
   describe "derived/3" do
-    test "takes a capture of a zero-arity function of the entity type's own as a query builder call" do
-      defmodule InlineEntityFixture167 do
-        use Hologram.Entity
+    test "raises on a capture of a zero-arity function of the entity type's own" do
+      line = __ENV__.line + 9
 
-        alias Hologram.Test.Fixtures.Entity.Module33
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :featured in Hologram.EntityTest.InlineEntityFixture167 is a capture of featured/0, which reads no field of the row - an entity's derived field is computed from its row, so name the fields it reads: fn ... -> featured(...) end"
 
-        derived :every_message, [Module33], &every_message/0
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture167 do
+          use Hologram.Entity
 
-        defp every_message, do: Module33
+          derived :featured, :integer, &featured/0
+        end
       end
-
-      assert InlineEntityFixture167.__derived_builder_calls__() == [:every_message]
     end
 
-    test "takes a capture of a zero-arity function of another module as a query builder call" do
-      defmodule InlineEntityFixture170 do
-        use Hologram.Entity
+    test "raises on a capture of a zero-arity function of another module" do
+      line = __ENV__.line + 9
 
-        alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :constant in Hologram.EntityTest.InlineEntityFixture170 is a capture of Module53.constant/0, which reads no field of the row - an entity's derived field is computed from its row, so name the fields it reads: fn ... -> Module53.constant(...) end"
 
-        derived :constant, :integer, &Module53.constant/0
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture170 do
+          use Hologram.Entity
+
+          derived :constant, :integer, &Module53.constant/0
+        end
       end
-
-      assert InlineEntityFixture170.__derived_builder_calls__() == [:constant]
     end
 
     test "raises on a capture of a function with arguments" do

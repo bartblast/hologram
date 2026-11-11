@@ -4,6 +4,20 @@ defmodule Hologram.Derived do
   # What entity and component derived fields share as written: the forms a definition can take.
 
   @doc """
+  Returns how the given derived field definition spells the function it captures and that
+  function's arity, or nil when the definition is no capture of a named function.
+  """
+  @spec captured(Macro.t()) :: {String.t(), non_neg_integer} | nil
+  def captured({:&, _meta, [{:/, _slash_meta, [target, arity]}]}) when is_integer(arity) do
+    case captured_name(target) do
+      nil -> nil
+      spelled -> {spelled, arity}
+    end
+  end
+
+  def captured(_definition), do: nil
+
+  @doc """
   Returns the given derived field definition as the function it stands for.
 
   A capture of a zero-arity function, local or remote, stands for the function calling it: it reads
@@ -34,11 +48,10 @@ defmodule Hologram.Derived do
     zero_arity_function(call, meta)
   end
 
-  def function(name, {:&, _meta, [{:/, _slash_meta, [target, arity]}]} = definition, env)
-      when is_integer(arity) do
-    case captured_name(target) do
+  def function(name, definition, env) when is_tuple(definition) and elem(definition, 0) == :& do
+    case captured(definition) do
+      {spelled, arity} -> raise_capture_with_arguments!(name, spelled, arity, env)
       nil -> definition
-      spelled -> raise_capture_with_arguments!(name, spelled, arity, env)
     end
   end
 

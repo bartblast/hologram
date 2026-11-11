@@ -23,6 +23,7 @@ defmodule Hologram.ExJsConsistency.TypeTest do
   test "component struct" do
     assert %Component{} == %{
              __struct__: Component,
+             derived: %{},
              emitted_context: %{},
              next_action: nil,
              next_command: nil,

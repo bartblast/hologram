@@ -295,9 +295,8 @@ defmodule Hologram.Entity do
 
       derived :recent_messages, [MyApp.Message], fn messages -> recent(messages) end
 
-  A capture of a zero-arity function stands for the function calling it, `&recent/0` for
-  `fn -> recent() end`, as on a component. Reading no field, such a builder can't start its query
-  from the row, so the build refuses what it returns.
+  A field reads its row, so a capture of a function, which leaves the fields it reads unwritten, is
+  refused: a zero-arity one reads no field at all, and one with arguments hides them.
 
   The options go between the type and the function, bracketed, since the function comes last:
   `values:` names an enum's values, in the order sorts and comparisons read them.
@@ -954,6 +953,8 @@ defmodule Hologram.Entity do
   end
 
   defp derived_declaration(name, type, opts, definition, env) do
+    Validator.validate_derived_capture!(name, definition, env)
+
     definition = Hologram.Derived.function(name, definition, env)
 
     Validator.validate_derived_function!(name, definition, env)

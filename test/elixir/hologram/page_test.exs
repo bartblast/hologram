@@ -6,6 +6,7 @@ defmodule Hologram.PageTest do
   alias Hologram.Component
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Page.Module1
+  alias Hologram.Test.Fixtures.Page.Module17
   alias Hologram.Test.Fixtures.Page.Module2
   alias Hologram.Test.Fixtures.Page.Module3
   alias Hologram.Test.Fixtures.Page.Module4
@@ -13,6 +14,24 @@ defmodule Hologram.PageTest do
   alias Hologram.Test.Fixtures.Page.Module6
   alias Hologram.Test.Fixtures.Page.Module7
   alias Hologram.Test.Fixtures.Page.Module8
+
+  describe "__derived__/0" do
+    test "lists the derived fields, reading params and state" do
+      assert Module17.__derived__() == [
+               %{
+                 args: [:project_id, :page_size],
+                 function: &Module17.__derived_label__/2,
+                 name: :label,
+                 reads_state: true,
+                 type: :string
+               }
+             ]
+    end
+
+    test "lists no derived fields for a page declaring none" do
+      assert Module1.__derived__() == []
+    end
+  end
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
@@ -141,6 +160,131 @@ defmodule Hologram.PageTest do
                    fn ->
                      cast_params(%{x: 123}, Module6)
                    end
+    end
+  end
+
+  describe "derived/3" do
+    test "raises on a head naming what is no param, state entry or derived field" do
+      expected_msg =
+        "nofile:10: total is not a param, state entry or derived field of Hologram.Test.Fixtures.Page.DerivedUnknownName - the arguments of derived field :double's function name the fields it reads: b"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.DerivedUnknownName do
+          use Hologram.Page
+
+          param :b, :integer
+
+          route "/hologram-test-fixtures-page-derived-unknown-name/:b"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          derived :double, :integer, fn total -> total * 2 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a name a param declares" do
+      expected_msg =
+        "nofile:10: derived field :b in Hologram.Test.Fixtures.Page.DerivedParamName has the same name as a param, which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.DerivedParamName do
+          use Hologram.Page
+
+          param :b, :integer
+
+          route "/hologram-test-fixtures-page-derived-param-name/:b"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          derived :b, :integer, fn -> 1 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on the name of the layout's cid prop" do
+      expected_msg =
+        "nofile:8: derived field :cid in Hologram.Test.Fixtures.Page.DerivedCidName has the same name as the layout's cid prop, which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.DerivedCidName do
+          use Hologram.Page
+
+          route "/hologram-test-fixtures-page-derived-cid-name"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          derived :cid, :string, fn -> "x" end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a name a state entry declares" do
+      expected_msg =
+        "nofile:10: derived field :size in Hologram.Test.Fixtures.Page.DerivedStateName has the same name as a state entry, which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.DerivedStateName do
+          use Hologram.Page
+
+          route "/hologram-test-fixtures-page-derived-state-name"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          state :size, :integer
+
+          derived :size, :integer, fn -> 1 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a body reading a param its head doesn't name" do
+      expected_msg =
+        "nofile:10: b is a param of Hologram.Test.Fixtures.Page.DerivedUnnamedParam, which derived field :double's function doesn't name - add it to the head to read it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Page.DerivedUnnamedParam do
+          use Hologram.Page
+
+          param :b, :integer
+
+          route "/hologram-test-fixtures-page-derived-unnamed-param/:b"
+
+          layout Hologram.Test.Fixtures.LayoutFixture
+
+          derived :double, :integer, fn -> b * 2 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
     end
   end
 

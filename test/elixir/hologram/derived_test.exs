@@ -12,12 +12,37 @@ defmodule Hologram.DerivedTest do
     }
   end
 
+  defp captured_from(code) do
+    code
+    |> Code.string_to_quoted!()
+    |> captured()
+  end
+
   defp quoted_function(code) do
     definition = Code.string_to_quoted!(code, line: 7)
 
     :tags
     |> function(definition, env())
     |> Macro.to_string()
+  end
+
+  describe "captured/1" do
+    test "returns how a local capture spells its function, with the arity" do
+      assert captured_from("&tags_query/0") == {"tags_query", 0}
+    end
+
+    test "returns how a remote capture spells its function, with the arity" do
+      assert captured_from("&MyApp.Queries.tags/2") ==
+               {"MyApp.Queries.tags", 2}
+    end
+
+    test "returns nil for the capture shorthand" do
+      assert captured_from("&tags_query(&1)") == nil
+    end
+
+    test "returns nil for a function" do
+      assert captured_from("fn -> tags_query() end") == nil
+    end
   end
 
   describe "function/3" do

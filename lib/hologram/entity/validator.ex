@@ -316,6 +316,28 @@ defmodule Hologram.Entity.Validator do
   end
 
   @doc """
+  Validates that the given derived field definition is no capture of a zero-arity function, which
+  reads no field of the row - a derived field of an entity type is computed from its row, so such a
+  function can only return a query of every row of a type or a value fixed at build time. A capture
+  of a function with arguments is refused where captures are read (see `Hologram.Derived`).
+
+  Returns :ok, or raises Hologram.CompileError located at the declaration.
+  """
+  @spec validate_derived_capture!(Macro.t(), Macro.t(), Macro.Env.t()) :: :ok
+  def validate_derived_capture!(name, definition, env) do
+    case Hologram.Derived.captured(definition) do
+      {spelled, 0} ->
+        derived_function_error!(
+          "derived field #{Macro.to_string(name)} in #{inspect(env.module)} is a capture of #{spelled}/0, which reads no field of the row - an entity's derived field is computed from its row, so name the fields it reads: fn ... -> #{spelled}(...) end",
+          env
+        )
+
+      _other ->
+        :ok
+    end
+  end
+
+  @doc """
   Validates the function a derived field is declared with, as written, before its body is lowered:
   a function of one clause whose arguments are distinct bare names, with no pattern, default or
   guard - each one names a field.
