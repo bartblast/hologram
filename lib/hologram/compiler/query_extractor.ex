@@ -1181,7 +1181,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
       nil ->
         compile_error!(
-          "#{context.subject} calls undefined function #{inspect(module)}.#{function}/#{arity}",
+          undefined_function_message(context.subject, module, function, arity),
           context
         )
     end
@@ -1435,8 +1435,7 @@ defmodule Hologram.Compiler.QueryExtractor do
         )
       end)
 
-    no_match =
-      "#{context.subject} calls #{inspect(module)}.#{function}/#{arity} with #{Enum.map_join(arg_values, ", ", &spelled_argument/1)}, which no clause matches - the code raises FunctionClauseError there"
+    no_match = no_clause_message(context.subject, module, function, arg_values)
 
     {choice, state_after_choice} = choose_clause!(candidates, state_after_funs, no_match, context)
 
@@ -1613,16 +1612,40 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     value
   rescue
-    error ->
-      if query_failure?(error, __STACKTRACE__) do
-        compile_error!(query_as_value_message(context.subject), context)
-      else
-        reraise error, __STACKTRACE__
-      end
+    error -> native_failure!(error, __STACKTRACE__, context)
   end
 
   defp native_call!(module, function, arg_values, _context),
     do: apply(module, function, arg_values)
+
+  # A call the build ran failed. A function that doesn't exist, or one of the project or a dependency
+  # that no clause of matches, is reported as the walk reports one it follows. A call that failed on
+  # a query it was given used the query as a value. Any other failure is the app's own.
+  defp native_failure!(%UndefinedFunctionError{} = error, _stacktrace, context) do
+    message =
+      undefined_function_message(context.subject, error.module, error.function, error.arity)
+
+    compile_error!(message, context)
+  end
+
+  @spec native_failure!(Exception.t(), Exception.stacktrace(), map) :: no_return
+  defp native_failure!(error, stacktrace, context) do
+    cond do
+      project_clause_failure?(error, stacktrace) ->
+        [{module, function, args, _location} | _frames] = stacktrace
+        compile_error!(no_clause_message(context.subject, module, function, args), context)
+
+      query_failure?(error, stacktrace) ->
+        compile_error!(query_as_value_message(context.subject), context)
+
+      true ->
+        reraise error, stacktrace
+    end
+  end
+
+  defp no_clause_message(subject, module, function, arg_values) do
+    "#{subject} calls #{inspect(module)}.#{function}/#{length(arg_values)} with #{Enum.map_join(arg_values, ", ", &spelled_argument/1)}, which no clause matches - the code raises FunctionClauseError there"
+  end
 
   defp param_name(clause, index) do
     case Enum.at(clause.params, index) do
@@ -1739,6 +1762,17 @@ defmodule Hologram.Compiler.QueryExtractor do
     )
   end
 
+  # A function of the project or a dependency fails on a clause it doesn't have for its arguments,
+  # whichever of them it is - the walk reports that as it reports a clause it follows.
+  defp project_clause_failure?(
+         %FunctionClauseError{module: module, function: function},
+         [{module, function, args, _location} | _frames]
+       )
+       when is_list(args),
+       do: interpretable_module?(module)
+
+  defp project_clause_failure?(_error, _stacktrace), do: false
+
   # The queries a value holds, itself one or inside lists, tuples, maps and structs.
   defp queries_in(%Query{} = query), do: [query]
 
@@ -1773,8 +1807,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp query_description(%Query{entity: entity}), do: "a set of #{inspect(entity)} rows"
 
   # A call fails on a query it was given when a protocol the query doesn't implement was asked of it -
-  # Enumerable, String.Chars - or when an Erlang function was handed it in place of a list or a
-  # number, which its frame shows with the arguments it was called with.
+  # Enumerable, String.Chars - or when an Erlang or Elixir function was handed it in place of a list,
+  # a number or a string, which its frame shows with the arguments it was called with.
   defp query_failure?(%Protocol.UndefinedError{value: value}, _stacktrace),
     do: contains_query?(value)
 
@@ -2321,6 +2355,10 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp type_description(:integer), do: "a count"
 
   defp type_description(entity), do: "one #{inspect(entity)} row"
+
+  defp undefined_function_message(subject, module, function, arity) do
+    "#{subject} calls undefined function #{inspect(module)}.#{function}/#{arity}"
+  end
 
   defp unknown_value?(value), do: contains_placeholder?(value) or stand_in?(value)
 

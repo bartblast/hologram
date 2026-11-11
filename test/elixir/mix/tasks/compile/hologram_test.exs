@@ -30,9 +30,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
   alias Hologram.Test.Fixtures.Component.Module13, as: ComponentModule13
   alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
-  alias Hologram.Test.Fixtures.Component.Module15, as: ComponentModule15
-  alias Hologram.Test.Fixtures.Component.Module21, as: ComponentModule21
-  alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
+  alias Hologram.Test.Fixtures.Component.Module43, as: ComponentModule43
+  alias Hologram.Test.Fixtures.Component.Module54, as: ComponentModule54
+  alias Hologram.Test.Fixtures.Component.Module55, as: ComponentModule55
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
@@ -45,7 +45,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module7
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module8
-  alias Hologram.Test.Fixtures.Page.Module16, as: PageModule16
+  alias Hologram.Test.Fixtures.Page.Module18, as: PageModule18
 
   # The module is most of the lib suite's serial phase, so CI runs it in a job of its own (see the
   # lib_tests matrix in .github/workflows/ci.yml).
@@ -1099,8 +1099,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     assert map_size(page_windows_items) == @num_pages
 
-    # The page renders a component whose prop reads a query, so it downloads that query's window.
-    assert [window_id] = page_windows_items[PageModule16]
+    # The page renders a component whose derived field builds a query, so it downloads that query's
+    # window.
+    assert [window_id] = page_windows_items[PageModule18]
     assert window_id =~ ~r/^[0-9a-f]{32}$/
   end
 
@@ -1152,7 +1153,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       Path.join(opts[:build_dir], Reflection.page_windows_plt_dump_file_name())
     )
 
-    assert [window_id] = PLT.get!(page_windows_plt, PageModule16)
+    assert [window_id] = PLT.get!(page_windows_plt, PageModule18)
     assert Map.has_key?(queries.windows, window_id)
   end
 
@@ -1576,13 +1577,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_extractions(fn -> run(opts) end) == 1
     end
 
-    # Page 16 is the one page that reaches Module21. A page holds derived fields of its own, so
+    # Page 18 is the one page that reaches Module84. A page holds derived fields of its own, so
     # the edit reaches its queries as it reaches a component's.
     test "an edit of a component extracts its queries and those of the pages reaching it", %{
       opts: opts
     } do
       run(opts)
-      fake_edit(ComponentModule21)
+      fake_edit(QueryExtractorModule84)
 
       assert count_extractions(fn -> run(opts) end) == 2
     end
@@ -1604,6 +1605,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_extractions(fn -> run(opts) end) == num_pointing
     end
 
+    # Page 23 is the one page that reaches Module54, whose derived field calls a function of
+    # Module55, which is no component. The call is an edge of the graph, so the edit reaches both.
+    test "an edit of a module a component's derived field calls extracts the queries of that component and the pages reaching it",
+         %{opts: opts} do
+      run(opts)
+      fake_edit(ComponentModule55)
+
+      assert count_extractions(fn -> run(opts) end) == 2
+    end
+
     # The extractor replays a query whose entity type is an argument over every entity type, and
     # the query validations read what the entity types declare.
     test "an edit of an entity type extracts every component's queries", %{opts: opts} do
@@ -1615,24 +1626,24 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_extractions(fn -> run(opts) end) == num_components
     end
 
-    # Page 16 reaches Module21. Taken out of the graph, Module21 is built into it again by the walk
+    # Page 18 reaches Module84. Taken out of the graph, Module84 is built into it again by the walk
     # an edit of the page starts, as a component a page starts reaching is. The edited page's own
     # queries are the other extraction.
     test "a component a walk builds into the graph has its queries extracted", %{opts: opts} do
       run(opts)
 
-      take_out_of_graph(ComponentModule21)
-      fake_edit(PageModule16)
+      take_out_of_graph(QueryExtractorModule84)
+      fake_edit(PageModule18)
 
       assert count_extractions(fn -> run(opts) end) == 2
-      assert ComponentModule21 in CallGraph.modules(cache_state().call_graph)
+      assert QueryExtractorModule84 in CallGraph.modules(cache_state().call_graph)
     end
 
     test "the kept component queries after an edit are the ones a cold compile extracts", %{
       opts: opts
     } do
       run(opts)
-      fake_edit(ComponentModule21)
+      fake_edit(QueryExtractorModule84)
       run(opts)
 
       components = cache_state().data_layer.components
@@ -1666,7 +1677,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "an edit of a component derives the data layer again", %{opts: opts} do
       run(opts)
-      fake_edit(ComponentModule21)
+      fake_edit(QueryExtractorModule84)
 
       assert count_data_layer_dumps(fn -> run(opts) end) == [1, 1]
     end
@@ -1675,7 +1686,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       run(opts)
       derived = load_dumped_derived(opts)
 
-      fake_edit(ComponentModule21)
+      fake_edit(QueryExtractorModule84)
 
       assert count_resolutions(fn -> run(opts) end) == 0
       assert load_dumped_derived(opts) == derived
@@ -1786,7 +1797,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "the kept page reach after an edit is the one a cold compile lists", %{opts: opts} do
       run(opts)
-      fake_edit(PageModule16)
+      fake_edit(PageModule18)
       run(opts)
 
       pages = cache_state().data_layer.pages
@@ -1860,14 +1871,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       assert %{
                checks_permissions?: false,
-               components: [ComponentModule21, LayoutFixture, PageModule16]
+               components: [QueryExtractorModule84, LayoutFixture, PageModule18]
              } =
-               cache_state().data_layer.pages[PageModule16]
+               cache_state().data_layer.pages[PageModule18]
     end
 
     test "a new VM reuses the derived definitions from the compile state dump", %{opts: opts} do
       run(opts)
-      fake_edit_in_dump(ComponentModule21, opts)
+      fake_edit_in_dump(QueryExtractorModule84, opts)
       Cache.reset()
       fake_recompile()
 
@@ -1907,13 +1918,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # The component joins the build with the edit, as a component saved with a refused query
       # does: an edited templatable is validated without a kept entry of its own.
-      fake_edit(ComponentModule15)
+      fake_edit(ComponentModule43)
 
       failing_opts =
-        Keyword.update!(opts, :component_modules, &[ComponentModule15 | &1])
+        Keyword.update!(opts, :component_modules, &[ComponentModule43 | &1])
 
       expected_msg =
-        "the registered query in Hologram.Test.Fixtures.Component.Module15 reads " <>
+        "the registered query in Hologram.Test.Fixtures.Component.Module43 reads " <>
           "Hologram.Test.Fixtures.Entity.Module1, which declares no allow lines - " <>
           "default deny returns no rows to any session. Add allow lines, or drop the query."
 
@@ -2633,17 +2644,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute @unreached_module in CallGraph.modules(cache_state().call_graph)
     end
 
-    # Page 9 reaches Module24, whose query is a parameterized capture of its own function, so the
-    # page's rebuild reads the component's IR and its queries are extracted again from the same IR.
-    # The first run loads the dumps, which hold no IR, so the rebuild builds what the page reads too.
+    # Page 23 reaches Module54, whose derived field reads an argument, so the page's rebuild reads
+    # the component's IR and its queries are extracted again from the same IR. The first run loads
+    # the dumps, which hold no IR, so the rebuild builds what the page reads too.
     test "an edit of a component builds its IR once", %{opts: opts} do
       run(opts)
-      fake_edit(ComponentModule24)
+      fake_edit(ComponentModule54)
 
       Code.ensure_loaded!(IR)
       built_modules = list_ir_builds(fn -> run(opts) end)
 
-      assert ComponentModule24 in built_modules
+      assert ComponentModule54 in built_modules
       assert built_modules == Enum.uniq(built_modules)
     end
 

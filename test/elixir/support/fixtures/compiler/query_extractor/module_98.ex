@@ -30,5 +30,9 @@ defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module98 do
 
   def label(query), do: "ripe: #{query}"
 
+  def narrow(query, :ripe), do: filter(query, a == true)
+
   def ripe, do: filter(Entity2, a == true)
+
+  def total(rows) when is_list(rows), do: length(rows)
 end
