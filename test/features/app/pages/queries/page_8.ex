@@ -10,6 +10,10 @@ defmodule HologramFeatureTests.Queries.Page8 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :local_messages, :string
+  state :unrendered_channel_name, :string
+  state :unrendered_label_name, :string
+
   def init(_params, component, _server) do
     component
     |> put_state(:local_messages, nil)

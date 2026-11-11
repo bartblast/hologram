@@ -8,25 +8,28 @@ defmodule HologramFeatureTests.Components.Policies.Component1 do
   prop :current_user, User, from_context: {Hologram, :user}
   prop :documents, [Document], from_query: &documents_query/0
 
+  state :shown_current_user, :any
+  state :shown_documents, :list
+
   # The query result arrives as a server-injected prop and hydrates the client
   # through state - client-side from_query rendering runs on the local database,
   # which is not built yet.
   def init(props, component, _server) do
     component
-    |> put_state(:current_user, props.current_user)
-    |> put_state(:documents, props.documents)
+    |> put_state(:shown_current_user, props.current_user)
+    |> put_state(:shown_documents, props.documents)
   end
 
   def template do
     ~HOLO"""
     <p>
-      Documents: <strong id="documents"><code>{Enum.map_join(@documents, ",", & &1.title)}</code></strong>
+      Documents: <strong id="documents"><code>{Enum.map_join(@shown_documents, ",", & &1.title)}</code></strong>
     </p>
     <p>
-      Folders: <strong id="folders"><code>{Enum.map_join(@documents, ",", &folder_name(&1.folder))}</code></strong>
+      Folders: <strong id="folders"><code>{Enum.map_join(@shown_documents, ",", &folder_name(&1.folder))}</code></strong>
     </p>
     <p>
-      Session user: <strong id="session_user"><code>{session_user_email(@current_user)}</code></strong>
+      Session user: <strong id="session_user"><code>{session_user_email(@shown_current_user)}</code></strong>
     </p>
     """
   end

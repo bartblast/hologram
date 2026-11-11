@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.SyncPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :folder_name, :string
+  state :local_folder, :string
+
   def init(_params, component, _server) do
     component
     |> put_state(:folder_name, "kept_folder")

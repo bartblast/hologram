@@ -11,6 +11,9 @@ defmodule HologramFeatureTests.Policies.Page9 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :project_id, :any
+  state :result, :string
+
   # The project is seeded by the test before the visit, and read here as trusted code so the page
   # holds its id whoever is signed in.
   def init(_params, component, _server) do

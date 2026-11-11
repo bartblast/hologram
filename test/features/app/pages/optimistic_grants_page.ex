@@ -12,6 +12,12 @@ defmodule HologramFeatureTests.OptimisticGrantsPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :computed_operation, :atom
+  state :document, :any
+  state :other_user_id, :any
+  state :result, :string
+  state :session_user_id, :any
+
   # The document and the other user are seeded by the test before the visit, and read here as
   # trusted code so the page holds their ids whoever is signed in. The session user's id is
   # what the page was mounted under - a reload after "Log in" is what makes it theirs.

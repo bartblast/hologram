@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.DurabilityPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :show_products, :boolean
+
   # Nothing is read until the button is clicked, so this page CARRIES no rows - the server renders
   # it without touching the products, and none of them travel with the markup. Whatever the list
   # shows afterwards therefore came from the client's own database: filled by the stream on a first

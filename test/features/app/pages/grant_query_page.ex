@@ -11,6 +11,11 @@ defmodule HologramFeatureTests.GrantQueryPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :document, :any
+  state :result, :string
+  state :session_user_id, :any
+  state :third_user_id, :any
+
   # The document and the third user are seeded by the test before the visit, and read here as
   # trusted code so the page holds their ids whoever is signed in.
   def init(_params, component, server) do

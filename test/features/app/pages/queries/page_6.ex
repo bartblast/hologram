@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.Queries.Page6 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :local_names, :any
+
   def init(_params, component, _server) do
     put_state(component, :local_names, nil)
   end

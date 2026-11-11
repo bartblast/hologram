@@ -6,15 +6,17 @@ defmodule HologramClusterTests.Components.SyncedItems do
 
   prop :items, [Item], from_query: &items_query/0
 
+  state :shown_items, :list
+
   # The prop exists to give the build a registered query over Item, which is what makes a window
   # for it - the cluster tests read the sync stream directly rather than the rendered page.
   def init(props, component, _server) do
-    put_state(component, :items, props.items)
+    put_state(component, :shown_items, props.items)
   end
 
   def template do
     ~HOLO"""
-    <p>Items: <strong id="items">{Enum.map_join(@items, ",", & &1.title)}</strong></p>
+    <p>Items: <strong id="items">{Enum.map_join(@shown_items, ",", & &1.title)}</strong></p>
     """
   end
 

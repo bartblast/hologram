@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.Policies.Page1 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :result, :string
+
   def template do
     ~HOLO"""
     <p>

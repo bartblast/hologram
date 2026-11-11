@@ -12,6 +12,8 @@ defmodule HologramFeatureTests.PoliciesPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :result, :string
+
   def init(_params, component, _server) do
     put_state(component, :result, nil)
   end
