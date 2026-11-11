@@ -252,7 +252,7 @@ defmodule Hologram.Test.BrowserSessionTest do
                ) == :ok
       end)
 
-      assert_receive {:deleted, :other_session}
+      assert_receive {:deleted, :other_session}, 5_000
     end
 
     test "deletes a running test's session the restarted store dropped once that test ends", %{
@@ -277,12 +277,12 @@ defmodule Hologram.Test.BrowserSessionTest do
         )
       end)
 
-      assert_receive {:deleted, :hung_session}
+      assert_receive {:deleted, :hung_session}, 5_000
       refute_receive {:deleted, :other_test_session}, 100
 
       Process.exit(other_test_pid, :kill)
 
-      assert_receive {:deleted, :other_test_session}
+      assert_receive {:deleted, :other_test_session}, 5_000
     end
 
     @tag :tmp_dir
@@ -390,12 +390,12 @@ defmodule Hologram.Test.BrowserSessionTest do
         )
       end)
 
-      assert_receive {:attempt_started, worker}
+      assert_receive {:attempt_started, worker}, 5_000
       refute_received {:deleted, _base_url, _session_id}
 
       send(worker, :release)
 
-      assert_receive {:deleted, @base_url, "abandoned"}
+      assert_receive {:deleted, @base_url, "abandoned"}, 5_000
     end
 
     test "deletes the session an attempt creates after its caller died" do
@@ -410,15 +410,15 @@ defmodule Hologram.Test.BrowserSessionTest do
           )
         end)
 
-      assert_receive {:attempt_started, worker}
+      assert_receive {:attempt_started, worker}, 5_000
 
       caller_ref = Process.monitor(caller)
       Process.exit(caller, :kill)
-      assert_receive {:DOWN, ^caller_ref, :process, ^caller, :killed}
+      assert_receive {:DOWN, ^caller_ref, :process, ^caller, :killed}, 5_000
 
       send(worker, :release)
 
-      assert_receive {:deleted, @base_url, "orphaned"}
+      assert_receive {:deleted, @base_url, "orphaned"}, 5_000
     end
 
     @tag :tmp_dir
@@ -786,12 +786,12 @@ defmodule Hologram.Test.BrowserSessionTest do
                      fn -> start_wallaby(opts) end
       end)
 
-      assert_receive {:attempt_started, worker}
+      assert_receive {:attempt_started, worker}, 5_000
       refute_received {:deleted, _base_url, _session_id}
 
       send(worker, :release)
 
-      assert_receive {:deleted, @base_url, "warm-up"}
+      assert_receive {:deleted, @base_url, "warm-up"}, 5_000
     end
 
     test "raises when the browser session start answers with an error, without reporting it", %{
