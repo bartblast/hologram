@@ -42,6 +42,24 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
+  Returns true when the build registered the given derived field of the given component or page
+  module as a query - its function builds one, which the renderer runs - or false otherwise,
+  including in an app that declares no entity type, whose cache never starts.
+  """
+  @spec derived_query?(module, atom) :: boolean
+  def derived_query?(module, name) do
+    case :persistent_term.get(impl().persistent_term_key(), nil) do
+      nil ->
+        false
+
+      data ->
+        data
+        |> Map.get(:derived_queries, MapSet.new())
+        |> MapSet.member?({module, name})
+    end
+  end
+
+  @doc """
   Returns all query cache entries - a map from query content ID to its registry entry.
   """
   @spec entries() :: %{String.t() => %{atom => any}}

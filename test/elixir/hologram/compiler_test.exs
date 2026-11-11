@@ -71,6 +71,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module13, as: PageModule13
   alias Hologram.Test.Fixtures.Page.Module15, as: PageModule15
   alias Hologram.Test.Fixtures.Page.Module16, as: PageModule16
+  alias Hologram.Test.Fixtures.Page.Module18, as: PageModule18
+  alias Hologram.Test.Fixtures.Page.Module19, as: PageModule19
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
@@ -124,6 +126,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1, as: QueryExtractorModule1
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84, as: QueryExtractorModule84
 
   @root_dir Reflection.root_dir()
   @assets_dir Path.join(@root_dir, "assets")
@@ -161,6 +164,7 @@ defmodule Hologram.CompilerTest do
   ]
 
   @empty_sync_constants %{
+    derived_queries: %{},
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
     permission_checking?: false,
@@ -170,7 +174,7 @@ defmodule Hologram.CompilerTest do
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "", propParams: {}, protocolVersion: 1};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", propParams: {}, protocolVersion: 1};/
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -1200,6 +1204,28 @@ defmodule Hologram.CompilerTest do
       assert page_windows[PageModule16] == [window_id]
     end
 
+    test "gives a page the window of a component's derived query", %{page_windows: page_windows} do
+      window_id =
+        Entity2
+        |> filter(a == true)
+        |> Stage.normalize()
+        |> Window.derive(false)
+        |> Registry.id()
+
+      assert page_windows[PageModule18] == [window_id]
+    end
+
+    test "gives a page the window of its own derived query", %{page_windows: page_windows} do
+      window_id =
+        Entity2
+        |> filter(a == false)
+        |> Stage.normalize()
+        |> Window.derive(false)
+        |> Registry.id()
+
+      assert page_windows[PageModule19] == [window_id]
+    end
+
     test "gives a page reaching no query no windows", %{page_windows: page_windows} do
       assert page_windows[PageModule7] == []
     end
@@ -1653,6 +1679,17 @@ defmodule Hologram.CompilerTest do
       assert queries.prop_params == %{{ComponentModule11, :entities} => [:min_b]}
     end
 
+    test "collects the derived fields the components register as queries", %{
+      entity_types: entity_types
+    } do
+      component_queries =
+        extract_component_queries([QueryExtractorModule84], entity_types, PLT.start())
+
+      queries = build_queries(component_queries, entity_types, false)
+
+      assert queries.derived_queries == MapSet.new([{QueryExtractorModule84, :ripe}])
+    end
+
     # The grants window rides with every build's windows, whether or not a page subscribes to it -
     # the build decides who asks, this is only where an id resolves back to a term.
     test "registers the grants window beside the windows the queries download", %{
@@ -2083,6 +2120,18 @@ defmodule Hologram.CompilerTest do
       assert sync_constants.prop_params[ComponentModule24] == [entities: [:min_b]]
     end
 
+    test "collects the derived fields those components register as queries", %{
+      sync_constants: sync_constants
+    } do
+      assert sync_constants.derived_queries[QueryExtractorModule84] == [:ripe]
+    end
+
+    test "collects the derived fields a page registers as queries", %{
+      sync_constants: sync_constants
+    } do
+      assert sync_constants.derived_queries[PageModule19] == [:ripe]
+    end
+
     # A zero-arity capture binds nothing, so there is nothing to name - the client reads its
     # absence the same way it reads an empty list.
     test "leaves out a component declaring no parameterized capture", %{
@@ -2230,6 +2279,7 @@ defmodule Hologram.CompilerTest do
 
     test "records no model hash when the module info PLT records no entity type" do
       assert build_sync_constants(%{}, %{}, PLT.start()) == %{
+               derived_queries: %{},
                entity_types: MapSet.new(),
                model_hash: nil,
                permission_checking?: false,
@@ -2255,7 +2305,17 @@ defmodule Hologram.CompilerTest do
   describe "build_sync_constants_js/1" do
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {expandedRoles: {}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+    end
+
+    test "renders the derived fields each component registers as queries" do
+      sync_constants = %{
+        @empty_sync_constants
+        | derived_queries: %{QueryExtractorModule84 => [:ripe, :ripe_rows]}
+      }
+
+      assert build_sync_constants_js(sync_constants) ==
+               ~s/globalThis.Hologram.sync = {derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
     end
 
     # A client asked whether a user holds a global role refuses an unknown one by these keys and
@@ -2264,7 +2324,7 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -2775,7 +2835,7 @@ defmodule Hologram.CompilerTest do
       [module_info_plt: module_info_plt]
     end
 
-    test "keeps the modules a page reaches, the struct types it names included, and the components among them, sorted",
+    test "keeps the modules a page reaches, the struct types it names included, and the components among them with the page, sorted",
          %{module_info_plt: module_info_plt} do
       reach = %{
         mfas: [{Module1, :fun_1, 0}, {Module3, :fun_2, 1}, {Module2, :fun_3, 0}],
@@ -2785,7 +2845,7 @@ defmodule Hologram.CompilerTest do
       assert build_kept_page_reach([{Module1, reach}], [], module_info_plt) == %{
                Module1 => %{
                  checks_permissions?: false,
-                 components: [Module2, Module3],
+                 components: [Module1, Module2, Module3],
                  modules: MapSet.new([Module1, Module2, Module3, Module4])
                }
              }
@@ -2796,7 +2856,7 @@ defmodule Hologram.CompilerTest do
     } do
       reach = %{mfas: [{Module1, :fun_1, 0}, {Enum, :map, 2}], types: []}
 
-      assert %{Module1 => %{components: []}} =
+      assert %{Module1 => %{components: [Module1]}} =
                build_kept_page_reach([{Module1, reach}], [], module_info_plt)
     end
 
@@ -2819,8 +2879,16 @@ defmodule Hologram.CompilerTest do
 
       assert build_kept_page_reach([{Module1, reach}, {Module11, reach}], [], module_info_plt) ==
                %{
-                 Module1 => %{checks_permissions?: false, components: [], modules: MapSet.new()},
-                 Module11 => %{checks_permissions?: false, components: [], modules: MapSet.new()}
+                 Module1 => %{
+                   checks_permissions?: false,
+                   components: [Module1],
+                   modules: MapSet.new()
+                 },
+                 Module11 => %{
+                   checks_permissions?: false,
+                   components: [Module11],
+                   modules: MapSet.new()
+                 }
                }
     end
   end
@@ -7089,11 +7157,13 @@ defmodule Hologram.CompilerTest do
              ) ==
                %{
                  ComponentModule11 => %{
+                   derived_queries: [],
                    prop_params: [entities: [:min_b]],
                    targets: [ComponentModule11],
                    terms: [module_11_term]
                  },
                  QueryExtractorModule1 => %{
+                   derived_queries: [],
                    prop_params: [],
                    targets: [QueryExtractorModule1],
                    terms: [module_1_term]
@@ -7128,7 +7198,23 @@ defmodule Hologram.CompilerTest do
       ir_plt: ir_plt
     } do
       assert extract_component_queries([ComponentModule1], entity_types, ir_plt) == %{
-               ComponentModule1 => %{prop_params: [], targets: [], terms: []}
+               ComponentModule1 => %{derived_queries: [], prop_params: [], targets: [], terms: []}
+             }
+    end
+
+    test "extracts the queries a component's derived fields build", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries = extract_component_queries([QueryExtractorModule84], entity_types, ir_plt)
+
+      assert queries == %{
+               QueryExtractorModule84 => %{
+                 derived_queries: [:ripe],
+                 prop_params: [],
+                 targets: [QueryExtractorModule84],
+                 terms: [%Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}]
+               }
              }
     end
 

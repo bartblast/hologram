@@ -419,8 +419,14 @@ defmodule Mix.Tasks.Compile.Hologram do
       # Whether the kept derived definitions can be out of date (see derived_stale?/3).
       derived_stale? = derived_stale?(cache.data_layer, module_digests_diff, data_model_changed?)
 
+      # A page declares derived fields as a component does, so the data layer tracks the queries of
+      # both.
       tracked_component_modules =
-        list_tracked_component_modules(cache.data_layer, component_modules, new_module_info_plt)
+        list_tracked_component_modules(
+          cache.data_layer,
+          component_modules ++ page_modules,
+          new_module_info_plt
+        )
 
       # The components whose registered queries the data layer extracts again, if it derives at all
       # (see list_stale_components/7). Listed once both walks are done: a component a walk built
@@ -493,7 +499,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         sync_constants_js(data_layer_kept?, %{
           call_graph: call_graph,
           call_graph_for_runtime: call_graph_for_runtime,
-          component_modules: component_modules,
+          component_modules: component_modules ++ page_modules,
           derived_stale?: derived_stale?,
           entity_types: entity_types,
           ir_plt: ir_plt,

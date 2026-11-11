@@ -24,15 +24,17 @@ defmodule Hologram.Component.Derived do
   given, and returns the given computed values with theirs added.
 
   Each function is given its arguments by name: the props (params on a page), then the state, then
-  the values computed so far. A result that is a query - for now a query term, or an entity type
-  standing for every row of it - is normalized, checked against the field's type and handed to the
-  `:run_query` option, a function taking the field's name, its arguments and the term, whose
-  result is the field's value. Any other result is checked against the field's type.
+  the values computed so far. The result of a field the build registered as a query, which the
+  `:registered_query?` option answers for a field's name, is normalized, checked against the
+  field's type and handed to the `:run_query` option, a function taking the field's name, its
+  arguments and the term, whose result is the field's value. Any other result is checked against
+  the field's type.
 
   With the `:stateless` option a component renders without a cid, so it has no state to read.
 
   Raises Hologram.MisuseError when an argument has no value, when a result doesn't match the field's
-  type, and Hologram.StateError when a stateless component's field reads state.
+  type, when a field the build didn't register returns a query, and Hologram.StateError when a
+  stateless component's field reads state.
 
   WARNING: must match the client renderer's #computeDerived (renderer.mjs), messages included - but
   for a value each tier spells with its own inspect, which spell structs and the key order of maps
@@ -146,8 +148,9 @@ defmodule Hologram.Component.Derived do
       end)
 
     functions =
-      Enum.map(declarations, fn {{name, args, _arg_names, body, _line}, _type} ->
-        quote do
+      Enum.map(declarations, fn {{name, args, _arg_names, body, line}, _type} ->
+        # At the declaration's line, which is where the build's refusals point.
+        quote line: line do
           @doc false
           def unquote(function_name(name))(unquote_splicing(args)) do
             unquote(body)
@@ -239,18 +242,27 @@ defmodule Hologram.Component.Derived do
   end
 
   defp computed_value!(value, entry, module, args, opts) do
-    if query?(value) do
-      term = Stage.normalize(value)
+    registered_query? = Keyword.fetch!(opts, :registered_query?)
 
-      validate_query_type!(term, entry, module)
+    cond do
+      registered_query?.(entry.name) ->
+        term = Stage.normalize(value)
 
-      opts
-      |> Keyword.fetch!(:run_query)
-      |> apply([entry.name, args, term])
-    else
-      validate_value_type!(value, entry, module)
+        validate_query_type!(term, entry, module)
 
-      value
+        opts
+        |> Keyword.fetch!(:run_query)
+        |> apply([entry.name, args, term])
+
+      query?(value) ->
+        raise Hologram.MisuseError,
+          message:
+            "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} returned a query the build didn't register - a query is built in the derived field's own function or the builders it calls, not passed in as data"
+
+      true ->
+        validate_value_type!(value, entry, module)
+
+        value
     end
   end
 
@@ -312,8 +324,7 @@ defmodule Hologram.Component.Derived do
     end
   end
 
-  # TODO: answer from the queries the build registered (QueryCache.derived_query?/2) once it
-  # registers derived fields' queries, and refuse a query result it didn't register.
+  # A query term, or an entity type standing for every row of it.
   defp query?(value) do
     is_struct(value, Query) or (is_atom(value) and Reflection.entity?(value))
   end

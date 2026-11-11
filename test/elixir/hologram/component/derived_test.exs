@@ -17,8 +17,12 @@ defmodule Hologram.Component.DerivedTest do
   defp no_query(_name, _args, _term), do: raise("no query was expected")
 
   defp compute_plain(entries, props, state \\ %{}, computed \\ %{}) do
-    compute(entries, Module37, props, state, computed, run_query: &no_query/3)
+    compute(entries, Module37, props, state, computed, plain_opts())
   end
+
+  defp plain_opts, do: [registered_query?: fn _name -> false end, run_query: &no_query/3]
+
+  defp query_opts(run_query), do: [registered_query?: fn _name -> true end, run_query: run_query]
 
   describe "compute/6" do
     test "computes the fields in order, each reading the fields before it" do
@@ -51,7 +55,7 @@ defmodule Hologram.Component.DerivedTest do
         |> filter(a == true)
         |> Stage.normalize()
 
-      assert compute(entries, Module37, %{count: 3}, %{}, %{}, run_query: run_query) == %{
+      assert compute(entries, Module37, %{count: 3}, %{}, %{}, query_opts(run_query)) == %{
                entities: {:entities, [3], term}
              }
     end
@@ -61,7 +65,7 @@ defmodule Hologram.Component.DerivedTest do
 
       run_query = fn _name, _args, term -> term end
 
-      assert compute(entries, Module37, %{}, %{}, %{}, run_query: run_query) == %{
+      assert compute(entries, Module37, %{}, %{}, %{}, query_opts(run_query)) == %{
                entities: Stage.normalize(Entity2)
              }
     end
@@ -73,7 +77,7 @@ defmodule Hologram.Component.DerivedTest do
         "derived field :total in Hologram.Test.Fixtures.Component.Module37 is declared :integer, but its query is a set of Hologram.Test.Fixtures.Entity.Module2 rows"
 
       assert_error Hologram.MisuseError, expected_msg, fn ->
-        compute_plain(entries, %{})
+        compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3))
       end
     end
 
@@ -87,7 +91,7 @@ defmodule Hologram.Component.DerivedTest do
         |> one()
         |> Stage.normalize()
 
-      assert compute(entries, Module37, %{}, %{}, %{}, run_query: run_query) == %{first: term}
+      assert compute(entries, Module37, %{}, %{}, %{}, query_opts(run_query)) == %{first: term}
     end
 
     test "raises on a count where a set is declared" do
@@ -97,7 +101,7 @@ defmodule Hologram.Component.DerivedTest do
         "derived field :rows in Hologram.Test.Fixtures.Component.Module37 is declared [Hologram.Test.Fixtures.Entity.Module2], but its query is a count of Hologram.Test.Fixtures.Entity.Module2 rows"
 
       assert_error Hologram.MisuseError, expected_msg, fn ->
-        compute_plain(entries, %{})
+        compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3))
       end
     end
 
@@ -108,7 +112,7 @@ defmodule Hologram.Component.DerivedTest do
         "derived field :total in Hologram.Test.Fixtures.Component.Module37 is declared :integer, but its query is one Hologram.Test.Fixtures.Entity.Module2 row"
 
       assert_error Hologram.MisuseError, expected_msg, fn ->
-        compute_plain(entries, %{})
+        compute(entries, Module37, %{}, %{}, %{}, query_opts(&no_query/3))
       end
     end
 
@@ -155,6 +159,17 @@ defmodule Hologram.Component.DerivedTest do
       entries = [entry(:tags, [:string], [], fn -> ["a", 1] end)]
 
       assert compute_plain(entries, %{}) == %{tags: ["a", 1]}
+    end
+
+    test "raises on a query result of a field the build didn't register as a query" do
+      entries = [entry(:entities, [Entity2], [], fn -> filter(Entity2, a == true) end)]
+
+      expected_msg =
+        "derived field :entities in Hologram.Test.Fixtures.Component.Module37 returned a query the build didn't register - a query is built in the derived field's own function or the builders it calls, not passed in as data"
+
+      assert_error Hologram.MisuseError, expected_msg, fn ->
+        compute_plain(entries, %{})
+      end
     end
 
     test "takes nil for any type" do
@@ -237,7 +252,7 @@ defmodule Hologram.Component.DerivedTest do
         "derived field :label in Hologram.Test.Fixtures.Page.Module17 reads :project_id, which is not set - pass it as a param of the page"
 
       assert_error Hologram.MisuseError, expected_msg, fn ->
-        compute(entries, Module17, %{}, %{}, %{}, run_query: &no_query/3)
+        compute(entries, Module17, %{}, %{}, %{}, plain_opts())
       end
     end
 
@@ -248,7 +263,7 @@ defmodule Hologram.Component.DerivedTest do
         "derived field :double in Hologram.Test.Fixtures.Component.Module37 reads state :step, which a component rendered without a cid doesn't have - give it a cid"
 
       assert_error Hologram.StateError, expected_msg, fn ->
-        compute(entries, Module37, %{}, %{step: 1}, %{}, run_query: &no_query/3, stateless: true)
+        compute(entries, Module37, %{}, %{step: 1}, %{}, [{:stateless, true} | plain_opts()])
       end
     end
   end

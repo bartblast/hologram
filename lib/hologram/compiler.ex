@@ -132,13 +132,16 @@ defmodule Hologram.Compiler do
         }
 
   @typedoc """
-  The registered queries of one component: the normalized terms its from_query props declare (see
-  `Hologram.Compiler.QueryExtractor.extract_module_queries/3`), the argument names of its
-  parameterized captures (see `Hologram.Compiler.QueryExtractor.extract_prop_params/2`) and the
-  modules those captures point at, sorted. A capture of the component's own function points at the
-  component itself.
+  The registered queries of one component or page: the normalized terms its from_query props
+  declare (see `Hologram.Compiler.QueryExtractor.extract_module_queries/3`) and its derived fields
+  build (see `Hologram.Compiler.QueryExtractor.extract_derived_queries/3`), the names of the derived
+  fields that build one, the argument names of its parameterized captures (see
+  `Hologram.Compiler.QueryExtractor.extract_prop_params/2`) and the modules those captures and
+  functions point at, sorted. A capture of the component's own function, and a derived field's
+  function, point at the component itself.
   """
   @type component_queries :: %{
+          derived_queries: [atom],
           prop_params: keyword(list(atom | nil)),
           targets: [module],
           terms: [Query.t()]
@@ -165,6 +168,7 @@ defmodule Hologram.Compiler do
   What the client's data layer is compiled with (see `build_sync_constants/3`).
   """
   @type sync_constants :: %{
+          derived_queries: %{module => [atom]},
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
           permission_checking?: boolean,
@@ -745,7 +749,8 @@ defmodule Hologram.Compiler do
   @doc """
   Folds what each page's client code reaches, as `list_reach_by_page/2` lists it, into what the data
   layer keeps of it (see `kept_page_reach`), keyed by page module. The components among the reached
-  modules are told by the given module info PLT. The pages checking permissions are given as
+  modules are told by the given module info PLT, and the page is one of them: a page declares derived
+  fields as a component does, and their queries are its own. The pages checking permissions are given as
   `pages_checking_permissions/1` lists them, from the pages' reach on the call graph BEFORE manually
   ported MFAs are removed.
 
@@ -763,6 +768,8 @@ defmodule Hologram.Compiler do
       components =
         modules
         |> reached_components(module_info_plt)
+        |> Enum.concat([page_module])
+        |> Enum.uniq()
         |> Enum.sort()
 
       kept_reach = %{
@@ -901,6 +908,7 @@ defmodule Hologram.Compiler do
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_3/README.md
   """
   @spec build_queries(%{module => component_queries}, list(module), boolean) :: %{
+          derived_queries: MapSet.t({module, atom}),
           entries: %{String.t() => %{atom => any}},
           permission_checking?: boolean,
           prop_params: %{{module, atom} => list(atom | nil)},
@@ -926,6 +934,7 @@ defmodule Hologram.Compiler do
       |> put_grants_window(entity_types)
 
     %{
+      derived_queries: derived_queries_index(component_queries),
       entries: entries,
       permission_checking?: permission_checking?,
       prop_params: prop_params_index(component_queries),
@@ -1657,7 +1666,8 @@ defmodule Hologram.Compiler do
   The IR the captures are walked over is read from the given IR PLT, the compile's, and the capture
   targets it lacks are built into it first, in one go.
 
-  Raises what `Hologram.Compiler.QueryExtractor.extract_module_queries/3` and
+  Raises what `Hologram.Compiler.QueryExtractor.extract_module_queries/3`,
+  `Hologram.Compiler.QueryExtractor.extract_derived_queries/3` and
   `Hologram.Compiler.QueryExtractor.extract_prop_params/2` raise.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/extract_component_queries_3/README.md
@@ -1675,10 +1685,19 @@ defmodule Hologram.Compiler do
     |> then(&build_missing_ir!(ir_plt, &1))
 
     Map.new(component_modules, fn module ->
+      derived_queries = QueryExtractor.extract_derived_queries(module, entity_types, ir_plt)
+
+      terms =
+        Enum.concat(
+          QueryExtractor.extract_module_queries(module, entity_types, ir_plt),
+          Enum.flat_map(derived_queries, fn {_name, derived_terms} -> derived_terms end)
+        )
+
       queries = %{
+        derived_queries: Enum.map(derived_queries, fn {name, _terms} -> name end),
         prop_params: QueryExtractor.extract_prop_params(module, ir_plt),
         targets: targets_by_module[module],
-        terms: QueryExtractor.extract_module_queries(module, entity_types, ir_plt)
+        terms: terms
       }
 
       {module, queries}
@@ -2319,6 +2338,10 @@ defmodule Hologram.Compiler do
   has to be told the declarations of. A type neither queried nor mentioned is left out, which is
   what keeps an app's other tables out of a file every page load serves.
 
+  `:derived_queries` are the derived fields of those components whose function builds a query,
+  keyed by component - the fields the client answers from its database rather than computing a
+  value of.
+
   `:prop_params` are the ordered argument names of every parameterized from_query capture those
   components declare, keyed by component and prop. A capture travels in the bundle and is called
   there, but the names its arguments were written with do not survive encoding - and those names
@@ -2410,6 +2433,7 @@ defmodule Hologram.Compiler do
     # rows puts the type there too, and a build that bakes every policy because someone LISTED
     # grants would hand each client the whole authorization model to read for nothing.
     %{
+      derived_queries: derived_queries(component_modules, component_queries),
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
       permission_checking?: permission_checking?,
@@ -2421,9 +2445,9 @@ defmodule Hologram.Compiler do
   @doc """
   Builds the JavaScript statement that sets the client's data layer constants,
   `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/3`): the
-  global roles with the role modules carrying each, the model of the entity types the client
-  holds, the hash of the project's data model, the argument names of the parameterized query
-  captures, and the sync protocol version.
+  derived fields whose function builds a query, the global roles with the role modules carrying
+  each, the model of the entity types the client holds, the hash of the project's data model, the
+  argument names of the parameterized query captures, and the sync protocol version.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2457,10 +2481,11 @@ defmodule Hologram.Compiler do
       model =
         render_entity_model(sync_constants.entity_types, sync_constants.permission_checking?)
 
+      derived_queries = render_derived_queries(sync_constants.derived_queries)
       params = render_prop_params(sync_constants.prop_params)
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
-      ~s/globalThis.Hologram.sync = {expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
+      ~s/globalThis.Hologram.sync = {derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", propParams: #{params}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 
@@ -2846,17 +2871,27 @@ defmodule Hologram.Compiler do
 
   # The modules the from_query captures of the module's props point at, sorted: a capture of the
   # module's own function points at the module itself.
+  # A derived field's function is hoisted into the component itself, so a component declaring one
+  # is a target of its own, as one whose from_query fn is inline.
   defp capture_targets(module) do
-    if Reflection.has_function?(module, :__props__, 0) do
-      module.__props__()
-      |> Enum.map(fn {_name, _type, opts} -> opts[:from_query] end)
-      |> Enum.filter(&is_function/1)
-      |> Enum.map(&Function.info(&1)[:module])
-      |> Enum.uniq()
-      |> Enum.sort()
-    else
-      []
-    end
+    prop_targets =
+      if Reflection.has_function?(module, :__props__, 0) do
+        module.__props__()
+        |> Enum.map(fn {_name, _type, opts} -> opts[:from_query] end)
+        |> Enum.filter(&is_function/1)
+        |> Enum.map(&Function.info(&1)[:module])
+      else
+        []
+      end
+
+    derived_targets =
+      if Reflection.has_function?(module, :__derived__, 0) and module.__derived__() != [],
+        do: [module],
+        else: []
+
+    (prop_targets ++ derived_targets)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   # A call of one of the asks records the operation it names and is walked into as well - the
@@ -3945,6 +3980,33 @@ defmodule Hologram.Compiler do
       _attr ->
         nil
     end)
+  end
+
+  # The derived fields of each component whose function builds a query, which the renderers run
+  # as one. A component with none is left out, which the client reads as none.
+  defp derived_queries(component_modules, component_queries) do
+    component_modules
+    |> Enum.map(fn module ->
+      names =
+        component_queries
+        |> Map.fetch!(module)
+        |> Map.get(:derived_queries, [])
+
+      {module, names}
+    end)
+    |> Enum.reject(fn {_module, names} -> names == [] end)
+    |> Map.new()
+  end
+
+  # The same names `derived_queries/2` collects for the bundle, as the pairs a renderer asks about.
+  defp derived_queries_index(component_queries) do
+    component_queries
+    |> Enum.flat_map(fn {module, queries} ->
+      queries
+      |> Map.get(:derived_queries, [])
+      |> Enum.map(&{module, &1})
+    end)
+    |> MapSet.new()
   end
 
   # A component declaring no parameterized capture is left out rather than carried as an empty
@@ -5234,6 +5296,19 @@ defmodule Hologram.Compiler do
     Enum.filter(modules, fn module ->
       match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
     end)
+  end
+
+  defp render_derived_queries(derived_queries) do
+    derived_queries
+    |> Enum.map(fn {module, names} ->
+      spelled_names =
+        names
+        |> Enum.map(&Atom.to_string/1)
+        |> Jason.encode!()
+
+      {Codec.encode_enum_value(module), spelled_names}
+    end)
+    |> render_json_object()
   end
 
   # What each argument of a parameterized builder binds by: its authored name. The capture itself

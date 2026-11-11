@@ -52,7 +52,13 @@ defmodule Hologram.Template.RendererDerivedTest do
     setup_chunk_registry(ChunkRegistryStub)
     setup_query_cache(QueryCacheStub, false)
 
-    dump_query_cache(QueryCacheStub, [])
+    dump_query_cache(QueryCacheStub, [
+      Module149,
+      Module150,
+      Module151,
+      Module157,
+      Module158
+    ])
 
     QueryCache.init(nil)
 

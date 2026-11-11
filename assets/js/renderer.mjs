@@ -1648,7 +1648,7 @@ export default class Renderer {
   // `?.`: a query reads rows of entity types, which only a build that declares them has, and that
   // build ships the data layer.
   static #derivedValue(value, entry, moduleProxy, module, args) {
-    if (Renderer.#isDerivedQuery(value)) {
+    if (Renderer.#isRegisteredDerivedQuery(module, entry.name)) {
       const term = Hologram.dataLayer.normalizeQuery(value);
 
       Renderer.#validateDerivedQueryType(term, entry, module);
@@ -1658,6 +1658,12 @@ export default class Renderer {
         entry.name,
         args,
         term,
+      );
+    }
+
+    if (Renderer.#isDerivedQuery(value)) {
+      Interpreter.raiseMisuseError(
+        `derived field ${Interpreter.inspect(entry.name)} in ${module} returned a query the build didn't register - a query is built in the derived field's own function or the builders it calls, not passed in as data`,
       );
     }
 
@@ -2394,9 +2400,6 @@ export default class Renderer {
   //
   // A query term is the plain object the ported query stages build, and an entity type stands for
   // every row of it.
-  //
-  // TODO: answer from the queries the build registered once it registers derived fields' queries,
-  // and refuse a query result it didn't register.
   static #isDerivedQuery(value) {
     if (value !== null && typeof value === "object" && "entity" in value) {
       return true;
@@ -2511,6 +2514,16 @@ export default class Renderer {
       Type.isTuple(value) &&
       value.data.length === 2 &&
       Interpreter.isStrictlyEqual(value.data[0], Type.atom("safe"))
+    );
+  }
+
+  // Based on QueryCache.derived_query?/2
+  //
+  // Whether the build registered the given derived field as a query, which the bundle's sync
+  // constants list by module.
+  static #isRegisteredDerivedQuery(module, name) {
+    return Boolean(
+      globalThis.Hologram.sync?.derivedQueries?.[module]?.includes(name.value),
     );
   }
 

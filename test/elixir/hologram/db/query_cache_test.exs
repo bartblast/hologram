@@ -17,6 +17,7 @@ defmodule Hologram.DB.QueryCacheTest do
   alias Hologram.Query.Registry
   alias Hologram.Query.Stage
   alias Hologram.Reflection
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84
   alias Hologram.Test.Fixtures.Component.Module11
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module33
@@ -34,6 +35,7 @@ defmodule Hologram.DB.QueryCacheTest do
 
     %{
       derived: %{},
+      derived_queries: MapSet.new(),
       entries: entries,
       permission_checking?: false,
       prop_params: %{{Module11, :entities} => [:min_b]},
@@ -70,6 +72,30 @@ defmodule Hologram.DB.QueryCacheTest do
     init(nil)
 
     assert entries() == expected_entries()
+  end
+
+  describe "derived_query?/2" do
+    test "returns true for a derived field the build registered as a query" do
+      dump_query_cache(QueryCacheStub, [Module84])
+
+      init(nil)
+
+      assert derived_query?(Module84, :ripe)
+    end
+
+    test "returns false when no query cache has started" do
+      :persistent_term.erase(QueryCacheStub.persistent_term_key())
+
+      refute derived_query?(Module84, :ripe)
+    end
+
+    test "returns false for a derived field computing a plain value" do
+      dump_query_cache(QueryCacheStub, [Module84])
+
+      init(nil)
+
+      refute derived_query?(Module84, :ripe_total)
+    end
   end
 
   describe "fetch/1" do

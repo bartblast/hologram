@@ -79,7 +79,17 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module75
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module76
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module77
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module78
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module80
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module81
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module82
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module83
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module85
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module86
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module87
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module88
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module89
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
   alias Hologram.Test.Fixtures.Component.Module10, as: Component10
   alias Hologram.Test.Fixtures.Component.Module11, as: Component11
@@ -419,6 +429,201 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         derived_definition(Module54, :looping, ir_plt)
+      end
+    end
+  end
+
+  describe "extract_derived_queries/3" do
+    setup %{entity_types: entity_types, ir_plt: ir_plt} do
+      queries =
+        Module78
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      %{queries: queries}
+    end
+
+    test "registers a query reading an argument with a placeholder for it", %{queries: queries} do
+      assert queries.by_wanted == [
+               %Query{
+                 entity: Entity2,
+                 filter: [{:a, :==, {:placeholder, :wanted}}],
+                 sort: [id: :asc]
+               }
+             ]
+    end
+
+    test "registers a query reading no argument", %{queries: queries} do
+      assert queries.ripe == [
+               %Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}
+             ]
+    end
+
+    test "registers an entity type as a query of every row", %{queries: queries} do
+      assert queries.every_row == [%Query{entity: Entity2, sort: [id: :asc]}]
+    end
+
+    test "registers the query a builder of another module builds", %{queries: queries} do
+      assert queries.through_builder == [
+               %Query{
+                 entity: Entity2,
+                 filter: [{:a, :==, {:placeholder, :wanted}}],
+                 sort: [id: :asc]
+               }
+             ]
+    end
+
+    test "registers a query for each branch on an argument", %{queries: queries} do
+      assert queries.ripe_or_all == [
+               %Query{entity: Entity2, sort: [id: :asc]},
+               %Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}
+             ]
+    end
+
+    test "registers an entity type a branch returns", %{queries: queries} do
+      assert queries.branch_entity == [%Query{entity: Entity2, sort: [id: :asc]}]
+    end
+
+    test "keeps only the replay the field's type names of a query over an entity type an argument holds",
+         %{queries: queries} do
+      assert queries.sorted_entity == [%Query{entity: Entity2, sort: [id: :asc]}]
+    end
+
+    test "registers nothing for a field computing a plain value", %{queries: queries} do
+      refute Map.has_key?(queries, :labels)
+    end
+
+    test "registers nothing for a field calling a function of Hologram's own", %{
+      queries: queries
+    } do
+      refute Map.has_key?(queries, :can_read)
+    end
+
+    test "registers nothing for a field passing on an entity type a function returns", %{
+      queries: queries
+    } do
+      refute Map.has_key?(queries, :entity_label)
+    end
+
+    test "doesn't run a field computing a plain value", %{queries: queries} do
+      refute Map.has_key?(queries, :raising)
+    end
+
+    test "registers nothing for a module declaring no derived field", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      assert extract_derived_queries(Module1, entity_types, ir_plt) == []
+    end
+
+    test "raises on a field building a query that returns a value on a branch", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_80.ex:10: derived field :ripe_or_three in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module80 builds a query, but returns 3 - a derived field holding rows returns the query, and a value computed from the rows is a derived field of its own"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module80, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query of a set where a count is declared", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_81.ex:8: derived field :total in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module81 is declared :integer, but its query is a set of Hologram.Test.Fixtures.Entity.Module2 rows"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module81, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query of a set where one row is declared", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_83.ex:8: derived field :first in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module83 is declared Hologram.Test.Fixtures.Entity.Module2, but its query is a set of Hologram.Test.Fixtures.Entity.Module2 rows"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module83, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query of a count where a set is declared", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_86.ex:8: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module86 is declared [Hologram.Test.Fixtures.Entity.Module2], but its query is a count of Hologram.Test.Fixtures.Entity.Module2 rows"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module86, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query of one row where a set is declared", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_87.ex:8: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module87 is declared [Hologram.Test.Fixtures.Entity.Module2], but its query is one Hologram.Test.Fixtures.Entity.Module2 row"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module87, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query over an entity type an argument holds that is never the declared type",
+         %{entity_types: entity_types, ir_plt: ir_plt} do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_88.ex:10: derived field :titled in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module88 is declared [Hologram.Test.Fixtures.Entity.Module2], but its query, over the entity type entity_type holds, is never a set of Hologram.Test.Fixtures.Entity.Module2 rows"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module88, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query no entity type admits", %{entity_types: entity_types, ir_plt: ir_plt} do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_89.ex:11: derived field :unknown in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module89 builds no query that any entity type of the build admits - it filters on :no_entity_declares_this - a derived field with no window would read rows nothing ever fills"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module89, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query over a field read off another derived field's row", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_85.ex:10: derived field :narrowed in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module85 runs a query over derived field :first's rows - a query reads an entity type, so filter the rows in Elixir or build the query from the same inputs
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_85.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module85.__derived_narrowed__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module85, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query over another derived field's rows", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_82.ex:10: derived field :ripe_rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module82 runs a query over derived field :rows's rows - a query reads an entity type, so filter the rows in Elixir or build the query from the same inputs
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_82.ex:10: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module82.__derived_ripe_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module82, entity_types, ir_plt)
       end
     end
   end

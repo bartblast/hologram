@@ -987,9 +987,12 @@ defmodule Hologram.Template.Renderer do
     }
   end
 
-  # A derived field defined by a query runs it the way a query prop runs its own.
+  # A derived field the build registered as a query runs it the way a query prop runs its own.
   defp derived_compute_opts(module) do
-    [run_query: &run_query!(module, &1, &2, &3)]
+    [
+      registered_query?: &QueryCache.derived_query?(module, &1),
+      run_query: &run_query!(module, &1, &2, &3)
+    ]
   end
 
   # WARNING: must match the client renderer's #duplicateRefMessage (renderer.mjs).

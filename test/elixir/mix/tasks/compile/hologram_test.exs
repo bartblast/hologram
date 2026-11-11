@@ -26,6 +26,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Query
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, as: QueryExtractorModule53
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84, as: QueryExtractorModule84
   alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
   alias Hologram.Test.Fixtures.Component.Module13, as: ComponentModule13
   alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
@@ -160,7 +161,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     entity_types = Reflection.list_entities()
 
     Enum.filter(Reflection.list_components(), fn module ->
-      not declares_query_prop?(module) or buildable_queries?(module, entity_types)
+      not declares_query?(module) or buildable_queries?(module, entity_types)
     end)
   end
 
@@ -181,12 +182,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
     Hologram.MisuseError -> false
   end
 
-  # Only a component declaring a from_query prop can be refused - one without produces no terms,
-  # so neither the extractor nor the validations have anything to object to. Asking the cheap
-  # question first keeps this out of the suite's timing.
-  defp declares_query_prop?(module) do
-    Reflection.has_function?(module, :__props__, 0) and
-      Enum.any?(module.__props__(), fn {_name, _type, opts} -> opts[:from_query] end)
+  # Only a component declaring a from_query prop or a derived field can be refused - one without
+  # produces no terms, so neither the extractor nor the validations have anything to object to.
+  # Asking the cheap question first keeps this out of the suite's timing.
+  defp declares_query?(module) do
+    query_prop? =
+      Reflection.has_function?(module, :__props__, 0) and
+        Enum.any?(module.__props__(), fn {_name, _type, opts} -> opts[:from_query] end)
+
+    query_prop? or
+      (Reflection.has_function?(module, :__derived__, 0) and module.__derived__() != [])
   end
 
   # A page whose template holds a link to another page, and that page.
@@ -1113,7 +1118,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
       |> Map.keys()
       |> Enum.sort()
 
-    assert query_cache_keys == [:derived, :entries, :permission_checking?, :prop_params, :windows]
+    assert query_cache_keys == [
+             :derived,
+             :derived_queries,
+             :entries,
+             :permission_checking?,
+             :prop_params,
+             :windows
+           ]
+
+    # The derived fields whose function builds a query, which the renderers run as one.
+    assert MapSet.member?(queries.derived_queries, {QueryExtractorModule84, :ripe})
 
     # Resolved by walking the query builder the derived field calls.
     assert queries.derived[{Entity36, :unread_count}] ==
@@ -1554,18 +1569,22 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_extractions(fn -> run(opts) end) == 0
     end
 
-    test "an edit of a page extracts no component's queries", %{opts: opts} do
+    test "an edit of a page extracts its own queries and no component's", %{opts: opts} do
       run(opts)
       fake_edit(Module1)
 
-      assert count_extractions(fn -> run(opts) end) == 0
+      assert count_extractions(fn -> run(opts) end) == 1
     end
 
-    test "an edit of a component extracts its queries and no other's", %{opts: opts} do
+    # Page 16 is the one page that reaches Module21. A page holds derived fields of its own, so
+    # the edit reaches its queries as it reaches a component's.
+    test "an edit of a component extracts its queries and those of the pages reaching it", %{
+      opts: opts
+    } do
       run(opts)
       fake_edit(ComponentModule21)
 
-      assert count_extractions(fn -> run(opts) end) == 1
+      assert count_extractions(fn -> run(opts) end) == 2
     end
 
     # Module14's query is a remote capture of a function of Module13, which is no component.
@@ -1596,15 +1615,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_extractions(fn -> run(opts) end) == num_components
     end
 
-    # Page 8 reaches Module21. Taken out of the graph, Module21 is built into it again by the walk
-    # an edit of the page starts, as a component a page starts reaching is.
+    # Page 16 reaches Module21. Taken out of the graph, Module21 is built into it again by the walk
+    # an edit of the page starts, as a component a page starts reaching is. The edited page's own
+    # queries are the other extraction.
     test "a component a walk builds into the graph has its queries extracted", %{opts: opts} do
       run(opts)
 
       take_out_of_graph(ComponentModule21)
       fake_edit(PageModule16)
 
-      assert count_extractions(fn -> run(opts) end) == 1
+      assert count_extractions(fn -> run(opts) end) == 2
       assert ComponentModule21 in CallGraph.modules(cache_state().call_graph)
     end
 
@@ -1833,10 +1853,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert data_layer.sync_constants_js == runtime.sync_constants_js
     end
 
-    test "the kept reach of a page names the components it reaches", %{opts: opts} do
+    test "the kept reach of a page names the components it reaches, itself included", %{
+      opts: opts
+    } do
       run(opts)
 
-      assert %{checks_permissions?: false, components: [ComponentModule21, LayoutFixture]} =
+      assert %{
+               checks_permissions?: false,
+               components: [ComponentModule21, LayoutFixture, PageModule16]
+             } =
                cache_state().data_layer.pages[PageModule16]
     end
 
