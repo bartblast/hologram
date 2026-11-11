@@ -4,6 +4,8 @@ defmodule HologramFeatureTests.Components.Actions.Component21 do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
+  state :result, :any
+
   # Mounted on one page only, so its cid is registered nowhere once the user navigates away.
   def init(_props, component, _server) do
     put_state(component, :result, nil)

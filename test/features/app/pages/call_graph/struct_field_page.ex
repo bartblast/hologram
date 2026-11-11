@@ -13,6 +13,8 @@ defmodule HologramFeatureTests.CallGraph.StructFieldPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :title, :any
+
   def init(_params, component, _server) do
     fixture = %StructFieldFixture{note: %StructFieldNoteFixture{}}
 

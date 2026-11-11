@@ -1,20 +1,19 @@
-# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module106 do
-  use Hologram.Component
-  use Hologram.DB
+  use Hologram.Page
 
-  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+  route "/hologram-test-fixtures-template-renderer-module106"
 
-  prop :entities, [Entity2], from_query: &entities_query/1
+  state :a, :integer
 
-  @impl Component
-  def template do
-    ~HOLO"""
-    entities = {inspect(@entities)}
-    """
+  layout Hologram.Test.Fixtures.LayoutFixture
+
+  @impl Page
+  def init(_params, component, _server) do
+    put_state(component, a: 1, b: 2)
   end
 
-  defp entities_query(missing_prop) do
-    filter(Entity2, b >= ^missing_prop)
+  @impl Page
+  def template do
+    ~HOLO""
   end
 end

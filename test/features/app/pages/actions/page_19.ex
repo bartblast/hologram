@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.Actions.Page19 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :execution_count, :integer
+  state :result, :any
+
   def init(_params, component, _server) do
     put_state(component, execution_count: 0, result: nil)
   end

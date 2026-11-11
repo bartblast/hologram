@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Middleware.Page1 do
 
   middleware :enrich
 
+  state :result, :any
+
   def enrich(server, _opts) do
     put_stash(server, :marker, "enriched by middleware")
   end

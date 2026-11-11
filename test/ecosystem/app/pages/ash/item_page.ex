@@ -13,6 +13,8 @@ defmodule HologramEcosystemTests.Ash.ItemPage do
 
   layout HologramEcosystemTests.Components.DefaultLayout
 
+  state :title, :string
+
   def init(_params, component, _server) do
     item = Item.create!(%{price: Money.new(:EUR, 10), title: "title"})
 

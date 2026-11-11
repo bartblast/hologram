@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.TemplateSyntax.DynamicComponentBroadcastReceiverP
 
   @channel :template_syntax_dynamic_component
 
+  state :module, :any
+
   def init(_params, component, server) do
     {
       put_state(component, :module, nil),

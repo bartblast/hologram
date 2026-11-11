@@ -4,55 +4,36 @@ defmodule Hologram.Realtime.ChannelTest do
   import Hologram.Realtime.Channel
 
   describe "validate!/1" do
-    test "accepts a bare atom" do
+    test "accepts an atom" do
       assert validate!(:notifications) == :notifications
     end
 
-    test "accepts a 2-tuple with an atom value" do
-      assert validate!({:tag, :value}) == {:tag, :value}
-    end
-
-    test "accepts a 2-tuple with an integer value" do
-      assert validate!({:room, 42}) == {:room, 42}
-    end
-
-    test "accepts a 2-tuple with a string value" do
-      assert validate!({:room, "lounge"}) == {:room, "lounge"}
-    end
-
-    test "accepts a 3+-tuple with mixed primitive values" do
+    test "accepts a tuple" do
       assert validate!({:doc, "abc", "v2"}) == {:doc, "abc", "v2"}
-      assert validate!({:tag, :a, 1, "s"}) == {:tag, :a, 1, "s"}
     end
 
-    test "rejects a bare string" do
+    test "rejects a value that isn't an identifier with a hint" do
       assert_error ArgumentError,
-                   "channel must be a bare atom or tagged tuple; got bare string \"my-channel\"",
+                   "a channel must be an identifier, like :search or {:message, 42}, got: {:room, nil} - nil, true and false can't be in an identifier",
+                   fn -> validate!({:room, nil}) end
+    end
+
+    test "rejects a value that isn't an identifier without a hint" do
+      assert_error ArgumentError,
+                   ~s(a channel must be an identifier, like :search or {:message, 42}, got: "my-channel"),
                    fn -> validate!("my-channel") end
     end
 
-    test "rejects a tuple whose first element is not an atom" do
+    test "rejects a tuple with a true value" do
       assert_error ArgumentError,
-                   "channel tuple's first element must be an atom; got {\"room\", 42}",
-                   fn -> validate!({"room", 42}) end
+                   "a channel must be an identifier, like :search or {:message, 42}, got: {:room, true} - nil, true and false can't be in an identifier",
+                   fn -> validate!({:room, true}) end
     end
 
-    test "rejects a tuple containing a non-primitive value" do
+    test "rejects nil" do
       assert_error ArgumentError,
-                   "channel tuple elements after the tag must be primitive (atom, integer, string); got %{a: 1} in {:room, %{a: 1}}",
-                   fn -> validate!({:room, %{a: 1}}) end
-    end
-
-    test "rejects a 1-tuple" do
-      assert_error ArgumentError,
-                   "channel tuple must have at least 2 elements; got 1-tuple {:foo}",
-                   fn -> validate!({:foo}) end
-    end
-
-    test "rejects a non-supported scalar type" do
-      assert_error ArgumentError,
-                   "channel must be a bare atom or tagged tuple; got 1.5",
-                   fn -> validate!(1.5) end
+                   "a channel must be an identifier, like :search or {:message, 42}, got: nil - nil, true and false can't be in an identifier",
+                   fn -> validate!(nil) end
     end
   end
 end

@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.Middleware.Page8 do
 
   middleware Composite
 
+  state :result, :string
+
   def init(_params, component, server) do
     put_state(component, :result, "#{get_stash(server, :shared)} / #{get_stash(server, :nested)}")
   end

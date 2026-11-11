@@ -4,6 +4,8 @@ defmodule HologramFeatureTests.Components.Commands.LateReplyComponent do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
+  state :result, :any
+
   # Mounted on the late reply page only, so its cid is registered nowhere once the user has
   # navigated away. A reply that survives the navigation then has no target, and raises an
   # invalid action target error on the page navigated to.

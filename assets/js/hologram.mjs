@@ -11,6 +11,7 @@ import Debouncer from "./debouncer.mjs";
 import Deserializer from "./deserializer.mjs";
 import Dispatch from "./dispatch.mjs";
 import ERTS from "./erts.mjs";
+import ElementRefRegistry from "./element_ref_registry.mjs";
 import EventListenerRegistry from "./event_listener_registry.mjs";
 import EventListeners from "./event_listeners.mjs";
 import GlobalRegistry from "./global_registry.mjs";
@@ -38,6 +39,8 @@ import Vdom from "./vdom.mjs";
 import ChangeEvent from "./events/change_event.mjs";
 import ClickEvent from "./events/click_event.mjs";
 import ClickOutsideEvent from "./events/click_outside_event.mjs";
+import DragEvent from "./events/drag_event.mjs";
+import DropEvent from "./events/drop_event.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import InputEvent from "./events/input_event.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
@@ -145,6 +148,7 @@ export default class Hologram {
   static #deps = {
     Bitstring: Bitstring,
     ERTS: ERTS,
+    ElementRefRegistry: ElementRefRegistry,
     HologramBoxedError: HologramBoxedError,
     HologramInterpreterError: HologramInterpreterError,
     Interpreter: Interpreter,
@@ -364,6 +368,7 @@ export default class Hologram {
 
           Hologram.#processActionResult(
             resolved,
+            componentModule,
             name,
             target,
             startTime,
@@ -380,6 +385,7 @@ export default class Hologram {
 
     Hologram.#processActionResult(
       resultComponentStruct,
+      componentModule,
       name,
       target,
       startTime,
@@ -557,6 +563,11 @@ export default class Hologram {
     if (stopPropagation) {
       event.stopPropagation?.();
     }
+
+    // Some events need a change made to them while their listener still runs, like the placeholder
+    // data a drag needs to start in Firefox. It runs after the disabled and ignored checks, so a nil
+    // binding leaves the event alone.
+    eventImpl.prepareEvent?.(event);
 
     const eventParam = eventImpl.buildEventParam(event);
     const eventTarget = event.target;
@@ -931,20 +942,30 @@ export default class Hologram {
         newVirtualDocument,
       );
 
-      // renderPage() collected this render's <window>/<document> bindings into Renderer.listenerBindings
-      // and its deferred element bindings (reach, resize) into Renderer.reachBindings and
+      // renderPage() collected this render's <window>/<document> bindings into
+      // Renderer.listenerBindings, its capture-phase drag listeners into Renderer.dragBindings, and
+      // its deferred element bindings (reach, resize) into Renderer.reachBindings and
       // Renderer.resizeBindings. Now that the DOM is patched, reconcile them into real listeners on
       // their targets. The deferred bindings are resolved here because their target is a live DOM
       // element, which exists only after patch. Each resolve also drops a binding whose once modifier
-      // has fired, so reconcile tears it down. A navigation has already detached the previous
+      // has fired (for the drag bindings, a <window>/<document> drop target whose $drop bindings have
+      // all fired), so reconcile tears it down. A navigation has already detached the previous
       // page's listeners at its boundary, so a mount's reconcile attaches against an empty
       // registry: every mount attaches fresh, and no listener's private state crosses from one
       // page to the next.
       EventListenerRegistry.reconcile([
+        ...Renderer.resolveDragBindings(),
         ...Renderer.resolveListenerBindings(),
         ...Renderer.resolveReachBindings(),
         ...Renderer.resolveResizeBindings(),
       ]);
+
+      // A ref names the element this render put under it, which exists only now that the DOM is
+      // patched.
+      ElementRefRegistry.replace(
+        Renderer.resolveRefBindings(),
+        Hologram.pageModule(),
+      );
 
       // Reach listeners persist across renders, so reconcile alone does not re-run them. Recheck them
       // now that the DOM is patched, so each re-syncs the children it watches and recomputes - firing
@@ -1301,6 +1322,13 @@ export default class Hologram {
 
     Interpreter.defineManuallyPortedFunction(
       "Hologram.JS",
+      "element/1",
+      "public",
+      ManuallyPortedElixirHologramJS["element/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.JS",
       "eval/1",
       "public",
       ManuallyPortedElixirHologramJS["eval/1"],
@@ -1483,17 +1511,20 @@ export default class Hologram {
   }
 
   // Everything the page being left armed is dropped at the boundary: a debounce or throttle
-  // timer, and every registry listener - a <window>/<document> binding, a click_outside, a reach
-  // or resize observer. A timer outlives the page that armed it, and a listener attached to a
-  // target the patch does not own would observe the patch itself: a detached element's observer
-  // reports it at 0x0, a shortened document fires the scroll the browser clamps, and every such
-  // dispatch would carry the destination's epoch. Nothing of the destination exists yet at
-  // either boundary, so nothing of it is taken, and the mount's render attaches its listeners
-  // afresh. Cancel, not flush: a dispatch must never execute on a page the user has left.
+  // timer, every registry listener - a <window>/<document> binding, a click_outside, a reach or
+  // resize observer - and the elements its refs named. A timer outlives the page that armed it,
+  // and a listener attached to a target the patch does not own would observe the patch itself: a
+  // detached element's observer reports it at 0x0, a shortened document fires the scroll the
+  // browser clamps, and every such dispatch would carry the destination's epoch. A ref looked up
+  // before the destination's first render would get an element of the page being left. Nothing of
+  // the destination exists yet at either boundary, so nothing of it is taken, and the mount's
+  // render attaches its listeners afresh. Cancel, not flush: a dispatch must never execute on a
+  // page the user has left.
   static #disarmLeftPage() {
     Debouncer.cancelAll();
     Throttler.cancelAll();
     EventListenerRegistry.detachAll();
+    ElementRefRegistry.clear();
 
     // Nothing of the destination is on screen yet, whichever way it arrives.
     $.isPageShown = false;
@@ -1569,6 +1600,17 @@ export default class Hologram {
 
       case "click_outside":
         return ClickOutsideEvent;
+
+      case "drag":
+      case "dragend":
+      case "dragenter":
+      case "dragleave":
+      case "dragover":
+      case "dragstart":
+        return DragEvent;
+
+      case "drop":
+        return DropEvent;
 
       case "input":
         return InputEvent;
@@ -1915,10 +1957,14 @@ export default class Hologram {
 
     window.addEventListener("popstate", Hologram.handlePopstateEvent);
 
+    // The page is being left, for good or into the browser's back/forward cache.
+    window.addEventListener("pagehide", () => Sse.suspend());
+
     window.addEventListener("pageshow", (event) => {
       // A page the browser brings back from its back/forward cache.
       if (event.persisted) {
         Hologram.checkIdentity();
+        Sse.resume();
       }
 
       // Reconnect when page is restored from bfcache OR when navigating back from external page
@@ -2370,9 +2416,7 @@ export default class Hologram {
       // SSE must open AFTER `#mountPage()` because the handshake payload
       // includes the receipts merged from the mount data's `subReceiptAdds` -
       // connecting earlier would send an empty receipts list.
-      if (Sse.eventSource === null) {
-        Sse.connect();
-      }
+      Sse.start();
     });
   }
 
@@ -2549,11 +2593,27 @@ export default class Hologram {
   // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
   static #processActionResult(
     resultComponentStruct,
+    componentModule,
     name,
     target,
     startTime,
     epoch,
   ) {
+    // Checked against the module that ran the action, before anything in the result takes effect,
+    // so an action that fails it changes nothing: its rows are dropped with it, as for an action
+    // that raises.
+    try {
+      Renderer.validateDeclaredState(
+        Erlang_Maps["get/2"](Type.atom("state"), resultComponentStruct),
+        Interpreter.moduleProxy(componentModule),
+        `action ${Interpreter.inspect(name)}`,
+      );
+    } catch (error) {
+      Hologram.dataLayer?.discardBatch();
+
+      throw error;
+    }
+
     // Sealed BEFORE the render below, so the one frame that follows shows the action's state
     // change and its data change together - which is the whole point of the batch boundary being
     // the action.

@@ -151,6 +151,26 @@ defmodule Hologram.JS do
 
   # Server-side pass-through; implemented in JavaScript.
   @doc """
+  Returns the element rendered under the given ref, as a native value the other JS functions take.
+
+  A ref is what a template names an element with, as in `<input $ref="search" />` or
+  `<li $ref={:message, message.id}>`. `:window` and `:document` are built-in refs for the window
+  and the document. A native value is returned unchanged, so code that takes either a ref or an
+  element can pass it here.
+
+  Raises `Hologram.MisuseError` when the value is neither a ref nor a native value, or when nothing
+  is rendered under the ref. On the server it returns a placeholder, like the other JS functions.
+
+  ## Examples
+
+      JS.element(:search) |> JS.call(:focus, [])
+      JS.element({:message, 42}) |> JS.call(:scrollIntoView, [])
+  """
+  @spec element(atom() | tuple() | NativeValue.t()) :: any()
+  def element(_ref), do: __server_pass_through__()
+
+  # Server-side pass-through; implemented in JavaScript.
+  @doc """
   Evaluates a JavaScript expression and returns the result.
   """
   @spec eval(String.t()) :: any()

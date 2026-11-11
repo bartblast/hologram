@@ -18,6 +18,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page20
   alias HologramFeatureTests.Patching.Page21
   alias HologramFeatureTests.Patching.Page22
+  alias HologramFeatureTests.Patching.Page23
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
   alias HologramFeatureTests.Patching.Page5
@@ -37,14 +38,14 @@ defmodule HologramFeatureTests.PatchingTest do
     end)
   end
 
-  # Reverses Page22's lists, then removes the first row, checking after each that the rows of the
+  # Reverses the page's lists, then removes the first row, checking after each that the rows of the
   # given kind of list kept their nodes, their order and their typed values. A typed value on the
   # first and last rows is what a node reused for another item would carry to the wrong row.
-  defp assert_rows_follow_their_items(session, kind) do
+  defp assert_rows_follow_their_items(session, page, kind) do
     rows = Enum.map(["alpha", "bravo", "charlie"], &"#{kind}_row_#{&1}")
 
     session
-    |> visit(Page22)
+    |> visit(page)
     |> assert_text(css("#result"), "alpha, bravo, charlie")
     |> fill_in(css("##{kind}_input_alpha"), with: "typed alpha")
     |> fill_in(css("##{kind}_input_charlie"), with: "typed charlie")
@@ -1312,19 +1313,31 @@ defmodule HologramFeatureTests.PatchingTest do
     feature "rows keyed by a $key on their element keep their nodes and typed values", %{
       session: session
     } do
-      assert_rows_follow_their_items(session, "element")
+      assert_rows_follow_their_items(session, Page22, "element")
     end
 
     feature "rows keyed by a $key on a stateless component keep their nodes and typed values", %{
       session: session
     } do
-      assert_rows_follow_their_items(session, "component")
+      assert_rows_follow_their_items(session, Page22, "component")
     end
 
     feature "stateful component rows keyed by their cid keep their nodes and typed values", %{
       session: session
     } do
-      assert_rows_follow_their_items(session, "stateful")
+      assert_rows_follow_their_items(session, Page22, "stateful")
+    end
+
+    feature "rows keyed by an identifier $key keep their nodes and typed values", %{
+      session: session
+    } do
+      assert_rows_follow_their_items(session, Page23, "identifier")
+    end
+
+    feature "rows keyed by a record $key keep their nodes and typed values", %{
+      session: session
+    } do
+      assert_rows_follow_their_items(session, Page23, "record")
     end
 
     feature "a navigation to the page keeps the rows its first patch put on screen", %{

@@ -8,6 +8,8 @@ defmodule Hologram.Test.Fixtures.Page.Module13 do
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
+  state :entity_type, :atom
+
   @impl Page
   def template do
     ~HOLO"""

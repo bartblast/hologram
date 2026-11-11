@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.Components.Events.ReachNested do
   use Hologram.Component
 
+  state :nested_bottom, :integer
+
   def init(_props, component, _server) do
     put_state(component, :nested_bottom, 0)
   end

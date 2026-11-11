@@ -6,6 +6,9 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module26 do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module28
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module29
 
+  state :ecto_schema, :atom
+  state :struct, :map
+
   def init(_params, component, _server) do
     put_state(component,
       ecto_schema: Module27,

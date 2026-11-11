@@ -4,6 +4,8 @@ defmodule HologramFeatureTests.Components.Actions.Component4 do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
+  state :result, :any
+
   def init(_params, component, _server) do
     put_state(component, :result, nil)
   end

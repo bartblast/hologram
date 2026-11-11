@@ -10,6 +10,9 @@ defmodule HologramFeatureTests.Navigation.LeftListenersDestinationPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :mounted_with_kind, :any
+  state :result, :any
+
   # The param is copied into state so an action can report it: what a click puts on screen then
   # says which mount the page is running under, not merely that the patch drew the new markup.
   def init(params, component, _server) do

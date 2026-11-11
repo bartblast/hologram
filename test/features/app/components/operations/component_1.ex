@@ -6,6 +6,8 @@ defmodule HologramFeatureTests.Components.Operations.Component1 do
 
   prop :prop_1, :atom, from_context: :my_context_key
 
+  state :result, :any
+
   def init(_props, component, _server) do
     put_state(component, :result, nil)
   end

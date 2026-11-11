@@ -10,11 +10,13 @@ defmodule HologramFeatureTests.Actions.Page24 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :log, :list
+
   # The page starts an action in both of the ways a page can: one queued here, one dispatched by
   # the script in its template.
-  def init(params, component, _server) do
+  def init(_params, component, _server) do
     component
-    |> put_state(log: [], via: params.via)
+    |> put_state(log: [])
     |> put_action(:append_from_init)
   end
 
@@ -31,10 +33,10 @@ defmodule HologramFeatureTests.Actions.Page24 do
   end
 
   def action(:append_from_init, _params, component) do
-    put_state(component, :log, component.state.log ++ [init: component.state.via])
+    put_state(component, :log, component.state.log ++ [init: component.props.via])
   end
 
   def action(:append_from_script, _params, component) do
-    put_state(component, :log, component.state.log ++ [script: component.state.via])
+    put_state(component, :log, component.state.log ++ [script: component.props.via])
   end
 end

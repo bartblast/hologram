@@ -1,22 +1,12 @@
-# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module118 do
   use Hologram.Component
-  use Hologram.DB
 
-  alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
-
-  prop :entities, [Entity2], from_query: &entities_query/0
+  prop :ref, :any, default: :shared
 
   @impl Component
   def template do
     ~HOLO"""
-    entities = {Enum.map_join(@entities, ",", & &1.c)}
+    <div $ref={@ref}></div><slot />
     """
-  end
-
-  defp entities_query do
-    Entity2
-    |> filter(a: true)
-    |> sort(c)
   end
 end

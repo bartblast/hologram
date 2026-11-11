@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Components.Actions.LateResultComponent do
 
   js_import from: "../../pages/actions/helpers.mjs", as: :helpers
 
+  state :result, :any
+
   # Mounted on the late result page only, so its cid is registered nowhere once the user has
   # navigated away. A result that survives then has no struct to replace, and the registry write
   # faults with a raw TypeError, which the error overlay does not show but the browser log records.

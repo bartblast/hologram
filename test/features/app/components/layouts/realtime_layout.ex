@@ -3,6 +3,8 @@ defmodule HologramFeatureTests.Components.RealtimeLayout do
 
   alias Hologram.UI.Runtime
 
+  state :received, :string
+
   def init(_props, component, server) do
     {
       put_state(component, :received, "none"),

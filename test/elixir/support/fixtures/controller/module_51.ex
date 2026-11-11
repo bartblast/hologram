@@ -9,6 +9,8 @@ defmodule Hologram.Test.Fixtures.Controller.Module51 do
 
   layout LayoutFixture
 
+  state :actor, :any
+
   middleware :capture_actor
 
   def capture_actor(server, _opts) do

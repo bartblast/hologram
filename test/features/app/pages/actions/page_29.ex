@@ -8,6 +8,8 @@ defmodule HologramFeatureTests.Actions.Page29 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :status, :string
+
   # The result of an action must show while the next action it put, with no delay, awaits: the
   # next action renders nothing until its promise resolves.
   def init(_params, component, _server) do

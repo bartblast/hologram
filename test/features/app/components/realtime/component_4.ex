@@ -1,6 +1,9 @@
 defmodule HologramFeatureTests.Realtime.Component4 do
   use Hologram.Component
 
+  state :broadcasts, :any
+  state :subscriptions, :any
+
   def init(_props, component, server) do
     put_state(component,
       broadcasts: inspect(server.broadcasts),

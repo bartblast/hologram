@@ -8,6 +8,8 @@ defmodule Hologram.Test.Fixtures.Page.Module10 do
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
+  state :entity, :any
+
   @impl Page
   def init(_params, component, _server) do
     put_state(component, :entity, %Module2{})

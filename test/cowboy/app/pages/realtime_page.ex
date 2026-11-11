@@ -5,6 +5,8 @@ defmodule HologramCowboyTests.RealtimePage do
 
   layout HologramCowboyTests.Components.DefaultLayout
 
+  state :received, :string
+
   @channel {:room, 1}
 
   def init(_params, component, server) do

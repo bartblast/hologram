@@ -1,17 +1,17 @@
-# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module116 do
-  use Hologram.Component
+  use Hologram.Page
 
-  alias Hologram.Test.Fixtures.Entity.Module14, as: User
+  alias Hologram.Test.Fixtures.Template.Renderer.Module89
 
-  # The prop remaps the framework's {Hologram, :user} context value to the conventional
-  # current_user template name.
-  prop :current_user, User, from_context: {Hologram, :user}
+  route "/hologram-test-fixtures-template-renderer-module116"
 
-  @impl Component
+  layout Hologram.Test.Fixtures.Template.Renderer.Module114
+
+  # The spread keeps the build from refusing the missing prop, so the render raises for it instead.
+  @impl Page
   def template do
     ~HOLO"""
-    current user = {if(@current_user, do: @current_user.email, else: "none")}
+    <Module89 ...{%{}} />
     """
   end
 end

@@ -19,8 +19,29 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
+  alias Hologram.Test.Fixtures.Template.Renderer.Module100
+  alias Hologram.Test.Fixtures.Template.Renderer.Module101
+  alias Hologram.Test.Fixtures.Template.Renderer.Module102
+  alias Hologram.Test.Fixtures.Template.Renderer.Module103
+  alias Hologram.Test.Fixtures.Template.Renderer.Module104
+  alias Hologram.Test.Fixtures.Template.Renderer.Module105
+  alias Hologram.Test.Fixtures.Template.Renderer.Module106
+  alias Hologram.Test.Fixtures.Template.Renderer.Module107
+  alias Hologram.Test.Fixtures.Template.Renderer.Module108
+  alias Hologram.Test.Fixtures.Template.Renderer.Module109
   alias Hologram.Test.Fixtures.Template.Renderer.Module11
+  alias Hologram.Test.Fixtures.Template.Renderer.Module110
+  alias Hologram.Test.Fixtures.Template.Renderer.Module111
+  alias Hologram.Test.Fixtures.Template.Renderer.Module113
+  alias Hologram.Test.Fixtures.Template.Renderer.Module114
+  alias Hologram.Test.Fixtures.Template.Renderer.Module115
+  alias Hologram.Test.Fixtures.Template.Renderer.Module116
+  alias Hologram.Test.Fixtures.Template.Renderer.Module117
+  alias Hologram.Test.Fixtures.Template.Renderer.Module118
+  alias Hologram.Test.Fixtures.Template.Renderer.Module119
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
+  alias Hologram.Test.Fixtures.Template.Renderer.Module120
+  alias Hologram.Test.Fixtures.Template.Renderer.Module121
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
@@ -1240,7 +1261,90 @@ defmodule Hologram.Template.RendererTest do
                 }, @server}
     end
 
-    test "with props and state, give state priority over prop if there are name collisions" do
+    test "with declared state defaults and no init/3" do
+      node = {:component, Module100, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>state_a = 1, state_b = abc</div>",
+                %{
+                  "my_component" => %{
+                    module: Module100,
+                    struct: %Component{props: %{cid: "my_component"}, state: %{a: 1, b: "abc"}}
+                  }
+                }, @server}
+    end
+
+    test "with declared state defaults, which init/3 sees and can override" do
+      node = {:component, Module101, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {"<div>state_a = 1, state_b = xyz</div>",
+                %{
+                  "my_component" => %{
+                    module: Module101,
+                    struct: %Component{
+                      props: %{cid: "my_component"},
+                      state: %{a: 1, b: "xyz", c: %{a: 1, b: "abc"}}
+                    }
+                  }
+                }, @server}
+    end
+
+    test "with declared state defaults and only server struct returned from init/3" do
+      node = {:component, Module103, [{"cid", [text: "my_component"]}], []}
+
+      assert {"<div>state_a = 1</div>", component_registry, _server_struct} =
+               render_dom(node, @env, @server)
+
+      assert component_registry["my_component"].struct.state == %{a: 1}
+    end
+
+    test "with state that init/3 put without declaring it" do
+      node = {:component, Module105, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg =
+        ~s/state "b" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module105", / <>
+          "but init/3 put it - declare it with state/2 or state/3"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with props that init/3 copied into state" do
+      node =
+        {:component, Module108, [{"cid", [text: "my_component"]}, {"label", [text: "abc"]}], []}
+
+      expected_msg =
+        ~s/state "cid" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module108", / <>
+          ~s/but init\/3 put it - "cid" is a prop, read it from component.props instead/
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with state that init/3 put under a key that isn't an atom" do
+      node = {:component, Module110, [{"cid", [text: "my_component"]}], []}
+
+      expected_msg =
+        ~s/state key "b" isn't an atom, but init\/3 put it in / <>
+          ~s/"Hologram.Test.Fixtures.Template.Renderer.Module110" - state is declared with atom names/
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "with state put by init/3 under a path, whose top key is declared" do
+      node = {:component, Module107, [{"cid", [text: "my_component"]}], []}
+
+      assert {"", component_registry, _server_struct} = render_dom(node, @env, @server)
+
+      assert component_registry["my_component"].struct.state == %{values: %{x: 1}}
+    end
+
+    test "with props and state" do
       node =
         {:component, Module4,
          [
@@ -1250,13 +1354,13 @@ defmodule Hologram.Template.RendererTest do
          ], []}
 
       assert render_dom(node, @env, @server) ==
-               {"<div>var_a = state_a, var_b = state_b, var_c = prop_c</div>",
+               {"<div>var_a = state_a, var_b = prop_b, var_c = prop_c</div>",
                 %{
                   "my_component" => %{
                     module: Module4,
                     struct: %Component{
                       props: %{b: "prop_b", c: "prop_c", cid: "my_component"},
-                      state: %{a: "state_a", b: "state_b"}
+                      state: %{a: "state_a"}
                     }
                   }
                 }, @server}
@@ -1368,6 +1472,33 @@ defmodule Hologram.Template.RendererTest do
       end
     end
 
+    # A template that puts its own <slot /> inside a component usage passes the content on, and the
+    # content is still the writer's, however many templates pass it on.
+    test "a prop error in slot content passed on through a nested slot names the template that wrote it" do
+      for passing_module <- [Module114, Module115] do
+        node = {:component, passing_module, [], [{:component, Module89, [], []}]}
+        env = %Renderer.Env{parent_module: Module64}
+
+        expected_msg =
+          ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", / <>
+            ~s/rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"/
+
+        assert_raise Hologram.PropError, expected_msg, fn ->
+          render_dom(node, env, @server)
+        end
+      end
+    end
+
+    test "slot content passed on through a nested slot renders in its place" do
+      node = {:component, Module115, [], [text: "123"]}
+      assert render_tree(node, @env, @server) == {[text: "abc123xyz"], %{}, @server}
+    end
+
+    test "slot content passed on through two slots of a nested usage renders in both" do
+      node = {:component, Module117, [], [text: "123"]}
+      assert render_tree(node, @env, @server) == {[text: "abc123123xyz"], %{}, @server}
+    end
+
     test "with multiple nodes" do
       node = {:component, Module8, [], [text: "123", expression: {456}]}
       assert render_dom(node, @env, @server) == {"abc123456xyz", %{}, @server}
@@ -1435,8 +1566,6 @@ defmodule Hologram.Template.RendererTest do
                     struct: %Component{
                       props: %{a: "34a_prop", cid: "component_34"},
                       state: %{
-                        cid: "component_34",
-                        a: "34a_prop",
                         b: "34b_state",
                         c: "34c_state",
                         x: "34x_state",
@@ -1449,14 +1578,14 @@ defmodule Hologram.Template.RendererTest do
                     module: Module35,
                     struct: %Component{
                       props: %{a: "35a_prop", cid: "component_35"},
-                      state: %{cid: "component_35", a: "35a_prop", z: "35z_state"}
+                      state: %{z: "35z_state"}
                     }
                   },
                   "component_36" => %{
                     module: Module36,
                     struct: %Component{
                       props: %{a: "36a_prop", cid: "component_36"},
-                      state: %{cid: "component_36", a: "36a_prop", z: "36z_state"}
+                      state: %{z: "36z_state"}
                     }
                   }
                 },
@@ -1771,6 +1900,595 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "render_tree/3, $data_transfer" do
+    test "leaves no attribute in the tree" do
+      # <div $drop="dropped" $data_transfer={drop_effect: :move}></div>
+      node = data_transfer_element(drop_effect: :move)
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a map" do
+      # <div $drop="dropped" $data_transfer={%{drop_effect: :copy}}></div>
+      node = data_transfer_element(%{drop_effect: :copy})
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a drop effect on a disabled drop target" do
+      # <div $drop={nil} $data_transfer={drop_effect: :move}></div>
+      node =
+        {:element, "div",
+         [
+           {"$drop", [expression: {nil}]},
+           {"$data_transfer", [expression: {[drop_effect: :move]}]}
+         ], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a drop effect on a drop target whose $drop binding has modifiers" do
+      # <div $drop.once="dropped" $data_transfer={drop_effect: :move}></div>
+      node =
+        {:element, "div",
+         [
+           {"$drop", [text: "dropped"], %{once: true}},
+           {"$data_transfer", [expression: {[drop_effect: :move]}]}
+         ], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes drag data" do
+      # <div $data_transfer={data: %{"text/plain" => "Buy milk", "text/uri-list" => nil}}></div>
+      node =
+        {:element, "div",
+         [
+           {"$data_transfer",
+            [expression: {[data: %{"text/plain" => "Buy milk", "text/uri-list" => nil}]}]}
+         ], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes an allowed effect" do
+      # <div $data_transfer={effects_allowed: :move}></div>
+      node = {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: :move]}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a list of allowed effects" do
+      # <div $data_transfer={effects_allowed: [:copy, :move]}></div>
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: [:copy, :move]]}]}],
+         []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes an empty list of allowed effects" do
+      # <div $data_transfer={effects_allowed: []}></div>
+      node = {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: []]}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a drag image" do
+      # <div $data_transfer={image: %{ref: {:task_preview, 42}, x: 16, y: 8}}></div>
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[image: %{ref: {:task_preview, 42}, x: 16, y: 8}]}]}],
+         []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a drag image with no offsets" do
+      # <div $data_transfer={image: %{ref: :task_preview}}></div>
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[image: %{ref: :task_preview}]}]}],
+         []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "takes a drag image with a nil ref" do
+      # <div $data_transfer={image: %{ref: nil}}></div>
+      node = {:element, "div", [{"$data_transfer", [expression: {[image: %{ref: nil}]}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "raises for a value that is neither a keyword list nor a map" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes a keyword list or a map, got :move",
+                   fn -> render_tree(data_transfer_element(:move), @env, @server) end
+    end
+
+    test "raises for a list that isn't a keyword list" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes a keyword list or a map, got [:move]",
+                   fn -> render_tree(data_transfer_element([:move]), @env, @server) end
+    end
+
+    test "raises for a struct" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes a keyword list or a map, got ~D[2026-11-10]",
+                   fn -> render_tree(data_transfer_element(~D[2026-11-10]), @env, @server) end
+    end
+
+    test "raises for an unknown key" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
+                   fn -> render_tree(data_transfer_element(effect: :move), @env, @server) end
+    end
+
+    test "raises for a map key that isn't an atom" do
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got "drop_effect"',
+                   fn ->
+                     render_tree(data_transfer_element(%{"drop_effect" => :move}), @env, @server)
+                   end
+    end
+
+    test "raises for a key given twice" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+                   fn ->
+                     render_tree(
+                       data_transfer_element(drop_effect: :move, drop_effect: :copy),
+                       @env,
+                       @server
+                     )
+                   end
+    end
+
+    test "raises for a key given twice before judging the entries" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+                   fn ->
+                     render_tree(
+                       data_transfer_element(drop_effect: :all, drop_effect: :move),
+                       @env,
+                       @server
+                     )
+                   end
+    end
+
+    test "judges a keyword list's entries in the order written" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
+                   fn ->
+                     render_tree(
+                       data_transfer_element(effect: :move, drop_effect: :all),
+                       @env,
+                       @server
+                     )
+                   end
+    end
+
+    test "judges a map's entries in the order of their keys" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn ->
+                     render_tree(
+                       data_transfer_element(%{effect: :move, drop_effect: :all}),
+                       @env,
+                       @server
+                     )
+                   end
+    end
+
+    test "raises for a drop effect outside the drop effects" do
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn -> render_tree(data_transfer_element(drop_effect: :all), @env, @server) end
+    end
+
+    test "raises for a drop effect that isn't an atom" do
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer drop_effect takes :none, :copy, :move or :link, got "move"',
+                   fn ->
+                     render_tree(data_transfer_element(drop_effect: "move"), @env, @server)
+                   end
+    end
+
+    test "raises for a drop effect on a tag with no $drop binding" do
+      # <div $data_transfer={drop_effect: :move}></div>
+      node = {:element, "div", [{"$data_transfer", [expression: {[drop_effect: :move]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drop effect on a <window> tag with no $drop binding" do
+      # <window $data_transfer={drop_effect: :move} />
+      node = {:element, "window", [{"$data_transfer", [expression: {[drop_effect: :move]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drop effect outside the drop effects on a <window> tag" do
+      # <window $drop="dropped" $data_transfer={drop_effect: :all} />
+      node =
+        {:element, "window",
+         [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: {[drop_effect: :all]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data that isn't a map" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[data: "Buy milk"]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got "Buy milk"',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data that is a struct" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[data: ~D[2026-11-10]]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got ~D[2026-11-10]',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data whose type isn't a string" do
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[data: %{text: "Buy milk"}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{text: "Buy milk"}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data whose value isn't a string or nil" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[data: %{"application/x-task" => 42}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"application/x-task" => 42}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data whose type isn't valid UTF-8" do
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[data: %{<<255>> => "Buy milk"}]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{<<255>> => "Buy milk"}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data whose value isn't valid UTF-8" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[data: %{"text/plain" => <<255>>}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"text/plain" => <<255>>}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for an allowed effect outside the effects" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: :all]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got :all",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a list of allowed effects holding one outside the effects" do
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[effects_allowed: [:move, :none]]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got [:move, :none]",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for an improper list of allowed effects" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[effects_allowed: [:move | :copy]]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got [:move | :copy]",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data on a <document> tag before judging it" do
+      node = {:element, "document", [{"$data_transfer", [expression: {[data: "Buy milk"]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer data goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for allowed effects on a <document> tag before judging them" do
+      node =
+        {:element, "document", [{"$data_transfer", [expression: {[effects_allowed: :all]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for drag data on a <window> tag before judging it" do
+      node = {:element, "window", [{"$data_transfer", [expression: {[data: "Buy milk"]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer data goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for allowed effects on a <window> tag before judging them" do
+      node =
+        {:element, "window", [{"$data_transfer", [expression: {[effects_allowed: :all]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer effects_allowed goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image that isn't a map" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[image: :task_preview]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got :task_preview',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image with no ref" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[image: %{x: 16}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{x: 16}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image with a key it doesn't take" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[image: %{ref: :task_preview, width: 16}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, width: 16}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image offset that isn't an integer" do
+      node =
+        {:element, "div",
+         [{"$data_transfer", [expression: {[image: %{ref: :task_preview, x: 16.5}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, x: 16.5}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image ref that isn't an identifier" do
+      node =
+        {:element, "div", [{"$data_transfer", [expression: {[image: %{ref: "task_preview"}]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: "task_preview"}',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image that is a struct" do
+      node = {:element, "div", [{"$data_transfer", [expression: {[image: ~D[2026-11-10]]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got ~D[2026-11-10]',
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image on a <document> tag" do
+      node =
+        {:element, "document",
+         [{"$data_transfer", [expression: {[image: %{ref: :task_preview}]}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer image goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "raises for a drag image on a <window> tag" do
+      node =
+        {:element, "window", [{"$data_transfer", [expression: {[image: %{ref: :task_preview}]}]}],
+         []}
+
+      assert_error Hologram.MisuseError,
+                   "the $data_transfer image goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> render_tree(node, @env, @server) end
+    end
+  end
+
+  describe "render_tree/3, refs" do
+    test "an element's ref leaves no attribute in the tree" do
+      assert render_tree(ref_element(:search), @env, @server) ==
+               {{:element, "div", [], []}, %{}, @server}
+    end
+
+    test "a ref of several parts leaves no attribute in the tree" do
+      # <div $ref={:message, 42}></div>
+      node = {:element, "div", [{"$ref", [expression: {:message, 42}]}], []}
+
+      assert render_tree(node, @env, @server) == {{:element, "div", [], []}, %{}, @server}
+    end
+  end
+
+  describe "render_dom/3, refs" do
+    test "raises for a value that isn't an identifier" do
+      assert_error Hologram.MisuseError,
+                   ~s/$ref takes an identifier, like :search or {:message, 42}, got: "search"/,
+                   fn -> render_dom(ref_element("search"), @env, @server) end
+    end
+
+    test "raises for a value that isn't an identifier, with the reason" do
+      assert_error Hologram.MisuseError,
+                   "$ref takes an identifier, like :search or {:message, 42}, got: {:message, nil} - nil, true and false can't be in an identifier",
+                   fn -> render_dom(ref_element({:message, nil}), @env, @server) end
+    end
+
+    test "raises for an Elixir reference, with a hint" do
+      ref = make_ref()
+
+      assert_error Hologram.MisuseError,
+                   "$ref takes an identifier, like :search or {:message, 42}, got: #{inspect(ref)} - an element ref is an identifier, not an Elixir reference",
+                   fn -> render_dom(ref_element(ref), @env, @server) end
+    end
+
+    test "raises for a built-in ref" do
+      for {ref, name} <- [window: "window", document: "document"] do
+        assert_error Hologram.MisuseError,
+                     ":#{name} is a built-in ref, so a template can't name an element with it - JS.element(:#{name}) returns the #{name}",
+                     fn -> render_dom(ref_element(ref), @env, @server) end
+      end
+    end
+
+    test "raises for a ref on the component a dynamic tag renders" do
+      node = {:dynamic_tag, {Module1}, [{"$ref", [expression: {:search}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "$ref can't go on the Hologram.Test.Fixtures.Template.Renderer.Module1 component a dynamic tag renders - " <>
+                     "a component renders no element of its own, so put $ref on an element in its template " <>
+                     "and pass the ref as a prop, like input_ref={:search}",
+                   fn -> render_dom(node, @env, @server) end
+    end
+
+    test "raises for a ref on a tag a dynamic tag renders that the build keeps refs off" do
+      messages = %{
+        "window" =>
+          "$ref can't go on a <window> tag, which renders no element - JS.element(:window) returns the window",
+        "document" =>
+          "$ref can't go on a <document> tag, which renders no element - JS.element(:document) returns the document",
+        "slot" =>
+          "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content",
+        "html" =>
+          "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element"
+      }
+
+      for {tag_name, message} <- messages do
+        node = {:dynamic_tag, {tag_name}, [{"$ref", [expression: {:root}]}], []}
+
+        assert_error Hologram.MisuseError, message, fn -> render_dom(node, @env, @server) end
+      end
+    end
+
+    test "a ref on the element a dynamic tag renders" do
+      node = {:dynamic_tag, {"div"}, [{"$ref", [expression: {:search}]}], []}
+
+      assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "raises for two elements of one template under one ref" do
+      env = %Renderer.Env{parent_module: Module64}
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :search, both from "Hologram.Test.Fixtures.Template.Renderer.Module64" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn ->
+                     render_dom([ref_element(:search), ref_element(:search)], env, @server)
+                   end
+    end
+
+    test "raises for elements of two components under one ref" do
+      nodes = [
+        {:component, Module118, [{"ref", [expression: {:search}]}], []},
+        {:component, Module119, [{"ref", [expression: {:search}]}], []}
+      ]
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :search, / <>
+                     ~s/one from "Hologram.Test.Fixtures.Template.Renderer.Module118" / <>
+                     ~s/and one from "Hologram.Test.Fixtures.Template.Renderer.Module119" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn -> render_dom(nodes, @env, @server) end
+    end
+
+    test "names slot content after the template that supplied it" do
+      node = {:component, Module118, [{"ref", [expression: {:search}]}], [ref_element(:search)]}
+      env = %Renderer.Env{parent_module: Module64}
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :search, / <>
+                     ~s/one from "Hologram.Test.Fixtures.Template.Renderer.Module118" / <>
+                     ~s/and one from "Hologram.Test.Fixtures.Template.Renderer.Module64" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn -> render_dom(node, env, @server) end
+    end
+
+    test "names an element before the elements inside it" do
+      node =
+        ref_element(:search, [{:component, Module119, [{"ref", [expression: {:search}]}], []}])
+
+      env = %Renderer.Env{parent_module: Module64}
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :search, / <>
+                     ~s/one from "Hologram.Test.Fixtures.Template.Renderer.Module64" / <>
+                     ~s/and one from "Hologram.Test.Fixtures.Template.Renderer.Module119" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn -> render_dom(node, env, @server) end
+    end
+
+    test "elements under refs that differ in their keys" do
+      nodes = [ref_element({:item, 1}), ref_element({:item, 2}), ref_element(:item)]
+
+      assert render_dom(nodes, @env, @server) ==
+               {"<div></div><div></div><div></div>", %{}, @server}
+    end
+
+    test "a ref of several parts names the same ref as the tuple it makes" do
+      # <div $ref={:message, 42}></div>
+      several_parts = {:element, "div", [{"$ref", [expression: {:message, 42}]}], []}
+
+      assert_error Hologram.MisuseError,
+                   "two elements are rendered under the ref {:message, 42} - " <>
+                     "a ref names one element, so give each element a ref of its own, like {:message, 42, item.id} for the items of a loop",
+                   fn ->
+                     render_dom([several_parts, ref_element({:message, 42})], @env, @server)
+                   end
+    end
+
+    test "the items of a loop and the branches of an if block render under refs of their own" do
+      node =
+        {:component, Module121,
+         [{"items", [expression: {[1, 2]}]}, {"open?", [expression: {true}]}], []}
+
+      assert render_dom(node, @env, @server) == {"<li></li><li></li><p></p>", %{}, @server}
+    end
+
+    test "a render that raised leaves no refs behind" do
+      assert_error Hologram.MisuseError,
+                   "two elements are rendered under the ref :search - " <>
+                     "a ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn ->
+                     render_dom([ref_element(:search), ref_element(:search)], @env, @server)
+                   end
+
+      assert render_dom(ref_element(:search), @env, @server) == {"<div></div>", %{}, @server}
+    end
+
+    test "each render claims its refs afresh" do
+      assert render_dom(ref_element(:search), @env, @server) == {"<div></div>", %{}, @server}
+      assert render_dom(ref_element(:search), @env, @server) == {"<div></div>", %{}, @server}
+    end
+  end
+
   describe "context" do
     setup do
       setup_asset_path_registry(AssetPathRegistryStub)
@@ -1953,6 +2671,95 @@ defmodule Hologram.Template.RendererTest do
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 
+    test "with declared state defaults and no init/3" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module102, :dummy_module_102_digest)
+
+      assert {"page state_a = 1, state_b = abc", component_registry, _server_struct} =
+               render_page_without_tree(Module102, @params, @server, @opts)
+
+      assert component_registry["page"].struct.state == %{a: 1, b: "abc"}
+    end
+
+    test "with declared state defaults, which init/3 sees and can override" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module104, :dummy_module_104_digest)
+
+      assert {"page state_a = 1, state_b = xyz", component_registry, _server_struct} =
+               render_page_without_tree(Module104, @params, @server, @opts)
+
+      assert component_registry["page"].struct.state == %{a: 1, b: "xyz", c: %{a: 1, b: "abc"}}
+    end
+
+    test "with state that init/3 put without declaring it" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module106, :dummy_module_106_digest)
+
+      expected_msg =
+        ~s/state "b" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module106", / <>
+          "but init/3 put it - declare it with state/2 or state/3"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_page_without_tree(Module106, @params, @server, @opts)
+      end
+    end
+
+    test "with params that init/3 copied into state" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module109, :dummy_module_109_digest)
+
+      expected_msg =
+        ~s/state "id" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module109", / <>
+          ~s/but init\/3 put it - "id" is a param, read it from component.props instead/
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_page_without_tree(Module109, %{id: 1}, @server, @opts)
+      end
+    end
+
+    test "with a cid entry that init/3 put into the page state" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module113, :dummy_module_113_digest)
+
+      expected_msg =
+        ~s/state "cid" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module113", / <>
+          ~s/but init\/3 put it - "cid" is the layout's cid prop, put the value under another name/
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_page_without_tree(Module113, @params, @server, @opts)
+      end
+    end
+
+    test "with state that the layout's init/3 put without declaring it" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module111, :dummy_module_111_digest)
+
+      expected_msg =
+        ~s/state "b" isn't declared in "Hologram.Test.Fixtures.Template.Renderer.Module112", / <>
+          "but init/3 put it - declare it with state/2 or state/3"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        render_page_without_tree(Module111, @params, @server, @opts)
+      end
+    end
+
+    test "a prop error in page content its layout passes on through a nested slot names the page" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module116, :dummy_module_116_digest)
+
+      expected_msg =
+        ~s/component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", / <>
+          ~s/rendered from "Hologram.Test.Fixtures.Template.Renderer.Module116"/
+
+      assert_raise Hologram.PropError, expected_msg, fn ->
+        render_page_without_tree(Module116, @params, @server, @opts)
+      end
+    end
+
+    test "raises for an element of the page and one of its layout under one ref" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module120, :dummy_module_120_digest)
+
+      assert_error Hologram.MisuseError,
+                   ~s/two elements are rendered under the ref :shared, / <>
+                     ~s/one from "Hologram.Test.Fixtures.Template.Renderer.Module118" / <>
+                     ~s/and one from "Hologram.Test.Fixtures.Template.Renderer.Module120" - / <>
+                     "a ref names one element, so give each element a ref of its own, like {:shared, item.id} for the items of a loop",
+                   fn -> render_page(Module120, @params, @server, @opts) end
+    end
+
     test "inside layout slot" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module14, :dummy_module_14_digest)
 
@@ -1987,20 +2794,20 @@ defmodule Hologram.Template.RendererTest do
                render_page_without_tree(Module27, @params, @server, @opts)
     end
 
-    test "aggregate page vars, giving state vars priority over param vars when there are name conflicts" do
+    test "aggregate page vars" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
 
       params = %{key_1: "param_value_1", key_2: "param_value_2"}
 
-      assert {~s'page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
+      assert {~s'page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;param_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _component_registry, _server_struct} =
                render_page_without_tree(Module21, params, @server, @opts)
     end
 
-    test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do
+    test "aggregate layout vars" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
 
-      assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
+      assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;prop_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _component_registry, _server_struct} =
                render_page_without_tree(Module24, @params, @server, @opts)
     end
@@ -3952,6 +4759,14 @@ defmodule Hologram.Template.RendererTest do
                {[{:element, "li", [{"$key", [text: "k:0#aabc"]}], []}], %{}, @server}
     end
 
+    test "an item with an identifier id" do
+      node =
+        {:loop_item, {%{id: {:post, 7}}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#tapost,i7"]}], []}], %{}, @server}
+    end
+
     test "an integer id and a string id with the same text give different keys" do
       li = {:element, "li", [{"$key", [text: "k:0"]}], []}
 
@@ -3973,17 +4788,19 @@ defmodule Hologram.Template.RendererTest do
 
     test "the characters keys are delimited by are escaped" do
       node =
-        {:loop_item, {%{id: "a#b:c\\d"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+        {:loop_item, {%{id: "a#b:c,d\\e"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
 
       assert render_tree(node, @env, @server) ==
-               {[{:element, "li", [{"$key", [text: "k:0#sa\\#b\\:c\\\\d"]}], []}], %{}, @server}
+               {[{:element, "li", [{"$key", [text: "k:0#sa\\#b\\:c\\,d\\\\e"]}], []}], %{},
+                @server}
     end
 
     test "an atom id is escaped" do
-      node = {:loop_item, {%{id: :"a#b:c"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
+      node =
+        {:loop_item, {%{id: :"a#b:c,d"}}, [{:element, "li", [{"$key", [text: "k:0"]}], []}]}
 
       assert render_tree(node, @env, @server) ==
-               {[{:element, "li", [{"$key", [text: "k:0#aa\\#b\\:c"]}], []}], %{}, @server}
+               {[{:element, "li", [{"$key", [text: "k:0#aa\\#b\\:c\\,d"]}], []}], %{}, @server}
     end
 
     test "a struct's module is escaped" do
@@ -4004,6 +4821,8 @@ defmodule Hologram.Template.RendererTest do
             %{id: 1.5},
             %{id: <<255>>},
             %{id: [1]},
+            %{id: {:post, nil}},
+            %{id: {1, 2}},
             %{name: "no id"},
             5,
             [id: 1]
@@ -4282,6 +5101,87 @@ defmodule Hologram.Template.RendererTest do
                {[{:element, "li", [{"$key", [text: "k:0#aabc"]}], []}], %{}, @server}
     end
 
+    test "an identifier $key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {:post, 7}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#tapost,i7"]}], []}], %{}, @server}
+    end
+
+    test "an identifier $key in the one-value form gives the same key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {{:post, 7}}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#tapost,i7"]}], []}], %{}, @server}
+    end
+
+    test "an identifier $key with several values" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {:cell, 1, "b"}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#tacell,i1,sb"]}], []}], %{}, @server}
+    end
+
+    test "a string in an identifier $key is escaped" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {:a, "x,y"}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#taa,sx\\,y"]}], []}], %{}, @server}
+    end
+
+    test "a string $key is escaped" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {"x,y"}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#sx\\,y"]}], []}], %{}, @server}
+    end
+
+    test "a map $key" do
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {%{id: 7, name: "a"}}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#i7"]}], []}], %{}, @server}
+    end
+
+    test "a struct $key" do
+      item = %{__struct__: MyApp.Comment, id: 7}
+
+      node =
+        {:loop_item, {%{id: 1}},
+         [{:element, "li", [{"$key", [text: "k:0", expression: {item}]}], []}]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#mElixir.MyApp.Comment#i7"]}], []}], %{},
+                @server}
+    end
+
+    test "an enclosing item's part follows a struct $key" do
+      item = %{__struct__: MyApp.Comment, id: 7}
+
+      node =
+        {:loop_item, {%{id: 1}},
+         [
+           {:loop_item, {{item, 0}},
+            [{:element, "li", [{"$key", [text: "k:0", expression: {item}]}], []}]}
+         ]}
+
+      assert render_tree(node, @env, @server) ==
+               {[{:element, "li", [{"$key", [text: "k:0#mElixir.MyApp.Comment#i7#i1"]}], []}],
+                %{}, @server}
+    end
+
     test "a sibling without $key keeps the item's own part" do
       node =
         {:loop_item, {%{id: 1}},
@@ -4316,43 +5216,6 @@ defmodule Hologram.Template.RendererTest do
                {{:element, "li", [{"$key", [text: "k:0#sabc"]}], []}, %{}, @server}
     end
 
-    test "a $key that can't be a key raises" do
-      for {value, text} <- [
-            {1.5, "1.5"},
-            {%{}, "%{}"},
-            {[1], "[1]"},
-            {nil, "nil"},
-            {true, "true"},
-            {false, "false"}
-          ] do
-        node = {:element, "li", [{"$key", [text: "k:0", expression: {value}]}], []}
-
-        assert_raise ArgumentError,
-                     "$key takes a string, an integer or an atom other than nil, true and false, got: #{text}",
-                     fn -> render_tree(node, @env, @server) end
-      end
-    end
-
-    test "a $key that can't be a key raises on an element keyed by what it loads" do
-      node =
-        {:element, "link",
-         [{"href", [text: "/a.css"]}, {"$key", [text: "k:0", expression: {1.5}]}], []}
-
-      assert_raise ArgumentError,
-                   "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
-                   fn -> render_tree(node, @env, @server) end
-    end
-
-    test "a $key that can't be a key raises before the element's children render" do
-      node =
-        {:element, "textarea", [{"$key", [text: "k:0", expression: {1.5}]}],
-         [expression: {%TrustedHTML{html: "<b>bold</b>"}}]}
-
-      assert_raise ArgumentError,
-                   "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
-                   fn -> render_tree(node, @env, @server) end
-    end
-
     test "a dynamic tag resolving to an element takes its $key" do
       node =
         {:loop_item, {%{id: 1}},
@@ -4380,6 +5243,31 @@ defmodule Hologram.Template.RendererTest do
 
       assert keyed_div_key == div_key <> "#sabc"
       assert keyed_p_key == p_key <> "#sabc"
+    end
+
+    test "a component's identifier $key" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node = {:component, Module1, [{"$key", [expression: {:post, 7}]}], []}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#tapost,i7"
+    end
+
+    test "a component's struct $key" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      item = %{__struct__: MyApp.Comment, id: 7}
+      node = {:component, Module1, [{"$key", [expression: {item}]}], []}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], %{}, @server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#mElixir.MyApp.Comment#i7"
     end
 
     test "a component's $key under an outer item" do
@@ -4481,6 +5369,19 @@ defmodule Hologram.Template.RendererTest do
       assert key == slot_key <> "#i5"
     end
 
+    test "a stateful component with an identifier cid" do
+      assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
+               render_tree({:component, Module1, [], []}, @env, @server)
+
+      node =
+        {:loop_item, {%{id: 1}}, [{:component, Module1, [{"cid", [expression: {:post, 7}]}], []}]}
+
+      assert {[{:element, "div", [{"$key", [text: key]}], _children}], _registry, _server} =
+               render_tree(node, @env, @server)
+
+      assert key == slot_key <> "#tapost,i7"
+    end
+
     test "a stateful component outside a loop item keeps the plain key" do
       assert {[{:element, "div", [{"$key", [text: slot_key]}], _children}], %{}, @server} =
                render_tree({:component, Module1, [], []}, @env, @server)
@@ -4528,11 +5429,68 @@ defmodule Hologram.Template.RendererTest do
                    fn -> render_tree(node, @env, @server) end
     end
 
+    test "a $key that can't be a key raises" do
+      for {value, text} <- [
+            {1.5, "1.5"},
+            {%{}, "%{} - the map has no :id that can be a key"},
+            {%{name: "a"}, ~s(%{name: "a"} - the map has no :id that can be a key)},
+            {%{id: nil}, "%{id: nil} - the map has no :id that can be a key"},
+            {%{id: 1.5}, "%{id: 1.5} - the map has no :id that can be a key"},
+            {%{__struct__: MyApp.Comment, id: nil},
+             "%{id: nil, __struct__: MyApp.Comment} - the map has no :id that can be a key"},
+            {[1], "[1]"},
+            {nil, "nil - nil, true and false can't be in an identifier"},
+            {true, "true - nil, true and false can't be in an identifier"},
+            {false, "false - nil, true and false can't be in an identifier"},
+            {<<255>>, "<<255>> - strings must be valid UTF-8"},
+            {{:post, nil}, "{:post, nil} - nil, true and false can't be in an identifier"},
+            {{"post", 1}, ~s({"post", 1} - an identifier tuple starts with an atom)},
+            {{:post}, "{:post} - an identifier tuple holds an atom and at least one more value"},
+            {{:post, 1.5},
+             "{:post, 1.5} - an identifier tuple holds only integers, strings and atoms after its atom"},
+            {{:post, <<255>>}, "{:post, <<255>>} - strings must be valid UTF-8"}
+          ] do
+        node = {:element, "li", [{"$key", [text: "k:0", expression: {value}]}], []}
+
+        assert_error ArgumentError,
+                     "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: #{text}",
+                     fn -> render_tree(node, @env, @server) end
+      end
+    end
+
+    test "a $key that can't be a key raises on an element keyed by what it loads" do
+      node =
+        {:element, "link",
+         [{"href", [text: "/a.css"]}, {"$key", [text: "k:0", expression: {1.5}]}], []}
+
+      assert_error ArgumentError,
+                   "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "a $key that can't be a key raises before the element's children render" do
+      node =
+        {:element, "textarea", [{"$key", [text: "k:0", expression: {1.5}]}],
+         [expression: {%TrustedHTML{html: "<b>bold</b>"}}]}
+
+      assert_error ArgumentError,
+                   "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
+    test "a $key that can't be a key raises in the multi-value form" do
+      node = {:element, "li", [{"$key", [text: "k:0", expression: {:post, nil}]}], []}
+
+      assert_error ArgumentError,
+                   "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: {:post, nil} - nil, true and false can't be in an identifier",
+                   fn -> render_tree(node, @env, @server) end
+    end
+
     test "a component's $key that can't be a key raises" do
       node = {:component, Module1, [{"$key", [expression: {1.5}]}], []}
 
-      assert_raise ArgumentError,
-                   "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+      assert_error ArgumentError,
+                   "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
                    fn -> render_tree(node, @env, @server) end
     end
   end
@@ -4550,6 +5508,17 @@ defmodule Hologram.Template.RendererTest do
   end
 
   defp collect_script_texts(_node), do: []
+
+  # <div $drop="dropped" $data_transfer={value}></div>
+  defp data_transfer_element(value) do
+    {:element, "div", [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: {value}]}],
+     []}
+  end
+
+  # <div $ref={ref}></div>
+  defp ref_element(ref, children \\ []) do
+    {:element, "div", [{"$ref", [expression: {ref}]}], children}
+  end
 
   # The page printed from its tree, as the controller prints a first page, here with nothing to fill
   # its markers with. Named for the tree it leaves out of what it returns.

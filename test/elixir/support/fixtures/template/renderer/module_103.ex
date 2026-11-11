@@ -1,28 +1,15 @@
-# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module103 do
-  use Hologram.Page
+  use Hologram.Component
 
-  alias Hologram.Test.Fixtures.Policy.Module1
+  state :a, :integer, default: 1
 
-  param :entity_id, :string
-
-  route "/hologram-test-fixtures-template-renderer-module103/:entity_id"
-
-  # The layout that renders Hologram.UI.Runtime, which is what puts the mount data - the rows a
-  # page carries among it - into the page.
-  layout Hologram.Test.Fixtures.Template.Renderer.Module49
-
-  @impl Page
-  def init(params, component, server) do
-    put_state(component, entity: %Module1{id: params.entity_id}, user_id: server.user_id)
+  @impl Component
+  def init(_props, _component, server) do
+    put_cookie(server, "cookie_key_103", :cookie_value_103)
   end
 
-  # Checked while RENDERING, so the client re-runs the same check - and needs the row answering
-  # it before the fill arrives.
-  @impl Page
+  @impl Component
   def template do
-    ~HOLO"""
-    may read = {can?(@user_id, :read, @entity)}
-    """
+    ~HOLO"<div>state_a = {@a}</div>"
   end
 end

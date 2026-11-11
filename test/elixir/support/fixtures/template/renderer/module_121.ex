@@ -1,17 +1,13 @@
-# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module121 do
-  use Hologram.Page
+  use Hologram.Component
 
-  alias Hologram.Test.Fixtures.Template.Renderer.Module122
+  prop :items, :list
+  prop :open?, :boolean
 
-  route "/hologram-test-fixtures-template-renderer-module121"
-
-  layout Hologram.Test.Fixtures.Template.Renderer.Module49
-
-  @impl Page
+  @impl Component
   def template do
     ~HOLO"""
-    <Module122 />
+    {%for item <- @items}<li $ref={:item, item}></li>{/for}{%if @open?}<p $ref="toggle"></p>{%else}<div $ref="toggle"></div>{/if}
     """
   end
 end

@@ -8,6 +8,9 @@ defmodule HologramFeatureTests.Events.ResizePage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :element_resize, :any
+  state :window_resize, :any
+
   def init(_params, component, _server) do
     put_state(component,
       element_resize: nil,

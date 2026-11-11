@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.TemplateSyntax.AttributeSpreadPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :attrs, :map
+
   def init(_params, component, _server) do
     put_state(component, :attrs, %{title: "value_3"})
   end

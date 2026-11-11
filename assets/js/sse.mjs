@@ -43,11 +43,24 @@ export default class Sse {
   static eventSource = null;
   static heartbeatIntervalMs = null;
   static heartbeatTimer = null;
+
+  // Whether the page has asked for the stream, which it does once it is first mounted.
+  static isStarted = false;
+
+  // Whether the page has been left: from pagehide until the browser brings the page back
+  // from its back/forward cache, if it ever does.
+  static isSuspended = false;
+
   static reconnectAttempts = 0;
 
   // The pending retry after a stream died, held so a deliberate restart can call it off - the same
   // bookkeeping `Connection` keeps for the websocket's.
   static reconnectTimer = null;
+
+  // Tells apart a connect() run that suspend() has overtaken from the current one: a
+  // handshake in flight when the page is left must neither open a stream nor schedule a retry.
+  static runId = 0;
+
   static stabilityTimer = null;
 
   // Exponential backoff with ±RECONNECT_JITTER noise. Mirrors the established
@@ -90,6 +103,9 @@ export default class Sse {
   }
 
   static async connect() {
+    const runId = $.runId;
+    const isStale = () => runId !== $.runId;
+
     try {
       const preHandshakeReceiptCount =
         App.subscriptionReceiptRegistry.entries.size;
@@ -99,6 +115,8 @@ export default class Sse {
         headers: {"Content-Type": "application/json"},
         body: Serializer.serialize($.buildHandshakePayload(), "server"),
       });
+
+      if (isStale()) return;
 
       if (!response.ok) {
         Logger.debug(`SSE handshake error: ${response.status}`);
@@ -111,6 +129,8 @@ export default class Sse {
         heartbeatIntervalMs,
         refreshedReceipts: serializedRefreshed,
       } = await response.json();
+
+      if (isStale()) return;
 
       const refreshed = Deserializer.deserialize(serializedRefreshed);
 
@@ -244,6 +264,9 @@ export default class Sse {
         $.handleStreamLoss(event.type);
       };
     } catch (error) {
+      // Leaving the page aborts a handshake in flight.
+      if (isStale()) return;
+
       Logger.debug(`SSE handshake error: ${error}`);
       $.scheduleReconnect();
     }
@@ -272,7 +295,12 @@ export default class Sse {
   // serve.
   // Answers the connect's own promise, so a caller that wants to know the new stream is up can
   // wait for it. Nothing in the framework does - a replaced stream is opened and forgotten.
+  //
+  // A page that has been left opens no stream: resume() connects, with the greeting of that
+  // moment, if the browser brings the page back.
   static reconnect() {
+    if ($.isSuspended) return Promise.resolve();
+
     // A retry the dying stream had already scheduled is called off, or it would open a second
     // stream on top of this one a moment later.
     clearTimeout($.reconnectTimer);
@@ -284,6 +312,19 @@ export default class Sse {
     return $.connect();
   }
 
+  // Reopens the stream on a page the browser brought back from its back/forward cache, where
+  // suspend() closed it. A page left before its first mount has nothing to reopen: start()
+  // opens the stream once the page is mounted.
+  static resume() {
+    if (!$.isSuspended) return;
+
+    $.isSuspended = false;
+
+    if ($.isStarted) {
+      $.connect();
+    }
+  }
+
   // Bump the failure counter and re-run the handshake protocol from scratch
   // after an exponential backoff delay. Shared by the handshake-failure paths
   // and the post-open EventSource onerror handler so a failure anywhere in the
@@ -293,6 +334,43 @@ export default class Sse {
     const delay = $.computeReconnectDelay($.reconnectAttempts);
 
     $.reconnectTimer = setTimeout(() => $.connect(), delay);
+  }
+
+  // Opens the stream the first time it is called, and does nothing after that: the page asks
+  // on every mount, while connect() and its retries keep the one stream alive from then on.
+  // Asking again while the first handshake is still in flight or being retried would start a
+  // second stream next to the first.
+  static start() {
+    if ($.isStarted) return;
+
+    $.isStarted = true;
+
+    if (!$.isSuspended) {
+      $.connect();
+    }
+  }
+
+  // Closes the stream when the page is left (pagehide), whether the document is being
+  // destroyed or put into the back/forward cache. Chrome keeps the stream of a destroyed
+  // document open (https://issues.chromium.org/issues/358538891), and over HTTP/1.1 six such
+  // streams use up the connections the browser allows per origin, so every further request
+  // to it stalls. Everything that could reopen the stream is cancelled along with it: the
+  // timers, and a handshake in flight (see runId).
+  static suspend() {
+    $.isSuspended = true;
+    $.runId++;
+
+    clearTimeout($.heartbeatTimer);
+    clearTimeout($.reconnectTimer);
+    clearTimeout($.stabilityTimer);
+
+    $.reconnectAttempts = 0;
+
+    if ($.eventSource !== null) {
+      $.eventSource.close();
+    }
+
+    GlobalRegistry.set("sseConnected?", false);
   }
 }
 

@@ -102,6 +102,37 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Evaluates the given module source code, which must raise Hologram.CompileError while its module
+  body runs, and returns the error message with the line of the code the error points at.
+  """
+  @spec compile_error_at(String.t()) :: {String.t(), pos_integer}
+  def compile_error_at(code) do
+    file = "compile_error_at.ex"
+
+    try do
+      Code.eval_string(code, [], file: file)
+    rescue
+      error in Hologram.CompileError ->
+        line =
+          Enum.find_value(__STACKTRACE__, fn {_module, function, _arity, location} ->
+            if function == :__MODULE__ and location[:file] == String.to_charlist(file) do
+              location[:line]
+            end
+          end)
+
+        if line == nil do
+          reraise ExUnit.AssertionError,
+                  [message: "Hologram.CompileError wasn't raised while the module body ran"],
+                  __STACKTRACE__
+        end
+
+        {error.message, line}
+    else
+      _result -> raise ExUnit.AssertionError, message: "expected Hologram.CompileError"
+    end
+  end
+
+  @doc """
   Returns how many times the given function is called, in any process, while the given function runs.
   """
   @spec count_calls(mfa, (-> any)) :: non_neg_integer

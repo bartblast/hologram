@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Components.PendingActionLayout do
   alias Hologram.UI.Runtime
   alias HologramFeatureTests.Components.CommonLayoutStyles
 
+  state :result, :any
+
   # The shell every page in this layout shares. Its cid is the same string on every page, so it is
   # what a dispatch aimed at the layout still resolves to after a navigation.
   def init(_params, component, _server) do

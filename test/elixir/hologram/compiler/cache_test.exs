@@ -82,6 +82,7 @@ defmodule Hologram.Compiler.CacheTest do
     })
 
     put_template_modules(%{Module1 => MapSet.new()})
+    put_template_refs(%{Module1 => {:ref, :search, 0}})
   end
 
   # One put per field the compile state dump holds, each with a value the empty cache does not hold.
@@ -102,7 +103,8 @@ defmodule Hologram.Compiler.CacheTest do
           mfas: []
         })
       end,
-      fn -> put_template_modules(%{Module1 => MapSet.new()}) end
+      fn -> put_template_modules(%{Module1 => MapSet.new()}) end,
+      fn -> put_template_refs(%{Module1 => {:ref, :search, 0}}) end
     ]
   end
 
@@ -129,10 +131,17 @@ defmodule Hologram.Compiler.CacheTest do
     test "forgets the dump time and the editable modules, and keeps the module infos" do
       %{module_info_plt: module_info_plt} = get()
       PLT.put(module_info_plt, Module1, %{digest: "a"})
-      put_module_infos(123, MapSet.new([Module1]))
+      put_module_infos({123, "t"}, MapSet.new([Module1]))
 
       assert clear_module_infos() == :ok
-      assert %{dumped_at: nil, editable_modules: nil, module_info_plt: ^module_info_plt} = get()
+
+      assert %{
+               dump_token: nil,
+               dumped_at: nil,
+               editable_modules: nil,
+               module_info_plt: ^module_info_plt
+             } = get()
+
       assert PLT.get(module_info_plt, Module1) == {:ok, %{digest: "a"}}
     end
 
@@ -187,6 +196,15 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().template_modules == template_modules
     end
 
+    test "keeps the template refs" do
+      template_refs = %{Module1 => {:ref, :search, 0}}
+      put_template_refs(template_refs)
+
+      clear_module_infos()
+
+      assert get().template_refs == template_refs
+    end
+
     test "keeps the bundle inputs" do
       bundle_inputs = %{client_stacktraces?: true, package_json_digest: "a"}
       put_bundle_inputs(bundle_inputs)
@@ -194,6 +212,32 @@ defmodule Hologram.Compiler.CacheTest do
       clear_module_infos()
 
       assert get().bundle_inputs == bundle_inputs
+    end
+  end
+
+  describe "compile_started?" do
+    test "is clear at first" do
+      refute get().compile_started?
+    end
+
+    test "is set by mark_compile_started/0, which returns whether it was set" do
+      refute mark_compile_started()
+      assert get().compile_started?
+      assert mark_compile_started()
+    end
+
+    test "is kept by clear_module_infos/0" do
+      mark_compile_started()
+      clear_module_infos()
+
+      assert get().compile_started?
+    end
+
+    test "is cleared by reset/0" do
+      mark_compile_started()
+      reset()
+
+      refute get().compile_started?
     end
   end
 
@@ -271,7 +315,7 @@ defmodule Hologram.Compiler.CacheTest do
     test "is left clear by put_module_infos/2", %{path: path} do
       dump_compile_state(path, false)
 
-      put_module_infos(123, MapSet.new([Module1]))
+      put_module_infos({123, "t"}, MapSet.new([Module1]))
 
       refute get().compile_state_changed?
     end
@@ -376,7 +420,8 @@ defmodule Hologram.Compiler.CacheTest do
                     mfas: [{Module1, :fun_1, 0}],
                     dynamic_calls: %{open: MapSet.new([{:__struct__, 0}])}
                   },
-                  template_modules: %{Module1 => MapSet.new()}
+                  template_modules: %{Module1 => MapSet.new()},
+                  template_refs: %{Module1 => {:ref, :search, 0}}
                 }}
     end
 
@@ -466,12 +511,13 @@ defmodule Hologram.Compiler.CacheTest do
       assert PLT.keys(pages_plt) == []
     end
 
-    test "forgets the pending pages, the runtime, the chunks, the data layer, the template modules and the encoding inputs" do
+    test "forgets the pending pages, the runtime, the chunks, the data layer, the template modules and refs and the encoding inputs" do
       put_chunks(chunks_state_reading(%{}))
       put_data_layer(data_layer_state())
       put_encoding_inputs(%{async_mfas: MapSet.new(), client_stacktraces?: true})
       put_pending_pages([Module1])
       put_template_modules(%{Module1 => MapSet.new()})
+      put_template_refs(%{Module1 => {:ref, :search, 0}})
 
       put_runtime(%{
         app_versions: [],
@@ -487,7 +533,8 @@ defmodule Hologram.Compiler.CacheTest do
                data_layer: nil,
                encoding_inputs: nil,
                runtime: nil,
-               template_modules: nil
+               template_modules: nil,
+               template_refs: nil
              } = get()
 
       assert get().pending_pages == MapSet.new()
@@ -498,7 +545,7 @@ defmodule Hologram.Compiler.CacheTest do
       CallGraph.add_vertex(call_graph, {Module1, :fun_1, 0})
       PLT.put(ir_plt, Module1, :ir_1)
       PLT.put(module_info_plt, Module1, %{digest: "a"})
-      put_module_infos(123, MapSet.new([Module1]))
+      put_module_infos({123, "t"}, MapSet.new([Module1]))
       put_app_versions(hologram: "1.0.0")
       bundle_inputs = %{client_stacktraces?: true}
       put_bundle_inputs(bundle_inputs)
@@ -562,7 +609,8 @@ defmodule Hologram.Compiler.CacheTest do
                pages_plt: %PLT{} = pages_plt,
                pending_pages: pending_pages,
                runtime: nil,
-               template_modules: nil
+               template_modules: nil,
+               template_refs: nil
              } = get()
 
       assert pending_pages == MapSet.new()
@@ -726,7 +774,8 @@ defmodule Hologram.Compiler.CacheTest do
                  mfas: [{Module1, :fun_1, 0}],
                  dynamic_calls: %{open: dynamic_calls_open}
                },
-               template_modules: template_modules
+               template_modules: template_modules,
+               template_refs: template_refs
              } = get()
 
       assert async_mfas == MapSet.new()
@@ -755,6 +804,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert js_binding_modules == MapSet.new()
       assert pending_pages == MapSet.new([Module2])
       assert template_modules == %{Module1 => MapSet.new()}
+      assert template_refs == %{Module1 => {:ref, :search, 0}}
 
       assert PLT.get_all(pages_plt) == %{
                Module1 => %{
@@ -836,6 +886,26 @@ defmodule Hologram.Compiler.CacheTest do
       assert pending_pages == MapSet.new([Module2])
     end
 
+    test "a dump written before the template refs were kept loads with no template refs", %{
+      path: path
+    } do
+      put_full_state()
+      dump_compile_state(path, false)
+
+      {1, compile_state} = read_compile_state_dump(path)
+
+      File.write!(
+        path,
+        SerializationUtils.serialize({1, Map.delete(compile_state, :template_refs)})
+      )
+
+      stop_cache()
+
+      assert load_compile_state(path) == :ok
+      assert %{template_modules: template_modules, template_refs: nil} = get()
+      assert template_modules == %{Module1 => MapSet.new()}
+    end
+
     test "a dump of another version is not loaded", %{path: path} do
       File.write!(
         path,
@@ -910,8 +980,15 @@ defmodule Hologram.Compiler.CacheTest do
   test "put_module_infos/2" do
     editable_modules = MapSet.new([Module1])
 
-    assert put_module_infos(123, editable_modules) == :ok
-    assert %{dumped_at: 123, editable_modules: ^editable_modules} = get()
+    assert put_module_infos({123, "t"}, editable_modules) == :ok
+
+    assert %{dump_token: "t", dumped_at: 123, editable_modules: ^editable_modules} = get()
+  end
+
+  test "put_module_infos/2 with no dump" do
+    put_module_infos(nil, MapSet.new())
+
+    assert %{dump_token: nil, dumped_at: nil, seen_dump_stamp: nil} = get()
   end
 
   test "put_module_metadata/1" do
@@ -960,6 +1037,13 @@ defmodule Hologram.Compiler.CacheTest do
     assert %{template_modules: ^template_modules} = get()
   end
 
+  test "put_template_refs/1" do
+    template_refs = %{Module1 => {:ref, :search, 0}, Module2 => {:seq, []}}
+
+    assert put_template_refs(template_refs) == :ok
+    assert %{template_refs: ^template_refs} = get()
+  end
+
   describe "reset/0" do
     test "stops the kept call graph and starts an empty one" do
       old_call_graph = get().call_graph
@@ -1005,16 +1089,21 @@ defmodule Hologram.Compiler.CacheTest do
     test "stops the kept module info PLT and starts an empty one, and forgets the dump time and the editable modules" do
       old_module_info_plt = get().module_info_plt
       PLT.put(old_module_info_plt, Module1, %{digest: "a"})
-      put_module_infos(123, MapSet.new([Module1]))
+      put_module_infos({123, "t"}, MapSet.new([Module1]))
 
       reset()
 
-      %{dumped_at: dumped_at, editable_modules: editable_modules, module_info_plt: new_plt} =
-        get()
+      %{
+        dump_token: dump_token,
+        dumped_at: dumped_at,
+        editable_modules: editable_modules,
+        module_info_plt: new_plt
+      } = get()
 
       refute Process.alive?(old_module_info_plt.pid)
       assert new_plt.table_ref != old_module_info_plt.table_ref
       assert PLT.keys(new_plt) == []
+      assert dump_token == nil
       assert dumped_at == nil
       assert editable_modules == nil
     end
@@ -1027,13 +1116,14 @@ defmodule Hologram.Compiler.CacheTest do
       assert get().pending_pages == MapSet.new()
     end
 
-    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the data layer, the template modules and the bundle inputs, and marks the compile state as unchanged" do
+    test "stops the kept page states and MFA lists and forgets the app versions, the module metadata, the runtime, the data layer, the template modules and refs and the bundle inputs, and marks the compile state as unchanged" do
       %{page_mfas_plt: old_page_mfas_plt, pages_plt: old_pages_plt} = get()
       put_app_versions(hologram: "1.0.0")
       put_bundle_inputs(%{client_stacktraces?: true})
       put_data_layer(data_layer_state())
       put_module_metadata(%{Module1 => %{app: :hologram, file: "lib/module_1.ex"}})
       put_template_modules(%{Module1 => MapSet.new()})
+      put_template_refs(%{Module1 => {:ref, :search, 0}})
       put_page(Module1, %{bundle_info: %{digest: "a", js_inputs: %{}}, modules: MapSet.new()}, [])
 
       put_runtime(%{
@@ -1054,7 +1144,8 @@ defmodule Hologram.Compiler.CacheTest do
         page_mfas_plt: new_page_mfas_plt,
         pages_plt: new_pages_plt,
         runtime: runtime,
-        template_modules: template_modules
+        template_modules: template_modules,
+        template_refs: template_refs
       } = get()
 
       refute Process.alive?(old_pages_plt.pid)
@@ -1070,6 +1161,7 @@ defmodule Hologram.Compiler.CacheTest do
       assert module_metadata == nil
       assert runtime == nil
       assert template_modules == nil
+      assert template_refs == nil
     end
   end
 
@@ -1092,5 +1184,54 @@ defmodule Hologram.Compiler.CacheTest do
     refute Process.alive?(page_mfas_plt.pid)
     refute Process.alive?(pages_plt.pid)
     assert :ets.whereis(Tracer) == :undefined
+  end
+
+  describe "reset_kept_state/0" do
+    test "forgets the kept state as reset/0 does" do
+      put_pending_pages([Module1])
+
+      assert reset_kept_state() == :ok
+      assert get().pending_pages == MapSet.new()
+    end
+
+    test "keeps the mark that a compile started and the module info dump the VM last saw" do
+      mark_compile_started()
+      put_seen_dump_stamp({123, "t"})
+
+      reset_kept_state()
+
+      assert %{compile_started?: true, seen_dump_stamp: {123, "t"}} = get()
+    end
+  end
+
+  describe "seen_dump_stamp" do
+    test "is nil at first" do
+      assert get().seen_dump_stamp == nil
+    end
+
+    test "is set by put_seen_dump_stamp/1" do
+      assert put_seen_dump_stamp({123, "t"}) == :ok
+      assert get().seen_dump_stamp == {123, "t"}
+    end
+
+    test "is set by put_module_infos/2" do
+      put_module_infos({123, "t"}, MapSet.new())
+
+      assert get().seen_dump_stamp == {123, "t"}
+    end
+
+    test "is kept by clear_module_infos/0" do
+      put_module_infos({123, "t"}, MapSet.new())
+      clear_module_infos()
+
+      assert %{dumped_at: nil, seen_dump_stamp: {123, "t"}} = get()
+    end
+
+    test "is forgotten by reset/0" do
+      put_seen_dump_stamp({123, "t"})
+      reset()
+
+      assert get().seen_dump_stamp == nil
+    end
   end
 end

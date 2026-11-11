@@ -8,9 +8,11 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module21 do
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
+  state :key_3, :string
+
   @impl Page
   def init(_params, component, _server) do
-    put_state(component, key_2: "state_value_2", key_3: "state_value_3")
+    put_state(component, key_3: "state_value_3")
   end
 
   # Can't use Hologram.Commons.KernelUtils.inspect/1 here,

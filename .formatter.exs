@@ -2,6 +2,8 @@ exported_locals_without_parens = [
   # Hologram.Component
   prop: 2,
   prop: 3,
+  state: 2,
+  state: 3,
 
   # Hologram.Entity
   allow: 1,

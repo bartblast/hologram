@@ -2,6 +2,8 @@
 defmodule Hologram.Test.Fixtures.Component.Module2 do
   use Hologram.Component
 
+  state :overriden, :boolean
+
   def init(_props, component) do
     put_state(component, :overriden, true)
   end

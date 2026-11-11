@@ -6,6 +6,8 @@ defmodule Hologram.Test.Fixtures.Page.Module2 do
 
   layout Hologram.Test.Fixtures.Page.Module4
 
+  state :overriden, :boolean
+
   def init(_params, component, server) do
     {put_state(component, :overriden, true), server}
   end

@@ -10,6 +10,10 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module44 do
 
   layout Module23
 
+  state :ecto_schema, :atom
+  state :fields, :map
+  state :struct, :map
+
   def init(_params, component, _server) do
     put_state(component,
       ecto_schema: Module24,

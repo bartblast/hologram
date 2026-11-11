@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.JavaScriptInterop.DOMPatchingPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :counter, :integer
+
   def init(_params, component, _server) do
     put_state(component, :counter, 0)
   end

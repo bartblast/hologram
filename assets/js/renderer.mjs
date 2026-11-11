@@ -5,10 +5,13 @@
 import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
+import Dispatch from "./dispatch.mjs";
+import ElementRefRegistry from "./element_ref_registry.mjs";
 import EventListeners from "./event_listeners.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import Identifier from "./identifier.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
 import Once from "./once.mjs";
@@ -20,6 +23,41 @@ import Vdom, {TRUSTED_HTML_SEL} from "./vdom.mjs";
 
 import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
+
+// The drop effects a $data_transfer drop_effect takes.
+//
+// WARNING: must match Hologram.Template.DataTransfer.
+const DROP_EFFECTS = ["none", "copy", "move", "link"];
+
+// The effectAllowed value for each set of effects a $data_transfer effects_allowed takes, by the
+// effects in alphabetical order.
+const EFFECT_ALLOWED_VALUES = {
+  "": "none",
+  copy: "copy",
+  "copy,link": "copyLink",
+  "copy,link,move": "all",
+  "copy,move": "copyMove",
+  link: "link",
+  "link,move": "linkMove",
+  move: "move",
+};
+
+// The effects a $data_transfer effects_allowed takes.
+//
+// WARNING: must match Hologram.Template.DataTransfer.
+const EFFECTS_ALLOWED = ["copy", "move", "link"];
+
+// An element ref and an Elixir reference are both called a ref, so a reference passed as one gets
+// this hint.
+//
+// WARNING: must match @elixir_reference_hint in Hologram.Template.Renderer, and the copy in
+// Elixir_Hologram_JS (elixir/hologram/js.mjs).
+const ELIXIR_REFERENCE_HINT =
+  "an element ref is an identifier, not an Elixir reference";
+
+// WARNING: must match @ref_expectation in Hologram.Template.Renderer.
+const REF_EXPECTATION =
+  "$ref takes an identifier, like :search or {:message, 42}";
 
 // The characters a value cannot carry into a script element as the text of a JavaScript string
 // literal, each with the escape sequence it is written as instead. Every sequence is valid inside
@@ -155,6 +193,17 @@ const TRUSTED_HTML_REFUSED_PARENTS = new Set([
 ]);
 
 export default class Renderer {
+  // Capture-phase drag listeners collected during the current render: an element's is a
+  // {vnode, eventName, handler}, since its live DOM node exists only after the patch, with the
+  // source function that puts its declaration on the drag for a drag source, and a
+  // <window>/<document> tag's is a {target, eventName, handler, dropSlots}, where dropSlots holds the
+  // slot key and once flag of each of the tag's enabled $drop bindings. They run as the event travels
+  // down from the window to the element, before any event binding on its path. They are kept apart
+  // from listenerBindings, whose positional slot keys must not shift when a $drop binding is enabled
+  // or disabled. resolveDragBindings turns them into registry bindings after the patch, and
+  // renderPage() resets this.
+  static dragBindings = [];
+
   // Event listener bindings collected during the current render, each a {target, key, attach,
   // handler} descriptor (see EventListenerRegistry). A <window> or <document> tag pushes here (with
   // the window or document target) instead of producing a vnode. renderPage() resets this, and the
@@ -167,6 +216,12 @@ export default class Renderer {
   // resolveReachBindings turns it into a registry binding once `.elm` exists. renderPage() resets
   // this.
   static reachBindings = [];
+
+  // The refs collected during the current render, each a {ref, module, vnode} under the ref's
+  // encoded map key, where module is the one whose template wrote the element. The vnode is set
+  // once the element's vnode exists, and resolveRefBindings reads its live element after the patch.
+  // renderPage() resets this.
+  static refBindings = new Map();
 
   // Deferred resize-observer bindings collected during the current render, each a {vnode, handler}.
   // An element's observer target is its live DOM node, which Snabbdom sets on the vnode only during
@@ -187,6 +242,14 @@ export default class Renderer {
   // a page load however the diff reused its nodes, so every element it declares focused is a
   // candidate, not only one whose declaration changed. settleFocus() clears it.
   static isPageArrival = false;
+
+  // The dragstart events a drag source has been applied for, so the other sources on the path
+  // leave them alone.
+  static #appliedDragStarts = new WeakSet();
+
+  // The elements whose $data_transfer declares what a drag starting in them carries, each with the
+  // function that puts it on the drag, rebuilt by resolveDragBindings after each patch.
+  static #dragSources = new WeakMap();
 
   // Based on Elixir Renderer.encode_tree/1, which it inverts clause for clause.
   //
@@ -264,6 +327,7 @@ export default class Renderer {
           defaultTarget,
           parentTagName,
           parentModule,
+          slotsParentModule,
           keyScope,
         );
 
@@ -325,6 +389,22 @@ export default class Renderer {
           keyScope,
         );
 
+      // Slot content passed on through a nested slot renders as written by the template that
+      // supplied it.
+      //
+      // WARNING: must match render_tree/3's slot_content clause on the server.
+      case "slot_content":
+        return Renderer.renderDom(
+          dom.data[2],
+          context,
+          slots,
+          defaultTarget,
+          parentTagName,
+          dom.data[1],
+          slotsParentModule,
+          keyScope,
+        );
+
       case "dynamic_tag":
         return Renderer.#renderDynamicTag(
           dom,
@@ -362,8 +442,10 @@ export default class Renderer {
 
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
+    Renderer.dragBindings = [];
     Renderer.listenerBindings = [];
     Renderer.reachBindings = [];
+    Renderer.refBindings = new Map();
     Renderer.resizeBindings = [];
 
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
@@ -430,6 +512,42 @@ export default class Renderer {
     $.blurCandidates = [];
   }
 
+  // Resolves this render's capture-phase drag listeners into {target, key, attach, handler} registry
+  // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. A target's
+  // bindings for one event share one registry listener, which reconcile keeps across renders and
+  // only swaps its handlers.
+  //
+  // A <window>/<document> tag whose $drop bindings are all spent once bindings is no longer a drop
+  // target: resolveListenerBindings drops those bindings, so nothing would prevent the drop's
+  // default, and a drag the page accepts would then open the dropped file or link. An element keeps
+  // its spent once binding, which goes on preventing the drop's default, so it stays a drop target.
+  static resolveDragBindings() {
+    $.#dragSources = new WeakMap(
+      $.dragBindings
+        .filter(({source}) => source !== undefined)
+        .map(({vnode, source}) => [vnode.elm, source]),
+    );
+
+    return $.dragBindings
+      .filter(
+        ({target, dropSlots}) =>
+          !dropSlots?.every(
+            ({once, slotKey}) => once && Once.hasFired(target, slotKey),
+          ),
+      )
+      .map(({vnode, target, eventName, handler}) => {
+        const bindingTarget = vnode ? vnode.elm : target;
+
+        const {key, attach} = EventListeners.domEvent(
+          bindingTarget,
+          eventName,
+          true,
+        );
+
+        return {target: bindingTarget, key, attach, handler};
+      });
+  }
+
   // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
   // reconcile detaches its real listener through the same path that removes a vanished binding. The
   // fired-state is keyed by the binding's target and slot, both carried on the binding. The drop is
@@ -463,6 +581,14 @@ export default class Renderer {
 
         return {target: vnode.elm, key, attach, handler};
       });
+  }
+
+  // Resolves this render's refs into the elements rendered under them, by the ref's encoded map
+  // key, called after Snabbdom has patched so each carried vnode's `.elm` is live.
+  static resolveRefBindings() {
+    return new Map(
+      Array.from($.refBindings, ([key, {vnode}]) => [key, vnode.elm]),
+    );
   }
 
   // Resolves this render's deferred resize bindings into {target, key, attach, handler} registry
@@ -550,6 +676,35 @@ export default class Renderer {
     return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
   }
 
+  // Based on validate_declared_state/3
+  //
+  // put_state/2,3 can't tell which module it runs in, so the state is checked where the struct comes
+  // back from the module's own code. Of several undeclared keys the smallest in term order is named,
+  // so the message doesn't depend on map order.
+  //
+  // WARNING: must match validate_declared_state/3 on the server.
+  static validateDeclaredState(state, moduleProxy, handler) {
+    const declaredNames = Renderer.#getDeclaredStateNames(moduleProxy);
+
+    // The map's data is keyed by encoded keys already.
+    const undeclaredKeys = Object.entries(state.data)
+      .filter(([encodedKey, _entry]) => !declaredNames.has(encodedKey))
+      .map(([_encodedKey, [key, _value]]) => key);
+
+    if (undeclaredKeys.length === 0) {
+      return;
+    }
+
+    Interpreter.raiseError(
+      "Hologram.StateError",
+      Renderer.#undeclaredStateMessage(
+        Renderer.#smallestStateKey(undeclaredKeys),
+        moduleProxy,
+        handler,
+      ),
+    );
+  }
+
   static valueDomToBitstring(valueDom) {
     // Cache the property access
     const valueParts = valueDom.data;
@@ -595,6 +750,83 @@ export default class Renderer {
     );
   }
 
+  // Puts the element rendered under the drag image's ref on the drag, at its offset from the
+  // pointer. What's on the page decides whether there is one, and a drag shouldn't fail over its
+  // preview, so a ref with nothing under it logs an error and leaves the browser's default image.
+  static #applyDragImage(store, {ref, x, y}) {
+    if (ref === null) {
+      return;
+    }
+
+    if (
+      Type.isAtom(ref) &&
+      (ref.value === "window" || ref.value === "document")
+    ) {
+      console.error(
+        `Hologram: the drag image needs an element, but :${ref.value} names the ${ref.value}, so the browser's default drag image is used`,
+      );
+
+      return;
+    }
+
+    const element = ElementRefRegistry.get(ref);
+
+    if (element === null) {
+      console.error(
+        `Hologram: no element is rendered under the drag image's ref ${Interpreter.inspect(ref)}${ElementRefRegistry.missingElementHint(ref, null)}, so the browser's default drag image is used`,
+      );
+
+      return;
+    }
+
+    store.setDragImage(element, x, y);
+  }
+
+  // Puts a drag source's declaration on the drag: each data type's string, a nil removing its type,
+  // and the allowed effects and the drag image when declared. Other data the browser put on a link
+  // or an image stays.
+  static #applyDragSource(event, dataTransfer) {
+    const store = event.dataTransfer;
+
+    if (!store) {
+      return;
+    }
+
+    for (const [type, value] of dataTransfer.data) {
+      if (value === null) {
+        store.clearData(type);
+      } else {
+        store.setData(type, value);
+      }
+    }
+
+    if (dataTransfer.effectsAllowed !== null) {
+      store.effectAllowed = dataTransfer.effectsAllowed;
+    }
+
+    if (dataTransfer.image !== null) {
+      $.#applyDragImage(store, dataTransfer.image);
+    }
+  }
+
+  // The dragstart listener every drag source shares. The first to run for a drag applies the
+  // nearest source on the event's path, from where the drag starts outward, and the others skip
+  // the drag.
+  static #applyNearestDragSource(event) {
+    if ($.#appliedDragStarts.has(event)) {
+      return;
+    }
+
+    $.#appliedDragStarts.add(event);
+
+    const source = event
+      .composedPath()
+      .map((node) => $.#dragSources.get(node))
+      .find((candidate) => candidate !== undefined);
+
+    source?.(event);
+  }
+
   // Builds one event binding from a "$"-prefixed attribute, shared by element and window bindings.
   // Returns an {eventName, handler} descriptor (the handler runs modifier matching, dispatch, and
   // debounce/throttle), or null when the attribute is not an event binding. slotKey identifies the
@@ -622,10 +854,24 @@ export default class Renderer {
       return null;
     }
 
+    // $data_transfer declares what a drag carries and how a drop target takes it, which the drag
+    // listeners apply, so it binds nothing either. Without this it would register a listener for an
+    // event called "datatransfer", which no browser fires.
+    if (originalEventName === "data_transfer") {
+      return null;
+    }
+
     // $focused says whether the element should have focus rather than something that happens to it,
     // so it binds nothing either. Without this it would register a listener for an event called
     // "focused", which no browser fires.
     if (originalEventName === "focused") {
+      return null;
+    }
+
+    // $ref names the element for a lookup rather than something that happens to it, so it binds
+    // nothing either. Without this it would register a listener for an event called "ref", which no
+    // browser fires.
+    if (originalEventName === "ref") {
       return null;
     }
 
@@ -847,6 +1093,57 @@ export default class Renderer {
     });
   }
 
+  // An element whose $data_transfer declares data, allowed effects or a drag image is a drag
+  // source. A drag that starts in it, on it or on an element inside it that declares none, carries
+  // what it declares. Nested sources would each put theirs on the same drag, so only the one
+  // nearest to where the drag starts does: every source gets a capture-phase dragstart listener,
+  // and the first to run, the outermost, looks up the nearest source on the event's path and
+  // applies it for all of them. Running in the capture phase, it applies before any $drag_start
+  // binding on the path reads the drag.
+  static #collectDragSourceBinding(elementVnode, dataTransfer) {
+    if (!dataTransfer?.isSource) {
+      return;
+    }
+
+    $.dragBindings.push({
+      vnode: elementVnode,
+      eventName: "dragstart",
+      handler: $.#applyNearestDragSource,
+      source: (event) => $.#applyDragSource(event, dataTransfer),
+    });
+  }
+
+  // An element or a <window>/<document> tag with an enabled $drop binding is a drop target. The
+  // browser fires drop only on an element whose dragenter and dragover defaults were prevented, so
+  // both are, by one pair of capture-phase listeners however many $drop bindings the tag has. A
+  // disabled $drop leaves the drag alone. The drop's own default is the $drop binding's to prevent
+  // (see DropEvent), so allow_default can let it through.
+  //
+  // A drop target's declared drop effect is set by the same listeners. They run from the window
+  // inward, so the nearest drop target that declares one has the last word.
+  static #collectDropTargetBindings(attrsDom, place, dataTransfer) {
+    if (!attrsDom.data.some((attrDom) => $.#isEnabledDropBinding(attrDom))) {
+      return;
+    }
+
+    const dropEffect = dataTransfer?.dropEffect ?? null;
+
+    const handler =
+      dropEffect === null
+        ? $.#preventDefault
+        : (event) => {
+            $.#preventDefault(event);
+
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = dropEffect;
+            }
+          };
+
+    for (const eventName of ["dragenter", "dragover"]) {
+      $.dragBindings.push({...place, eventName, handler});
+    }
+  }
+
   // Snabbdom insert hook: runs once the whole patch is in the document, where .focus() can work -
   // the create hook runs before the element is attached. An element that enters the page carrying
   // autofocus takes focus, whether $focused put it there or the template wrote it, on a mount and
@@ -864,6 +1161,13 @@ export default class Renderer {
   // target share a currentTarget. A bare tag (no attributes) records nothing. A listener target has
   // no element tag name, so event-name mapping is skipped (passed null).
   static #collectListenerBindings(target, attrsDom, defaultTarget) {
+    const dataTransfer = $.#renderDataTransfer(
+      attrsDom,
+      target === window ? "window" : "document",
+    );
+
+    const dropSlots = [];
+
     attrsDom.data.forEach((attrDom) => {
       const slotKey = $.listenerBindings.length;
 
@@ -881,16 +1185,24 @@ export default class Renderer {
           binding.eventName,
         );
 
+        const once = $.#onceFromModifiers(attrDom.data[2]);
+
         $.listenerBindings.push({
           target,
           key,
           attach,
           handler: binding.handler,
           slotKey,
-          once: $.#onceFromModifiers(attrDom.data[2]),
+          once,
         });
+
+        if ($.#isEnabledDropBinding(attrDom)) {
+          dropSlots.push({once, slotKey});
+        }
       }
     });
+
+    $.#collectDropTargetBindings(attrsDom, {target, dropSlots}, dataTransfer);
   }
 
   // Records each $reach_<edge> attribute on the element as a deferred scroll-edge binding. A reach
@@ -1050,6 +1362,38 @@ export default class Renderer {
     );
   }
 
+  // Based on data_transfer_entries/1
+  // The entries of a $data_transfer value: a keyword list's, each key once, in the order written, or
+  // a map's, in the order of their keys, which both renderers can reproduce.
+  static #dataTransferEntries(value) {
+    if (Type.isMap(value) && !Type.isStruct(value)) {
+      return Object.values(value.data).sort(([keyA], [keyB]) =>
+        Interpreter.compareTerms(keyA, keyB),
+      );
+    }
+
+    if (!Type.isProperList(value) || !Type.isKeywordList(value)) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer attribute takes a keyword list or a map, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    const entries = value.data.map((entry) => entry.data);
+    const seenKeys = new Set();
+
+    for (const [key] of entries) {
+      if (seenKeys.has(key.value)) {
+        Interpreter.raiseMisuseError(
+          `the $data_transfer attribute takes each key once, but got the ${$.#inspectDataTransferValue(key)} key twice`,
+        );
+      }
+
+      seenKeys.add(key.value);
+    }
+
+    return entries;
+  }
+
   // Returns the debounce window in milliseconds from a modifiers map, or null when there is no
   // debounce modifier.
   // Deps: [:maps.get/3]
@@ -1150,16 +1494,28 @@ export default class Renderer {
     return null;
   }
 
+  // Based on duplicate_ref_message/3
+  //
+  // WARNING: must match duplicate_ref_message/3 on the server.
+  static #duplicateRefMessage(ref, firstModule, secondModule) {
+    return (
+      `two elements are rendered under the ref ${Interpreter.inspect(ref)}${$.#refWriters(firstModule, secondModule)} - ` +
+      "a ref names one element, so give each element a ref of its own, " +
+      `like ${$.#refExample(ref)} for the items of a loop`
+    );
+  }
+
   // Based on escape_key_text/1
   //
   // Backslash-escapes the characters key parts are delimited by. The slot key holds no "#", its
-  // hash being base 36, so with values escaped every unescaped "#" after it starts a part and
-  // every unescaped ":" is a suffix Vdom.dedupeKeys adds. A value can therefore never pose as
-  // another part or as a repeat's number.
+  // hash being base 36, so with values escaped every unescaped "#" after it starts a part, every
+  // unescaped ":" is a suffix Vdom.dedupeKeys adds, and every unescaped "," inside a tuple's body
+  // ends one of its elements. A value can therefore never pose as another part, as a repeat's
+  // number or as two elements of a tuple.
   //
   // WARNING: must match escape_key_text/1 on the server.
   static #escapeKeyText(text) {
-    return text.replace(/[\\#:]/g, "\\$&");
+    return text.replace(/[\\#:,]/g, "\\$&");
   }
 
   // Based on stringify_for_script_interpolation/1
@@ -1250,57 +1606,60 @@ export default class Renderer {
       : propsDom.data;
   }
 
-  // Based on expand_slots/2 (including fallback case)
-  static #expandSlots(dom, slots) {
+  // Based on expand_slots/3 (including fallback case)
+  static #expandSlots(dom, slots, supplier) {
     if (Type.isList(dom)) {
-      return Renderer.#expandSlotsInNodes(dom, slots);
+      return Renderer.#expandSlotsInNodes(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "component") {
-      return Renderer.#expandSlotsInComponentNode(dom, slots);
+      return Renderer.#expandSlotsInComponentNode(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "dynamic_tag") {
-      return Renderer.#expandSlotsInDynamicTagNode(dom, slots);
+      return Renderer.#expandSlotsInDynamicTagNode(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "element") {
-      return Renderer.#expandSlotsInElementNode(dom, slots);
+      return Renderer.#expandSlotsInElementNode(dom, slots, supplier);
     }
 
     if (dom.data[0].value === "loop_item") {
-      return Renderer.#expandSlotsInLoopItemNode(dom, slots);
+      return Renderer.#expandSlotsInLoopItemNode(dom, slots, supplier);
     }
 
     return dom;
   }
 
   // Based on expand_slots/3 (component case)
-  static #expandSlotsInComponentNode(dom, slots) {
+  static #expandSlotsInComponentNode(dom, slots, supplier) {
     const [nodeType, moduleAlias, propsDom, childrenDom] = dom.data;
 
     return Type.tuple([
       nodeType,
       moduleAlias,
       propsDom,
-      Renderer.#expandSlots(childrenDom, slots),
+      Renderer.#expandSlots(childrenDom, slots, supplier),
     ]);
   }
 
   // Based on expand_slots/3 (dynamic tag case)
-  static #expandSlotsInDynamicTagNode(dom, slots) {
+  static #expandSlotsInDynamicTagNode(dom, slots, supplier) {
     const [nodeType, value, attrsDom, childrenDom] = dom.data;
 
     return Type.tuple([
       nodeType,
       value,
       attrsDom,
-      Renderer.#expandSlots(childrenDom, slots),
+      Renderer.#expandSlots(childrenDom, slots, supplier),
     ]);
   }
 
   // Based on expand_slots/3 (element cases)
-  static #expandSlotsInElementNode(dom, slots) {
+  //
+  // The content goes on rendering as written by the template that supplied it, though it now sits
+  // in the children of a usage another template wrote.
+  static #expandSlotsInElementNode(dom, slots, supplier) {
     const [nodeType, tagName, attrsDom, childrenDom] = dom.data;
 
     if (Interpreter.isStrictlyEqual(tagName, Type.bitstring("slot"))) {
@@ -1309,32 +1668,38 @@ export default class Renderer {
         Type.atom("default"),
       );
 
-      return slotDom ? slotDom : Type.nil();
+      return slotDom
+        ? Type.tuple([Type.atom("slot_content"), supplier, slotDom])
+        : Type.nil();
     }
 
     return Type.tuple([
       nodeType,
       tagName,
       attrsDom,
-      Renderer.#expandSlots(childrenDom, slots),
+      Renderer.#expandSlots(childrenDom, slots, supplier),
     ]);
   }
 
-  // Based on expand_slots/2 (loop item case)
-  static #expandSlotsInLoopItemNode(dom, slots) {
+  // Based on expand_slots/3 (loop item case)
+  static #expandSlotsInLoopItemNode(dom, slots, supplier) {
     const [nodeType, source, nodes] = dom.data;
 
-    return Type.tuple([nodeType, source, Renderer.#expandSlots(nodes, slots)]);
+    return Type.tuple([
+      nodeType,
+      source,
+      Renderer.#expandSlots(nodes, slots, supplier),
+    ]);
   }
 
   // Based on expand_slots/3 (list case)
   // Deps: [:lists.flatten/1]
-  static #expandSlotsInNodes(nodes, slots) {
+  static #expandSlotsInNodes(nodes, slots, supplier) {
     return Erlang_Lists["flatten/1"](
       Type.list(
         nodes.data
           .filter((node) => !Type.isNil(node))
-          .map((node) => Renderer.#expandSlots(node, slots)),
+          .map((node) => Renderer.#expandSlots(node, slots, supplier)),
       ),
     );
   }
@@ -1390,11 +1755,7 @@ export default class Renderer {
         Type.atom("expression"),
       )
     ) {
-      if (valueDom.data[0].data[1].data.length === 1) {
-        evaluatedValue = valueDom.data[0].data[1].data[0];
-      } else {
-        evaluatedValue = valueDom.data[0].data[1];
-      }
+      evaluatedValue = $.#expressionValue(valueDom.data[0].data[1]);
     } else {
       evaluatedValue = Renderer.valueDomToBitstring(valueDom);
     }
@@ -1439,7 +1800,7 @@ export default class Renderer {
 
       for (const partDom of propDom.data[1].data) {
         if (Type.isRecordTuple(partDom, "expression", 2)) {
-          return partDom.data[1].data[0];
+          return $.#expressionValue(partDom.data[1]);
         }
       }
     }
@@ -1447,22 +1808,59 @@ export default class Renderer {
     return null;
   }
 
+  // Based on explicit_key_hint/1
+  //
+  // Why a value that can't be a key can't be one, for the $key error. Only a binary that isn't
+  // valid UTF-8 gets here among strings, and only a map whose :id can't be a key among maps.
+  //
+  // WARNING: must match explicit_key_hint/1 on the server.
+  static #explicitKeyHint(value) {
+    if (Type.isBinary(value)) {
+      return "strings must be valid UTF-8";
+    }
+
+    if (Type.isMap(value)) {
+      return "the map has no :id that can be a key";
+    }
+
+    return Identifier.check(value).hint;
+  }
+
   // Based on explicit_key_part/1
   //
   // The key part of a $key the template author wrote, which raises for a value that can't be a
-  // key, since the author asked for that key.
+  // key, since the author asked for that key. A map or struct gives the part a loop over it would
+  // give it, so $key={comment} keys a comment the way the automatic key does.
   //
   // WARNING: must match explicit_key_part/1 on the server.
   static #explicitKeyPart(value) {
+    if (Type.isMap(value)) {
+      const part = $.#itemKeyPart(Type.tuple([value]));
+
+      if (part === null) {
+        $.#raiseInvalidExplicitKey(value);
+      }
+
+      return part;
+    }
+
     const body = $.#keyBody(value);
 
     if (body === null) {
-      Interpreter.raiseArgumentError(
-        `$key takes a string, an integer or an atom other than nil, true and false, got: ${Interpreter.inspect(value)}`,
-      );
+      $.#raiseInvalidExplicitKey(value);
     }
 
     return `#${body}`;
+  }
+
+  // Based on expression_value/1
+  //
+  // The value an expression evaluates to: the one value of {value}, or the whole tuple when the
+  // braces hold none or several, so $key={:post, id} and $key={{:post, id}} give the same key.
+  //
+  // WARNING: must match expression_value/1 on the server.
+  static #expressionValue(expression) {
+    return expression.data.length === 1 ? expression.data[0] : expression;
   }
 
   // Based on filter_allowed_props/2
@@ -1488,6 +1886,16 @@ export default class Renderer {
       allowedPropNames.some((name) =>
         Interpreter.isStrictlyEqual(name, propDom.data[0]),
       ),
+    );
+  }
+
+  // The first "$"-prefixed attribute of the given name a tag carries, or null. Spread entries can't
+  // carry such names, so they are passed over.
+  static #findAttribute(attrsDom, name) {
+    return (
+      attrsDom.data.find(
+        (attrDom) => $.#eventAttributeName(attrDom) === name,
+      ) ?? null
     );
   }
 
@@ -1578,12 +1986,54 @@ export default class Renderer {
     return moduleProxy.__constrainedProps__;
   }
 
+  // The names of the module's declared state entries, as encoded map keys, cached on the module
+  // proxy like the defaults.
+  static #getDeclaredStateNames(moduleProxy) {
+    if (!("__declaredStateNames__" in moduleProxy)) {
+      moduleProxy.__declaredStateNames__ = new Set(
+        moduleProxy["__state__/0"]().data.map((definition) =>
+          Type.encodeMapKey(definition.data[0]),
+        ),
+      );
+    }
+
+    return moduleProxy.__declaredStateNames__;
+  }
+
   static #getPropDefinitions(moduleProxy) {
     if (!("__props__" in moduleProxy)) {
       moduleProxy.__props__ = moduleProxy["__props__/0"]();
     }
 
     return moduleProxy.__props__;
+  }
+
+  // Based on state_defaults/1
+  //
+  // The declared defaults are a property of the module, so the map is built once and cached on the
+  // module proxy. Every component initialized from it shares the map, which is safe since nothing
+  // changes a state map in place: every write builds a new one.
+  // Deps: [:lists.keyfind/3]
+  static #getStateDefaults(moduleProxy) {
+    if (!("__stateDefaults__" in moduleProxy)) {
+      const entries = moduleProxy["__state__/0"]()
+        .data.map((definition) => {
+          const defaultEntry = Erlang_Lists["keyfind/3"](
+            Type.atom("default"),
+            Type.integer(1),
+            definition.data[2],
+          );
+
+          return Type.isFalse(defaultEntry)
+            ? null
+            : [definition.data[0], defaultEntry.data[1]];
+        })
+        .filter((entry) => entry !== null);
+
+      moduleProxy.__stateDefaults__ = Type.map(entries);
+    }
+
+    return moduleProxy.__stateDefaults__;
   }
 
   // autofocus is a boolean attribute, so its presence is what counts: a bare attribute renders as
@@ -1706,6 +2156,21 @@ export default class Renderer {
     return `dynamic tag expression must evaluate to a component module or an HTML tag name string, got: ${Interpreter.inspect(value)}`;
   }
 
+  // Based on Hologram.Commons.KernelUtils.inspect/1
+  // Inspects a value for a $data_transfer message with its maps sorted, so the message reads the
+  // same on the client and the server, whatever order a map's keys come in.
+  static #inspectDataTransferValue(value) {
+    return Interpreter.inspect(
+      value,
+      Type.keywordList([
+        [
+          Type.atom("custom_options"),
+          Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+        ],
+      ]),
+    );
+  }
+
   static #isControlledValueInputType(inputType) {
     // Control value for all input types except radio and checkbox
     // Radios and checkboxes use value attribute for submit value, not display value
@@ -1716,6 +2181,14 @@ export default class Renderer {
   // Based on nested_spread_value?/1
   // Maps and keyword lists compose nested attribute names, everything else is a leaf value. Structs
   // are excluded, since they are ordinary values which stringify through String.Chars, e.g. Date.
+  // Whether the attribute is a $drop binding that isn't disabled ($drop={nil}).
+  static #isEnabledDropBinding(attrDom) {
+    return (
+      $.#eventAttributeName(attrDom) === "$drop" &&
+      !Dispatch.isDisabled(attrDom.data[1])
+    );
+  }
+
   static #isModuleRegisteredForCid(cid, moduleProxy) {
     const registeredModule = ComponentRegistry.getComponentModule(cid);
 
@@ -1778,13 +2251,20 @@ export default class Renderer {
   // Based on key_body/1
   //
   // A key value as text, tagged by its type so that 1, "1" and :"1" stay apart, or null for a
-  // value that can't be a key. nil, true and false are refused with the other non-identifying
-  // values.
+  // value that can't be a key. Only an integer, a valid UTF-8 string or an identifier can be one,
+  // so nil, true and false can't. An identifier tuple is "t" followed by its elements, each tagged
+  // by its type and separated by ",".
   //
   // WARNING: must match key_body/1 on the server.
   static #keyBody(value) {
     if (Type.isInteger(value)) {
       return `i${value.value.toString()}`;
+    }
+
+    if (Type.isTuple(value)) {
+      return Identifier.check(value) === null
+        ? `t${value.data.map((element) => $.#keyBody(element)).join(",")}`
+        : null;
     }
 
     if (Type.isBinary(value) && Bitstring.isText(value)) {
@@ -1848,11 +2328,24 @@ export default class Renderer {
     let componentEmittedContext;
 
     if (componentState === null) {
-      const initialComponentStruct = Type.componentStruct({props});
+      // The declared defaults are in place before init/2 runs, so init/2 sees them and can override
+      // them.
+      //
+      // WARNING: must match the struct init_component/3 starts from on the server.
+      const initialComponentStruct = Type.componentStruct({
+        props,
+        state: Renderer.#getStateDefaults(moduleProxy),
+      });
 
       const componentStruct = moduleProxy["init/2"](
         props,
         initialComponentStruct,
+      );
+
+      Renderer.validateDeclaredState(
+        Erlang_Maps["get/2"](Type.atom("state"), componentStruct),
+        moduleProxy,
+        "init/2",
       );
 
       ComponentRegistry.putEntry(
@@ -2046,6 +2539,12 @@ export default class Renderer {
     return htmlVnode;
   }
 
+  // One handler for every drop target that declares no drop effect, so a re-render hands the
+  // registry the same function.
+  static #preventDefault(event) {
+    event.preventDefault();
+  }
+
   // Returns true when the modifiers map carries a prevent_default modifier, which forces the
   // framework's preventDefault even on events that allow the default by design.
   // Deps: [:maps.is_key/2]
@@ -2067,6 +2566,51 @@ export default class Renderer {
     return {level, outer: keyScope ? keyScope.outer : "", loop: keyScope?.loop};
   }
 
+  // Based on put_rendered_ref/2
+  //
+  // Checks the element's ref and claims it for the element in the render in progress, returning the
+  // binding the element's vnode goes into, or null when the element has no ref.
+  //
+  // WARNING: must match put_rendered_ref/2 on the server.
+  static #putRenderedRef(attrsDom, module) {
+    const attrDom = $.#findAttribute(attrsDom, "$ref");
+
+    if (attrDom === null) {
+      return null;
+    }
+
+    const ref = $.#validateRef(
+      $.#expressionValue(attrDom.data[1].data[0].data[1]),
+    );
+
+    const key = Type.encodeMapKey(ref);
+    const claimed = $.refBindings.get(key);
+
+    if (claimed !== undefined) {
+      Interpreter.raiseMisuseError(
+        $.#duplicateRefMessage(ref, claimed.module, module),
+      );
+    }
+
+    const binding = {ref, module, vnode: null};
+    $.refBindings.set(key, binding);
+
+    return binding;
+  }
+
+  // Based on raise_invalid_explicit_key/1
+  //
+  // WARNING: must match raise_invalid_explicit_key/1 on the server.
+  static #raiseInvalidExplicitKey(value) {
+    Interpreter.raiseArgumentError(
+      Identifier.message(
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key",
+        value,
+        $.#explicitKeyHint(value),
+      ),
+    );
+  }
+
   // Based on raise_invalid_spread_value/1
   static #raiseInvalidSpreadValue(value) {
     Interpreter.raiseArgumentError(
@@ -2078,6 +2622,15 @@ export default class Renderer {
     Interpreter.raiseArgumentError(
       "Phoenix.HTML safe tuples aren't supported in Hologram templates, use trust_html/1 instead",
     );
+  }
+
+  // Based on ref_example/1
+  static #refExample(ref) {
+    const text = Interpreter.inspect(ref);
+
+    return Type.isTuple(ref)
+      ? `${text.slice(0, -1)}, item.id}`
+      : `{${text}, item.id}`;
   }
 
   // Raises for a value that stands for markup where a value becomes text: an attribute value or a
@@ -2094,6 +2647,20 @@ export default class Renderer {
     if ($.#isPhoenixSafeTuple(value)) {
       $.#raisePhoenixSafeTuple();
     }
+  }
+
+  // Based on ref_writers/2
+  static #refWriters(firstModule, secondModule) {
+    if (!firstModule || !secondModule) {
+      return "";
+    }
+
+    const firstName = Interpreter.moduleExName(firstModule);
+    const secondName = Interpreter.moduleExName(secondModule);
+
+    return firstName === secondName
+      ? `, both from "${firstName}"`
+      : `, one from "${firstName}" and one from "${secondName}"`;
   }
 
   // Based on render_tree_attribute/1
@@ -2234,13 +2801,18 @@ export default class Renderer {
     defaultTarget,
     parentTagName,
     parentModule,
+    slotsParentModule,
     keyScope,
   ) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
     const propsDom = dom.data[2];
     let childrenDom = dom.data[3];
 
-    const expandedChildrenDom = Renderer.#expandSlots(childrenDom, slots);
+    const expandedChildrenDom = Renderer.#expandSlots(
+      childrenDom,
+      slots,
+      slotsParentModule,
+    );
 
     let props = Renderer.#injectPropsFromContext(
       Renderer.#castProps(propsDom, moduleProxy),
@@ -2283,6 +2855,159 @@ export default class Renderer {
     }
   }
 
+  // Based on validate_data_transfer/2
+  // Returns null when the tag has no $data_transfer, otherwise {data, dropEffect, effectsAllowed,
+  // image, isSource}, where data holds [type, string or null] pairs, effectsAllowed is the
+  // effectAllowed value and image is null or {ref, x, y}, with a null ref for nil.
+  //
+  // The value it renders with must be a keyword list or a map of the keys the attribute takes,
+  // each given once, with a drop effect only on a tag with a $drop binding (a disabled one
+  // included), and data, allowed effects and a drag image only on an element, where a drag can
+  // start. tagName is "window" or "document" for those tags, and null for an element.
+  //
+  // WARNING: must match Hologram.Template.DataTransfer.
+  static #renderDataTransfer(attrsDom, tagName = null) {
+    const attrDom = $.#findAttribute(attrsDom, "$data_transfer");
+
+    if (attrDom === null) {
+      return null;
+    }
+
+    const value = $.#expressionValue(attrDom.data[1].data[0].data[1]);
+
+    const dataTransfer = {
+      data: [],
+      dropEffect: null,
+      effectsAllowed: null,
+      image: null,
+      isSource: false,
+    };
+
+    for (const [key, entryValue] of $.#dataTransferEntries(value)) {
+      const keyName = Type.isAtom(key) ? key.value : null;
+
+      if (
+        !["data", "drop_effect", "effects_allowed", "image"].includes(keyName)
+      ) {
+        Interpreter.raiseMisuseError(
+          `the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got ${$.#inspectDataTransferValue(key)}`,
+        );
+      }
+
+      if (keyName !== "drop_effect" && tagName !== null) {
+        Interpreter.raiseMisuseError(
+          `the $data_transfer ${keyName} goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+        );
+      }
+
+      switch (keyName) {
+        case "data":
+          dataTransfer.data = $.#renderDragData(entryValue);
+          dataTransfer.isSource = true;
+          break;
+
+        case "drop_effect":
+          dataTransfer.dropEffect = $.#renderDropEffect(entryValue, attrsDom);
+          break;
+
+        case "effects_allowed":
+          dataTransfer.effectsAllowed = $.#renderEffectsAllowed(entryValue);
+          dataTransfer.isSource = true;
+          break;
+
+        case "image":
+          dataTransfer.image = $.#renderDragImage(entryValue);
+          dataTransfer.isSource = true;
+          break;
+      }
+    }
+
+    return dataTransfer;
+  }
+
+  // A $data_transfer data: a map of drag data types to strings, or nil to remove a type.
+  static #renderDragData(value) {
+    const entries =
+      Type.isMap(value) && !Type.isStruct(value)
+        ? Object.values(value.data).sort(([typeA], [typeB]) =>
+            Interpreter.compareTerms(typeA, typeB),
+          )
+        : null;
+
+    if (
+      entries === null ||
+      !entries.every(
+        ([type, typeValue]) =>
+          Bitstring.isText(type) &&
+          (Bitstring.isText(typeValue) || Type.isNil(typeValue)),
+      )
+    ) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    return entries.map(([type, typeValue]) => [
+      Bitstring.toText(type),
+      Type.isNil(typeValue) ? null : Bitstring.toText(typeValue),
+    ]);
+  }
+
+  // A $data_transfer image: a map with the ref of the element to show, or nil for none, and its
+  // optional integer x and y offsets from the pointer, which default to 0. The element is looked up
+  // when the drag starts, since only then is it known what the page renders.
+  static #renderDragImage(value) {
+    const entries =
+      Type.isMap(value) && !Type.isStruct(value)
+        ? Object.values(value.data)
+        : [];
+
+    const image = Object.fromEntries(
+      entries
+        .filter(([key]) => Type.isAtom(key))
+        .map(([key, entryValue]) => [key.value, entryValue]),
+    );
+
+    const isImage =
+      entries.length > 0 &&
+      Object.keys(image).length === entries.length &&
+      Object.keys(image).every((key) => ["ref", "x", "y"].includes(key)) &&
+      "ref" in image &&
+      (Type.isNil(image.ref) || Identifier.check(image.ref) === null) &&
+      ["x", "y"].every((key) => !(key in image) || Type.isInteger(image[key]));
+
+    if (!isImage) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    return {
+      ref: Type.isNil(image.ref) ? null : image.ref,
+      x: "x" in image ? Number(image.x.value) : 0,
+      y: "y" in image ? Number(image.y.value) : 0,
+    };
+  }
+
+  // A $data_transfer drop_effect: one of the drop effects, on a tag with a $drop binding.
+  static #renderDropEffect(value, attrsDom) {
+    if (!Type.isAtom(value) || !DROP_EFFECTS.includes(value.value)) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer drop_effect takes :none, :copy, :move or :link, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    if (
+      !attrsDom.data.some((attr) => $.#eventAttributeName(attr) === "$drop")
+    ) {
+      Interpreter.raiseMisuseError(
+        "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+      );
+    }
+
+    return value.value;
+  }
+
   // Based on render_tree/3 (dynamic tag cases)
   static #renderDynamicTag(
     dom,
@@ -2300,9 +3025,13 @@ export default class Renderer {
 
     // Mirrors the server's is_binary/1 guard - a non-binary bitstring is not a tag name.
     if (Type.isBinary(value)) {
-      const tagName = Type.bitstring(
-        Renderer.#normalizeTagName(Bitstring.toText(value)),
-      );
+      const tagNameText = Renderer.#normalizeTagName(Bitstring.toText(value));
+
+      if ($.#findAttribute(attrsDom, "$ref") !== null) {
+        $.#validateRefTag(tagNameText);
+      }
+
+      const tagName = Type.bitstring(tagNameText);
 
       return Renderer.renderDom(
         Type.tuple([Type.atom("element"), tagName, attrsDom, childrenDom]),
@@ -2324,6 +3053,15 @@ export default class Renderer {
 
     Renderer.#validateDynamicTagModule(value);
 
+    // WARNING: must match render_tree/3's dynamic tag component clause on the server.
+    if ($.#findAttribute(attrsDom, "$ref") !== null) {
+      Interpreter.raiseMisuseError(
+        `$ref can't go on the ${Interpreter.moduleExName(value)} component a dynamic tag renders - ` +
+          "a component renders no element of its own, so put $ref on an element in its template " +
+          "and pass the ref as a prop, like input_ref={:search}",
+      );
+    }
+
     return Renderer.renderDom(
       Type.tuple([Type.atom("component"), value, attrsDom, childrenDom]),
       context,
@@ -2341,6 +3079,29 @@ export default class Renderer {
     return parentModule === null || typeof parentModule === "undefined"
       ? ""
       : `, rendered from "${Interpreter.moduleExName(parentModule)}"`;
+  }
+
+  // A $data_transfer effects_allowed: one effect, or a list of them in any order, which gives the
+  // effectAllowed value naming the set.
+  static #renderEffectsAllowed(value) {
+    const effects = Type.isProperList(value) ? value.data : [value];
+
+    if (
+      !effects.every(
+        (effect) =>
+          Type.isAtom(effect) && EFFECTS_ALLOWED.includes(effect.value),
+      )
+    ) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    const effectSet = [
+      ...new Set(effects.map((effect) => effect.value)),
+    ].sort();
+
+    return EFFECT_ALLOWED_VALUES[effectSet.join(",")];
   }
 
   // Based on render_tree/3 (element & slot case)
@@ -2386,6 +3147,10 @@ export default class Renderer {
     // takes a resource key instead.
     const slotKey = $.#renderSlotKey(attrsDom, keyScope);
 
+    // Before the children, so an element is claimed ahead of the elements inside it, as the server
+    // claims it.
+    const refBinding = $.#putRenderedRef(attrsDom, parentModule);
+
     // $focused renders as autofocus, the way the server renders it, so the boot patch finds the
     // attribute the server sent and the focus hooks read one attribute either way. An autofocus
     // from a spread yields to $focused.
@@ -2398,6 +3163,8 @@ export default class Renderer {
     } else if (focused === false) {
       delete attrsVdom.autofocus;
     }
+
+    const dataTransfer = Renderer.#renderDataTransfer(attrsDom);
 
     const eventListenersVdom = Renderer.#renderEventListeners(
       attrsDom,
@@ -2571,10 +3338,22 @@ export default class Renderer {
 
     const elementVnode = vnode(currentTagName, data, childrenVdom);
 
+    if (refBinding !== null) {
+      refBinding.vnode = elementVnode;
+    }
+
     Renderer.#collectClickOutsideBindings(
       attrsDom,
       elementVnode,
       defaultTarget,
+    );
+
+    Renderer.#collectDragSourceBinding(elementVnode, dataTransfer);
+
+    Renderer.#collectDropTargetBindings(
+      attrsDom,
+      {vnode: elementVnode},
+      dataTransfer,
     );
 
     Renderer.#collectReachBindings(attrsDom, elementVnode, defaultTarget);
@@ -2890,7 +3669,7 @@ export default class Renderer {
           return {
             key:
               Bitstring.toText(valueDom.data[0].data[1]) +
-              $.#explicitKeyPart(valueDom.data[1].data[1].data[0]) +
+              $.#explicitKeyPart($.#expressionValue(valueDom.data[1].data[1])) +
               $.#outerKeyParts(keyScope),
             isItemKeyed: Boolean(keyScope),
           };
@@ -2997,6 +3776,26 @@ export default class Renderer {
     );
   }
 
+  // Enum.min/1 over the keys, in term order. Equal keys of different types, like 1 and 1.0, give
+  // the integer, which sorts first among map keys on the BEAM. compareTerms doesn't compare every
+  // type yet, and a key it can't compare leaves the first key standing rather than raising in
+  // place of the StateError.
+  static #smallestStateKey(keys) {
+    return keys.reduce((min, candidate) => {
+      let order;
+
+      try {
+        order = Interpreter.compareTerms(candidate, min);
+      } catch {
+        return min;
+      }
+
+      return order < 0 || (order === 0 && Type.isInteger(candidate))
+        ? candidate
+        : min;
+    });
+  }
+
   // Based on spread_entries/1
   // Returns [key, value] term pairs. Structs are maps, but their __struct__ key is not a name.
   static #spreadEntries(value) {
@@ -3063,6 +3862,46 @@ export default class Renderer {
         : Interpreter.moduleExName(parentModule);
 
     return Vdom.trustedHtmlVnode(Bitstring.toText(html), module);
+  }
+
+  // Based on undeclared_state_hint/2
+  static #undeclaredStateHint(key, moduleProxy) {
+    const isPage = "__params__/0" in moduleProxy;
+
+    if (isPage && key.value === "cid") {
+      return `"cid" is the layout's cid prop, put the value under another name`;
+    }
+
+    const holder = isPage ? "param" : "prop";
+
+    const holderNames = (
+      isPage ? moduleProxy["__params__/0"]() : moduleProxy["__props__/0"]()
+    ).data.map((definition) => definition.data[0].value);
+
+    if (!isPage) {
+      holderNames.push("cid");
+    }
+
+    return holderNames.includes(key.value)
+      ? `"${key.value}" is a ${holder}, read it from component.props instead`
+      : "declare it with state/2 or state/3";
+  }
+
+  // Based on undeclared_state_message/3
+  static #undeclaredStateMessage(key, moduleProxy, handler) {
+    const moduleName = Interpreter.moduleExName(moduleProxy.__exModule__);
+
+    if (!Type.isAtom(key)) {
+      return (
+        `state key ${Interpreter.inspect(key)} isn't an atom, but ${handler} put it in ` +
+        `"${moduleName}" - state is declared with atom names`
+      );
+    }
+
+    return (
+      `state "${key.value}" isn't declared in "${moduleName}", but ${handler} put it - ` +
+      Renderer.#undeclaredStateHint(key, moduleProxy)
+    );
   }
 
   static #updateFormInputChecked(element, newChecked) {
@@ -3146,6 +3985,57 @@ export default class Renderer {
           );
         }
       }
+    }
+  }
+
+  // Based on validate_ref/1
+  //
+  // WARNING: must match validate_ref/1 on the server.
+  static #validateRef(ref) {
+    if (
+      Type.isAtom(ref) &&
+      (ref.value === "window" || ref.value === "document")
+    ) {
+      Interpreter.raiseMisuseError(
+        `:${ref.value} is a built-in ref, so a template can't name an element with it - JS.element(:${ref.value}) returns the ${ref.value}`,
+      );
+    }
+
+    const result = Identifier.check(ref);
+
+    if (result !== null) {
+      const hint = Type.isReference(ref) ? ELIXIR_REFERENCE_HINT : result.hint;
+
+      Interpreter.raiseMisuseError(
+        Identifier.message(REF_EXPECTATION, ref, hint),
+      );
+    }
+
+    return ref;
+  }
+
+  // Based on validate_ref_tag/1
+  //
+  // WARNING: must match validate_ref_tag/1 on the server.
+  static #validateRefTag(tagName) {
+    switch (tagName) {
+      case "window":
+      case "document":
+        Interpreter.raiseMisuseError(
+          `$ref can't go on a <${tagName}> tag, which renders no element - JS.element(:${tagName}) returns the ${tagName}`,
+        );
+        break;
+
+      case "slot":
+        Interpreter.raiseMisuseError(
+          "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content",
+        );
+        break;
+
+      case "html":
+        Interpreter.raiseMisuseError(
+          "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element",
+        );
     }
   }
 

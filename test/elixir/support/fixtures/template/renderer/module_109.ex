@@ -1,17 +1,19 @@
-# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module109 do
   use Hologram.Page
 
-  alias Hologram.Test.Fixtures.Template.Renderer.Module116
+  route "/hologram-test-fixtures-template-renderer-module109/:id"
 
-  route "/hologram-test-fixtures-template-renderer-module109"
+  param :id, :integer
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
   @impl Page
+  def init(params, component, _server) do
+    put_state(component, params)
+  end
+
+  @impl Page
   def template do
-    ~HOLO"""
-    <Module116 />
-    """
+    ~HOLO""
   end
 end

@@ -5,6 +5,8 @@ defmodule HologramClusterTests.CommandSubscribePage do
 
   layout HologramClusterTests.Components.DefaultLayout
 
+  state :received, :string
+
   @channel {:room, :command}
 
   # The action queued here is scheduled as soon as the page mounts, so the command it

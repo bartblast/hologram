@@ -13,6 +13,9 @@ defmodule HologramFeatureTests.Navigation.Page8 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :mounted_with_n, :any
+  state :result, :any
+
   # Links to itself with the next param value, which is the navigation that lands on a page whose
   # code this client has already run.
   #

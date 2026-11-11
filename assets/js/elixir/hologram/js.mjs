@@ -4,9 +4,18 @@ import {box} from "../../js_interop.mjs";
 
 import Bitstring from "../../bitstring.mjs";
 import ERTS from "../../erts.mjs";
+import ElementRefRegistry from "../../element_ref_registry.mjs";
 import HologramInterpreterError from "../../errors/interpreter_error.mjs";
+import Identifier from "../../identifier.mjs";
 import Interpreter from "../../interpreter.mjs";
 import Type from "../../type.mjs";
+
+const ELEMENT_EXPECTATION =
+  "JS.element/1 takes a ref, like :search or {:message, 42}, or a native value";
+
+// WARNING: must match ELIXIR_REFERENCE_HINT in the client renderer (renderer.mjs).
+const ELIXIR_REFERENCE_HINT =
+  "an element ref is an identifier, not an Elixir reference";
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
@@ -163,6 +172,43 @@ const Elixir_Hologram_JS = {
     const jsOpts = unbox(opts, callerModule);
 
     return box(jsTarget.dispatchEvent(new EventClass(jsEventName, jsOpts)));
+  },
+
+  // A native value is returned as it is, so code that takes a ref or an element alike can pass
+  // either here. :window and :document name the window and the document, which no template
+  // renders.
+  "element/1": (ref) => {
+    if (Type.isNativeValueStruct(ref)) {
+      return ref;
+    }
+
+    if (Type.isAtom(ref) && ref.value === "window") {
+      return box(window);
+    }
+
+    if (Type.isAtom(ref) && ref.value === "document") {
+      return box(document);
+    }
+
+    const result = Identifier.check(ref);
+
+    if (result !== null) {
+      const hint = Type.isReference(ref) ? ELIXIR_REFERENCE_HINT : result.hint;
+
+      Interpreter.raiseMisuseError(
+        Identifier.message(ELEMENT_EXPECTATION, ref, hint),
+      );
+    }
+
+    const element = ElementRefRegistry.get(ref);
+
+    if (element === null) {
+      Interpreter.raiseMisuseError(
+        `no element is rendered under the ref ${Interpreter.inspect(ref)}${ElementRefRegistry.missingElementHint(ref)}`,
+      );
+    }
+
+    return box(element);
   },
 
   "eval/1": (expression) => {

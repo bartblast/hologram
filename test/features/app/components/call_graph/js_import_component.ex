@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.Components.CallGraph.JsImportComponent do
   js_import :loadCount, from: "./js_import_component.mjs"
   js_import :shout, from: "./js_import_component.mjs"
 
+  state :result, :string
+
   def init(_props, component, _server) do
     put_state(component, :result, "not called yet")
   end

@@ -8,6 +8,10 @@ defmodule HologramFeatureTests.Patching.Page10 do
 
   layout HologramFeatureTests.Components.EmptyLayout
 
+  state :email, :string
+  state :text, :string
+  state :textarea, :string
+
   def init(_params, component, _server) do
     put_state(component,
       email: "initial email",

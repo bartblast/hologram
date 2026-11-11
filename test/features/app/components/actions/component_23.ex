@@ -3,6 +3,8 @@ defmodule HologramFeatureTests.Components.Actions.Component23 do
 
   alias HologramFeatureTests.Components.Actions.Component24
 
+  state :value, :string
+
   # The owner of the committed value: the editor below shows it, and forwards each commit here.
   def init(_props, component, _server) do
     put_state(component, :value, "ORIGINAL")

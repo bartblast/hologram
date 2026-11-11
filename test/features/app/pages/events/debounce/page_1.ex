@@ -8,6 +8,14 @@ defmodule HologramFeatureTests.Events.Debounce.Page1 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :blurred_value, :any
+  state :debounced_count, :integer
+  state :debounced_key, :any
+  state :plain_count, :integer
+  state :plain_key, :any
+  state :submitted_value, :any
+  state :synced_value, :any
+
   def init(_params, component, _server) do
     put_state(component,
       blurred_value: nil,

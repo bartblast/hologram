@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Components.DebounceLayout do
   alias Hologram.UI.Runtime
   alias HologramFeatureTests.Components.CommonLayoutStyles
 
+  state :result, :any
+
   def init(_params, component, _server) do
     put_state(component, :result, nil)
   end

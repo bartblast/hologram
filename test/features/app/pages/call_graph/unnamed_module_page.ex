@@ -11,6 +11,9 @@ defmodule HologramFeatureTests.CallGraph.UnnamedModulePage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :built, :any
+  state :type, :any
+
   def init(_params, component, _server) do
     # The module is loaded by hand, since the BEAM loads a module on first use and nothing has
     # used this one. String.to_atom/1 and not String.to_existing_atom/1 for the same reason: the

@@ -10,6 +10,8 @@ defmodule HologramFeatureTests.Components.LateResultLayout do
 
   js_import from: "../../pages/actions/helpers.mjs", as: :helpers
 
+  state :result, :any
+
   # Shared by both late result pages, so the layout cid resolves on the destination too, to a new
   # instance of this same module. A result that survives the navigation raises nothing there: it
   # replaces that instance's struct with the left page's, and the destination shows the result.

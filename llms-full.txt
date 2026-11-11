@@ -223,6 +223,8 @@ defmodule Blog.HomePage do
 
   layout Blog.MainLayout
 
+  state :posts, :list
+
   def init(_params, component, _server) do
     # In real app, fetch from database
     posts = [
@@ -283,6 +285,8 @@ defmodule Blog.PostPage do
   param :id, :integer
 
   layout Blog.MainLayout
+
+  state :post, :map
 
   def init(params, component, _server) do
     # In real app, fetch from database
@@ -575,6 +579,8 @@ A bare interpolation is only as safe as the value. Write one for values the appl
 To output HTML as markup instead of escaping it, like Markdown rendered to HTML or content from a CMS, mark it with `trust_html/1` and interpolate it as an element's content:
 
 ```elixir
+state :body, :any
+
 def init(%{slug: slug}, component, _server) do
   post = Blog.get_post!(slug)
   put_state(component, :body, trust_html(post.body_html))
@@ -716,7 +722,7 @@ Take a list of comments, each with a reply box that isn't bound to state:
 
 Say a user is typing a reply to the second comment when the first one is deleted. If Hologram matched elements by their position, it would update the first `<li>` to show what was the second comment and remove the last `<li>`. The half-written reply would stay in the second `<li>`, which now shows the third comment, so it would end up under the wrong comment.
 
-To avoid that, Hologram gives each item a key and matches elements by key instead of position. An item that is a map or struct with an `:id`, like each comment above, is keyed by its `:id` automatically, so the example works as written and the reply stays with its comment. Two structs of different types with the same id get different keys. The `:id` must be a string, an integer, or an atom other than `nil`, `true` and `false`. An item with any other `:id`, such as a float or a tuple, gets no automatic key.
+To avoid that, Hologram gives each item a key and matches elements by key instead of position. An item that is a map or struct with an `:id`, like each comment above, is keyed by its `:id` automatically, so the example works as written and the reply stays with its comment. Two structs of different types with the same id get different keys. The `:id` must be an integer, a string or an identifier. An identifier is an atom, like `:search`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:message, 42}`, with no `nil`, `true` or `false` among its atoms. An item with any other `:id`, such as a float or a tuple that doesn't start with an atom, gets no automatic key.
 
 For items without an `:id`, such as strings, add a `$key` to the tag, with a value that identifies the item:
 
@@ -733,7 +739,27 @@ For items without an `:id`, such as strings, add a `$key` to the tag, with a val
 
 A `$key` replaces the automatic key, so you can also use it when the `:id` isn't the right identity, like a list that can show the same record twice. It keys only the tag it's on, so if the loop body renders several tags, give each one a `$key`. When the loop body is a stateless component, put the `$key` on its tag, like `<Invite email={email} $key={email} />`. Whatever the component renders then stays with its item when the list changes, as it would with a `$key` on an element. A stateful component is keyed by its `cid`, so it needs no `$key` and can't take one.
 
-Put a `$key` on a tag directly inside the `{%for}` block, or inside an `{%if}` block there. Anywhere else, the build fails. The value must be a string, an integer, or an atom other than `nil`, `true` and `false`. Any other value raises an `ArgumentError`. Keys only need to be unique within one list.
+A `$key` can be an identifier, which lets it combine values. Take a feed of posts and comments, where a post and a comment can share an id. When `item.kind` is an atom like `:post` or `:comment`, `$key={item.kind, item.id}` keeps them apart. A loop with several generators gets no automatic key, so key its items by every value they come from:
+
+```holo
+<ul>
+  {%for size <- @sizes, color <- @colors}
+    <li $key={:variant, size, color}>{size} {color}</li>
+  {/for}
+</ul>
+```
+
+A `$key` can also be a map or struct, and Hologram keys it the way it would key that item automatically. That helps when the loop item isn't the record, like with `Enum.with_index/1`:
+
+```holo
+<ol>
+  {%for {comment, index} <- Enum.with_index(@comments)}
+    <li $key={comment}>{index + 1}. {comment.text}</li>
+  {/for}
+</ol>
+```
+
+Put a `$key` on a tag directly inside the `{%for}` block, or inside an `{%if}` block there. Anywhere else, the build fails. The value must be an integer, a string, an identifier, or a map or struct with an `:id` that can be a key. Any other value raises an `ArgumentError`. Keys only need to be unique within one list.
 
 Items without a key are matched by position. So are the items of a loop with several generators or with the `uniq` option, since those get no automatic key. When two items in one list have the same key, Hologram matches them by position too and logs a warning in the browser console.
 
@@ -823,7 +849,7 @@ prop :user_id, :integer, default: 123
 
 Props can be typed using the following types:
 
-- `:any` - Any type (no type checking)
+- `:any` - Any type
 - `:atom` - Atoms
 - `:boolean` - Booleans
 - `:bitstring` - Bitstrings
@@ -886,6 +912,54 @@ A missing required prop is reported at compile time wherever a template writes t
 
 Everything else is checked while rendering, and raises `Hologram.PropError` naming the template the component was rendered from. That covers a prop arriving through a spread, a component chosen by a dynamic tag, a prop sourced from the Context, an interpolated value such as `size="a{@b}"`, and any expression - including one nested inside an otherwise literal value, such as `{[:small, @other]}`.
 
+#### State
+
+A stateful component declares the state it keeps with the `state/2` macro, receiving `name` and `type` params, the same way it declares props:
+
+```elixir
+state :count, :integer
+```
+
+or `state/3` macro that can receive the third `opts` param:
+
+```elixir
+state :count, :integer, default: 0
+```
+
+Pages declare their state the same way.
+
+Every key a component or page puts in its state has to be declared. Putting one that isn't raises `Hologram.StateError` once the `init` or action that put it returns, naming the key, the module and the function. A nested update needs only its first key declared:
+
+```elixir
+state :form, :map, default: %{}
+
+def action(:email_changed, params, component) do
+  put_state(component, [:form, :email], params.event.value)
+end
+```
+
+##### Types
+
+State takes the same types as props.
+
+##### Options
+
+State can be configured using the `default` option. Any other option is a compile error.
+
+###### Default Value
+
+Set the value an entry starts with using the `default` option:
+
+```elixir
+state :count, :integer, default: 0
+```
+
+The default is in the state before `init/3` or `init/2` runs, so `init` sees it and can change it. A component or page whose state starts out as constant values needs no `init` at all. An entry with no default isn't in the state until something puts it there.
+
+##### Names
+
+A state entry can't have the same name as one of the component's props or the page's params, and it can't be named `cid`. Templates read state and props by the same `@name`, so state would hide the prop, and the build fails instead. When a prop supplies a starting value that the component goes on to own, give the state entry a name of its own, like an `:initial_count` prop feeding a `:count` entry.
+
 #### Stateful vs. Stateless Components
 
 Components can be either stateful or stateless:
@@ -933,6 +1007,8 @@ The function should return either:
 Example:
 
 ```elixir
+state :kill_count, :integer
+
 def init(_props, component, server) do
   component = put_state(component, :kill_count, 439)
   server = put_session(server, :name, "John Wick")
@@ -953,6 +1029,9 @@ The function should return a `Component` struct with any initial state.
 Example:
 
 ```elixir
+state :kill_count, :integer
+state :name, :string
+
 def init(_props, component) do
   put_state(component, kill_count: 439, name: "John Wick")
 end
@@ -980,11 +1059,7 @@ end
 
 ###### Optional Initialization
 
-Both `init/3` and `init/2` functions are optional. If you don't need to initialize state or perform any preparation, you can omit them entirely - Hologram provides default implementations that simply return the `Component` and `Server` structs unchanged.
-
-###### Props and State Name Collisions
-
-Give props and state entries different names. Templates merge the two with state taking precedence, so a state entry sharing a prop's name shadows it entirely. Copying a prop into a same-named state entry during `init` is the usual way to hit this: initialization runs only once, so the copy never refreshes, and the template keeps reading the copy rather than the prop. New values from the parent arrive on every render, none of them reach the screen, and nothing warns you. When a prop supplies a starting value that the component goes on to own, separate names - an `:initial_count` prop feeding a `:count` state entry - keep the prop reachable and make the snapshot obvious.
+Both `init/3` and `init/2` functions are optional. If declared defaults cover the starting state and there's nothing else to prepare, you can omit them entirely - Hologram provides default implementations that simply return the `Component` and `Server` structs unchanged.
 
 ##### Reading Props in Actions
 
@@ -992,6 +1067,8 @@ A stateful component's props are carried on its `%Component{}` struct, so an act
 
 ```elixir
 prop :label, :string
+
+state :announced, :string
 
 def action(:announce, _params, component) do
   put_state(component, :announced, component.props.label)
@@ -1067,6 +1144,8 @@ Stateful components can handle user interactions and business logic through two 
 Example:
 
 ```elixir
+state :count, :integer, default: 0
+
 def action(:increment, params, component) do
   put_state(component, :count, component.state.count + params.by)
 end
@@ -1110,11 +1189,9 @@ defmodule MyApp.GreetingPage do
 
   route "/hello/:username"
 
-  layout MyApp.MainLayout
+  param :username, :string
 
-  def init(params, component, _server) do
-    put_state(component, :username, params.username)
-  end
+  layout MyApp.MainLayout
 
   def template do
     ~HOLO"""
@@ -1203,6 +1280,9 @@ Using the `layout/1` macro and setting props through the page's `init/3` functio
 ```elixir
 layout MyApp.MainLayout
 
+state :page_title, :string
+state :show_sidebar?, :boolean
+
 def init(_params, component, _server) do
   put_state(component, page_title: "My Page", show_sidebar?: true)
 end
@@ -1257,6 +1337,13 @@ Hologram supports various event types that you can bind to elements in your temp
 - `$change` - triggered when the value of an input element changes
 - `$click` - triggered when an element is clicked
 - `$click_outside` - triggered when a click occurs outside an element and its descendants
+- `$drag` - triggered repeatedly on the dragged element while a drag is in progress
+- `$drag_end` - triggered when a drag ends, whether it was dropped or cancelled
+- `$drag_enter` - triggered when a drag enters an element
+- `$drag_leave` - triggered when a drag leaves an element
+- `$drag_over` - triggered repeatedly on an element while a drag is over it
+- `$drag_start` - triggered when the user starts dragging an element
+- `$drop` - triggered when the user drops on an element
 - `$focus` - triggered when an element receives focus
 - `$key_down` - triggered when a key is pressed down
 - `$key_up` - triggered when a key is released
@@ -1290,6 +1377,98 @@ The `$change` event data structure depends on where the event handler is placed:
 - **Form-level events:** include all form field values as a map, where keys are input names and values are current input values
 
 For detailed information about `$change` event behavior with forms, including synthetic event mapping, usage patterns, and data types for different input types, see the "Event Handling" section in the Forms documentation.
+
+##### Drag and Drop Events
+
+The drag and drop events (`$drag_start`, `$drag`, `$drag_enter`, `$drag_over`, `$drag_leave`, `$drop`, `$drag_end`) bind the browser's native drag and drop: the drag image follows the pointer, a drag can cross into other windows and apps, and files can be dropped from the desktop. An element drags when it has `draggable="true"`. Links, images and selected text drag without it.
+
+Most drags move something within the page, like a task between columns. The dragged item doesn't have to travel with the drag. Keep it in state when the drag starts, and read it back when the drop lands.
+
+```holo
+{%for task <- @tasks}
+  <li draggable="true" $drag_start={:drag_started, id: task.id}>{task.title}</li>
+{/for}
+
+<div $drop={:dropped, column: @column.id}>...</div>
+```
+
+```elixir
+def action(:drag_started, %{id: id}, component) do
+  put_state(component, :dragged_task_id, id)
+end
+
+def action(:dropped, %{column: column}, component) do
+  tasks = move_task(component.state.tasks, component.state.dragged_task_id, column)
+  put_state(component, :tasks, tasks)
+end
+```
+
+Each drag event includes the mouse event fields (see "Mouse Events" below) and a `data_transfer` map:
+
+- `data` - the drag data, a map of data type to string, like `%{"text/plain" => "Buy milk"}`
+- `drop_effect` - the effect the drop target picked, `:none`, `:copy`, `:move` or `:link`
+- `effects_allowed` - the effects the drag allows, a map like `%{copy: false, link: false, move: true}`, so a function head can match one with `%{move: true}`
+- `files` - the dropped files and folders, a list of `%Hologram.File{}` structs
+- `items` - one map per piece of data the drag carries, like `%{kind: :string, type: "text/plain"}` or `%{kind: :file, type: "image/png"}`
+- `types` - the data types the drag carries, like `["text/plain", "Files"]`
+
+The browser shows the drag data only when the drag starts and when it drops, so Hologram fills `data` on `$drag_start` and `$drop` and leaves it empty on the other events, which show the types alone. To act on what is being dragged during `$drag_over`, keep the item in state from `$drag_start` as above. Hologram fills `files` on `$drop` only. Hologram reads the event while it runs, so a debounced, throttled or delayed action still gets its data.
+
+###### Dropped Files
+
+Files and folders dropped from the desktop reach `$drop` as `%Hologram.File{path: path}` structs. Each path is under `/$hologram/drops/<id>/` and ends with the original name, so `Path.basename(file.path)` gives the name and `MIME.from_path(file.path)` the type. A dropped folder is one struct, named like a file. Reading the files with Elixir's `File` functions is coming soon.
+
+A dropped file exists only in the browser tab it was dropped in, for as long as the page stays open, so a path kept in state doesn't survive a reload. Sending dropped files to the server in a command is coming soon.
+
+###### Drop Targets
+
+The browser lets a drop land only on an element that cancels the `$drag_enter` and `$drag_over` events of the drag over it. An element with an enabled `$drop` binding is a drop target, so Hologram cancels them for you. It also prevents the drop's own default, which would open a dropped file or link in place of the page, and `$drop.allow_default` lets it through. `allow_default` on `$drag_over` doesn't stop the element being a drop target. A disabled binding like `$drop={nil}` leaves the element alone. `<window $drop>` and `<document $drop>` accept a drop anywhere on the page.
+
+###### Setting What a Drag Carries
+
+The browser lets a page set what a drag carries only while the drag events run, and an action can run later, after a debounce or once the action queue frees up. So you declare it in the template with `$data_transfer`, and Hologram applies it while the event runs, before any `$drag_*` binding on the drag's path, so their data shows it:
+
+```holo
+<img $ref={:task_preview, @task.id} src={@task.thumbnail} style="position: absolute; top: -1000px" />
+
+<li
+  draggable="true"
+  $data_transfer={
+    data: %{"text/plain" => @task.title, "application/x-task" => "#{@task.id}"},
+    effects_allowed: :move,
+    image: %{ref: {:task_preview, @task.id}, x: 16, y: 16}
+  }
+>
+  {@task.title}
+</li>
+
+<div $drop="dropped" $data_transfer={drop_effect: :move}>...</div>
+```
+
+It takes a keyword list or a map with these keys:
+
+- `data` - a map of data type to string, for other windows and apps, or a drop target on another page. Each type is put on the drag, and `nil` removes one. The data the browser puts on a drag stays, so a link keeps its URL unless you remove `"text/uri-list"`.
+- `effects_allowed` - `:copy`, `:move` or `:link`, or a list of them, the effects a drop may use. `[]` allows no drop. Without it every effect is allowed.
+- `image` - `%{ref: ref, x: x, y: y}`. The element rendered under the ref follows the pointer, `x` and `y` pixels from it, `0` by default. `ref: nil` keeps the browser's image. The element has to be rendered, so place one that shouldn't show off-screen, as above. When nothing is rendered under the ref, Hologram logs an error and the browser shows its default image. See the "Element Refs" section in the DOM documentation.
+- `drop_effect` - `:none`, `:copy`, `:move` or `:link`, the effect a drop target picks while a drag is over it, which sets the cursor. It goes on a tag with a `$drop` binding, and a disabled `$drop` ignores it.
+
+`data`, `effects_allowed` and `image` describe the dragged element, so `<window>` and `<document>` take only `drop_effect`. The build checks a literal value. Hologram checks any other value when the element renders, and a wrong one raises a `Hologram.MisuseError`.
+
+When elements that declare `$data_transfer` are nested, the nearest one wins. A drag carries what the nearest element declaring `data`, `effects_allowed` or `image` declares, and nothing from the elements around it. A link or an image inside it that declares none drags with that declaration, plus what the browser puts on it. Give it `draggable="false"` or its own `$data_transfer` to change that. Over nested drop targets, the nearest one that declares a `drop_effect` sets it.
+
+###### Entering and Leaving
+
+`$drag_enter` and `$drag_leave` fire when the drag crosses the element's own edge, not each time it moves between the element's children, so a highlight shown while a drag is over the element doesn't flicker. On `<window>` and `<document>` they fire when a drag enters or leaves the page. Their modifiers apply only to those crossings.
+
+No `$drag_leave` fires after a drop, so clear a highlight in the `$drop` action too.
+
+###### Browser Differences
+
+- Firefox starts a drag only when the page puts data on it. Hologram puts placeholder data on a drag that has a `$drag_start` binding and carries no data, so an element with `$drag_start` or `$data_transfer` data drags in Firefox. A `<window $drag_start>` does it for every drag on the page, so every draggable element drags in Firefox, as it does in other browsers. The placeholder never shows in the event data.
+- `$drag` and `$drag_over` keep firing every few hundred milliseconds while the drag goes on, even when the pointer stands still, so pair them with `throttle(ms)`.
+- Firefox reports `0` for every coordinate on `$drag`.
+
+`$drag_start.prevent_default` cancels the drag.
 
 ##### Focus Events
 
@@ -1633,7 +1812,7 @@ In a `{%for}` list, a `once` binding on an item with a key stays with that item.
 
 #### Controlling the Native Default
 
-Hologram calls `preventDefault` by default only on `$submit` - so a bound form does not reload the page. Every other event is left alone, so clicks, typing, text selection, scrolling, and the rest of the browser's native behavior keep working. Two modifiers override this per binding: `allow_default` lets the native default through where Hologram would prevent it, and `prevent_default` forces `preventDefault` where Hologram would leave it alone.
+Hologram calls `preventDefault` by default only on `$submit` - so a bound form does not reload the page - and on `$drop` and the drag events of a drop target (see "Drop Targets" above). Every other event is left alone, so clicks, typing, text selection, scrolling, and the rest of the browser's native behavior keep working. Two modifiers override this per binding: `allow_default` lets the native default through where Hologram would prevent it, and `prevent_default` forces `preventDefault` where Hologram would leave it alone.
 
 ##### Allowing the Native Default
 
@@ -1645,17 +1824,17 @@ Append `allow_default` to a single binding so Hologram does not call `preventDef
 </form>
 ```
 
-Use it when you want both the native behavior and an action - for example a form that posts to an external endpoint you also want to track. It is meaningful only where Hologram actually prevents the native default (in practice `$submit`). It composes with key filters, `stop_propagation`, `debounce`, and `throttle`.
+Use it when you want both the native behavior and an action - for example a form that posts to an external endpoint you also want to track. It is meaningful only where Hologram actually prevents the native default (in practice `$submit` and `$drop`). It composes with key filters, `stop_propagation`, `debounce`, and `throttle`.
 
 ##### Preventing the Native Default
 
-The mirror of `allow_default` is `prevent_default`: append it and Hologram calls `preventDefault` for that binding. Since `$submit` is the only event prevented by default, `prevent_default` is how you do the same on any other event. The classic case is Enter-to-send on a keyboard binding, where the action should fire without the keystroke also inserting a newline or submitting the surrounding form:
+The mirror of `allow_default` is `prevent_default`: append it and Hologram calls `preventDefault` for that binding. Since only `$submit` and `$drop` are prevented by default, `prevent_default` is how you do the same on any other event. The classic case is Enter-to-send on a keyboard binding, where the action should fire without the keystroke also inserting a newline or submitting the surrounding form:
 
 ```holo
 <textarea $key_down.enter.prevent_default="send_message"></textarea>
 ```
 
-It composes with key filters - so only the matched key is prevented - as well as `stop_propagation`, `debounce`, and `throttle`. It only affects cancelable events, so it is a no-op on ones the browser does not let you cancel - among them `$change`, `$input`, `$select`, `$scroll`, `$resize`, `$focus`, `$blur`, `$pointer_cancel`, and the `$transition_*` events. A binding cannot carry both `allow_default` and `prevent_default`: they are opposite intents, so combining them fails the build.
+It composes with key filters - so only the matched key is prevented - as well as `stop_propagation`, `debounce`, and `throttle`. It only affects cancelable events, so it is a no-op on ones the browser does not let you cancel - among them `$change`, `$input`, `$select`, `$scroll`, `$resize`, `$focus`, `$blur`, `$pointer_cancel`, `$drag_leave`, `$drag_end`, and the `$transition_*` events. A binding cannot carry both `allow_default` and `prevent_default`: they are opposite intents, so combining them fails the build.
 
 #### Stopping Event Propagation
 
@@ -1711,6 +1890,8 @@ end
 For example:
 
 ```elixir
+state :count, :integer
+
 def action(:update_count, params, component) do
   put_state(component, :count, params.new_count)
 end
@@ -1741,6 +1922,8 @@ Actions must return a `%Component{}` struct. This struct not only reflects chang
 Within an action, you can:
 
 ##### Update Component State
+
+Every top-level key you put has to be declared with `state/2` or `state/3`, as the State section of the Components documentation describes. A nested path needs only its first key declared.
 
 By setting the value for a single key:
 
@@ -1902,6 +2085,8 @@ Here's a simple example that demonstrates how actions work in Hologram. The coun
 defmodule MyApp.Components.Counter do
   # ...
 
+  state :count, :integer, default: 0
+
   def template do
     ~HOLO"""
     <div>
@@ -2040,6 +2225,8 @@ Commands can be triggered using event attributes in templates or from actions. F
 Commands can also be triggered from actions using `put_command/3`:
 
 ```elixir
+state :saving, :boolean, default: false
+
 def action(:save_form, params, component) do
   component
   |> put_state(:saving, true)
@@ -2142,12 +2329,10 @@ Synchronized inputs maintain their displayed values in sync with your component'
 
 ###### Basic Usage
 
-To create a synchronized input, you need three things: state initialization, the input element synchronized with the state, and an event handler:
+To create a synchronized input, you need three things: a state entry, the input element synchronized with the state, and an event handler:
 
 ```elixir
-def init(_props, component, _server) do
-  put_state(component, :email, "")
-end
+state :email, :string, default: ""
 ```
 
 ```holo
@@ -2192,6 +2377,8 @@ With non-synchronized inputs, you can access form data from `params.event` in bo
 ```
 
 ```elixir
+state :validation_error, :string, default: ""
+
 def action(:form_changed, params, component) do
   # params.event contains all form data: %{username: "...", email: "..."}
   # Validate the form whenever any field changes
@@ -2403,6 +2590,8 @@ The `$focused` attribute declares whether an element should have focus. Set it f
 ```
 
 ```elixir
+state :editing_title?, :boolean, default: false
+
 def action(:edit_title, _params, component) do
   put_state(component, :editing_title?, true)
 end
@@ -2457,9 +2646,7 @@ The same pattern works with one state value that names the field to focus. The e
 ```
 
 ```elixir
-def init(_params, component, _server) do
-  put_state(component, :focused_field, nil)
-end
+state :focused_field, :atom, default: nil
 
 def action(:submit, params, component) do
   case validate(params.event) do
@@ -2503,11 +2690,119 @@ A page reached by client-side navigation is shown before its code has finished l
 
 `$focus` is an event and `$focused` is state, so a binding like `$focus={true}` is almost always a typo. A literal `true` fails the build, and a binding that evaluates to `true` raises an error when the event fires.
 
+#### Element Refs
+
+`$ref` names an element, so other parts of your app can point at it. Code that needs the element itself, like a JavaScript library you hand it to, gets it with `JS.element/1`:
+
+```holo
+<canvas $ref="sales_chart"></canvas>
+<button $click="draw_chart">Draw chart</button>
+```
+
+```elixir
+def action(:draw_chart, _params, component) do
+  JS.new(:Chart, [JS.element(:sales_chart), %{type: "bar"}])
+
+  component
+end
+```
+
+For what Hologram does itself, like moving focus with `$focused` or setting a drag image with `$data_transfer`, use that instead of JavaScript.
+
+##### Naming Elements
+
+A ref is an identifier, the same kind of value channels and `$key` take. An identifier is an atom, like `:search`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:message, 42}`. None of its atoms can be `nil`, `true` or `false`. A ref that's a single atom is an atom ref, and one that's a tuple is a tuple ref, whose values after the name are its parts. An element ref is never an Elixir reference, the kind `make_ref/0` returns. The text form `$ref="sales_chart"` is the atom `:sales_chart`, so it takes only a name you can write as an atom without quotes. Write any other ref as an expression. That's also how each element in a loop gets its own:
+
+```holo
+{%for message <- @messages}
+  <div $ref={:message, message.id}>{message.text}</div>
+{/for}
+```
+
+```elixir
+{:message, 42}
+|> JS.element()
+|> JS.call(:scrollIntoView, [])
+```
+
+A ref can come from state or props, like `$ref={@list_ref}`. A value that isn't an identifier raises a `Hologram.MisuseError` when the element renders.
+
+`$ref` goes on an HTML element. A component renders no element of its own, so `$ref` on a component tag fails the build. Put it on an element inside the component and pass the ref as a prop. `$ref` on `<slot>`, `<window>`, `<document>` or `<html>` fails the build too.
+
+##### Refs Are Page-Wide
+
+A ref names one element on the whole page, across components. It's plain data, so passing one to a component passes the value, and keeping one in state is safe:
+
+```holo
+<MessageList list_ref={:messages} />
+```
+
+Inside `MessageList`, the element takes the ref from the prop:
+
+```holo
+<ul $ref={@list_ref}>...</ul>
+```
+
+A reusable component shouldn't name its elements with a fixed ref, since the page may render it twice or use the same name itself. Take the ref as a prop, or build one from something unique to each instance, like its cid, and start it with the package's name:
+
+```holo
+<ul $ref={:acme_ui_menu, @cid}>...</ul>
+```
+
+`:window` and `:document` are built-in refs. `JS.element(:window)` returns the window and `JS.element(:document)` the document, so code that takes a ref can be given the window, like `scroll_ref={:window}`. A template can't name an element `:window` or `:document`.
+
+`JS.element/1` also takes a native value and returns it unchanged, so a component that takes a ref prop can pass the prop to `JS.element/1` whether it was given a ref or an element.
+
+Two elements rendered under one ref raise a `Hologram.MisuseError` that names the ref and the components that rendered them. Elements in the branches of one `{%if}` and `{%else}` don't clash, since only one of them renders. An element that takes another's place under the same ref isn't a duplicate either. The build fails for the mistakes it can see in literal refs:
+
+- the same atom ref on two elements of one template, unless they're in the two branches of one `{%if}` and `{%else}`
+- an atom ref inside a `{%for}`, or in a component that renders itself
+- a component whose template has an atom ref, rendered twice or inside a `{%for}`
+- the same atom ref in a page, its layout and the components they render together
+- a ref name used with different numbers of parts on one page
+
+##### Keep the Ref, Not the Element
+
+Keep the ref in state and look the element up when you need it. An element kept in state is the one a past render put on the page, and a later render can replace it.
+
+##### Elements an Action Renders
+
+Hologram renders after an action returns, so an action can't look up an element its own state change adds. Take a reply form that opens with a rich text editor, a JavaScript library that needs the element it runs in:
+
+```holo
+<button $click="open_reply">Reply</button>
+{%if @replying?}
+  <div $ref="reply_editor"></div>
+{/if}
+```
+
+Looking up `:reply_editor` in the action that sets `@replying?` raises, since the `<div>` isn't on the page until that action returns. Look it up in a chained action instead, which runs after that render and before the browser paints:
+
+```elixir
+def action(:open_reply, _params, component) do
+  component
+  |> put_state(:replying?, true)
+  |> put_action(:start_reply_editor)
+end
+
+def action(:start_reply_editor, _params, component) do
+  JS.new(:Editor, [JS.element(:reply_editor)])
+
+  component
+end
+```
+
+When nothing is rendered under a ref, `JS.element/1` raises a `Hologram.MisuseError` that names the ref. If a template declares the ref, the message says nothing renders it right now and points to a chained action. For a misspelled name, it suggests the closest ref the page declares.
+
+A template renders on the server too, where `JS.element/1` returns a placeholder like every JS interop function, and in the browser the element may not exist yet while the template renders. So `JS.element/1` in a template fails the build. Pass the ref itself instead.
+
 #### Changes Made Through JS Interop
 
 Hologram's virtual DOM patching is aware of JS interop. If you manipulate the DOM directly via JS interop (e.g. appending child elements), those changes are preserved across Hologram re-renders, as long as the container element is present in the template:
 
 ```elixir
+state :counter, :integer, default: 0
+
 def template do
   ~HOLO"""
   <button $click={:populate}>Populate JS subtree</button>
@@ -2913,6 +3208,8 @@ You can read session values using the `get_session/2` and `get_session/3` functi
 For simple values stored in the session:
 
 ```elixir
+state :locale, :string
+
 def init(_params, component, server) do
   locale = get_session(server, :locale)
   put_state(component, :locale, locale)
@@ -2924,6 +3221,8 @@ end
 Sessions can store any Elixir data type, including complex data structures like maps, lists, and tuples. You can work with these structures directly:
 
 ```elixir
+state :user_preferences, :map
+
 def init(_params, component, server) do
   preferences =
     server
@@ -2939,6 +3238,8 @@ end
 When a session key doesn't exist, `get_session/2` returns `nil`. You can provide default values using `get_session/3`:
 
 ```elixir
+state :cart_items, :list
+
 def init(_params, component, server) do
   cart_items = get_session(server, :cart, [])
   put_state(component, :cart_items, cart_items)
@@ -3108,6 +3409,8 @@ You can read cookies using the `get_cookie/2` function or `get_cookie/3` with a 
 For simple string values stored in cookies:
 
 ```elixir
+state :cookie_value, :string
+
 def init(_params, component, server) do
   cookie_value = get_cookie(server, "my_cookie")
   put_state(component, :cookie_value, cookie_value)
@@ -3119,6 +3422,8 @@ end
 Hologram can automatically encode and decode complex Elixir data structures (maps, lists, tuples, etc.) in cookies:
 
 ```elixir
+state :user_data, :map
+
 def init(_params, component, server) do
   user_data =
     server
@@ -3134,6 +3439,9 @@ end
 Use `get_cookie/3` to provide a default value when a cookie doesn't exist:
 
 ```elixir
+state :preferences, :map
+state :theme, :string
+
 def init(_params, component, server) do
   # Set default theme if no cookie exists
   theme = get_cookie(server, "theme", "light")
@@ -3275,7 +3583,7 @@ An instance is a single browser tab - one JS execution context. Each instance is
 
 ##### Channels
 
-A channel is the target of a broadcast and the thing a component subscribes to. Channels are structured, typed values, never raw topic strings. A channel is either a bare atom like `:notifications`, or a tuple of an atom tag followed by one or more primitive values, like `{:room, 42}` or `{:doc, "abc-123", "v2"}`.
+A channel is the target of a broadcast and the thing a component subscribes to. Channels are structured, typed values, never raw topic strings. A channel is an identifier: an atom, like `:notifications`, or a tuple of an atom followed by one or more integers, strings or atoms, like `{:room, 42}` or `{:doc, "abc-123", "v2"}`. No atom in it can be `nil`, `true` or `false`. A channel built from missing data, like `{:room, nil}`, raises an `ArgumentError`. If Hologram accepted it, every client whose room id is missing would end up on the same channel and get each other's broadcasts.
 
 The framework encodes each channel to an internal topic for you, so you never build or see a topic string, and a malformed channel is rejected with a clear error instead of routing nowhere. There are two kinds: identity channels and application channels.
 
@@ -3381,6 +3689,8 @@ Broadcasting dispatches an action to every component subscribed to the channel -
 For example, a command that persists a new chat message and broadcasts it to the room, with the action handler that adds it to the list on each subscriber:
 
 ```elixir
+state :messages, :list, default: []
+
 def command(:send_message, %{room_id: room_id, text: text}, server) do
   message = Chat.create_message(room_id, text)
   put_broadcast(server, {:room, room_id}, :add_message, message: message)
@@ -3438,7 +3748,12 @@ defmodule MyApp.RoomPage do
 
   route "/rooms/:id"
 
+  param :id, :integer
+
   layout MyApp.Layout
+
+  state :messages, :list
+  state :room_id, :integer
 
   def init(%{id: room_id}, component, server) do
     messages = Chat.recent_messages(room_id)
@@ -3580,9 +3895,7 @@ defmodule MyApp.CalculatorPage do
 
   layout MyApp.DefaultLayout
 
-  def init(_params, component, _server) do
-    put_state(component, :result, nil)
-  end
+  state :result, :any, default: nil
 
   def template do
     ~HOLO"""
@@ -3874,14 +4187,36 @@ return x + 4;
 """  # 11
 ```
 
+##### JS.element/1 - Get an Element by Ref
+
+Returns the element a template names with `$ref`, as a native value the other JS interop functions take:
+
+```holo
+<input type="search" $ref="search" />
+```
+
+```elixir
+:search
+|> JS.element()
+|> JS.call(:select, [])
+```
+
+`JS.element(:window)` and `JS.element(:document)` return the window and the document as native values too. A native value is returned unchanged. When nothing is rendered under the ref, it raises a `Hologram.MisuseError`. See the "Element Refs" section in the DOM documentation.
+
 ##### JS.dispatch_event - Dispatch Events
 
-Dispatches an event on a target. There are several variants:
+Dispatches an event on a target. The examples below target an element a template names with `$ref`:
+
+```holo
+<div $ref="panel"></div>
+```
+
+There are several variants:
 
 ###### dispatch_event/2 - CustomEvent, No Options
 
 ```elixir
-target = JS.call(:document, :getElementById, ["my-element"])
+target = JS.element(:panel)
 JS.dispatch_event(target, "my:event")
 ```
 
@@ -3916,7 +4251,7 @@ JS.dispatch_event(:document, "my:event")
 You can combine `dispatch_event` with callback interop to set up listeners:
 
 ```elixir
-target = JS.call(:document, :getElementById, ["my-element"])
+target = JS.element(:panel)
 
 JS.call(target, :addEventListener, [
   "my:event",
@@ -4007,6 +4342,8 @@ Hologram.dispatchAction("my_action", "page", { amount: 42, label: "test" });
 **Corresponding action in your page, layout, or component:**
 
 ```elixir
+state :result, :tuple
+
 def action(:my_action, params, component) do
   # params.amount => 42 (integer)
   # params.label  => "test" (string)
@@ -4108,6 +4445,8 @@ Hologram.dispatchAction("chart_clicked", "page", { point: 42 });
 ```
 
 ```elixir
+state :selected, :integer
+
 # Hologram handler (runs in the browser)
 def action(:chart_clicked, params, component) do
   put_state(component, :selected, params.point)
@@ -4136,12 +4475,16 @@ Hooks.MyChart = {
 };
 ```
 
-In Hologram, dispatch an event and listen for it with `addEventListener`:
+In Hologram, dispatch an event and listen for it with `addEventListener`. The chart element carries an `id` for the JavaScript side and a `$ref` for the Elixir side:
+
+```holo
+<canvas id="my-chart" $ref="chart"></canvas>
+```
 
 ```elixir
 # Hologram action (runs in the browser)
 def action(:refresh, _params, component) do
-  target = JS.call(:document, :getElementById, ["my-chart"])
+  target = JS.element(:chart)
   JS.dispatch_event(target, "data_updated", detail: %{value: 99})
 
   component
@@ -4159,7 +4502,7 @@ Alternatively, you can set up the listener entirely from Elixir using the low-le
 
 ```elixir
 def action(:setup_chart, _params, component) do
-  target = JS.call(:document, :getElementById, ["my-chart"])
+  target = JS.element(:chart)
 
   JS.call(target, :addEventListener, [
     "data_updated",
@@ -4197,6 +4540,8 @@ Since JS interop functions only work in the browser, functions that use them can
 #### Publishing Packages
 
 Planning to publish a reusable package that wraps a JavaScript library, a Web API, or provides Hologram utilities? Check the Package Naming conventions to help distinguish official and community packages.
+
+A package's components share the page's refs with the app. See the "Refs Are Page-Wide" section in the DOM documentation for how to name their elements.
 
 ### Configuration
 
@@ -4438,6 +4783,9 @@ The compiler writes the bundles to Hologram's build dir, `_build/<env>/lib/holog
 Client code that works with a struct needs the struct's code: its protocol implementations, like `String.Chars` to interpolate it in a template, and its `__struct__` functions, which build it. Neither the runtime bundle nor a page bundle holds them. The compiler writes them to chunks, which are separate files, and the browser loads a type's chunks when a struct of that type reaches it: in the state `init/3` sets, in an action a command returns, or in an action the server broadcasts.
 
 ```elixir
+state :every, :string
+state :price, :map
+
 def init(_params, component, _server) do
   # Loads Price's chunks: the struct reaches the state.
   price = %Price{amount: 1_000, currency: :EUR}

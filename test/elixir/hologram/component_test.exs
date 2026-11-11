@@ -14,6 +14,7 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Test.Fixtures.Component.Module10
   alias Hologram.Test.Fixtures.Component.Module2
   alias Hologram.Test.Fixtures.Component.Module3
+  alias Hologram.Test.Fixtures.Component.Module35
   alias Hologram.Test.Fixtures.Component.Module4
   alias Hologram.Test.Fixtures.Component.Module5
   alias Hologram.Test.Fixtures.Component.Module7
@@ -24,7 +25,7 @@ defmodule Hologram.ComponentTest do
   @server %Server{cid: "page"}
 
   test "__entities_from_query__/0 shim delegates to the private query function" do
-    assert Module7.__entities_from_query__() == filter(Entity2, a: true)
+    assert Module35.__entities_from_query__() == filter(Entity2, a: true)
   end
 
   test "__entities_from_query__/0 shim evaluates an inline from_query function" do
@@ -38,7 +39,7 @@ defmodule Hologram.ComponentTest do
   end
 
   test "__from_query_delegations__/0 maps delegation shims to their targets" do
-    assert Module7.__from_query_delegations__() == [__entities_from_query__: :entities_query]
+    assert Module35.__from_query_delegations__() == [__entities_from_query__: :entities_query]
   end
 
   test "__is_hologram_component__/0" do
@@ -56,14 +57,21 @@ defmodule Hologram.ComponentTest do
   end
 
   test "__props__/0 rewrites a local from_query capture to a generated shim capture" do
-    assert Module7.__props__() == [
-             {:entities, [Entity2], [from_query: &Module7.__entities_from_query__/0]}
+    assert Module35.__props__() == [
+             {:entities, [Entity2], [from_query: &Module35.__entities_from_query__/0]}
            ]
   end
 
   test "__props__/0 rewrites an inline from_query function to a generated shim capture" do
     assert Module10.__props__() == [
              {:entities, [Entity2], [from_query: &Module10.__entities_from_query__/0]}
+           ]
+  end
+
+  test "__state__/0" do
+    assert Module7.__state__() == [
+             {:count, :integer, [default: 0]},
+             {:user, :map, []}
            ]
   end
 
@@ -666,7 +674,7 @@ defmodule Hologram.ComponentTest do
 
     test "raises at the call site when the channel is invalid" do
       assert_error ArgumentError,
-                   "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
+                   ~s(a channel must be an identifier, like :search or {:message, 42}, got: "bad-channel"),
                    fn -> put_broadcast(@server, "bad-channel", :foo) end
     end
   end
@@ -742,7 +750,7 @@ defmodule Hologram.ComponentTest do
 
     test "raises at the call site when the channel is invalid" do
       assert_error ArgumentError,
-                   "channel must be a bare atom or tagged tuple; got bare string \"bad-channel\"",
+                   ~s(a channel must be an identifier, like :search or {:message, 42}, got: "bad-channel"),
                    fn -> put_broadcast_except(@server, {:user, "u1"}, "bad-channel", :foo) end
     end
   end
@@ -945,6 +953,274 @@ defmodule Hologram.ComponentTest do
 
     test "raises ArgumentError for an invalid channel" do
       assert_raise ArgumentError, fn -> put_subscription(@server, "not_a_valid_channel") end
+    end
+  end
+
+  describe "state/3" do
+    test "accepts the supported options" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.SupportedStateOpts do
+          use Hologram.Component
+
+          state :a, :string
+          state :b, :string, default: "abc"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__state__() == [
+               {:a, :string, []},
+               {:b, :string, [default: "abc"]}
+             ]
+    end
+
+    test "accepts a prop declared after a state entry with another name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.StateBeforeProp do
+          use Hologram.Component
+
+          state :count, :integer, default: 0
+
+          prop :label, :string
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__props__() == [{:label, :string, []}]
+      assert module.__state__() == [{:count, :integer, [default: 0]}]
+    end
+
+    test "accepts options given as an expression" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.ExpressionStateOpts do
+          use Hologram.Component
+
+          @my_opts [default: ""]
+
+          state :a, :string, @my_opts
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__state__() == [{:a, :string, [default: ""]}]
+    end
+
+    test "raises when an option is not supported" do
+      expected_error_msg =
+        ~s/invalid option :some_option for state "b" in Hologram.Test.Fixtures.Component.UnsupportedStateOpt, expected one of: :default/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.UnsupportedStateOpt do
+          use Hologram.Component
+
+          state :b, :string, some_option: "abc"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an option given as an expression is not supported" do
+      expected_error_msg =
+        ~s/invalid option :some_option for state "b" in Hologram.Test.Fixtures.Component.UnsupportedExpressionStateOpt, expected one of: :default/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.UnsupportedExpressionStateOpt do
+          use Hologram.Component
+
+          @my_opts [some_option: "abc"]
+
+          state :b, :string, @my_opts
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when the options are not a keyword list" do
+      expected_error_msg =
+        ~s/the options for state "b" in Hologram.Test.Fixtures.Component.NonKeywordStateOpts / <>
+          ~s/must be a keyword list, got: [{"default", 1}]/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonKeywordStateOpts do
+          use Hologram.Component
+
+          state :b, :integer, [{"default", 1}]
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an option is given more than once" do
+      expected_error_msg =
+        ~s/option :default is given more than once for state "b" / <>
+          "in Hologram.Test.Fixtures.Component.RepeatedStateOpt"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.RepeatedStateOpt do
+          use Hologram.Component
+
+          state :b, :integer, default: 1, default: 2
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when the name is not an atom" do
+      expected_error_msg =
+        ~s/the name of state "b" in Hologram.Test.Fixtures.Component.NonAtomStateName must be an atom/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.NonAtomStateName do
+          use Hologram.Component
+
+          state "b", :integer, default: 0
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an entry is declared more than once" do
+      expected_error_msg =
+        ~s/state "b" is declared more than once in Hologram.Test.Fixtures.Component.DuplicateState/
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DuplicateState do
+          use Hologram.Component
+
+          state :a, :string
+          state :b, :string
+          state :b, :integer
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises at the state entry when it has the same name as a prop declared before it" do
+      code = """
+      defmodule Hologram.Test.Fixtures.Component.StateClashLineAfterProp do
+        use Hologram.Component
+
+        prop :items, :list
+
+        state :items, :list, default: []
+
+        def template do
+          ~HOLO""
+        end
+      end
+      """
+
+      expected_error_msg =
+        ~s/state "items" in Hologram.Test.Fixtures.Component.StateClashLineAfterProp has the same name as a prop, / <>
+          "which it would shadow - give them different names"
+
+      assert compile_error_at(code) == {expected_error_msg, 6}
+    end
+
+    test "raises at the prop when it has the same name as a state entry declared before it" do
+      code = """
+      defmodule Hologram.Test.Fixtures.Component.StateClashLineBeforeProp do
+        use Hologram.Component
+
+        state :items, :list, default: []
+
+        prop :items, :list
+
+        def template do
+          ~HOLO""
+        end
+      end
+      """
+
+      expected_error_msg =
+        ~s/state "items" in Hologram.Test.Fixtures.Component.StateClashLineBeforeProp has the same name as a prop, / <>
+          "which it would shadow - give them different names"
+
+      assert compile_error_at(code) == {expected_error_msg, 6}
+    end
+
+    test "raises when an entry has the same name as a prop sourced from context" do
+      expected_error_msg =
+        ~s/state "user" in Hologram.Test.Fixtures.Component.StateNamedLikeContextProp has the same name as a prop, / <>
+          "which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.StateNamedLikeContextProp do
+          use Hologram.Component
+
+          prop :user, :map, from_context: :current_user
+
+          state :user, :map
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises when an entry is named cid" do
+      expected_error_msg =
+        ~s/state "cid" in Hologram.Test.Fixtures.Component.StateNamedCid has the same name as the cid prop, / <>
+          "which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_error_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.StateNamedCid do
+          use Hologram.Component
+
+          state :cid, :string, default: "my_cid"
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
     end
   end
 

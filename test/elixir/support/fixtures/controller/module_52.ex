@@ -9,6 +9,8 @@ defmodule Hologram.Test.Fixtures.Controller.Module52 do
 
   layout LayoutWithRuntime
 
+  state :row, :any
+
   @impl Page
   def init(_params, component, server) do
     row = %Module15{

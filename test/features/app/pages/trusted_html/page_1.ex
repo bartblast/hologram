@@ -8,6 +8,11 @@ defmodule HologramFeatureTests.TrustedHtml.Page1 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :content, :any
+  state :direct_rows, :any
+  state :malformed, :any
+  state :rows, :any
+
   def init(_params, component, _server) do
     put_state(component,
       content:

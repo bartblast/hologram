@@ -69,8 +69,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module12, as: PageModule12
   alias Hologram.Test.Fixtures.Page.Module13, as: PageModule13
   alias Hologram.Test.Fixtures.Page.Module15, as: PageModule15
+  alias Hologram.Test.Fixtures.Page.Module16, as: PageModule16
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
-  alias Hologram.Test.Fixtures.Page.Module8, as: PageModule8
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module19, as: LabelPolicyEntity
@@ -113,6 +113,13 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module39
   alias Hologram.Test.Fixtures.Compiler.Module4
   alias Hologram.Test.Fixtures.Compiler.Module40
+  alias Hologram.Test.Fixtures.Compiler.Module41
+  alias Hologram.Test.Fixtures.Compiler.Module42
+  alias Hologram.Test.Fixtures.Compiler.Module43
+  alias Hologram.Test.Fixtures.Compiler.Module44
+  alias Hologram.Test.Fixtures.Compiler.Module45
+  alias Hologram.Test.Fixtures.Compiler.Module46
+  alias Hologram.Test.Fixtures.Compiler.Module47
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1, as: QueryExtractorModule1
@@ -744,6 +751,54 @@ defmodule Hologram.CompilerTest do
       refute String.contains?(result, js_fragment_3)
     end
 
+    test "hands the runtime the refs its page renders, inside its define", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result =
+        mfas
+        |> build_page_js(ir_plt, PLT.start(), MapSet.new(),
+          js_dir: @js_dir,
+          ref_names: {MyApp.Page, [{:item, 1}, {:"my-search", 0}]}
+        )
+        |> normalize_newlines()
+
+      expected =
+        ~s'ElementRefRegistry.putPageRefNames("Elixir.MyApp.Page", [["item",1],["my-search",0]]);\n  },'
+
+      assert String.contains?(result, expected)
+    end
+
+    test "hands the runtime nothing for a page without refs", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result =
+        build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(),
+          js_dir: @js_dir,
+          ref_names: {MyApp.Page, []}
+        )
+
+      refute String.contains?(result, "putPageRefNames")
+    end
+
+    test "hands the runtime nothing without the ref names", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result = build_page_js(mfas, ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+
+      refute String.contains?(result, "putPageRefNames")
+    end
+
+    test "takes the element ref registry from the deps it is defined with", %{ir_plt: ir_plt} do
+      mfas = [{Module22, :my_fun, 0}]
+
+      result =
+        mfas
+        |> build_page_js(ir_plt, PLT.start(), MapSet.new(), js_dir: @js_dir)
+        |> normalize_newlines()
+
+      assert String.contains?(result, "  ElementRefRegistry,\n")
+    end
+
     test "leaves its function defs for the runtime to define, under its own digest", %{
       ir_plt: ir_plt
     } do
@@ -1141,7 +1196,7 @@ defmodule Hologram.CompilerTest do
         |> Window.derive(false)
         |> Registry.id()
 
-      assert page_windows[PageModule8] == [window_id]
+      assert page_windows[PageModule16] == [window_id]
     end
 
     test "gives a page reaching no query no windows", %{page_windows: page_windows} do
@@ -1180,10 +1235,10 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt
     } do
       page_windows =
-        derive_page_windows([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_page_windows([PageModule16], call_graph, module_info_plt, [PageModule16])
 
-      assert Registry.id(Auth.grants_window()) in page_windows[PageModule8]
-      assert length(page_windows[PageModule8]) == 2
+      assert Registry.id(Auth.grants_window()) in page_windows[PageModule16]
+      assert length(page_windows[PageModule16]) == 2
     end
 
     # The grant entity is an entity type like any other, so a page's own query can derive the very
@@ -1470,7 +1525,7 @@ defmodule Hologram.CompilerTest do
     test "is true when a page checks permissions on the client and the data model designates a user entity type",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       {reach_by_page, _component_queries} =
-        derive_kept_reach([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_kept_reach([PageModule16], call_graph, module_info_plt, [PageModule16])
 
       assert permission_checking?(reach_by_page, module_info_plt)
     end
@@ -1480,7 +1535,7 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt
     } do
       {reach_by_page, _component_queries} =
-        derive_kept_reach([PageModule8], call_graph, module_info_plt, [])
+        derive_kept_reach([PageModule16], call_graph, module_info_plt, [])
 
       refute permission_checking?(reach_by_page, module_info_plt)
     end
@@ -1492,7 +1547,7 @@ defmodule Hologram.CompilerTest do
       plt_without_user_entity = without_user_entity(module_info_plt)
 
       {reach_by_page, _component_queries} =
-        derive_kept_reach([PageModule8], call_graph, plt_without_user_entity, [PageModule8])
+        derive_kept_reach([PageModule16], call_graph, plt_without_user_entity, [PageModule16])
 
       refute permission_checking?(reach_by_page, plt_without_user_entity)
     end
@@ -2044,7 +2099,7 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt
     } do
       sync_constants =
-        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_sync_constants([PageModule16], call_graph, module_info_plt, [PageModule16])
 
       assert MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
@@ -2053,7 +2108,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
+      sync_constants = derive_sync_constants([PageModule16], call_graph, module_info_plt, [])
 
       refute MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
@@ -2067,7 +2122,7 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt
     } do
       sync_constants =
-        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_sync_constants([PageModule16], call_graph, module_info_plt, [PageModule16])
 
       assert MapSet.member?(sync_constants.entity_types, PolicyEntity)
       refute MapSet.member?(sync_constants.entity_types, Entity4)
@@ -2078,7 +2133,7 @@ defmodule Hologram.CompilerTest do
     test "names the type of a set a checked rule reads when a page checks permissions on the client",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       sync_constants =
-        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_sync_constants([PageModule16], call_graph, module_info_plt, [PageModule16])
 
       assert MapSet.member?(sync_constants.entity_types, LabelPolicyEntity)
     end
@@ -2088,7 +2143,7 @@ defmodule Hologram.CompilerTest do
     test "names a type a checked rule's set is read through when a page checks permissions on the client",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       sync_constants =
-        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_sync_constants([PageModule16], call_graph, module_info_plt, [PageModule16])
 
       assert MapSet.member?(sync_constants.entity_types, ShelfPolicyEntity)
     end
@@ -2097,7 +2152,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
+      sync_constants = derive_sync_constants([PageModule16], call_graph, module_info_plt, [])
 
       refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
     end
@@ -2105,7 +2160,7 @@ defmodule Hologram.CompilerTest do
     test "marks the constants as permission-checking when a page checks permissions on the client",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       sync_constants =
-        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_sync_constants([PageModule16], call_graph, module_info_plt, [PageModule16])
 
       assert sync_constants.permission_checking?
     end
@@ -2115,7 +2170,7 @@ defmodule Hologram.CompilerTest do
     test "names a type declaring roles and no rule when a page checks permissions on the client",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
       sync_constants =
-        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_sync_constants([PageModule16], call_graph, module_info_plt, [PageModule16])
 
       assert MapSet.member?(sync_constants.entity_types, Entity12)
     end
@@ -2127,14 +2182,14 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt
     } do
       sync_constants =
-        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_sync_constants([PageModule16], call_graph, module_info_plt, [PageModule16])
 
       assert MapSet.member?(sync_constants.entity_types, Entity1)
     end
 
     test "leaves an unqueried type declaring roles out when no page checks permissions on the client",
          %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
+      sync_constants = derive_sync_constants([PageModule16], call_graph, module_info_plt, [])
 
       refute MapSet.member?(sync_constants.entity_types, Entity12)
     end
@@ -2144,7 +2199,7 @@ defmodule Hologram.CompilerTest do
       module_info_plt: module_info_plt
     } do
       sync_constants =
-        derive_sync_constants([PageModule8], call_graph, module_info_plt, [PageModule8])
+        derive_sync_constants([PageModule16], call_graph, module_info_plt, [PageModule16])
 
       assert sync_constants.role_modules == [RoleModule1, RoleModule2]
     end
@@ -2153,7 +2208,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants = derive_sync_constants([PageModule8], call_graph, module_info_plt, [])
+      sync_constants = derive_sync_constants([PageModule16], call_graph, module_info_plt, [])
 
       assert sync_constants.role_modules == []
     end
@@ -2165,7 +2220,7 @@ defmodule Hologram.CompilerTest do
       plt_without_user_entity = without_user_entity(module_info_plt)
 
       sync_constants =
-        derive_sync_constants([PageModule8], call_graph, plt_without_user_entity, [PageModule8])
+        derive_sync_constants([PageModule16], call_graph, plt_without_user_entity, [PageModule16])
 
       refute sync_constants.permission_checking?
       refute MapSet.member?(sync_constants.entity_types, RoleGrant)
@@ -5940,6 +5995,351 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "check_template_refs/2" do
+    test "returns each page's refs with its layout's, by name and number of parts, sorted" do
+      summaries = %{
+        MyApp.Card => {:ref, :card, 0},
+        MyApp.Layout => {:seq, [{:ref, :menu, 0}, {:ref, :item, 1}]},
+        MyApp.Page => {:seq, [{:component, MyApp.Card}, {:loop, {:ref, :item, 1}}]}
+      }
+
+      assert check_template_refs(summaries, %{MyApp.Page => MyApp.Layout}) == %{
+               MyApp.Page => [{:card, 0}, {:item, 1}, {:menu, 0}]
+             }
+    end
+
+    test "a page without refs" do
+      summaries = %{MyApp.Layout => {:seq, []}, MyApp.Page => {:seq, []}}
+
+      assert check_template_refs(summaries, %{MyApp.Page => MyApp.Layout}) == %{MyApp.Page => []}
+    end
+
+    test "raises for an atom ref twice in one template" do
+      summaries = %{MyApp.Card => {:seq, [{:ref, :title, 0}, {:ref, :title, 0}]}}
+
+      assert_error Hologram.CompileError,
+                   "the ref :title would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a component with an atom ref rendered twice" do
+      summaries = %{
+        MyApp.Card => {:ref, :title, 0},
+        MyApp.Feed => {:seq, [{:component, MyApp.Card}, {:component, MyApp.Card}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title would name two elements in a render of MyApp.Feed, " <>
+                     "both in the template of MyApp.Card (rendered from MyApp.Feed) - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "names every template a ref is rendered through" do
+      summaries = %{
+        MyApp.Card => {:ref, :title, 0},
+        MyApp.Feed => {:seq, [{:component, MyApp.List}, {:ref, :title, 0}]},
+        MyApp.List => {:component, MyApp.Card}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title would name two elements in a render of MyApp.Feed, " <>
+                     "one in the template of MyApp.Card (rendered from MyApp.Feed > MyApp.List) " <>
+                     "and one in the template of MyApp.Feed - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for an atom ref inside a for block" do
+      summaries = %{MyApp.Feed => {:loop, {:ref, :post, 0}}}
+
+      assert_error Hologram.CompileError,
+                   "the ref :post, in the template of MyApp.Feed, would name an element " <>
+                     "for each item of a {%for} in the template of MyApp.Feed - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:post, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a component with an atom ref rendered inside a for block" do
+      summaries = %{
+        MyApp.Card => {:ref, :title, 0},
+        MyApp.Feed => {:loop, {:component, MyApp.Card}}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title, in the template of MyApp.Card (rendered from MyApp.Feed), " <>
+                     "would name an element for each item of a {%for} in the template of MyApp.Feed - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for an atom ref of a component that renders itself" do
+      summaries = %{
+        MyApp.Tree => {:seq, [{:ref, :toggle, 0}, {:alt, [{:component, MyApp.Tree}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle, in the template of MyApp.Tree, would name an element " <>
+                     "for each level of MyApp.Tree, which renders itself - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for an atom ref of components that render each other, naming the one that declares it" do
+      for {renderer, declarer, expected_place} <- [
+            {MyApp.Branch, MyApp.Leaf,
+             "in the template of MyApp.Leaf (rendered from MyApp.Branch), would name an element " <>
+               "for each level of MyApp.Leaf, which renders itself through MyApp.Branch"},
+            {MyApp.Leaf, MyApp.Branch,
+             "in the template of MyApp.Branch, would name an element " <>
+               "for each level of MyApp.Branch, which renders itself through MyApp.Leaf"}
+          ] do
+        summaries = %{
+          renderer => {:alt, [{:component, declarer}]},
+          declarer => {:seq, [{:ref, :node, 0}, {:alt, [{:component, renderer}]}]}
+        }
+
+        assert_error Hologram.CompileError,
+                     "the ref :node, #{expected_place} - " <>
+                       "an atom ref names one element, so give each element a ref of its own, like {:node, item.id} for the items of a loop",
+                     fn -> check_template_refs(summaries, %{}) end
+      end
+    end
+
+    test "names every template of a cycle a ref is rendered through" do
+      summaries = %{
+        MyApp.A => {:alt, [{:component, MyApp.B}]},
+        MyApp.B => {:alt, [{:component, MyApp.C}]},
+        MyApp.C => {:seq, [{:ref, :x, 0}, {:alt, [{:component, MyApp.A}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :x, in the template of MyApp.C (rendered from MyApp.A > MyApp.B), " <>
+                     "would name an element for each level of MyApp.C, which renders itself through MyApp.A > MyApp.B - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:x, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    # A list's end marker renders only where the list stops, never next to the usage that recurses.
+    test "an atom ref in a branch the recursive usage isn't in passes" do
+      summaries = %{MyApp.Node => {:alt, [{:ref, :last, 0}, {:component, MyApp.Node}]}}
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+
+    # Each template of a cycle is evaluated once, so a cycle where every template renders every
+    # other one takes one pass rather than one per path through it.
+    test "templates that all render one another" do
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      modules = for index <- 1..30, do: :"Elixir.MyApp.Node#{index}"
+
+      summaries =
+        Map.new(modules, fn module ->
+          usages = for other <- modules, other != module, do: {:alt, [{:component, other}]}
+          {module, {:seq, [{:ref, :node, 1} | usages]}}
+        end)
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+
+    test "tuple refs inside a for block and a recursion pass" do
+      summaries = %{
+        MyApp.Feed => {:loop, {:ref, :post, 1}},
+        MyApp.Tree => {:seq, [{:ref, :node, 1}, {:alt, [{:component, MyApp.Tree}]}]}
+      }
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+
+    test "raises for an atom ref in a page and in its layout" do
+      summaries = %{MyApp.Layout => {:ref, :search, 0}, MyApp.Page => {:ref, :search, 0}}
+
+      assert_error Hologram.CompileError,
+                   "the ref :search would name two elements in the page MyApp.Page with its layout MyApp.Layout, " <>
+                     "one in the template of MyApp.Layout and one in the template of MyApp.Page - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:search, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{MyApp.Page => MyApp.Layout}) end
+    end
+
+    test "raises for an atom ref inside a for block in a branch that doesn't count" do
+      summaries = %{
+        MyApp.Card => {:alt, [{:loop, {:component, MyApp.Zeta}}, {:ref, :title, 0}]},
+        MyApp.Zeta => {:ref, :title, 0}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title, in the template of MyApp.Zeta (rendered from MyApp.Card), " <>
+                     "would name an element for each item of a {%for} in the template of MyApp.Card - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "the same atom ref in the branches of an if block passes" do
+      summaries = %{MyApp.Card => {:alt, [{:ref, :toggle, 0}, {:ref, :toggle, 0}]}}
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+
+    test "raises for an atom ref in one branch of an if block and next to it" do
+      summaries = %{
+        MyApp.Card => {:seq, [{:alt, [{:ref, :toggle, 0}, {:seq, []}]}, {:ref, :toggle, 0}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for an atom ref twice in one branch of an if block, with no hint" do
+      summaries = %{
+        MyApp.Card => {:alt, [{:seq, [{:ref, :toggle, 0}, {:ref, :toggle, 0}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for an atom ref in two separate if blocks, with a hint" do
+      summaries = %{
+        MyApp.Card => {:seq, [{:alt, [{:ref, :toggle, 0}]}, {:alt, [{:ref, :toggle, 0}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop" <>
+                     " - two {%if} blocks can both render, so elements that take turns go in the branches of one {%if} and {%else}",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for an atom ref in two separate if blocks inside an if block, with a hint" do
+      summaries = %{
+        MyApp.Card =>
+          {:alt, [{:seq, [{:alt, [{:ref, :toggle, 0}]}, {:alt, [{:ref, :toggle, 0}]}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :toggle would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Card - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:toggle, item.id} for the items of a loop" <>
+                     " - two {%if} blocks can both render, so elements that take turns go in the branches of one {%if} and {%else}",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a component with an atom ref in its own if block, rendered in two separate if blocks, with a hint" do
+      summaries = %{
+        MyApp.Alpha => {:alt, [{:ref, :title, 0}]},
+        MyApp.Card =>
+          {:seq, [{:alt, [{:component, MyApp.Alpha}]}, {:alt, [{:component, MyApp.Alpha}]}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :title would name two elements in a render of MyApp.Card, " <>
+                     "both in the template of MyApp.Alpha (rendered from MyApp.Card) - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop" <>
+                     " - two {%if} blocks can both render, so elements that take turns go in the branches of one {%if} and {%else}",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "a tie between branches names the same templates whichever branch comes first" do
+      for branches <- [
+            [{:component, MyApp.Alpha}, {:component, MyApp.Beta}],
+            [{:component, MyApp.Beta}, {:component, MyApp.Alpha}]
+          ] do
+        summaries = %{
+          MyApp.Alpha => {:ref, :title, 0},
+          MyApp.Beta => {:ref, :title, 0},
+          MyApp.Card => {:seq, [{:alt, branches}, {:ref, :title, 0}]}
+        }
+
+        assert_error Hologram.CompileError,
+                     "the ref :title would name two elements in a render of MyApp.Card, " <>
+                       "one in the template of MyApp.Alpha (rendered from MyApp.Card) " <>
+                       "and one in the template of MyApp.Card - " <>
+                       "an atom ref names one element, so give each element a ref of its own, like {:title, item.id} for the items of a loop",
+                     fn -> check_template_refs(summaries, %{}) end
+      end
+    end
+
+    test "raises for a ref name with different numbers of parts" do
+      summaries = %{
+        MyApp.Card => {:ref, :item, 2},
+        MyApp.Feed => {:seq, [{:ref, :item, 1}, {:component, MyApp.Card}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :item takes 1 part after its name in the template of MyApp.Feed, " <>
+                     "and 2 parts in the template of MyApp.Card (rendered from MyApp.Feed), " <>
+                     "both in a render of MyApp.Feed - " <>
+                     "a ref name takes the same number of parts everywhere it can render",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for a ref name with and without parts in the branches of an if block" do
+      summaries = %{MyApp.Card => {:alt, [{:ref, :item, 0}, {:ref, :item, 1}]}}
+
+      assert_error Hologram.CompileError,
+                   "the ref :item takes no parts after its name in the template of MyApp.Card, " <>
+                     "and 1 part in the template of MyApp.Card, " <>
+                     "both in a render of MyApp.Card - " <>
+                     "a ref name takes the same number of parts everywhere it can render",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "a ref name with different numbers of parts on two pages passes" do
+      summaries = %{
+        MyApp.Layout => {:seq, []},
+        MyApp.PageA => {:ref, :item, 1},
+        MyApp.PageB => {:ref, :item, 2}
+      }
+
+      layouts = %{MyApp.PageA => MyApp.Layout, MyApp.PageB => MyApp.Layout}
+
+      assert check_template_refs(summaries, layouts) == %{
+               MyApp.PageA => [{:item, 1}],
+               MyApp.PageB => [{:item, 2}]
+             }
+    end
+
+    test "raises for the mistake of the first template in module order" do
+      summaries = %{
+        MyApp.Alpha => {:loop, {:ref, :post, 0}},
+        MyApp.Beta => {:seq, [{:ref, :title, 0}, {:ref, :title, 0}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :post, in the template of MyApp.Alpha, would name an element " <>
+                     "for each item of a {%for} in the template of MyApp.Alpha - " <>
+                     "an atom ref names one element, so give each element a ref of its own, like {:post, item.id} for the items of a loop",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "raises for different numbers of parts before an atom ref rendered twice" do
+      summaries = %{
+        MyApp.Card => {:seq, [{:ref, :item, 0}, {:ref, :item, 0}, {:ref, :item, 1}]}
+      }
+
+      assert_error Hologram.CompileError,
+                   "the ref :item takes no parts after its name in the template of MyApp.Card, " <>
+                     "and 1 part in the template of MyApp.Card, both in a render of MyApp.Card - " <>
+                     "a ref name takes the same number of parts everywhere it can render",
+                   fn -> check_template_refs(summaries, %{}) end
+    end
+
+    test "a component the summaries don't hold adds nothing" do
+      summaries = %{MyApp.Feed => {:seq, [{:component, MyApp.Unknown}, {:ref, :post, 0}]}}
+
+      assert check_template_refs(summaries, %{}) == %{}
+    end
+  end
+
   describe "chunk_signature_digest/1" do
     test "is the first 8 hex digits of the MD5 of the sorted type names" do
       assert chunk_signature_digest(MapSet.new([Date])) == "59b80f19"
@@ -6419,6 +6819,41 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.added_modules) == [:module_2, :module_4]
     assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
+  end
+
+  describe "dump_module_info_plt/2" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "dump_module_info_plt_2"])
+      clean_dir(test_tmp_dir)
+
+      [dump_path: Path.join([test_tmp_dir, "build", Reflection.module_info_plt_dump_file_name()])]
+    end
+
+    test "writes the PLT and a token", %{dump_path: dump_path} do
+      plt = PLT.put(PLT.start(), :module_1, %{digest: 1})
+
+      assert dump_module_info_plt(plt, dump_path) == :ok
+
+      loaded_plt = PLT.start()
+      PLT.maybe_load(loaded_plt, dump_path)
+
+      assert PLT.get_all(loaded_plt) == %{module_1: %{digest: 1}}
+      assert {_mtime, token} = module_info_dump_stamp(dump_path)
+      assert is_binary(token)
+    end
+
+    test "gives a dump written again within the same second another stamp", %{
+      dump_path: dump_path
+    } do
+      plt = PLT.start()
+      dump_module_info_plt(plt, dump_path)
+      {mtime, _token} = old_stamp = module_info_dump_stamp(dump_path)
+
+      dump_module_info_plt(plt, dump_path)
+      File.touch!(dump_path, mtime)
+
+      assert module_info_dump_stamp(dump_path) != old_stamp
+    end
   end
 
   describe "encode_reachable_functions/5" do
@@ -7356,6 +7791,119 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "list_template_refs/1" do
+    test "a ref in text form, in braces, as a tuple in its own braces and on a dynamic tag, and none for a ref an expression names" do
+      refs =
+        Module41
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs ==
+               {:seq,
+                [
+                  {:ref, :search, 0},
+                  {:ref, :message, 1},
+                  {:ref, :comment, 1},
+                  {:ref, :label, 0}
+                ]}
+    end
+
+    test "none for a ref whose literal part can't be in an identifier" do
+      refs =
+        Module47
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:seq, []}
+    end
+
+    test "the branches of an if block are alternatives" do
+      refs =
+        Module42
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs ==
+               {:seq,
+                [
+                  {:alt, [{:ref, :toggle, 0}, {:ref, :toggle, 0}]},
+                  {:alt, [{:ref, :hint, 0}]}
+                ]}
+    end
+
+    test "the clauses of a cond are alternatives" do
+      refs =
+        Module46
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:alt, [{:ref, :wide, 0}, {:ref, :tall, 0}, {:ref, :narrow, 0}]}
+    end
+
+    test "the body of a for block repeats" do
+      refs =
+        Module43
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:loop, {:ref, :item, 1}}
+    end
+
+    test "a component is followed by the slot content the template gives it" do
+      refs =
+        Module44
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:seq, [{:component, Module45}, {:ref, :inside, 0}]}
+    end
+
+    test "a component's template declares the refs of its own elements" do
+      refs =
+        Module45
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:ref, :box, 0}
+    end
+
+    test "a template without refs or components" do
+      refs =
+        Module27
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:seq, []}
+    end
+
+    test "a module without a template" do
+      refs =
+        Module1
+        |> IR.for_module()
+        |> list_template_refs()
+
+      assert refs == {:seq, []}
+    end
+  end
+
+  test "list_template_refs_by_module/2" do
+    ir_plt =
+      PLT.start(
+        items: [
+          {Module43, IR.for_module(Module43)},
+          {Module45, IR.for_module(Module45)}
+        ]
+      )
+
+    assert list_template_refs_by_module([Module43, Module45, Module27], ir_plt) == %{
+             Module27 => {:seq, []},
+             Module43 => {:loop, {:ref, :item, 1}},
+             Module45 => {:ref, :box, 0}
+           }
+
+    PLT.stop(ir_plt)
+  end
+
   test "list_components/1" do
     info = fn page?, component? ->
       %{digest: 1, mtime: 1, size: 1, page?: page?, component?: component?}
@@ -8003,6 +8551,35 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "module_info_dump_stamp/1" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "module_info_dump_stamp_1"])
+      clean_dir(test_tmp_dir)
+
+      [dump_path: Path.join(test_tmp_dir, Reflection.module_info_plt_dump_file_name())]
+    end
+
+    test "dump with a token", %{dump_path: dump_path} do
+      File.write!(dump_path, "dump")
+      File.write!(dump_path <> ".token", "token")
+
+      assert module_info_dump_stamp(dump_path) ==
+               {File.stat!(dump_path, time: :posix).mtime, "token"}
+    end
+
+    test "dump with no token", %{dump_path: dump_path} do
+      File.write!(dump_path, "dump")
+
+      assert module_info_dump_stamp(dump_path) == {File.stat!(dump_path, time: :posix).mtime, nil}
+    end
+
+    test "no dump", %{dump_path: dump_path} do
+      File.write!(dump_path <> ".token", "token")
+
+      assert module_info_dump_stamp(dump_path) == nil
+    end
+  end
+
   describe "partition_affected_pages/6" do
     setup do
       test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_6"])
@@ -8515,17 +9092,46 @@ defmodule Hologram.CompilerTest do
       [empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []}]
     end
 
-    test "leaves the entry of a module the compiler did not report", %{empty_diff: empty_diff} do
+    test "reads a module the compiler did not report when its beam moved since its entry", %{
+      empty_diff: empty_diff
+    } do
+      # Another OS process compiled it: this VM's compiler reported nothing, but the beam's mtime
+      # moved.
       beam_path = :code.which(Hologram.Reflection)
-
-      # Its mtime moved, so a check of the beam would read it.
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0}
+      beam_info = Reflection.beam_info(beam_path)
+      old_info = %{beam_info | digest: 1, mtime: 0}
       plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
 
       result =
         patch_module_info_plt!(
           plt,
-          nil,
+          beam_info.mtime + 2,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new()
+        )
+
+      assert result ==
+               {%{empty_diff | edited_modules: [Hologram.Reflection]}, true,
+                %{Hologram.Reflection => old_info}}
+
+      assert PLT.get!(plt, Hologram.Reflection) == beam_info
+    end
+
+    test "keeps the entry of a module the compiler did not report when its beam matches it", %{
+      empty_diff: empty_diff
+    } do
+      beam_path = :code.which(Hologram.Reflection)
+
+      # The faked digest would show as an edit if the beam were read.
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1}
+      plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      # Untouched and a second older than the dump, so the entry is reused.
+      result =
+        patch_module_info_plt!(
+          plt,
+          old_info.mtime + 1,
           MapSet.new([Hologram.Reflection]),
           [{Hologram.Reflection, beam_path}],
           MapSet.new()
@@ -8672,65 +9278,30 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(plt, module) == :error
     end
 
-    test "checks the beam of a protocol the compiler did not report", %{empty_diff: empty_diff} do
-      beam_path = :code.which(Enumerable)
-
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0}
-      plt = PLT.put(PLT.start(), Enumerable, old_info)
-
-      result =
-        patch_module_info_plt!(
-          plt,
-          nil,
-          MapSet.new([Enumerable]),
-          [{Enumerable, beam_path}],
-          MapSet.new()
-        )
-
-      assert result ==
-               {%{empty_diff | edited_modules: [Enumerable]}, true, %{Enumerable => old_info}}
-
-      assert PLT.get!(plt, Enumerable) == Reflection.beam_info(beam_path)
-    end
-
-    test "reuses the entry of a protocol whose beam is untouched and older than the dump", %{
-      empty_diff: empty_diff
-    } do
-      beam_path = :code.which(Enumerable)
-      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1}
-      plt = PLT.put(PLT.start(), Enumerable, old_info)
-
-      result =
-        patch_module_info_plt!(
-          plt,
-          mtime + 1,
-          MapSet.new([Enumerable]),
-          [{Enumerable, beam_path}],
-          MapSet.new()
-        )
-
-      assert result == {empty_diff, false, %{}}
-      assert PLT.get!(plt, Enumerable) == old_info
-    end
-
     test "leaves every entry as the beams and the reported modules say, and finds the diff" do
       reflection_path = :code.which(Hologram.Reflection)
       compiler_path = :code.which(Hologram.Compiler)
       enumerable_path = :code.which(Enumerable)
 
       plt_path = :code.which(Hologram.Commons.PLT)
-      kept_reflection_info = %{Reflection.beam_info(reflection_path) | digest: 1, mtime: 0}
+      tracer_path = :code.which(Hologram.Compiler.Tracer)
+
+      # The faked digest would show as an edit if the beam were read.
+      kept_reflection_info = %{Reflection.beam_info(reflection_path) | digest: 1}
       old_compiler_info = %{Reflection.beam_info(compiler_path) | digest: 1}
       old_enumerable_info = %{Reflection.beam_info(enumerable_path) | digest: 1, mtime: 0}
       old_removed_info = %{digest: "removed"}
+      old_tracer_info = %{Reflection.beam_info(tracer_path) | digest: 1, mtime: 0}
 
       plt =
         PLT.put(PLT.start(), [
           # Not editable.
           {Enum, %{digest: "kept"}},
-          # Editable, not reported, mtime moved: left as it is.
+          # Editable, not reported, beam as its entry says: left as it is.
           {Hologram.Reflection, kept_reflection_info},
+          # Editable, not reported, mtime moved, as when another OS process compiled it: read
+          # again.
+          {Hologram.Compiler.Tracer, old_tracer_info},
           # Reported: read again.
           {Hologram.Compiler, old_compiler_info},
           # A protocol not reported, mtime moved: read again.
@@ -8740,10 +9311,17 @@ defmodule Hologram.CompilerTest do
         ])
 
       editable_modules =
-        MapSet.new([Hologram.Reflection, Hologram.Compiler, Enumerable, :removed_module])
+        MapSet.new([
+          Hologram.Reflection,
+          Hologram.Compiler.Tracer,
+          Hologram.Compiler,
+          Enumerable,
+          :removed_module
+        ])
 
       editable_beams = [
         {Hologram.Reflection, reflection_path},
+        {Hologram.Compiler.Tracer, tracer_path},
         {Hologram.Compiler, compiler_path},
         {Enumerable, enumerable_path},
         # No entry: added.
@@ -8752,12 +9330,20 @@ defmodule Hologram.CompilerTest do
 
       compiled_modules = MapSet.new([Hologram.Compiler])
 
+      # Past every beam's mtime, so that a beam its entry matches is not read.
+      dumped_at =
+        editable_beams
+        |> Enum.map(fn {_module, beam_path} -> Reflection.beam_info(beam_path).mtime end)
+        |> Enum.max()
+        |> Kernel.+(2)
+
       {diff, changed?, previous_infos} =
-        patch_module_info_plt!(plt, nil, editable_modules, editable_beams, compiled_modules)
+        patch_module_info_plt!(plt, dumped_at, editable_modules, editable_beams, compiled_modules)
 
       assert PLT.get_all(plt) == %{
                Enum => %{digest: "kept"},
                Hologram.Reflection => kept_reflection_info,
+               Hologram.Compiler.Tracer => Reflection.beam_info(tracer_path),
                Hologram.Compiler => Reflection.beam_info(compiler_path),
                Enumerable => Reflection.beam_info(enumerable_path),
                Hologram.Commons.PLT => Reflection.beam_info(plt_path)
@@ -8765,7 +9351,7 @@ defmodule Hologram.CompilerTest do
 
       assert diff == %{
                added_modules: [Hologram.Commons.PLT],
-               edited_modules: [Enumerable, Hologram.Compiler],
+               edited_modules: [Enumerable, Hologram.Compiler, Hologram.Compiler.Tracer],
                removed_modules: [:removed_module]
              }
 
@@ -8773,6 +9359,7 @@ defmodule Hologram.CompilerTest do
 
       assert previous_infos == %{
                Hologram.Compiler => old_compiler_info,
+               Hologram.Compiler.Tracer => old_tracer_info,
                Enumerable => old_enumerable_info,
                Hologram.Commons.PLT => nil,
                removed_module: old_removed_info

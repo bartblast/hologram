@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.Session.Page6 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :command_executed?, :boolean
+
   def init(_params, component, _server) do
     put_state(component, command_executed?: false)
   end

@@ -5,6 +5,10 @@ defmodule HologramFeatureTests.Focus.Page1 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :count, :integer
+  state :focused_field, :any
+  state :sticky?, :boolean
+
   def init(_params, component, _server) do
     put_state(component, count: 0, focused_field: nil, sticky?: false)
   end

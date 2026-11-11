@@ -5,6 +5,9 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module28 do
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
+  state :state_1, :string
+  state :state_2, :string
+
   @impl Page
   def init(_params, component, _server) do
     put_state(component, state_1: "value_1", state_2: "value_2")

@@ -3,10 +3,17 @@ defmodule Hologram.Template.DOM do
 
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.AST
+  alias Hologram.Identifier
+  alias Hologram.Template.DataTransfer
   alias Hologram.Template.EventModifiers
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
   alias Hologram.TemplateSyntaxError
+
+  # The refs that name the window and the document, which a template can't give an element.
+  @built_in_refs [:window, :document]
+
+  @ref_expectation "$ref takes an identifier, like :search or {:message, 42}"
 
   # Tags a key would name nothing new. "document" and "window" render no node at all, and "slot"
   # renders whatever is put in its place. The three page-level elements are each the only one of
@@ -143,6 +150,82 @@ defmodule Hologram.Template.DOM do
     code_acc <> code
   end
 
+  # Whether the quoted expression is plain data: atoms, numbers, negative numbers, strings, and
+  # lists, tuples and maps of them. A struct is left out, since building it needs its module, which
+  # only the template's aliases may name, and so is a module name, for the same reason.
+  defp data_literal?(ast) when is_atom(ast) or is_number(ast) or is_binary(ast), do: true
+
+  defp data_literal?(ast) when is_list(ast), do: Enum.all?(ast, &data_literal?/1)
+
+  defp data_literal?({:-, _meta, [number]}) when is_number(number), do: true
+
+  defp data_literal?({left, right}), do: data_literal?(left) and data_literal?(right)
+
+  defp data_literal?({:{}, _meta, elements}), do: data_literal?(elements)
+
+  defp data_literal?({:%{}, _meta, pairs}), do: data_literal?(pairs)
+
+  defp data_literal?(_ast), do: false
+
+  # Whether the attribute is a $data_transfer, with modifiers or without.
+  defp data_transfer_attribute?({name, _value_parts}) when is_binary(name) do
+    match?({"$data_transfer", _modifiers}, decompose_event_attribute_name(name))
+  end
+
+  defp data_transfer_attribute?(_spread), do: false
+
+  defp data_transfer_entry({key, value_ast}) do
+    if data_literal?(value_ast) do
+      {key, literal_value(value_ast)}
+    else
+      {key, %DataTransfer.Unknown{}}
+    end
+  end
+
+  # The value a $data_transfer expression gives, read off its source as far as the source tells it:
+  # {:ok, value}, with %DataTransfer.Unknown{} in place of each value of a keyword list or map that
+  # only the render knows, like an assign. :unknown when the source doesn't tell even the shape. The
+  # braces holding one value give that value, and holding none or several give the tuple, as the
+  # renderers read them.
+  defp data_transfer_literal(expr_str) do
+    case expr_str
+         |> normalize_implicit_keyword_list()
+         |> Code.string_to_quoted(emit_warnings: false) do
+      {:ok, {:{}, _meta, [value_ast]}} -> data_transfer_term(value_ast)
+      {:ok, tuple_ast} -> data_transfer_term(tuple_ast)
+      {:error, _reason} -> :unknown
+    end
+  end
+
+  defp data_transfer_pairs?(ast) when is_list(ast) do
+    Enum.all?(ast, &match?({key, _value_ast} when is_atom(key), &1))
+  end
+
+  defp data_transfer_pairs?(_ast), do: false
+
+  # A map is built entry by entry, before the literal case, so a repeated key keeps the last value
+  # the way the map does when it renders, without evaluating the map.
+  defp data_transfer_term(ast) do
+    cond do
+      match?({:%{}, _meta, _pairs}, ast) and data_transfer_pairs?(elem(ast, 2)) ->
+        entries =
+          ast
+          |> elem(2)
+          |> Map.new(&data_transfer_entry/1)
+
+        {:ok, entries}
+
+      data_literal?(ast) ->
+        {:ok, literal_value(ast)}
+
+      data_transfer_pairs?(ast) ->
+        {:ok, Enum.map(ast, &data_transfer_entry/1)}
+
+      true ->
+        :unknown
+    end
+  end
+
   # Splits a "$"-prefixed event attribute name on "." into the bare name and its
   # raw modifier segments. Names without "$" (or without ".") carry no modifiers.
   defp decompose_event_attribute_name("$" <> _rest = name) do
@@ -153,6 +236,13 @@ defmodule Hologram.Template.DOM do
   end
 
   defp decompose_event_attribute_name(name), do: {name, []}
+
+  # Whether the attribute is a $drop binding, with modifiers or without.
+  defp drop_attribute?({name, _value_parts}) when is_binary(name) do
+    match?({"$drop", _modifiers}, decompose_event_attribute_name(name))
+  end
+
+  defp drop_attribute?(_spread), do: false
 
   defp extract_expression_content(expr_str) do
     expr_str
@@ -257,6 +347,26 @@ defmodule Hologram.Template.DOM do
 
   defp generator?(_qualifier), do: false
 
+  # The value a quoted data literal stands for, built from its source without evaluating it. A map
+  # keeps the last value of a repeated key, as the map does when it renders.
+  defp literal_value(ast) when is_list(ast), do: Enum.map(ast, &literal_value/1)
+
+  defp literal_value({:-, _meta, [number]}), do: -number
+
+  defp literal_value({left, right}), do: {literal_value(left), literal_value(right)}
+
+  defp literal_value({:{}, _meta, elements}) do
+    elements
+    |> Enum.map(&literal_value/1)
+    |> List.to_tuple()
+  end
+
+  defp literal_value({:%{}, _meta, pairs}) do
+    Map.new(pairs, fn {key, value} -> {literal_value(key), literal_value(value)} end)
+  end
+
+  defp literal_value(ast), do: ast
+
   # Wraps implicit keyword list.
   # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
   defp normalize_implicit_keyword_list(templ_expr) do
@@ -294,6 +404,54 @@ defmodule Hologram.Template.DOM do
 
   defp normalize_newlines(term), do: term
 
+  # The text form names the ref the atom spells, so it takes only a name that can be written as an
+  # atom without quotes. Any other identifier is an expression's to give. It runs when the template
+  # compiles, on text the template author wrote.
+  # sobelow_skip ["DOS.StringToAtom"]
+  defp ref_text_atom(text) do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    atom = String.to_atom(text)
+
+    if Macro.classify_atom(atom) != :identifier do
+      raise TemplateSyntaxError,
+        message:
+          ~s'the text form of $ref takes a plain atom name, like $ref="search", got "#{text}" - ' <>
+            "write any other ref as an expression, like $ref={#{inspect(atom)}}"
+    end
+
+    case Identifier.check(atom) do
+      :ok ->
+        validate_ref_not_built_in(atom)
+        atom
+
+      {:error, hint} ->
+        raise TemplateSyntaxError, message: Identifier.message(@ref_expectation, atom, hint)
+    end
+  end
+
+  # The build judges an expression only when it's a literal built-in ref. Every other value is
+  # checked when the element renders, since only then is it known.
+  defp ref_value_code([text: text], _value_code) do
+    "{:expression, {#{inspect(ref_text_atom(text))}}}"
+  end
+
+  defp ref_value_code([expression: expr_str], value_code) do
+    case expr_str
+         |> extract_expression_content()
+         |> Code.string_to_quoted(emit_warnings: false) do
+      {:ok, atom} when atom in @built_in_refs -> validate_ref_not_built_in(atom)
+      _other -> :ok
+    end
+
+    value_code
+  end
+
+  defp ref_value_code(_value_parts, _value_code) do
+    raise TemplateSyntaxError,
+      message:
+        ~s'the $ref attribute takes a name, like $ref="search", or a single expression, like $ref={:message, message.id}'
+  end
+
   defp render_attribute_code({:spread, templ_expr}, _tag_type) do
     "{:spread, #{normalize_implicit_keyword_list(templ_expr)}}"
   end
@@ -302,6 +460,26 @@ defmodule Hologram.Template.DOM do
     value_code = Enum.map_join(value_parts, ", ", &render_code/1)
 
     case decompose_event_attribute_name(name) do
+      # $ref names the element for a lookup rather than something that happens to it. Its text form
+      # is the atom it spells, so both renderers read one expression either way.
+      {"$ref", []} ->
+        "{\"$ref\", [#{ref_value_code(value_parts, value_code)}]}"
+
+      {"$ref", [modifier | _rest]} ->
+        raise TemplateSyntaxError,
+          message: ~s'the $ref attribute takes no modifiers, got "#{modifier}"'
+
+      # $data_transfer declares what a drag carries and how a drop target takes it, which the client
+      # applies while the drag events run, so it binds nothing and the modifier syntax has nothing
+      # to mean on it.
+      {"$data_transfer", []} ->
+        validate_data_transfer_value(value_parts)
+        "{\"$data_transfer\", [#{value_code}]}"
+
+      {"$data_transfer", [modifier | _rest]} ->
+        raise TemplateSyntaxError,
+          message: ~s'the $data_transfer attribute takes no modifiers, got "#{modifier}"'
+
       # $focused says where focus should be, so it is a boolean attribute the client reads rather
       # than an event binding, and the modifier syntax has nothing to mean on it.
       {"$focused", []} ->
@@ -398,7 +576,9 @@ defmodule Hologram.Template.DOM do
   # holding the runtime value. Attributes use element-style event decomposition, since the element
   # branch is the only one that can consume events - the component branch filters them out anyway.
   defp render_code({:start_tag, {{:expression, templ_expr}, attributes}}) do
+    validate_data_transfer_attributes(%DataTransfer.Unknown{}, attributes)
     validate_focus_attributes(attributes)
+    validate_ref_attributes(attributes)
 
     attributes_code = Enum.map_join(attributes, ", ", &render_attribute_code(&1, :element))
 
@@ -408,11 +588,20 @@ defmodule Hologram.Template.DOM do
   defp render_code({:start_tag, {tag_name, attributes}}) do
     tag_type = Helpers.tag_type(tag_name)
 
+    if has_ref_attribute?(attributes) do
+      validate_ref_tag(tag_name, tag_type)
+    end
+
+    validate_ref_attributes(attributes)
+
     if tag_name in ["window", "document"] do
       validate_reserved_tag_attributes(tag_name, attributes)
     end
 
     if tag_type == :element do
+      reserved_tag = if tag_name in ["window", "document"], do: tag_name
+      validate_data_transfer_attributes(reserved_tag, attributes)
+
       validate_focus_attributes(attributes)
     end
 
@@ -539,6 +728,36 @@ defmodule Hologram.Template.DOM do
     end
   end
 
+  # One attribute declares it all, so a second would leave the renderers to pick between them. A
+  # literal value is judged here, the way the renderers judge it, with whether the tag has a $drop
+  # binding, which the value's drop effect needs, and the <window> or <document> tag it is on,
+  # where no drag starts (nil for an element, %DataTransfer.Unknown{} for a dynamic tag).
+  defp validate_data_transfer_attributes(tag, attributes) do
+    if Enum.count(attributes, &data_transfer_attribute?/1) > 1 do
+      raise TemplateSyntaxError, message: "a tag takes one $data_transfer attribute"
+    end
+
+    has_drop? = Enum.any?(attributes, &drop_attribute?/1)
+
+    with {"$data_transfer", [expression: expr_str]} <-
+           List.keyfind(attributes, "$data_transfer", 0),
+         {:ok, value} <- data_transfer_literal(expr_str),
+         {:error, message} <- DataTransfer.check(value, has_drop?, tag) do
+      raise TemplateSyntaxError, message: message
+    end
+
+    :ok
+  end
+
+  # $data_transfer takes one expression. What it gives is judged with the tag's other attributes.
+  defp validate_data_transfer_value(expression: _expr_str), do: :ok
+
+  defp validate_data_transfer_value(_value_parts) do
+    raise TemplateSyntaxError,
+      message:
+        "the $data_transfer attribute takes a single expression, like $data_transfer={drop_effect: :move}"
+  end
+
   # autofocus is what $focused renders as, so an element carrying both would have the markup and
   # the state disagree about it. Only literal attributes are judged here: an autofocus arriving
   # through a spread yields to $focused at render time instead.
@@ -562,6 +781,65 @@ defmodule Hologram.Template.DOM do
     raise TemplateSyntaxError,
       message: "the $focused attribute takes a single expression, like $focused={@editing?}"
   end
+
+  defp validate_ref_attributes(attributes) do
+    if Enum.count(attributes, &ref_attribute?/1) > 1 do
+      raise TemplateSyntaxError, message: "a tag takes one $ref attribute"
+    end
+  end
+
+  defp has_ref_attribute?(attributes), do: Enum.any?(attributes, &ref_attribute?/1)
+
+  defp ref_attribute?({name, _value_parts}) when is_binary(name) do
+    match?({"$ref", _modifiers}, decompose_event_attribute_name(name))
+  end
+
+  defp ref_attribute?(_spread), do: false
+
+  # :window and :document name the window and the document, which no template renders.
+  defp validate_ref_not_built_in(:window) do
+    raise TemplateSyntaxError,
+      message:
+        ":window is a built-in ref, so a template can't name an element with it - JS.element(:window) returns the window"
+  end
+
+  defp validate_ref_not_built_in(:document) do
+    raise TemplateSyntaxError,
+      message:
+        ":document is a built-in ref, so a template can't name an element with it - JS.element(:document) returns the document"
+  end
+
+  defp validate_ref_not_built_in(_atom), do: :ok
+
+  # A ref names an element, so it goes only on a tag that renders one the client can reach. The
+  # client patches the <html> element's attributes through a node of its own rather than the
+  # rendered one, so a ref there would name nothing.
+  defp validate_ref_tag(tag_name, :component) do
+    raise TemplateSyntaxError,
+      message:
+        "$ref can't go on the <#{tag_name}> component tag - a component renders no element of its own, " <>
+          "so put $ref on an element in its template and pass the ref as a prop, like input_ref={:search}"
+  end
+
+  defp validate_ref_tag(tag_name, _tag_type) when tag_name in ["window", "document"] do
+    raise TemplateSyntaxError,
+      message:
+        "$ref can't go on a <#{tag_name}> tag, which renders no element - JS.element(:#{tag_name}) returns the #{tag_name}"
+  end
+
+  defp validate_ref_tag("slot", _tag_type) do
+    raise TemplateSyntaxError,
+      message:
+        "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content"
+  end
+
+  defp validate_ref_tag("html", _tag_type) do
+    raise TemplateSyntaxError,
+      message:
+        "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element"
+  end
+
+  defp validate_ref_tag(_tag_name, _tag_type), do: :ok
 
   # The <window> and <document> tags bind events to the window or document and nothing else, so each
   # attribute must be an event binding (a "$"-prefixed name). Any other attribute fails the build.

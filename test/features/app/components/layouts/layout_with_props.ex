@@ -10,6 +10,8 @@ defmodule HologramFeatureTests.Components.LayoutWithProps do
   prop :a, :string
   prop :b, :integer
 
+  state :result, :any
+
   def init(props, component, _server) do
     put_state(component, :result, props)
   end

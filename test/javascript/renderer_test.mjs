@@ -18,6 +18,13 @@ import {defineLayoutFixture} from "./support/fixtures/layout_fixture.mjs";
 import {defineModule1Fixture} from "./support/fixtures/renderer/module_1.mjs";
 import {defineModule10Fixture} from "./support/fixtures/renderer/module_10.mjs";
 import {defineModule11Fixture} from "./support/fixtures/renderer/module_11.mjs";
+import {defineModule114Fixture} from "./support/fixtures/renderer/module_114.mjs";
+import {defineModule115Fixture} from "./support/fixtures/renderer/module_115.mjs";
+import {defineModule116Fixture} from "./support/fixtures/renderer/module_116.mjs";
+import {defineModule117Fixture} from "./support/fixtures/renderer/module_117.mjs";
+import {defineModule118Fixture} from "./support/fixtures/renderer/module_118.mjs";
+import {defineModule119Fixture} from "./support/fixtures/renderer/module_119.mjs";
+import {defineModule120Fixture} from "./support/fixtures/renderer/module_120.mjs";
 import {defineModule12Fixture} from "./support/fixtures/renderer/module_12.mjs";
 import {defineModule14Fixture} from "./support/fixtures/renderer/module_14.mjs";
 import {defineModule15Fixture} from "./support/fixtures/renderer/module_15.mjs";
@@ -84,15 +91,23 @@ import {defineClientOnlyModule3Fixture} from "./support/fixtures/renderer/client
 import {defineClientOnlyModule4Fixture} from "./support/fixtures/renderer/client_only/module_4.mjs";
 import {defineClientOnlyModule5Fixture} from "./support/fixtures/renderer/client_only/module_5.mjs";
 import {defineClientOnlyModule6Fixture} from "./support/fixtures/renderer/client_only/module_6.mjs";
+import {defineClientOnlyModule7Fixture} from "./support/fixtures/renderer/client_only/module_7.mjs";
+import {defineClientOnlyModule8Fixture} from "./support/fixtures/renderer/client_only/module_8.mjs";
+import {defineClientOnlyModule9Fixture} from "./support/fixtures/renderer/client_only/module_9.mjs";
+import {defineClientOnlyModule10Fixture} from "./support/fixtures/renderer/client_only/module_10.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import DragEvent from "../../assets/js/events/drag_event.mjs";
+import ElementRefRegistry from "../../assets/js/element_ref_registry.mjs";
+import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import FocusEvent from "../../assets/js/events/focus_event.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Once from "../../assets/js/once.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -104,6 +119,13 @@ defineLayoutFixture();
 defineModule1Fixture();
 defineModule10Fixture();
 defineModule11Fixture();
+defineModule114Fixture();
+defineModule115Fixture();
+defineModule116Fixture();
+defineModule117Fixture();
+defineModule118Fixture();
+defineModule119Fixture();
+defineModule120Fixture();
 defineModule12Fixture();
 defineModule14Fixture();
 defineModule15Fixture();
@@ -170,10 +192,17 @@ defineClientOnlyModule3Fixture();
 defineClientOnlyModule4Fixture();
 defineClientOnlyModule5Fixture();
 defineClientOnlyModule6Fixture();
+defineClientOnlyModule7Fixture();
+defineClientOnlyModule8Fixture();
+defineClientOnlyModule9Fixture();
+defineClientOnlyModule10Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
     ComponentRegistry.clear();
+
+    // Tests render with renderDom directly, which collects refs into bindings only renderPage resets.
+    Renderer.refBindings = new Map();
   });
 
   const cid = Type.bitstring("my_component");
@@ -987,6 +1016,41 @@ describe("Renderer", () => {
           );
 
           Hologram.handleUiEvent.restore();
+        });
+
+        it("$ref binds no listener", () => {
+          // <button $ref={:save} $click="my_action">Click me</button>
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("button"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("$ref"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.atom("save")])],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$click"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("Click me")]),
+            ]),
+          ]);
+
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["click"]);
         });
 
         it("multiple event listeners", () => {
@@ -6832,6 +6896,87 @@ describe("Renderer", () => {
       );
     });
 
+    it("with declared state defaults, component hasn't been initialized yet", () => {
+      const module = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module7",
+      );
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module,
+              props: Type.map([[Type.atom("cid"), cid]]),
+              state: Type.map([
+                [Type.atom("a"), Type.integer(1)],
+                [Type.atom("b"), Type.bitstring("abc")],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("with declared state defaults, which init/2 sees and can override", () => {
+      const module = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module8",
+      );
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid,
+            componentRegistryEntryFixture({
+              module: module,
+              props: Type.map([[Type.atom("cid"), cid]]),
+              state: Type.map([
+                [Type.atom("a"), Type.integer(1)],
+                [Type.atom("b"), Type.bitstring("xyz")],
+                [
+                  Type.atom("c"),
+                  Type.map([
+                    [Type.atom("a"), Type.integer(1)],
+                    [Type.atom("b"), Type.bitstring("abc")],
+                  ]),
+                ],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
     it("refreshes the props of an already-initialized component on every render", () => {
       // Module2 declares props but no init/2, so it can only be rendered already registered -
       // which is exactly the path that used to leave the props at whatever init put there.
@@ -6949,7 +7094,7 @@ describe("Renderer", () => {
       );
     });
 
-    it("with props and state, give state priority over prop if there are name collisions", () => {
+    it("with props and state", () => {
       const node = Type.tuple([
         Type.atom("component"),
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module4"),
@@ -6972,10 +7117,7 @@ describe("Renderer", () => {
 
       const entry = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module4"),
-        state: Type.map([
-          [Type.atom("a"), Type.bitstring("state_a")],
-          [Type.atom("b"), Type.bitstring("state_b")],
-        ]),
+        state: Type.map([[Type.atom("a"), Type.bitstring("state_a")]]),
       });
 
       ComponentRegistry.putEntry(cid, entry);
@@ -6990,7 +7132,7 @@ describe("Renderer", () => {
 
       const expectedVdom = [
         vnode("div", {attrs: {}, on: {}}, [
-          "var_a = state_a, var_b = state_b, var_c = prop_c",
+          "var_a = state_a, var_b = prop_b, var_c = prop_c",
         ]),
       ];
 
@@ -7054,6 +7196,37 @@ describe("Renderer", () => {
         'component vars = %{cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"}';
 
       assert.equal(result, expected);
+    });
+
+    it("with state that init/2 put without declaring it", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "Hologram.StateError",
+        'state "b" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but init/2 put it - declare it with state/2 or state/3',
+      );
+
+      assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
     });
 
     it("with unregistered var used", () => {
@@ -7310,6 +7483,63 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, ["abc123456xyz"]);
     });
 
+    // A template that puts its own <slot /> inside a component usage passes the content on, and the
+    // content is still the writer's, however many templates pass it on.
+    it("a prop error in slot content passed on through a nested slot names the template that wrote it", () => {
+      for (const passingModule of ["Module114", "Module115"]) {
+        const node = Type.tuple([
+          Type.atom("component"),
+          Type.alias(
+            `Hologram.Test.Fixtures.Template.Renderer.${passingModule}`,
+          ),
+          Type.list(),
+          Type.list([
+            Type.tuple([
+              Type.atom("component"),
+              Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module89"),
+              Type.list(),
+              Type.list(),
+            ]),
+          ]),
+        ]);
+
+        assertBoxedError(
+          () =>
+            Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+              Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+              null,
+            ),
+          "Hologram.PropError",
+          'component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", ' +
+            'rendered from "Hologram.Test.Fixtures.Template.Renderer.Module64"',
+        );
+      }
+    });
+
+    it("slot content passed on through a nested slot renders in its place", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module115"),
+        Type.list(),
+        Type.keywordList([[Type.atom("text"), Type.bitstring("123")]]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(result, ["abc123xyz"]);
+    });
+
     it("nested components with slots, no slot tag in the top component template, not using vars", () => {
       const node = Type.tuple([
         Type.atom("component"),
@@ -7439,8 +7669,6 @@ describe("Renderer", () => {
       const entry34 = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module34"),
         state: Type.map([
-          [Type.atom("cid"), cid34],
-          [Type.atom("a"), Type.bitstring("34a_prop")],
           [Type.atom("b"), Type.bitstring("34b_state")],
           [Type.atom("c"), Type.bitstring("34c_state")],
           [Type.atom("x"), Type.bitstring("34x_state")],
@@ -7453,22 +7681,14 @@ describe("Renderer", () => {
 
       const entry35 = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module35"),
-        state: Type.map([
-          [Type.atom("cid"), cid35],
-          [Type.atom("a"), Type.bitstring("35a_prop")],
-          [Type.atom("z"), Type.bitstring("35z_state")],
-        ]),
+        state: Type.map([[Type.atom("z"), Type.bitstring("35z_state")]]),
       });
 
       ComponentRegistry.putEntry(cid35, entry35);
 
       const entry36 = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module36"),
-        state: Type.map([
-          [Type.atom("cid"), cid36],
-          [Type.atom("a"), Type.bitstring("36a_prop")],
-          [Type.atom("z"), Type.bitstring("36z_state")],
-        ]),
+        state: Type.map([[Type.atom("z"), Type.bitstring("36z_state")]]),
       });
 
       ComponentRegistry.putEntry(cid36, entry36);
@@ -8760,6 +8980,1579 @@ describe("Renderer", () => {
     });
   });
 
+  describe("drop target", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    // Example: $drop={nil}
+    const disabledSpecDom = Type.list([
+      Type.tuple([Type.atom("expression"), Type.tuple([Type.nil()])]),
+    ]);
+
+    const tag = (tagName, attrsDom) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    beforeEach(() => {
+      Renderer.dragBindings = [];
+      Renderer.listenerBindings = [];
+    });
+
+    afterEach(() => {
+      EventListenerRegistry.detachAll();
+    });
+
+    it("collects a dragenter and a dragover listener for an element with a $drop binding", () => {
+      // <div $drop="my_action"></div>
+      const vdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({vnode, eventName}) => [vnode, eventName]),
+        [
+          [vdom, "dragenter"],
+          [vdom, "dragover"],
+        ],
+      );
+
+      assert.deepStrictEqual(Object.keys(vdom.data.on), ["drop"]);
+    });
+
+    it("prevents the default of the drag over a drop target", () => {
+      // <div $drop="my_action"></div>
+      render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      const prevented = Renderer.dragBindings.map(({eventName, handler}) => {
+        const event = new Event(eventName, {cancelable: true});
+
+        handler(event);
+
+        return [eventName, event.defaultPrevented];
+      });
+
+      assert.deepStrictEqual(prevented, [
+        ["dragenter", true],
+        ["dragover", true],
+      ]);
+    });
+
+    it("collects nothing for a disabled $drop binding", () => {
+      // <div $drop={nil}></div>
+      render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), disabledSpecDom])]),
+      );
+
+      assert.deepStrictEqual(Renderer.dragBindings, []);
+    });
+
+    it("collects one pair for an element with two $drop bindings", () => {
+      // <div $drop="my_action" $drop.once="my_action"></div>
+      render(
+        tag("div", [
+          Type.tuple([Type.bitstring("$drop"), actionSpecDom]),
+          Type.tuple([
+            Type.bitstring("$drop"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({eventName}) => eventName),
+        ["dragenter", "dragover"],
+      );
+    });
+
+    it("collects the pair when one of two $drop bindings is enabled", () => {
+      // <div $drop={nil} $drop.once="my_action"></div>
+      render(
+        tag("div", [
+          Type.tuple([Type.bitstring("$drop"), disabledSpecDom]),
+          Type.tuple([
+            Type.bitstring("$drop"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({eventName}) => eventName),
+        ["dragenter", "dragover"],
+      );
+    });
+
+    it("collects nothing for an element without a $drop binding", () => {
+      // <div $drag_over="my_action"></div>
+      render(
+        tag("div", [Type.tuple([Type.bitstring("$drag_over"), actionSpecDom])]),
+      );
+
+      assert.deepStrictEqual(Renderer.dragBindings, []);
+    });
+
+    // The global is read when the test runs: some test files replace the window and the document
+    // when they load.
+    for (const tagName of ["document", "window"]) {
+      it(`collects the pair for a <${tagName}> tag with a $drop binding`, () => {
+        const listenerTarget = globalThis[tagName];
+
+        // <document $drop="my_action" /> or <window $drop="my_action" />
+        render(
+          tag(tagName, [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+        );
+
+        assert.deepStrictEqual(
+          Renderer.dragBindings.map(({target, eventName}) => [
+            target,
+            eventName,
+          ]),
+          [
+            [listenerTarget, "dragenter"],
+            [listenerTarget, "dragover"],
+          ],
+        );
+      });
+    }
+
+    it("keeps the <window> tag's listener slot keys when its $drop binding is disabled", () => {
+      // <window $drop={nil} $key_down="my_action" />
+      render(
+        tag("window", [
+          Type.tuple([Type.bitstring("$drop"), disabledSpecDom]),
+          Type.tuple([Type.bitstring("$key_down"), actionSpecDom]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.listenerBindings.map(({slotKey}) => slotKey),
+        [0, 1],
+      );
+    });
+
+    it("keeps the <window> tag's listener slot keys when its $drop binding is enabled", () => {
+      // <window $drop="my_action" $key_down="my_action" />
+      render(
+        tag("window", [
+          Type.tuple([Type.bitstring("$drop"), actionSpecDom]),
+          Type.tuple([Type.bitstring("$key_down"), actionSpecDom]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.listenerBindings.map(({slotKey}) => slotKey),
+        [0, 1],
+      );
+    });
+
+    it("resolves into capture-phase registry bindings on the element", () => {
+      // <div $drop="my_action"></div>
+      const vdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      // Snabbdom sets `.elm` during patch; emulate the element here.
+      const element = {};
+      vdom.elm = element;
+
+      const resolved = Renderer.resolveDragBindings();
+
+      assert.deepStrictEqual(
+        resolved.map(({target, key, handler}) => [target, key, handler]),
+        [
+          [element, "capture:dragenter", Renderer.dragBindings[0].handler],
+          [element, "capture:dragover", Renderer.dragBindings[1].handler],
+        ],
+      );
+    });
+
+    it("resolves into capture-phase registry bindings on the window", () => {
+      // <window $drop="my_action" />
+      render(
+        tag("window", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      const resolved = Renderer.resolveDragBindings();
+
+      assert.deepStrictEqual(
+        resolved.map(({target, key}) => [target, key]),
+        [
+          [window, "capture:dragenter"],
+          [window, "capture:dragover"],
+        ],
+      );
+    });
+
+    describe("a <window> tag's spent once $drop binding", () => {
+      // <window $drop.once="my_action" />
+      const onceDropNode = tag("window", [
+        Type.tuple([
+          Type.bitstring("$drop"),
+          actionSpecDom,
+          Type.map([[Type.atom("once"), Type.boolean(true)]]),
+        ]),
+      ]);
+
+      afterEach(() => {
+        Once.reset();
+      });
+
+      it("keeps the window a drop target before it fires", () => {
+        render(onceDropNode);
+
+        assert.deepStrictEqual(
+          Renderer.resolveDragBindings().map(({key}) => key),
+          ["capture:dragenter", "capture:dragover"],
+        );
+      });
+
+      it("stops the window being a drop target once it fires", () => {
+        render(onceDropNode);
+
+        Once.markFired(window, 0);
+
+        assert.deepStrictEqual(Renderer.resolveDragBindings(), []);
+      });
+
+      it("keeps the window a drop target while another $drop binding is live", () => {
+        // <window $drop.once="my_action" $drop="my_action" />
+        render(
+          tag("window", [
+            ...onceDropNode.data[2].data,
+            Type.tuple([Type.bitstring("$drop"), actionSpecDom]),
+          ]),
+        );
+
+        Once.markFired(window, 0);
+
+        assert.deepStrictEqual(
+          Renderer.resolveDragBindings().map(({key}) => key),
+          ["capture:dragenter", "capture:dragover"],
+        );
+      });
+    });
+
+    it("makes a drag over the element cancelled once reconciled", () => {
+      // <div $drop="my_action"></div>
+      const vdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      const element = document.createElement("div");
+      vdom.elm = element;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      for (const eventName of ["dragenter", "dragover"]) {
+        const event = new Event(eventName, {bubbles: true, cancelable: true});
+
+        assert.isFalse(element.dispatchEvent(event));
+      }
+    });
+
+    it("leaves a drag over the element alone once its $drop binding is disabled", () => {
+      const element = document.createElement("div");
+
+      // <div $drop="my_action"></div>
+      const enabledVdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      enabledVdom.elm = element;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      Renderer.dragBindings = [];
+
+      // <div $drop={nil}></div>
+      const disabledVdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), disabledSpecDom])]),
+      );
+
+      disabledVdom.elm = element;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      const notCancelled = ["dragenter", "dragover"].map((eventName) =>
+        element.dispatchEvent(
+          new Event(eventName, {bubbles: true, cancelable: true}),
+        ),
+      );
+
+      assert.deepStrictEqual(notCancelled, [true, true]);
+    });
+  });
+
+  describe("$data_transfer", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    // Example: $drop={nil}
+    const disabledSpecDom = Type.list([
+      Type.tuple([Type.atom("expression"), Type.tuple([Type.nil()])]),
+    ]);
+
+    const dropAttr = Type.tuple([Type.bitstring("$drop"), actionSpecDom]);
+
+    const dataTransferAttr = (value) =>
+      Type.tuple([
+        Type.bitstring("$data_transfer"),
+        Type.list([Type.tuple([Type.atom("expression"), Type.tuple([value])])]),
+      ]);
+
+    const dropEffect = (effect) =>
+      Type.keywordList([[Type.atom("drop_effect"), Type.atom(effect)]]);
+
+    const tag = (tagName, attrsDom, childrenDom = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(childrenDom),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    // Runs the tag's drop-target listener for the given event on a new drag event, and returns the
+    // event.
+    const runDropTargetListener = (eventName) => {
+      const binding = Renderer.dragBindings.find(
+        (dragBinding) => dragBinding.eventName === eventName,
+      );
+
+      const event = dragEvent(eventName);
+
+      binding.handler(event);
+
+      return event;
+    };
+
+    // A drag event carrying a DataTransfer that only tracks its drop effect.
+    const dragEvent = (eventName) => {
+      const event = new Event(eventName, {bubbles: true, cancelable: true});
+
+      Object.defineProperty(event, "dataTransfer", {
+        value: {dropEffect: "none"},
+      });
+
+      return event;
+    };
+
+    beforeEach(() => {
+      Renderer.dragBindings = [];
+      Renderer.listenerBindings = [];
+    });
+
+    afterEach(() => {
+      EventListenerRegistry.detachAll();
+    });
+
+    it("binds nothing", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      const vdom = render(
+        tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]),
+      );
+
+      assert.deepStrictEqual(Object.keys(vdom.data.on), ["drop"]);
+    });
+
+    it("renders no attribute", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      const vdom = render(
+        tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]),
+      );
+
+      assert.deepStrictEqual(vdom.data.attrs, {});
+    });
+
+    for (const eventName of ["dragenter", "dragover"]) {
+      it(`sets the drop effect on ${eventName}`, () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        render(tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]));
+
+        const event = runDropTargetListener(eventName);
+
+        assert.isTrue(event.defaultPrevented);
+        assert.equal(event.dataTransfer.dropEffect, "move");
+      });
+    }
+
+    it("takes a map", () => {
+      // <div $drop="my_action" $data_transfer={%{drop_effect: :copy}}></div>
+      render(
+        tag("div", [
+          dropAttr,
+          dataTransferAttr(
+            Type.map([[Type.atom("drop_effect"), Type.atom("copy")]]),
+          ),
+        ]),
+      );
+
+      const event = runDropTargetListener("dragover");
+
+      assert.equal(event.dataTransfer.dropEffect, "copy");
+    });
+
+    it("takes a drop effect on a tag whose $drop binding has modifiers", () => {
+      // <div $drop.once="my_action" $data_transfer={drop_effect: :move}></div>
+      render(
+        tag("div", [
+          Type.tuple([
+            Type.bitstring("$drop"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+          dataTransferAttr(dropEffect("move")),
+        ]),
+      );
+
+      const event = runDropTargetListener("dragover");
+
+      assert.equal(event.dataTransfer.dropEffect, "move");
+    });
+
+    it("leaves the drop effect alone when it declares no drop effect", () => {
+      // <div $drop="my_action" $data_transfer={[]}></div>
+      render(tag("div", [dropAttr, dataTransferAttr(Type.keywordList([]))]));
+
+      const event = runDropTargetListener("dragover");
+
+      assert.isTrue(event.defaultPrevented);
+      assert.equal(event.dataTransfer.dropEffect, "none");
+    });
+
+    it("doesn't throw on a drag event with no DataTransfer", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      render(tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]));
+
+      const binding = Renderer.dragBindings.find(
+        (dragBinding) => dragBinding.eventName === "dragover",
+      );
+
+      const event = new Event("dragover", {cancelable: true});
+
+      assert.doesNotThrow(() => binding.handler(event));
+      assert.isTrue(event.defaultPrevented);
+    });
+
+    it("ignores the drop effect of a disabled $drop binding", () => {
+      // <div $drop={nil} $data_transfer={drop_effect: :move}></div>
+      render(
+        tag("div", [
+          Type.tuple([Type.bitstring("$drop"), disabledSpecDom]),
+          dataTransferAttr(dropEffect("move")),
+        ]),
+      );
+
+      assert.deepStrictEqual(Renderer.dragBindings, []);
+    });
+
+    for (const tagName of ["document", "window"]) {
+      it(`sets the drop effect on the ${tagName}`, () => {
+        // <document $drop="my_action" $data_transfer={drop_effect: :link} /> or the same <window>
+        render(tag(tagName, [dropAttr, dataTransferAttr(dropEffect("link"))]));
+
+        const event = runDropTargetListener("dragover");
+
+        assert.equal(event.dataTransfer.dropEffect, "link");
+      });
+    }
+
+    describe("nested drop targets", () => {
+      let inner, outer;
+
+      // Renders the outer and inner drop targets with the given $data_transfer values (null for
+      // none), attaches them to live elements and reconciles their listeners.
+      const renderNested = (outerValue, innerValue) => {
+        const attrs = (value) =>
+          value === null ? [dropAttr] : [dropAttr, dataTransferAttr(value)];
+
+        const outerVdom = render(
+          tag("div", attrs(outerValue), [tag("div", attrs(innerValue))]),
+        );
+
+        outer = document.createElement("div");
+        inner = document.createElement("div");
+        outer.appendChild(inner);
+        document.body.appendChild(outer);
+
+        outerVdom.elm = outer;
+        outerVdom.children[0].elm = inner;
+
+        EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+      };
+
+      afterEach(() => {
+        outer.remove();
+      });
+
+      it("takes the inner drop target's drop effect", () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :copy}>
+        //   <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        // </div>
+        renderNested(dropEffect("copy"), dropEffect("move"));
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "move");
+      });
+
+      it("lets the inner drop target refuse the drop the outer one accepts", () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :copy}>
+        //   <div $drop="my_action" $data_transfer={drop_effect: :none}></div>
+        // </div>
+        renderNested(dropEffect("copy"), dropEffect("none"));
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "none");
+      });
+
+      it("takes the outer drop target's drop effect when the inner one declares no drop effect", () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :copy}>
+        //   <div $drop="my_action"></div>
+        // </div>
+        renderNested(dropEffect("copy"), null);
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "copy");
+      });
+
+      it("takes the element's drop effect over the window's", () => {
+        // <window $drop="my_action" $data_transfer={drop_effect: :link} />
+        // <div $drop="my_action">
+        //   <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        // </div>
+        renderNested(null, dropEffect("move"));
+
+        render(tag("window", [dropAttr, dataTransferAttr(dropEffect("link"))]));
+
+        EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "move");
+      });
+
+      it("sets the drop effect before the element's own bindings run", () => {
+        // <div $drop="my_action">
+        //   <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        // </div>
+        renderNested(null, dropEffect("move"));
+
+        // Stands for the inner element's $drag_over binding, which Snabbdom attaches in the bubble
+        // phase.
+        let seenDropEffect = null;
+
+        inner.addEventListener("dragover", (event) => {
+          seenDropEffect = event.dataTransfer.dropEffect;
+        });
+
+        inner.dispatchEvent(dragEvent("dragover"));
+
+        assert.equal(seenDropEffect, "move");
+      });
+    });
+
+    describe("invalid values", () => {
+      it("raises for a value that is neither a keyword list nor a map", () => {
+        assertBoxedError(
+          () =>
+            render(tag("div", [dropAttr, dataTransferAttr(Type.atom("move"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got :move",
+        );
+      });
+
+      it("raises for a list that isn't a keyword list", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(Type.list([Type.atom("move")])),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got [:move]",
+        );
+      });
+
+      it("raises for an improper list", () => {
+        const improperList = Type.improperList([
+          Type.tuple([Type.atom("drop_effect"), Type.atom("move")]),
+          Type.atom("a"),
+        ]);
+
+        assertBoxedError(
+          () => render(tag("div", [dropAttr, dataTransferAttr(improperList)])),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got [{:drop_effect, :move} | :a]",
+        );
+      });
+
+      it("raises for a struct", () => {
+        const struct = Type.struct("MyStruct", [
+          [Type.atom("drop_effect"), Type.atom("move")],
+        ]);
+
+        assertBoxedError(
+          () => render(tag("div", [dropAttr, dataTransferAttr(struct)])),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got %{__struct__: MyStruct, drop_effect: :move}",
+        );
+      });
+
+      it("raises for an unknown key", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([[Type.atom("effect"), Type.atom("move")]]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
+        );
+      });
+
+      it("raises for a map key that isn't an atom", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.map([
+                    [Type.bitstring("drop_effect"), Type.atom("move")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          'the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got "drop_effect"',
+        );
+      });
+
+      it("raises for a key given twice", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("drop_effect"), Type.atom("move")],
+                    [Type.atom("drop_effect"), Type.atom("copy")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+        );
+      });
+
+      it("raises for a key given twice before judging the entries", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("drop_effect"), Type.atom("all")],
+                    [Type.atom("drop_effect"), Type.atom("move")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+        );
+      });
+
+      it("judges a keyword list's entries in the order written", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("effect"), Type.atom("move")],
+                    [Type.atom("drop_effect"), Type.atom("all")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
+        );
+      });
+
+      it("judges a map's entries in the order of their keys", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.map([
+                    [Type.atom("effect"), Type.atom("move")],
+                    [Type.atom("drop_effect"), Type.atom("all")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+        );
+      });
+
+      it("raises for a drop effect outside the drop effects", () => {
+        assertBoxedError(
+          () =>
+            render(tag("div", [dropAttr, dataTransferAttr(dropEffect("all"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+        );
+      });
+
+      it("raises for a drop effect that isn't an atom", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("drop_effect"), Type.bitstring("move")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          'the $data_transfer drop_effect takes :none, :copy, :move or :link, got "move"',
+        );
+      });
+
+      it("raises for a drop effect on a tag with no $drop binding", () => {
+        assertBoxedError(
+          () => render(tag("div", [dataTransferAttr(dropEffect("move"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+        );
+      });
+
+      it("raises for a drop effect on a <window> tag with no $drop binding", () => {
+        assertBoxedError(
+          () => render(tag("window", [dataTransferAttr(dropEffect("move"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+        );
+      });
+    });
+  });
+
+  describe("drag source", () => {
+    const dataTransferAttr = (value) =>
+      Type.tuple([
+        Type.bitstring("$data_transfer"),
+        Type.list([Type.tuple([Type.atom("expression"), Type.tuple([value])])]),
+      ]);
+
+    const dataEntry = (pairs) => [
+      Type.atom("data"),
+      Type.map(
+        pairs.map(([type, value]) => [
+          Type.bitstring(type),
+          value === null ? Type.nil() : Type.bitstring(value),
+        ]),
+      ),
+    ];
+
+    const effectsEntry = (effects) => [
+      Type.atom("effects_allowed"),
+      Array.isArray(effects)
+        ? Type.list(effects.map((effect) => Type.atom(effect)))
+        : Type.atom(effects),
+    ];
+
+    const tag = (tagName, attrsDom, childrenDom = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(childrenDom),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    // A DataTransfer that keeps its data by type, the way a dragstart's does.
+    const buildStore = () => {
+      const data = new Map();
+
+      return {
+        clearData: sinon.spy((type) => data.delete(type)),
+        data,
+        effectAllowed: "uninitialized",
+        setData: sinon.spy((type, value) => data.set(type, value)),
+        setDragImage: sinon.spy(),
+        get types() {
+          return [...data.keys()];
+        },
+      };
+    };
+
+    const dispatchDragStart = (element, store) => {
+      const event = new Event("dragstart", {bubbles: true, cancelable: true});
+      Object.defineProperty(event, "dataTransfer", {value: store});
+      element.dispatchEvent(event);
+    };
+
+    let outer;
+
+    // Renders an outer element with the given $data_transfer entries (null for none) around an inner
+    // one with its own (null for none) and a child declaring nothing, attaches them to live
+    // elements and reconciles their listeners. Returns the live inner element and child.
+    const renderNested = (outerEntries, innerEntries) => {
+      const attrs = (entries) =>
+        entries === null ? [] : [dataTransferAttr(Type.keywordList(entries))];
+
+      const outerVdom = render(
+        tag("div", attrs(outerEntries), [
+          tag("div", attrs(innerEntries), [tag("span", [])]),
+        ]),
+      );
+
+      outer = document.createElement("div");
+      const inner = document.createElement("div");
+      const child = document.createElement("span");
+
+      inner.appendChild(child);
+      outer.appendChild(inner);
+      document.body.appendChild(outer);
+
+      outerVdom.elm = outer;
+      outerVdom.children[0].elm = inner;
+      outerVdom.children[0].children[0].elm = child;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      return {child, inner};
+    };
+
+    beforeEach(() => {
+      Renderer.dragBindings = [];
+      Renderer.listenerBindings = [];
+      outer = null;
+    });
+
+    afterEach(() => {
+      EventListenerRegistry.detachAll();
+      outer?.remove();
+    });
+
+    it("collects a capture-phase dragstart listener for an element with data", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}></div>
+      const vdom = render(
+        tag("div", [
+          dataTransferAttr(
+            Type.keywordList([dataEntry([["text/plain", "Buy milk"]])]),
+          ),
+        ]),
+      );
+
+      vdom.elm = document.createElement("div");
+
+      assert.deepStrictEqual(
+        Renderer.resolveDragBindings().map(({target, key}) => [target, key]),
+        [[vdom.elm, "capture:dragstart"]],
+      );
+    });
+
+    it("collects a capture-phase dragstart listener for an element with allowed effects", () => {
+      // <div $data_transfer={effects_allowed: :move}></div>
+      const vdom = render(
+        tag("div", [
+          dataTransferAttr(Type.keywordList([effectsEntry("move")])),
+        ]),
+      );
+
+      vdom.elm = document.createElement("div");
+
+      assert.deepStrictEqual(
+        Renderer.resolveDragBindings().map(({key}) => key),
+        ["capture:dragstart"],
+      );
+    });
+
+    it("collects a capture-phase dragstart listener for an element with a drag image", () => {
+      // <div $data_transfer={image: %{ref: :task_preview}}></div>
+      const vdom = render(
+        tag("div", [
+          dataTransferAttr(
+            Type.keywordList([
+              [
+                Type.atom("image"),
+                Type.map([[Type.atom("ref"), Type.atom("task_preview")]]),
+              ],
+            ]),
+          ),
+        ]),
+      );
+
+      vdom.elm = document.createElement("div");
+
+      assert.deepStrictEqual(
+        Renderer.resolveDragBindings().map(({key}) => key),
+        ["capture:dragstart"],
+      );
+    });
+
+    it("collects nothing for an element that declares only a drop effect", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      render(
+        tag("div", [
+          Type.tuple([
+            Type.bitstring("$drop"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+          ]),
+          dataTransferAttr(
+            Type.keywordList([[Type.atom("drop_effect"), Type.atom("move")]]),
+          ),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({eventName}) => eventName),
+        ["dragenter", "dragover"],
+      );
+    });
+
+    it("puts each type's data on the drag and removes a nil type", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk", "text/uri-list" => nil}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([
+          ["text/plain", "Buy milk"],
+          ["text/uri-list", null],
+        ]),
+      ]);
+
+      const store = buildStore();
+      store.data.set("text/uri-list", "https://example.com");
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual([...store.data], [["text/plain", "Buy milk"]]);
+
+      sinon.assert.calledOnceWithExactly(store.clearData, "text/uri-list");
+    });
+
+    it("leaves the allowed effects alone when it declares none", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.equal(store.effectAllowed, "uninitialized");
+    });
+
+    it("leaves the data alone when it declares none", () => {
+      // <div $data_transfer={effects_allowed: :move}></div>
+      const {inner} = renderNested(null, [effectsEntry("move")]);
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      sinon.assert.notCalled(store.setData);
+      sinon.assert.notCalled(store.clearData);
+    });
+
+    for (const [effects, effectAllowed] of [
+      [[], "none"],
+      ["copy", "copy"],
+      ["link", "link"],
+      ["move", "move"],
+      [["copy", "link"], "copyLink"],
+      [["copy", "move"], "copyMove"],
+      [["link", "move"], "linkMove"],
+      [["copy", "link", "move"], "all"],
+      [["move", "copy", "move"], "copyMove"],
+    ]) {
+      it(`allows ${effectAllowed} for ${JSON.stringify(effects)}`, () => {
+        // <div $data_transfer={effects_allowed: ...}></div>
+        const {inner} = renderNested(null, [effectsEntry(effects)]);
+
+        const store = buildStore();
+
+        dispatchDragStart(inner, store);
+
+        assert.equal(store.effectAllowed, effectAllowed);
+      });
+    }
+
+    it("applies to a drag that starts on a child declaring nothing", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}><span></span></div>
+      const {child} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      const store = buildStore();
+
+      dispatchDragStart(child, store);
+
+      assert.deepStrictEqual([...store.data], [["text/plain", "Buy milk"]]);
+    });
+
+    it("applies only the nearest source of nested ones", () => {
+      // <div $data_transfer={data: %{"application/x-task" => "42"}, effects_allowed: :move}>
+      //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+      // </div>
+      const {inner} = renderNested(
+        [dataEntry([["application/x-task", "42"]]), effectsEntry("move")],
+        [dataEntry([["application/x-tag", "urgent"]])],
+      );
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual(
+        [...store.data],
+        [["application/x-tag", "urgent"]],
+      );
+
+      assert.equal(store.effectAllowed, "uninitialized");
+
+      sinon.assert.calledOnceWithExactly(
+        store.setData,
+        "application/x-tag",
+        "urgent",
+      );
+    });
+
+    it("applies the outer source to a drag that starts outside the inner one", () => {
+      // <div $data_transfer={data: %{"application/x-task" => "42"}}>
+      //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+      // </div>
+      renderNested(
+        [dataEntry([["application/x-task", "42"]])],
+        [dataEntry([["application/x-tag", "urgent"]])],
+      );
+
+      const store = buildStore();
+
+      dispatchDragStart(outer, store);
+
+      assert.deepStrictEqual([...store.data], [["application/x-task", "42"]]);
+    });
+
+    it("applies the source before the bindings on the drag's path run", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}>
+      //   <div $drag_start="my_action"></div>
+      // </div>
+      const {inner} = renderNested(
+        [dataEntry([["text/plain", "Buy milk"]])],
+        null,
+      );
+
+      // Stands for the inner element's $drag_start binding, which Snabbdom attaches in the bubble
+      // phase, and which puts the placeholder on a drag that carries no data.
+      let seenTypes = null;
+
+      inner.addEventListener("dragstart", (event) => {
+        DragEvent.prepareEvent(event);
+        seenTypes = event.dataTransfer.types;
+      });
+
+      dispatchDragStart(inner, buildStore());
+
+      assert.deepStrictEqual(seenTypes, ["text/plain"]);
+    });
+
+    it("applies the source before its own bindings run", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}} $drag_start="my_action"></div>
+      const {inner} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      // Stands for the source's own $drag_start binding, which Snabbdom attaches in the bubble
+      // phase.
+      let seenTypes = null;
+
+      inner.addEventListener("dragstart", (event) => {
+        DragEvent.prepareEvent(event);
+        seenTypes = event.dataTransfer.types;
+      });
+
+      dispatchDragStart(inner, buildStore());
+
+      assert.deepStrictEqual(seenTypes, ["text/plain"]);
+    });
+
+    it("forgets a source the last render no longer declares", () => {
+      // <div $data_transfer={data: %{"application/x-task" => "42"}}>
+      //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+      // </div>
+      const {child, inner} = renderNested(
+        [dataEntry([["application/x-task", "42"]])],
+        [dataEntry([["application/x-tag", "urgent"]])],
+      );
+
+      Renderer.dragBindings = [];
+
+      // <div $data_transfer={data: %{"application/x-task" => "42"}}><div></div></div>
+      const outerVdom = render(
+        tag(
+          "div",
+          [
+            dataTransferAttr(
+              Type.keywordList([dataEntry([["application/x-task", "42"]])]),
+            ),
+          ],
+          [tag("div", [], [tag("span", [])])],
+        ),
+      );
+
+      outerVdom.elm = outer;
+      outerVdom.children[0].elm = inner;
+      outerVdom.children[0].children[0].elm = child;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual([...store.data], [["application/x-task", "42"]]);
+    });
+
+    it("puts the data on the drag in the order of its types", () => {
+      // <div $data_transfer={data: %{"text/uri-list" => "https://example.com", "text/plain" => "Example"}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([
+          ["text/uri-list", "https://example.com"],
+          ["text/plain", "Example"],
+        ]),
+      ]);
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual(store.types, ["text/plain", "text/uri-list"]);
+    });
+
+    it("applies what the last render declared", () => {
+      const element = document.createElement("div");
+
+      for (const value of ["Buy milk", "Buy bread"]) {
+        Renderer.dragBindings = [];
+
+        // <div $data_transfer={data: %{"text/plain" => value}}></div>
+        const vdom = render(
+          tag("div", [
+            dataTransferAttr(
+              Type.keywordList([dataEntry([["text/plain", value]])]),
+            ),
+          ]),
+        );
+
+        vdom.elm = element;
+
+        EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+      }
+
+      const store = buildStore();
+
+      dispatchDragStart(element, store);
+
+      assert.deepStrictEqual([...store.data], [["text/plain", "Buy bread"]]);
+    });
+
+    it("doesn't throw on a dragstart with no DataTransfer", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      assert.doesNotThrow(() => dispatchDragStart(inner, null));
+    });
+
+    describe("invalid values", () => {
+      const raises = (entries, message, tagName = "div") =>
+        assertBoxedError(
+          () =>
+            render(tag(tagName, [dataTransferAttr(Type.keywordList(entries))])),
+          "Hologram.MisuseError",
+          message,
+        );
+
+      it("raises for data that isn't a map", () => {
+        raises(
+          [[Type.atom("data"), Type.bitstring("Buy milk")]],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got "Buy milk"',
+        );
+      });
+
+      it("raises for data whose type isn't a string", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([[Type.atom("text"), Type.bitstring("Buy milk")]]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{text: "Buy milk"}',
+        );
+      });
+
+      it("raises for data whose value isn't a string or nil", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([
+                [Type.bitstring("application/x-task"), Type.integer(42)],
+              ]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"application/x-task" => 42}',
+        );
+      });
+
+      it("raises for data that is a struct", () => {
+        const struct = Type.struct("MyStruct", [
+          [Type.bitstring("text/plain"), Type.bitstring("Buy milk")],
+        ]);
+
+        raises(
+          [[Type.atom("data"), struct]],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{:__struct__ => MyStruct, "text/plain" => "Buy milk"}',
+        );
+      });
+
+      it("raises for data whose type isn't valid UTF-8", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([
+                [Bitstring.fromBytes([255]), Type.bitstring("Buy milk")],
+              ]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{<<255>> => "Buy milk"}',
+        );
+      });
+
+      it("raises for data whose value isn't valid UTF-8", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([
+                [Type.bitstring("text/plain"), Bitstring.fromBytes([255])],
+              ]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"text/plain" => <<255>>}',
+        );
+      });
+
+      it("raises for an allowed effect outside the effects", () => {
+        raises(
+          [effectsEntry("all")],
+          "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got :all",
+        );
+      });
+
+      it("raises for a list of allowed effects holding one outside the effects", () => {
+        raises(
+          [effectsEntry(["move", "none"])],
+          "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got [:move, :none]",
+        );
+      });
+
+      for (const tagName of ["document", "window"]) {
+        it(`raises for data on a <${tagName}> tag before judging it`, () => {
+          raises(
+            [[Type.atom("data"), Type.bitstring("Buy milk")]],
+            `the $data_transfer data goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+            tagName,
+          );
+        });
+
+        it(`raises for allowed effects on a <${tagName}> tag before judging them`, () => {
+          raises(
+            [effectsEntry("all")],
+            `the $data_transfer effects_allowed goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+            tagName,
+          );
+        });
+      }
+    });
+
+    describe("drag image", () => {
+      const imageEntry = (pairs) => [Type.atom("image"), Type.map(pairs)];
+
+      const preview = Type.tuple([Type.atom("task_preview"), Type.integer(42)]);
+
+      let consoleErrorStub, previewElement;
+
+      // Drags the inner element of renderNested with the given entries on it, and returns the
+      // drag's DataTransfer.
+      const drag = (outerEntries, innerEntries) => {
+        const {inner} = renderNested(outerEntries, innerEntries);
+        const store = buildStore();
+
+        dispatchDragStart(inner, store);
+
+        return store;
+      };
+
+      beforeEach(() => {
+        previewElement = document.createElement("img");
+
+        ElementRefRegistry.replace(
+          new Map([[Type.encodeMapKey(preview), previewElement]]),
+          Type.alias("MyPage"),
+        );
+
+        consoleErrorStub = sinon.stub(console, "error");
+      });
+
+      afterEach(() => {
+        consoleErrorStub.restore();
+        ElementRefRegistry.clear();
+        ElementRefRegistry.pageRefNames = new Map();
+      });
+
+      it("puts the element rendered under the ref on the drag at its offsets", () => {
+        // <div $data_transfer={image: %{ref: {:task_preview, 42}, x: 16, y: 8}}></div>
+        const store = drag(null, [
+          imageEntry([
+            [Type.atom("ref"), preview],
+            [Type.atom("x"), Type.integer(16)],
+            [Type.atom("y"), Type.integer(8)],
+          ]),
+        ]);
+
+        sinon.assert.calledOnceWithExactly(
+          store.setDragImage,
+          previewElement,
+          16,
+          8,
+        );
+      });
+
+      it("puts the image at no offset by default", () => {
+        // <div $data_transfer={image: %{ref: {:task_preview, 42}}}></div>
+        const store = drag(null, [imageEntry([[Type.atom("ref"), preview]])]);
+
+        sinon.assert.calledOnceWithExactly(
+          store.setDragImage,
+          previewElement,
+          0,
+          0,
+        );
+      });
+
+      it("leaves the browser's image for a nil ref", () => {
+        // <div $data_transfer={image: %{ref: nil}}></div>
+        const store = drag(null, [
+          imageEntry([[Type.atom("ref"), Type.nil()]]),
+        ]);
+
+        sinon.assert.notCalled(store.setDragImage);
+        sinon.assert.notCalled(consoleErrorStub);
+      });
+
+      it("logs and leaves the browser's image for a ref nothing is rendered under", () => {
+        // <div $data_transfer={image: %{ref: :missing}}></div>
+        const store = drag(null, [
+          imageEntry([[Type.atom("ref"), Type.atom("missing")]]),
+        ]);
+
+        sinon.assert.notCalled(store.setDragImage);
+
+        sinon.assert.calledOnceWithExactly(
+          consoleErrorStub,
+          "Hologram: no element is rendered under the drag image's ref :missing, so the browser's default drag image is used",
+        );
+      });
+
+      it("says a template declares the ref nothing renders, without advice for actions", () => {
+        ElementRefRegistry.putPageRefNames("Elixir.MyPage", [["missing", 0]]);
+
+        // <div $data_transfer={image: %{ref: :missing}}></div>
+        drag(null, [imageEntry([[Type.atom("ref"), Type.atom("missing")]])]);
+
+        sinon.assert.calledOnceWithExactly(
+          consoleErrorStub,
+          "Hologram: no element is rendered under the drag image's ref :missing - a template declares the ref, but nothing renders it right now, so the browser's default drag image is used",
+        );
+      });
+
+      for (const builtIn of ["document", "window"]) {
+        it(`logs and leaves the browser's image for the :${builtIn} ref`, () => {
+          // <div $data_transfer={image: %{ref: :document}}></div> or the same with :window
+          const store = drag(null, [
+            imageEntry([[Type.atom("ref"), Type.atom(builtIn)]]),
+          ]);
+
+          sinon.assert.notCalled(store.setDragImage);
+
+          sinon.assert.calledOnceWithExactly(
+            consoleErrorStub,
+            `Hologram: the drag image needs an element, but :${builtIn} names the ${builtIn}, so the browser's default drag image is used`,
+          );
+        });
+      }
+
+      it("leaves the browser's image for an inner source declaring none", () => {
+        // <div $data_transfer={image: %{ref: {:task_preview, 42}}}>
+        //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+        // </div>
+        const store = drag(
+          [imageEntry([[Type.atom("ref"), preview]])],
+          [dataEntry([["application/x-tag", "urgent"]])],
+        );
+
+        sinon.assert.notCalled(store.setDragImage);
+      });
+
+      describe("invalid values", () => {
+        const raises = (image, message) =>
+          assertBoxedError(
+            () =>
+              render(
+                tag("div", [
+                  dataTransferAttr(
+                    Type.keywordList([[Type.atom("image"), image]]),
+                  ),
+                ]),
+              ),
+            "Hologram.MisuseError",
+            message,
+          );
+
+        it("raises for an image that isn't a map", () => {
+          raises(
+            Type.atom("task_preview"),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got :task_preview",
+          );
+        });
+
+        it("raises for an image with no ref", () => {
+          raises(
+            Type.map([[Type.atom("x"), Type.integer(16)]]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{x: 16}",
+          );
+        });
+
+        it("raises for an image with a key it doesn't take", () => {
+          raises(
+            Type.map([
+              [Type.atom("width"), Type.integer(16)],
+              [Type.atom("ref"), Type.atom("task_preview")],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, width: 16}",
+          );
+        });
+
+        it("raises for an offset that isn't an integer", () => {
+          raises(
+            Type.map([
+              [Type.atom("x"), Type.float(16.5)],
+              [Type.atom("ref"), Type.atom("task_preview")],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, x: 16.5}",
+          );
+        });
+
+        it("raises for a ref that isn't an identifier", () => {
+          raises(
+            Type.map([[Type.atom("ref"), Type.bitstring("task_preview")]]),
+            'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: "task_preview"}',
+          );
+        });
+
+        it("raises for a native value as the ref", () => {
+          raises(
+            Type.map([
+              [
+                Type.atom("ref"),
+                Type.nativeValueStruct("object", Type.integer(1)),
+              ],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: %{__struct__: Hologram.JS.NativeValue, type: :object, value: 1}}",
+          );
+        });
+
+        it("raises for an image that is a struct", () => {
+          raises(
+            Type.struct("MyStruct", [
+              [Type.atom("ref"), Type.atom("task_preview")],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{__struct__: MyStruct, ref: :task_preview}",
+          );
+        });
+
+        for (const tagName of ["document", "window"]) {
+          it(`raises for a drag image on a <${tagName}> tag`, () => {
+            assertBoxedError(
+              () =>
+                render(
+                  tag(tagName, [
+                    dataTransferAttr(
+                      Type.keywordList([
+                        imageEntry([[Type.atom("ref"), preview]]),
+                      ]),
+                    ),
+                  ]),
+                ),
+              "Hologram.MisuseError",
+              `the $data_transfer image goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+            );
+          });
+        }
+      });
+    });
+  });
+
   describe("focus", () => {
     const boolAttr = (name) =>
       Type.tuple([Type.bitstring(name), Type.keywordList()]);
@@ -9590,6 +11383,28 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("a prop error in page content its layout passes on through a nested slot names the page", () => {
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module116"),
+      );
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module114"),
+      );
+
+      assertBoxedError(
+        () =>
+          Renderer.renderPage(
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module116"),
+            Type.map(),
+          ),
+        "Hologram.PropError",
+        'component "Hologram.Test.Fixtures.Template.Renderer.Module89" is missing required prop "aaa", ' +
+          'rendered from "Hologram.Test.Fixtures.Template.Renderer.Module116"',
+      );
+    });
+
     // This test case doesn't apply to the client renderer, because the client renderer receives already cast page params.
     // it("cast page params")
 
@@ -9648,11 +11463,10 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("aggregate page vars, giving state vars priority over param vars when there are name conflicts", () => {
+    it("aggregate page vars", () => {
       const pageEntry = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
         state: Type.map([
-          [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
         ]),
       });
@@ -9674,7 +11488,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'page vars = %{key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
+          'page vars = %{key_1: "param_value_1", key_2: "param_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
@@ -9685,7 +11499,6 @@ describe("Renderer", () => {
       const pageEntry = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
         state: Type.map([
-          [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
         ]),
       });
@@ -9716,7 +11529,7 @@ describe("Renderer", () => {
       );
     });
 
-    it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
+    it("aggregate layout vars", () => {
       initComponentRegistryEntry(
         Type.bitstring("page"),
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module24"),
@@ -9725,7 +11538,6 @@ describe("Renderer", () => {
       const layoutEntry = componentRegistryEntryFixture({
         module: Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module23"),
         state: Type.map([
-          [Type.atom("key_2"), Type.bitstring("state_value_2")],
           [Type.atom("key_3"), Type.bitstring("state_value_3")],
         ]),
       });
@@ -9739,7 +11551,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
+          'layout vars = %{cid: "layout", key_1: "prop_value_1", key_2: "prop_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
@@ -11221,6 +13033,15 @@ describe("Renderer", () => {
       assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aabc"]);
     });
 
+    it("an item with an identifier id", () => {
+      const node = loopItem(
+        itemWithId(Type.tuple([Type.atom("post"), Type.integer(7)])),
+        [keyedElement("li", 0)],
+      );
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#tapost,i7"]);
+    });
+
     it("an integer id and a string id with the same text give different keys", () => {
       const integerNode = loopItem(itemWithId(Type.integer(1)), [
         keyedElement("li", 0),
@@ -11248,21 +13069,21 @@ describe("Renderer", () => {
     });
 
     it("the characters keys are delimited by are escaped", () => {
-      const node = loopItem(itemWithId(Type.bitstring("a#b:c\\d")), [
+      const node = loopItem(itemWithId(Type.bitstring("a#b:c,d\\e")), [
         keyedElement("li", 0),
       ]);
 
       assert.deepStrictEqual(keysOf(render(node)), [
-        "1a2b3c:0#sa\\#b\\:c\\\\d",
+        "1a2b3c:0#sa\\#b\\:c\\,d\\\\e",
       ]);
     });
 
     it("an atom id is escaped", () => {
-      const node = loopItem(itemWithId(Type.atom("a#b:c")), [
+      const node = loopItem(itemWithId(Type.atom("a#b:c,d")), [
         keyedElement("li", 0),
       ]);
 
-      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aa\\#b\\:c"]);
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aa\\#b\\:c\\,d"]);
     });
 
     it("a struct's module is escaped", () => {
@@ -11286,6 +13107,8 @@ describe("Renderer", () => {
         itemWithId(Type.float(1.5)),
         itemWithId(Bitstring.fromBytes([255])),
         itemWithId(Type.list([Type.integer(1)])),
+        itemWithId(Type.tuple([Type.atom("post"), Type.nil()])),
+        itemWithId(Type.tuple([Type.integer(1), Type.integer(2)])),
         Type.map([[Type.atom("name"), Type.bitstring("no id")]]),
         Type.integer(5),
         Type.keywordList([[Type.atom("id"), Type.integer(1)]]),
@@ -11575,6 +13398,11 @@ describe("Renderer", () => {
       Type.tuple([value]),
     ];
 
+    const multiValueExpressionPart = (...values) => [
+      Type.atom("expression"),
+      Type.tuple(values),
+    ];
+
     const keyAttr = (...parts) =>
       Type.tuple([Type.bitstring("$key"), Type.keywordList(parts)]);
 
@@ -11592,6 +13420,11 @@ describe("Renderer", () => {
     const explicitlyKeyed = (tagName, slotKey, value) =>
       elementWithAttrs(tagName, [
         keyAttr(textPart(slotKey), expressionPart(value)),
+      ]);
+
+    const explicitlyKeyedByValues = (tagName, slotKey, ...values) =>
+      elementWithAttrs(tagName, [
+        keyAttr(textPart(slotKey), multiValueExpressionPart(...values)),
       ]);
 
     const component = (module, props) =>
@@ -11631,6 +13464,113 @@ describe("Renderer", () => {
       assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#aabc"]);
     });
 
+    it("an identifier $key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyedByValues(
+          "li",
+          "1a2b3c:0",
+          Type.atom("post"),
+          Type.integer(7),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#tapost,i7"]);
+    });
+
+    it("an identifier $key in the one-value form gives the same key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed(
+          "li",
+          "1a2b3c:0",
+          Type.tuple([Type.atom("post"), Type.integer(7)]),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#tapost,i7"]);
+    });
+
+    it("an identifier $key with several values", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyedByValues(
+          "li",
+          "1a2b3c:0",
+          Type.atom("cell"),
+          Type.integer(1),
+          Type.bitstring("b"),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#tacell,i1,sb"]);
+    });
+
+    it("a string in an identifier $key is escaped", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyedByValues(
+          "li",
+          "1a2b3c:0",
+          Type.atom("a"),
+          Type.bitstring("x,y"),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#taa,sx\\,y"]);
+    });
+
+    it("a string $key is escaped", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed("li", "1a2b3c:0", Type.bitstring("x,y")),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#sx\\,y"]);
+    });
+
+    it("a map $key", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed(
+          "li",
+          "1a2b3c:0",
+          Type.map([
+            [Type.atom("id"), Type.integer(7)],
+            [Type.atom("name"), Type.bitstring("a")],
+          ]),
+        ),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["1a2b3c:0#i7"]);
+    });
+
+    it("a struct $key", () => {
+      const item = Type.map([
+        [Type.atom("__struct__"), Type.alias("MyApp.Comment")],
+        [Type.atom("id"), Type.integer(7)],
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        explicitlyKeyed("li", "1a2b3c:0", item),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "1a2b3c:0#mElixir.MyApp.Comment#i7",
+      ]);
+    });
+
+    it("an enclosing item's part follows a struct $key", () => {
+      const item = Type.map([
+        [Type.atom("__struct__"), Type.alias("MyApp.Comment")],
+        [Type.atom("id"), Type.integer(7)],
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        loopItem(Type.tuple([item, Type.integer(0)]), [
+          explicitlyKeyed("li", "1a2b3c:0", item),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "1a2b3c:0#mElixir.MyApp.Comment#i7#i1",
+      ]);
+    });
+
     it("a sibling without $key keeps the item's own part", () => {
       const node = loopItem(itemWithId(Type.integer(1)), [
         explicitlyKeyed("dt", "1a2b3c:0", Type.bitstring("abc")),
@@ -11659,64 +13599,6 @@ describe("Renderer", () => {
       );
 
       assert.equal(result.key, "1a2b3c:0#sabc");
-    });
-
-    it("a $key that can't be a key raises", () => {
-      const cases = [
-        [Type.float(1.5), "1.5"],
-        [Type.map(), "%{}"],
-        [Type.list([Type.integer(1)]), "[1]"],
-        [Type.nil(), "nil"],
-        [Type.boolean(true), "true"],
-        [Type.boolean(false), "false"],
-      ];
-
-      for (const [value, text] of cases) {
-        assertBoxedError(
-          () => render(explicitlyKeyed("li", "1a2b3c:0", value)),
-          "ArgumentError",
-          `$key takes a string, an integer or an atom other than nil, true and false, got: ${text}`,
-        );
-      }
-    });
-
-    it("a $key that can't be a key raises on an element keyed by what it loads", () => {
-      const node = elementWithAttrs("link", [
-        Type.tuple([
-          Type.bitstring("href"),
-          Type.keywordList([textPart("/a.css")]),
-        ]),
-        keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
-      ]);
-
-      assertBoxedError(
-        () => render(node),
-        "ArgumentError",
-        "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
-      );
-    });
-
-    it("a $key that can't be a key raises before the element's children render", () => {
-      const trustedHtml = Type.struct("Hologram.Template.TrustedHTML", [
-        [Type.atom("html"), Type.bitstring("<b>bold</b>")],
-      ]);
-
-      const node = Type.tuple([
-        Type.atom("element"),
-        Type.bitstring("textarea"),
-        Type.list([
-          keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
-        ]),
-        Type.list([
-          Type.tuple([Type.atom("expression"), Type.tuple([trustedHtml])]),
-        ]),
-      ]);
-
-      assertBoxedError(
-        () => render(node),
-        "ArgumentError",
-        "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
-      );
     });
 
     it("a dynamic tag resolving to an element takes its $key", () => {
@@ -11750,6 +13632,27 @@ describe("Renderer", () => {
       assert.equal(p.key, "7a8b9c:2#sabc");
     });
 
+    it("a component's identifier $key", () => {
+      const node = component(module5, [
+        keyAttr(multiValueExpressionPart(Type.atom("post"), Type.integer(7))),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#tapost,i7"]);
+    });
+
+    it("a component's struct $key", () => {
+      const item = Type.map([
+        [Type.atom("__struct__"), Type.alias("MyApp.Comment")],
+        [Type.atom("id"), Type.integer(7)],
+      ]);
+
+      const node = component(module5, [keyAttr(expressionPart(item))]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "4d5e6f:0#mElixir.MyApp.Comment#i7",
+      ]);
+    });
+
     it("a component's $key under an outer item", () => {
       const node = loopItem(itemWithId(Type.integer(1)), [
         loopItem(itemWithId(Type.integer(7)), [
@@ -11758,6 +13661,18 @@ describe("Renderer", () => {
       ]);
 
       assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#sabc#i1"]);
+    });
+
+    it("a component's $key doesn't reach the component's siblings", () => {
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        component(module5, [keyAttr(expressionPart(Type.bitstring("abc")))]),
+        keyedElement("li", 0),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), [
+        "4d5e6f:0#sabc",
+        "1a2b3c:0#i1",
+      ]);
     });
 
     it("a stateless component's $key outside a loop item", () => {
@@ -11822,6 +13737,25 @@ describe("Renderer", () => {
       assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#i5"]);
     });
 
+    it("a stateful component with an identifier cid", () => {
+      const cidValue = Type.tuple([Type.atom("post"), Type.integer(7)]);
+
+      initComponentRegistryEntry(cidValue, module5);
+
+      const cid = Type.tuple([
+        Type.bitstring("cid"),
+        Type.keywordList([
+          multiValueExpressionPart(Type.atom("post"), Type.integer(7)),
+        ]),
+      ]);
+
+      const node = loopItem(itemWithId(Type.integer(1)), [
+        component(module5, [cid]),
+      ]);
+
+      assert.deepStrictEqual(keysOf(render(node)), ["4d5e6f:0#tapost,i7"]);
+    });
+
     it("a stateful component outside a loop item keeps the plain key", () => {
       initComponentRegistryEntry(Type.bitstring("my_component"), module5);
 
@@ -11877,6 +13811,126 @@ describe("Renderer", () => {
       );
     });
 
+    it("a $key that can't be a key raises", () => {
+      const cases = [
+        [Type.float(1.5), "1.5"],
+        [Type.map(), "%{} - the map has no :id that can be a key"],
+        [
+          Type.map([[Type.atom("name"), Type.bitstring("a")]]),
+          '%{name: "a"} - the map has no :id that can be a key',
+        ],
+        [
+          itemWithId(Type.nil()),
+          "%{id: nil} - the map has no :id that can be a key",
+        ],
+        [
+          itemWithId(Type.float(1.5)),
+          "%{id: 1.5} - the map has no :id that can be a key",
+        ],
+        // The id comes first, the order the server inspects this struct in.
+        [
+          Type.map([
+            [Type.atom("id"), Type.nil()],
+            [Type.atom("__struct__"), Type.alias("MyApp.Comment")],
+          ]),
+          "%{id: nil, __struct__: MyApp.Comment} - the map has no :id that can be a key",
+        ],
+        [Type.list([Type.integer(1)]), "[1]"],
+        [Type.nil(), "nil - nil, true and false can't be in an identifier"],
+        [
+          Type.boolean(true),
+          "true - nil, true and false can't be in an identifier",
+        ],
+        [
+          Type.boolean(false),
+          "false - nil, true and false can't be in an identifier",
+        ],
+        [Bitstring.fromBytes([255]), "<<255>> - strings must be valid UTF-8"],
+        [
+          Type.tuple([Type.atom("post"), Type.nil()]),
+          "{:post, nil} - nil, true and false can't be in an identifier",
+        ],
+        [
+          Type.tuple([Type.bitstring("post"), Type.integer(1)]),
+          '{"post", 1} - an identifier tuple starts with an atom',
+        ],
+        [
+          Type.tuple([Type.atom("post")]),
+          "{:post} - an identifier tuple holds an atom and at least one more value",
+        ],
+        [
+          Type.tuple([Type.atom("post"), Type.float(1.5)]),
+          "{:post, 1.5} - an identifier tuple holds only integers, strings and atoms after its atom",
+        ],
+        [
+          Type.tuple([Type.atom("post"), Bitstring.fromBytes([255])]),
+          "{:post, <<255>>} - strings must be valid UTF-8",
+        ],
+      ];
+
+      for (const [value, text] of cases) {
+        assertBoxedError(
+          () => render(explicitlyKeyed("li", "1a2b3c:0", value)),
+          "ArgumentError",
+          `$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: ${text}`,
+        );
+      }
+    });
+
+    it("a $key that can't be a key raises on an element keyed by what it loads", () => {
+      const node = elementWithAttrs("link", [
+        Type.tuple([
+          Type.bitstring("href"),
+          Type.keywordList([textPart("/a.css")]),
+        ]),
+        keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
+      );
+    });
+
+    it("a $key that can't be a key raises before the element's children render", () => {
+      const trustedHtml = Type.struct("Hologram.Template.TrustedHTML", [
+        [Type.atom("html"), Type.bitstring("<b>bold</b>")],
+      ]);
+
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("textarea"),
+        Type.list([
+          keyAttr(textPart("1a2b3c:0"), expressionPart(Type.float(1.5))),
+        ]),
+        Type.list([
+          Type.tuple([Type.atom("expression"), Type.tuple([trustedHtml])]),
+        ]),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
+      );
+    });
+
+    it("a $key that can't be a key raises in the multi-value form", () => {
+      const node = explicitlyKeyedByValues(
+        "li",
+        "1a2b3c:0",
+        Type.atom("post"),
+        Type.nil(),
+      );
+
+      assertBoxedError(
+        () => render(node),
+        "ArgumentError",
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: {:post, nil} - nil, true and false can't be in an identifier",
+      );
+    });
+
     it("a component's $key that can't be a key raises", () => {
       const node = component(module5, [
         keyAttr(expressionPart(Type.float(1.5))),
@@ -11885,20 +13939,8 @@ describe("Renderer", () => {
       assertBoxedError(
         () => render(node),
         "ArgumentError",
-        "$key takes a string, an integer or an atom other than nil, true and false, got: 1.5",
+        "$key takes an integer, a string, an identifier, like :search or {:message, 42}, or a map or struct with an :id that can be a key, got: 1.5",
       );
-    });
-
-    it("a component's $key doesn't reach the component's siblings", () => {
-      const node = loopItem(itemWithId(Type.integer(1)), [
-        component(module5, [keyAttr(expressionPart(Type.bitstring("abc")))]),
-        keyedElement("li", 0),
-      ]);
-
-      assert.deepStrictEqual(keysOf(render(node)), [
-        "4d5e6f:0#sabc",
-        "1a2b3c:0#i1",
-      ]);
     });
   });
 
@@ -12030,6 +14072,42 @@ describe("Renderer", () => {
       sinon.assert.notCalled(warnStub);
     });
 
+    // Each place the content is passed on to renders it as a list of its own, so a loop in it is
+    // the same loop rendered twice, as with two slots in the template that was given the content.
+    it("the same loop passed on through two slots of a nested usage isn't logged", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module117"),
+        Type.list(),
+        Type.list([
+          loopItem(itemWithId(908), [keyedElement("li", 0)]),
+          loopItem(itemWithId(909), [keyedElement("li", 0)]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        keyedElement("ul", 9, [node]),
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      assert.deepStrictEqual(
+        result.children
+          .map((child) => child.key)
+          .filter((key) => key !== undefined),
+        [
+          "1a2b3c:0#i908",
+          "1a2b3c:0#i909",
+          "1a2b3c:0#i908:1",
+          "1a2b3c:0#i909:1",
+        ],
+      );
+
+      sinon.assert.notCalled(warnStub);
+    });
+
     it("two items whose elements carry the same $key are logged", () => {
       const explicitlyKeyedLi = () =>
         Type.tuple([
@@ -12125,6 +14203,387 @@ describe("Renderer", () => {
       Renderer.renderTree(Type.list([li, li]));
 
       sinon.assert.notCalled(warnStub);
+    });
+  });
+
+  describe("refs", () => {
+    const module64 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module64",
+    );
+    const module118 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module118",
+    );
+    const module119 = Type.alias(
+      "Hologram.Test.Fixtures.Template.Renderer.Module119",
+    );
+
+    // <div $ref={ref}></div>
+    const refElement = (ref, children = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$ref"),
+            Type.keywordList([[Type.atom("expression"), Type.tuple([ref])]]),
+          ]),
+        ]),
+        Type.list(children),
+      ]);
+
+    // <Module ref={ref}>children</Module>
+    const refComponent = (module, ref, children = []) =>
+      Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("ref"),
+            Type.keywordList([[Type.atom("expression"), Type.tuple([ref])]]),
+          ]),
+        ]),
+        Type.list(children),
+      ]);
+
+    const render = (dom, parentModule = null) =>
+      Renderer.renderDom(
+        dom,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+        parentModule,
+        null,
+      );
+
+    const duplicateMessage = (refText, writers, example) =>
+      `two elements are rendered under the ref ${refText}${writers} - ` +
+      `a ref names one element, so give each element a ref of its own, like ${example} for the items of a loop`;
+
+    it("an element's ref renders no attribute and binds the element's vnode", () => {
+      const search = Type.atom("search");
+      const vdom = render(refElement(search));
+
+      assert.deepStrictEqual(vdom.data.attrs, {});
+
+      assert.deepStrictEqual(
+        Renderer.refBindings,
+        new Map([
+          [Type.encodeMapKey(search), {ref: search, module: null, vnode: vdom}],
+        ]),
+      );
+    });
+
+    it("a ref of several parts names the same ref as the tuple it makes", () => {
+      // <div $ref={:message, 42}></div>
+      const severalParts = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$ref"),
+            Type.keywordList([
+              [
+                Type.atom("expression"),
+                Type.tuple([Type.atom("message"), Type.integer(42)]),
+              ],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const ref = Type.tuple([Type.atom("message"), Type.integer(42)]);
+
+      assertBoxedError(
+        () => render(Type.list([severalParts, refElement(ref)])),
+        "Hologram.MisuseError",
+        duplicateMessage("{:message, 42}", "", "{:message, 42, item.id}"),
+      );
+    });
+
+    it("raises for a value that isn't an identifier", () => {
+      assertBoxedError(
+        () => render(refElement(Type.bitstring("search"))),
+        "Hologram.MisuseError",
+        '$ref takes an identifier, like :search or {:message, 42}, got: "search"',
+      );
+    });
+
+    it("raises for a value that isn't an identifier, with the reason", () => {
+      assertBoxedError(
+        () =>
+          render(refElement(Type.tuple([Type.atom("message"), Type.nil()]))),
+        "Hologram.MisuseError",
+        "$ref takes an identifier, like :search or {:message, 42}, got: {:message, nil} - nil, true and false can't be in an identifier",
+      );
+    });
+
+    it("raises for an Elixir reference, with a hint", () => {
+      const ref = Type.reference(NodeTable.CLIENT_NODE, 0, [3, 2, 1]);
+
+      assertBoxedError(
+        () => render(refElement(ref)),
+        "Hologram.MisuseError",
+        "$ref takes an identifier, like :search or {:message, 42}, got: #Reference<0.1.2.3> - an element ref is an identifier, not an Elixir reference",
+      );
+    });
+
+    it("raises for a built-in ref", () => {
+      for (const name of ["window", "document"]) {
+        assertBoxedError(
+          () => render(refElement(Type.atom(name))),
+          "Hologram.MisuseError",
+          `:${name} is a built-in ref, so a template can't name an element with it - JS.element(:${name}) returns the ${name}`,
+        );
+      }
+    });
+
+    it("raises for a ref on the component a dynamic tag renders", () => {
+      const node = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+        ]),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$ref"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.atom("search")])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () => render(node),
+        "Hologram.MisuseError",
+        "$ref can't go on the Hologram.Test.Fixtures.Template.Renderer.Module1 component a dynamic tag renders - " +
+          "a component renders no element of its own, so put $ref on an element in its template " +
+          "and pass the ref as a prop, like input_ref={:search}",
+      );
+    });
+
+    it("a ref on the element a dynamic tag renders", () => {
+      const node = Type.tuple([
+        Type.atom("dynamic_tag"),
+        Type.tuple([Type.bitstring("div")]),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("$ref"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.atom("search")])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const vdom = render(node);
+
+      assert.strictEqual(
+        Renderer.refBindings.get(Type.encodeMapKey(Type.atom("search"))).vnode,
+        vdom,
+      );
+    });
+
+    it("raises for a ref on a tag a dynamic tag renders that the build keeps refs off", () => {
+      const messages = {
+        window:
+          "$ref can't go on a <window> tag, which renders no element - JS.element(:window) returns the window",
+        document:
+          "$ref can't go on a <document> tag, which renders no element - JS.element(:document) returns the document",
+        slot: "$ref can't go on a <slot> tag, which renders no element of its own - put it on an element in the slot content",
+        html: "$ref can't go on the <html> tag - JS.element(:document) returns the document, whose documentElement is the <html> element",
+      };
+
+      for (const [tagName, message] of Object.entries(messages)) {
+        const node = Type.tuple([
+          Type.atom("dynamic_tag"),
+          Type.tuple([Type.bitstring(tagName)]),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("$ref"),
+              Type.keywordList([
+                [Type.atom("expression"), Type.tuple([Type.atom("root")])],
+              ]),
+            ]),
+          ]),
+          Type.list(),
+        ]);
+
+        assertBoxedError(() => render(node), "Hologram.MisuseError", message);
+      }
+    });
+
+    it("raises for two elements of one template under one ref", () => {
+      const search = Type.atom("search");
+
+      assertBoxedError(
+        () =>
+          render(Type.list([refElement(search), refElement(search)]), module64),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":search",
+          ', both from "Hologram.Test.Fixtures.Template.Renderer.Module64"',
+          "{:search, item.id}",
+        ),
+      );
+    });
+
+    it("raises for elements of two components under one ref", () => {
+      const search = Type.atom("search");
+
+      assertBoxedError(
+        () =>
+          render(
+            Type.list([
+              refComponent(module118, search),
+              refComponent(module119, search),
+            ]),
+          ),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":search",
+          ', one from "Hologram.Test.Fixtures.Template.Renderer.Module118" and one from "Hologram.Test.Fixtures.Template.Renderer.Module119"',
+          "{:search, item.id}",
+        ),
+      );
+    });
+
+    it("names slot content after the template that supplied it", () => {
+      const search = Type.atom("search");
+
+      assertBoxedError(
+        () =>
+          render(
+            refComponent(module118, search, [refElement(search)]),
+            module64,
+          ),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":search",
+          ', one from "Hologram.Test.Fixtures.Template.Renderer.Module118" and one from "Hologram.Test.Fixtures.Template.Renderer.Module64"',
+          "{:search, item.id}",
+        ),
+      );
+    });
+
+    it("names an element before the elements inside it", () => {
+      const search = Type.atom("search");
+
+      assertBoxedError(
+        () =>
+          render(
+            refElement(search, [refComponent(module119, search)]),
+            module64,
+          ),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":search",
+          ', one from "Hologram.Test.Fixtures.Template.Renderer.Module64" and one from "Hologram.Test.Fixtures.Template.Renderer.Module119"',
+          "{:search, item.id}",
+        ),
+      );
+    });
+
+    it("elements under refs that differ in their keys", () => {
+      const item = (id) => Type.tuple([Type.atom("item"), Type.integer(id)]);
+
+      render(
+        Type.list([
+          refElement(item(1)),
+          refElement(item(2)),
+          refElement(Type.atom("item")),
+        ]),
+      );
+
+      assert.deepStrictEqual(Array.from(Renderer.refBindings.keys()), [
+        Type.encodeMapKey(item(1)),
+        Type.encodeMapKey(item(2)),
+        Type.encodeMapKey(Type.atom("item")),
+      ]);
+    });
+
+    it("the items of a loop render under refs of their own", () => {
+      const loopItem = (id) =>
+        Type.tuple([
+          Type.atom("loop_item"),
+          Type.tuple([Type.integer(id)]),
+          Type.list([
+            refElement(Type.tuple([Type.atom("item"), Type.integer(id)])),
+          ]),
+        ]);
+
+      render(
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("ul"),
+          Type.list(),
+          Type.list([Type.list([loopItem(1), loopItem(2)])]),
+        ]),
+      );
+
+      assert.deepStrictEqual(Array.from(Renderer.refBindings.keys()), [
+        Type.encodeMapKey(Type.tuple([Type.atom("item"), Type.integer(1)])),
+        Type.encodeMapKey(Type.tuple([Type.atom("item"), Type.integer(2)])),
+      ]);
+    });
+
+    it("raises for an element of the page and one of its layout under one ref", () => {
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module120"),
+      );
+
+      initComponentRegistryEntry(Type.bitstring("layout"), module118);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderPage(
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module120"),
+            Type.map(),
+          ),
+        "Hologram.MisuseError",
+        duplicateMessage(
+          ":shared",
+          ', one from "Hologram.Test.Fixtures.Template.Renderer.Module118" and one from "Hologram.Test.Fixtures.Template.Renderer.Module120"',
+          "{:shared, item.id}",
+        ),
+      );
+    });
+
+    it("each page render claims its refs afresh", () => {
+      render(refElement(Type.atom("search")));
+
+      initComponentRegistryEntry(
+        Type.bitstring("page"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
+      );
+
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module15"),
+      );
+
+      Renderer.renderPage(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
+        Type.map(),
+      );
+
+      assert.strictEqual(Renderer.refBindings.size, 0);
+    });
+
+    it("resolves each ref to the element its vnode was patched into", () => {
+      const vdom = render(refElement(Type.atom("search")));
+      const element = document.createElement("div");
+      vdom.elm = element;
+
+      assert.deepStrictEqual(
+        Renderer.resolveRefBindings(),
+        new Map([[Type.encodeMapKey(Type.atom("search")), element]]),
+      );
     });
   });
 
@@ -12489,6 +14948,108 @@ describe("Renderer", () => {
       const result = toText(term);
 
       assert.equal(result, dummyStringCharsProtocolResult);
+    });
+  });
+
+  describe("validateDeclaredState()", () => {
+    const componentProxy = Interpreter.moduleProxy(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9"),
+    );
+
+    const pageProxy = Interpreter.moduleProxy(
+      Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module10",
+      ),
+    );
+
+    it("declared keys", () => {
+      const state = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      assert.isUndefined(
+        Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+      );
+    });
+
+    it("undeclared keys, the smallest one is named", () => {
+      const state = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("c"), Type.integer(3)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state "b" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but action :x put it - declare it with state/2 or state/3',
+      );
+    });
+
+    it("undeclared key named like a prop", () => {
+      const state = Type.map([[Type.atom("label"), Type.bitstring("abc")]]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state "label" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but action :x put it - "label" is a prop, read it from component.props instead',
+      );
+    });
+
+    it("undeclared key named cid", () => {
+      const state = Type.map([[Type.atom("cid"), Type.bitstring("my_cid")]]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state "cid" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but action :x put it - "cid" is a prop, read it from component.props instead',
+      );
+    });
+
+    it("undeclared key named like a page param", () => {
+      const state = Type.map([[Type.atom("id"), Type.integer(1)]]);
+
+      assertBoxedError(
+        () => Renderer.validateDeclaredState(state, pageProxy, "action :x"),
+        "Hologram.StateError",
+        'state "id" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module10", but action :x put it - "id" is a param, read it from component.props instead',
+      );
+    });
+
+    it("undeclared cid key of a page", () => {
+      const state = Type.map([[Type.atom("cid"), Type.bitstring("my_cid")]]);
+
+      assertBoxedError(
+        () => Renderer.validateDeclaredState(state, pageProxy, "action :x"),
+        "Hologram.StateError",
+        'state "cid" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module10", but action :x put it - "cid" is the layout\'s cid prop, put the value under another name',
+      );
+    });
+
+    it("undeclared key that isn't an atom", () => {
+      const state = Type.map([[Type.bitstring("b"), Type.integer(2)]]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state key "b" isn\'t an atom, but action :x put it in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9" - state is declared with atom names',
+      );
+    });
+
+    it("undeclared keys of different types, the smallest in term order is named", () => {
+      const state = Type.map([
+        [Type.bitstring("b"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.validateDeclaredState(state, componentProxy, "action :x"),
+        "Hologram.StateError",
+        'state "c" isn\'t declared in "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module9", but action :x put it - declare it with state/2 or state/3',
+      );
     });
   });
 

@@ -5,6 +5,8 @@ defmodule HologramClusterTests.PlainPage do
 
   layout HologramClusterTests.Components.DefaultLayout
 
+  state :received, :string
+
   # Declares no subscriptions, so its connection starts unbound - the page for tests
   # that grant subscriptions from outside any handler.
   def init(_params, component, _server) do

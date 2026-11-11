@@ -11,6 +11,8 @@ defmodule HologramFeatureTests.Navigation.Page3 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :result, :any
+
   def init(params, component, _server) do
     put_state(component, :result, params)
   end

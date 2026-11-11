@@ -3,6 +3,8 @@ defmodule HologramFeatureTests.Components.Rendering.Component1 do
 
   prop :text, :string
 
+  state :length_on_server, :any
+
   # The length is measured in init/3, which runs on the server only, so the number travels to the
   # client in the component registry rather than being recomputed there. That is what makes the
   # test meaningful: the client's own render repairs the text it prints, but it adopts this number

@@ -5,6 +5,9 @@ defmodule HologramFeatureTests.Realtime.Page4 do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :received_1, :string
+  state :received_2, :string
+
   def init(_params, component, server) do
     new_component =
       component

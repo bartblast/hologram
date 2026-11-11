@@ -3,6 +3,8 @@ defmodule HologramFeatureTests.Components.RealtimeEchoLayout do
 
   alias Hologram.UI.Runtime
 
+  state :received, :string
+
   # Shared by Realtime.Page24 and Realtime.Page25, which both declare it, so its subscription
   # survives a navigation between them. The sender's own tab receives its broadcast only as the
   # self echo in the command's reply, so a reply that lands after that navigation is the one

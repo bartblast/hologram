@@ -7,11 +7,21 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module34 do
 
   prop :a, :string
 
-  def init(props, component, server) do
+  state :b, :string
+  state :c, :string
+  state :x, :string
+  state :y, :string
+  state :z, :string
+
+  def init(_props, component, server) do
     new_component =
-      component
-      |> put_state(props)
-      |> put_state(b: "34b_state", c: "34c_state", x: "34x_state", y: "34y_state", z: "34z_state")
+      put_state(component,
+        b: "34b_state",
+        c: "34c_state",
+        x: "34x_state",
+        y: "34y_state",
+        z: "34z_state"
+      )
 
     new_server = put_cookie(server, "cookie_key_34", :cookie_value_34)
 

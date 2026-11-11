@@ -8,6 +8,13 @@ defmodule HologramFeatureTests.Patching.Page5 do
 
   layout HologramFeatureTests.Components.EmptyLayout
 
+  state :checkbox, :boolean
+  state :email, :string
+  state :radio, :any
+  state :select, :any
+  state :text, :string
+  state :textarea, :string
+
   def init(_params, component, _server) do
     put_state(component,
       checkbox: true,

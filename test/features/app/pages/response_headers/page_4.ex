@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.ResponseHeaders.Page4 do
 
   layout HologramFeatureTests.Components.ResponseHeadersLayout
 
+  state :result, :any
+
   def init(_params, component, _server) do
     put_state(component, :result, nil)
   end

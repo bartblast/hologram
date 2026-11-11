@@ -5,6 +5,10 @@ defmodule HologramFeatureTests.Layouts.PropsPassedImplicitelyPage do
 
   layout HologramFeatureTests.Components.LayoutWithProps
 
+  state :a, :string
+  state :b, :integer
+  state :c, :atom
+
   def init(_params, component, _server) do
     put_state(component, a: "abc", b: 123, c: :xyz)
   end

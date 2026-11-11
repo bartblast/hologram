@@ -8,6 +8,10 @@ defmodule HologramFeatureTests.MountDataPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :bytes, :string
+  state :snippet, :string
+  state :status, :string
+
   def init(_params, component, _server) do
     component
     |> put_state(:bytes, <<240, 145, 163>>)

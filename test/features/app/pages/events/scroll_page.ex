@@ -8,6 +8,10 @@ defmodule HologramFeatureTests.Events.ScrollPage do
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  state :document_scroll, :any
+  state :element_scroll, :any
+  state :window_scroll, :any
+
   def init(_params, component, _server) do
     put_state(component,
       document_scroll: nil,
