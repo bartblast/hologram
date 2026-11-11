@@ -49,19 +49,19 @@ defmodule Hologram.Sync.Carry do
   end
 
   @doc """
-  Records the given count under the key naming the query prop that answered it.
+  Records the given count under the key naming the query prop or derived field that answered it.
 
   A counting query answers with a number and no rows, so nothing about it can be re-derived from
   the rows a page carries - the client is told the number itself, and holds it until its own database is
   complete enough to count.
 
-  The key names the component, the prop, and the arguments the builder was called with, which is
-  what tells two instances of one component apart - `inspect/1` spells the arguments, being the
-  spelling both tiers already agree on.
+  The key names the component, the prop or field, and the arguments its function was called with,
+  which is what tells two instances of one component apart - `inspect/1` spells the arguments, being
+  the spelling both tiers already agree on, in full, since the client's spelling cuts nothing short.
   """
   @spec collect_count(module, atom, list, integer) :: :ok
-  def collect_count(module, prop_name, args, count) do
-    collected = Map.put(gathered_counts(), count_key(module, prop_name, args), count)
+  def collect_count(module, name, args, count) do
+    collected = Map.put(gathered_counts(), count_key(module, name, args), count)
 
     Process.put(@counts_key, collected)
 
@@ -159,8 +159,11 @@ defmodule Hologram.Sync.Carry do
     scopes
   end
 
-  defp count_key(module, prop_name, args) do
-    "#{inspect(module)}/#{prop_name}/#{Enum.map_join(args, ",", &inspect/1)}"
+  defp count_key(module, name, args) do
+    spelled_args =
+      Enum.map_join(args, ",", &inspect(&1, limit: :infinity, printable_limit: :infinity))
+
+    "#{inspect(module)}/#{name}/#{spelled_args}"
   end
 
   defp entities(%NotIncluded{}), do: []

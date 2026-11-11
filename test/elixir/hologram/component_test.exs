@@ -363,6 +363,27 @@ defmodule Hologram.ComponentTest do
       assert module.__derived_limit__() == 1
     end
 
+    test "counts an alias the body reads as used" do
+      {_result, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedAliasInBody do
+            use Hologram.Component
+
+            alias Hologram.Test.Fixtures.Component.Module9
+
+            derived :entities, :list, fn -> Module9.shared_query() end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert diagnostics == []
+    end
+
     test "marks a derived field reading state through another derived field as reading state" do
       {{:module, module, _binary, _result}, _bindings} =
         Code.eval_string("""

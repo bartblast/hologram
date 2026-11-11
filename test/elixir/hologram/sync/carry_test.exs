@@ -309,6 +309,29 @@ defmodule Hologram.Sync.CarryTest do
       assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1",true) => 7}
     end
 
+    # The client spells the key with no limit, so a long argument is spelled in full here too.
+    test "spells an argument holding over 50 items in full" do
+      collect_count(Module2, :total, [Enum.to_list(1..51)], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/#{inspect(Enum.to_list(1..51), limit: :infinity)}" =>
+                 7
+             }
+    end
+
+    # The rows a derived field passes on are an argument like any other, and the client spells the
+    # same key for them (see the data layer's carried count tests).
+    test "spells an argument holding rows" do
+      row = Module2.new(id: "01a1cbe6-0000-7000-8000-000000000001", a: true, c: "banana")
+
+      collect_count(Module2, :total, [[row]], 7)
+
+      assert take_counts() == %{
+               ~s(Hologram.Test.Fixtures.Entity.Module2/total/[%Hologram.Test.Fixtures.Entity.Module2{__meta__: #Hologram.Entity.Metadata<>, a: true, b: nil, c: "banana", created_at: nil, id: "01a1cbe6-0000-7000-8000-000000000001", updated_at: nil}]) =>
+                 7
+             }
+    end
+
     test "keys props of one component apart" do
       collect_count(Module2, :open_total, [], 7)
       collect_count(Module2, :done_total, [], 3)

@@ -2,17 +2,53 @@ defmodule Hologram.Component.Derived do
   @moduledoc false
 
   # The derived fields of a component or a page: declared by derived/3, checked once the module body
-  # has run, and reflected as __derived__/0 with a public function per field holding its body.
+  # has run, reflected as __derived__/0 with a public function per field holding its body, and
+  # computed by the server render (compute/6), which the client render mirrors.
   #
   # A field's function is hoisted into a def of the module rather than kept as a closure, so its body
   # is ordinary module code: called on the server, walked by the build through IR, and transpiled for
   # the client, which the call graph reaches through the capture __derived__/0 holds.
 
   alias Hologram.Compiler.AST
+  alias Hologram.Component.NotComputed
+  alias Hologram.Query
+  alias Hologram.Query.Stage
+  alias Hologram.Reflection
 
   # The query macros whose arguments after the source are query vocabulary, where a bare name is the
   # queried row's and only a pinned expression reads the surrounding Elixir.
   @query_macros [filter: 2, include: 2, paginate: 2, skip: 2, sort: 2, take: 2]
+
+  @doc """
+  Computes the given derived field entries of the given component or page module, in the order
+  given, and returns the given computed values with theirs added.
+
+  Each function is given its arguments by name: the props (params on a page), then the state, then
+  the values computed so far. A result that is a query - for now a query term, or an entity type
+  standing for every row of it - is normalized, checked against the field's type and handed to the
+  `:run_query` option, a function taking the field's name, its arguments and the term, whose
+  result is the field's value. Any other result is checked against the field's type.
+
+  With the `:stateless` option a component renders without a cid, so it has no state to read.
+
+  Raises Hologram.MisuseError when an argument has no value, when a result doesn't match the field's
+  type, and Hologram.StateError when a stateless component's field reads state.
+
+  WARNING: must match the client renderer's #computeDerived (renderer.mjs), messages included.
+  """
+  @spec compute([map], module, map, map, map, keyword) :: map
+  def compute(entries, module, props, state, computed, opts) do
+    Enum.reduce(entries, computed, fn entry, acc ->
+      args = Enum.map(entry.args, &argument!(&1, entry, module, props, state, acc, opts))
+
+      value =
+        entry.function
+        |> apply(args)
+        |> computed_value!(entry, module, args, opts)
+
+      Map.put(acc, entry.name, value)
+    end)
+  end
 
   @doc """
   Returns the AST of code that accumulates the given derived field declaration in __derived__
@@ -46,6 +82,15 @@ defmodule Hologram.Component.Derived do
         {unquote(Macro.escape(declaration, unquote: true)), unquote(type)}
       )
     end
+  end
+
+  @doc """
+  Returns what the derived fields given hold while `init` runs: a placeholder each, since they read
+  state, which `init` sets.
+  """
+  @spec not_computed([map]) :: %{atom => NotComputed.t()}
+  def not_computed(entries) do
+    Map.new(entries, &{&1.name, %NotComputed{field: &1.name}})
   end
 
   @doc """
@@ -131,8 +176,80 @@ defmodule Hologram.Component.Derived do
     end
   end
 
+  @doc """
+  Returns the derived fields the given module computes before `init` and after it: the ones reading
+  only props (params on a page) come before, the ones reading state after, since `init` is what
+  sets the state they read.
+  """
+  @spec split_by_init([map]) :: {[map], [map]}
+  def split_by_init(entries), do: Enum.split_with(entries, &(not &1.reads_state))
+
+  @doc """
+  Validates that the given state, returned by the given handler of the given module, holds no
+  placeholder of a derived field not yet computed - a state entry `init` copied it into would show
+  it in every render after.
+
+  Raises Hologram.StateError naming the field and the entry.
+  """
+  @spec validate_state_computed!(map, module, String.t()) :: :ok
+  def validate_state_computed!(state, module, handler) do
+    stored =
+      state
+      |> Enum.filter(fn {_key, value} -> is_struct(value, NotComputed) end)
+      |> Enum.min_by(fn {key, _value} -> key end, fn -> nil end)
+
+    case stored do
+      {key, %NotComputed{field: field}} ->
+        raise Hologram.StateError,
+          message:
+            "#{handler} of #{Reflection.module_name(module)} stored derived field #{inspect(field)} in state #{inspect(key)} before it was computed - it reads state, so it's computed after init"
+
+      nil ->
+        :ok
+    end
+  end
+
+  defp argument!(name, entry, module, props, state, computed, opts) do
+    cond do
+      Map.has_key?(props, name) ->
+        Map.fetch!(props, name)
+
+      state_name?(module, name) and opts[:stateless] ->
+        raise Hologram.StateError,
+          message:
+            "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} reads state #{inspect(name)}, which a component rendered without a cid doesn't have - give it a cid"
+
+      Map.has_key?(state, name) ->
+        Map.fetch!(state, name)
+
+      Map.has_key?(computed, name) ->
+        Map.fetch!(computed, name)
+
+      true ->
+        raise Hologram.MisuseError,
+          message:
+            "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} reads #{inspect(name)}, which is not set - #{unset_hint(module, name)}"
+    end
+  end
+
   defp compile_error!(message, env, line) do
     raise Hologram.CompileError, message: message, file: env.file, line: line
+  end
+
+  defp computed_value!(value, entry, module, args, opts) do
+    if query?(value) do
+      term = Stage.normalize(value)
+
+      validate_query_type!(term, entry, module)
+
+      opts
+      |> Keyword.fetch!(:run_query)
+      |> apply([entry.name, args, term])
+    else
+      validate_value_type!(value, entry, module)
+
+      value
+    end
   end
 
   defp declaration_name({{name, _args, _arg_names, _body, _line}, _type}), do: name
@@ -192,6 +309,20 @@ defmodule Hologram.Component.Derived do
       free -> order_step(List.delete(left, free), reads, [free | ordered])
     end
   end
+
+  # TODO: answer from the queries the build registered (QueryCache.derived_query?/2) once it
+  # registers derived fields' queries, and refuse a query result it didn't register.
+  defp query?(value) do
+    is_struct(value, Query) or (is_atom(value) and Reflection.entity?(value))
+  end
+
+  defp query_description(%Query{cardinality: :count, entity: entity}),
+    do: "a count of #{inspect(entity)} rows"
+
+  defp query_description(%Query{cardinality: :one, entity: entity}),
+    do: "one #{inspect(entity)} row"
+
+  defp query_description(%Query{entity: entity}), do: "a set of #{inspect(entity)} rows"
 
   # Whether the given call is one of the query macros, given the number of arguments a pipe leaves
   # out of it: called unqualified where Hologram.Query is imported, by the module or earlier in the
@@ -273,7 +404,7 @@ defmodule Hologram.Component.Derived do
          ]}
 
       {:__aliases__, meta, [first | _rest] = segments} = ast when is_atom(first) ->
-        case Macro.Env.expand_alias(env, meta, segments, trace: false) do
+        case Macro.Env.expand_alias(env, meta, segments) do
           {:alias, module} -> module
           :error -> ast
         end
@@ -281,6 +412,29 @@ defmodule Hologram.Component.Derived do
       ast ->
         ast
     end)
+  end
+
+  defp state_name?(module, name) do
+    List.keymember?(module.__state__(), name, 0)
+  end
+
+  defp unset_hint(module, name) do
+    cond do
+      state_name?(module, name) ->
+        "give it a default or set it in init/3"
+
+      Reflection.page?(module) ->
+        "pass it as a param of the page"
+
+      module.__props__()
+      |> List.keyfind(name, 0)
+      |> elem(2)
+      |> Keyword.has_key?(:from_context) ->
+        "the context has no such key"
+
+      true ->
+        "give it a default or pass it"
+    end
   end
 
   # The body names only what its head binds of the module's fields, whether it reads one or binds a
@@ -372,6 +526,66 @@ defmodule Hologram.Component.Derived do
       MapSet.put(declared, name)
     end)
   end
+
+  defp validate_query_type!(term, entry, module) do
+    matches? =
+      case {entry.type, term} do
+        {[entity], %Query{cardinality: :set, entity: entity}} -> true
+        {entity, %Query{cardinality: :one, entity: entity}} -> true
+        {:integer, %Query{cardinality: :count}} -> true
+        _other -> false
+      end
+
+    if not matches? do
+      raise Hologram.MisuseError,
+        message:
+          "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} is declared #{inspect(entry.type)}, but its query is #{query_description(term)}"
+    end
+
+    :ok
+  end
+
+  defp validate_value_type!(value, entry, module) do
+    if not value_of_type?(value, entry.type) do
+      raise Hologram.MisuseError,
+        message:
+          "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} is declared #{inspect(entry.type)}, but computed #{inspect(value, limit: 5)}"
+    end
+
+    :ok
+  end
+
+  # nil stands for no value in every type, a float takes an integer as Elixir's arithmetic does, and
+  # a type with no test of its own takes anything.
+  defp value_of_type?(nil, _type), do: true
+
+  defp value_of_type?(value, [element_type]) when is_atom(element_type) do
+    if Reflection.alias?(element_type) and Reflection.entity?(element_type),
+      do: is_list(value) and Enum.all?(value, &is_struct(&1, element_type)),
+      else: true
+  end
+
+  defp value_of_type?(value, :atom), do: is_atom(value)
+
+  defp value_of_type?(value, :boolean), do: is_boolean(value)
+
+  defp value_of_type?(value, :float), do: is_number(value)
+
+  defp value_of_type?(value, :integer), do: is_integer(value)
+
+  defp value_of_type?(value, :list), do: is_list(value)
+
+  defp value_of_type?(value, :map), do: is_map(value)
+
+  defp value_of_type?(value, :string), do: is_binary(value)
+
+  defp value_of_type?(value, type) when is_atom(type) do
+    if Reflection.alias?(type) and Reflection.entity?(type),
+      do: is_struct(value, type),
+      else: true
+  end
+
+  defp value_of_type?(_value, _type), do: true
 
   # Each walk returns the state the rest of a block is walked with, which is what carries an import
   # or alias of Hologram.Query to the expressions after it.
