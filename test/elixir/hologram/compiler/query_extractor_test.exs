@@ -12,6 +12,9 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module10
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module100
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module101
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module102
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module11
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module12
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module13
@@ -91,6 +94,15 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module88
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module89
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module90
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module91
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module92
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module93
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module94
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module95
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module96
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module97
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module99
   alias Hologram.Test.Fixtures.Component.Module10, as: Component10
   alias Hologram.Test.Fixtures.Component.Module11, as: Component11
   alias Hologram.Test.Fixtures.Component.Module12, as: Component12
@@ -625,6 +637,295 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_derived_queries(Module82, entity_types, ir_plt)
       end
+    end
+
+    test "raises on a query an Erlang function fails on", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_90.ex:13: derived field :ripe_total in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module90 uses a query as a value - a query describes rows, so declare it as a derived field and read that
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_90.ex:13: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module90.__derived_ripe_total__/0\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module90, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query an Elixir function fails on", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_91.ex:11: derived field :ripe_total in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module91 uses a query as a value - a query describes rows, so declare it as a derived field and read that
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_91.ex:11: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module91.__derived_ripe_total__/0\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module91, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query a function of the project interpolates into a string", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_92.ex:12: derived field :label in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module92 uses a query as a value - a query describes rows, so declare it as a derived field and read that
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_92.ex:12: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module92.__derived_label__/0\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module92, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query returned inside a tuple", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_93.ex:8: derived field :pair in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module93 uses a query as a value - a query describes rows, so declare it as a derived field and read that
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_93.ex:8: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module93.__derived_pair__/0\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module93, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query bound to a variable and dropped", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_94.ex:9: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module94 uses a query as a value - a query describes rows, so declare it as a derived field and read that
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_94.ex:9: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module94.__derived_rows__/0\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module94, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a dropped chain of stages", %{entity_types: entity_types, ir_plt: ir_plt} do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_95.ex:11: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module95 uses a query as a value - a query describes rows, so declare it as a derived field and read that
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_95.ex:11: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module95.__derived_rows__/0\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module95, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query built in a closure and dropped", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_96.ex:9: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module96 uses a query as a value - a query describes rows, so declare it as a derived field and read that
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_96.ex:9: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module96.__derived_rows__/0\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module96, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query whose rows an Elixir function iterates", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_99.ex:11: derived field :labels in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module99 uses a query as a value - a query describes rows, so declare it as a derived field and read that
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_99.ex:11: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module99.__derived_labels__/0\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module99, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query a function of the project returns inside a tuple", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_100.ex:8: derived field :pair in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module100 uses a query as a value - a query describes rows, so declare it as a derived field and read that"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module100, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query a followed function of the project drops", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      expected_msg =
+        normalize_newlines("""
+        test/elixir/support/fixtures/compiler/query_extractor/module_98.ex:18: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module101 uses a query as a value - a query describes rows, so declare it as a derived field and read that
+
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_98.ex:18: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module98.drop_ripe/1
+            #{@app} test/elixir/support/fixtures/compiler/query_extractor/module_101.ex:11: Hologram.Test.Fixtures.Compiler.QueryExtractor.Module101.__derived_rows__/1\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module101, entity_types, ir_plt)
+      end
+    end
+
+    test "raises on a query an Elixir function given an argument takes, as a value only known at runtime",
+         %{entity_types: entity_types, ir_plt: ir_plt} do
+      expected_msg =
+        "test/elixir/support/fixtures/compiler/query_extractor/module_102.ex:10: derived field :rows in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module102 builds a query, but returns a value only known at runtime - a derived field holding rows returns the query, and a value computed from the rows is a derived field of its own"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        extract_derived_queries(Module102, entity_types, ir_plt)
+      end
+    end
+
+    test "registers a query a function of the project the walk runs builds on", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module97
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert queries.applied == [
+               %Query{entity: Entity2, filter: [{:a, :==, true}], sort: [c: :asc, id: :asc]}
+             ]
+    end
+
+    test "registers a query a function of the project takes inside its options", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module97
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert queries.from_options == [
+               %Query{entity: Entity2, filter: [{:a, :==, true}], sort: [c: :asc, id: :asc]}
+             ]
+    end
+
+    test "registers a query an Elixir function checks without failing", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module97
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert queries.checked == [
+               %Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}
+             ]
+    end
+
+    test "registers each of the queries an argument chooses between", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module97
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert queries.chosen == [
+               %Query{entity: Entity2, sort: [c: :asc, id: :asc]},
+               %Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}
+             ]
+    end
+
+    test "registers a query that a builder of the project is given and returns", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module97
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert queries.kept == [
+               %Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}
+             ]
+
+      assert queries.kept_with_argument == [
+               %Query{
+                 entity: Entity2,
+                 filter: [{:a, :==, {:placeholder, :wanted}}],
+                 sort: [id: :asc]
+               }
+             ]
+    end
+
+    test "registers a query an Elixir function's closure builds on", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module97
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert queries.reduced == [
+               %Query{entity: Entity2, filter: [{:a, :==, true}], sort: [c: :asc, id: :asc]}
+             ]
+    end
+
+    test "registers a string interpolation the build knows as the string", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module97
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert queries.interpolated_known == [
+               %Query{entity: Entity2, filter: [{:c, :==, "ripe pear"}], sort: [id: :asc]}
+             ]
+    end
+
+    test "registers a string interpolating an argument with a placeholder for it", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module97
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert queries.interpolated == [
+               %Query{
+                 entity: Entity2,
+                 filter: [{:c, :==, {:placeholder, :suffix}}],
+                 sort: [id: :asc]
+               }
+             ]
     end
   end
 
