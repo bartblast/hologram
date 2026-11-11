@@ -4906,7 +4906,7 @@ describe("Hologram", () => {
           .callsFake(() => (domEpochDuringRender = Hologram.domEpoch));
 
         const scrollToStub = sinon.stub(window, "scrollTo");
-        const sseConnectStub = sinon.stub(Sse, "connect");
+        const sseStartStub = sinon.stub(Sse, "start");
 
         let frame = null;
         window.requestAnimationFrame = (callback) => (frame = callback);
@@ -4948,7 +4948,7 @@ describe("Hologram", () => {
           Hologram.isPageShown = false;
           renderStub.restore();
           scrollToStub.restore();
-          sseConnectStub.restore();
+          sseStartStub.restore();
         }
       });
     });

@@ -3612,6 +3612,41 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
   end
 
+  describe "dump_module_info_plt/2" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "dump_module_info_plt_2"])
+      clean_dir(test_tmp_dir)
+
+      [dump_path: Path.join([test_tmp_dir, "build", Reflection.module_info_plt_dump_file_name()])]
+    end
+
+    test "writes the PLT and a token", %{dump_path: dump_path} do
+      plt = PLT.put(PLT.start(), :module_1, %{digest: 1})
+
+      assert dump_module_info_plt(plt, dump_path) == :ok
+
+      loaded_plt = PLT.start()
+      PLT.maybe_load(loaded_plt, dump_path)
+
+      assert PLT.get_all(loaded_plt) == %{module_1: %{digest: 1}}
+      assert {_mtime, token} = module_info_dump_stamp(dump_path)
+      assert is_binary(token)
+    end
+
+    test "gives a dump written again within the same second another stamp", %{
+      dump_path: dump_path
+    } do
+      plt = PLT.start()
+      dump_module_info_plt(plt, dump_path)
+      {mtime, _token} = old_stamp = module_info_dump_stamp(dump_path)
+
+      dump_module_info_plt(plt, dump_path)
+      File.touch!(dump_path, mtime)
+
+      assert module_info_dump_stamp(dump_path) != old_stamp
+    end
+  end
+
   describe "encode_reachable_functions/5" do
     setup do
       # A PLT per test, so one test's cache can never stand in for another's encoding.
@@ -5181,6 +5216,35 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "module_info_dump_stamp/1" do
+    setup do
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "module_info_dump_stamp_1"])
+      clean_dir(test_tmp_dir)
+
+      [dump_path: Path.join(test_tmp_dir, Reflection.module_info_plt_dump_file_name())]
+    end
+
+    test "dump with a token", %{dump_path: dump_path} do
+      File.write!(dump_path, "dump")
+      File.write!(dump_path <> ".token", "token")
+
+      assert module_info_dump_stamp(dump_path) ==
+               {File.stat!(dump_path, time: :posix).mtime, "token"}
+    end
+
+    test "dump with no token", %{dump_path: dump_path} do
+      File.write!(dump_path, "dump")
+
+      assert module_info_dump_stamp(dump_path) == {File.stat!(dump_path, time: :posix).mtime, nil}
+    end
+
+    test "no dump", %{dump_path: dump_path} do
+      File.write!(dump_path <> ".token", "token")
+
+      assert module_info_dump_stamp(dump_path) == nil
+    end
+  end
+
   describe "partition_affected_pages/6" do
     setup do
       test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "partition_affected_pages_6"])
@@ -5693,17 +5757,42 @@ defmodule Hologram.CompilerTest do
       [empty_diff: %{added_modules: [], edited_modules: [], removed_modules: []}]
     end
 
-    test "leaves the entry of a module the compiler did not report", %{empty_diff: empty_diff} do
+    test "reads a module the compiler did not report when its beam moved since its entry", %{
+      empty_diff: empty_diff
+    } do
+      # Another OS process compiled it: this VM's compiler reported nothing, but the beam's mtime
+      # moved.
       beam_path = :code.which(Hologram.Reflection)
-
-      # Its mtime moved, so a check of the beam would read it.
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0}
-      plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+      beam_info = Reflection.beam_info(beam_path)
+      plt = PLT.put(PLT.start(), Hologram.Reflection, %{beam_info | digest: 1, mtime: 0})
 
       result =
         patch_module_info_plt!(
           plt,
-          nil,
+          beam_info.mtime + 2,
+          MapSet.new([Hologram.Reflection]),
+          [{Hologram.Reflection, beam_path}],
+          MapSet.new()
+        )
+
+      assert result == {%{empty_diff | edited_modules: [Hologram.Reflection]}, true}
+      assert PLT.get!(plt, Hologram.Reflection) == beam_info
+    end
+
+    test "keeps the entry of a module the compiler did not report when its beam matches it", %{
+      empty_diff: empty_diff
+    } do
+      beam_path = :code.which(Hologram.Reflection)
+
+      # The faked digest would show as an edit if the beam were read.
+      old_info = %{Reflection.beam_info(beam_path) | digest: 1}
+      plt = PLT.put(PLT.start(), Hologram.Reflection, old_info)
+
+      # Untouched and a second older than the dump, so the entry is reused.
+      result =
+        patch_module_info_plt!(
+          plt,
+          old_info.mtime + 1,
           MapSet.new([Hologram.Reflection]),
           [{Hologram.Reflection, beam_path}],
           MapSet.new()
@@ -5836,60 +5925,26 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(plt, module) == :error
     end
 
-    test "checks the beam of a protocol the compiler did not report", %{empty_diff: empty_diff} do
-      beam_path = :code.which(Enumerable)
-
-      plt =
-        PLT.put(PLT.start(), Enumerable, %{Reflection.beam_info(beam_path) | digest: 1, mtime: 0})
-
-      result =
-        patch_module_info_plt!(
-          plt,
-          nil,
-          MapSet.new([Enumerable]),
-          [{Enumerable, beam_path}],
-          MapSet.new()
-        )
-
-      assert result == {%{empty_diff | edited_modules: [Enumerable]}, true}
-      assert PLT.get!(plt, Enumerable) == Reflection.beam_info(beam_path)
-    end
-
-    test "reuses the entry of a protocol whose beam is untouched and older than the dump", %{
-      empty_diff: empty_diff
-    } do
-      beam_path = :code.which(Enumerable)
-      %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
-      old_info = %{Reflection.beam_info(beam_path) | digest: 1}
-      plt = PLT.put(PLT.start(), Enumerable, old_info)
-
-      result =
-        patch_module_info_plt!(
-          plt,
-          mtime + 1,
-          MapSet.new([Enumerable]),
-          [{Enumerable, beam_path}],
-          MapSet.new()
-        )
-
-      assert result == {empty_diff, false}
-      assert PLT.get!(plt, Enumerable) == old_info
-    end
-
     test "leaves every entry as the beams and the reported modules say, and finds the diff" do
       reflection_path = :code.which(Hologram.Reflection)
       compiler_path = :code.which(Hologram.Compiler)
       enumerable_path = :code.which(Enumerable)
 
       plt_path = :code.which(Hologram.Commons.PLT)
-      kept_reflection_info = %{Reflection.beam_info(reflection_path) | digest: 1, mtime: 0}
+      tracer_path = :code.which(Hologram.Compiler.Tracer)
+
+      # The faked digest would show as an edit if the beam were read.
+      kept_reflection_info = %{Reflection.beam_info(reflection_path) | digest: 1}
 
       plt =
         PLT.put(PLT.start(), [
           # Not editable.
           {Enum, %{digest: "kept"}},
-          # Editable, not reported, mtime moved: left as it is.
+          # Editable, not reported, beam as its entry says: left as it is.
           {Hologram.Reflection, kept_reflection_info},
+          # Editable, not reported, mtime moved, as when another OS process compiled it: read
+          # again.
+          {Hologram.Compiler.Tracer, %{Reflection.beam_info(tracer_path) | digest: 1, mtime: 0}},
           # Reported: read again.
           {Hologram.Compiler, %{Reflection.beam_info(compiler_path) | digest: 1}},
           # A protocol not reported, mtime moved: read again.
@@ -5899,10 +5954,17 @@ defmodule Hologram.CompilerTest do
         ])
 
       editable_modules =
-        MapSet.new([Hologram.Reflection, Hologram.Compiler, Enumerable, :removed_module])
+        MapSet.new([
+          Hologram.Reflection,
+          Hologram.Compiler.Tracer,
+          Hologram.Compiler,
+          Enumerable,
+          :removed_module
+        ])
 
       editable_beams = [
         {Hologram.Reflection, reflection_path},
+        {Hologram.Compiler.Tracer, tracer_path},
         {Hologram.Compiler, compiler_path},
         {Enumerable, enumerable_path},
         # No entry: added.
@@ -5911,12 +5973,20 @@ defmodule Hologram.CompilerTest do
 
       compiled_modules = MapSet.new([Hologram.Compiler])
 
+      # Past every beam's mtime, so that a beam its entry matches is not read.
+      dumped_at =
+        editable_beams
+        |> Enum.map(fn {_module, beam_path} -> Reflection.beam_info(beam_path).mtime end)
+        |> Enum.max()
+        |> Kernel.+(2)
+
       {diff, changed?} =
-        patch_module_info_plt!(plt, nil, editable_modules, editable_beams, compiled_modules)
+        patch_module_info_plt!(plt, dumped_at, editable_modules, editable_beams, compiled_modules)
 
       assert PLT.get_all(plt) == %{
                Enum => %{digest: "kept"},
                Hologram.Reflection => kept_reflection_info,
+               Hologram.Compiler.Tracer => Reflection.beam_info(tracer_path),
                Hologram.Compiler => Reflection.beam_info(compiler_path),
                Enumerable => Reflection.beam_info(enumerable_path),
                Hologram.Commons.PLT => Reflection.beam_info(plt_path)
@@ -5924,7 +5994,7 @@ defmodule Hologram.CompilerTest do
 
       assert diff == %{
                added_modules: [Hologram.Commons.PLT],
-               edited_modules: [Enumerable, Hologram.Compiler],
+               edited_modules: [Enumerable, Hologram.Compiler, Hologram.Compiler.Tracer],
                removed_modules: [:removed_module]
              }
 

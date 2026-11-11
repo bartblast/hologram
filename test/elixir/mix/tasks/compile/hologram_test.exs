@@ -15,6 +15,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.Tracer
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module11
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module3
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module5
@@ -253,7 +254,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     edited_info = %{info | digest: "edited", mtime: info.mtime - 100}
 
     plt = PLT.start(items: Map.to_list(%{module_infos | module => edited_info}))
-    PLT.dump(plt, dump_path)
+    Compiler.dump_module_info_plt(plt, dump_path)
     PLT.stop(plt)
   end
 
@@ -306,6 +307,35 @@ defmodule Mix.Tasks.Compile.HologramTest do
     opts[:build_dir]
     |> Path.join(Reflection.chunk_registry_plt_dump_file_name())
     |> load_plt_items()
+  end
+
+  # Loads other code for the module than its beam holds, as a VM still runs once another OS process
+  # rewrote the beam. The beam's code is loaded back when the test exits.
+  defp load_code_other_than_beam(module) do
+    beam_path = :code.which(module)
+    ignore_module_conflict? = Code.get_compiler_option(:ignore_module_conflict)
+    Code.put_compiler_option(:ignore_module_conflict, true)
+
+    [{^module, bytecode}] =
+      try do
+        # Under the module's own file name, which its compile info names.
+        Code.compile_string(
+          "defmodule #{inspect(module)} do def value, do: :memory end",
+          Reflection.source_path(module)
+        )
+      after
+        Code.put_compiler_option(:ignore_module_conflict, ignore_module_conflict?)
+      end
+
+    on_exit(fn -> reload_beam(module) end)
+
+    # This VM compiled it, which the tracer records, but the code stands for what the beam held
+    # before the other process rewrote it.
+    :ets.delete(Tracer, module)
+
+    # Loaded from the beam's path, as Mix loads a module, so that the VM compares it with the beam.
+    :code.purge(module)
+    {:module, ^module} = :code.load_binary(module, beam_path, bytecode)
   end
 
   defp load_compile_state_dump(opts) do
@@ -404,7 +434,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     |> PLT.reset()
     |> PLT.put(Map.to_list(module_infos))
 
-    Cache.put_module_infos(dumped_at, editable_modules)
+    # The dump this VM saw, whose token the cache keeps beside the dump time.
+    %{dump_token: dump_token} = Cache.get()
+    Cache.put_module_infos(dumped_at && {dumped_at, dump_token}, editable_modules)
   end
 
   # Moves the kept runtime bundle, its gzip copy and its source map to the names of an older build,
@@ -445,6 +477,102 @@ defmodule Mix.Tasks.Compile.HologramTest do
     recorded = fn -> Agent.get(agent, &Enum.reverse/1) end
 
     {record, recorded}
+  end
+
+  defp reload_beam(module) do
+    :code.purge(module)
+    :code.delete(module)
+    :code.purge(module)
+    {:module, ^module} = :code.load_file(module)
+  end
+
+  # Deletes the module's beam as another OS process does when its source file goes, the module
+  # staying loaded. The beam and its code are put back when the test exits.
+  defp remove_beam(module) do
+    Code.ensure_loaded!(module)
+    beam_path = :code.which(module)
+    bytecode = File.read!(beam_path)
+    %File.Stat{mtime: mtime} = File.stat!(beam_path, time: :posix)
+
+    on_exit(fn ->
+      File.write!(beam_path, bytecode)
+      File.touch!(beam_path, mtime)
+      reload_beam(module)
+    end)
+
+    File.rm!(beam_path)
+  end
+
+  # Writes the module info dump again with the given change to its entries, as another OS process's
+  # compile does, with an mtime the given number of seconds past the one it had: 0 for a dump
+  # written in the same second.
+  defp rewrite_module_info_dump(opts, fun, seconds_later \\ 1) do
+    dump_path = Path.join(opts[:build_dir], Reflection.module_info_plt_dump_file_name())
+    %File.Stat{mtime: mtime} = File.stat!(dump_path, time: :posix)
+
+    module_infos =
+      opts
+      |> load_module_info_items()
+      |> fun.()
+
+    plt = PLT.start(items: Map.to_list(module_infos))
+    Compiler.dump_module_info_plt(plt, dump_path)
+    PLT.stop(plt)
+
+    File.touch!(dump_path, mtime + seconds_later)
+  end
+
+  # The calls of the given functions this process made while the function ran, in order, as
+  # {module, function} pairs. Each function is given with the arguments a call must have, or :_ for
+  # any. Collected by another process, since the compile can take messages off this one's mailbox.
+  defp trace_calls(functions, fun) do
+    {:ok, collector} = Agent.start_link(fn -> [] end)
+    {:ok, tracer} = Task.start_link(fn -> collect_traced_calls(collector) end)
+
+    patterns =
+      Enum.map(functions, fn
+        {module, function, :_} -> {{module, function, :_}, true}
+        {module, function, args} -> {{module, function, length(args)}, [{args, [], []}]}
+      end)
+
+    try do
+      Enum.each(patterns, fn {mfa, match_spec} ->
+        :erlang.trace_pattern(mfa, match_spec, [:global])
+      end)
+
+      :erlang.trace(self(), true, [:call, {:tracer, tracer}])
+      fun.()
+    after
+      :erlang.trace(self(), false, [:call])
+
+      Enum.each(patterns, fn {mfa, _match_spec} ->
+        :erlang.trace_pattern(mfa, false, [:global])
+      end)
+    end
+
+    # Every trace message of this process is in the tracer's mailbox once this arrives.
+    ref = :erlang.trace_delivered(self())
+
+    receive do
+      {:trace_delivered, _pid, ^ref} -> :ok
+    end
+
+    send(tracer, {:done, self()})
+
+    receive do
+      :collected -> Agent.get(collector, &Enum.reverse/1)
+    end
+  end
+
+  defp collect_traced_calls(collector) do
+    receive do
+      {:trace, _pid, :call, {module, function, _args}} ->
+        Agent.update(collector, &[{module, function} | &1])
+        collect_traced_calls(collector)
+
+      {:done, caller} ->
+        send(caller, :collected)
+    end
   end
 
   # What the compiler tracer records when the module is compiled: the bytes its beam holds.
@@ -911,7 +1039,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   describe "kept compile state" do
     setup do
       # Reset on the way out too: a test here can leave faked entries in the cache that nothing
-      # rereads, since the modules they are for are not reported as compiled.
+      # rereads, such as a library module's, which no compile checks against its beam.
       on_exit(&Cache.reset/0)
     end
 
@@ -1093,7 +1221,160 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert {:ok, %IR.ModuleDefinition{}} = PLT.get(ir_plt, Module1)
     end
 
-    test "copies the kept entry of an editable module the compiler did not report", %{
+    test "reads an editable module another process compiled", %{opts: opts} do
+      run(opts)
+
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+        cache_state()
+
+      pages_reaching_module_2 = count_pages_reaching(Module2)
+
+      # Another OS process compiled it: this VM's compiler reported nothing, but the beam no longer
+      # matches the kept entry's mtime.
+      stale_info = %{module_infos[Module2] | digest: "stale", mtime: 0}
+      put_kept_module_infos(%{module_infos | Module2 => stale_info}, dumped_at, editable_modules)
+
+      assert count_built_bundles(fn -> run(opts) end) == pages_reaching_module_2
+
+      assert pages_reaching_module_2 > 0
+      assert cache_state().module_infos[Module2] == module_infos[Module2]
+    end
+
+    test "unloads the old code of a module another process compiled", %{opts: opts} do
+      run(opts)
+
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+        cache_state()
+
+      load_code_other_than_beam(Module11)
+      assert :code.module_status(Module11) == :modified
+
+      stale_info = %{module_infos[Module11] | digest: "stale", mtime: 0}
+      put_kept_module_infos(%{module_infos | Module11 => stale_info}, dumped_at, editable_modules)
+
+      # Unloaded before the compile asks the pages for their routes, as the first call into the
+      # changed modules.
+      calls =
+        trace_calls([{:code, :delete, [Module11]}, {Compiler, :validate_page_modules, :_}], fn ->
+          run(opts)
+        end)
+
+      assert calls == [{:code, :delete}, {Compiler, :validate_page_modules}]
+      assert Module11.value() == :beam
+    end
+
+    test "unloads the old code of a module another process compiled after a failed compile", %{
+      opts: opts
+    } do
+      run(opts)
+
+      # What a failed compile leaves, so the next compile is cold. Then another process's compile
+      # writes its dumps, its record of the compile inputs among them, which says nothing changed.
+      Cache.clear_module_infos()
+      fake_edit_in_dump(Module11, opts)
+      load_code_other_than_beam(Module11)
+
+      run(opts)
+
+      assert Module11.value() == :beam
+    end
+
+    test "unloads the old code of a module another process compiled after a run that found nothing changed",
+         %{opts: opts} do
+      run(opts)
+
+      # A new VM whose first run finds nothing changed and compiles nothing. Then another process
+      # compiles the module, and writes a module info dump that matches its beam. Then a live
+      # reload pass compiles.
+      Cache.reset()
+      assert run(opts) == :noop
+
+      load_code_other_than_beam(Module11)
+      rewrite_module_info_dump(opts, & &1)
+
+      run(Keyword.put(opts, :force?, true))
+
+      assert Module11.value() == :beam
+    end
+
+    test "unloads the old code of a module another process compiled after a failed compile, against that process's module info dump",
+         %{opts: opts} do
+      run(opts)
+
+      # What a failed compile leaves. Then another process compiles the module, and writes a module
+      # info dump that matches its beam, so the diff against it misses the module.
+      Cache.clear_module_infos()
+      load_code_other_than_beam(Module11)
+      rewrite_module_info_dump(opts, & &1)
+
+      run(opts)
+
+      assert Module11.value() == :beam
+    end
+
+    test "unloads a module whose beam another process deleted after a failed compile, against that process's module info dump",
+         %{opts: opts} do
+      run(opts)
+
+      # What a failed compile leaves. Then another process deletes the module, and writes a module
+      # info dump without it.
+      Cache.clear_module_infos()
+      remove_beam(Module11)
+      rewrite_module_info_dump(opts, &Map.delete(&1, Module11))
+
+      run(opts)
+
+      refute :code.is_loaded(Module11)
+    end
+
+    test "checks only the diff's modules after a run that found nothing changed when the module info dump is the one it saw",
+         %{opts: opts} do
+      run(opts)
+
+      Cache.reset()
+      assert run(opts) == :noop
+
+      load_code_other_than_beam(Module11)
+      run(Keyword.put(opts, :force?, true))
+
+      assert :code.module_status(Module11) == :modified
+    end
+
+    test "unloads the old code of a module another process compiled after a failed compile, against that process's module info dump written in the same second",
+         %{opts: opts} do
+      run(opts)
+
+      Cache.clear_module_infos()
+      load_code_other_than_beam(Module11)
+      rewrite_module_info_dump(opts, & &1, 0)
+
+      run(opts)
+
+      assert Module11.value() == :beam
+    end
+
+    test "checks only the diff's modules after a failed compile when the module info dump is the one it saw",
+         %{opts: opts} do
+      run(opts)
+
+      Cache.clear_module_infos()
+      load_code_other_than_beam(Module11)
+
+      run(opts)
+
+      assert :code.module_status(Module11) == :modified
+    end
+
+    test "unloads a module whose beam another process deleted", %{opts: opts} do
+      run(opts)
+
+      remove_beam(Module11)
+      run(opts)
+
+      refute :code.is_loaded(Module11)
+    end
+
+    test "keeps loaded the old code of Hologram's own module another process compiled", %{
       opts: opts
     } do
       run(opts)
@@ -1101,23 +1382,40 @@ defmodule Mix.Tasks.Compile.HologramTest do
       %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
         cache_state()
 
-      # The mtime faked here would make a check of the beam read it, so a kept digest shows that
-      # the beam was not checked, and no page is rebuilt for it.
-      kept_info = %{module_infos[Module2] | digest: "kept", mtime: 0}
-      put_kept_module_infos(%{module_infos | Module2 => kept_info}, dumped_at, editable_modules)
+      # A Hologram module the compile doesn't call.
+      module = Hologram.Benchmarks
+      load_code_other_than_beam(module)
 
-      assert count_built_bundles(fn -> run(opts) end) == 0
+      stale_info = %{module_infos[module] | digest: "stale", mtime: 0}
+      put_kept_module_infos(%{module_infos | module => stale_info}, dumped_at, editable_modules)
 
-      assert cache_state().module_infos[Module2] == kept_info
-    end
-
-    test "a run with no changes checks only the beams of the protocols", %{opts: opts} do
       run(opts)
 
-      %{editable_modules: editable_modules, module_infos: module_infos} = cache_state()
+      assert :code.module_status(module) == :modified
+    end
 
-      num_editable_protocols =
-        Enum.count(editable_modules, fn module -> module_infos[module].protocol? end)
+    test "keeps loaded a module another process compiled when its code is the beam's", %{
+      opts: opts
+    } do
+      run(opts)
+
+      %{dumped_at: dumped_at, editable_modules: editable_modules, module_infos: module_infos} =
+        cache_state()
+
+      Code.ensure_loaded!(Module11)
+
+      stale_info = %{module_infos[Module11] | digest: "stale", mtime: 0}
+      put_kept_module_infos(%{module_infos | Module11 => stale_info}, dumped_at, editable_modules)
+
+      run(opts)
+
+      assert :code.is_loaded(Module11)
+    end
+
+    test "a run with no changes checks every editable beam and builds no bundle", %{opts: opts} do
+      run(opts)
+
+      %{editable_modules: editable_modules} = cache_state()
 
       # The function a beam is checked against its entry through, which is private, so its local
       # calls are counted.
@@ -1125,14 +1423,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
       :erlang.trace_pattern(mfa, true, [:local, :call_count])
 
       try do
-        run(opts)
+        assert count_built_bundles(fn -> run(opts) end) == 0
 
-        assert :erlang.trace_info(mfa, :call_count) == {:call_count, num_editable_protocols}
+        assert :erlang.trace_info(mfa, :call_count) ==
+                 {:call_count, MapSet.size(editable_modules)}
       after
         :erlang.trace_pattern(mfa, false, [:local, :call_count])
       end
-
-      assert num_editable_protocols > 0
     end
 
     test "a run into a fresh build dir dumps the call graph of what the pages reach", %{
@@ -3228,6 +3525,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_dumps(fn -> run(opts) end) == [1, 1]
     end
 
+    test "a run with no changes writes both dumps when another VM rewrote the module info dump in the same second",
+         %{opts: opts} do
+      run(opts)
+
+      rewrite_module_info_dump(opts, & &1, 0)
+
+      assert count_dumps(fn -> run(opts) end) == [1, 1]
+    end
+
     test "a run with no changes writes the call graph dump again when it is gone", %{opts: opts} do
       run(opts)
 
@@ -3267,8 +3573,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       %{editable_modules: editable_modules, module_infos: module_infos} = cache_state()
 
-      # A consolidated protocol, whose beam a new implementation rewrites without a compile, so it
-      # is checked against its entry on every compile rather than taken from the compiler.
+      # A consolidated protocol, whose beam a new implementation rewrites without a compile, so the
+      # compiler reports nothing and the beam is checked against its entry.
       protocol_info = module_infos[Enumerable]
 
       # The state of a compile that dumped in the same second as the beam was last written: its
@@ -3477,6 +3783,22 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "a new VM with no record compiles", %{opts: opts} do
       File.rm!(@compile_inputs_path)
 
+      assert run(opts) == :ok
+    end
+
+    test "a compile after a failed one in the same VM compiles", %{opts: opts} do
+      fake_recompile()
+      assert run(opts) == :ok
+
+      # What a failed compile leaves in the cache. The record of the compile inputs this run wrote
+      # stands for one another process's compile wrote since.
+      Cache.clear_module_infos()
+
+      assert run(opts) == :ok
+    end
+
+    test "a run after one that found nothing changed in the same VM compiles", %{opts: opts} do
+      assert run(opts) == :noop
       assert run(opts) == :ok
     end
 

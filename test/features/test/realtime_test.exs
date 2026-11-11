@@ -573,11 +573,19 @@ defmodule HologramFeatureTests.RealtimeTest do
       session = visit(session, Page1)
 
       instance_id = current_instance_id(session)
+      wait_for_connection(instance_id)
 
       session =
         session
         |> visit("/external")
         |> assert_text("External Page")
+
+      # Leaving the page closes its stream, so what follows shows the stream reopened on
+      # the way back, not one that stayed open all along.
+      wait_for_no_connection(instance_id, 5_000)
+
+      session =
+        session
         |> go_back()
         |> assert_page(Page1)
         |> wait_for_subscription(@channel_1)
@@ -694,8 +702,7 @@ defmodule HologramFeatureTests.RealtimeTest do
       wait_for_connection(instance_id)
 
       # A second tab keeps the browser up, and over HTTP/2 the connection it shares with
-      # this tab, so closing this tab ends only its own stream. Navigating away instead
-      # would prove nothing: the back/forward cache keeps a left page's stream open.
+      # this tab, so closing this tab ends only its own stream.
       [original_tab] = window_handles(session)
       execute_script(session, "window.open('/external', '_blank')")
       [other_tab] = window_handles(session) -- [original_tab]
@@ -708,6 +715,28 @@ defmodule HologramFeatureTests.RealtimeTest do
       # Without a way to notice the tab closing, only the stream's first heartbeat does,
       # 15 s after the stream attached. 5 s is policy: far above the milliseconds noticing
       # takes, far below that first heartbeat.
+      wait_for_no_connection(instance_id, 5_000)
+    end
+  end
+
+  describe "subscriptions of a left page" do
+    # Chrome keeps the stream of a page left by a full page load open unless the page closes
+    # it. Over HTTP/1.1 six such streams use up the connections it allows per origin, over
+    # HTTP/2 they pile up on the server.
+    feature "forgotten on the server as soon as the page is left by a full page load", %{
+      session: session
+    } do
+      session = visit(session, Page1)
+
+      instance_id = current_instance_id(session)
+      wait_for_connection(instance_id)
+
+      session
+      |> visit("/external")
+      |> assert_text("External Page")
+
+      # 5 s is policy: far above the milliseconds closing the stream takes. A stream the
+      # page left open stays registered for good, since heartbeat writes to it keep succeeding.
       wait_for_no_connection(instance_id, 5_000)
     end
   end
