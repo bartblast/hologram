@@ -34,7 +34,9 @@ defmodule Hologram.Component.Derived do
   Raises Hologram.MisuseError when an argument has no value, when a result doesn't match the field's
   type, and Hologram.StateError when a stateless component's field reads state.
 
-  WARNING: must match the client renderer's #computeDerived (renderer.mjs), messages included.
+  WARNING: must match the client renderer's #computeDerived (renderer.mjs), messages included - but
+  for a value each tier spells with its own inspect, which spell structs and the key order of maps
+  differently.
   """
   @spec compute([map], module, map, map, map, keyword) :: map
   def compute(entries, module, props, state, computed, opts) do
@@ -549,7 +551,7 @@ defmodule Hologram.Component.Derived do
     if not value_of_type?(value, entry.type) do
       raise Hologram.MisuseError,
         message:
-          "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} is declared #{inspect(entry.type)}, but computed #{inspect(value, limit: 5)}"
+          "derived field #{inspect(entry.name)} in #{Reflection.module_name(module)} is declared #{inspect(entry.type)}, but computed #{inspect(value)}"
     end
 
     :ok

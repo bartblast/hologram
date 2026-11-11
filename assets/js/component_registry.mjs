@@ -71,6 +71,13 @@ export default class ComponentRegistry {
     ComponentRegistry.entries = entries;
   }
 
+  // Optimized (mutates derived field in-place)
+  static putComponentDerived(cid, derived) {
+    const entry = ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1];
+    const componentStruct = entry.data["atom(struct)"][1];
+    componentStruct.data["atom(derived)"][1] = derived;
+  }
+
   // Optimized (mutates props field in-place)
   static putComponentProps(cid, props) {
     const entry = ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1];

@@ -25,20 +25,14 @@ import Type from "./type.mjs";
 //
 // The bodies assume the build carries a data model, so the sync constants are there.
 export default class DataLayer {
-  // Based on run_prop_query!/4
+  // Based on run_query!/4
   //
-  // The builder is ordinary transpiled code piping the ported query stages, so calling it yields
-  // the plain term the kernel evaluates - normalized first, exactly as the server normalizes
-  // before running, so the client answers the same query the same way.
-  //
-  // The result is boxed here and nowhere else: rows live plain, and this is the boundary where
-  // one becomes something a template can read.
-  static answerPropQuery(module, propName, args, capture) {
-    const term = ManuallyPortedElixirHologramQueryStage["normalize/1"](
-      Interpreter.callAnonymousFunction(capture, args),
-    );
-
-    const carried = $.#carriedCount(module, propName, args, term);
+  // Answers the given normalized term a derived field or a query prop of the given module is
+  // defined by, for the given name and the arguments its function was called with. The result is
+  // boxed here and nowhere else: rows live plain, and this is the boundary where one becomes
+  // something a template can read.
+  static answerDerivedQuery(module, name, args, term) {
+    const carried = $.#carriedCount(module, name, args, term);
 
     if (carried !== null) {
       return Type.integer(carried);
@@ -49,6 +43,19 @@ export default class DataLayer {
     });
 
     return Model.boxResult(term, result);
+  }
+
+  // Based on run_prop_query!/4
+  //
+  // The builder is ordinary transpiled code piping the ported query stages, so calling it yields
+  // the plain term the kernel evaluates - normalized first, exactly as the server normalizes
+  // before running, so the client answers the same query the same way.
+  static answerPropQuery(module, propName, args, capture) {
+    const term = ManuallyPortedElixirHologramQueryStage["normalize/1"](
+      Interpreter.callAnonymousFunction(capture, args),
+    );
+
+    return $.answerDerivedQuery(module, propName, args, term);
   }
 
   // What the data layer needs before the page mounts: the replica identity, the durable store and
@@ -518,6 +525,17 @@ export default class DataLayer {
     SyncStream.listen(eventSource);
   }
 
+  // Called by every render: the rows the derived fields read are now the ones it computed them
+  // from (see rowsChangedSinceRender).
+  static markRendered() {
+    SyncStream.rowsChangedSinceRender = false;
+  }
+
+  // Based on Stage.normalize/1
+  static normalizeQuery(query) {
+    return ManuallyPortedElixirHologramQueryStage["normalize/1"](query);
+  }
+
   // An action's writes are one batch: opened when it starts, sealed when it returns, discarded
   // when it raises. That is what makes "the writes of one action" need no bookkeeping from the app
   // - a DB verb writes to whichever batch is open, and there is one open only while an action
@@ -556,6 +574,12 @@ export default class DataLayer {
     Batches.flush();
   }
 
+  // Whether rows changed since the last render, which computed the derived fields from the rows it
+  // saw - so an action about to read them knows to compute them again first.
+  static rowsChangedSinceRender() {
+    return SyncStream.rowsChangedSinceRender;
+  }
+
   // The one signal that actually means the network is worth trying again. A batch whose send got
   // no answer is still pending, and this is what wakes the queue that stopped behind it.
   static streamOpened() {
@@ -571,9 +595,10 @@ export default class DataLayer {
   // the page this client connected on, whose rows the server declares complete first, and the
   // whole pot's for any page reached since, whose rows are only promised at "all".
   //
-  // The key names the component, the prop and the arguments the builder was called with - which
-  // is what tells two instances of one component apart, and what both tiers can spell alike.
-  static #carriedCount(module, propName, args, term) {
+  // The key names the component, the prop or derived field, and the arguments its function was
+  // called with - which is what tells two instances of one component apart, and what both tiers
+  // can spell alike.
+  static #carriedCount(module, name, args, term) {
     if (term.cardinality !== "count") {
       return null;
     }
@@ -585,7 +610,7 @@ export default class DataLayer {
       return null;
     }
 
-    const key = `${module}/${propName.value}/${args
+    const key = `${module}/${name.value}/${args
       .map((arg) => Interpreter.inspect(arg))
       .join(",")}`;
 

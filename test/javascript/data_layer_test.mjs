@@ -32,6 +32,75 @@ describe("DataLayer", () => {
     sinon.restore();
   });
 
+  describe("answerDerivedQuery()", () => {
+    const TASK = "MyApp.Task";
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [TASK]: {
+            attributes: {done: "boolean", id: "uuid", title: "string"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+        propParams: {},
+      };
+
+      Model.reset();
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = null;
+      GlobalRegistry.set("connectPageModule", null);
+
+      LocalDatabase.putRow(TASK, {
+        done: false,
+        id: "t1",
+        title: "Buy milk",
+        title$sort: "buy milk",
+      });
+      LocalDatabase.putRow(TASK, {
+        done: true,
+        id: "t2",
+        title: "Call Ann",
+        title$sort: "call ann",
+      });
+    });
+
+    it("answers a count from the local database", () => {
+      const term = DataLayer.normalizeQuery(
+        ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+      );
+
+      assert.deepStrictEqual(
+        DataLayer.answerDerivedQuery(
+          "MyApp.Tasks",
+          Type.atom("total"),
+          [],
+          term,
+        ),
+        Type.integer(2),
+      );
+    });
+
+    it("answers a count with the count the page carried under the field's name and arguments", () => {
+      const term = DataLayer.normalizeQuery(
+        ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+      );
+
+      LocalDatabase.syncCounts = {"MyApp.Tasks/total/5": 42};
+
+      assert.deepStrictEqual(
+        DataLayer.answerDerivedQuery(
+          "MyApp.Tasks",
+          Type.atom("total"),
+          [Type.integer(5)],
+          term,
+        ),
+        Type.integer(42),
+      );
+    });
+  });
+
   describe("answerPropQuery()", () => {
     const TASK = "MyApp.Task";
 
@@ -709,6 +778,39 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("markRendered()", () => {
+    it("marks the rows as the ones the last render saw", () => {
+      SyncStream.rowsChangedSinceRender = true;
+
+      DataLayer.markRendered();
+
+      assert.isFalse(DataLayer.rowsChangedSinceRender());
+    });
+  });
+
+  describe("normalizeQuery()", () => {
+    it("normalizes a query as the server does before running it", () => {
+      globalThis.Hologram.sync = {
+        model: {
+          "MyApp.Task": {
+            attributes: {id: "uuid"},
+            relationships: {},
+            serverOnly: [],
+          },
+        },
+      };
+
+      Model.reset();
+
+      assert.deepStrictEqual(
+        DataLayer.normalizeQuery(Type.alias("MyApp.Task")),
+        ManuallyPortedElixirHologramQueryStage["normalize/1"](
+          Type.alias("MyApp.Task"),
+        ),
+      );
+    });
+  });
+
   describe("openBatch()", () => {
     it("opens the action's batch for its target", () => {
       const opening = sinon.stub(Batches, "open");
@@ -779,6 +881,18 @@ describe("DataLayer", () => {
       sinon.assert.notCalled(flushing);
 
       assert.isNull(SyncStream.syncCursor);
+    });
+  });
+
+  describe("rowsChangedSinceRender()", () => {
+    afterEach(() => {
+      SyncStream.rowsChangedSinceRender = false;
+    });
+
+    it("answers whether rows changed since the last render", () => {
+      SyncStream.rowsChangedSinceRender = true;
+
+      assert.isTrue(DataLayer.rowsChangedSinceRender());
     });
   });
 

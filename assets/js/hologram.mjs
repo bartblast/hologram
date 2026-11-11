@@ -309,6 +309,12 @@ export default class Hologram {
       );
     }
 
+    // The last render computed the target's derived fields from the rows it saw, and a frame may
+    // have changed them while its own render waits for an animation frame.
+    if (Hologram.dataLayer?.rowsChangedSinceRender()) {
+      Renderer.refreshDerived(target);
+    }
+
     const componentModule = ComponentRegistry.getComponentModule(target);
     const componentStruct = ComponentRegistry.getComponentStruct(target);
     const args = [name, params, componentStruct];
@@ -906,6 +912,9 @@ export default class Hologram {
     // leave the DOM and the virtual document describing different pages. While this flag is set a
     // dispatch waits instead of running.
     $.isRendering = true;
+
+    // What this render computes the derived fields from is the rows as they stand now.
+    Hologram.dataLayer?.markRendered();
 
     try {
       const newVirtualDocument = Renderer.renderPage(

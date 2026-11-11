@@ -435,6 +435,33 @@ describe("SyncStream", () => {
     });
   });
 
+  describe("scheduleRender()", () => {
+    afterEach(() => {
+      SyncStream.renderScheduled = false;
+      SyncStream.rowsChangedSinceRender = false;
+      sinon.restore();
+    });
+
+    it("marks rows changed since the last render", () => {
+      sinon.stub(window, "requestAnimationFrame");
+
+      SyncStream.rowsChangedSinceRender = false;
+
+      SyncStream.scheduleRender();
+
+      assert.isTrue(SyncStream.rowsChangedSinceRender);
+    });
+
+    it("marks rows changed while a render is already scheduled", () => {
+      SyncStream.renderScheduled = true;
+      SyncStream.rowsChangedSinceRender = false;
+
+      SyncStream.scheduleRender();
+
+      assert.isTrue(SyncStream.rowsChangedSinceRender);
+    });
+  });
+
   describe("sync_deltas event", () => {
     const TASK = "MyApp.Task";
 

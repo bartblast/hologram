@@ -218,6 +218,50 @@ describe("ComponentRegistry", () => {
     );
   });
 
+  describe("putComponentDerived()", () => {
+    const newDerived = Type.map([[Type.atom("double"), Type.integer(2)]]);
+
+    it("overwrites the derived fields, leaving the struct's other fields alone", () => {
+      ComponentRegistry.entries = Type.map([
+        [
+          cid3,
+          Type.map([
+            [Type.atom("module"), module3],
+            [
+              Type.atom("struct"),
+              Type.componentStruct({
+                emittedContext: emittedContext3,
+                state: state3,
+              }),
+            ],
+          ]),
+        ],
+      ]);
+
+      ComponentRegistry.putComponentDerived(cid3, newDerived);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.entries,
+        Type.map([
+          [
+            cid3,
+            Type.map([
+              [Type.atom("module"), module3],
+              [
+                Type.atom("struct"),
+                Type.componentStruct({
+                  derived: newDerived,
+                  emittedContext: emittedContext3,
+                  state: state3,
+                }),
+              ],
+            ]),
+          ],
+        ]),
+      );
+    });
+  });
+
   describe("putComponentProps()", () => {
     const oldProps = Type.map([[Type.atom("prop_a"), Type.integer(1)]]);
     const newProps = Type.map([[Type.atom("prop_b"), Type.integer(2)]]);
