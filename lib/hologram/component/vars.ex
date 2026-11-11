@@ -8,4 +8,6 @@ defmodule Hologram.Component.Vars do
   # reads a missing key from it. The tagged map carries keys this struct doesn't declare, since
   # which vars a template has is only known when it renders.
   defstruct []
+
+  @type t :: %{required(:__struct__) => __MODULE__, optional(any) => any}
 end
