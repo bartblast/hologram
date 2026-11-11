@@ -425,6 +425,8 @@ You can use standard HTML elements and attributes in your templates:
 
 Props and state are accessible in templates using the `@var` syntax. This provides a convenient way to reference component data. For example, if you have a prop or state variable named `count`, you can access it as `@count` in your template.
 
+Reading a var the template doesn't have raises `Hologram.MisuseError`, on the server and in the browser. The message names the var, the template's module and the vars the template has. A typo like `{@usr}` reads `undefined var @usr in the template of "MyApp.Profile", available vars: @cid, @user`. A declared prop with no default is a var only when the usage passes it, so give it a default if the template reads it.
+
 In the following sections, you'll see how to use these variables in Elixir expressions for interpolation and control flow blocks.
 
 #### Component Nodes

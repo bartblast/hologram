@@ -33,6 +33,7 @@ For additional details beyond these rules, see deps/hologram/llms-full.txt or ht
 
 - Hologram templates use the `~HOLO` sigil, not HEEx. **Never** use HEEx syntax (`<%= %>`, `<.component>`, `<:slot>`).
 - Access props and state with `@var` syntax: `{@name}`, `{@count}`.
+- Reading a var the template doesn't have raises `Hologram.MisuseError`, naming the var and the vars the template has. A declared prop with no default is a var only when the usage passes it, so give it a default if the template reads it.
 - Interpolate Elixir expressions with curly braces: `{expression}`. **Not** `<%= expression %>`.
 - Component nodes use module names: `<MyComponent prop="value" />`. **Not** `<.my_component>`.
 - Tag names can be dynamic: `<{@module} cid="my_id" title="Hello" />` renders a component when the expression yields a component module, `<{@tag} class="heading">` renders an HTML element when it yields a string, anything else raises `ArgumentError`.
