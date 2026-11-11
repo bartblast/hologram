@@ -74,7 +74,12 @@ describe("Sse", () => {
     Sse.eventSource = null;
     Sse.heartbeatIntervalMs = null;
     Sse.heartbeatTimer = null;
+    Sse.isStarted = false;
+    Sse.isSuspended = false;
     Sse.reconnectAttempts = 0;
+    Sse.reconnectTimer = null;
+    Sse.runId = 0;
+    Sse.stabilityTimer = null;
 
     SubscriptionReceiptRegistry.entries.clear();
 
@@ -581,6 +586,314 @@ describe("Sse", () => {
         loggerDebugStub,
         "SSE stream lost: heartbeat timeout",
       );
+    });
+  });
+
+  describe("page lifecycle", () => {
+    let clock;
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers();
+
+      // A stream loss logs, and the log is kept in session storage, which a run of this file
+      // alone has none of.
+      sinon.stub(Logger, "debug");
+    });
+
+    describe("start()", () => {
+      it("opens the stream on the first call", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        await clock.runAllAsync();
+
+        sinon.assert.calledOnce(fetchStub);
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      it("does nothing on a second call while the first handshake is in flight", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        Sse.start();
+        await clock.runAllAsync();
+
+        sinon.assert.calledOnce(fetchStub);
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      it("does nothing on a second call while a failed handshake waits for its retry", async () => {
+        fetchStub.rejects(new Error("network down"));
+
+        Sse.start();
+        await clock.tickAsync(0);
+
+        Sse.start();
+        await clock.tickAsync(0);
+
+        sinon.assert.calledOnce(fetchStub);
+        assert.strictEqual(Sse.reconnectAttempts, 1);
+      });
+
+      it("does nothing on a second call once the stream is open", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        await clock.tickAsync(0);
+        Sse.eventSource.onopen({});
+
+        Sse.start();
+        await clock.tickAsync(0);
+
+        sinon.assert.calledOnce(fetchStub);
+      });
+
+      it("does not open the stream on a page that has been left", async () => {
+        stubHandshakeResponse();
+
+        Sse.suspend();
+        Sse.start();
+        await clock.runAllAsync();
+
+        sinon.assert.notCalled(fetchStub);
+        sinon.assert.notCalled(globalThis.EventSource);
+      });
+    });
+
+    describe("suspend()", () => {
+      it("closes the stream", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        await clock.tickAsync(0);
+        Sse.eventSource.onopen({});
+
+        Sse.suspend();
+
+        sinon.assert.calledOnce(mockEventSource.close);
+      });
+
+      it("does not throw when no stream was opened", () => {
+        assert.doesNotThrow(() => Sse.suspend());
+      });
+
+      it("flips the sseConnected? signal to false on the global registry", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        await clock.tickAsync(0);
+        Sse.eventSource.onopen({});
+
+        Sse.suspend();
+
+        assert.isFalse(globalThis.Hologram["sseConnected?"]);
+      });
+
+      it("cancels the heartbeat watchdog", async () => {
+        stubHandshakeResponse({heartbeatIntervalMs: 1_000});
+
+        Sse.start();
+        await clock.tickAsync(0);
+        Sse.eventSource.onopen({});
+
+        Sse.suspend();
+        await clock.tickAsync(1_000 * Sse.HEARTBEAT_TIMEOUT_INTERVALS * 2);
+
+        // A stream loss would close the stream a second time and retry the handshake.
+        sinon.assert.calledOnce(mockEventSource.close);
+        sinon.assert.calledOnce(fetchStub);
+      });
+
+      it("cancels the pending clear of the failure count", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        await clock.tickAsync(0);
+        Sse.eventSource.onopen({});
+
+        Sse.suspend();
+        Sse.reconnectAttempts = 3;
+        await clock.tickAsync(Sse.STABLE_CONNECTION_MS * 2);
+
+        assert.strictEqual(Sse.reconnectAttempts, 3);
+      });
+
+      it("cancels a pending reconnect", async () => {
+        fetchStub.rejects(new Error("network down"));
+
+        Sse.start();
+        await clock.tickAsync(0);
+
+        Sse.suspend();
+        await clock.tickAsync(Sse.MAX_RECONNECT_DELAY * 2);
+
+        sinon.assert.calledOnce(fetchStub);
+      });
+
+      it("forgets the failures counted so far", async () => {
+        fetchStub.rejects(new Error("network down"));
+
+        Sse.start();
+        await clock.tickAsync(0);
+        assert.strictEqual(Sse.reconnectAttempts, 1);
+
+        Sse.suspend();
+
+        assert.strictEqual(Sse.reconnectAttempts, 0);
+      });
+
+      it("keeps a handshake in flight from opening a stream", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        Sse.suspend();
+        await clock.runAllAsync();
+
+        sinon.assert.calledOnce(fetchStub);
+        sinon.assert.notCalled(globalThis.EventSource);
+      });
+
+      it("keeps a handshake whose response is still being read from opening a stream", async () => {
+        let resolveJson;
+
+        fetchStub.resolves({
+          ok: true,
+          status: 200,
+          json: () => new Promise((resolve) => (resolveJson = resolve)),
+        });
+
+        const evaluateStub = sinon.stub(
+          Interpreter,
+          "evaluateJavaScriptExpression",
+        );
+
+        Sse.start();
+        await clock.tickAsync(0);
+
+        Sse.suspend();
+
+        resolveJson({
+          handshakeId: "test-handshake-id",
+          heartbeatIntervalMs: 15_000,
+          refreshedReceipts: "encoded-refreshed-receipts",
+        });
+
+        await clock.runAllAsync();
+
+        sinon.assert.notCalled(evaluateStub);
+        sinon.assert.notCalled(globalThis.EventSource);
+      });
+
+      it("keeps a handshake in flight that then fails from scheduling a reconnect", async () => {
+        fetchStub.rejects(new Error("aborted"));
+
+        Sse.start();
+        Sse.suspend();
+        await clock.runAllAsync();
+
+        sinon.assert.calledOnce(fetchStub);
+        assert.strictEqual(Sse.reconnectAttempts, 0);
+      });
+
+      it("keeps a handshake in flight that then gets a non-2xx from scheduling a reconnect", async () => {
+        stubHandshakeResponse({ok: false, status: 503});
+
+        Sse.start();
+        Sse.suspend();
+        await clock.runAllAsync();
+
+        sinon.assert.calledOnce(fetchStub);
+        assert.strictEqual(Sse.reconnectAttempts, 0);
+      });
+    });
+
+    describe("resume()", () => {
+      it("reopens the stream that suspend() closed", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        await clock.tickAsync(0);
+        Sse.eventSource.onopen({});
+
+        Sse.suspend();
+        Sse.resume();
+        await clock.tickAsync(0);
+
+        sinon.assert.calledTwice(fetchStub);
+        sinon.assert.calledTwice(globalThis.EventSource);
+      });
+
+      it("does nothing when the page was not left", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        await clock.tickAsync(0);
+
+        Sse.resume();
+        await clock.tickAsync(0);
+
+        sinon.assert.calledOnce(fetchStub);
+      });
+
+      it("does nothing on a second call", async () => {
+        stubHandshakeResponse();
+
+        Sse.start();
+        await clock.tickAsync(0);
+
+        Sse.suspend();
+        Sse.resume();
+        Sse.resume();
+        await clock.tickAsync(0);
+
+        sinon.assert.calledTwice(fetchStub);
+        sinon.assert.calledTwice(globalThis.EventSource);
+      });
+
+      it("leaves opening the stream to start() on a page left before its first mount", async () => {
+        stubHandshakeResponse();
+
+        Sse.suspend();
+        Sse.resume();
+        await clock.tickAsync(0);
+
+        sinon.assert.notCalled(fetchStub);
+
+        Sse.start();
+        await clock.tickAsync(0);
+
+        sinon.assert.calledOnce(fetchStub);
+        sinon.assert.calledOnce(globalThis.EventSource);
+      });
+
+      it("opens a single stream, from its own handshake, when one from before suspend() is still in flight", async () => {
+        stubHandshakeResponse();
+
+        const response = (handshakeId) => ({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            handshakeId,
+            heartbeatIntervalMs: 15_000,
+            refreshedReceipts: "encoded-refreshed-receipts",
+          }),
+        });
+
+        fetchStub.onFirstCall().resolves(response("stale-handshake-id"));
+        fetchStub.onSecondCall().resolves(response("fresh-handshake-id"));
+
+        Sse.start();
+        Sse.suspend();
+        Sse.resume();
+        await clock.runAllAsync();
+
+        sinon.assert.calledTwice(fetchStub);
+
+        sinon.assert.calledOnceWithExactly(
+          globalThis.EventSource,
+          "/hologram/sse?instance_id=test-instance-id&handshake_id=fresh-handshake-id",
+        );
+      });
     });
   });
 
