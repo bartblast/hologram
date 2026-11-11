@@ -99,6 +99,9 @@ import {defineClientOnlyModule10Fixture} from "./support/fixtures/renderer/clien
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import DragEvent from "../../assets/js/events/drag_event.mjs";
+import ElementRefRegistry from "../../assets/js/element_ref_registry.mjs";
+import EventListenerRegistry from "../../assets/js/event_listener_registry.mjs";
 import EventListeners from "../../assets/js/event_listeners.mjs";
 import FocusEvent from "../../assets/js/events/focus_event.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
@@ -8976,6 +8979,1579 @@ describe("Renderer", () => {
       assert.equal(Renderer.listenerBindings.length, 1);
       assert.equal(Renderer.listenerBindings[0].key, "bubble:resize");
       assert.equal(Renderer.listenerBindings[0].target, window);
+    });
+  });
+
+  describe("drop target", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    // Example: $drop={nil}
+    const disabledSpecDom = Type.list([
+      Type.tuple([Type.atom("expression"), Type.tuple([Type.nil()])]),
+    ]);
+
+    const tag = (tagName, attrsDom) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    beforeEach(() => {
+      Renderer.dragBindings = [];
+      Renderer.listenerBindings = [];
+    });
+
+    afterEach(() => {
+      EventListenerRegistry.detachAll();
+    });
+
+    it("collects a dragenter and a dragover listener for an element with a $drop binding", () => {
+      // <div $drop="my_action"></div>
+      const vdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({vnode, eventName}) => [vnode, eventName]),
+        [
+          [vdom, "dragenter"],
+          [vdom, "dragover"],
+        ],
+      );
+
+      assert.deepStrictEqual(Object.keys(vdom.data.on), ["drop"]);
+    });
+
+    it("prevents the default of the drag over a drop target", () => {
+      // <div $drop="my_action"></div>
+      render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      const prevented = Renderer.dragBindings.map(({eventName, handler}) => {
+        const event = new Event(eventName, {cancelable: true});
+
+        handler(event);
+
+        return [eventName, event.defaultPrevented];
+      });
+
+      assert.deepStrictEqual(prevented, [
+        ["dragenter", true],
+        ["dragover", true],
+      ]);
+    });
+
+    it("collects nothing for a disabled $drop binding", () => {
+      // <div $drop={nil}></div>
+      render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), disabledSpecDom])]),
+      );
+
+      assert.deepStrictEqual(Renderer.dragBindings, []);
+    });
+
+    it("collects one pair for an element with two $drop bindings", () => {
+      // <div $drop="my_action" $drop.once="my_action"></div>
+      render(
+        tag("div", [
+          Type.tuple([Type.bitstring("$drop"), actionSpecDom]),
+          Type.tuple([
+            Type.bitstring("$drop"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({eventName}) => eventName),
+        ["dragenter", "dragover"],
+      );
+    });
+
+    it("collects the pair when one of two $drop bindings is enabled", () => {
+      // <div $drop={nil} $drop.once="my_action"></div>
+      render(
+        tag("div", [
+          Type.tuple([Type.bitstring("$drop"), disabledSpecDom]),
+          Type.tuple([
+            Type.bitstring("$drop"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({eventName}) => eventName),
+        ["dragenter", "dragover"],
+      );
+    });
+
+    it("collects nothing for an element without a $drop binding", () => {
+      // <div $drag_over="my_action"></div>
+      render(
+        tag("div", [Type.tuple([Type.bitstring("$drag_over"), actionSpecDom])]),
+      );
+
+      assert.deepStrictEqual(Renderer.dragBindings, []);
+    });
+
+    // The global is read when the test runs: some test files replace the window and the document
+    // when they load.
+    for (const tagName of ["document", "window"]) {
+      it(`collects the pair for a <${tagName}> tag with a $drop binding`, () => {
+        const listenerTarget = globalThis[tagName];
+
+        // <document $drop="my_action" /> or <window $drop="my_action" />
+        render(
+          tag(tagName, [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+        );
+
+        assert.deepStrictEqual(
+          Renderer.dragBindings.map(({target, eventName}) => [
+            target,
+            eventName,
+          ]),
+          [
+            [listenerTarget, "dragenter"],
+            [listenerTarget, "dragover"],
+          ],
+        );
+      });
+    }
+
+    it("keeps the <window> tag's listener slot keys when its $drop binding is disabled", () => {
+      // <window $drop={nil} $key_down="my_action" />
+      render(
+        tag("window", [
+          Type.tuple([Type.bitstring("$drop"), disabledSpecDom]),
+          Type.tuple([Type.bitstring("$key_down"), actionSpecDom]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.listenerBindings.map(({slotKey}) => slotKey),
+        [0, 1],
+      );
+    });
+
+    it("keeps the <window> tag's listener slot keys when its $drop binding is enabled", () => {
+      // <window $drop="my_action" $key_down="my_action" />
+      render(
+        tag("window", [
+          Type.tuple([Type.bitstring("$drop"), actionSpecDom]),
+          Type.tuple([Type.bitstring("$key_down"), actionSpecDom]),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.listenerBindings.map(({slotKey}) => slotKey),
+        [0, 1],
+      );
+    });
+
+    it("resolves into capture-phase registry bindings on the element", () => {
+      // <div $drop="my_action"></div>
+      const vdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      // Snabbdom sets `.elm` during patch; emulate the element here.
+      const element = {};
+      vdom.elm = element;
+
+      const resolved = Renderer.resolveDragBindings();
+
+      assert.deepStrictEqual(
+        resolved.map(({target, key, handler}) => [target, key, handler]),
+        [
+          [element, "capture:dragenter", Renderer.dragBindings[0].handler],
+          [element, "capture:dragover", Renderer.dragBindings[1].handler],
+        ],
+      );
+    });
+
+    it("resolves into capture-phase registry bindings on the window", () => {
+      // <window $drop="my_action" />
+      render(
+        tag("window", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      const resolved = Renderer.resolveDragBindings();
+
+      assert.deepStrictEqual(
+        resolved.map(({target, key}) => [target, key]),
+        [
+          [window, "capture:dragenter"],
+          [window, "capture:dragover"],
+        ],
+      );
+    });
+
+    describe("a <window> tag's spent once $drop binding", () => {
+      // <window $drop.once="my_action" />
+      const onceDropNode = tag("window", [
+        Type.tuple([
+          Type.bitstring("$drop"),
+          actionSpecDom,
+          Type.map([[Type.atom("once"), Type.boolean(true)]]),
+        ]),
+      ]);
+
+      afterEach(() => {
+        Once.reset();
+      });
+
+      it("keeps the window a drop target before it fires", () => {
+        render(onceDropNode);
+
+        assert.deepStrictEqual(
+          Renderer.resolveDragBindings().map(({key}) => key),
+          ["capture:dragenter", "capture:dragover"],
+        );
+      });
+
+      it("stops the window being a drop target once it fires", () => {
+        render(onceDropNode);
+
+        Once.markFired(window, 0);
+
+        assert.deepStrictEqual(Renderer.resolveDragBindings(), []);
+      });
+
+      it("keeps the window a drop target while another $drop binding is live", () => {
+        // <window $drop.once="my_action" $drop="my_action" />
+        render(
+          tag("window", [
+            ...onceDropNode.data[2].data,
+            Type.tuple([Type.bitstring("$drop"), actionSpecDom]),
+          ]),
+        );
+
+        Once.markFired(window, 0);
+
+        assert.deepStrictEqual(
+          Renderer.resolveDragBindings().map(({key}) => key),
+          ["capture:dragenter", "capture:dragover"],
+        );
+      });
+    });
+
+    it("makes a drag over the element cancelled once reconciled", () => {
+      // <div $drop="my_action"></div>
+      const vdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      const element = document.createElement("div");
+      vdom.elm = element;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      for (const eventName of ["dragenter", "dragover"]) {
+        const event = new Event(eventName, {bubbles: true, cancelable: true});
+
+        assert.isFalse(element.dispatchEvent(event));
+      }
+    });
+
+    it("leaves a drag over the element alone once its $drop binding is disabled", () => {
+      const element = document.createElement("div");
+
+      // <div $drop="my_action"></div>
+      const enabledVdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), actionSpecDom])]),
+      );
+
+      enabledVdom.elm = element;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      Renderer.dragBindings = [];
+
+      // <div $drop={nil}></div>
+      const disabledVdom = render(
+        tag("div", [Type.tuple([Type.bitstring("$drop"), disabledSpecDom])]),
+      );
+
+      disabledVdom.elm = element;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      const notCancelled = ["dragenter", "dragover"].map((eventName) =>
+        element.dispatchEvent(
+          new Event(eventName, {bubbles: true, cancelable: true}),
+        ),
+      );
+
+      assert.deepStrictEqual(notCancelled, [true, true]);
+    });
+  });
+
+  describe("$data_transfer", () => {
+    const actionSpecDom = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+    ]);
+
+    // Example: $drop={nil}
+    const disabledSpecDom = Type.list([
+      Type.tuple([Type.atom("expression"), Type.tuple([Type.nil()])]),
+    ]);
+
+    const dropAttr = Type.tuple([Type.bitstring("$drop"), actionSpecDom]);
+
+    const dataTransferAttr = (value) =>
+      Type.tuple([
+        Type.bitstring("$data_transfer"),
+        Type.list([Type.tuple([Type.atom("expression"), Type.tuple([value])])]),
+      ]);
+
+    const dropEffect = (effect) =>
+      Type.keywordList([[Type.atom("drop_effect"), Type.atom(effect)]]);
+
+    const tag = (tagName, attrsDom, childrenDom = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(childrenDom),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    // Runs the tag's drop-target listener for the given event on a new drag event, and returns the
+    // event.
+    const runDropTargetListener = (eventName) => {
+      const binding = Renderer.dragBindings.find(
+        (dragBinding) => dragBinding.eventName === eventName,
+      );
+
+      const event = dragEvent(eventName);
+
+      binding.handler(event);
+
+      return event;
+    };
+
+    // A drag event carrying a DataTransfer that only tracks its drop effect.
+    const dragEvent = (eventName) => {
+      const event = new Event(eventName, {bubbles: true, cancelable: true});
+
+      Object.defineProperty(event, "dataTransfer", {
+        value: {dropEffect: "none"},
+      });
+
+      return event;
+    };
+
+    beforeEach(() => {
+      Renderer.dragBindings = [];
+      Renderer.listenerBindings = [];
+    });
+
+    afterEach(() => {
+      EventListenerRegistry.detachAll();
+    });
+
+    it("binds nothing", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      const vdom = render(
+        tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]),
+      );
+
+      assert.deepStrictEqual(Object.keys(vdom.data.on), ["drop"]);
+    });
+
+    it("renders no attribute", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      const vdom = render(
+        tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]),
+      );
+
+      assert.deepStrictEqual(vdom.data.attrs, {});
+    });
+
+    for (const eventName of ["dragenter", "dragover"]) {
+      it(`sets the drop effect on ${eventName}`, () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        render(tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]));
+
+        const event = runDropTargetListener(eventName);
+
+        assert.isTrue(event.defaultPrevented);
+        assert.equal(event.dataTransfer.dropEffect, "move");
+      });
+    }
+
+    it("takes a map", () => {
+      // <div $drop="my_action" $data_transfer={%{drop_effect: :copy}}></div>
+      render(
+        tag("div", [
+          dropAttr,
+          dataTransferAttr(
+            Type.map([[Type.atom("drop_effect"), Type.atom("copy")]]),
+          ),
+        ]),
+      );
+
+      const event = runDropTargetListener("dragover");
+
+      assert.equal(event.dataTransfer.dropEffect, "copy");
+    });
+
+    it("takes a drop effect on a tag whose $drop binding has modifiers", () => {
+      // <div $drop.once="my_action" $data_transfer={drop_effect: :move}></div>
+      render(
+        tag("div", [
+          Type.tuple([
+            Type.bitstring("$drop"),
+            actionSpecDom,
+            Type.map([[Type.atom("once"), Type.boolean(true)]]),
+          ]),
+          dataTransferAttr(dropEffect("move")),
+        ]),
+      );
+
+      const event = runDropTargetListener("dragover");
+
+      assert.equal(event.dataTransfer.dropEffect, "move");
+    });
+
+    it("leaves the drop effect alone when it declares no drop effect", () => {
+      // <div $drop="my_action" $data_transfer={[]}></div>
+      render(tag("div", [dropAttr, dataTransferAttr(Type.keywordList([]))]));
+
+      const event = runDropTargetListener("dragover");
+
+      assert.isTrue(event.defaultPrevented);
+      assert.equal(event.dataTransfer.dropEffect, "none");
+    });
+
+    it("doesn't throw on a drag event with no DataTransfer", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      render(tag("div", [dropAttr, dataTransferAttr(dropEffect("move"))]));
+
+      const binding = Renderer.dragBindings.find(
+        (dragBinding) => dragBinding.eventName === "dragover",
+      );
+
+      const event = new Event("dragover", {cancelable: true});
+
+      assert.doesNotThrow(() => binding.handler(event));
+      assert.isTrue(event.defaultPrevented);
+    });
+
+    it("ignores the drop effect of a disabled $drop binding", () => {
+      // <div $drop={nil} $data_transfer={drop_effect: :move}></div>
+      render(
+        tag("div", [
+          Type.tuple([Type.bitstring("$drop"), disabledSpecDom]),
+          dataTransferAttr(dropEffect("move")),
+        ]),
+      );
+
+      assert.deepStrictEqual(Renderer.dragBindings, []);
+    });
+
+    for (const tagName of ["document", "window"]) {
+      it(`sets the drop effect on the ${tagName}`, () => {
+        // <document $drop="my_action" $data_transfer={drop_effect: :link} /> or the same <window>
+        render(tag(tagName, [dropAttr, dataTransferAttr(dropEffect("link"))]));
+
+        const event = runDropTargetListener("dragover");
+
+        assert.equal(event.dataTransfer.dropEffect, "link");
+      });
+    }
+
+    describe("nested drop targets", () => {
+      let inner, outer;
+
+      // Renders the outer and inner drop targets with the given $data_transfer values (null for
+      // none), attaches them to live elements and reconciles their listeners.
+      const renderNested = (outerValue, innerValue) => {
+        const attrs = (value) =>
+          value === null ? [dropAttr] : [dropAttr, dataTransferAttr(value)];
+
+        const outerVdom = render(
+          tag("div", attrs(outerValue), [tag("div", attrs(innerValue))]),
+        );
+
+        outer = document.createElement("div");
+        inner = document.createElement("div");
+        outer.appendChild(inner);
+        document.body.appendChild(outer);
+
+        outerVdom.elm = outer;
+        outerVdom.children[0].elm = inner;
+
+        EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+      };
+
+      afterEach(() => {
+        outer.remove();
+      });
+
+      it("takes the inner drop target's drop effect", () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :copy}>
+        //   <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        // </div>
+        renderNested(dropEffect("copy"), dropEffect("move"));
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "move");
+      });
+
+      it("lets the inner drop target refuse the drop the outer one accepts", () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :copy}>
+        //   <div $drop="my_action" $data_transfer={drop_effect: :none}></div>
+        // </div>
+        renderNested(dropEffect("copy"), dropEffect("none"));
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "none");
+      });
+
+      it("takes the outer drop target's drop effect when the inner one declares no drop effect", () => {
+        // <div $drop="my_action" $data_transfer={drop_effect: :copy}>
+        //   <div $drop="my_action"></div>
+        // </div>
+        renderNested(dropEffect("copy"), null);
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "copy");
+      });
+
+      it("takes the element's drop effect over the window's", () => {
+        // <window $drop="my_action" $data_transfer={drop_effect: :link} />
+        // <div $drop="my_action">
+        //   <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        // </div>
+        renderNested(null, dropEffect("move"));
+
+        render(tag("window", [dropAttr, dataTransferAttr(dropEffect("link"))]));
+
+        EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+        const event = dragEvent("dragover");
+        inner.dispatchEvent(event);
+
+        assert.equal(event.dataTransfer.dropEffect, "move");
+      });
+
+      it("sets the drop effect before the element's own bindings run", () => {
+        // <div $drop="my_action">
+        //   <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+        // </div>
+        renderNested(null, dropEffect("move"));
+
+        // Stands for the inner element's $drag_over binding, which Snabbdom attaches in the bubble
+        // phase.
+        let seenDropEffect = null;
+
+        inner.addEventListener("dragover", (event) => {
+          seenDropEffect = event.dataTransfer.dropEffect;
+        });
+
+        inner.dispatchEvent(dragEvent("dragover"));
+
+        assert.equal(seenDropEffect, "move");
+      });
+    });
+
+    describe("invalid values", () => {
+      it("raises for a value that is neither a keyword list nor a map", () => {
+        assertBoxedError(
+          () =>
+            render(tag("div", [dropAttr, dataTransferAttr(Type.atom("move"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got :move",
+        );
+      });
+
+      it("raises for a list that isn't a keyword list", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(Type.list([Type.atom("move")])),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got [:move]",
+        );
+      });
+
+      it("raises for an improper list", () => {
+        const improperList = Type.improperList([
+          Type.tuple([Type.atom("drop_effect"), Type.atom("move")]),
+          Type.atom("a"),
+        ]);
+
+        assertBoxedError(
+          () => render(tag("div", [dropAttr, dataTransferAttr(improperList)])),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got [{:drop_effect, :move} | :a]",
+        );
+      });
+
+      it("raises for a struct", () => {
+        const struct = Type.struct("MyStruct", [
+          [Type.atom("drop_effect"), Type.atom("move")],
+        ]);
+
+        assertBoxedError(
+          () => render(tag("div", [dropAttr, dataTransferAttr(struct)])),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes a keyword list or a map, got %{__struct__: MyStruct, drop_effect: :move}",
+        );
+      });
+
+      it("raises for an unknown key", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([[Type.atom("effect"), Type.atom("move")]]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
+        );
+      });
+
+      it("raises for a map key that isn't an atom", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.map([
+                    [Type.bitstring("drop_effect"), Type.atom("move")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          'the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got "drop_effect"',
+        );
+      });
+
+      it("raises for a key given twice", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("drop_effect"), Type.atom("move")],
+                    [Type.atom("drop_effect"), Type.atom("copy")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+        );
+      });
+
+      it("raises for a key given twice before judging the entries", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("drop_effect"), Type.atom("all")],
+                    [Type.atom("drop_effect"), Type.atom("move")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+        );
+      });
+
+      it("judges a keyword list's entries in the order written", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("effect"), Type.atom("move")],
+                    [Type.atom("drop_effect"), Type.atom("all")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
+        );
+      });
+
+      it("judges a map's entries in the order of their keys", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.map([
+                    [Type.atom("effect"), Type.atom("move")],
+                    [Type.atom("drop_effect"), Type.atom("all")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+        );
+      });
+
+      it("raises for a drop effect outside the drop effects", () => {
+        assertBoxedError(
+          () =>
+            render(tag("div", [dropAttr, dataTransferAttr(dropEffect("all"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+        );
+      });
+
+      it("raises for a drop effect that isn't an atom", () => {
+        assertBoxedError(
+          () =>
+            render(
+              tag("div", [
+                dropAttr,
+                dataTransferAttr(
+                  Type.keywordList([
+                    [Type.atom("drop_effect"), Type.bitstring("move")],
+                  ]),
+                ),
+              ]),
+            ),
+          "Hologram.MisuseError",
+          'the $data_transfer drop_effect takes :none, :copy, :move or :link, got "move"',
+        );
+      });
+
+      it("raises for a drop effect on a tag with no $drop binding", () => {
+        assertBoxedError(
+          () => render(tag("div", [dataTransferAttr(dropEffect("move"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+        );
+      });
+
+      it("raises for a drop effect on a <window> tag with no $drop binding", () => {
+        assertBoxedError(
+          () => render(tag("window", [dataTransferAttr(dropEffect("move"))])),
+          "Hologram.MisuseError",
+          "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+        );
+      });
+    });
+  });
+
+  describe("drag source", () => {
+    const dataTransferAttr = (value) =>
+      Type.tuple([
+        Type.bitstring("$data_transfer"),
+        Type.list([Type.tuple([Type.atom("expression"), Type.tuple([value])])]),
+      ]);
+
+    const dataEntry = (pairs) => [
+      Type.atom("data"),
+      Type.map(
+        pairs.map(([type, value]) => [
+          Type.bitstring(type),
+          value === null ? Type.nil() : Type.bitstring(value),
+        ]),
+      ),
+    ];
+
+    const effectsEntry = (effects) => [
+      Type.atom("effects_allowed"),
+      Array.isArray(effects)
+        ? Type.list(effects.map((effect) => Type.atom(effect)))
+        : Type.atom(effects),
+    ];
+
+    const tag = (tagName, attrsDom, childrenDom = []) =>
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring(tagName),
+        Type.list(attrsDom),
+        Type.list(childrenDom),
+      ]);
+
+    const render = (node) =>
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
+
+    // A DataTransfer that keeps its data by type, the way a dragstart's does.
+    const buildStore = () => {
+      const data = new Map();
+
+      return {
+        clearData: sinon.spy((type) => data.delete(type)),
+        data,
+        effectAllowed: "uninitialized",
+        setData: sinon.spy((type, value) => data.set(type, value)),
+        setDragImage: sinon.spy(),
+        get types() {
+          return [...data.keys()];
+        },
+      };
+    };
+
+    const dispatchDragStart = (element, store) => {
+      const event = new Event("dragstart", {bubbles: true, cancelable: true});
+      Object.defineProperty(event, "dataTransfer", {value: store});
+      element.dispatchEvent(event);
+    };
+
+    let outer;
+
+    // Renders an outer element with the given $data_transfer entries (null for none) around an inner
+    // one with its own (null for none) and a child declaring nothing, attaches them to live
+    // elements and reconciles their listeners. Returns the live inner element and child.
+    const renderNested = (outerEntries, innerEntries) => {
+      const attrs = (entries) =>
+        entries === null ? [] : [dataTransferAttr(Type.keywordList(entries))];
+
+      const outerVdom = render(
+        tag("div", attrs(outerEntries), [
+          tag("div", attrs(innerEntries), [tag("span", [])]),
+        ]),
+      );
+
+      outer = document.createElement("div");
+      const inner = document.createElement("div");
+      const child = document.createElement("span");
+
+      inner.appendChild(child);
+      outer.appendChild(inner);
+      document.body.appendChild(outer);
+
+      outerVdom.elm = outer;
+      outerVdom.children[0].elm = inner;
+      outerVdom.children[0].children[0].elm = child;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      return {child, inner};
+    };
+
+    beforeEach(() => {
+      Renderer.dragBindings = [];
+      Renderer.listenerBindings = [];
+      outer = null;
+    });
+
+    afterEach(() => {
+      EventListenerRegistry.detachAll();
+      outer?.remove();
+    });
+
+    it("collects a capture-phase dragstart listener for an element with data", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}></div>
+      const vdom = render(
+        tag("div", [
+          dataTransferAttr(
+            Type.keywordList([dataEntry([["text/plain", "Buy milk"]])]),
+          ),
+        ]),
+      );
+
+      vdom.elm = document.createElement("div");
+
+      assert.deepStrictEqual(
+        Renderer.resolveDragBindings().map(({target, key}) => [target, key]),
+        [[vdom.elm, "capture:dragstart"]],
+      );
+    });
+
+    it("collects a capture-phase dragstart listener for an element with allowed effects", () => {
+      // <div $data_transfer={effects_allowed: :move}></div>
+      const vdom = render(
+        tag("div", [
+          dataTransferAttr(Type.keywordList([effectsEntry("move")])),
+        ]),
+      );
+
+      vdom.elm = document.createElement("div");
+
+      assert.deepStrictEqual(
+        Renderer.resolveDragBindings().map(({key}) => key),
+        ["capture:dragstart"],
+      );
+    });
+
+    it("collects a capture-phase dragstart listener for an element with a drag image", () => {
+      // <div $data_transfer={image: %{ref: :task_preview}}></div>
+      const vdom = render(
+        tag("div", [
+          dataTransferAttr(
+            Type.keywordList([
+              [
+                Type.atom("image"),
+                Type.map([[Type.atom("ref"), Type.atom("task_preview")]]),
+              ],
+            ]),
+          ),
+        ]),
+      );
+
+      vdom.elm = document.createElement("div");
+
+      assert.deepStrictEqual(
+        Renderer.resolveDragBindings().map(({key}) => key),
+        ["capture:dragstart"],
+      );
+    });
+
+    it("collects nothing for an element that declares only a drop effect", () => {
+      // <div $drop="my_action" $data_transfer={drop_effect: :move}></div>
+      render(
+        tag("div", [
+          Type.tuple([
+            Type.bitstring("$drop"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+          ]),
+          dataTransferAttr(
+            Type.keywordList([[Type.atom("drop_effect"), Type.atom("move")]]),
+          ),
+        ]),
+      );
+
+      assert.deepStrictEqual(
+        Renderer.dragBindings.map(({eventName}) => eventName),
+        ["dragenter", "dragover"],
+      );
+    });
+
+    it("puts each type's data on the drag and removes a nil type", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk", "text/uri-list" => nil}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([
+          ["text/plain", "Buy milk"],
+          ["text/uri-list", null],
+        ]),
+      ]);
+
+      const store = buildStore();
+      store.data.set("text/uri-list", "https://example.com");
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual([...store.data], [["text/plain", "Buy milk"]]);
+
+      sinon.assert.calledOnceWithExactly(store.clearData, "text/uri-list");
+    });
+
+    it("leaves the allowed effects alone when it declares none", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.equal(store.effectAllowed, "uninitialized");
+    });
+
+    it("leaves the data alone when it declares none", () => {
+      // <div $data_transfer={effects_allowed: :move}></div>
+      const {inner} = renderNested(null, [effectsEntry("move")]);
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      sinon.assert.notCalled(store.setData);
+      sinon.assert.notCalled(store.clearData);
+    });
+
+    for (const [effects, effectAllowed] of [
+      [[], "none"],
+      ["copy", "copy"],
+      ["link", "link"],
+      ["move", "move"],
+      [["copy", "link"], "copyLink"],
+      [["copy", "move"], "copyMove"],
+      [["link", "move"], "linkMove"],
+      [["copy", "link", "move"], "all"],
+      [["move", "copy", "move"], "copyMove"],
+    ]) {
+      it(`allows ${effectAllowed} for ${JSON.stringify(effects)}`, () => {
+        // <div $data_transfer={effects_allowed: ...}></div>
+        const {inner} = renderNested(null, [effectsEntry(effects)]);
+
+        const store = buildStore();
+
+        dispatchDragStart(inner, store);
+
+        assert.equal(store.effectAllowed, effectAllowed);
+      });
+    }
+
+    it("applies to a drag that starts on a child declaring nothing", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}><span></span></div>
+      const {child} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      const store = buildStore();
+
+      dispatchDragStart(child, store);
+
+      assert.deepStrictEqual([...store.data], [["text/plain", "Buy milk"]]);
+    });
+
+    it("applies only the nearest source of nested ones", () => {
+      // <div $data_transfer={data: %{"application/x-task" => "42"}, effects_allowed: :move}>
+      //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+      // </div>
+      const {inner} = renderNested(
+        [dataEntry([["application/x-task", "42"]]), effectsEntry("move")],
+        [dataEntry([["application/x-tag", "urgent"]])],
+      );
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual(
+        [...store.data],
+        [["application/x-tag", "urgent"]],
+      );
+
+      assert.equal(store.effectAllowed, "uninitialized");
+
+      sinon.assert.calledOnceWithExactly(
+        store.setData,
+        "application/x-tag",
+        "urgent",
+      );
+    });
+
+    it("applies the outer source to a drag that starts outside the inner one", () => {
+      // <div $data_transfer={data: %{"application/x-task" => "42"}}>
+      //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+      // </div>
+      renderNested(
+        [dataEntry([["application/x-task", "42"]])],
+        [dataEntry([["application/x-tag", "urgent"]])],
+      );
+
+      const store = buildStore();
+
+      dispatchDragStart(outer, store);
+
+      assert.deepStrictEqual([...store.data], [["application/x-task", "42"]]);
+    });
+
+    it("applies the source before the bindings on the drag's path run", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}>
+      //   <div $drag_start="my_action"></div>
+      // </div>
+      const {inner} = renderNested(
+        [dataEntry([["text/plain", "Buy milk"]])],
+        null,
+      );
+
+      // Stands for the inner element's $drag_start binding, which Snabbdom attaches in the bubble
+      // phase, and which puts the placeholder on a drag that carries no data.
+      let seenTypes = null;
+
+      inner.addEventListener("dragstart", (event) => {
+        DragEvent.prepareEvent(event);
+        seenTypes = event.dataTransfer.types;
+      });
+
+      dispatchDragStart(inner, buildStore());
+
+      assert.deepStrictEqual(seenTypes, ["text/plain"]);
+    });
+
+    it("applies the source before its own bindings run", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}} $drag_start="my_action"></div>
+      const {inner} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      // Stands for the source's own $drag_start binding, which Snabbdom attaches in the bubble
+      // phase.
+      let seenTypes = null;
+
+      inner.addEventListener("dragstart", (event) => {
+        DragEvent.prepareEvent(event);
+        seenTypes = event.dataTransfer.types;
+      });
+
+      dispatchDragStart(inner, buildStore());
+
+      assert.deepStrictEqual(seenTypes, ["text/plain"]);
+    });
+
+    it("forgets a source the last render no longer declares", () => {
+      // <div $data_transfer={data: %{"application/x-task" => "42"}}>
+      //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+      // </div>
+      const {child, inner} = renderNested(
+        [dataEntry([["application/x-task", "42"]])],
+        [dataEntry([["application/x-tag", "urgent"]])],
+      );
+
+      Renderer.dragBindings = [];
+
+      // <div $data_transfer={data: %{"application/x-task" => "42"}}><div></div></div>
+      const outerVdom = render(
+        tag(
+          "div",
+          [
+            dataTransferAttr(
+              Type.keywordList([dataEntry([["application/x-task", "42"]])]),
+            ),
+          ],
+          [tag("div", [], [tag("span", [])])],
+        ),
+      );
+
+      outerVdom.elm = outer;
+      outerVdom.children[0].elm = inner;
+      outerVdom.children[0].children[0].elm = child;
+
+      EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual([...store.data], [["application/x-task", "42"]]);
+    });
+
+    it("puts the data on the drag in the order of its types", () => {
+      // <div $data_transfer={data: %{"text/uri-list" => "https://example.com", "text/plain" => "Example"}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([
+          ["text/uri-list", "https://example.com"],
+          ["text/plain", "Example"],
+        ]),
+      ]);
+
+      const store = buildStore();
+
+      dispatchDragStart(inner, store);
+
+      assert.deepStrictEqual(store.types, ["text/plain", "text/uri-list"]);
+    });
+
+    it("applies what the last render declared", () => {
+      const element = document.createElement("div");
+
+      for (const value of ["Buy milk", "Buy bread"]) {
+        Renderer.dragBindings = [];
+
+        // <div $data_transfer={data: %{"text/plain" => value}}></div>
+        const vdom = render(
+          tag("div", [
+            dataTransferAttr(
+              Type.keywordList([dataEntry([["text/plain", value]])]),
+            ),
+          ]),
+        );
+
+        vdom.elm = element;
+
+        EventListenerRegistry.reconcile(Renderer.resolveDragBindings());
+      }
+
+      const store = buildStore();
+
+      dispatchDragStart(element, store);
+
+      assert.deepStrictEqual([...store.data], [["text/plain", "Buy bread"]]);
+    });
+
+    it("doesn't throw on a dragstart with no DataTransfer", () => {
+      // <div $data_transfer={data: %{"text/plain" => "Buy milk"}}></div>
+      const {inner} = renderNested(null, [
+        dataEntry([["text/plain", "Buy milk"]]),
+      ]);
+
+      assert.doesNotThrow(() => dispatchDragStart(inner, null));
+    });
+
+    describe("invalid values", () => {
+      const raises = (entries, message, tagName = "div") =>
+        assertBoxedError(
+          () =>
+            render(tag(tagName, [dataTransferAttr(Type.keywordList(entries))])),
+          "Hologram.MisuseError",
+          message,
+        );
+
+      it("raises for data that isn't a map", () => {
+        raises(
+          [[Type.atom("data"), Type.bitstring("Buy milk")]],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got "Buy milk"',
+        );
+      });
+
+      it("raises for data whose type isn't a string", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([[Type.atom("text"), Type.bitstring("Buy milk")]]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{text: "Buy milk"}',
+        );
+      });
+
+      it("raises for data whose value isn't a string or nil", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([
+                [Type.bitstring("application/x-task"), Type.integer(42)],
+              ]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"application/x-task" => 42}',
+        );
+      });
+
+      it("raises for data that is a struct", () => {
+        const struct = Type.struct("MyStruct", [
+          [Type.bitstring("text/plain"), Type.bitstring("Buy milk")],
+        ]);
+
+        raises(
+          [[Type.atom("data"), struct]],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{:__struct__ => MyStruct, "text/plain" => "Buy milk"}',
+        );
+      });
+
+      it("raises for data whose type isn't valid UTF-8", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([
+                [Bitstring.fromBytes([255]), Type.bitstring("Buy milk")],
+              ]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{<<255>> => "Buy milk"}',
+        );
+      });
+
+      it("raises for data whose value isn't valid UTF-8", () => {
+        raises(
+          [
+            [
+              Type.atom("data"),
+              Type.map([
+                [Type.bitstring("text/plain"), Bitstring.fromBytes([255])],
+              ]),
+            ],
+          ],
+          'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"text/plain" => <<255>>}',
+        );
+      });
+
+      it("raises for an allowed effect outside the effects", () => {
+        raises(
+          [effectsEntry("all")],
+          "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got :all",
+        );
+      });
+
+      it("raises for a list of allowed effects holding one outside the effects", () => {
+        raises(
+          [effectsEntry(["move", "none"])],
+          "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got [:move, :none]",
+        );
+      });
+
+      for (const tagName of ["document", "window"]) {
+        it(`raises for data on a <${tagName}> tag before judging it`, () => {
+          raises(
+            [[Type.atom("data"), Type.bitstring("Buy milk")]],
+            `the $data_transfer data goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+            tagName,
+          );
+        });
+
+        it(`raises for allowed effects on a <${tagName}> tag before judging them`, () => {
+          raises(
+            [effectsEntry("all")],
+            `the $data_transfer effects_allowed goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+            tagName,
+          );
+        });
+      }
+    });
+
+    describe("drag image", () => {
+      const imageEntry = (pairs) => [Type.atom("image"), Type.map(pairs)];
+
+      const preview = Type.tuple([Type.atom("task_preview"), Type.integer(42)]);
+
+      let consoleErrorStub, previewElement;
+
+      // Drags the inner element of renderNested with the given entries on it, and returns the
+      // drag's DataTransfer.
+      const drag = (outerEntries, innerEntries) => {
+        const {inner} = renderNested(outerEntries, innerEntries);
+        const store = buildStore();
+
+        dispatchDragStart(inner, store);
+
+        return store;
+      };
+
+      beforeEach(() => {
+        previewElement = document.createElement("img");
+
+        ElementRefRegistry.replace(
+          new Map([[Type.encodeMapKey(preview), previewElement]]),
+          Type.alias("MyPage"),
+        );
+
+        consoleErrorStub = sinon.stub(console, "error");
+      });
+
+      afterEach(() => {
+        consoleErrorStub.restore();
+        ElementRefRegistry.clear();
+        ElementRefRegistry.pageRefNames = new Map();
+      });
+
+      it("puts the element rendered under the ref on the drag at its offsets", () => {
+        // <div $data_transfer={image: %{ref: {:task_preview, 42}, x: 16, y: 8}}></div>
+        const store = drag(null, [
+          imageEntry([
+            [Type.atom("ref"), preview],
+            [Type.atom("x"), Type.integer(16)],
+            [Type.atom("y"), Type.integer(8)],
+          ]),
+        ]);
+
+        sinon.assert.calledOnceWithExactly(
+          store.setDragImage,
+          previewElement,
+          16,
+          8,
+        );
+      });
+
+      it("puts the image at no offset by default", () => {
+        // <div $data_transfer={image: %{ref: {:task_preview, 42}}}></div>
+        const store = drag(null, [imageEntry([[Type.atom("ref"), preview]])]);
+
+        sinon.assert.calledOnceWithExactly(
+          store.setDragImage,
+          previewElement,
+          0,
+          0,
+        );
+      });
+
+      it("leaves the browser's image for a nil ref", () => {
+        // <div $data_transfer={image: %{ref: nil}}></div>
+        const store = drag(null, [
+          imageEntry([[Type.atom("ref"), Type.nil()]]),
+        ]);
+
+        sinon.assert.notCalled(store.setDragImage);
+        sinon.assert.notCalled(consoleErrorStub);
+      });
+
+      it("logs and leaves the browser's image for a ref nothing is rendered under", () => {
+        // <div $data_transfer={image: %{ref: :missing}}></div>
+        const store = drag(null, [
+          imageEntry([[Type.atom("ref"), Type.atom("missing")]]),
+        ]);
+
+        sinon.assert.notCalled(store.setDragImage);
+
+        sinon.assert.calledOnceWithExactly(
+          consoleErrorStub,
+          "Hologram: no element is rendered under the drag image's ref :missing, so the browser's default drag image is used",
+        );
+      });
+
+      it("says a template declares the ref nothing renders, without advice for actions", () => {
+        ElementRefRegistry.putPageRefNames("Elixir.MyPage", [["missing", 0]]);
+
+        // <div $data_transfer={image: %{ref: :missing}}></div>
+        drag(null, [imageEntry([[Type.atom("ref"), Type.atom("missing")]])]);
+
+        sinon.assert.calledOnceWithExactly(
+          consoleErrorStub,
+          "Hologram: no element is rendered under the drag image's ref :missing - a template declares the ref, but nothing renders it right now, so the browser's default drag image is used",
+        );
+      });
+
+      for (const builtIn of ["document", "window"]) {
+        it(`logs and leaves the browser's image for the :${builtIn} ref`, () => {
+          // <div $data_transfer={image: %{ref: :document}}></div> or the same with :window
+          const store = drag(null, [
+            imageEntry([[Type.atom("ref"), Type.atom(builtIn)]]),
+          ]);
+
+          sinon.assert.notCalled(store.setDragImage);
+
+          sinon.assert.calledOnceWithExactly(
+            consoleErrorStub,
+            `Hologram: the drag image needs an element, but :${builtIn} names the ${builtIn}, so the browser's default drag image is used`,
+          );
+        });
+      }
+
+      it("leaves the browser's image for an inner source declaring none", () => {
+        // <div $data_transfer={image: %{ref: {:task_preview, 42}}}>
+        //   <div $data_transfer={data: %{"application/x-tag" => "urgent"}}></div>
+        // </div>
+        const store = drag(
+          [imageEntry([[Type.atom("ref"), preview]])],
+          [dataEntry([["application/x-tag", "urgent"]])],
+        );
+
+        sinon.assert.notCalled(store.setDragImage);
+      });
+
+      describe("invalid values", () => {
+        const raises = (image, message) =>
+          assertBoxedError(
+            () =>
+              render(
+                tag("div", [
+                  dataTransferAttr(
+                    Type.keywordList([[Type.atom("image"), image]]),
+                  ),
+                ]),
+              ),
+            "Hologram.MisuseError",
+            message,
+          );
+
+        it("raises for an image that isn't a map", () => {
+          raises(
+            Type.atom("task_preview"),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got :task_preview",
+          );
+        });
+
+        it("raises for an image with no ref", () => {
+          raises(
+            Type.map([[Type.atom("x"), Type.integer(16)]]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{x: 16}",
+          );
+        });
+
+        it("raises for an image with a key it doesn't take", () => {
+          raises(
+            Type.map([
+              [Type.atom("width"), Type.integer(16)],
+              [Type.atom("ref"), Type.atom("task_preview")],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, width: 16}",
+          );
+        });
+
+        it("raises for an offset that isn't an integer", () => {
+          raises(
+            Type.map([
+              [Type.atom("x"), Type.float(16.5)],
+              [Type.atom("ref"), Type.atom("task_preview")],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, x: 16.5}",
+          );
+        });
+
+        it("raises for a ref that isn't an identifier", () => {
+          raises(
+            Type.map([[Type.atom("ref"), Type.bitstring("task_preview")]]),
+            'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: "task_preview"}',
+          );
+        });
+
+        it("raises for a native value as the ref", () => {
+          raises(
+            Type.map([
+              [
+                Type.atom("ref"),
+                Type.nativeValueStruct("object", Type.integer(1)),
+              ],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: %{__struct__: Hologram.JS.NativeValue, type: :object, value: 1}}",
+          );
+        });
+
+        it("raises for an image that is a struct", () => {
+          raises(
+            Type.struct("MyStruct", [
+              [Type.atom("ref"), Type.atom("task_preview")],
+            ]),
+            "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{__struct__: MyStruct, ref: :task_preview}",
+          );
+        });
+
+        for (const tagName of ["document", "window"]) {
+          it(`raises for a drag image on a <${tagName}> tag`, () => {
+            assertBoxedError(
+              () =>
+                render(
+                  tag(tagName, [
+                    dataTransferAttr(
+                      Type.keywordList([
+                        imageEntry([[Type.atom("ref"), preview]]),
+                      ]),
+                    ),
+                  ]),
+                ),
+              "Hologram.MisuseError",
+              `the $data_transfer image goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+            );
+          });
+        }
+      });
     });
   });
 

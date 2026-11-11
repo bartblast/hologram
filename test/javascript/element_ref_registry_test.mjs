@@ -93,6 +93,27 @@ describe("ElementRefRegistry", () => {
       );
     });
 
+    it("says a template declares a ref nothing renders, with the given advice", () => {
+      showPage([["search", 0]]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(
+          Type.atom("search"),
+          "Render it first",
+        ),
+        " - a template declares the ref, but nothing renders it right now. Render it first",
+      );
+    });
+
+    it("says a template declares a ref nothing renders, with no advice", () => {
+      showPage([["search", 0]]);
+
+      assert.equal(
+        ElementRefRegistry.missingElementHint(Type.atom("search"), null),
+        " - a template declares the ref, but nothing renders it right now",
+      );
+    });
+
     it("says a template declares a tuple ref nothing renders", () => {
       showPage([["message", 1]]);
 

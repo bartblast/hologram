@@ -2431,6 +2431,174 @@ describe("Hologram", () => {
       sinon.assert.calledOnce(executeActionStub);
     });
 
+    it("prevents the default of a drop", () => {
+      // DropEvent.isDefaultAllowed is false, so the browser doesn't open the dropped file or link
+
+      const preventDefault = sinon.spy();
+
+      const dropEvent = {
+        type: "drop",
+        dataTransfer: null,
+        preventDefault,
+        target: {id: "dummy_node"},
+      };
+
+      Hologram.handleUiEvent(dropEvent, "drop", actionSpecDom, defaultTarget);
+
+      sinon.assert.calledOnce(preventDefault);
+    });
+
+    it("allows the default of a drop when allowDefault is set", () => {
+      const preventDefault = sinon.spy();
+
+      const dropEvent = {
+        type: "drop",
+        dataTransfer: null,
+        preventDefault,
+        target: {id: "dummy_node"},
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        dropEvent,
+        "drop",
+        actionSpecDom,
+        defaultTarget,
+        true,
+      );
+
+      dispatch();
+
+      sinon.assert.notCalled(preventDefault);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
+    it("doesn't prevent the default of a dragstart", () => {
+      // DragEvent.isDefaultAllowed is true, since a dragstart's default starts the drag
+
+      const preventDefault = sinon.spy();
+
+      const dragStartEvent = {
+        type: "dragstart",
+        dataTransfer: null,
+        preventDefault,
+        target: {id: "dummy_node"},
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        dragStartEvent,
+        "dragstart",
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      dispatch();
+
+      sinon.assert.notCalled(preventDefault);
+      sinon.assert.calledOnce(executeActionStub);
+    });
+
+    it("puts the placeholder on a dragstart and leaves it out of the payload", () => {
+      // DragEvent.prepareEvent puts the placeholder a drag needs to start in Firefox.
+
+      const items = [];
+      const types = [];
+
+      const dataTransfer = {
+        dropEffect: "none",
+        effectAllowed: "uninitialized",
+        getData: () => "hologram",
+        items,
+        setData: sinon.spy((type) => {
+          items.push({kind: "string", type});
+          types.push(type);
+        }),
+        types,
+      };
+
+      const dragStartEvent = {
+        ...notIgnoredEvent,
+        type: "dragstart",
+        dataTransfer,
+      };
+
+      const dispatch = Hologram.handleUiEvent(
+        dragStartEvent,
+        "dragstart",
+        commandSpecDom,
+        defaultTarget,
+      );
+
+      dispatch();
+
+      sinon.assert.calledOnceWithExactly(
+        dataTransfer.setData,
+        "application/x-hologram",
+        "hologram",
+      );
+
+      const dataTransferDetails = Type.map([
+        [Type.atom("data"), Type.map()],
+        [Type.atom("drop_effect"), Type.atom("none")],
+        [
+          Type.atom("effects_allowed"),
+          Type.map([
+            [Type.atom("copy"), Type.boolean(true)],
+            [Type.atom("link"), Type.boolean(true)],
+            [Type.atom("move"), Type.boolean(true)],
+          ]),
+        ],
+        [Type.atom("files"), Type.list()],
+        [Type.atom("items"), Type.list()],
+        [Type.atom("types"), Type.list()],
+      ]);
+
+      const expectedEvent = Type.map([
+        [Type.atom("client_x"), Type.float(10)],
+        [Type.atom("client_y"), Type.float(20)],
+        [Type.atom("data_transfer"), dataTransferDetails],
+        [Type.atom("movement_x"), Type.float(5)],
+        [Type.atom("movement_y"), Type.float(15)],
+        [Type.atom("offset_x"), Type.float(30)],
+        [Type.atom("offset_y"), Type.float(40)],
+        [Type.atom("page_x"), Type.float(1)],
+        [Type.atom("page_y"), Type.float(2)],
+        [Type.atom("screen_x"), Type.float(100)],
+        [Type.atom("screen_y"), Type.float(200)],
+      ]);
+
+      sinon.assert.calledOnceWithExactly(
+        clientSendCommandStub,
+        Type.commandStruct({
+          name: Type.atom("my_command"),
+          params: Type.map([[Type.atom("event"), expectedEvent]]),
+          target: defaultTarget,
+        }),
+        0,
+      );
+    });
+
+    it("doesn't prepare a dragstart for a disabled binding", () => {
+      // A nil $drag_start leaves the drag alone, so it doesn't start in Firefox.
+
+      const dataTransfer = {setData: sinon.spy(), types: []};
+
+      const dragStartEvent = {
+        type: "dragstart",
+        dataTransfer,
+        preventDefault: () => null,
+        target: {id: "dummy_node"},
+      };
+
+      Hologram.handleUiEvent(
+        dragStartEvent,
+        "dragstart",
+        disabledSpecDom,
+        defaultTarget,
+      );
+
+      sinon.assert.notCalled(dataTransfer.setData);
+    });
+
     it("prevents the default when forcePreventDefault is set", () => {
       // The binding's prevent_default modifier forces the framework preventDefault, even for an
       // isDefaultAllowed: true event like keydown.
@@ -5997,10 +6165,17 @@ describe("Hologram", () => {
       });
     });
 
-    it("reconciles the global and resolved observer bindings collected during the render", () => {
+    it("reconciles the global, drag and resolved observer bindings collected during the render", () => {
       const listenerBindings = [
         {target: window, eventName: "keydown", handler: () => {}},
       ];
+
+      const dragBinding = {
+        target: {},
+        key: "capture:dragover",
+        attach: () => {},
+        handler: () => {},
+      };
 
       const reachBinding = {
         target: {},
@@ -6015,7 +6190,9 @@ describe("Hologram", () => {
         return {sel: "html", data: {}, children: []};
       });
 
-      // Observer bindings are resolved from their patched elements right before reconciliation.
+      // Drag and observer bindings are resolved from their patched elements right before
+      // reconciliation.
+      sinon.stub(Renderer, "resolveDragBindings").returns([dragBinding]);
       sinon.stub(Renderer, "resolveReachBindings").returns([reachBinding]);
 
       sinon.stub(Vdom, "patchVirtualDocument");
@@ -6025,6 +6202,7 @@ describe("Hologram", () => {
       Hologram.render();
 
       sinon.assert.calledOnceWithExactly(reconcileStub, [
+        dragBinding,
         ...listenerBindings,
         reachBinding,
       ]);

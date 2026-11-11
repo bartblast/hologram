@@ -39,6 +39,8 @@ import Vdom from "./vdom.mjs";
 import ChangeEvent from "./events/change_event.mjs";
 import ClickEvent from "./events/click_event.mjs";
 import ClickOutsideEvent from "./events/click_outside_event.mjs";
+import DragEvent from "./events/drag_event.mjs";
+import DropEvent from "./events/drop_event.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import InputEvent from "./events/input_event.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
@@ -532,6 +534,11 @@ export default class Hologram {
       event.stopPropagation?.();
     }
 
+    // Some events need a change made to them while their listener still runs, like the placeholder
+    // data a drag needs to start in Firefox. It runs after the disabled and ignored checks, so a nil
+    // binding leaves the event alone.
+    eventImpl.prepareEvent?.(event);
+
     const eventParam = eventImpl.buildOperationParam(event);
     const eventTarget = event.target;
 
@@ -903,16 +910,19 @@ export default class Hologram {
         newVirtualDocument,
       );
 
-      // renderPage() collected this render's <window>/<document> bindings into Renderer.listenerBindings
-      // and its deferred element bindings (reach, resize) into Renderer.reachBindings and
+      // renderPage() collected this render's <window>/<document> bindings into
+      // Renderer.listenerBindings, its capture-phase drag listeners into Renderer.dragBindings, and
+      // its deferred element bindings (reach, resize) into Renderer.reachBindings and
       // Renderer.resizeBindings. Now that the DOM is patched, reconcile them into real listeners on
       // their targets. The deferred bindings are resolved here because their target is a live DOM
       // element, which exists only after patch. Each resolve also drops a binding whose once modifier
-      // has fired, so reconcile tears it down. A navigation has already detached the previous
+      // has fired (for the drag bindings, a <window>/<document> drop target whose $drop bindings have
+      // all fired), so reconcile tears it down. A navigation has already detached the previous
       // page's listeners at its boundary, so a mount's reconcile attaches against an empty
       // registry: every mount attaches fresh, and no listener's private state crosses from one
       // page to the next.
       EventListenerRegistry.reconcile([
+        ...Renderer.resolveDragBindings(),
         ...Renderer.resolveListenerBindings(),
         ...Renderer.resolveReachBindings(),
         ...Renderer.resolveResizeBindings(),
@@ -1553,6 +1563,17 @@ export default class Hologram {
 
       case "click_outside":
         return ClickOutsideEvent;
+
+      case "drag":
+      case "dragend":
+      case "dragenter":
+      case "dragleave":
+      case "dragover":
+      case "dragstart":
+        return DragEvent;
+
+      case "drop":
+        return DropEvent;
 
       case "input":
         return InputEvent;

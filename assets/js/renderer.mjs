@@ -5,6 +5,7 @@
 import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
+import ElementRefRegistry from "./element_ref_registry.mjs";
 import EventListeners from "./event_listeners.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import Hologram from "./hologram.mjs";
@@ -13,6 +14,7 @@ import Identifier from "./identifier.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
 import Once from "./once.mjs";
+import Operation from "./operation.mjs";
 import StringOrder from "./string_order.mjs";
 import Throttler from "./throttler.mjs";
 import Type from "./type.mjs";
@@ -21,6 +23,29 @@ import Vdom, {TRUSTED_HTML_SEL} from "./vdom.mjs";
 
 import {h as vnode} from "./vendor/snabbdom/build/index.js";
 import vnodeToHtml from "snabbdom-to-html";
+
+// The drop effects a $data_transfer drop_effect takes.
+//
+// WARNING: must match Hologram.Template.DataTransfer.
+const DROP_EFFECTS = ["none", "copy", "move", "link"];
+
+// The effectAllowed value for each set of effects a $data_transfer effects_allowed takes, by the
+// effects in alphabetical order.
+const EFFECT_ALLOWED_VALUES = {
+  "": "none",
+  copy: "copy",
+  "copy,link": "copyLink",
+  "copy,link,move": "all",
+  "copy,move": "copyMove",
+  link: "link",
+  "link,move": "linkMove",
+  move: "move",
+};
+
+// The effects a $data_transfer effects_allowed takes.
+//
+// WARNING: must match Hologram.Template.DataTransfer.
+const EFFECTS_ALLOWED = ["copy", "move", "link"];
 
 // An element ref and an Elixir reference are both called a ref, so a reference passed as one gets
 // this hint.
@@ -168,6 +193,17 @@ const TRUSTED_HTML_REFUSED_PARENTS = new Set([
 ]);
 
 export default class Renderer {
+  // Capture-phase drag listeners collected during the current render: an element's is a
+  // {vnode, eventName, handler}, since its live DOM node exists only after the patch, with the
+  // source function that puts its declaration on the drag for a drag source, and a
+  // <window>/<document> tag's is a {target, eventName, handler, dropSlots}, where dropSlots holds the
+  // slot key and once flag of each of the tag's enabled $drop bindings. They run as the event travels
+  // down from the window to the element, before any event binding on its path. They are kept apart
+  // from listenerBindings, whose positional slot keys must not shift when a $drop binding is enabled
+  // or disabled. resolveDragBindings turns them into registry bindings after the patch, and
+  // renderPage() resets this.
+  static dragBindings = [];
+
   // Event listener bindings collected during the current render, each a {target, key, attach,
   // handler} descriptor (see EventListenerRegistry). A <window> or <document> tag pushes here (with
   // the window or document target) instead of producing a vnode. renderPage() resets this, and the
@@ -206,6 +242,14 @@ export default class Renderer {
   // a page load however the diff reused its nodes, so every element it declares focused is a
   // candidate, not only one whose declaration changed. settleFocus() clears it.
   static isPageArrival = false;
+
+  // The dragstart events a drag source has been applied for, so the other sources on the path
+  // leave them alone.
+  static #appliedDragStarts = new WeakSet();
+
+  // The elements whose $data_transfer declares what a drag starting in them carries, each with the
+  // function that puts it on the drag, rebuilt by resolveDragBindings after each patch.
+  static #dragSources = new WeakMap();
 
   // Based on Elixir Renderer.encode_tree/1, which it inverts clause for clause.
   //
@@ -398,6 +442,7 @@ export default class Renderer {
 
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
+    Renderer.dragBindings = [];
     Renderer.listenerBindings = [];
     Renderer.reachBindings = [];
     Renderer.refBindings = new Map();
@@ -465,6 +510,42 @@ export default class Renderer {
   static resetFocusCandidates() {
     $.focusCandidates = [];
     $.blurCandidates = [];
+  }
+
+  // Resolves this render's capture-phase drag listeners into {target, key, attach, handler} registry
+  // bindings, called after Snabbdom has patched so each carried vnode's `.elm` is live. A target's
+  // bindings for one event share one registry listener, which reconcile keeps across renders and
+  // only swaps its handlers.
+  //
+  // A <window>/<document> tag whose $drop bindings are all spent once bindings is no longer a drop
+  // target: resolveListenerBindings drops those bindings, so nothing would prevent the drop's
+  // default, and a drag the page accepts would then open the dropped file or link. An element keeps
+  // its spent once binding, which goes on preventing the drop's default, so it stays a drop target.
+  static resolveDragBindings() {
+    $.#dragSources = new WeakMap(
+      $.dragBindings
+        .filter(({source}) => source !== undefined)
+        .map(({vnode, source}) => [vnode.elm, source]),
+    );
+
+    return $.dragBindings
+      .filter(
+        ({target, dropSlots}) =>
+          !dropSlots?.every(
+            ({once, slotKey}) => once && Once.hasFired(target, slotKey),
+          ),
+      )
+      .map(({vnode, target, eventName, handler}) => {
+        const bindingTarget = vnode ? vnode.elm : target;
+
+        const {key, attach} = EventListeners.domEvent(
+          bindingTarget,
+          eventName,
+          true,
+        );
+
+        return {target: bindingTarget, key, attach, handler};
+      });
   }
 
   // Resolves this render's <window>/<document> listener bindings, dropping any spent once binding so
@@ -669,6 +750,83 @@ export default class Renderer {
     );
   }
 
+  // Puts the element rendered under the drag image's ref on the drag, at its offset from the
+  // pointer. What's on the page decides whether there is one, and a drag shouldn't fail over its
+  // preview, so a ref with nothing under it logs an error and leaves the browser's default image.
+  static #applyDragImage(store, {ref, x, y}) {
+    if (ref === null) {
+      return;
+    }
+
+    if (
+      Type.isAtom(ref) &&
+      (ref.value === "window" || ref.value === "document")
+    ) {
+      console.error(
+        `Hologram: the drag image needs an element, but :${ref.value} names the ${ref.value}, so the browser's default drag image is used`,
+      );
+
+      return;
+    }
+
+    const element = ElementRefRegistry.get(ref);
+
+    if (element === null) {
+      console.error(
+        `Hologram: no element is rendered under the drag image's ref ${Interpreter.inspect(ref)}${ElementRefRegistry.missingElementHint(ref, null)}, so the browser's default drag image is used`,
+      );
+
+      return;
+    }
+
+    store.setDragImage(element, x, y);
+  }
+
+  // Puts a drag source's declaration on the drag: each data type's string, a nil removing its type,
+  // and the allowed effects and the drag image when declared. Other data the browser put on a link
+  // or an image stays.
+  static #applyDragSource(event, dataTransfer) {
+    const store = event.dataTransfer;
+
+    if (!store) {
+      return;
+    }
+
+    for (const [type, value] of dataTransfer.data) {
+      if (value === null) {
+        store.clearData(type);
+      } else {
+        store.setData(type, value);
+      }
+    }
+
+    if (dataTransfer.effectsAllowed !== null) {
+      store.effectAllowed = dataTransfer.effectsAllowed;
+    }
+
+    if (dataTransfer.image !== null) {
+      $.#applyDragImage(store, dataTransfer.image);
+    }
+  }
+
+  // The dragstart listener every drag source shares. The first to run for a drag applies the
+  // nearest source on the event's path, from where the drag starts outward, and the others skip
+  // the drag.
+  static #applyNearestDragSource(event) {
+    if ($.#appliedDragStarts.has(event)) {
+      return;
+    }
+
+    $.#appliedDragStarts.add(event);
+
+    const source = event
+      .composedPath()
+      .map((node) => $.#dragSources.get(node))
+      .find((candidate) => candidate !== undefined);
+
+    source?.(event);
+  }
+
   // Builds one event binding from a "$"-prefixed attribute, shared by element and window bindings.
   // Returns an {eventName, handler} descriptor (the handler runs modifier matching, dispatch, and
   // debounce/throttle), or null when the attribute is not an event binding. slotKey identifies the
@@ -693,6 +851,13 @@ export default class Renderer {
     // it, so it binds nothing. Without this it would register a listener for an event called "key",
     // which no browser fires.
     if (originalEventName === "key") {
+      return null;
+    }
+
+    // $data_transfer declares what a drag carries and how a drop target takes it, which the drag
+    // listeners apply, so it binds nothing either. Without this it would register a listener for an
+    // event called "datatransfer", which no browser fires.
+    if (originalEventName === "data_transfer") {
       return null;
     }
 
@@ -929,6 +1094,57 @@ export default class Renderer {
     });
   }
 
+  // An element whose $data_transfer declares data, allowed effects or a drag image is a drag
+  // source. A drag that starts in it, on it or on an element inside it that declares none, carries
+  // what it declares. Nested sources would each put theirs on the same drag, so only the one
+  // nearest to where the drag starts does: every source gets a capture-phase dragstart listener,
+  // and the first to run, the outermost, looks up the nearest source on the event's path and
+  // applies it for all of them. Running in the capture phase, it applies before any $drag_start
+  // binding on the path reads the drag.
+  static #collectDragSourceBinding(elementVnode, dataTransfer) {
+    if (!dataTransfer?.isSource) {
+      return;
+    }
+
+    $.dragBindings.push({
+      vnode: elementVnode,
+      eventName: "dragstart",
+      handler: $.#applyNearestDragSource,
+      source: (event) => $.#applyDragSource(event, dataTransfer),
+    });
+  }
+
+  // An element or a <window>/<document> tag with an enabled $drop binding is a drop target. The
+  // browser fires drop only on an element whose dragenter and dragover defaults were prevented, so
+  // both are, by one pair of capture-phase listeners however many $drop bindings the tag has. A
+  // disabled $drop leaves the drag alone. The drop's own default is the $drop binding's to prevent
+  // (see DropEvent), so allow_default can let it through.
+  //
+  // A drop target's declared drop effect is set by the same listeners. They run from the window
+  // inward, so the nearest drop target that declares one has the last word.
+  static #collectDropTargetBindings(attrsDom, place, dataTransfer) {
+    if (!attrsDom.data.some((attrDom) => $.#isEnabledDropBinding(attrDom))) {
+      return;
+    }
+
+    const dropEffect = dataTransfer?.dropEffect ?? null;
+
+    const handler =
+      dropEffect === null
+        ? $.#preventDefault
+        : (event) => {
+            $.#preventDefault(event);
+
+            if (event.dataTransfer) {
+              event.dataTransfer.dropEffect = dropEffect;
+            }
+          };
+
+    for (const eventName of ["dragenter", "dragover"]) {
+      $.dragBindings.push({...place, eventName, handler});
+    }
+  }
+
   // Snabbdom insert hook: runs once the whole patch is in the document, where .focus() can work -
   // the create hook runs before the element is attached. An element that enters the page carrying
   // autofocus takes focus, whether $focused put it there or the template wrote it, on a mount and
@@ -946,6 +1162,13 @@ export default class Renderer {
   // target share a currentTarget. A bare tag (no attributes) records nothing. A listener target has
   // no element tag name, so event-name mapping is skipped (passed null).
   static #collectListenerBindings(target, attrsDom, defaultTarget) {
+    const dataTransfer = $.#renderDataTransfer(
+      attrsDom,
+      target === window ? "window" : "document",
+    );
+
+    const dropSlots = [];
+
     attrsDom.data.forEach((attrDom) => {
       const slotKey = $.listenerBindings.length;
 
@@ -963,16 +1186,24 @@ export default class Renderer {
           binding.eventName,
         );
 
+        const once = $.#onceFromModifiers(attrDom.data[2]);
+
         $.listenerBindings.push({
           target,
           key,
           attach,
           handler: binding.handler,
           slotKey,
-          once: $.#onceFromModifiers(attrDom.data[2]),
+          once,
         });
+
+        if ($.#isEnabledDropBinding(attrDom)) {
+          dropSlots.push({once, slotKey});
+        }
       }
     });
+
+    $.#collectDropTargetBindings(attrsDom, {target, dropSlots}, dataTransfer);
   }
 
   // Records each $reach_<edge> attribute on the element as a deferred scroll-edge binding. A reach
@@ -1130,6 +1361,38 @@ export default class Renderer {
       opts,
       Type.atom("from_context"),
     );
+  }
+
+  // Based on data_transfer_entries/1
+  // The entries of a $data_transfer value: a keyword list's, each key once, in the order written, or
+  // a map's, in the order of their keys, which both renderers can reproduce.
+  static #dataTransferEntries(value) {
+    if (Type.isMap(value) && !Type.isStruct(value)) {
+      return Object.values(value.data).sort(([keyA], [keyB]) =>
+        Interpreter.compareTerms(keyA, keyB),
+      );
+    }
+
+    if (!Type.isProperList(value) || !Type.isKeywordList(value)) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer attribute takes a keyword list or a map, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    const entries = value.data.map((entry) => entry.data);
+    const seenKeys = new Set();
+
+    for (const [key] of entries) {
+      if (seenKeys.has(key.value)) {
+        Interpreter.raiseMisuseError(
+          `the $data_transfer attribute takes each key once, but got the ${$.#inspectDataTransferValue(key)} key twice`,
+        );
+      }
+
+      seenKeys.add(key.value);
+    }
+
+    return entries;
   }
 
   // Returns the debounce window in milliseconds from a modifiers map, or null when there is no
@@ -1792,6 +2055,21 @@ export default class Renderer {
     return `dynamic tag expression must evaluate to a component module or an HTML tag name string, got: ${Interpreter.inspect(value)}`;
   }
 
+  // Based on Hologram.Commons.KernelUtils.inspect/1
+  // Inspects a value for a $data_transfer message with its maps sorted, so the message reads the
+  // same on the client and the server, whatever order a map's keys come in.
+  static #inspectDataTransferValue(value) {
+    return Interpreter.inspect(
+      value,
+      Type.keywordList([
+        [
+          Type.atom("custom_options"),
+          Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+        ],
+      ]),
+    );
+  }
+
   static #isControlledValueInputType(inputType) {
     // Control value for all input types except radio and checkbox
     // Radios and checkboxes use value attribute for submit value, not display value
@@ -1802,6 +2080,14 @@ export default class Renderer {
   // Based on nested_spread_value?/1
   // Maps and keyword lists compose nested attribute names, everything else is a leaf value. Structs
   // are excluded, since they are ordinary values which stringify through String.Chars, e.g. Date.
+  // Whether the attribute is a $drop binding that isn't disabled ($drop={nil}).
+  static #isEnabledDropBinding(attrDom) {
+    return (
+      $.#eventAttributeName(attrDom) === "$drop" &&
+      !Operation.isDisabled(attrDom.data[1])
+    );
+  }
+
   static #isModuleRegisteredForCid(cid, moduleProxy) {
     const registeredModule = ComponentRegistry.getComponentModule(cid);
 
@@ -2152,6 +2438,12 @@ export default class Renderer {
     return htmlVnode;
   }
 
+  // One handler for every drop target that declares no drop effect, so a re-render hands the
+  // registry the same function.
+  static #preventDefault(event) {
+    event.preventDefault();
+  }
+
   // Returns true when the modifiers map carries a prevent_default modifier, which forces the
   // framework's preventDefault even on events that allow the default by design.
   // Deps: [:maps.is_key/2]
@@ -2461,6 +2753,159 @@ export default class Renderer {
     }
   }
 
+  // Based on validate_data_transfer/2
+  // Returns null when the tag has no $data_transfer, otherwise {data, dropEffect, effectsAllowed,
+  // image, isSource}, where data holds [type, string or null] pairs, effectsAllowed is the
+  // effectAllowed value and image is null or {ref, x, y}, with a null ref for nil.
+  //
+  // The value it renders with must be a keyword list or a map of the keys the attribute takes,
+  // each given once, with a drop effect only on a tag with a $drop binding (a disabled one
+  // included), and data, allowed effects and a drag image only on an element, where a drag can
+  // start. tagName is "window" or "document" for those tags, and null for an element.
+  //
+  // WARNING: must match Hologram.Template.DataTransfer.
+  static #renderDataTransfer(attrsDom, tagName = null) {
+    const attrDom = $.#findAttribute(attrsDom, "$data_transfer");
+
+    if (attrDom === null) {
+      return null;
+    }
+
+    const value = $.#expressionValue(attrDom.data[1].data[0].data[1]);
+
+    const dataTransfer = {
+      data: [],
+      dropEffect: null,
+      effectsAllowed: null,
+      image: null,
+      isSource: false,
+    };
+
+    for (const [key, entryValue] of $.#dataTransferEntries(value)) {
+      const keyName = Type.isAtom(key) ? key.value : null;
+
+      if (
+        !["data", "drop_effect", "effects_allowed", "image"].includes(keyName)
+      ) {
+        Interpreter.raiseMisuseError(
+          `the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got ${$.#inspectDataTransferValue(key)}`,
+        );
+      }
+
+      if (keyName !== "drop_effect" && tagName !== null) {
+        Interpreter.raiseMisuseError(
+          `the $data_transfer ${keyName} goes on the element a drag starts from, so a <${tagName}> tag can't take it`,
+        );
+      }
+
+      switch (keyName) {
+        case "data":
+          dataTransfer.data = $.#renderDragData(entryValue);
+          dataTransfer.isSource = true;
+          break;
+
+        case "drop_effect":
+          dataTransfer.dropEffect = $.#renderDropEffect(entryValue, attrsDom);
+          break;
+
+        case "effects_allowed":
+          dataTransfer.effectsAllowed = $.#renderEffectsAllowed(entryValue);
+          dataTransfer.isSource = true;
+          break;
+
+        case "image":
+          dataTransfer.image = $.#renderDragImage(entryValue);
+          dataTransfer.isSource = true;
+          break;
+      }
+    }
+
+    return dataTransfer;
+  }
+
+  // A $data_transfer data: a map of drag data types to strings, or nil to remove a type.
+  static #renderDragData(value) {
+    const entries =
+      Type.isMap(value) && !Type.isStruct(value)
+        ? Object.values(value.data).sort(([typeA], [typeB]) =>
+            Interpreter.compareTerms(typeA, typeB),
+          )
+        : null;
+
+    if (
+      entries === null ||
+      !entries.every(
+        ([type, typeValue]) =>
+          Bitstring.isText(type) &&
+          (Bitstring.isText(typeValue) || Type.isNil(typeValue)),
+      )
+    ) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    return entries.map(([type, typeValue]) => [
+      Bitstring.toText(type),
+      Type.isNil(typeValue) ? null : Bitstring.toText(typeValue),
+    ]);
+  }
+
+  // A $data_transfer image: a map with the ref of the element to show, or nil for none, and its
+  // optional integer x and y offsets from the pointer, which default to 0. The element is looked up
+  // when the drag starts, since only then is it known what the page renders.
+  static #renderDragImage(value) {
+    const entries =
+      Type.isMap(value) && !Type.isStruct(value)
+        ? Object.values(value.data)
+        : [];
+
+    const image = Object.fromEntries(
+      entries
+        .filter(([key]) => Type.isAtom(key))
+        .map(([key, entryValue]) => [key.value, entryValue]),
+    );
+
+    const isImage =
+      entries.length > 0 &&
+      Object.keys(image).length === entries.length &&
+      Object.keys(image).every((key) => ["ref", "x", "y"].includes(key)) &&
+      "ref" in image &&
+      (Type.isNil(image.ref) || Identifier.check(image.ref) === null) &&
+      ["x", "y"].every((key) => !(key in image) || Type.isInteger(image[key]));
+
+    if (!isImage) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    return {
+      ref: Type.isNil(image.ref) ? null : image.ref,
+      x: "x" in image ? Number(image.x.value) : 0,
+      y: "y" in image ? Number(image.y.value) : 0,
+    };
+  }
+
+  // A $data_transfer drop_effect: one of the drop effects, on a tag with a $drop binding.
+  static #renderDropEffect(value, attrsDom) {
+    if (!Type.isAtom(value) || !DROP_EFFECTS.includes(value.value)) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer drop_effect takes :none, :copy, :move or :link, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    if (
+      !attrsDom.data.some((attr) => $.#eventAttributeName(attr) === "$drop")
+    ) {
+      Interpreter.raiseMisuseError(
+        "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+      );
+    }
+
+    return value.value;
+  }
+
   // Based on render_tree/3 (dynamic tag cases)
   static #renderDynamicTag(
     dom,
@@ -2534,6 +2979,29 @@ export default class Renderer {
       : `, rendered from "${Interpreter.moduleExName(parentModule)}"`;
   }
 
+  // A $data_transfer effects_allowed: one effect, or a list of them in any order, which gives the
+  // effectAllowed value naming the set.
+  static #renderEffectsAllowed(value) {
+    const effects = Type.isProperList(value) ? value.data : [value];
+
+    if (
+      !effects.every(
+        (effect) =>
+          Type.isAtom(effect) && EFFECTS_ALLOWED.includes(effect.value),
+      )
+    ) {
+      Interpreter.raiseMisuseError(
+        `the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got ${$.#inspectDataTransferValue(value)}`,
+      );
+    }
+
+    const effectSet = [
+      ...new Set(effects.map((effect) => effect.value)),
+    ].sort();
+
+    return EFFECT_ALLOWED_VALUES[effectSet.join(",")];
+  }
+
   // Based on render_tree/3 (element & slot case)
   static #renderElement(
     dom,
@@ -2593,6 +3061,8 @@ export default class Renderer {
     } else if (focused === false) {
       delete attrsVdom.autofocus;
     }
+
+    const dataTransfer = Renderer.#renderDataTransfer(attrsDom);
 
     const eventListenersVdom = Renderer.#renderEventListeners(
       attrsDom,
@@ -2774,6 +3244,14 @@ export default class Renderer {
       attrsDom,
       elementVnode,
       defaultTarget,
+    );
+
+    Renderer.#collectDragSourceBinding(elementVnode, dataTransfer);
+
+    Renderer.#collectDropTargetBindings(
+      attrsDom,
+      {vnode: elementVnode},
+      dataTransfer,
     );
 
     Renderer.#collectReachBindings(attrsDom, elementVnode, defaultTarget);

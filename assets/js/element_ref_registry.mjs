@@ -3,6 +3,11 @@
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
+// What a message about a declared ref nothing renders advises for a lookup inside an action.
+const ACTION_LOOKUP_ADVICE =
+  "An element the action's own state change renders is on the page only once the action " +
+  "returns, so look it up in an action chained with put_action/2";
+
 // How close a ref name has to be to one the page declares to be suggested, as Elixir's own
 // did-you-mean suggestions take it.
 const SUGGESTION_THRESHOLD = 0.77;
@@ -38,8 +43,9 @@ export default class ElementRefRegistry {
   // What a message about a ref nothing is rendered under adds, from the literal refs the current
   // page renders: that a template declares the ref, how many parts refs of its name take, or the
   // closest declared name. A ref only an expression names, like $ref={@input_ref}, is declared by
-  // no template, so a miss for one adds nothing.
-  static missingElementHint(ref) {
+  // no template, so a miss for one adds nothing. For a declared ref it gives the advice for a
+  // lookup inside an action, or the advice passed instead, or none when that is null.
+  static missingElementHint(ref, declaredRefAdvice = ACTION_LOOKUP_ADVICE) {
     const name = Type.isAtom(ref) ? ref.value : ref.data[0].value;
     const partCount = Type.isAtom(ref) ? 0 : ref.data.length - 1;
     const names = $.refNames();
@@ -49,10 +55,11 @@ export default class ElementRefRegistry {
         ([declaredName, count]) => declaredName === name && count === partCount,
       )
     ) {
+      const advice = declaredRefAdvice === null ? "" : `. ${declaredRefAdvice}`;
+
       return (
-        " - a template declares the ref, but nothing renders it right now. An element the action's " +
-        "own state change renders is on the page only once the action returns, so look it up in " +
-        "an action chained with put_action/2"
+        " - a template declares the ref, but nothing renders it right now" +
+        advice
       );
     }
 

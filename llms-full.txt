@@ -1337,6 +1337,13 @@ Hologram supports various event types that you can bind to elements in your temp
 - `$change` - triggered when the value of an input element changes
 - `$click` - triggered when an element is clicked
 - `$click_outside` - triggered when a click occurs outside an element and its descendants
+- `$drag` - triggered repeatedly on the dragged element while a drag is in progress
+- `$drag_end` - triggered when a drag ends, whether it was dropped or cancelled
+- `$drag_enter` - triggered when a drag enters an element
+- `$drag_leave` - triggered when a drag leaves an element
+- `$drag_over` - triggered repeatedly on an element while a drag is over it
+- `$drag_start` - triggered when the user starts dragging an element
+- `$drop` - triggered when the user drops on an element
 - `$focus` - triggered when an element receives focus
 - `$key_down` - triggered when a key is pressed down
 - `$key_up` - triggered when a key is released
@@ -1370,6 +1377,98 @@ The `$change` event data structure depends on where the event handler is placed:
 - **Form-level events:** include all form field values as a map, where keys are input names and values are current input values
 
 For detailed information about `$change` event behavior with forms, including synthetic event mapping, usage patterns, and data types for different input types, see the "Event Handling" section in the Forms documentation.
+
+##### Drag and Drop Events
+
+The drag and drop events (`$drag_start`, `$drag`, `$drag_enter`, `$drag_over`, `$drag_leave`, `$drop`, `$drag_end`) bind the browser's native drag and drop: the drag image follows the pointer, a drag can cross into other windows and apps, and files can be dropped from the desktop. An element drags when it has `draggable="true"`. Links, images and selected text drag without it.
+
+Most drags move something within the page, like a task between columns. The dragged item doesn't have to travel with the drag. Keep it in state when the drag starts, and read it back when the drop lands.
+
+```holo
+{%for task <- @tasks}
+  <li draggable="true" $drag_start={:drag_started, id: task.id}>{task.title}</li>
+{/for}
+
+<div $drop={:dropped, column: @column.id}>...</div>
+```
+
+```elixir
+def action(:drag_started, %{id: id}, component) do
+  put_state(component, :dragged_task_id, id)
+end
+
+def action(:dropped, %{column: column}, component) do
+  tasks = move_task(component.state.tasks, component.state.dragged_task_id, column)
+  put_state(component, :tasks, tasks)
+end
+```
+
+Each drag event includes the mouse event fields (see "Mouse Events" below) and a `data_transfer` map:
+
+- `data` - the drag data, a map of data type to string, like `%{"text/plain" => "Buy milk"}`
+- `drop_effect` - the effect the drop target picked, `:none`, `:copy`, `:move` or `:link`
+- `effects_allowed` - the effects the drag allows, a map like `%{copy: false, link: false, move: true}`, so a function head can match one with `%{move: true}`
+- `files` - the dropped files and folders, a list of `%Hologram.File{}` structs
+- `items` - one map per piece of data the drag carries, like `%{kind: :string, type: "text/plain"}` or `%{kind: :file, type: "image/png"}`
+- `types` - the data types the drag carries, like `["text/plain", "Files"]`
+
+The browser shows the drag data only when the drag starts and when it drops, so Hologram fills `data` on `$drag_start` and `$drop` and leaves it empty on the other events, which show the types alone. To act on what is being dragged during `$drag_over`, keep the item in state from `$drag_start` as above. Hologram fills `files` on `$drop` only. Hologram reads the event while it runs, so a debounced, throttled or delayed action still gets its data.
+
+###### Dropped Files
+
+Files and folders dropped from the desktop reach `$drop` as `%Hologram.File{path: path}` structs. Each path is under `/$hologram/drops/<id>/` and ends with the original name, so `Path.basename(file.path)` gives the name and `MIME.from_path(file.path)` the type. A dropped folder is one struct, named like a file. Reading the files with Elixir's `File` functions is coming soon.
+
+A dropped file exists only in the browser tab it was dropped in, for as long as the page stays open, so a path kept in state doesn't survive a reload. Sending dropped files to the server in a command is coming soon.
+
+###### Drop Targets
+
+The browser lets a drop land only on an element that cancels the `$drag_enter` and `$drag_over` events of the drag over it. An element with an enabled `$drop` binding is a drop target, so Hologram cancels them for you. It also prevents the drop's own default, which would open a dropped file or link in place of the page, and `$drop.allow_default` lets it through. `allow_default` on `$drag_over` doesn't stop the element being a drop target. A disabled binding like `$drop={nil}` leaves the element alone. `<window $drop>` and `<document $drop>` accept a drop anywhere on the page.
+
+###### Setting What a Drag Carries
+
+The browser lets a page set what a drag carries only while the drag events run, and an action can run later, after a debounce or once the action queue frees up. So you declare it in the template with `$data_transfer`, and Hologram applies it while the event runs, before any `$drag_*` binding on the drag's path, so their data shows it:
+
+```holo
+<img $ref={:task_preview, @task.id} src={@task.thumbnail} style="position: absolute; top: -1000px" />
+
+<li
+  draggable="true"
+  $data_transfer={
+    data: %{"text/plain" => @task.title, "application/x-task" => "#{@task.id}"},
+    effects_allowed: :move,
+    image: %{ref: {:task_preview, @task.id}, x: 16, y: 16}
+  }
+>
+  {@task.title}
+</li>
+
+<div $drop="dropped" $data_transfer={drop_effect: :move}>...</div>
+```
+
+It takes a keyword list or a map with these keys:
+
+- `data` - a map of data type to string, for other windows and apps, or a drop target on another page. Each type is put on the drag, and `nil` removes one. The data the browser puts on a drag stays, so a link keeps its URL unless you remove `"text/uri-list"`.
+- `effects_allowed` - `:copy`, `:move` or `:link`, or a list of them, the effects a drop may use. `[]` allows no drop. Without it every effect is allowed.
+- `image` - `%{ref: ref, x: x, y: y}`. The element rendered under the ref follows the pointer, `x` and `y` pixels from it, `0` by default. `ref: nil` keeps the browser's image. The element has to be rendered, so place one that shouldn't show off-screen, as above. When nothing is rendered under the ref, Hologram logs an error and the browser shows its default image. See the "Element Refs" section in the DOM documentation.
+- `drop_effect` - `:none`, `:copy`, `:move` or `:link`, the effect a drop target picks while a drag is over it, which sets the cursor. It goes on a tag with a `$drop` binding, and a disabled `$drop` ignores it.
+
+`data`, `effects_allowed` and `image` describe the dragged element, so `<window>` and `<document>` take only `drop_effect`. The build checks a literal value. Hologram checks any other value when the element renders, and a wrong one raises a `Hologram.MisuseError`.
+
+When elements that declare `$data_transfer` are nested, the nearest one wins. A drag carries what the nearest element declaring `data`, `effects_allowed` or `image` declares, and nothing from the elements around it. A link or an image inside it that declares none drags with that declaration, plus what the browser puts on it. Give it `draggable="false"` or its own `$data_transfer` to change that. Over nested drop targets, the nearest one that declares a `drop_effect` sets it.
+
+###### Entering and Leaving
+
+`$drag_enter` and `$drag_leave` fire when the drag crosses the element's own edge, not each time it moves between the element's children, so a highlight shown while a drag is over the element doesn't flicker. On `<window>` and `<document>` they fire when a drag enters or leaves the page. Their modifiers apply only to those crossings.
+
+No `$drag_leave` fires after a drop, so clear a highlight in the `$drop` action too.
+
+###### Browser Differences
+
+- Firefox starts a drag only when the page puts data on it. Hologram puts placeholder data on a drag that has a `$drag_start` binding and carries no data, so an element with `$drag_start` or `$data_transfer` data drags in Firefox. A `<window $drag_start>` does it for every drag on the page, so every draggable element drags in Firefox, as it does in other browsers. The placeholder never shows in the event data.
+- `$drag` and `$drag_over` keep firing every few hundred milliseconds while the drag goes on, even when the pointer stands still, so pair them with `throttle(ms)`.
+- Firefox reports `0` for every coordinate on `$drag`.
+
+`$drag_start.prevent_default` cancels the drag.
 
 ##### Focus Events
 
@@ -1713,7 +1812,7 @@ In a `{%for}` list, a `once` binding on an item with a key stays with that item.
 
 #### Controlling the Native Default
 
-Hologram calls `preventDefault` by default only on `$submit` - so a bound form does not reload the page. Every other event is left alone, so clicks, typing, text selection, scrolling, and the rest of the browser's native behavior keep working. Two modifiers override this per binding: `allow_default` lets the native default through where Hologram would prevent it, and `prevent_default` forces `preventDefault` where Hologram would leave it alone.
+Hologram calls `preventDefault` by default only on `$submit` - so a bound form does not reload the page - and on `$drop` and the drag events of a drop target (see "Drop Targets" above). Every other event is left alone, so clicks, typing, text selection, scrolling, and the rest of the browser's native behavior keep working. Two modifiers override this per binding: `allow_default` lets the native default through where Hologram would prevent it, and `prevent_default` forces `preventDefault` where Hologram would leave it alone.
 
 ##### Allowing the Native Default
 
@@ -1725,17 +1824,17 @@ Append `allow_default` to a single binding so Hologram does not call `preventDef
 </form>
 ```
 
-Use it when you want both the native behavior and an action - for example a form that posts to an external endpoint you also want to track. It is meaningful only where Hologram actually prevents the native default (in practice `$submit`). It composes with key filters, `stop_propagation`, `debounce`, and `throttle`.
+Use it when you want both the native behavior and an action - for example a form that posts to an external endpoint you also want to track. It is meaningful only where Hologram actually prevents the native default (in practice `$submit` and `$drop`). It composes with key filters, `stop_propagation`, `debounce`, and `throttle`.
 
 ##### Preventing the Native Default
 
-The mirror of `allow_default` is `prevent_default`: append it and Hologram calls `preventDefault` for that binding. Since `$submit` is the only event prevented by default, `prevent_default` is how you do the same on any other event. The classic case is Enter-to-send on a keyboard binding, where the action should fire without the keystroke also inserting a newline or submitting the surrounding form:
+The mirror of `allow_default` is `prevent_default`: append it and Hologram calls `preventDefault` for that binding. Since only `$submit` and `$drop` are prevented by default, `prevent_default` is how you do the same on any other event. The classic case is Enter-to-send on a keyboard binding, where the action should fire without the keystroke also inserting a newline or submitting the surrounding form:
 
 ```holo
 <textarea $key_down.enter.prevent_default="send_message"></textarea>
 ```
 
-It composes with key filters - so only the matched key is prevented - as well as `stop_propagation`, `debounce`, and `throttle`. It only affects cancelable events, so it is a no-op on ones the browser does not let you cancel - among them `$change`, `$input`, `$select`, `$scroll`, `$resize`, `$focus`, `$blur`, `$pointer_cancel`, and the `$transition_*` events. A binding cannot carry both `allow_default` and `prevent_default`: they are opposite intents, so combining them fails the build.
+It composes with key filters - so only the matched key is prevented - as well as `stop_propagation`, `debounce`, and `throttle`. It only affects cancelable events, so it is a no-op on ones the browser does not let you cancel - among them `$change`, `$input`, `$select`, `$scroll`, `$resize`, `$focus`, `$blur`, `$pointer_cancel`, `$drag_leave`, `$drag_end`, and the `$transition_*` events. A binding cannot carry both `allow_default` and `prevent_default`: they are opposite intents, so combining them fails the build.
 
 #### Stopping Event Propagation
 
@@ -2608,7 +2707,7 @@ def action(:draw_chart, _params, component) do
 end
 ```
 
-For what Hologram does itself, like moving focus with `$focused`, use that instead of JavaScript.
+For what Hologram does itself, like moving focus with `$focused` or setting a drag image with `$data_transfer`, use that instead of JavaScript.
 
 ##### Naming Elements
 

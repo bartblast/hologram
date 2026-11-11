@@ -10,6 +10,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
+  alias Hologram.Template.DataTransfer
   alias Hologram.Template.DOM
   alias Hologram.Template.Helpers
   alias Hologram.Template.HTMLNormalizer
@@ -572,9 +573,12 @@ defmodule Hologram.Template.Renderer do
   end
 
   # The <window> and <document> tags bind events to the window or document on the client. They have
-  # no server rendering - they produce no markup and no hydration node.
-  def render_tree({:element, tag_name, _attrs_dom, []}, _env, server_struct)
+  # no server rendering - they produce no markup and no hydration node. Their $data_transfer is
+  # judged all the same, as the client judges it.
+  def render_tree({:element, tag_name, attrs_dom, []}, _env, server_struct)
       when tag_name in ["window", "document"] do
+    validate_data_transfer(attrs_dom, tag_name)
+
     {nil, %{}, server_struct}
   end
 
@@ -593,6 +597,8 @@ defmodule Hologram.Template.Renderer do
     # Before the children, so an element is claimed ahead of the elements inside it, as the client
     # renderer claims it.
     put_rendered_ref(attrs_dom, env.parent_module)
+
+    validate_data_transfer(attrs_dom, nil)
 
     children_env = %Env{env | key_scope: nil, tag_name: tag_name}
 
@@ -898,9 +904,6 @@ defmodule Hologram.Template.Renderer do
     if csp_nonce && nonced_elements != [], do: {csp_nonce, nonced_elements}, else: nil
   end
 
-  # Event attributes are exempt from deduplication, because a tag may carry multiple bindings which
-  # share a base name once their modifiers are decomposed at compile time, e.g. both
-  # $key_down.enter and $key_down.escape are named "$key_down".
   defp dedupe_attributes(attrs_dom) do
     attrs_dom
     |> Enum.with_index()
@@ -1781,6 +1784,22 @@ defmodule Hologram.Template.Renderer do
   defp undeclared_state_message(key, module, handler) do
     "state key #{inspect(key)} isn't an atom, but #{handler} put it in " <>
       ~s/"#{Reflection.module_name(module)}" - state is declared with atom names/
+  end
+
+  # The build judges a literal $data_transfer. This judges the value it renders with, literal or not.
+  #
+  # WARNING: must match the client renderer's #renderDataTransfer (renderer.mjs).
+  defp validate_data_transfer(attrs_dom, tag) do
+    with {"$data_transfer", [expression: expression]} <-
+           List.keyfind(attrs_dom, "$data_transfer", 0),
+         {:error, message} <-
+           expression
+           |> expression_value()
+           |> DataTransfer.check(List.keymember?(attrs_dom, "$drop", 0), tag) do
+      raise Hologram.MisuseError, message: message
+    end
+
+    :ok
   end
 
   # put_state/2,3 can't tell which module it runs in, so the state is checked where the struct comes

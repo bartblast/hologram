@@ -1349,6 +1349,1204 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, $data_transfer attribute" do
+    test "with a drop effect on a drop target" do
+      # <div $drop="dropped" $data_transfer={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: "{drop_effect: :move}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$drop", [text: "dropped"]},
+                    {"$data_transfer", [expression: {:{}, [line: 1], [[drop_effect: :move]]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a map" do
+      # <div $drop="dropped" $data_transfer={%{drop_effect: :copy}} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer", [expression: "{%{drop_effect: :copy}}"]}
+          ]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$drop", [text: "dropped"]},
+                    {"$data_transfer",
+                     [expression: {:{}, [line: 1], [{:%{}, [line: 1], [drop_effect: :copy]}]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a value only the render knows" do
+      # <div $data_transfer={@data_transfer} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{@data_transfer}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            {{:., [line: 1], [{:vars, [line: 1], nil}, :data_transfer]},
+                             [no_parens: true, line: 1], []}
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a variable" do
+      # <div $data_transfer={data_transfer} />
+      tags = [{:self_closing_tag, {"div", [{"$data_transfer", [expression: "{data_transfer}"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [expression: {:{}, [line: 1], [{:data_transfer, [line: 1], nil}]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with several expressions, which the render judges" do
+      # <div $data_transfer={@a, @b} />
+      tags = [{:self_closing_tag, {"div", [{"$data_transfer", [expression: "{@a, @b}"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {{{:., [line: 1], [{:vars, [line: 1], nil}, :a]},
+                           [no_parens: true, line: 1], []},
+                          {{:., [line: 1], [{:vars, [line: 1], nil}, :b]},
+                           [no_parens: true, line: 1], []}}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drop effect only the render knows" do
+      # <div $drop="dropped" $data_transfer={drop_effect: @effect} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer", [expression: "{drop_effect: @effect}"]}
+          ]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$drop", [text: "dropped"]},
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              drop_effect:
+                                {{:., [line: 1], [{:vars, [line: 1], nil}, :effect]},
+                                 [no_parens: true, line: 1], []}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drop effect only the render knows on a tag with no $drop binding" do
+      # <div $data_transfer={drop_effect: @effect} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{drop_effect: @effect}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              drop_effect:
+                                {{:., [line: 1], [{:vars, [line: 1], nil}, :effect]},
+                                 [no_parens: true, line: 1], []}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drop effect on a tag whose $drop binding has modifiers" do
+      # <div $drop.once="dropped" $data_transfer={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop.once", [text: "dropped"]},
+            {"$data_transfer", [expression: "{drop_effect: :move}"]}
+          ]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {:{}, [line: 1],
+                     ["$drop", [text: "dropped"], {:%{}, [line: 1], [once: true]}]},
+                    {"$data_transfer", [expression: {:{}, [line: 1], [[drop_effect: :move]]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a map that repeats a key, which keeps the last value" do
+      # <div $drop="dropped" $data_transfer={%{drop_effect: :all, drop_effect: :move}} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer", [expression: "{%{drop_effect: :all, drop_effect: :move}}"]}
+          ]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$drop", [text: "dropped"]},
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [{:%{}, [line: 1], [drop_effect: :all, drop_effect: :move]}]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drop effect on a <document> drop target" do
+      # <document $drop="dropped" $data_transfer={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"document",
+          [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: "{drop_effect: :move}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "document",
+                  [
+                    {"$drop", [text: "dropped"]},
+                    {"$data_transfer", [expression: {:{}, [line: 1], [[drop_effect: :move]]}]}
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drop effect on a <window> drop target" do
+      # <window $drop="dropped" $data_transfer={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"window",
+          [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: "{drop_effect: :move}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "window",
+                  [
+                    {"$drop", [text: "dropped"]},
+                    {"$data_transfer", [expression: {:{}, [line: 1], [[drop_effect: :move]]}]}
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "on a dynamic tag" do
+      # <{"div"} $drop="dropped" $data_transfer={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {{:expression, ~s({"div"})},
+          [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: "{drop_effect: :move}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1], ["div"]},
+                  [
+                    {"$drop", [text: "dropped"]},
+                    {"$data_transfer", [expression: {:{}, [line: 1], [[drop_effect: :move]]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "judges a map's entries in the order of their keys" do
+      # <div $drop="dropped" $data_transfer={%{effect: :move, drop_effect: :all}} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer", [expression: "{%{effect: :move, drop_effect: :all}}"]}
+          ]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn -> build_ast(tags) end
+    end
+
+    test "with drag data and allowed effects" do
+      # <div $data_transfer={data: %{"text/plain" => "Buy milk"}, effects_allowed: [:copy, :move]} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$data_transfer",
+             [
+               expression:
+                 "{data: %{\"text/plain\" => \"Buy milk\"}, effects_allowed: [:copy, :move]}"
+             ]}
+          ]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              data: {:%{}, [line: 1], [{"text/plain", "Buy milk"}]},
+                              effects_allowed: [:copy, :move]
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with drag data only the render knows" do
+      # <div $data_transfer={data: %{"text/plain" => @title}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{data: %{\"text/plain\" => @title}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              data:
+                                {:%{}, [line: 1],
+                                 [
+                                   {"text/plain",
+                                    {{:., [line: 1], [{:vars, [line: 1], nil}, :title]},
+                                     [no_parens: true, line: 1], []}}
+                                 ]}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with an allowed effect" do
+      # <div $data_transfer={effects_allowed: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{effects_allowed: :move}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [expression: {:{}, [line: 1], [[effects_allowed: :move]]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with an empty list of allowed effects" do
+      # <div $data_transfer={effects_allowed: []} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{effects_allowed: []}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer", [expression: {:{}, [line: 1], [[effects_allowed: []]]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with drag data only the render knows before an allowed effect it would refuse" do
+      # <div $data_transfer={data: @data, effects_allowed: :all} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{data: @data, effects_allowed: :all}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              data:
+                                {{:., [line: 1], [{:vars, [line: 1], nil}, :data]},
+                                 [no_parens: true, line: 1], []},
+                              effects_allowed: :all
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with drag data on a dynamic tag, which only the render knows to be an element" do
+      # <{@tag} $data_transfer={data: "Buy milk"} />
+      tags = [
+        {:self_closing_tag,
+         {{:expression, "{@tag}"}, [{"$data_transfer", [expression: "{data: \"Buy milk\"}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :dynamic_tag,
+                  {:{}, [line: 1],
+                   [
+                     {{:., [line: 1], [{:vars, [line: 1], nil}, :tag]},
+                      [no_parens: true, line: 1], []}
+                   ]},
+                  [
+                    {"$data_transfer", [expression: {:{}, [line: 1], [[data: "Buy milk"]]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drag image" do
+      # <div $data_transfer={image: %{ref: :task_preview, x: 16}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: :task_preview, x: 16}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [[image: {:%{}, [line: 1], [ref: :task_preview, x: 16]}]]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drag image whose ref only the render knows" do
+      # <div $data_transfer={image: %{ref: {:task_preview, @id}}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: {:task_preview, @id}}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              image:
+                                {:%{}, [line: 1],
+                                 [
+                                   ref:
+                                     {:task_preview,
+                                      {{:., [line: 1], [{:vars, [line: 1], nil}, :id]},
+                                       [no_parens: true, line: 1], []}}
+                                 ]}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a struct, which only the render can build" do
+      # <div $data_transfer={%MyStruct{}} />
+      tags = [{:self_closing_tag, {"div", [{"$data_transfer", [expression: "{%MyStruct{}}"]}]}}]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            {:%, [line: 1],
+                             [{:__aliases__, [line: 1], [:MyStruct]}, {:%{}, [line: 1], []}]}
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with drag data holding a struct, which only the render can build" do
+      # <div $data_transfer={data: %MyStruct{}} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{data: %MyStruct{}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              data:
+                                {:%, [line: 1],
+                                 [{:__aliases__, [line: 1], [:MyStruct]}, {:%{}, [line: 1], []}]}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a struct nested in a drag image, which only the render can build" do
+      # <div $data_transfer={image: %{ref: %MyStruct{}}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: %MyStruct{}}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              image:
+                                {:%{}, [line: 1],
+                                 [
+                                   ref:
+                                     {:%, [line: 1],
+                                      [
+                                        {:__aliases__, [line: 1], [:MyStruct]},
+                                        {:%{}, [line: 1], []}
+                                      ]}
+                                 ]}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a map holding a struct, which only the render can build" do
+      # <div $data_transfer={%{data: %MyStruct{}}} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{%{data: %MyStruct{}}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            {:%{}, [line: 1],
+                             [
+                               data:
+                                 {:%, [line: 1],
+                                  [{:__aliases__, [line: 1], [:MyStruct]}, {:%{}, [line: 1], []}]}
+                             ]}
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a value only the render knows, like __MODULE__" do
+      # <div $data_transfer={data: __MODULE__} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{data: __MODULE__}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [expression: {:{}, [line: 1], [[data: {:__MODULE__, [line: 1], nil}]]}]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "with a drag image at a negative offset" do
+      # <div $data_transfer={image: %{ref: :task_preview, x: -16}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: :task_preview, x: -16}}"]}]}}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :element,
+                  "div",
+                  [
+                    {"$data_transfer",
+                     [
+                       expression:
+                         {:{}, [line: 1],
+                          [
+                            [
+                              image:
+                                {:%{}, [line: 1], [ref: :task_preview, x: {:-, [line: 1], [16]}]}
+                            ]
+                          ]}
+                     ]},
+                    key(tags, 0)
+                  ],
+                  []
+                ]}
+             ]
+    end
+
+    test "raises for modifiers" do
+      # <div $drop="dropped" $data_transfer.once={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer.once", [expression: "{drop_effect: :move}"]}
+          ]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   ~s'the $data_transfer attribute takes no modifiers, got "once"',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for modifiers on a tag with no $drop binding" do
+      # <div $data_transfer.once={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer.once", [expression: "{drop_effect: :move}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   ~s'the $data_transfer attribute takes no modifiers, got "once"',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a text value" do
+      # <div $data_transfer="move" />
+      tags = [{:self_closing_tag, {"div", [{"$data_transfer", [text: "move"]}]}}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes a single expression, like $data_transfer={drop_effect: :move}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for no value" do
+      # <div $data_transfer />
+      tags = [{:self_closing_tag, {"div", [{"$data_transfer", []}]}}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes a single expression, like $data_transfer={drop_effect: :move}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a value that is neither a keyword list nor a map" do
+      # <div $drop="dropped" $data_transfer={:move} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: "{:move}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes a keyword list or a map, got :move",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for nil" do
+      # <div $drop="dropped" $data_transfer={nil} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: "{nil}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes a keyword list or a map, got nil",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for empty braces" do
+      # <div $drop="dropped" $data_transfer={} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: "{}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes a keyword list or a map, got {}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a literal tuple of several elements" do
+      # <div $drop="dropped" $data_transfer={:copy, :move} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: "{:copy, :move}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes a keyword list or a map, got {:copy, :move}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for an unknown key" do
+      # <div $data_transfer={effect: :move} />
+      tags = [{:self_closing_tag, {"div", [{"$data_transfer", [expression: "{effect: :move}"]}]}}]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for an unknown key in a map" do
+      # <div $data_transfer={%{effect: :move}} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{%{effect: :move}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for an unknown key after a value only the render knows" do
+      # <div $drop="dropped" $data_transfer={effect: @x, drop_effect: :all} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer", [expression: "{effect: @x, drop_effect: :all}"]}
+          ]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes the :data, :drop_effect, :effects_allowed and :image keys, got :effect",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a key given twice before judging the entries" do
+      # <div $drop="dropped" $data_transfer={drop_effect: :all, drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer", [expression: "{drop_effect: :all, drop_effect: :move}"]}
+          ]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes each key once, but got the :drop_effect key twice",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for an unknown key given twice" do
+      # <div $data_transfer={effect: 1, effect: 2} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{effect: 1, effect: 2}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer attribute takes each key once, but got the :effect key twice",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drop effect outside the drop effects" do
+      # <div $drop="dropped" $data_transfer={drop_effect: :all} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [{"$drop", [text: "dropped"]}, {"$data_transfer", [expression: "{drop_effect: :all}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drop effect that isn't an atom" do
+      # <div $drop="dropped" $data_transfer={drop_effect: "move"} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer", [expression: "{drop_effect: \"move\"}"]}
+          ]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got \"move\"",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drop effect outside the drop effects before the missing $drop binding" do
+      # <div $data_transfer={drop_effect: :all} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{drop_effect: :all}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer drop_effect takes :none, :copy, :move or :link, got :all",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drop effect on a tag with no $drop binding" do
+      # <div $data_transfer={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{drop_effect: :move}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drop effect on a <document> tag with no $drop binding" do
+      # <document $data_transfer={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"document", [{"$data_transfer", [expression: "{drop_effect: :move}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drop effect on a <window> tag with no $drop binding" do
+      # <window $data_transfer={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {"window", [{"$data_transfer", [expression: "{drop_effect: :move}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drop effect on a dynamic tag with no $drop binding" do
+      # <{"div"} $data_transfer={drop_effect: :move} />
+      tags = [
+        {:self_closing_tag,
+         {{:expression, ~s({"div"})}, [{"$data_transfer", [expression: "{drop_effect: :move}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer drop_effect goes on a tag with a $drop binding, which makes it a drop target",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for two $data_transfer attributes" do
+      # <div $drop="dropped" $data_transfer={drop_effect: :move} $data_transfer={drop_effect: :copy} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer", [expression: "{drop_effect: :move}"]},
+            {"$data_transfer", [expression: "{drop_effect: :copy}"]}
+          ]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "a tag takes one $data_transfer attribute",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a $data_transfer attribute and one with modifiers" do
+      # <div $drop="dropped" $data_transfer={drop_effect: :move} $data_transfer.once={drop_effect: :copy} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [
+            {"$drop", [text: "dropped"]},
+            {"$data_transfer", [expression: "{drop_effect: :move}"]},
+            {"$data_transfer.once", [expression: "{drop_effect: :copy}"]}
+          ]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "a tag takes one $data_transfer attribute",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for drag data that isn't a map" do
+      # <div $data_transfer={data: "Buy milk"} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{data: \"Buy milk\"}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got "Buy milk"',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for drag data whose type isn't a string" do
+      # <div $data_transfer={data: %{text: "Buy milk"}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{data: %{text: \"Buy milk\"}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{text: "Buy milk"}',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for drag data whose value isn't a string or nil" do
+      # <div $data_transfer={data: %{"application/x-task" => 42}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{data: %{\"application/x-task\" => 42}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   ~s'the $data_transfer data takes a map of drag data types to strings or nil, like %{"text/plain" => "Buy milk"}, got %{"application/x-task" => 42}',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for an allowed effect outside the effects" do
+      # <div $data_transfer={effects_allowed: :all} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{effects_allowed: :all}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got :all",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a list of allowed effects holding one outside the effects" do
+      # <div $data_transfer={effects_allowed: [:move, :none]} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{effects_allowed: [:move, :none]}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer effects_allowed takes :copy, :move or :link, or a list of them, got [:move, :none]",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for drag data on a <document> tag" do
+      # <document $data_transfer={data: %{"text/plain" => "Buy milk"}} />
+      tags = [
+        {:self_closing_tag,
+         {"document",
+          [{"$data_transfer", [expression: "{data: %{\"text/plain\" => \"Buy milk\"}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer data goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for allowed effects only the render knows on a <document> tag" do
+      # <document $data_transfer={effects_allowed: @effects} />
+      tags = [
+        {:self_closing_tag,
+         {"document", [{"$data_transfer", [expression: "{effects_allowed: @effects}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer effects_allowed goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for drag data on a <window> tag" do
+      # <window $data_transfer={data: %{"text/plain" => "Buy milk"}} />
+      tags = [
+        {:self_closing_tag,
+         {"window",
+          [{"$data_transfer", [expression: "{data: %{\"text/plain\" => \"Buy milk\"}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer data goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for allowed effects only the render knows on a <window> tag" do
+      # <window $data_transfer={effects_allowed: @effects} />
+      tags = [
+        {:self_closing_tag,
+         {"window", [{"$data_transfer", [expression: "{effects_allowed: @effects}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer effects_allowed goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image at a negative offset with a key it doesn't take" do
+      # <div $data_transfer={image: %{ref: :task_preview, x: -16, width: 1}} />
+      tags = [
+        {:self_closing_tag,
+         {"div",
+          [{"$data_transfer", [expression: "{image: %{ref: :task_preview, x: -16, width: 1}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: :task_preview, width: 1, x: -16}",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image with no ref" do
+      # <div $data_transfer={image: %{x: 16}} />
+      tags = [
+        {:self_closing_tag, {"div", [{"$data_transfer", [expression: "{image: %{x: 16}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{x: 16}',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image ref that isn't an identifier" do
+      # <div $data_transfer={image: %{ref: "task_preview"}} />
+      tags = [
+        {:self_closing_tag,
+         {"div", [{"$data_transfer", [expression: "{image: %{ref: \"task_preview\"}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   ~s'the $data_transfer image takes a map with a ref and optional integer x and y offsets, like %{ref: :task_preview, x: 16, y: 16}, got %{ref: "task_preview"}',
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image on a <document> tag" do
+      # <document $data_transfer={image: %{ref: :task_preview}} />
+      tags = [
+        {:self_closing_tag,
+         {"document", [{"$data_transfer", [expression: "{image: %{ref: :task_preview}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer image goes on the element a drag starts from, so a <document> tag can't take it",
+                   fn -> build_ast(tags) end
+    end
+
+    test "raises for a drag image on a <window> tag" do
+      # <window $data_transfer={image: %{ref: :task_preview}} />
+      tags = [
+        {:self_closing_tag,
+         {"window", [{"$data_transfer", [expression: "{image: %{ref: :task_preview}}"]}]}}
+      ]
+
+      assert_error Hologram.TemplateSyntaxError,
+                   "the $data_transfer image goes on the element a drag starts from, so a <window> tag can't take it",
+                   fn -> build_ast(tags) end
+    end
+  end
+
   describe "build_ast/1, $focused attribute" do
     test "with an expression stays a 2-tuple" do
       # <input $focused={true} />
