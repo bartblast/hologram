@@ -1,6 +1,7 @@
 "use strict";
 
 import Batches from "./batches.mjs";
+import Bitstring from "./bitstring.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
 import GlobalRegistry from "./global_registry.mjs";
@@ -596,8 +597,10 @@ export default class DataLayer {
   // whole pot's for any page reached since, whose rows are only promised at "all".
   //
   // The key names the component, the prop or derived field, and the arguments its function was
-  // called with - which is what tells two instances of one component apart, and what both tiers
-  // can spell alike.
+  // called with - which is what tells two instances of one component apart - spelled the way the
+  // server spells them (see #spellKeyPart).
+  //
+  // WARNING: must match count_key/3 on the server (carry.ex).
   static #carriedCount(module, name, args, term) {
     if (term.cardinality !== "count") {
       return null;
@@ -611,10 +614,105 @@ export default class DataLayer {
     }
 
     const key = `${module}/${name.value}/${args
-      .map((arg) => Interpreter.inspect(arg))
+      .map((arg) => $.#spellKeyPart(arg))
       .join(",")}`;
 
     return LocalDatabase.syncCounts[key] ?? null;
+  }
+
+  // Code point order, which is the order Elixir sorts UTF-8 binaries in - where JavaScript's own
+  // comparison orders UTF-16 code units, which a character past U+FFFF puts elsewhere.
+  static #compareCodePoints(left, right) {
+    const leftPoints = Array.from(left, (char) => char.codePointAt(0));
+    const rightPoints = Array.from(right, (char) => char.codePointAt(0));
+    const length = Math.min(leftPoints.length, rightPoints.length);
+
+    for (let index = 0; index < length; ++index) {
+      if (leftPoints[index] !== rightPoints[index]) {
+        return leftPoints[index] < rightPoints[index] ? -1 : 1;
+      }
+    }
+
+    return leftPoints.length - rightPoints.length;
+  }
+
+  static #spellEntityId(id) {
+    return Type.isBinary(id) ? Bitstring.toText(id) : $.#spellKeyPart(id);
+  }
+
+  // Based on spell_key_part/1 (carry.ex)
+  //
+  // An argument spelled the same way on both tiers, which inspect alone doesn't do for a struct or
+  // a float: an entity row by its type and id, the only parts both tiers are sure to hold alike, a
+  // list, a tuple and a map by their items, a map's entries and a struct's fields sorted, a float
+  // by its bits, and anything else by inspect.
+  //
+  // WARNING: must match spell_key_part/1 on the server.
+  static #spellKeyPart(term) {
+    if (Type.isStruct(term)) {
+      const name = Interpreter.moduleExName(
+        term.data[Type.encodeMapKey(Type.atom("__struct__"))][1],
+      );
+
+      // A row is told apart by the metadata every entity struct carries, rather than by its type,
+      // so a row of a type the model doesn't bake is spelled as the server spells it.
+      const meta = term.data[Type.encodeMapKey(Type.atom("__meta__"))];
+
+      if (meta && Type.isStruct(meta[1], "Hologram.Entity.Metadata")) {
+        const id = term.data[Type.encodeMapKey(Type.atom("id"))][1];
+
+        return `${name}#${$.#spellEntityId(id)}`;
+      }
+
+      const fields = Object.values(term.data)
+        .filter(([key]) => key.value !== "__struct__")
+        .map(([key, value]) => [key.value, value])
+        .sort(([left], [right]) => $.#compareCodePoints(left, right))
+        .map(([key, value]) => `${key}: ${$.#spellKeyPart(value)}`)
+        .join(", ");
+
+      return `%${name}{${fields}}`;
+    }
+
+    if (Type.isMap(term)) {
+      const entries = Object.values(term.data)
+        .map(([key, value]) => [$.#spellKeyPart(key), $.#spellKeyPart(value)])
+        .sort(([left], [right]) => $.#compareCodePoints(left, right))
+        .map(([key, value]) => `${key} => ${value}`)
+        .join(", ");
+
+      return `%{${entries}}`;
+    }
+
+    if (Type.isList(term)) {
+      const items = term.data.map((item) => $.#spellKeyPart(item));
+
+      if (!term.isProper) {
+        const tail = items.pop();
+
+        return `[${items.join(", ")} | ${tail}]`;
+      }
+
+      return `[${items.join(", ")}]`;
+    }
+
+    if (Type.isTuple(term)) {
+      return `{${term.data.map((item) => $.#spellKeyPart(item)).join(", ")}}`;
+    }
+
+    if (Type.isFloat(term)) {
+      const view = new DataView(new ArrayBuffer(8));
+
+      view.setFloat64(0, term.value);
+
+      const bits = Array.from(new Uint8Array(view.buffer), (byte) =>
+        byte.toString(16).padStart(2, "0"),
+      ).join("");
+
+      return `float:${bits}`;
+    }
+
+    return Interpreter.inspect(term);
   }
 }
 

@@ -269,8 +269,9 @@ defmodule Hologram.Template.RendererDerivedTest do
         render_dom(stateful_node(Module151), @env, @server)
 
       ripe = component_registry["my_component"].struct.derived.ripe
+      spelled_rows = Enum.map_join(ripe, ", ", &"#{inspect(Entity2)}##{&1.id}")
 
-      assert Carry.take_counts() == %{"#{inspect(Module151)}/ripe_total/#{inspect(ripe)}" => 2}
+      assert Carry.take_counts() == %{"#{inspect(Module151)}/ripe_total/[#{spelled_rows}]" => 2}
     end
   end
 

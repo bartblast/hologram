@@ -319,16 +319,62 @@ defmodule Hologram.Sync.CarryTest do
              }
     end
 
-    # The rows a derived field passes on are an argument like any other, and the client spells the
-    # same key for them (see the data layer's carried count tests).
-    test "spells an argument holding rows" do
+    # The rows a derived field passes on are an argument like any other. A row is spelled by its type
+    # and id, the parts both tiers are sure to hold alike, and the client spells the same key (see
+    # the data layer's answerDerivedQuery() tests).
+    test "spells an entity row by its type and id" do
       row = Module2.new(id: "01a1cbe6-0000-7000-8000-000000000001", a: true, c: "banana")
 
       collect_count(Module2, :total, [[row]], 7)
 
       assert take_counts() == %{
-               ~s(Hologram.Test.Fixtures.Entity.Module2/total/[%Hologram.Test.Fixtures.Entity.Module2{__meta__: #Hologram.Entity.Metadata<>, a: true, b: nil, c: "banana", created_at: nil, id: "01a1cbe6-0000-7000-8000-000000000001", updated_at: nil}]) =>
+               "Hologram.Test.Fixtures.Entity.Module2/total/[Hologram.Test.Fixtures.Entity.Module2#01a1cbe6-0000-7000-8000-000000000001]" =>
                  7
+             }
+    end
+
+    test "spells a tuple by its items" do
+      collect_count(Module2, :total, [{1, "a"}], 7)
+
+      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/{1, "a"}) => 7}
+    end
+
+    test "spells a struct by its fields, sorted by name" do
+      collect_count(Module2, :total, [~D[2026-01-02]], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/%Date{calendar: Calendar.ISO, day: 2, month: 1, year: 2026}" =>
+                 7
+             }
+    end
+
+    test "spells a map by its entries, sorted by key" do
+      collect_count(Module2, :total, [%{b: 1, a: 2}], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/%{:a => 2, :b => 1}" => 7
+             }
+    end
+
+    test "spells an improper list with its tail after a bar" do
+      collect_count(Module2, :total, [[1 | 2]], 7)
+
+      assert take_counts() == %{"Hologram.Test.Fixtures.Entity.Module2/total/[1 | 2]" => 7}
+    end
+
+    test "spells a float by its bits" do
+      collect_count(Module2, :total, [1.0e20], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/float:4415af1d78b58c40" => 7
+             }
+    end
+
+    test "sorts a map's entries in code point order" do
+      collect_count(Module2, :total, [%{"😀" => 2, "！" => 1}], 7)
+
+      assert take_counts() == %{
+               ~s(Hologram.Test.Fixtures.Entity.Module2/total/%{"！" => 1, "😀" => 2}) => 7
              }
     end
 

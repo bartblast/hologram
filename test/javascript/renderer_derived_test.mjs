@@ -617,6 +617,27 @@ describe("Renderer derived fields", () => {
       ]);
     });
 
+    // The server spells the same key for the same rows (see "carries a count reading another
+    // field's rows under those rows" in test/elixir/hologram/template/renderer_derived_test.exs).
+    it("answers a count reading another field's rows with the count carried under those rows", () => {
+      defineComponent("MyApp.RowsArgument", {
+        derived: [
+          derivedEntry("ripe", Type.list([Type.alias(ROW)]), [], ripeRows),
+          derivedEntry("ripe_total", Type.atom("integer"), ["ripe"], (_ripe) =>
+            count(ripeRows()),
+          ),
+        ],
+      });
+
+      LocalDatabase.syncCounts = {
+        [`MyApp.RowsArgument/ripe_total/[${ROW}#r1, ${ROW}#r3]`]: 42,
+      };
+
+      render(componentNode("MyApp.RowsArgument"));
+
+      assert.deepStrictEqual(renderedVar("ripe_total"), Type.integer(42));
+    });
+
     it("raises on a query of another shape than the type", () => {
       defineComponent("MyApp.WrongShape", {
         derived: [derivedEntry("total", Type.atom("integer"), [], ripeRows)],

@@ -21,6 +21,7 @@ defmodule Hologram.Sync.Carry do
 
   alias Hologram.DB.Codec
   alias Hologram.Entity
+  alias Hologram.Entity.Metadata
   alias Hologram.Entity.NotIncluded
   alias Hologram.Sync.Frame
 
@@ -56,8 +57,10 @@ defmodule Hologram.Sync.Carry do
   complete enough to count.
 
   The key names the component, the prop or field, and the arguments its function was called with,
-  which is what tells two instances of one component apart - `inspect/1` spells the arguments, being
-  the spelling both tiers already agree on, in full, since the client's spelling cuts nothing short.
+  which is what tells two instances of one component apart. The arguments are spelled the same way on
+  both tiers, which `inspect/1` alone doesn't do for a struct: an entity row by its type and id, the
+  only parts both tiers are sure to hold alike, a list, a tuple and a map by their items, a map's
+  entries and a struct's fields sorted, and anything else by `inspect/1`, in full.
   """
   @spec collect_count(module, atom, list, integer) :: :ok
   def collect_count(module, name, args, count) do
@@ -159,11 +162,9 @@ defmodule Hologram.Sync.Carry do
     scopes
   end
 
+  # WARNING: must match the client's DataLayer.#carriedCount (data_layer.mjs).
   defp count_key(module, name, args) do
-    spelled_args =
-      Enum.map_join(args, ",", &inspect(&1, limit: :infinity, printable_limit: :infinity))
-
-    "#{inspect(module)}/#{name}/#{spelled_args}"
+    "#{inspect(module)}/#{name}/#{Enum.map_join(args, ",", &spell_key_part/1)}"
   end
 
   defp entities(%NotIncluded{}), do: []
@@ -203,4 +204,70 @@ defmodule Hologram.Sync.Carry do
   # One row can be reached from several props, and the same row twice is the same row - what
   # tells two apart is the pair of what they are and which one they are.
   defp key(%entity_type{id: id}), do: {entity_type, id}
+
+  defp spell_entity_id(id) when is_binary(id), do: id
+
+  defp spell_entity_id(id), do: spell_key_part(id)
+
+  # A row is told apart by the metadata every entity struct carries, rather than by its type, so a
+  # row of a type the client's model doesn't bake is spelled the same way there.
+  #
+  # WARNING: must match the client's DataLayer.#spellKeyPart (data_layer.mjs).
+  defp spell_key_part(%module{__meta__: %Metadata{}} = term),
+    do: "#{inspect(module)}##{spell_entity_id(term.id)}"
+
+  defp spell_key_part(%module{} = term) do
+    fields =
+      term
+      |> Map.from_struct()
+      |> Enum.sort_by(fn {key, _value} -> Atom.to_string(key) end)
+      |> Enum.map_join(", ", fn {key, value} -> "#{key}: #{spell_key_part(value)}" end)
+
+    "%#{inspect(module)}{#{fields}}"
+  end
+
+  defp spell_key_part(term) when is_map(term) do
+    entries =
+      term
+      |> Enum.map(fn {key, value} -> {spell_key_part(key), spell_key_part(value)} end)
+      |> Enum.sort()
+      |> Enum.map_join(", ", fn {key, value} -> "#{key} => #{value}" end)
+
+    "%{#{entries}}"
+  end
+
+  defp spell_key_part(term) when is_list(term) do
+    items =
+      term
+      |> spell_list_items()
+      |> Enum.join(", ")
+
+    "[#{items}]"
+  end
+
+  defp spell_key_part(term) when is_tuple(term) do
+    items =
+      term
+      |> Tuple.to_list()
+      |> Enum.map_join(", ", &spell_key_part/1)
+
+    "{#{items}}"
+  end
+
+  # The client's inspect spells some floats unlike Elixir's, so a float is spelled by its bits.
+  defp spell_key_part(term) when is_float(term) do
+    <<bits::binary-size(8)>> = <<term::float-64>>
+
+    "float:#{Base.encode16(bits, case: :lower)}"
+  end
+
+  defp spell_key_part(term), do: inspect(term, limit: :infinity, printable_limit: :infinity)
+
+  # Walked rather than mapped, so an improper list's tail is spelled after a bar, as inspect does.
+  defp spell_list_items([]), do: []
+
+  defp spell_list_items([item | rest]) when is_list(rest),
+    do: [spell_key_part(item) | spell_list_items(rest)]
+
+  defp spell_list_items([item | tail]), do: ["#{spell_key_part(item)} | #{spell_key_part(tail)}"]
 end

@@ -82,6 +82,130 @@ describe("DataLayer", () => {
       );
     });
 
+    const MODULE_2 = "Hologram.Test.Fixtures.Entity.Module2";
+
+    // The same keys as the server's (see the collect_count/4 tests in
+    // test/elixir/hologram/sync/carry_test.exs).
+    const carriedFor = (arg, key) => {
+      globalThis.Hologram.sync.model[MODULE_2] = {
+        attributes: {id: "uuid"},
+        relationships: {},
+        serverOnly: [],
+      };
+
+      const term = DataLayer.normalizeQuery(
+        ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
+      );
+
+      LocalDatabase.syncCounts = {[`${MODULE_2}/total/${key}`]: 42};
+
+      return DataLayer.answerDerivedQuery(
+        MODULE_2,
+        Type.atom("total"),
+        [arg],
+        term,
+      );
+    };
+
+    it("spells an entity row in the key by its type and id", () => {
+      const row = Type.struct(MODULE_2, [
+        [Type.atom("__meta__"), Model.emptyMetadata()],
+        [Type.atom("a"), Type.boolean(true)],
+        [
+          Type.atom("id"),
+          Type.bitstring("01a1cbe6-0000-7000-8000-000000000001"),
+        ],
+      ]);
+
+      assert.deepStrictEqual(
+        carriedFor(
+          Type.list([row]),
+          "[Hologram.Test.Fixtures.Entity.Module2#01a1cbe6-0000-7000-8000-000000000001]",
+        ),
+        Type.integer(42),
+      );
+    });
+
+    it("spells a row of a type the model doesn't bake by its type and id", () => {
+      const row = Type.struct("MyApp.Unbaked", [
+        [Type.atom("__meta__"), Model.emptyMetadata()],
+        [Type.atom("id"), Type.bitstring("x")],
+      ]);
+
+      assert.deepStrictEqual(
+        carriedFor(row, "MyApp.Unbaked#x"),
+        Type.integer(42),
+      );
+    });
+
+    it("spells an improper list in the key with its tail after a bar", () => {
+      assert.deepStrictEqual(
+        carriedFor(
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+          "[1 | 2]",
+        ),
+        Type.integer(42),
+      );
+    });
+
+    it("spells a float in the key by its bits", () => {
+      assert.deepStrictEqual(
+        carriedFor(Type.float(1.0e20), "float:4415af1d78b58c40"),
+        Type.integer(42),
+      );
+    });
+
+    it("sorts a map's entries in the key in code point order", () => {
+      const map = Type.map([
+        [Type.bitstring("😀"), Type.integer(2)],
+        [Type.bitstring("！"), Type.integer(1)],
+      ]);
+
+      assert.deepStrictEqual(
+        carriedFor(map, '%{"！" => 1, "😀" => 2}'),
+        Type.integer(42),
+      );
+    });
+
+    it("spells a tuple in the key by its items", () => {
+      assert.deepStrictEqual(
+        carriedFor(
+          Type.tuple([Type.integer(1), Type.bitstring("a")]),
+          '{1, "a"}',
+        ),
+        Type.integer(42),
+      );
+    });
+
+    it("spells a struct in the key by its fields, sorted by name", () => {
+      const date = Type.struct("Date", [
+        [Type.atom("year"), Type.integer(2026)],
+        [Type.atom("month"), Type.integer(1)],
+        [Type.atom("day"), Type.integer(2)],
+        [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+      ]);
+
+      assert.deepStrictEqual(
+        carriedFor(
+          date,
+          "%Date{calendar: Calendar.ISO, day: 2, month: 1, year: 2026}",
+        ),
+        Type.integer(42),
+      );
+    });
+
+    it("spells a map in the key by its entries, sorted by key", () => {
+      const map = Type.map([
+        [Type.atom("b"), Type.integer(1)],
+        [Type.atom("a"), Type.integer(2)],
+      ]);
+
+      assert.deepStrictEqual(
+        carriedFor(map, "%{:a => 2, :b => 1}"),
+        Type.integer(42),
+      );
+    });
+
     it("answers a count with the count the page carried under the field's name and arguments", () => {
       const term = DataLayer.normalizeQuery(
         ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),
