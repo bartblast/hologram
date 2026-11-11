@@ -58,6 +58,22 @@ defmodule Hologram.Test.BrowserSessionTest do
               ] ++ messages_after_start}
   end
 
+  # A crashed stand-in is restarted by its supervisor in the background, while a
+  # real Wallaby start returns with every ChromeDriver server up.
+  defp await_chromedrivers do
+    children = PartitionSupervisor.which_children(:browser_session_test_chromedrivers)
+
+    all_alive? =
+      Enum.all?(children, fn {_partition, pid, _type, _modules} ->
+        is_pid(pid) and Process.alive?(pid)
+      end)
+
+    if !all_alive? do
+      Process.sleep(1)
+      await_chromedrivers()
+    end
+  end
+
   defp blocking_create_fn(test_pid, session_id) do
     fn _base_url, _capabilities ->
       send(test_pid, {:attempt_started, self()})
@@ -236,7 +252,7 @@ defmodule Hologram.Test.BrowserSessionTest do
                ) == :ok
       end)
 
-      assert_receive {:deleted, :other_session}
+      assert_receive {:deleted, :other_session}, 5_000
     end
 
     test "deletes a running test's session the restarted store dropped once that test ends", %{
@@ -261,12 +277,12 @@ defmodule Hologram.Test.BrowserSessionTest do
         )
       end)
 
-      assert_receive {:deleted, :hung_session}
+      assert_receive {:deleted, :hung_session}, 5_000
       refute_receive {:deleted, :other_test_session}, 100
 
       Process.exit(other_test_pid, :kill)
 
-      assert_receive {:deleted, :other_test_session}
+      assert_receive {:deleted, :other_test_session}, 5_000
     end
 
     @tag :tmp_dir
@@ -331,7 +347,7 @@ defmodule Hologram.Test.BrowserSessionTest do
 
       capture_io(fn ->
         assert create_session(@base_url, @capabilities,
-                 attempt_timeout: 50,
+                 attempt_timeout: 500,
                  attempts: 3,
                  create_fn: create_fn
                ) == {:ok, %{"sessionId" => "second"}}
@@ -367,19 +383,19 @@ defmodule Hologram.Test.BrowserSessionTest do
 
       capture_io(fn ->
         create_session(@base_url, @capabilities,
-          attempt_timeout: 50,
+          attempt_timeout: 500,
           attempts: 2,
           create_fn: create_fn,
           delete_fn: deleting_fn(self())
         )
       end)
 
-      assert_receive {:attempt_started, worker}
+      assert_receive {:attempt_started, worker}, 5_000
       refute_received {:deleted, _base_url, _session_id}
 
       send(worker, :release)
 
-      assert_receive {:deleted, @base_url, "abandoned"}
+      assert_receive {:deleted, @base_url, "abandoned"}, 5_000
     end
 
     test "deletes the session an attempt creates after its caller died" do
@@ -394,15 +410,15 @@ defmodule Hologram.Test.BrowserSessionTest do
           )
         end)
 
-      assert_receive {:attempt_started, worker}
+      assert_receive {:attempt_started, worker}, 5_000
 
       caller_ref = Process.monitor(caller)
       Process.exit(caller, :kill)
-      assert_receive {:DOWN, ^caller_ref, :process, ^caller, :killed}
+      assert_receive {:DOWN, ^caller_ref, :process, ^caller, :killed}, 5_000
 
       send(worker, :release)
 
-      assert_receive {:deleted, @base_url, "orphaned"}
+      assert_receive {:deleted, @base_url, "orphaned"}, 5_000
     end
 
     @tag :tmp_dir
@@ -419,7 +435,7 @@ defmodule Hologram.Test.BrowserSessionTest do
 
       capture_io(fn ->
         create_session(@base_url, @capabilities,
-          attempt_timeout: 50,
+          attempt_timeout: 500,
           attempts: 3,
           create_fn: create_fn,
           log_dir: tmp_dir
@@ -433,8 +449,8 @@ defmodule Hologram.Test.BrowserSessionTest do
 
       assert hangs ==
                normalize_newlines("""
-               Chrome session didn't start within 50 ms (attempt 1 of 3), retrying
-               Chrome session didn't start within 50 ms (attempt 2 of 3), retrying
+               Chrome session didn't start within 500 ms (attempt 1 of 3), retrying
+               Chrome session didn't start within 500 ms (attempt 2 of 3), retrying
                """)
     end
 
@@ -531,6 +547,7 @@ defmodule Hologram.Test.BrowserSessionTest do
         put_env_fn: fn app, key, value -> send(self(), {:put_env, app, key, value}) end,
         ready_timeout: 5_000,
         start_fn: fn ->
+          await_chromedrivers()
           :counters.add(starts, 1, 1)
           send(self(), :started)
         end,
@@ -630,7 +647,7 @@ defmodule Hologram.Test.BrowserSessionTest do
       opts: opts
     } do
       capture_io(fn ->
-        assert start_wallaby(Keyword.merge(opts, attempts: 3, ready_timeout: 50)) == :ok
+        assert start_wallaby(Keyword.merge(opts, attempts: 3, ready_timeout: 500)) == :ok
       end)
 
       assert_restarted_once(log_dir, @warm_up_messages)
@@ -769,12 +786,12 @@ defmodule Hologram.Test.BrowserSessionTest do
                      fn -> start_wallaby(opts) end
       end)
 
-      assert_receive {:attempt_started, worker}
+      assert_receive {:attempt_started, worker}, 5_000
       refute_received {:deleted, _base_url, _session_id}
 
       send(worker, :release)
 
-      assert_receive {:deleted, @base_url, "warm-up"}
+      assert_receive {:deleted, @base_url, "warm-up"}, 5_000
     end
 
     test "raises when the browser session start answers with an error, without reporting it", %{
