@@ -7,6 +7,7 @@ import ComponentRegistry from "./component_registry.mjs";
 import Debouncer from "./debouncer.mjs";
 import EventListeners from "./event_listeners.mjs";
 import Hologram from "./hologram.mjs";
+import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import KeyboardEvent from "./events/keyboard_event.mjs";
@@ -1170,10 +1171,44 @@ export default class Renderer {
     return Type.tuple([name, evaluatedValue]);
   }
 
+  // Based on evaluate_template/2
+  //
+  // WARNING: must match evaluate_template/2 on the server: the same KeyErrors become the same
+  // Hologram.MisuseError, every other error passes through untouched.
+  //
+  // A template reads `@name` as `vars.name`, so a var the template doesn't have fails as a
+  // KeyError on the vars map, which names neither the var nor the template. Translating it here,
+  // where the template runs, costs nothing on the happy path. The error's term has to be this very
+  // vars map, so a KeyError from inside an expression - a field read on a map the template holds,
+  // a helper it calls - is left alone. Comparing by identity makes that exact, where the server
+  // has to compare by value and look at the frame the error was raised in.
+  // The new error carries the KeyError's stacktrace, as the server's reraise does, since that's
+  // where the template's own frame is - a raise from here would only see the renderer's.
+  // Deps: [:maps.get/2]
   static #evaluateTemplate(moduleProxy, vars) {
-    return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
-      vars,
-    ]);
+    try {
+      return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
+        vars,
+      ]);
+    } catch (error) {
+      if (!Renderer.#isUndefinedVarError(error, vars)) {
+        throw error;
+      }
+
+      const key = Erlang_Maps["get/2"](Type.atom("key"), error.struct);
+
+      const misuseError = new HologramBoxedError(
+        Type.errorStruct(
+          "Hologram.MisuseError",
+          Renderer.#undefinedVarMessage(key, moduleProxy.__exModule__, vars),
+        ),
+      );
+
+      misuseError.stacktrace = error.stacktrace;
+      misuseError.rederive(Interpreter.boxStacktrace(error));
+
+      throw misuseError;
+    }
   }
 
   // Decides whether a live event satisfies an attribute's modifier filters. Modifiers are a
@@ -1346,6 +1381,35 @@ export default class Renderer {
   static #isNestedSpreadValue(value) {
     return (
       (Type.isMap(value) && !Type.isStruct(value)) || Type.isKeywordList(value)
+    );
+  }
+
+  // Tells apart the KeyError a template raises for a var it doesn't have, see #evaluateTemplate.
+  // A struct is null when its derivation was skipped or faulted.
+  // Deps: [:maps.get/2]
+  static #isUndefinedVarError(error, vars) {
+    if (
+      !(error instanceof HologramBoxedError) ||
+      error.kind.value !== "error" ||
+      error.struct === null
+    ) {
+      return false;
+    }
+
+    const struct = error.struct;
+
+    if (
+      !Interpreter.isStrictlyEqual(
+        Erlang_Maps["get/2"](Type.atom("__struct__"), struct),
+        Type.alias("KeyError"),
+      )
+    ) {
+      return false;
+    }
+
+    return (
+      Type.isAtom(Erlang_Maps["get/2"](Type.atom("key"), struct)) &&
+      Erlang_Maps["get/2"](Type.atom("term"), struct) === vars
     );
   }
 
@@ -2237,6 +2301,28 @@ export default class Renderer {
     );
 
     return throttle === null ? null : Number(throttle.value);
+  }
+
+  // Based on undefined_var_message/3
+  //
+  // WARNING: must match undefined_var_message/3 on the server character for character.
+  //
+  // Only atom keys are listed, since only those can be read with `@`.
+  static #undefinedVarMessage(key, module, vars) {
+    const names = Object.values(vars.data)
+      .map(([name]) => name)
+      .filter((name) => Type.isAtom(name))
+      .sort(Interpreter.compareTerms);
+
+    const availableVars =
+      names.length === 0
+        ? "no vars are available"
+        : "available vars: " + names.map(({value}) => `@${value}`).join(", ");
+
+    return (
+      `undefined var @${key.value} in the template of ` +
+      `"${Interpreter.moduleExName(module)}", ${availableVars}`
+    );
   }
 
   static #updateFormInputChecked(element, newChecked) {

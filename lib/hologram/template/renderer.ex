@@ -1239,7 +1239,7 @@ defmodule Hologram.Template.Renderer do
     available_vars =
       case names do
         [] -> "no vars are available"
-        names -> "available vars: " <> Enum.map_join(names, ", ", &"@#{&1}")
+        names -> "available vars: " <> Enum.map_join(names, ", ", &("@" <> Atom.to_string(&1)))
       end
 
     ~s/undefined var @#{key} in the template of "#{Reflection.module_name(module)}", #{available_vars}/

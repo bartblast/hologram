@@ -3,7 +3,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module96 do
   use Hologram.Component
 
   def init(_props, component, _server) do
-    put_state(component, %{:b => 222, "c" => 333})
+    put_state(component, %{:b => 222, "c" => 333, nil => 444})
   end
 
   @impl Component

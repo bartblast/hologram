@@ -1318,11 +1318,12 @@ defmodule Hologram.Template.RendererTest do
       end
     end
 
-    test "with unregistered var used, state with a key that isn't an atom" do
+    test "with unregistered var used, state with nil and non-atom keys" do
       node = {:component, Module96, [{"cid", [text: "my_component"]}], []}
 
       expected_msg =
-        ~s'undefined var @c in the template of "#{inspect(Module96)}", available vars: @b, @cid'
+        ~s'undefined var @c in the template of "#{inspect(Module96)}", ' <>
+          "available vars: @b, @cid, @nil"
 
       assert_raise Hologram.MisuseError, expected_msg, fn ->
         render_dom(node, @env, @server)
