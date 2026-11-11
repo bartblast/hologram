@@ -1178,22 +1178,23 @@ export default class Renderer {
   //
   // A template reads `@name` as `vars.name`, so a var the template doesn't have fails as a
   // KeyError on the vars map, which names neither the var nor the template. The template gets the
-  // map tagged as a Vars struct, which is what tells that KeyError apart from one raised on any
-  // other map. The tag costs a copy of the map per render, the catch nothing until something
-  // raises.
+  // map with a marker key put in, which is what tells that KeyError apart from one raised on any
+  // other map - one the template holds or builds. The one way around it is a template handing the
+  // bare `vars` on to a helper that reads a missing key from it. The marker costs a copy of the
+  // map per render, the catch nothing until something raises.
   // The new error carries the KeyError's stacktrace, as the server's reraise does, since that's
   // where the template's own frame is - a raise from here would only see the renderer's.
   // Deps: [:maps.get/2, :maps.put/3]
   static #evaluateTemplate(moduleProxy, vars) {
-    const taggedVars = Erlang_Maps["put/3"](
-      Type.atom("__struct__"),
-      Type.alias("Hologram.Component.Vars"),
+    const markedVars = Erlang_Maps["put/3"](
+      Type.atom("__hologram_vars__"),
+      Type.boolean(true),
       vars,
     );
 
     try {
       return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
-        taggedVars,
+        markedVars,
       ]);
     } catch (error) {
       if (!Renderer.#isUndefinedVarError(error)) {
@@ -1417,9 +1418,8 @@ export default class Renderer {
     return (
       Type.isAtom(Erlang_Maps["get/2"](Type.atom("key"), struct)) &&
       Type.isMap(term) &&
-      Interpreter.isStrictlyEqual(
-        Erlang_Maps["get/3"](Type.atom("__struct__"), term, Type.nil()),
-        Type.alias("Hologram.Component.Vars"),
+      Type.isTrue(
+        Erlang_Maps["get/3"](Type.atom("__hologram_vars__"), term, Type.nil()),
       )
     );
   }

@@ -8,7 +8,6 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
-  alias Hologram.Component.Vars
   alias Hologram.Reflection
   alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
@@ -739,16 +738,18 @@ defmodule Hologram.Template.Renderer do
   # WARNING: must match the client renderer's #evaluateTemplate.
   #
   # A template reads `@name` as `vars.name`, so a var the template doesn't have fails as a KeyError
-  # on the vars map, which names neither the var nor the template. The template gets the map
-  # tagged as a Vars struct, which is what tells that KeyError apart from one raised on any other
-  # map. The tag costs a copy of the map per render, the rescue nothing until something raises.
+  # on the vars map, which names neither the var nor the template. The template gets the map with
+  # a marker key put in, which is what tells that KeyError apart from one raised on any other map -
+  # one the template holds or builds. The one way around it is a template handing the bare `vars`
+  # on to a helper that reads a missing key from it. The marker costs a copy of the map per render,
+  # the rescue nothing until something raises.
   defp evaluate_template(module, vars) do
-    tagged_vars = Map.put(vars, :__struct__, Vars)
-    module.template().(tagged_vars)
+    marked_vars = Map.put(vars, :__hologram_vars__, true)
+    module.template().(marked_vars)
   rescue
     error in KeyError ->
       case error do
-        %KeyError{key: key, term: %Vars{}} when is_atom(key) ->
+        %KeyError{key: key, term: %{__hologram_vars__: true}} when is_atom(key) ->
           reraise Hologram.MisuseError,
                   [message: undefined_var_message(key, module, vars)],
                   __STACKTRACE__
