@@ -57,7 +57,9 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> visit(Page1)
     # The first radio button starts unselected
     |> click(css("#radio_elem_1"))
-    |> assert_text(css("#result"), ~r/\{:radio, %\{event: %\{value: true\}\}\}/)
+    |> assert_text(css("#result"), ~r/\{:radio, %\{event: %\{value: "option_1"\}\}\}/)
+    # The action stores the event value in state, so the radio stays selected after the re-render
+    |> assert_has(css("#radio_elem_1:checked"))
   end
 
   feature "radio button, changing selection within group", %{session: session} do
@@ -65,10 +67,10 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> visit(Page1)
     # The first radio button starts unselected, so click it first
     |> click(css("#radio_elem_1"))
-    # Now click the second radio button - this shouldn't fire a change event for the first radio button
-    # because radio buttons only fire change events when they become selected, not unselected
     |> click(css("#radio_elem_2"))
-    |> assert_text(css("#result"), ~r/\{:radio, %\{event: %\{value: true\}\}\}/)
+    |> assert_text(css("#result"), ~r/\{:radio, %\{event: %\{value: "option_2"\}\}\}/)
+    # The action stores the event value in state, so the radio stays selected after the re-render
+    |> assert_has(css("#radio_elem_2:checked"))
   end
 
   feature "single select, changing selection", %{session: session} do
