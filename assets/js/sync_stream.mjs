@@ -227,6 +227,11 @@ export default class SyncStream {
 
         if (frame.reason === "identity") {
           LocalDatabase.reset();
+
+          // The derived fields the last render computed read the rows just dropped, so an action
+          // run before the refill's first render computes its target's again (see
+          // DataLayer.rowsChangedSinceRender).
+          $.rowsChangedSinceRender = true;
         } else {
           LocalDatabase.beginRefill();
         }
