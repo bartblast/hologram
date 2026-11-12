@@ -294,13 +294,21 @@ export default class RegexEngine {
   // matches (everywhere or at the start position only). matchLimit and
   // matchLimitRecursion bound the matching work, with an exceeded limit
   // reported as no match - a limit verb in the pattern wins when lower.
+  //
+  // runOpts.firstNewlinePosition, when given with firstline, is the first
+  // newline position at or after the start position (Infinity when there is
+  // none), already looked up by matchGlobal() so its attempts don't each
+  // scan for it again. runOpts.subjectCache goes to the interpreter, which
+  // keeps data derived from the subject in it, so matchGlobal() passes one
+  // cache to all its attempts.
   static match(compiled, subject, runOpts = {}) {
     const anchored = runOpts.anchored === true;
     const startPosition = runOpts.startPosition ?? 0;
 
     const maxStartPosition =
       runOpts.firstline === true
-        ? $.#firstNewlinePosition(compiled.newlineType, subject, startPosition)
+        ? (runOpts.firstNewlinePosition ??
+          $.#firstNewlinePosition(compiled.newlineType, subject, startPosition))
         : Infinity;
 
     // The scan flags and limits need match-time decisions a JS regexp can't
@@ -356,6 +364,7 @@ export default class RegexEngine {
       notemptyAtStart: runOpts.notemptyAtStart === true,
       noteol: runOpts.noteol === true,
       startPosition: startPosition,
+      subjectCache: runOpts.subjectCache,
     });
   }
 
@@ -371,11 +380,41 @@ export default class RegexEngine {
     const results = [];
     let position = runOpts.startPosition ?? 0;
 
-    while (position <= subject.length) {
-      const result = $.match(compiled, subject, {
+    // With firstline, the first newline at or after an attempt position is
+    // kept and looked up again only once an attempt starts past it. A kept
+    // newline at or after the new position is still the first one, since
+    // the earlier lookup found no newline before it.
+    let firstNewlinePosition = -1;
+
+    // One subject cache for all attempts, so the interpreter derives data
+    // from the subject once per run instead of once per attempt
+    const subjectCache = {graphemeSegments: null};
+
+    const attemptOpts = (startPosition, extraOpts = {}) => {
+      const opts = {
         ...runOpts,
-        startPosition: position,
-      });
+        ...extraOpts,
+        startPosition: startPosition,
+        subjectCache: subjectCache,
+      };
+
+      if (runOpts.firstline === true) {
+        if (firstNewlinePosition < startPosition) {
+          firstNewlinePosition = $.#firstNewlinePosition(
+            compiled.newlineType,
+            subject,
+            startPosition,
+          );
+        }
+
+        opts.firstNewlinePosition = firstNewlinePosition;
+      }
+
+      return opts;
+    };
+
+    while (position <= subject.length) {
+      const result = $.match(compiled, subject, attemptOpts(position));
 
       if (result === null) break;
 
@@ -386,12 +425,13 @@ export default class RegexEngine {
         continue;
       }
 
-      const retry = $.match(compiled, subject, {
-        ...runOpts,
-        anchored: true,
-        notemptyAtStart: true,
-        startPosition: result.start,
-      });
+      // With \K the reported start can be past the kept newline, so the
+      // retry checks the kept newline against its own start too
+      const retry = $.match(
+        compiled,
+        subject,
+        attemptOpts(result.start, {anchored: true, notemptyAtStart: true}),
+      );
 
       if (retry !== null) {
         results.push(retry);
@@ -488,6 +528,35 @@ export default class RegexEngine {
     }
 
     return byteOffset;
+  }
+
+  // Returns a function that converts JS string indices of the text to UTF-8
+  // byte offsets. The byte offsets computed so far are kept, so a series of
+  // conversions walks the text once in total, in any call order, instead of
+  // once per conversion. Indices up to the text length are accepted.
+  static utf16IndexToByteOffsetConverter(text) {
+    // byteOffsets[i] is the byte offset of JS string index i
+    const byteOffsets = [0];
+
+    return (utf16Index) => {
+      while (byteOffsets.length <= utf16Index) {
+        const index = byteOffsets.length - 1;
+        const codePoint = text.codePointAt(index);
+
+        const byteOffset =
+          byteOffsets[index] + $.#calculateCodePointByteCount(codePoint);
+
+        // An index inside a surrogate pair maps to the offset after the
+        // pair, like utf16IndexToByteOffset() does
+        if (codePoint > 0xffff) {
+          byteOffsets.push(byteOffset, byteOffset);
+        } else {
+          byteOffsets.push(byteOffset);
+        }
+      }
+
+      return byteOffsets[utf16Index];
+    };
   }
 
   static #calculateCodePointByteCount(codePoint) {
