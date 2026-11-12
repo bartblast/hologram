@@ -315,7 +315,11 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp body_reaches_query?(body, {_reaches?, seen}, module, tail?, entity_types, ir_plt) do
-    case scan_reaches_query?([{body, tail?}], module, entity_types, ir_plt, seen) do
+    # The id tells this body's binds from another's: a variable's version is unique within a
+    # function only.
+    scope = %{bindings: plain_binds(body, %{}), id: make_ref(), module: module}
+
+    case scan_reaches_query?([{body, tail?}], scope, entity_types, ir_plt, seen) do
       {true, next_seen} -> {:halt, {true, next_seen}}
       {false, next_seen} -> {:cont, {false, next_seen}}
     end
@@ -1498,6 +1502,32 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
+  # The plain binds a function body makes, by variable: what a variable the field's result comes
+  # from holds, so the scan follows it there. A variable is bound once at each version, so one map
+  # holds every bind of the body, the ones inside its branches and functions too.
+  defp plain_binds(
+         %IR.MatchOperator{left: %IR.Variable{name: name, version: version}, right: right},
+         binds
+       ),
+       do: plain_binds(right, Map.put(binds, {name, version}, right))
+
+  defp plain_binds(node, binds) when is_struct(node) do
+    node
+    |> Map.from_struct()
+    |> Map.values()
+    |> plain_binds(binds)
+  end
+
+  defp plain_binds(node, binds) when is_list(node), do: Enum.reduce(node, binds, &plain_binds/2)
+
+  defp plain_binds(node, binds) when is_tuple(node) do
+    node
+    |> Tuple.to_list()
+    |> plain_binds(binds)
+  end
+
+  defp plain_binds(_node, binds), do: binds
+
   # A function of the project or a dependency fails on a clause it doesn't have for its arguments,
   # whichever of them it is - the walk reports that as it reports a clause it follows.
   defp project_clause_failure?(
@@ -1757,16 +1787,16 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp resolve(term, _entity_types), do: [term]
 
-  defp scan_args_reach_query?(nodes, module, entity_types, ir_plt, seen) do
+  defp scan_args_reach_query?(nodes, scope, entity_types, ir_plt, seen) do
     nodes
     |> Enum.map(&{&1, false})
-    |> scan_reaches_query?(module, entity_types, ir_plt, seen)
+    |> scan_reaches_query?(scope, entity_types, ir_plt, seen)
   end
 
   defp scan_node_reaches_query?(
          %IR.AtomType{value: value},
          tail?,
-         _module,
+         _scope,
          entity_types,
          _ir_plt,
          seen
@@ -1776,20 +1806,20 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp scan_node_reaches_query?(
          %IR.Block{expressions: expressions},
          tail?,
-         module,
+         scope,
          entity_types,
          ir_plt,
          seen
        ) do
     pairs = Enum.with_index(expressions, &{&1, tail? and &2 == length(expressions) - 1})
 
-    scan_reaches_query?(pairs, module, entity_types, ir_plt, seen)
+    scan_reaches_query?(pairs, scope, entity_types, ir_plt, seen)
   end
 
   defp scan_node_reaches_query?(
          %IR.Case{condition: condition, clauses: clauses},
          tail?,
-         module,
+         scope,
          entity_types,
          ir_plt,
          seen
@@ -1799,34 +1829,46 @@ defmodule Hologram.Compiler.QueryExtractor do
       | Enum.flat_map(clauses, &[{&1.match, false}, {&1.guards, false}, {&1.body, tail?}])
     ]
 
-    scan_reaches_query?(pairs, module, entity_types, ir_plt, seen)
+    scan_reaches_query?(pairs, scope, entity_types, ir_plt, seen)
   end
 
   defp scan_node_reaches_query?(
          %IR.Cond{clauses: clauses},
          tail?,
-         module,
+         scope,
          entity_types,
          ir_plt,
          seen
        ) do
     pairs = Enum.flat_map(clauses, &[{&1.condition, false}, {&1.body, tail?}])
 
-    scan_reaches_query?(pairs, module, entity_types, ir_plt, seen)
+    scan_reaches_query?(pairs, scope, entity_types, ir_plt, seen)
   end
 
   defp scan_node_reaches_query?(
          %IR.LocalFunctionCall{function: function, args: args},
          tail?,
-         module,
+         scope,
          entity_types,
          ir_plt,
          seen
        ) do
-    case reaches_query?({module, function, length(args)}, tail?, entity_types, ir_plt, seen) do
+    case reaches_query?({scope.module, function, length(args)}, tail?, entity_types, ir_plt, seen) do
       {true, next_seen} -> {true, next_seen}
-      {false, next_seen} -> scan_args_reach_query?(args, module, entity_types, ir_plt, next_seen)
+      {false, next_seen} -> scan_args_reach_query?(args, scope, entity_types, ir_plt, next_seen)
     end
+  end
+
+  # A match evaluates to its right side.
+  defp scan_node_reaches_query?(
+         %IR.MatchOperator{left: left, right: right},
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    scan_reaches_query?([{left, false}, {right, tail?}], scope, entity_types, ir_plt, seen)
   end
 
   defp scan_node_reaches_query?(
@@ -1836,7 +1878,7 @@ defmodule Hologram.Compiler.QueryExtractor do
            args: args
          },
          tail?,
-         module,
+         scope,
          entity_types,
          ir_plt,
          seen
@@ -1851,11 +1893,11 @@ defmodule Hologram.Compiler.QueryExtractor do
             {true, next_seen}
 
           {false, next_seen} ->
-            scan_args_reach_query?(args, module, entity_types, ir_plt, next_seen)
+            scan_args_reach_query?(args, scope, entity_types, ir_plt, next_seen)
         end
 
       true ->
-        scan_args_reach_query?(args, module, entity_types, ir_plt, seen)
+        scan_args_reach_query?(args, scope, entity_types, ir_plt, seen)
     end
   end
 
@@ -1868,7 +1910,7 @@ defmodule Hologram.Compiler.QueryExtractor do
            after_block: after_block
          },
          tail?,
-         module,
+         scope,
          entity_types,
          ir_plt,
          seen
@@ -1879,17 +1921,44 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     scan_reaches_query?(
       [{body, tail?}, {after_block, false} | branches],
-      module,
+      scope,
       entity_types,
       ir_plt,
       seen
     )
   end
 
+  # A variable the field's result comes from holds what its bind's right side evaluates to. Each
+  # bind is followed once per body: the scan stops at the first query it finds, so a bind followed
+  # before found none, and following it again from another branch would only repeat the work.
+  defp scan_node_reaches_query?(
+         %IR.Variable{name: name, version: version},
+         true,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    followed = {:bind, scope.id, {name, version}}
+
+    with false <- MapSet.member?(seen, followed),
+         {:ok, bound} <- Map.fetch(scope.bindings, {name, version}) do
+      scan_reaches_query?(
+        [{bound, true}],
+        scope,
+        entity_types,
+        ir_plt,
+        MapSet.put(seen, followed)
+      )
+    else
+      _skipped -> {false, seen}
+    end
+  end
+
   defp scan_node_reaches_query?(
          %IR.With{clauses: clauses, body: body, else_clauses: else_clauses},
          tail?,
-         module,
+         scope,
          entity_types,
          ir_plt,
          seen
@@ -1901,40 +1970,40 @@ defmodule Hologram.Compiler.QueryExtractor do
           &[{&1.match, false}, {&1.guards, false}, {&1.body, tail?}]
         )
 
-    scan_reaches_query?(pairs, module, entity_types, ir_plt, seen)
+    scan_reaches_query?(pairs, scope, entity_types, ir_plt, seen)
   end
 
-  defp scan_node_reaches_query?(node, _tail?, module, entity_types, ir_plt, seen)
+  defp scan_node_reaches_query?(node, _tail?, scope, entity_types, ir_plt, seen)
        when is_struct(node) do
     node
     |> Map.from_struct()
     |> Map.values()
-    |> scan_args_reach_query?(module, entity_types, ir_plt, seen)
+    |> scan_args_reach_query?(scope, entity_types, ir_plt, seen)
   end
 
-  defp scan_node_reaches_query?(node, _tail?, module, entity_types, ir_plt, seen)
+  defp scan_node_reaches_query?(node, _tail?, scope, entity_types, ir_plt, seen)
        when is_list(node),
-       do: scan_args_reach_query?(node, module, entity_types, ir_plt, seen)
+       do: scan_args_reach_query?(node, scope, entity_types, ir_plt, seen)
 
-  defp scan_node_reaches_query?(node, _tail?, module, entity_types, ir_plt, seen)
+  defp scan_node_reaches_query?(node, _tail?, scope, entity_types, ir_plt, seen)
        when is_tuple(node) do
     node
     |> Tuple.to_list()
-    |> scan_args_reach_query?(module, entity_types, ir_plt, seen)
+    |> scan_args_reach_query?(scope, entity_types, ir_plt, seen)
   end
 
-  defp scan_node_reaches_query?(_node, _tail?, _module, _entity_types, _ir_plt, seen),
+  defp scan_node_reaches_query?(_node, _tail?, _scope, _entity_types, _ir_plt, seen),
     do: {false, seen}
 
   # Walks the given IR nodes, each with whether it stands where the field's result comes from, for
   # a query stage call, a call into the project reaching one, and an entity type in that position -
-  # through a block's last expression, a branch's bodies and a call's callee.
-  defp scan_reaches_query?([], _module, _entity_types, _ir_plt, seen), do: {false, seen}
+  # through a block's last expression, a branch's bodies, a call's callee and a variable's bind.
+  defp scan_reaches_query?([], _scope, _entity_types, _ir_plt, seen), do: {false, seen}
 
-  defp scan_reaches_query?([{node, tail?} | rest], module, entity_types, ir_plt, seen) do
-    case scan_node_reaches_query?(node, tail?, module, entity_types, ir_plt, seen) do
+  defp scan_reaches_query?([{node, tail?} | rest], scope, entity_types, ir_plt, seen) do
+    case scan_node_reaches_query?(node, tail?, scope, entity_types, ir_plt, seen) do
       {true, next_seen} -> {true, next_seen}
-      {false, next_seen} -> scan_reaches_query?(rest, module, entity_types, ir_plt, next_seen)
+      {false, next_seen} -> scan_reaches_query?(rest, scope, entity_types, ir_plt, next_seen)
     end
   end
 
