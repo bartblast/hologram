@@ -2592,7 +2592,12 @@ export default class Renderer {
       );
 
       Renderer.validateDeclaredState(initState, moduleProxy, "init/2");
-      Renderer.#validateStateComputed(initState, moduleProxy, "init/2");
+
+      // Only a field reading state is a placeholder while init runs, so a component declaring none
+      // has nothing to look for - and its state, which can hold every row it loaded, isn't walked.
+      if (afterInit.length > 0) {
+        Renderer.#validateStateComputed(initState, moduleProxy, "init/2");
+      }
 
       derived = Renderer.#computeDerived(
         moduleProxy,
@@ -2813,6 +2818,27 @@ export default class Renderer {
     }
 
     return htmlVnode;
+  }
+
+  // Based on Hologram.Component.Derived's placeholders_in/2
+  //
+  // Adds to the given array the placeholders the given term holds, itself or anywhere inside a map,
+  // a list or a tuple (an improper list's tail too), and returns it.
+  static #placeholdersIn(term, acc = []) {
+    if (Type.isStruct(term, "Hologram.Component.NotComputed")) {
+      acc.push(term);
+    } else if (Type.isMap(term)) {
+      for (const [key, value] of Object.values(term.data)) {
+        Renderer.#placeholdersIn(key, acc);
+        Renderer.#placeholdersIn(value, acc);
+      }
+    } else if (Type.isList(term) || Type.isTuple(term)) {
+      for (const item of term.data) {
+        Renderer.#placeholdersIn(item, acc);
+      }
+    }
+
+    return acc;
   }
 
   // One handler for every drop target that declares no drop effect, so a re-render hands the
@@ -4424,19 +4450,31 @@ export default class Renderer {
   // Based on Hologram.Component.Derived.validate_state_computed!/3
   //
   // A state entry init copied a placeholder into would show it in every render after. Of several,
-  // the smallest key is named, so the message doesn't depend on map order.
+  // the smallest key is named, and of several under it the smallest field, so the message doesn't
+  // depend on map order.
   static #validateStateComputed(state, moduleProxy, handler) {
-    const stored = Object.values(state.data).filter(([_key, value]) =>
-      Type.isStruct(value, "Hologram.Component.NotComputed"),
-    );
+    const stored = Object.values(state.data)
+      .map(([key, value]) => [key, Renderer.#placeholdersIn(value)])
+      .filter(([_key, placeholders]) => placeholders.length > 0);
 
     if (stored.length === 0) {
       return;
     }
 
     const key = Renderer.#smallestStateKey(stored.map(([key, _value]) => key));
-    const value = state.data[Type.encodeMapKey(key)][1];
-    const field = value.data[Type.encodeMapKey(Type.atom("field"))][1];
+
+    const placeholders = stored.find(([storedKey, _placeholders]) =>
+      Interpreter.isStrictlyEqual(storedKey, key),
+    )[1];
+
+    const field = placeholders
+      .map(
+        (placeholder) =>
+          placeholder.data[Type.encodeMapKey(Type.atom("field"))][1],
+      )
+      .reduce((min, candidate) =>
+        Interpreter.compareTerms(candidate, min) < 0 ? candidate : min,
+      );
     const module = Interpreter.moduleExName(moduleProxy.__exModule__);
 
     Interpreter.raiseError(

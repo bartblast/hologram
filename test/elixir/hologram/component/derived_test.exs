@@ -290,6 +290,31 @@ defmodule Hologram.Component.DerivedTest do
       assert validate_state_computed!(%{step: 1}, Module37, "init/3") == :ok
     end
 
+    test "names the smallest field of an entry holding several placeholders" do
+      state = %{copy: %{a: %NotComputed{field: :triple}, b: %NotComputed{field: :double}}}
+
+      expected_msg =
+        "init/3 of Hologram.Test.Fixtures.Component.Module37 stored derived field :double in state :copy before it was computed - it reads state, so it's computed after init"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        validate_state_computed!(state, Module37, "init/3")
+      end
+    end
+
+    test "names the smallest key of state holding several nested placeholders" do
+      state = %{
+        copy_a: [%NotComputed{field: :triple}],
+        copy_b: %{summary: %NotComputed{field: :double}}
+      }
+
+      expected_msg =
+        "init/3 of Hologram.Test.Fixtures.Component.Module37 stored derived field :triple in state :copy_a before it was computed - it reads state, so it's computed after init"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        validate_state_computed!(state, Module37, "init/3")
+      end
+    end
+
     test "names the smallest key of state holding several placeholders" do
       state = %{
         copy_b: %NotComputed{field: :double},
@@ -310,6 +335,50 @@ defmodule Hologram.Component.DerivedTest do
 
       assert_error Hologram.StateError, expected_msg, fn ->
         validate_state_computed!(%{copy: %NotComputed{field: :double}}, Module37, "init/3")
+      end
+    end
+
+    test "raises on state holding a placeholder in an improper list's tail" do
+      state = %{copy: [1 | %NotComputed{field: :double}]}
+
+      expected_msg =
+        "init/3 of Hologram.Test.Fixtures.Component.Module37 stored derived field :double in state :copy before it was computed - it reads state, so it's computed after init"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        validate_state_computed!(state, Module37, "init/3")
+      end
+    end
+
+    test "raises on state holding a placeholder inside a list" do
+      state = %{copy: [1, %NotComputed{field: :double}]}
+
+      expected_msg =
+        "init/3 of Hologram.Test.Fixtures.Component.Module37 stored derived field :double in state :copy before it was computed - it reads state, so it's computed after init"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        validate_state_computed!(state, Module37, "init/3")
+      end
+    end
+
+    test "raises on state holding a placeholder inside a map" do
+      state = %{copy: %{summary: %NotComputed{field: :double}}}
+
+      expected_msg =
+        "init/3 of Hologram.Test.Fixtures.Component.Module37 stored derived field :double in state :copy before it was computed - it reads state, so it's computed after init"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        validate_state_computed!(state, Module37, "init/3")
+      end
+    end
+
+    test "raises on state holding a placeholder inside a tuple" do
+      state = %{copy: {:ok, %NotComputed{field: :double}}}
+
+      expected_msg =
+        "init/3 of Hologram.Test.Fixtures.Component.Module37 stored derived field :double in state :copy before it was computed - it reads state, so it's computed after init"
+
+      assert_error Hologram.StateError, expected_msg, fn ->
+        validate_state_computed!(state, Module37, "init/3")
       end
     end
   end

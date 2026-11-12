@@ -540,6 +540,117 @@ describe("Renderer derived fields", () => {
         "init/2 of MyApp.Stored stored derived field :double in state :copy before it was computed - it reads state, so it's computed after init",
       );
     });
+
+    // A component whose init stores in state what the given function builds from its two fields
+    // reading state, given as [key, value] pairs.
+    const defineStoring = (moduleName, store) =>
+      defineComponent(moduleName, {
+        derived: ["double", "triple"].map((name) =>
+          derivedEntry(
+            name,
+            Type.atom("integer"),
+            ["step"],
+            (step) => step,
+            true,
+          ),
+        ),
+        init: (_props, component) => {
+          const derived = fieldOf(component, "derived");
+
+          return store(
+            fieldOf(derived, "double"),
+            fieldOf(derived, "triple"),
+          ).reduce((acc, [key, value]) => putState(acc, key, value), component);
+        },
+        state: [
+          declaration("copy"),
+          declaration("copy_a"),
+          declaration("copy_b"),
+          declaration("step", [[Type.atom("default"), Type.integer(1)]]),
+        ],
+      });
+
+    const storedMessage = (moduleName, field, key) =>
+      `init/2 of ${moduleName} stored derived field :${field} in state :${key} before it was computed - it reads state, so it's computed after init`;
+
+    it("raises when init stores a derived field in an improper list's tail before it is computed", () => {
+      defineStoring("MyApp.StoredInTail", (double, _triple) => [
+        ["copy", Type.improperList([Type.integer(1), double])],
+      ]);
+
+      assertBoxedError(
+        () => render(statefulNode("MyApp.StoredInTail")),
+        "Hologram.StateError",
+        storedMessage("MyApp.StoredInTail", "double", "copy"),
+      );
+    });
+
+    it("raises when init stores a derived field inside a list before it is computed", () => {
+      defineStoring("MyApp.StoredInList", (double, _triple) => [
+        ["copy", Type.list([Type.integer(1), double])],
+      ]);
+
+      assertBoxedError(
+        () => render(statefulNode("MyApp.StoredInList")),
+        "Hologram.StateError",
+        storedMessage("MyApp.StoredInList", "double", "copy"),
+      );
+    });
+
+    it("raises when init stores a derived field inside a map before it is computed", () => {
+      defineStoring("MyApp.StoredInMap", (double, _triple) => [
+        ["copy", Type.map([[Type.atom("summary"), double]])],
+      ]);
+
+      assertBoxedError(
+        () => render(statefulNode("MyApp.StoredInMap")),
+        "Hologram.StateError",
+        storedMessage("MyApp.StoredInMap", "double", "copy"),
+      );
+    });
+
+    it("raises when init stores a derived field inside a tuple before it is computed", () => {
+      defineStoring("MyApp.StoredInTuple", (double, _triple) => [
+        ["copy", Type.tuple([Type.atom("ok"), double])],
+      ]);
+
+      assertBoxedError(
+        () => render(statefulNode("MyApp.StoredInTuple")),
+        "Hologram.StateError",
+        storedMessage("MyApp.StoredInTuple", "double", "copy"),
+      );
+    });
+
+    it("raises when init stores two derived fields inside one entry before they are computed, naming the smallest field", () => {
+      defineStoring("MyApp.StoredTwiceInOne", (double, triple) => [
+        [
+          "copy",
+          Type.map([
+            [Type.atom("a"), triple],
+            [Type.atom("b"), double],
+          ]),
+        ],
+      ]);
+
+      assertBoxedError(
+        () => render(statefulNode("MyApp.StoredTwiceInOne")),
+        "Hologram.StateError",
+        storedMessage("MyApp.StoredTwiceInOne", "double", "copy"),
+      );
+    });
+
+    it("raises when init stores two derived fields inside entries before they are computed, naming the smallest key", () => {
+      defineStoring("MyApp.StoredTwiceNested", (double, triple) => [
+        ["copy_b", Type.map([[Type.atom("summary"), double]])],
+        ["copy_a", Type.list([triple])],
+      ]);
+
+      assertBoxedError(
+        () => render(statefulNode("MyApp.StoredTwiceNested")),
+        "Hologram.StateError",
+        storedMessage("MyApp.StoredTwiceNested", "triple", "copy_a"),
+      );
+    });
   });
 
   describe("query", () => {

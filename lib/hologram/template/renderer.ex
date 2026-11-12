@@ -1322,7 +1322,12 @@ defmodule Hologram.Template.Renderer do
       end
 
     validate_declared_state(component_struct.state, module, "init/3")
-    ComponentDerived.validate_state_computed!(component_struct.state, module, "init/3")
+
+    # Only a field reading state is a placeholder while init runs, so a component declaring none
+    # has nothing to look for - and its state, which can hold every row it loaded, isn't walked.
+    if after_init != [] do
+      ComponentDerived.validate_state_computed!(component_struct.state, module, "init/3")
+    end
 
     derived =
       ComponentDerived.compute(

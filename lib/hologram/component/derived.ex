@@ -191,17 +191,23 @@ defmodule Hologram.Component.Derived do
 
   @doc """
   Validates that the given state, returned by the given handler of the given module, holds no
-  placeholder of a derived field not yet computed - a state entry `init` copied it into would show
-  it in every render after.
+  placeholder of a derived field not yet computed, as an entry or anywhere inside one - a state
+  entry `init` copied it into would show it in every render after.
 
-  Raises Hologram.StateError naming the field and the entry.
+  Raises Hologram.StateError naming the field and the entry: of several, the smallest entry, and of
+  several under it, the smallest field.
   """
   @spec validate_state_computed!(map, module, String.t()) :: :ok
   def validate_state_computed!(state, module, handler) do
     stored =
       state
-      |> Enum.filter(fn {_key, value} -> is_struct(value, NotComputed) end)
-      |> Enum.min_by(fn {key, _value} -> key end, fn -> nil end)
+      |> Enum.flat_map(fn {key, value} ->
+        case placeholders_in(value, []) do
+          [] -> []
+          placeholders -> [{key, Enum.min_by(placeholders, & &1.field)}]
+        end
+      end)
+      |> Enum.min_by(fn {key, _placeholder} -> key end, fn -> nil end)
 
     case stored do
       {key, %NotComputed{field: field}} ->
@@ -328,6 +334,27 @@ defmodule Hologram.Component.Derived do
   end
 
   # A query term, or an entity type standing for every row of it.
+  # Adds to the given list the placeholders the given value holds, itself or anywhere inside a map,
+  # a list or a tuple (an improper list's tail too). Every one is gathered, so that the smallest
+  # field can be named whatever order a map is walked in.
+  defp placeholders_in(%NotComputed{} = placeholder, acc), do: [placeholder | acc]
+
+  defp placeholders_in([head | tail], acc), do: placeholders_in(tail, placeholders_in(head, acc))
+
+  defp placeholders_in(value, acc) when is_map(value) do
+    value
+    |> Map.to_list()
+    |> placeholders_in(acc)
+  end
+
+  defp placeholders_in(value, acc) when is_tuple(value) do
+    value
+    |> Tuple.to_list()
+    |> placeholders_in(acc)
+  end
+
+  defp placeholders_in(_value, acc), do: acc
+
   defp query?(value) do
     is_struct(value, Query) or (is_atom(value) and Reflection.entity?(value))
   end
