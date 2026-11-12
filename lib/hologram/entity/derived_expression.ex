@@ -443,10 +443,14 @@ defmodule Hologram.Entity.DerivedExpression do
 
   defp field_path(_ast, _state), do: nil
 
-  defp imported_module(name, arity, state) do
-    case Macro.Env.lookup_import(state.env, {name, arity}) do
-      [{_kind, module} | _rest] -> module
-      [] -> nil
+  # Resolved through expand_import/5 rather than looked up, since the call is written out as a
+  # remote one: the expansion is what tells the compiler the import is used, so it doesn't warn
+  # that it is unused.
+  defp imported_module(name, meta, arity, state) do
+    case Macro.Env.expand_import(state.env, meta, name, arity, allow_locals: false) do
+      {:function, module, _name} -> module
+      {:macro, module, _expander} -> module
+      {:error, _reason} -> nil
     end
   end
 
@@ -473,7 +477,7 @@ defmodule Hologram.Entity.DerivedExpression do
       name in @special_forms or sigil?(name) or Macro.operator?(name, arity) ->
         vocabulary_error!(described_use(ast), ast, state)
 
-      module = imported_module(name, arity, state) ->
+      module = imported_module(name, meta, arity, state) ->
         if module == Hologram.Query or own_module?(module) do
           vocabulary_error!(described_use(ast), ast, state)
         end

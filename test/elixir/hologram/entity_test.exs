@@ -431,6 +431,30 @@ defmodule Hologram.EntityTest do
   end
 
   describe "derived/3" do
+    test "counts an import a derived field's body calls as used" do
+      {_result, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.EntityTest.DerivedImportedBuilder do
+            use Hologram.Entity
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [member_messages: 1]
+
+            alias Hologram.Test.Fixtures.Entity.Module33
+            alias Hologram.Test.Fixtures.Entity.Module34
+
+            relationship :member, Module34, optional: true
+
+            derived :member_messages, [Module33], fn member -> member_messages(member) end
+
+            allow :read
+          end
+          """)
+        end)
+
+      assert diagnostics == []
+    end
+
     test "raises on a capture of a zero-arity function of the entity type's own" do
       line = __ENV__.line + 9
 
