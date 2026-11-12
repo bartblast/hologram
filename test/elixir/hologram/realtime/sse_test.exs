@@ -422,6 +422,24 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "read_sync_start/5" do
+    # Starting a sync reads the data model after the handshake found it released, and a live
+    # reload can hold it in between - the client then waits for the compile like one arriving
+    # under the hold, rather than the stream raising.
+    test "waits for the compile when a hold began after the handshake" do
+      on_exit(&Model.release/0)
+
+      Model.hold()
+
+      assert read_sync_start("1.2.0123", nil, "0123", true, true) == :held
+    end
+
+    test "reads nothing for a client arriving for the first time with current rules" do
+      assert read_sync_start(nil, nil, "0123", false, true) ==
+               {:ok, %{edges: nil, gap: nil, grants_then: nil, resync_reason: nil, rules: nil}}
+    end
+  end
+
   # What a stream is willing to say about a client's own writes rests on this: a frame naming how
   # far a replica's batches are applied is only safe to send to a session that is really that
   # replica's, and the statement is checked the same way a batch's is.

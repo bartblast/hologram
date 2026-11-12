@@ -12,6 +12,7 @@ defmodule Hologram.Sync.Handshake do
 
   alias Hologram.Entity.Model
   alias Hologram.Policy
+  alias Hologram.StaleModelError
   alias Hologram.Sync.Frame
 
   @doc """
@@ -62,14 +63,17 @@ defmodule Hologram.Sync.Handshake do
     end
   end
 
+  # Every answer but the protocol's reads the data model, and a hold can begin between any two of
+  # those reads, so meeting one anywhere is the same answer as arriving under it.
   defp check_greeting(greeting, page, protocol_version, model_hash) do
     cond do
-      Model.held?() -> :held
       not Model.exists?() -> :no_sync
       protocol_version != Frame.protocol_version() -> {:reload, :protocol_version}
       model_hash != Model.hash() -> {:reload, :model_hash}
       true -> sync(greeting, page)
     end
+  rescue
+    StaleModelError -> :held
   end
 
   defp stale_rules?(nil, _policy_hash), do: false
