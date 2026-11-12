@@ -77,7 +77,13 @@ defmodule Hologram.Component.Derived do
     {:fn, _meta, [{:->, _arrow_meta, [args, body]}]} = definition
     arg_names = Enum.map(args, fn {arg_name, _meta, _context} -> arg_name end)
 
-    declaration = {name, args, arg_names, resolve_at_line(body, env), env.line}
+    body_at_line =
+      env
+      |> imports_at_line()
+      |> Enum.concat([resolve_at_line(body, env)])
+      |> then(&{:__block__, [], &1})
+
+    declaration = {name, args, arg_names, body_at_line, env.line}
 
     quote do
       Module.put_attribute(
@@ -295,6 +301,27 @@ defmodule Hologram.Component.Derived do
   # sobelow_skip ["DOS.BinToAtom"]
   # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
   defp function_name(name), do: :"__derived_#{name}__"
+
+  # The body is compiled into its def once the module body has run, when the module's imports can
+  # be others than at the declaration, so the def starts with the ones in effect there - the
+  # body's own imports come after them and override them, as Elixir scopes them. Kernel's, imported
+  # by default, are left out. warn: false, since a def reads only some of what the module imports.
+  defp imports_at_line(env) do
+    (env.functions ++ env.macros)
+    |> Enum.group_by(fn {module, _names} -> module end, fn {_module, names} -> names end)
+    |> Enum.reject(fn {module, _names} -> module in [Kernel, Kernel.SpecialForms] end)
+    |> Enum.sort()
+    |> Enum.map(fn {module, names} ->
+      only =
+        names
+        |> Enum.concat()
+        |> Enum.sort()
+
+      quote do
+        import unquote(module), only: unquote(only), warn: false
+      end
+    end)
+  end
 
   # The names a derived field's function can read besides other derived fields, each with how the
   # messages describe what holds it. A page's params stand where a component's props do.

@@ -612,6 +612,154 @@ defmodule Hologram.ComponentTest do
       assert module.__derived_target__(false) == Hologram.Test.Fixtures.Component.Module1
     end
 
+    test "calls a function the module imports at the declaration after a later import drops it" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedImportAtLine do
+            use Hologram.Component
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [constant: 0]
+
+            derived :value, :integer, fn -> constant() end
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, except: [constant: 0]
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_value__() == 5
+    end
+
+    test "calls a function the module imports at the declaration through a pipe after a later import drops it" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedPipedImportAtLine do
+            use Hologram.Component
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [capitalized: 1]
+
+            prop :nickname, :string
+
+            derived :label, :string, fn nickname -> nickname |> capitalized() end
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, except: [capitalized: 1]
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_label__("ada") == "Ada"
+    end
+
+    test "calls a function the module imports at the declaration inside a query's pin after a later import drops it" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedPinnedImportAtLine do
+            use Hologram.Component
+            use Hologram.DB
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [capitalized: 1]
+
+            alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+            prop :nickname, :string
+
+            derived :entities, [Entity2], fn nickname -> filter(Entity2, c == ^capitalized(nickname)) end
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, except: [capitalized: 1]
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_entities__("ada") == filter(Entity2, c == "Ada")
+    end
+
+    test "captures a function the module imports at the declaration after a later import drops it" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedCapturedImportAtLine do
+            use Hologram.Component
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [capitalized: 1]
+
+            prop :nicknames, :list
+
+            derived :labels, :list, fn nicknames -> Enum.map(nicknames, &capitalized/1) end
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, except: [capitalized: 1]
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_labels__(["ada"]) == ["Ada"]
+    end
+
+    test "calls a function an import the body declares brings in over the module's import of the same name" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedBodyImport do
+            use Hologram.Component
+
+            import Map, only: [new: 0]
+
+            derived :value, :any, fn ->
+              import Map, only: []
+              import MapSet, only: [new: 0]
+
+              new()
+            end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_value__() == MapSet.new()
+    end
+
+    test "counts an import the body calls as used" do
+      {_result, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedImportInBody do
+            use Hologram.Component
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [constant: 0]
+
+            derived :value, :integer, fn -> constant() end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert diagnostics == []
+    end
+
     test "counts an alias the body reads as used" do
       {_result, diagnostics} =
         Code.with_diagnostics(fn ->
