@@ -664,7 +664,13 @@ export default class DataLayer {
     if (Type.isMap(term)) {
       const entries = Object.values(term.data)
         .map(([key, value]) => [$.#spellKeyPart(key), $.#spellKeyPart(value)])
-        .sort(([left], [right]) => $.#compareCodePoints(left, right))
+        // Two keys can spell alike - two structs of one row - so a tie is broken by the value, as
+        // the server's sort of the spelled pairs does.
+        .sort(
+          ([leftKey, leftValue], [rightKey, rightValue]) =>
+            $.#compareCodePoints(leftKey, rightKey) ||
+            $.#compareCodePoints(leftValue, rightValue),
+        )
         .map(([key, value]) => `${key} => ${value}`)
         .join(", ");
 

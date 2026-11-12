@@ -206,6 +206,26 @@ describe("DataLayer", () => {
       );
     });
 
+    // Two structs of one row are two keys that spell alike.
+    it("spells a map whose keys spell alike in the key by its entries, sorted by value", () => {
+      const row = (a) =>
+        Type.struct(MODULE_2, [
+          [Type.atom("__meta__"), Model.emptyMetadata()],
+          [Type.atom("a"), Type.boolean(a)],
+          [Type.atom("id"), Type.bitstring("x")],
+        ]);
+
+      const map = Type.map([
+        [row(true), Type.integer(2)],
+        [row(false), Type.integer(1)],
+      ]);
+
+      assert.deepStrictEqual(
+        carriedFor(map, `%{${MODULE_2}#x => 1, ${MODULE_2}#x => 2}`),
+        Type.integer(42),
+      );
+    });
+
     it("answers a count with the count the page carried under the field's name and arguments", () => {
       const term = DataLayer.normalizeQuery(
         ManuallyPortedElixirHologramQueryStage["count/1"](Type.alias(TASK)),

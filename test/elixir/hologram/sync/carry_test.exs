@@ -356,6 +356,18 @@ defmodule Hologram.Sync.CarryTest do
              }
     end
 
+    # Two structs of one row are two keys that spell alike.
+    test "spells a map whose keys spell alike by its entries, sorted by value" do
+      map = %{Module2.new(id: "x", a: true) => 2, Module2.new(id: "x", a: false) => 1}
+
+      collect_count(Module2, :total, [map], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/%{Hologram.Test.Fixtures.Entity.Module2#x => 1, Hologram.Test.Fixtures.Entity.Module2#x => 2}" =>
+                 7
+             }
+    end
+
     test "spells an improper list with its tail after a bar" do
       collect_count(Module2, :total, [[1 | 2]], 7)
 
