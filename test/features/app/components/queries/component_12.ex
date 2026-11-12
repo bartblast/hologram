@@ -7,7 +7,8 @@ defmodule HologramFeatureTests.Components.Queries.Component12 do
   prop :page, :integer
   prop :size, :integer
   prop :sort_by, :atom
-  prop :tickets, [Ticket], from_query: &tickets_query/3
+
+  derived :tickets, [Ticket], fn page, size, sort_by -> tickets_query(page, size, sort_by) end
 
   def template do
     ~HOLO"""

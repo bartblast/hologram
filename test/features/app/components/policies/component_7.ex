@@ -7,12 +7,14 @@ defmodule HologramFeatureTests.Components.Policies.Component7 do
   alias HologramFeatureTests.Entities.User
 
   prop :current_user, User, from_context: {Hologram, :user}
-  prop :legs, [Leg], from_query: &legs_query/0
-  prop :stops, [Stop], from_query: &stops_query/0
+
+  derived :legs, [Leg], &legs_query/0
+  derived :stops, [Stop], &stops_query/0
 
   # Checked while RENDERING, so the checks ship to the client and re-answer themselves on every
   # render the stream schedules - a grant on a trip arriving changes which stops take a leg and
-  # which legs may be renamed. No init/3: the props are rendered as they resolve.
+  # which legs may be renamed. No init/3: the prop and the derived fields are rendered as they
+  # resolve.
   def template do
     ~HOLO"""
     <p>

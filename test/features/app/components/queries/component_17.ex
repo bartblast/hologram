@@ -5,9 +5,9 @@ defmodule HologramFeatureTests.Components.Queries.Component17 do
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Label
 
-  prop :chatty_channels, [Channel], from_query: &chatty_channels_query/0
-  prop :early_labels, [Label], from_query: &early_labels_query/0
-  prop :quiet_channels, [Channel], from_query: &quiet_channels_query/0
+  derived :chatty_channels, [Channel], &chatty_channels_query/0
+  derived :early_labels, [Label], &early_labels_query/0
+  derived :quiet_channels, [Channel], &quiet_channels_query/0
 
   def template do
     ~HOLO"""

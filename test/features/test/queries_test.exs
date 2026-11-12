@@ -121,7 +121,7 @@ defmodule HologramFeatureTests.QueriesTest do
     |> assert_text(css("#dynamic_string_order"), ~r/^apple,Łódź,Zebra$/)
   end
 
-  feature "renders from_query prop results in practical order", %{session: session} do
+  feature "renders derived field query results in practical order", %{session: session} do
     %{name: "Zürich"}
     |> Product.new()
     |> DB.create!()

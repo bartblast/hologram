@@ -5,8 +5,8 @@ defmodule HologramFeatureTests.Components.Queries.Component18 do
   alias HologramFeatureTests.Entities.Membership
   alias HologramFeatureTests.Entities.Post
 
-  prop :unread_count, :integer, from_query: &unread_count_query/0
-  prop :visible_posts, [Post], from_query: &visible_posts_query/0
+  derived :unread_count, :integer, &unread_count_query/0
+  derived :visible_posts, [Post], &visible_posts_query/0
 
   def template do
     ~HOLO"""

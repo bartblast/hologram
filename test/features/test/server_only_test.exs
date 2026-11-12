@@ -31,7 +31,7 @@ defmodule HologramFeatureTests.ServerOnlyTest do
   end
 
   # The payload is fetched over HTTP rather than read with page_source/1: the browser reports
-  # the hydrated DOM, which no longer carries the component registry the row travels in.
+  # the hydrated DOM, which no longer carries the boot data the row travels in.
   feature "delivers the row while keeping its server-only value out of the page", %{
     session: session
   } do
@@ -45,7 +45,7 @@ defmodule HologramFeatureTests.ServerOnlyTest do
 
     %HTTPoison.Response{body: html} = HTTPoison.get!("http://localhost:4002/policies")
 
-    assert String.contains?(html, "componentRegistry")
+    assert String.contains?(html, "syncRows")
     assert String.contains?(html, "public_document")
 
     refute String.contains?(html, "api_token_5rL9")

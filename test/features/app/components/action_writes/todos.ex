@@ -8,7 +8,7 @@ defmodule HologramFeatureTests.Components.ActionWrites.Todos do
   # evaluates against its own database - so a row an action wrote appears here in the same frame
   # as the action's state change, before anything has been sent. That is the whole claim the
   # scenarios check.
-  prop :todos, [Todo], from_query: &todos_query/0
+  derived :todos, [Todo], &todos_query/0
 
   def template do
     ~HOLO"""

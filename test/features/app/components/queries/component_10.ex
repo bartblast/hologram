@@ -4,7 +4,7 @@ defmodule HologramFeatureTests.Components.Queries.Component10 do
 
   alias HologramFeatureTests.Entities.Product
 
-  prop :products, [Product], from_query: &products_query/0
+  derived :products, [Product], &products_query/0
 
   # A row's revisions are framework state under __meta__ rather than an attribute, so rendering
   # one proves the whole path carried it: the server struct fills the SSR text, and a change

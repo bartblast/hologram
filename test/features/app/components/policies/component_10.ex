@@ -7,8 +7,9 @@ defmodule HologramFeatureTests.Components.Policies.Component10 do
   alias HologramFeatureTests.Entities.User
 
   prop :current_user, User, from_context: {Hologram, :user}
-  prop :milestones, [Milestone], from_query: &milestones_query/0
-  prop :projects, [Project], from_query: &projects_query/0
+
+  derived :milestones, [Milestone], &milestones_query/0
+  derived :projects, [Project], &projects_query/0
 
   # Checked while rendering, so each check ships to the browser and is answered again on every
   # render the stream schedules - from the member rows it holds for the update rule's any, and for

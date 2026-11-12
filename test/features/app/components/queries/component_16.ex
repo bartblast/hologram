@@ -6,9 +6,10 @@ defmodule HologramFeatureTests.Components.Queries.Component16 do
   alias HologramFeatureTests.Entities.Label
 
   prop :channel_name, :string
-  prop :channels, [Channel], from_query: &channels_query/1
   prop :label_name, :string
-  prop :labels, [Label], from_query: &labels_query/1
+
+  derived :channels, [Channel], fn channel_name -> channels_query(channel_name) end
+  derived :labels, [Label], fn label_name -> labels_query(label_name) end
 
   # No page roots a message or a topic, so they reach the client only through the channels' and
   # the labels' inverses.

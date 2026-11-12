@@ -7,7 +7,7 @@ defmodule HologramFeatureTests.Components.OptimisticGrants.GrantList do
   # The grant store's rows as this client holds them - the window a permission-checking page
   # downloads, read through the overlay, so a grant an action just made (or just revoked) shows
   # here before anything is sent.
-  prop :grants, [RoleGrant], from_query: fn -> RoleGrant end
+  derived :grants, [RoleGrant], fn -> RoleGrant end
 
   def template do
     ~HOLO"""

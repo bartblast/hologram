@@ -7,7 +7,7 @@ defmodule HologramFeatureTests.Components.Mutations.Notes do
   # The notes reach this list through the ordinary read path - a registered query filled by the
   # sync stream - so a note written by a batch POSTed from the page appears here without the page
   # being fetched again. That is the whole claim the scenarios check.
-  prop :notes, [Note], from_query: &notes_query/0
+  derived :notes, [Note], &notes_query/0
 
   def template do
     ~HOLO"""

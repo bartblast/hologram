@@ -5,11 +5,12 @@ defmodule HologramFeatureTests.Components.Policies.Component4 do
   alias HologramFeatureTests.Entities.Booking
   alias HologramFeatureTests.Entities.User
 
-  prop :bookings, [Booking], from_query: &bookings_query/0
   prop :current_user, User, from_context: {Hologram, :user}
 
+  derived :bookings, [Booking], &bookings_query/0
+
   # Checked while RENDERING, so the check ships to the client and answers there as well. No
-  # init/3: both props are rendered as they resolve.
+  # init/3: the prop and the derived field are rendered as they resolve.
   def template do
     ~HOLO"""
     <p>

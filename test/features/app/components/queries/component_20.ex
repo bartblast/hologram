@@ -5,8 +5,8 @@ defmodule HologramFeatureTests.Components.Queries.Component20 do
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Message
 
-  prop :channels, [Channel], from_query: &channels_query/0
-  prop :messages, [Message], from_query: &messages_query/0
+  derived :channels, [Channel], &channels_query/0
+  derived :messages, [Message], &messages_query/0
 
   def template do
     ~HOLO"""

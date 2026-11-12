@@ -4,8 +4,8 @@ defmodule HologramFeatureTests.Components.Queries.Component14 do
 
   alias HologramFeatureTests.Entities.Booking
 
-  prop :bookings, [Booking], from_query: &bookings_query/0
-  prop :reversed_bookings, [Booking], from_query: &reversed_bookings_query/0
+  derived :bookings, [Booking], &bookings_query/0
+  derived :reversed_bookings, [Booking], &reversed_bookings_query/0
 
   def template do
     ~HOLO"""

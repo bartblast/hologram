@@ -4,9 +4,10 @@ defmodule HologramFeatureTests.Components.Queries.Component19 do
 
   alias HologramFeatureTests.Entities.Ticket
 
-  prop :exact_tickets, [Ticket], from_query: &exact_tickets_query/1
   prop :query, :string
-  prop :tickets, [Ticket], from_query: &tickets_query/1
+
+  derived :exact_tickets, [Ticket], fn query -> exact_tickets_query(query) end
+  derived :tickets, [Ticket], fn query -> tickets_query(query) end
 
   def template do
     ~HOLO"""
