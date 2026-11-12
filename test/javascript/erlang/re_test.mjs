@@ -2234,6 +2234,51 @@ describe("Erlang_Re", () => {
       assertMatchResult(result, [[2, 1]]);
     });
 
+    it("global firstline looks up the first newline once per run", () => {
+      const subject = "a".repeat(300);
+      const charCodeAtSpy = sinon.spy(String.prototype, "charCodeAt");
+
+      let result;
+
+      try {
+        result = run(Type.bitstring(subject), Type.bitstring("a"), [
+          Type.atom("global"),
+          Type.atom("firstline"),
+        ]);
+      } finally {
+        charCodeAtSpy.restore();
+      }
+
+      const expected = [];
+
+      for (let k = 0; k < 300; k++) {
+        expected.push([[k, 1]]);
+      }
+
+      assertGlobalMatchResult(result, expected);
+      assert.isAtMost(charCodeAtSpy.callCount, 4 * subject.length);
+    });
+
+    it("global firstline looks up the newline again past a crossing match", () => {
+      const result = run(
+        Type.bitstring("a\nab\nb"),
+        Type.bitstring("a\\na|b"),
+        [Type.atom("global"), Type.atom("firstline")],
+      );
+
+      assertGlobalMatchResult(result, [[[0, 3]], [[3, 1]]]);
+    });
+
+    it("global firstline looks up the newline again for a retry past it", () => {
+      const result = run(
+        Type.bitstring("a\nb\nb"),
+        Type.bitstring("a\\n\\K|b"),
+        [Type.atom("global"), Type.atom("firstline")],
+      );
+
+      assertGlobalMatchResult(result, [[[2, 0]], [[2, 1]]]);
+    });
+
     it("compile-time firstline pattern applies when running", () => {
       const compiled = compilePattern("b", [Type.atom("firstline")]);
 

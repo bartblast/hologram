@@ -294,13 +294,19 @@ export default class RegexEngine {
   // matches (everywhere or at the start position only). matchLimit and
   // matchLimitRecursion bound the matching work, with an exceeded limit
   // reported as no match - a limit verb in the pattern wins when lower.
+  //
+  // runOpts.firstNewlinePosition, when given with firstline, is the first
+  // newline position at or after the start position (Infinity when there is
+  // none), already looked up by matchGlobal() so its attempts don't each
+  // scan for it again.
   static match(compiled, subject, runOpts = {}) {
     const anchored = runOpts.anchored === true;
     const startPosition = runOpts.startPosition ?? 0;
 
     const maxStartPosition =
       runOpts.firstline === true
-        ? $.#firstNewlinePosition(compiled.newlineType, subject, startPosition)
+        ? (runOpts.firstNewlinePosition ??
+          $.#firstNewlinePosition(compiled.newlineType, subject, startPosition))
         : Infinity;
 
     // The scan flags and limits need match-time decisions a JS regexp can't
@@ -371,11 +377,32 @@ export default class RegexEngine {
     const results = [];
     let position = runOpts.startPosition ?? 0;
 
+    // With firstline, the first newline at or after an attempt position is
+    // kept and looked up again only once an attempt starts past it. A kept
+    // newline at or after the new position is still the first one, since
+    // the earlier lookup found no newline before it.
+    let firstNewlinePosition = -1;
+
+    const attemptOpts = (startPosition, extraOpts = {}) => {
+      const opts = {...runOpts, ...extraOpts, startPosition: startPosition};
+
+      if (runOpts.firstline === true) {
+        if (firstNewlinePosition < startPosition) {
+          firstNewlinePosition = $.#firstNewlinePosition(
+            compiled.newlineType,
+            subject,
+            startPosition,
+          );
+        }
+
+        opts.firstNewlinePosition = firstNewlinePosition;
+      }
+
+      return opts;
+    };
+
     while (position <= subject.length) {
-      const result = $.match(compiled, subject, {
-        ...runOpts,
-        startPosition: position,
-      });
+      const result = $.match(compiled, subject, attemptOpts(position));
 
       if (result === null) break;
 
@@ -386,12 +413,13 @@ export default class RegexEngine {
         continue;
       }
 
-      const retry = $.match(compiled, subject, {
-        ...runOpts,
-        anchored: true,
-        notemptyAtStart: true,
-        startPosition: result.start,
-      });
+      // With \K the reported start can be past the kept newline, so the
+      // retry checks the kept newline against its own start too
+      const retry = $.match(
+        compiled,
+        subject,
+        attemptOpts(result.start, {anchored: true, notemptyAtStart: true}),
+      );
 
       if (retry !== null) {
         results.push(retry);

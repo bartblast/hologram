@@ -1123,6 +1123,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run("a\nb", "b", [:firstline, {:offset, 2}]) == {:match, [{2, 1}]}
     end
 
+    test "global firstline looks up the first newline once per run" do
+      subject = String.duplicate("a", 300)
+      expected = for k <- 0..299, do: [{k, 1}]
+
+      assert :re.run(subject, "a", [:global, :firstline]) == {:match, expected}
+    end
+
+    test "global firstline looks up the newline again past a crossing match" do
+      assert :re.run("a\nab\nb", "a\na|b", [:global, :firstline]) ==
+               {:match, [[{0, 3}], [{3, 1}]]}
+    end
+
+    test "global firstline looks up the newline again for a retry past it" do
+      assert :re.run("a\nb\nb", "a\\n\\K|b", [:global, :firstline]) ==
+               {:match, [[{2, 0}], [{2, 1}]]}
+    end
+
     test "compile-time firstline pattern applies when running" do
       {:ok, compiled} = :re.compile("b", [:firstline])
 
