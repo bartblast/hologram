@@ -164,6 +164,10 @@ defmodule Hologram.Realtime.SSE do
   end
 
   # Public so tests can read what a client said without standing up a stream to say it on.
+  #
+  # The rules are the ones the client holds now: those this stream handed it, once it has, rather
+  # than those its bundle greeted with. A change of identity starts syncing again from the same
+  # request, and a client already told the current rules is not told them twice.
   @doc false
   @spec greeting(Plug.Conn.t()) :: map
   def greeting(conn) do
@@ -176,7 +180,7 @@ defmodule Hologram.Realtime.SSE do
           cursor: params["cursor"],
           model_hash: model_hash,
           page: page_module(page),
-          policy_hash: params["policy_hash"],
+          policy_hash: conn.assigns[:hologram_sync_policy_hash] || params["policy_hash"],
           protocol_version: parse_protocol_version(protocol_version),
           replica_id: params["replica_id"],
           replica_token: params["replica_token"]
@@ -867,6 +871,16 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
+  # Remembered on the stream once sent, so the greeting a later start reads names the rules the
+  # client holds now (see greeting/1).
+  defp maybe_send_rules(conn, _policy_hash, false = _stale_rules?), do: conn
+
+  defp maybe_send_rules(conn, policy_hash, _stale_rules?) do
+    send(self(), {:sync_rules, policy_hash, Rules.rendered()})
+
+    Plug.Conn.assign(conn, :hologram_sync_policy_hash, policy_hash)
+  end
+
   # The session ids are handed back unchanged: only the sync session moves.
   defp maybe_start_held_sync(conn, session_id, user_id, {:held, resume?}) do
     {conn, sync_session} = start_syncing(conn, user_id, resume?)
@@ -989,12 +1003,8 @@ defmodule Hologram.Realtime.SSE do
       # client resume under the old rules and be handed places vouching for the new ones.
       {:sync, page, cursor, policy_hash, stale_rules?} ->
         # Ahead of anything the gap or the session sends, so the client answers by the rules the
-        # rows that follow were judged under from the first render they reach. A change of identity
-        # starts syncing again with the same greeting and hands them over again, which a client
-        # takes the same way.
-        if stale_rules? do
-          send(self(), {:sync_rules, policy_hash, Rules.rendered()})
-        end
+        # rows that follow were judged under from the first render they reach.
+        conn = maybe_send_rules(conn, policy_hash, stale_rules?)
 
         # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
         # answers FALSE when it does not resume, and a session reads "no gap" from nil alone -

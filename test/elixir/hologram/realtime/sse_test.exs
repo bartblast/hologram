@@ -387,6 +387,17 @@ defmodule Hologram.Realtime.SSETest do
       assert greeting(conn).policy_hash == "0123456789abcdef"
     end
 
+    # A change of identity starts syncing again from the same request, and a client this stream
+    # already handed the current rules is not handed them twice.
+    test "reads the rules this stream handed the client over the ones its bundle greeted with" do
+      conn =
+        :get
+        |> Plug.Test.conn(sync_query_string("&policy_hash=0123456789abcdef"))
+        |> Plug.Conn.assign(:hologram_sync_policy_hash, "fedcba9876543210")
+
+      assert greeting(conn).policy_hash == "fedcba9876543210"
+    end
+
     test "reads the replica a client presents" do
       conn =
         Plug.Test.conn(
