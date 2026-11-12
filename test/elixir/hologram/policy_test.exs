@@ -13,6 +13,7 @@ defmodule Hologram.PolicyTest do
       framework_operations: 0,
       grant_role_qualifying_roles: 1,
       grant_role_qualifying_roles: 2,
+      hash: 1,
       held_chains: 2,
       locked_set_links: 1,
       operation_key: 1,
@@ -828,6 +829,168 @@ defmodule Hologram.PolicyTest do
 
     test "returns empty list when no rule covers the given role" do
       assert grant_role_qualifying_roles(Policy.Module1, :viewer) == []
+    end
+  end
+
+  describe "hash/1" do
+    defmodule HashedTask do
+      use Hologram.Entity
+
+      attribute :first, :string
+
+      derived :label, :string, fn first -> first <> "!" end
+
+      allow :read, when: label == "x"
+    end
+
+    defmodule HashedNote do
+      use Hologram.Entity
+
+      attribute :first, :string
+
+      derived :label, :string, fn first -> first <> "!" end
+
+      allow :read, when: first == "x"
+    end
+
+    defmodule HashedMember do
+      use Hologram.Entity
+
+      attribute :seat, :string
+
+      relationship :archive, Hologram.PolicyTest.HashedProject, optional: true
+      relationship :project, Hologram.PolicyTest.HashedProject, optional: true
+
+      allow :read
+    end
+
+    test "gives the same types the same hash, in any order" do
+      put_derived_definitions([HashedTask, HashedNote])
+
+      assert hash([HashedTask, HashedNote]) == hash([HashedNote, HashedTask])
+    end
+
+    test "gives a type a new hash when its rules change" do
+      narrow = """
+      attribute :archived, :boolean
+      attribute :public, :boolean
+
+      allow :read, when: public == true and archived == false
+      """
+
+      wide = """
+      attribute :archived, :boolean
+      attribute :public, :boolean
+
+      allow :read, when: public == true
+      """
+
+      assert hash_of_project(narrow) != hash_of_project(wide)
+    end
+
+    # Rules are OR'd, so lines written in another order decide the same thing.
+    test "gives a type the same hash when its allow lines are reordered" do
+      read_first = """
+      attribute :public, :boolean
+
+      allow :read, when: public == true
+      allow :read, when: public == false
+      """
+
+      read_second = """
+      attribute :public, :boolean
+
+      allow :read, when: public == false
+      allow :read, when: public == true
+      """
+
+      assert hash_of_project(read_first) == hash_of_project(read_second)
+    end
+
+    test "gives a type a new hash when a derived field its rules read changes" do
+      put_derived_definitions([HashedTask])
+
+      rules_hash = hash([HashedTask])
+
+      Derived.put_definitions(%{{HashedTask, :label} => {:value, "y"}})
+
+      assert hash([HashedTask]) != rules_hash
+    end
+
+    test "gives a type the same hash when a derived field no rule reads changes" do
+      put_derived_definitions([HashedNote])
+
+      rules_hash = hash([HashedNote])
+
+      Derived.put_definitions(%{{HashedNote, :label} => {:value, "y"}})
+
+      assert hash([HashedNote]) == rules_hash
+    end
+
+    test "gives a type a new hash when an inverse its rules walk changes" do
+      through_project = """
+      relationship :members, [Hologram.PolicyTest.HashedMember], inverse: project
+
+      allow :read, when: any(member <- members, member.seat == "full")
+      """
+
+      through_archive = """
+      relationship :members, [Hologram.PolicyTest.HashedMember], inverse: archive
+
+      allow :read, when: any(member <- members, member.seat == "full")
+      """
+
+      assert hash_of_project(through_project) != hash_of_project(through_archive)
+    end
+
+    test "gives a type a new hash when an inverse a derived set its rules read walks changes" do
+      through_project = """
+      relationship :members, [Hologram.PolicyTest.HashedMember], inverse: project
+
+      derived :full_members, [Hologram.PolicyTest.HashedMember], fn members ->
+        filter(members, seat == "full")
+      end
+
+      allow :read, when: any(member <- full_members, member.seat == "full")
+      """
+
+      through_archive = String.replace(through_project, "inverse: project", "inverse: archive")
+
+      assert hash_of_project(through_project) != hash_of_project(through_archive)
+    end
+
+    test "gives a type a new hash when an inverse a derived count its rules read walks changes" do
+      through_project = """
+      relationship :members, [Hologram.PolicyTest.HashedMember], inverse: project
+
+      derived :member_count, :integer, fn members -> count(members) end
+
+      allow :read, when: member_count > 0
+      """
+
+      through_archive = String.replace(through_project, "inverse: project", "inverse: archive")
+
+      assert hash_of_project(through_project) != hash_of_project(through_archive)
+    end
+
+    test "gives a type the same hash when an inverse no rule walks changes" do
+      through_project = """
+      attribute :public, :boolean
+
+      relationship :members, [Hologram.PolicyTest.HashedMember], inverse: project
+
+      allow :read, when: public == true
+      """
+
+      through_archive = """
+      attribute :public, :boolean
+
+      relationship :members, [Hologram.PolicyTest.HashedMember], inverse: archive
+
+      allow :read, when: public == true
+      """
+
+      assert hash_of_project(through_project) == hash_of_project(through_archive)
     end
   end
 
@@ -1765,5 +1928,28 @@ defmodule Hologram.PolicyTest do
                  Hologram.PolicyTest.VerdictProject
                ])
     end
+  end
+
+  # A deploy changes what a type declares while its name stays, so the type is defined again under
+  # one name for each version of it.
+  defp hash_of_project(body) do
+    ignore_module_conflict? = Code.get_compiler_option(:ignore_module_conflict)
+    Code.put_compiler_option(:ignore_module_conflict, true)
+
+    try do
+      Code.compile_string("""
+      defmodule Hologram.PolicyTest.HashedProject do
+        use Hologram.Entity
+
+      #{body}
+      end
+      """)
+    after
+      Code.put_compiler_option(:ignore_module_conflict, ignore_module_conflict?)
+    end
+
+    put_derived_definitions([Hologram.PolicyTest.HashedProject])
+
+    hash([Hologram.PolicyTest.HashedProject])
   end
 end

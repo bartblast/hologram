@@ -7,6 +7,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.DB.Oplog
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
+  alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -908,10 +909,10 @@ defmodule Hologram.Realtime.SSE do
   # either told what it missed, or told to let go of what it holds - and is then filled the same
   # way a first arrival is. Deciding it here rather than in the session keeps the session a reader
   # of rounds and nothing else, and puts the answer beside the reload notice it stands next to.
-  defp gap(nil, _user_id), do: {nil, nil}
+  defp gap(nil, _user_id, _policy_hash), do: {nil, nil}
 
-  defp gap(cursor, user_id) do
-    case Catchup.gap(cursor, user_id) do
+  defp gap(cursor, user_id, policy_hash) do
+    case Catchup.gap(cursor, user_id, policy_hash) do
       {:ok, effects, grants_then} ->
         {effects, grants_then}
 
@@ -973,10 +974,16 @@ defmodule Hologram.Realtime.SSE do
 
     case SyncHandshake.check(greeting) do
       {:sync, page, cursor} ->
-        # Named rather than written inline as `resume? && gap(cursor, user_id)`: that answers
-        # FALSE when it does not resume, and a session reads "no gap" from nil alone - anything
-        # else and it sets about replaying something it cannot walk.
-        {gap, grants_then} = if resume?, do: gap(cursor, user_id), else: {nil, nil}
+        # The rules this session judges rows by, read once for both the door a returning client
+        # passes and the places the session hands over: read twice, a live reload between the two
+        # reads could let a client resume under the old rules and be handed places vouching for
+        # the new ones.
+        policy_hash = Policy.hash()
+
+        # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
+        # answers FALSE when it does not resume, and a session reads "no gap" from nil alone -
+        # anything else and it sets about replaying something it cannot walk.
+        {gap, grants_then} = if resume?, do: gap(cursor, user_id, policy_hash), else: {nil, nil}
 
         # What a rule reads besides its own row, so a row the gap never names can be judged again
         # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
@@ -1004,6 +1011,7 @@ defmodule Hologram.Realtime.SSE do
             gap: gap,
             grants_then: grants_then,
             page: page,
+            policy_hash: policy_hash,
             replica_id: replica_id
           )
 

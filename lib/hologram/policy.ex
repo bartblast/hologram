@@ -63,10 +63,15 @@ defmodule Hologram.Policy do
   alias Hologram.Entity.Validator, as: EntityValidator
   alias Hologram.MisuseError
   alias Hologram.Policy.Expression
+  alias Hologram.Query
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
   @deciding_quantifiers_key {__MODULE__, :deciding_quantifiers}
+
+  @hash_bytes 16
+
+  @hash_key {__MODULE__, :hash}
 
   @locked_set_links_key {__MODULE__, :locked_set_links}
 
@@ -400,6 +405,48 @@ defmodule Hologram.Policy do
   end
 
   @doc """
+  Returns the hash identifying the rules of the project's compiled data model (see `hash/1`).
+
+  Cached, with the model facts: every client arriving to sync is asked about it. Raises while the
+  data model is under a hold (see `Hologram.Entity.Model.ensure_released!/0`).
+  """
+  @spec hash() :: String.t()
+  def hash do
+    Model.ensure_released!()
+
+    case :persistent_term.get(@hash_key, nil) do
+      nil ->
+        rules_hash = hash(Model.entity_types())
+
+        :persistent_term.put(@hash_key, rules_hash)
+
+        rules_hash
+
+      rules_hash ->
+        rules_hash
+    end
+  end
+
+  @doc """
+  Returns the hash identifying what decides who may do what to the rows of the given entity types -
+  a lowercase hex string of the truncated SHA-256 of a pinned encoding, so a build and the node
+  running it agree across OTP releases.
+
+  It covers what the model hash leaves out on purpose and the rules read: each type's rules and the
+  operations they name, the definitions of the derived fields the rules read, and the inverse
+  relationships their chains walk. A derived field or an inverse no rule reads is left out, so
+  changing one moves no hash. Rules are OR'd, so their order within an operation, and the order of
+  the types, move nothing either.
+  """
+  @spec hash(list(module)) :: String.t()
+  def hash(entity_types) do
+    entity_types
+    |> Map.new(&{&1, rules_term(&1)})
+    |> :erlang.term_to_binary([:deterministic, minor_version: 2])
+    |> CryptographicUtils.short_digest(@hash_bytes)
+  end
+
+  @doc """
   Returns the chains `related_chains/2` returns for the given operation of the given entity type
   that a client answers from the rows it holds, sorted: those its rules read outside any deciding
   quantifier (see `deciding_quantifier?/2`), whose sets and the rows on the way to them the server's
@@ -569,6 +616,7 @@ defmodule Hologram.Policy do
   @spec reset_model_facts_cache() :: :ok
   def reset_model_facts_cache do
     :persistent_term.erase(@deciding_quantifiers_key)
+    :persistent_term.erase(@hash_key)
     :persistent_term.erase(@locked_set_links_key)
     :persistent_term.erase(@model_facts_key)
 
@@ -778,6 +826,13 @@ defmodule Hologram.Policy do
     end)
   end
 
+  # The inverses the given clauses walk from a row of the given entity type.
+  defp clause_inverses(entity_type, clauses) do
+    clauses
+    |> Stage.relationship_chains()
+    |> Enum.flat_map(&walked_inverses(entity_type, &1))
+  end
+
   # The set links the given clauses read on a row of the first of the given types, with the rows of
   # the others above it, every quantifier among them at both polarities, and those of the derived
   # fields they read - their names resolved through the given prefixes, the relationships from a row
@@ -858,6 +913,31 @@ defmodule Hologram.Policy do
   end
 
   defp definition_links({:value, _value}, _entity_type, _walked), do: []
+
+  # The inverses the given derived field definition of the given entity type walks: along a query's
+  # chain and its filter's, along a condition's chains, and along a path to a related row's value.
+  defp definition_inverses(_owner, {:query, %Query{} = term}) do
+    {source_owner, chain} = term.source
+
+    walked_inverses(source_owner, chain) ++ clause_inverses(term.entity, term.filter)
+  end
+
+  defp definition_inverses(owner, {:concat, operands}) do
+    Enum.flat_map(operands, &definition_inverses(owner, &1))
+  end
+
+  defp definition_inverses(owner, {:condition, clauses}), do: clause_inverses(owner, clauses)
+
+  defp definition_inverses(owner, {:if, clauses, then_value, else_value}) do
+    clause_inverses(owner, clauses) ++
+      definition_inverses(owner, then_value) ++ definition_inverses(owner, else_value)
+  end
+
+  defp definition_inverses(owner, {:name, path}) when is_list(path) do
+    walked_inverses(owner, Enum.drop(path, -1))
+  end
+
+  defp definition_inverses(_owner, _definition), do: []
 
   defp derived_deciding_quantifiers(entity_type) do
     entity_type
@@ -1250,6 +1330,50 @@ defmodule Hologram.Policy do
     quantifier_links ++ field_links
   end
 
+  # What the policy hash covers of the given entity type: its rules, each operation's sorted, the
+  # operations its lines name, and what the rules read beyond the row's stored values. A derived
+  # field's definition and an inverse's declaration are code the model hash never sees, so a rule
+  # reading one changes what it decides when they change.
+  defp rules_term(entity_type) do
+    rules = build(entity_type)
+
+    predicates =
+      rules
+      |> Map.values()
+      |> Enum.concat()
+      |> Enum.flat_map(& &1.predicates)
+
+    derived =
+      entity_type
+      |> Derived.read_fields(predicates)
+      |> Enum.map(fn {type, name} -> {type, name, Derived.definition(type, name)} end)
+
+    # A derived field's definition names the relationships it reads but not what an inverse among
+    # them reverses, so the inverses its definition walks are taken with the rules' own.
+    definition_inverses =
+      Enum.flat_map(derived, fn {type, _name, definition} ->
+        definition_inverses(type, definition)
+      end)
+
+    inverses =
+      entity_type
+      |> related_chains()
+      |> Enum.flat_map(&walked_inverses(entity_type, &1))
+      |> Enum.concat(definition_inverses)
+      |> Enum.uniq()
+      |> Enum.sort()
+
+    %{
+      derived: derived,
+      inverses: inverses,
+      operations: operations(entity_type),
+      rules:
+        Map.new(rules, fn {operation, operation_rules} ->
+          {operation, Enum.sort(operation_rules)}
+        end)
+    }
+  end
+
   # The given predicates without their deciding quantifiers - in a disjunction's alternatives too.
   defp undecided_predicates(entity_type, predicates) do
     Enum.flat_map(predicates, fn
@@ -1279,5 +1403,21 @@ defmodule Hologram.Policy do
         message:
           "invalid policy #{inspect(policy_module)} taken in #{inspect(module)} - #{inspect(policy_module)} is not a policy module (define it with use Hologram.Policy)"
     end
+  end
+
+  # The inverses the given chain walks from the given entity type, each as the type declaring it,
+  # its name and what it reverses. A chain may run through a derived field holding rows, whose own
+  # inverses its definition answers for.
+  defp walked_inverses(entity_type, chain) do
+    chain
+    |> Enum.with_index()
+    |> Enum.flat_map(fn {name, index} ->
+      hop_type = Derived.path_target(entity_type, Enum.take(chain, index))
+
+      case Entity.inverse_relationship(hop_type, name) do
+        nil -> []
+        inverse -> [{hop_type, name, inverse}]
+      end
+    end)
   end
 end

@@ -54,6 +54,7 @@ defmodule Hologram.Sync.SessionTest do
   @other_page MyApp.SettingsPage
   @other_window "w_other"
   @page MyApp.BoardPage
+  @policy_hash "0123456789abcdef0123456789abcdef"
   @project_window "w_project"
   @public_project_window "w_public_project"
   @reach_window "w_reach"
@@ -158,6 +159,7 @@ defmodule Hologram.Sync.SessionTest do
       opts
       |> Keyword.put_new(:client, self())
       |> Keyword.put_new(:page, @page)
+      |> Keyword.put_new(:policy_hash, @policy_hash)
 
     session = start_supervised!(Supervisor.child_spec({Session, opts}, id: make_ref()))
 
@@ -306,11 +308,11 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0}, gap: gap)
 
       assert_receive {:sync_deltas, first_cursor, first_deltas, _applied_seq}
-      assert Cursor.decode(first_cursor) == {:ok, 900, 2}
+      assert Cursor.decode(first_cursor) == {:ok, 900, 2, @policy_hash}
       assert length(first_deltas) == 2
 
       assert_receive {:sync_deltas, second_cursor, second_deltas, _applied_seq}
-      assert Cursor.decode(second_cursor) == {:ok, 900, 4}
+      assert Cursor.decode(second_cursor) == {:ok, 900, 4, @policy_hash}
       assert length(second_deltas) == 2
     end
 
@@ -827,7 +829,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0})
 
       assert_receive {:sync_synced, :all, cursor}
-      assert cursor == Cursor.encode(200, 0)
+      assert cursor == Cursor.encode(200, 0, @policy_hash)
     end
 
     # The claim a place makes is "everything up to here is applied", which a client holding one
@@ -852,7 +854,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0}, gap: [])
 
       assert_receive {:sync_synced, :page, cursor}
-      assert cursor == Cursor.encode(200, 0)
+      assert cursor == Cursor.encode(200, 0, @policy_hash)
     end
   end
 
@@ -1202,7 +1204,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), nil)
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 200, 0}
+      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash}
     end
 
     # A returning client kept what it had, so it can date its store from the first frame - there is
@@ -1216,7 +1218,26 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0}, gap: [gap_effect(moved.id, {900, 7})])
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
+    end
+
+    # The rules the session judged its rows by, not whatever rules are current when a frame goes
+    # out: a place vouches for what the client holds there.
+    test "dates its places under the rules it was started with" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      other_policy_hash = "fedcba9876543210fedcba9876543210"
+
+      start_session!(
+        fill_place: {200, 0},
+        gap: [gap_effect(moved.id, {900, 7})],
+        policy_hash: other_policy_hash
+      )
+
+      assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, other_policy_hash}
     end
 
     # A window the page map reaches but the query cache no longer holds - what a live reload leaves
@@ -1237,7 +1258,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 7})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
     end
 
     test "claims the place of the window furthest behind, not the one furthest ahead" do
@@ -1256,7 +1277,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 0})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 200, 0}
+      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash}
     end
 
     test "claims the newer place once every window has caught up to it" do
@@ -1274,7 +1295,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 0})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 0}
+      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash}
     end
 
     # A round arriving out of order must not walk a window's place backwards: both places it could
@@ -1293,7 +1314,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {500, 0})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 0}
+      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash}
     end
   end
 
@@ -1323,7 +1344,8 @@ defmodule Hologram.Sync.SessionTest do
 
       connection =
         spawn(fn ->
-          {:ok, session} = Session.start_link(client: test_pid, page: @page)
+          {:ok, session} =
+            Session.start_link(client: test_pid, page: @page, policy_hash: @policy_hash)
 
           send(test_pid, {:connected, session})
 

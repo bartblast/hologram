@@ -126,9 +126,10 @@ defmodule Hologram.Sync.Frame do
   Builds the SSE event-stream chunk telling a client to drop everything it holds, because what
   follows is the whole of what it may see rather than what changed.
 
-  Sent when a returning client cannot be told what it missed - its place could not be read, the
-  place predates the log, or the gap spans a change of model. The reason says which, for the sake
-  of whoever is looking at why a client paid for a resync, and the client does the same thing
+  Sent when a returning client cannot be told what it missed - its place could not be read, it was
+  judged under rules other than the current ones, the place predates the log, the gap is too big to
+  be worth replaying, or the gap spans a change of model. The reason says which, for the sake of
+  whoever is looking at why a client paid for a resync, and the client does the same thing
   whichever it is.
 
   It is its own chunk rather than a flag on the rows that follow, because there may be none: a
