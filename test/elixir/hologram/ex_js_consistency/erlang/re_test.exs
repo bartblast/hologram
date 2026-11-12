@@ -1166,6 +1166,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert :re.run("😀", "x*", [:global, :unicode]) == {:match, [[{0, 0}], [{4, 0}]]}
     end
 
+    test "global reports byte offsets of captures before the match start in unicode mode" do
+      assert :re.run("aé😀b", "(?<=(é😀))b|é", [:global, :unicode]) ==
+               {:match, [[{1, 2}], [{7, 1}, {1, 6}]]}
+    end
+
+    test "global converts byte offsets in one pass over a unicode subject" do
+      subject = String.duplicate("é ", 100)
+      expected = for k <- 0..99, do: [{3 * k, 2}]
+
+      assert :re.run(subject, "é", [:global, :unicode]) == {:match, expected}
+    end
+
     test "global starts at the offset" do
       assert :re.run("abab", "a", [:global, {:offset, 1}]) == {:match, [[{2, 1}]]}
     end

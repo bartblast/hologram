@@ -490,6 +490,35 @@ export default class RegexEngine {
     return byteOffset;
   }
 
+  // Returns a function that converts JS string indices of the text to UTF-8
+  // byte offsets. The byte offsets computed so far are kept, so a series of
+  // conversions walks the text once in total, in any call order, instead of
+  // once per conversion. Indices up to the text length are accepted.
+  static utf16IndexToByteOffsetConverter(text) {
+    // byteOffsets[i] is the byte offset of JS string index i
+    const byteOffsets = [0];
+
+    return (utf16Index) => {
+      while (byteOffsets.length <= utf16Index) {
+        const index = byteOffsets.length - 1;
+        const codePoint = text.codePointAt(index);
+
+        const byteOffset =
+          byteOffsets[index] + $.#calculateCodePointByteCount(codePoint);
+
+        // An index inside a surrogate pair maps to the offset after the
+        // pair, like utf16IndexToByteOffset() does
+        if (codePoint > 0xffff) {
+          byteOffsets.push(byteOffset, byteOffset);
+        } else {
+          byteOffsets.push(byteOffset);
+        }
+      }
+
+      return byteOffsets[utf16Index];
+    };
+  }
+
   static #calculateCodePointByteCount(codePoint) {
     // 1-byte: ASCII
     if (codePoint <= 0x7f) return 1;

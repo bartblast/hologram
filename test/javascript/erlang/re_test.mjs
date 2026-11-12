@@ -6,6 +6,7 @@ import {
   buildArgumentErrorMsg,
   buildMultiArgumentErrorMsg,
   defineRuntimeGlobals,
+  sinon,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
@@ -2328,6 +2329,50 @@ describe("Erlang_Re", () => {
       ]);
 
       assertGlobalMatchResult(result, [[[0, 0]], [[4, 0]]]);
+    });
+
+    it("global reports byte offsets of captures before the match start in unicode mode", () => {
+      const result = run(
+        Type.bitstring("aé😀b"),
+        Type.bitstring("(?<=(é😀))b|é"),
+        [Type.atom("global"), Type.atom("unicode")],
+      );
+
+      assertGlobalMatchResult(result, [
+        [[1, 2]],
+        [
+          [7, 1],
+          [1, 6],
+        ],
+      ]);
+    });
+
+    it("global converts byte offsets in one pass over a unicode subject", () => {
+      // The spy counts every codePointAt() call of the run, so the pattern
+      // takes the native route and never matches empty: the interpreter and
+      // the empty-match scan advance read code points too
+      const subject = "é ".repeat(100);
+      const codePointAtSpy = sinon.spy(String.prototype, "codePointAt");
+
+      let result;
+
+      try {
+        result = run(Type.bitstring(subject), Type.bitstring("é"), [
+          Type.atom("global"),
+          Type.atom("unicode"),
+        ]);
+      } finally {
+        codePointAtSpy.restore();
+      }
+
+      const expected = [];
+
+      for (let k = 0; k < 100; k++) {
+        expected.push([[3 * k, 2]]);
+      }
+
+      assertGlobalMatchResult(result, expected);
+      assert.isAtMost(codePointAtSpy.callCount, 2 * subject.length);
     });
 
     it("global starts at the offset", () => {
