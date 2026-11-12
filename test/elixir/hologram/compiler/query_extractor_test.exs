@@ -41,6 +41,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module128
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module130
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module131
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module132
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
@@ -545,6 +546,56 @@ defmodule Hologram.Compiler.QueryExtractorTest do
         |> Map.new()
 
       refute Map.has_key?(queries, :bound_entity_label)
+    end
+
+    test "registers nothing for a field returning an entity a stage changed an attribute of", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module132
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      refute Map.has_key?(queries, :edited)
+    end
+
+    test "registers nothing for a field returning an entity a stage changed a counter of", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module132
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      refute Map.has_key?(queries, :bumped)
+    end
+
+    test "registers nothing for a field returning an entity it trusts", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module132
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      refute Map.has_key?(queries, :trusted_row)
+    end
+
+    test "registers an entity type the field trusts as a query of every row", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module132
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert queries.trusted_entity_type == [
+               %Query{entity: Entity2, sort: [id: :asc], trust: true}
+             ]
     end
 
     test "doesn't run a field computing a plain value", %{queries: queries} do

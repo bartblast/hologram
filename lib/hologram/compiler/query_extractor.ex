@@ -36,6 +36,10 @@ defmodule Hologram.Compiler.QueryExtractor do
   @fork_signal :hologram_query_extractor_fork
   @prune_signal :hologram_query_extractor_prune
 
+  # The query stages that return a query. The other stages change an entity - an attribute, a
+  # counter, a relationship or a claim - and return it, and trust/1 returns what it is given.
+  @query_building_stages [:count, :filter, :include, :one, :paginate, :skip, :sort, :take]
+
   defmodule SymbolicQuery do
     @moduledoc false
 
@@ -369,9 +373,9 @@ defmodule Hologram.Compiler.QueryExtractor do
     {value, state_after_call}
   end
 
-  # Whether the given derived field's function builds a query - calls a query stage, or returns an
-  # entity type, itself or through a function of the project it calls. Only the IR is read, nothing
-  # is run, so a function computing a plain value costs the build nothing.
+  # Whether the given derived field's function builds a query - calls a stage that returns a query,
+  # or returns an entity type, itself or through a function of the project it calls. Only the IR is
+  # read, nothing is run, so a function computing a plain value costs the build nothing.
   defp builds_query?(capture, entity_types, ir_plt) do
     info = Function.info(capture)
     mfa = {info[:module], info[:name], info[:arity]}
@@ -1602,9 +1606,9 @@ defmodule Hologram.Compiler.QueryExtractor do
     )
   end
 
-  # Whether the given function calls a query stage, or returns an entity type when its result is the
-  # field's (tail? true), itself or through the functions of the project it calls - each walked once
-  # per position, so recursion ends.
+  # Whether the given function calls a stage that returns a query, or returns an entity type when
+  # its result is the field's (tail? true), itself or through the functions of the project it
+  # calls - each walked once per position, so recursion ends.
   defp reaches_query?({module, function, arity} = mfa, tail?, entity_types, ir_plt, seen) do
     key = {mfa, tail?}
 
@@ -1882,22 +1886,45 @@ defmodule Hologram.Compiler.QueryExtractor do
          entity_types,
          ir_plt,
          seen
-       ) do
+       )
+       when target in [Query, Stage] do
     cond do
-      target in [Query, Stage] ->
+      function in @query_building_stages ->
         {true, seen}
 
-      interpretable_module?(target) and not framework_module?(target) ->
-        case reaches_query?({target, function, length(args)}, tail?, entity_types, ir_plt, seen) do
-          {true, next_seen} ->
-            {true, next_seen}
-
-          {false, next_seen} ->
-            scan_args_reach_query?(args, scope, entity_types, ir_plt, next_seen)
-        end
+      # trust/1 returns what it is given, so its argument stands where the call does.
+      function == :trust ->
+        args
+        |> Enum.map(&{&1, tail?})
+        |> scan_reaches_query?(scope, entity_types, ir_plt, seen)
 
       true ->
         scan_args_reach_query?(args, scope, entity_types, ir_plt, seen)
+    end
+  end
+
+  defp scan_node_reaches_query?(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: target},
+           function: function,
+           args: args
+         },
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    if interpretable_module?(target) and not framework_module?(target) do
+      case reaches_query?({target, function, length(args)}, tail?, entity_types, ir_plt, seen) do
+        {true, next_seen} ->
+          {true, next_seen}
+
+        {false, next_seen} ->
+          scan_args_reach_query?(args, scope, entity_types, ir_plt, next_seen)
+      end
+    else
+      scan_args_reach_query?(args, scope, entity_types, ir_plt, seen)
     end
   end
 
@@ -1996,8 +2023,9 @@ defmodule Hologram.Compiler.QueryExtractor do
     do: {false, seen}
 
   # Walks the given IR nodes, each with whether it stands where the field's result comes from, for
-  # a query stage call, a call into the project reaching one, and an entity type in that position -
-  # through a block's last expression, a branch's bodies, a call's callee and a variable's bind.
+  # a call of a stage that returns a query, a call into the project reaching one, and an entity type
+  # in that position - through a block's last expression, a branch's bodies, a call's callee and a
+  # variable's bind.
   defp scan_reaches_query?([], _scope, _entity_types, _ir_plt, seen), do: {false, seen}
 
   defp scan_reaches_query?([{node, tail?} | rest], scope, entity_types, ir_plt, seen) do
