@@ -1626,11 +1626,14 @@ export default class Renderer {
   }
 
   // Based on Hologram.Component.Derived's unset_hint/2
+  //
+  // Names init/2 where the server names init/3: a component the server initialized has its state
+  // set by init/3 before the client sees it, so a state left unset here is one init/2 left unset.
   static #derivedUnsetHint(moduleProxy, name) {
     if (
       Renderer.#getDeclaredStateNames(moduleProxy).has(Type.encodeMapKey(name))
     ) {
-      return "give it a default or set it in init/3";
+      return "give it a default or set it in init/2";
     }
 
     if ("__params__/0" in moduleProxy) {

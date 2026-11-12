@@ -1273,7 +1273,7 @@ describe("Renderer derived fields", () => {
       assertBoxedError(
         () => render(statefulNode("MyApp.UnsetState")),
         "Hologram.MisuseError",
-        "derived field :double in MyApp.UnsetState reads :step, which is not set - give it a default or set it in init/3",
+        "derived field :double in MyApp.UnsetState reads :step, which is not set - give it a default or set it in init/2",
       );
     });
   });
