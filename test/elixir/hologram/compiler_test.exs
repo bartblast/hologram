@@ -24,6 +24,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
+  alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
 
   alias Hologram.Test.Fixtures.Component.Module1, as: ComponentModule1
@@ -68,6 +69,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
   alias Hologram.Test.Fixtures.Entity.Module44, as: Entity44
   alias Hologram.Test.Fixtures.Entity.Module45, as: Entity45
+  alias Hologram.Test.Fixtures.Entity.Module46, as: Entity46
+  alias Hologram.Test.Fixtures.Entity.Module47, as: Entity47
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
@@ -472,6 +475,18 @@ defmodule Hologram.CompilerTest do
     |> PLT.put(Module2, info)
     |> PLT.put(Module3, info)
     |> PLT.put(Hologram.JS, info)
+  end
+
+  # The given term as a sync frame carries it, decoded.
+  defp serialized(term) do
+    term
+    |> Serializer.serialize!()
+    |> Jason.decode!()
+  end
+
+  # An entry without the members whose terms the runtime script and a sync frame spell differently.
+  defp without_terms(entry) do
+    Map.drop(entry, ["constraints", "defaults"])
   end
 
   defp write_js_input(test_tmp_dir, relative_path, content) do
@@ -9551,7 +9566,41 @@ defmodule Hologram.CompilerTest do
 
       label = "Hologram.Test.Fixtures.Entity.Module42"
 
-      assert decoded_rules([Entity42])[label] == baked_model([Entity42])[label]
+      assert without_terms(decoded_rules([Entity42])[label]) ==
+               without_terms(baked_model([Entity42])[label])
+    end
+
+    # The runtime script spells them as JavaScript, and a sync frame carries JSON.
+    test "serializes the terms among the defaults" do
+      entry = decoded_rules([Entity13])["Hologram.Test.Fixtures.Entity.Module13"]
+
+      assert entry["defaults"] == %{"public" => serialized(false)}
+    end
+
+    test "serializes the terms among the constraints" do
+      entry = decoded_rules([Entity47])["Hologram.Test.Fixtures.Entity.Module47"]
+
+      assert entry["constraints"] == %{
+               "count" => %{"min" => serialized(1)},
+               "email" => %{
+                 "format" => %{
+                   "opts" => serialized([:dotall, {:newline, :anycrlf}]),
+                   "source" => "@"
+                 },
+                 "optional" => true
+               }
+             }
+    end
+
+    # A client boxing a row of a type the bundle never held reads the type's entry.
+    test "renders a type an inverse of a rendered type leads to" do
+      rules = decoded_rules([Entity44, Entity46])
+
+      assert Map.keys(rules) == [
+               "Hologram.Auth.RoleGrant",
+               "Hologram.Test.Fixtures.Entity.Module44",
+               "Hologram.Test.Fixtures.Entity.Module46"
+             ]
     end
 
     # Rules a deploy added can read a type the client's bundle never held, and the client needs its
@@ -9559,14 +9608,14 @@ defmodule Hologram.CompilerTest do
     test "renders a type declaring no rule or role that a rule reads through a relationship" do
       label = "Hologram.Test.Fixtures.Entity.Module44"
 
-      assert decoded_rules([Entity44, Entity45])[label] ==
-               baked_model([Entity44, Entity45])[label]
+      assert without_terms(decoded_rules([Entity44, Entity45])[label]) ==
+               without_terms(baked_model([Entity44, Entity45])[label])
     end
 
     # A type declaring no rule and no role is one the client reads as the server's default deny, by
     # finding no entry for it.
     test "leaves out a type declaring no rule and no role that no rule reads" do
-      rules = decoded_rules([Entity44])
+      rules = decoded_rules([Entity4])
 
       assert Map.keys(rules) == ["Hologram.Auth.RoleGrant"]
     end
@@ -9575,7 +9624,10 @@ defmodule Hologram.CompilerTest do
     test "renders the grant store's entry" do
       label = "Hologram.Auth.RoleGrant"
 
-      assert decoded_rules([]) == %{label => baked_model([RoleGrant])[label]}
+      rules = decoded_rules([])
+
+      assert Map.keys(rules) == [label]
+      assert without_terms(rules[label]) == without_terms(baked_model([RoleGrant])[label])
     end
   end
 

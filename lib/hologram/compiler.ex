@@ -29,6 +29,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
+  alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
 
   # The declaration options a write is judged against, which is why they are the ones baked into
@@ -2637,20 +2638,33 @@ defmodule Hologram.Compiler do
   @doc """
   Renders, as a JSON object keyed by label, the client's model entry of every entity type a build
   checking permissions bakes whatever the pages reach, out of the given ones - those declaring a
-  rule or a role, the types their rules read through relationships, and the grant store - each the
-  way that build bakes it.
+  rule or a role, the types their rules read through relationships, and the grant store - and of
+  every type the derived fields and inverses of those entries lead to, each the way that build
+  bakes it, but for the terms among its defaults and constraints, which are serialized (see
+  `Hologram.Runtime.Serializer`) where the runtime script spells them as JavaScript.
 
   What a server sends a client whose bundle was built with other rules but the same model, so it
   answers permission checks the way the server does without reloading. A whole entry rather than
-  its rules alone, because rules a deploy added can read a type the client's bundle never held. A
-  type left out declares no rule and no role, which is the server's own default deny.
+  its rules alone, because rules a deploy added can read a type the client's bundle never held, and
+  a derived field it redefined can lead to one. A type left out of the checked ones declares no
+  rule and no role, which is the server's own default deny.
   """
   @spec render_rules(list(module)) :: String.t()
   def render_rules(entity_types) do
     entity_types
     |> checked_entity_types()
     |> MapSet.put(RoleGrant)
-    |> render_entity_model(true)
+    |> rules_entity_types()
+    |> Enum.sort()
+    |> Enum.map(fn entity_type ->
+      entry =
+        entity_type
+        |> entity_model_members(true, &Serializer.serialize!/1)
+        |> render_json_object()
+
+      {Codec.encode_enum_value(entity_type), entry}
+    end)
+    |> render_json_object()
   end
 
   @doc """
@@ -4389,6 +4403,36 @@ defmodule Hologram.Compiler do
     |> MapSet.new()
   end
 
+  # The given entity types with every type their derived fields holding rows and their inverses
+  # lead to, and those types' own in turn: a client boxing a row of one reads the type's entry.
+  defp rules_entity_types(entity_types) do
+    led_to =
+      entity_types
+      |> Enum.flat_map(fn entity_type ->
+        derived_targets =
+          Enum.flat_map(entity_type.__derived__(), fn
+            {_name, [target], _opts} -> [target]
+            {_name, type, _opts} -> if Reflection.alias?(type), do: [type], else: []
+          end)
+
+        inverse_targets =
+          Enum.map(entity_type.__inverse_relationships__(), fn {name, _type, _opts} ->
+            Entity.inverse_relationship(entity_type, name).target
+          end)
+
+        derived_targets ++ inverse_targets
+      end)
+      |> MapSet.new()
+
+    if MapSet.subset?(led_to, entity_types) do
+      entity_types
+    else
+      entity_types
+      |> MapSet.union(led_to)
+      |> rules_entity_types()
+    end
+  end
+
   # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states. A
   # page's MFAs as its bundle was built from them are read from the page MFAs PLT. A page with no
   # list there counts as moved: its state was loaded from the compile state dump, which does not hold
@@ -4475,22 +4519,25 @@ defmodule Hologram.Compiler do
   # The inner keys are the option names as Elixir spells them (min_length, not minLength) rather
   # than in the camelCase of their neighbours, because they are also the words a violation is
   # reported in - one spelling, written by the build and read back in the answer.
-  defp render_constraints(entity_type) do
+  #
+  # The terms among them - a bound, a pattern's options - are written by the given function: as
+  # JavaScript for the runtime script, and serialized for a sync frame, which carries JSON.
+  defp render_constraints(entity_type, encode_term) do
     entity_type.__attributes__()
     |> Enum.filter(fn {_name, _type, opts} ->
       Enum.any?(@baked_constraint_opts, &Keyword.has_key?(opts, &1))
     end)
     |> Enum.map(fn {name, _type, opts} ->
-      {Atom.to_string(name), render_attribute_constraints(opts)}
+      {Atom.to_string(name), render_attribute_constraints(opts, encode_term)}
     end)
     |> render_json_object()
   end
 
-  defp render_attribute_constraints(opts) do
+  defp render_attribute_constraints(opts, encode_term) do
     @baked_constraint_opts
     |> Enum.flat_map(fn key ->
       case Keyword.fetch(opts, key) do
-        {:ok, value} -> [{Atom.to_string(key), render_constraint_value(key, value)}]
+        {:ok, value} -> [{Atom.to_string(key), render_constraint_value(key, value, encode_term)}]
         :error -> []
       end
     end)
@@ -4500,8 +4547,8 @@ defmodule Hologram.Compiler do
   # A bound travels as the ENCODED TERM its literal becomes, for the reason a default does: a
   # violation names the bound the declaration wrote, and a float attribute takes both `max: 5` and
   # `max: 5.0`, which the wire spells alike.
-  defp render_constraint_value(key, value) when key in [:max, :min] do
-    Encoder.encode_term!(value)
+  defp render_constraint_value(key, value, encode_term) when key in [:max, :min] do
+    encode_term.(value)
   end
 
   # A pattern travels as its source and its options rather than as a compiled one: a compiled
@@ -4512,11 +4559,11 @@ defmodule Hologram.Compiler do
   # The options travel as an ENCODED TERM rather than as their names, because not all of them are
   # names: ~r/x/s reads back as [:dotall, {:newline, :anycrlf}], and a tuple has no name to write.
   # Model.normalize_value/1 keeps the same list whole for the same reason.
-  defp render_constraint_value(:format, value) do
+  defp render_constraint_value(:format, value, encode_term) do
     opts =
       value
       |> Regex.opts()
-      |> Encoder.encode_term!()
+      |> encode_term.()
 
     source =
       value
@@ -4528,7 +4575,7 @@ defmodule Hologram.Compiler do
 
   # A range travels as its three parts, the step included - `in: 0..100//5` admits 5 and refuses
   # 7, so a client told only the ends would answer differently from the server.
-  defp render_constraint_value(:in, value) do
+  defp render_constraint_value(:in, value, _encode_term) do
     render_json_object([
       {"first", Jason.encode!(value.first)},
       {"last", Jason.encode!(value.last)},
@@ -4536,7 +4583,7 @@ defmodule Hologram.Compiler do
     ])
   end
 
-  defp render_constraint_value(_key, value), do: Jason.encode!(value)
+  defp render_constraint_value(_key, value, _encode_term), do: Jason.encode!(value)
 
   # A set's declared order, spelled the way a term spells one - each entry a name and a direction.
   defp render_declared_order(target, sort) do
@@ -4554,14 +4601,14 @@ defmodule Hologram.Compiler do
   #
   # Only the attributes declaring one are named - an attribute with no default has nothing to
   # apply, and the reader fills its field the way an absent value is filled anyway.
-  defp render_defaults(entity_type) do
+  defp render_defaults(entity_type, encode_term) do
     entity_type.__attributes__()
     |> Enum.filter(fn {_name, _type, opts} -> Keyword.has_key?(opts, :default) end)
     |> Enum.map(fn {name, _type, opts} ->
       default =
         opts
         |> Keyword.fetch!(:default)
-        |> Encoder.encode_term!()
+        |> encode_term.()
 
       {Atom.to_string(name), default}
     end)
@@ -4798,6 +4845,14 @@ defmodule Hologram.Compiler do
   end
 
   defp render_entity_model_entry(entity_type, permission_checking?) do
+    entity_type
+    |> entity_model_members(permission_checking?, &Encoder.encode_term!/1)
+    |> render_json_object()
+  end
+
+  # The members of the client's model entry of the given entity type, each rendered, by name, the
+  # terms among the defaults and constraints written by the given function.
+  defp entity_model_members(entity_type, permission_checking?, encode_term) do
     attributes =
       entity_type.__attributes__()
       |> Enum.concat(entity_type.__system_attributes__())
@@ -4810,11 +4865,11 @@ defmodule Hologram.Compiler do
       |> Enum.sort()
       |> Jason.encode!()
 
-    render_json_object([
+    [
       {"attributes", attributes},
-      {"constraints", render_constraints(entity_type)},
+      {"constraints", render_constraints(entity_type, encode_term)},
       {"creatorRoles", render_creator_roles(entity_type)},
-      {"defaults", render_defaults(entity_type)},
+      {"defaults", render_defaults(entity_type, encode_term)},
       {"derived", render_derived(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
       {"expandedRoles", render_expanded_roles(entity_type)},
@@ -4825,7 +4880,7 @@ defmodule Hologram.Compiler do
       {"relationships", render_relationships(entity_type)},
       {"roles", render_roles(entity_type)},
       {"serverOnly", server_only}
-    ])
+    ]
   end
 
   # A type with no enum attributes carries an empty object rather than nothing at all - the reader

@@ -1491,6 +1491,8 @@ describe("Model", () => {
     it("takes the whole entry of a type the client does not hold", () => {
       const folder = {
         attributes: {archived: "boolean", id: "uuid"},
+        constraints: {},
+        defaults: {},
         derived: {},
         inverses: {},
         operations: [],
@@ -1501,6 +1503,61 @@ describe("Model", () => {
       Model.replaceRules({[FOLDER]: folder});
 
       assert.deepStrictEqual(globalThis.Hologram.sync.model[FOLDER], folder);
+    });
+
+    // A frame carries JSON, so the terms the bundle would have spelled as JavaScript arrive
+    // serialized, and are taken in as the bundle bakes them.
+    it("takes in the serialized terms among a new type's defaults and constraints", () => {
+      Model.replaceRules({
+        [FOLDER]: {
+          attributes: {
+            archived: "boolean",
+            count: "integer",
+            id: "uuid",
+            name: "string",
+          },
+          constraints: {
+            count: {min: [4, "i1"]},
+            name: {
+              format: {
+                opts: [
+                  4,
+                  {
+                    t: "l",
+                    d: ["adotall", {t: "t", d: ["anewline", "aanycrlf"]}],
+                  },
+                ],
+                source: "@",
+              },
+              optional: true,
+            },
+          },
+          defaults: {archived: [4, "afalse"]},
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+          relationships: {},
+        },
+      });
+
+      const folder = globalThis.Hologram.sync.model[FOLDER];
+
+      assert.deepStrictEqual(folder.defaults, {archived: Type.boolean(false)});
+
+      assert.deepStrictEqual(folder.constraints, {
+        count: {min: Type.integer(1)},
+        name: {
+          format: {
+            opts: Type.list([
+              Type.atom("dotall"),
+              Type.tuple([Type.atom("newline"), Type.atom("anycrlf")]),
+            ]),
+            source: "@",
+          },
+          optional: true,
+        },
+      });
     });
 
     it("answers from the replaced entries from then on", () => {

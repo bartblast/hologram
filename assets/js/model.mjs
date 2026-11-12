@@ -2,6 +2,7 @@
 
 import Bitstring from "./bitstring.mjs";
 import Calendar from "./calendar.mjs";
+import Deserializer from "./deserializer.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import SortKey from "./sort_key.mjs";
@@ -450,10 +451,12 @@ export default class Model {
   // bundle's own code can still ask about an operation or read a field the new build dropped. An
   // operation left without rules is denied, which is what the new build answers for it. A type the
   // client holds that the entries leave out keeps everything but its rules, which go, the server's
-  // default deny. A type
-  // the client does not hold is taken whole: rules a deploy added can read a type the bundle never
-  // carried, and its rows arrive with them. Every other part of a held entry stays the bundle's -
-  // the model is the same, which is what the handshake checked before sending these.
+  // default deny. A type the client does not hold is taken whole: rules a deploy added can read a
+  // type the bundle never carried, and a derived field redefined can lead to one, whose rows arrive
+  // with them. Its defaults and constraints arrive serialized, since a frame carries JSON where the
+  // bundle spells their terms as JavaScript, and are taken in as the bundle would have baked them.
+  // Every other part of a held entry stays the bundle's - the model is the same, which is what the
+  // handshake checked before sending these.
   static replaceRules(entries) {
     const model = globalThis.Hologram.sync.model;
 
@@ -474,7 +477,7 @@ export default class Model {
     }
 
     for (const [type, entry] of Object.entries(entries)) {
-      model[type] ??= entry;
+      model[type] ??= Model.#deserializedTerms(entry);
     }
 
     Model.reset();
@@ -763,6 +766,46 @@ export default class Model {
     }
 
     return [];
+  }
+
+  // A constraint's term as the bundle bakes it, from the serialized one a frame carries.
+  static #deserializedConstraint(option, value) {
+    switch (option) {
+      case "format":
+        return {...value, opts: Deserializer.deserialize(value.opts)};
+
+      case "max":
+      case "min":
+        return Deserializer.deserialize(value);
+
+      default:
+        return value;
+    }
+  }
+
+  // The given entry with the terms among its defaults and constraints as the bundle bakes them.
+  static #deserializedTerms(entry) {
+    const defaults = Object.entries(entry.defaults ?? {}).map(
+      ([name, value]) => [name, Deserializer.deserialize(value)],
+    );
+
+    const constraints = Object.entries(entry.constraints ?? {}).map(
+      ([name, options]) => [
+        name,
+        Object.fromEntries(
+          Object.entries(options).map(([option, value]) => [
+            option,
+            Model.#deserializedConstraint(option, value),
+          ]),
+        ),
+      ],
+    );
+
+    return {
+      ...entry,
+      constraints: Object.fromEntries(constraints),
+      defaults: Object.fromEntries(defaults),
+    };
   }
 
   static #field(struct, name) {
