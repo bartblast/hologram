@@ -257,6 +257,57 @@ defmodule Hologram.ComponentTest do
       assert module.__derived_entities__() == filter(Entity2, b == true)
     end
 
+    test "reads a bare name inside a query through an alias the body declares with as: after another option as the queried row's" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasAsAfterOption do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn ->
+            require Hologram.Query, warn: false, as: Q
+
+            Q.filter(Entity2, b == true)
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() == filter(Entity2, b == true)
+    end
+
+    test "reads a bare name inside a query through a multi-alias the body declares as the queried row's" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyMultiAliasQuery do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn ->
+            alias Hologram.{Query}
+            require Query
+
+            Query.filter(Entity2, b == true)
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() == filter(Entity2, b == true)
+    end
+
     test "reads a capture of a function named like a prop as no variable" do
       {{:module, module, _binary, _result}, _bindings} =
         Code.eval_string("""
@@ -323,6 +374,242 @@ defmodule Hologram.ComponentTest do
         """)
 
       assert module.__derived_limit__() == 1
+    end
+
+    test "reads an alias the body declares over the module's alias of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasShadow do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Hologram.Test.Fixtures.Page.Module1, as: Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Page.Module1
+    end
+
+    test "reads an alias the body declares without as: over the module's alias of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasShadowLastSegment do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Hologram.Test.Fixtures.Page.Module1.Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Page.Module1.Target
+    end
+
+    test "reads the module's alias in the body before the body declares its own of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasAfterUse do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            before = Target
+            alias Hologram.Test.Fixtures.Page.Module1, as: Target
+            {before, Target}
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() ==
+               {Hologram.Test.Fixtures.Component.Module1, Hologram.Test.Fixtures.Page.Module1}
+    end
+
+    test "reads the target of an alias the body declares through the module's alias it shadows" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasOnShadowed do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Target.Sub, as: Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Component.Module1.Sub
+    end
+
+    test "reads the module's alias at the declaration after a block the body declares one in" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasInBlock do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          prop :flag, :boolean
+
+          derived :target, :any, fn flag ->
+            if flag do
+              alias Hologram.Test.Fixtures.Page.Module1, as: Target
+              _ = Target
+            end
+
+            Target
+          end
+
+          alias Hologram.Test.Fixtures.Page.Module2, as: Target
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__(false) == Hologram.Test.Fixtures.Component.Module1
+    end
+
+    test "reads a member of a multi-alias the body declares relative to its base" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyMultiAlias do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Hologram.Test.Fixtures.{Target.Sub}
+            Sub
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Target.Sub
+    end
+
+    test "reads a require the body declares with as: over the module's alias of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyRequireAs do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            require Hologram.Test.Fixtures.Page.Module1, as: Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Page.Module1
+    end
+
+    test "reads an alias the body declares with as: after another option over the module's alias of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasAsLast do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Hologram.Test.Fixtures.Page.Module1, warn: false, as: Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Page.Module1
+    end
+
+    test "reads the module's alias in a case clause after another clause declares one" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasInClause do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          prop :flag, :boolean
+
+          derived :target, :any, fn flag ->
+            case flag do
+              true ->
+                alias Hologram.Test.Fixtures.Page.Module1, as: Target
+                Target
+
+              false ->
+                Target
+            end
+          end
+
+          alias Hologram.Test.Fixtures.Page.Module2, as: Target
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__(false) == Hologram.Test.Fixtures.Component.Module1
     end
 
     test "counts an alias the body reads as used" do
@@ -866,6 +1153,32 @@ defmodule Hologram.ComponentTest do
           derived :total, :integer, fn ->
             total = 2
             total * 2
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a body reading a prop its head doesn't name through an alias shadowing Hologram.Query" do
+      expected_msg =
+        "nofile:8: limit is a prop of Hologram.Test.Fixtures.Component.DerivedShadowedQueryAlias, which derived field :value's function doesn't name - add it to the head to read it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedShadowedQueryAlias do
+          use Hologram.Component
+
+          alias Hologram.Query
+
+          prop :limit, :integer
+
+          derived :value, :any, fn ->
+            alias Hologram.Test.Fixtures.Component.Module1, as: Query
+            Query.take(1, limit)
           end
 
           def template do

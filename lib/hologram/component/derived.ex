@@ -220,6 +220,22 @@ defmodule Hologram.Component.Derived do
     end
   end
 
+  # The names an alias or require directive declares as aliases: the one as: gives, otherwise, for
+  # an alias, the last segment of each module it names.
+  defp aliased_names(directive, target, opts) do
+    as =
+      case opts do
+        [options] when is_list(options) -> List.keyfind(options, :as, 0)
+        _no_options -> nil
+      end
+
+    case as do
+      {:as, {:__aliases__, _meta, [name]}} -> [name]
+      _no_as when directive == :alias -> last_segments(target)
+      _no_as -> []
+    end
+  end
+
   defp argument!(name, entry, module, props, state, computed, opts) do
     cond do
       Map.has_key?(props, name) ->
@@ -297,6 +313,13 @@ defmodule Hologram.Component.Derived do
     |> Enum.concat(Enum.map(state, fn {name, _type, _opts} -> {name, "state entry"} end))
     |> Map.new()
   end
+
+  defp last_segments({:__aliases__, _meta, segments}), do: [List.last(segments)]
+
+  defp last_segments({{:., _dot_meta, [_base, :{}]}, _meta, targets}),
+    do: Enum.flat_map(targets, &last_segments/1)
+
+  defp last_segments(_target), do: []
 
   defp module_label(env), do: inspect(env.module)
 
@@ -388,9 +411,20 @@ defmodule Hologram.Component.Derived do
 
   defp query_macro?(_ast, _piped, _state), do: false
 
+  # Whether a module inside a multi-alias's braces is Hologram.Query, told by its name, so that no
+  # atom is made for a module the body only names.
+  defp query_member?(base_module, segments) when is_atom(base_module) do
+    Enum.join([base_module | segments], ".") == Atom.to_string(Hologram.Query)
+  end
+
+  defp query_member?(_base_module, _segments), do: false
+
   defp query_module?({:__aliases__, _meta, [alias_name]}, state) when is_atom(alias_name) do
-    alias_name in state.query_aliases or
-      Macro.expand({:__aliases__, [], [alias_name]}, state.env) == Hologram.Query
+    cond do
+      alias_name in state.query_aliases -> true
+      alias_name in state.body_aliases -> false
+      true -> Macro.expand({:__aliases__, [], [alias_name]}, state.env) == Hologram.Query
+    end
   end
 
   defp query_module?(module_ast, state), do: Macro.expand(module_ast, state.env) == Hologram.Query
@@ -434,28 +468,111 @@ defmodule Hologram.Component.Derived do
   # The body is compiled into its def once the module body has run, so what a def at the declaration
   # would read there is read there: a module attribute's value, through an unquote fragment the
   # declaration's escape evaluates where it stands, and an alias the module has declared. An alias
-  # the body declares itself is known only inside the body, and is left as written.
+  # the body declares itself is known only inside the body, so from the directive on, until the
+  # end of the block or clause it stands in, as Elixir scopes it, a name it declares is left as
+  # written - even one the module aliases too.
   defp resolve_at_line(body, env) do
-    Macro.prewalk(body, fn
-      {:@, _meta, [{attribute, _attribute_meta, context}]}
-      when is_atom(attribute) and is_atom(context) ->
-        {:unquote, [],
-         [
-           quote do
-             Macro.escape(Module.get_attribute(__MODULE__, unquote(attribute)))
-           end
-         ]}
+    {resolved, _declared} = resolve_names(body, MapSet.new(), env)
 
-      {:__aliases__, meta, [first | _rest] = segments} = ast when is_atom(first) ->
-        case Macro.Env.expand_alias(env, meta, segments) do
-          {:alias, module} -> module
-          :error -> ast
-        end
-
-      ast ->
-        ast
-    end)
+    resolved
   end
+
+  # Returns the given AST with the names resolved, and the names the body has declared once it has
+  # run - the ones declared before it, and the ones it declares for what follows it in its block.
+  defp resolve_names({:@, _meta, [{attribute, _attribute_meta, context}]}, declared, _env)
+       when is_atom(attribute) and is_atom(context) do
+    fragment =
+      {:unquote, [],
+       [
+         quote do
+           __MODULE__
+           |> Module.get_attribute(unquote(attribute))
+           |> Macro.escape()
+         end
+       ]}
+
+    {fragment, declared}
+  end
+
+  defp resolve_names({:__aliases__, meta, [first | _rest] = segments} = ast, declared, env)
+       when is_atom(first) do
+    if MapSet.member?(declared, first) do
+      {ast, declared}
+    else
+      case Macro.Env.expand_alias(env, meta, segments) do
+        {:alias, module} -> {module, declared}
+        :error -> {ast, declared}
+      end
+    end
+  end
+
+  # A directive's target is read with the names declared before it, and the names it declares
+  # count from the next expression on. Its options and the members inside braces name no module
+  # through an alias, so they are left as written.
+  defp resolve_names({directive, meta, [target | opts]}, declared, env)
+       when directive in [:alias, :require] do
+    resolved_target =
+      case target do
+        {{:., dot_meta, [base, :{}]}, braces_meta, members} ->
+          {resolved_base, _declared} = resolve_names(base, declared, env)
+          {{:., dot_meta, [resolved_base, :{}]}, braces_meta, members}
+
+        _single ->
+          {resolved, _declared} = resolve_names(target, declared, env)
+          resolved
+      end
+
+    names =
+      directive
+      |> aliased_names(target, opts)
+      |> MapSet.new()
+
+    {{directive, meta, [resolved_target | opts]}, MapSet.union(declared, names)}
+  end
+
+  defp resolve_names({:__block__, meta, expressions}, declared, env) when is_list(expressions) do
+    {resolved, declared_after} =
+      Enum.map_reduce(expressions, declared, &resolve_names(&1, &2, env))
+
+    {{:__block__, meta, resolved}, declared_after}
+  end
+
+  # A clause and a block given to do:, else: and the like are scopes of their own: what they
+  # declare is gone once they end.
+  defp resolve_names({:->, meta, [args, body]}, declared, env) do
+    {resolved_args, _declared} = resolve_names(args, declared, env)
+    {resolved_body, _declared} = resolve_names(body, declared, env)
+
+    {{:->, meta, [resolved_args, resolved_body]}, declared}
+  end
+
+  defp resolve_names({key, value}, declared, env)
+       when key in [:after, :catch, :do, :else, :rescue] do
+    {resolved, _declared} = resolve_names(value, declared, env)
+
+    {{key, resolved}, declared}
+  end
+
+  defp resolve_names({head, meta, args}, declared, env) when is_list(args) do
+    {resolved_head, declared_after_head} = resolve_names(head, declared, env)
+
+    {resolved_args, declared_after} =
+      Enum.map_reduce(args, declared_after_head, &resolve_names(&1, &2, env))
+
+    {{resolved_head, meta, resolved_args}, declared_after}
+  end
+
+  defp resolve_names({left, right}, declared, env) do
+    {resolved_left, declared_after_left} = resolve_names(left, declared, env)
+    {resolved_right, declared_after} = resolve_names(right, declared_after_left, env)
+
+    {{resolved_left, resolved_right}, declared_after}
+  end
+
+  defp resolve_names(list, declared, env) when is_list(list),
+    do: Enum.map_reduce(list, declared, &resolve_names(&1, &2, env))
+
+  defp resolve_names(ast, declared, _env), do: {ast, declared}
 
   defp state_name?(module, name) do
     List.keymember?(module.__state__(), name, 0)
@@ -486,6 +603,7 @@ defmodule Hologram.Component.Derived do
   defp validate_body!({{name, _args, arg_names, body, line}, _type}, fields, env) do
     state = %{
       arg_names: arg_names,
+      body_aliases: [],
       env: env,
       fields: fields,
       line: line,
@@ -657,22 +775,41 @@ defmodule Hologram.Component.Derived do
     end
   end
 
+  # A multi-alias declares a name for each module inside its braces, each joined onto the base.
+  defp walk_body(
+         {:alias, _meta, [{{:., _dot_meta, [base, :{}]}, _braces_meta, members} | _opts]},
+         state
+       ) do
+    base_module = Macro.expand(base, state.env)
+
+    Enum.reduce(members, state, fn
+      {:__aliases__, _member_meta, segments}, acc ->
+        name = List.last(segments)
+
+        query_aliases =
+          if query_member?(base_module, segments),
+            do: [name | acc.query_aliases],
+            else: acc.query_aliases -- [name]
+
+        %{acc | body_aliases: [name | acc.body_aliases], query_aliases: query_aliases}
+
+      _member, acc ->
+        acc
+    end)
+  end
+
+  # The names a directive declares stand for its module from then on: Hologram.Query's are read as
+  # the query module, and any other's shadows an alias of the module's own of the same name.
   defp walk_body({directive, _meta, [module_ast | opts]}, state)
        when directive in [:alias, :require] do
-    if query_module?(module_ast, state) do
-      case {directive, opts} do
-        {_directive, [[as: {:__aliases__, _as_meta, [as_name]}]]} ->
-          %{state | query_aliases: [as_name | state.query_aliases]}
+    names = aliased_names(directive, module_ast, opts)
 
-        {:alias, _opts} ->
-          %{state | query_aliases: [:Query | state.query_aliases]}
+    query_aliases =
+      if query_module?(module_ast, state),
+        do: names ++ state.query_aliases,
+        else: state.query_aliases -- names
 
-        {:require, _opts} ->
-          state
-      end
-    else
-      state
-    end
+    %{state | body_aliases: names ++ state.body_aliases, query_aliases: query_aliases}
   end
 
   defp walk_body({:=, _meta, [left, right]}, state) do
