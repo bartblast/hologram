@@ -269,8 +269,10 @@ export default class Renderer {
 
   // A sync frame can change rows while the render it schedules waits for an animation frame, so an
   // action running in between - a delayed action, a command's reply - would read derived fields
-  // older than what a database read in the same action sees. This brings the target's up to date
-  // without rendering.
+  // older than what a database read in the same action sees. And a component that left the page
+  // stays in the registry, where a delayed action can still reach it, but no render computes its
+  // derived fields again after its state or the rows they read change. This brings the target's
+  // up to date without rendering.
   // Deps: [:maps.get/2]
   static refreshDerived(cid) {
     const componentStruct = ComponentRegistry.getComponentStruct(cid);
@@ -470,6 +472,8 @@ export default class Renderer {
     Renderer.reachBindings = [];
     Renderer.refBindings = new Map();
     Renderer.resizeBindings = [];
+
+    ComponentRegistry.resetCurrentDerived();
 
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
 
@@ -4032,7 +4036,8 @@ export default class Renderer {
     // Computed again on every render after the first, which init's computed: the props, the state
     // or the rows they read may have changed since the last one. A handler reads what the latest
     // render computed - an action is always followed by a render - unless a frame changed rows
-    // since, when executeAction computes the target's again first (see refreshDerived).
+    // since or the latest render did not reach the target, when executeAction computes the
+    // target's again first (see refreshDerived).
     const entries = Renderer.#getDerivedEntries(moduleProxy);
 
     const derived =
@@ -4046,9 +4051,9 @@ export default class Renderer {
         false,
       );
 
-    if (entries.length > 0) {
-      ComponentRegistry.putComponentDerived(cid, derived);
-    }
+    // Written even for a component that declares none, since the write is what tells
+    // executeAction the render reached it (see ComponentRegistry.isDerivedCurrent).
+    ComponentRegistry.putComponentDerived(cid, derived);
 
     // WARNING: must match the vars of render_stateful_component/7 on the server.
     const propsAndState = Erlang_Maps["merge/2"](props, componentState);

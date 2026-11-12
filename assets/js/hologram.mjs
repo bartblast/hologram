@@ -310,8 +310,12 @@ export default class Hologram {
     }
 
     // The last render computed the target's derived fields from the rows it saw, and a frame may
-    // have changed them while its own render waits for an animation frame.
-    if (Hologram.dataLayer?.rowsChangedSinceRender()) {
+    // have changed them while its own render waits for an animation frame. And a target that left
+    // the page is one no render reaches any more, while its state or the rows it reads can change.
+    if (
+      Hologram.dataLayer?.rowsChangedSinceRender() ||
+      !ComponentRegistry.isDerivedCurrent(target)
+    ) {
       Renderer.refreshDerived(target);
     }
 

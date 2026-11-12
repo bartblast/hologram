@@ -82,6 +82,8 @@ const entry3 = Type.map([
 
 describe("ComponentRegistry", () => {
   beforeEach(() => {
+    ComponentRegistry.clear();
+
     ComponentRegistry.entries = Type.map([
       [cid1, entry1],
       [cid2, entry2],
@@ -100,6 +102,14 @@ describe("ComponentRegistry", () => {
     ComponentRegistry.clear();
 
     assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
+  });
+
+  it("clear() drops the current derived fields marks", () => {
+    initComponentRegistryEntry(cid4);
+    ComponentRegistry.putComponentDerived(cid4, Type.map());
+    ComponentRegistry.clear();
+
+    assert.isFalse(ComponentRegistry.isDerivedCurrent(cid4));
   });
 
   describe("clearNextAction()", () => {
@@ -200,9 +210,47 @@ describe("ComponentRegistry", () => {
     });
   });
 
+  describe("isDerivedCurrent()", () => {
+    // A fresh entry rather than a module-level one: putComponentStruct writes in place.
+    beforeEach(() => {
+      initComponentRegistryEntry(cid4);
+    });
+
+    it("is not current for an entry nothing computed the fields of", () => {
+      assert.isFalse(ComponentRegistry.isDerivedCurrent(cid4));
+    });
+
+    it("is current once derived fields were put", () => {
+      ComponentRegistry.putComponentDerived(cid4, Type.map());
+
+      assert.isTrue(ComponentRegistry.isDerivedCurrent(cid4));
+    });
+
+    it("is not current once a struct was put after the derived fields", () => {
+      ComponentRegistry.putComponentDerived(cid4, Type.map());
+      ComponentRegistry.putComponentStruct(cid4, Type.componentStruct());
+
+      assert.isFalse(ComponentRegistry.isDerivedCurrent(cid4));
+    });
+
+    it("leaves other cids alone", () => {
+      ComponentRegistry.putComponentDerived(cid4, Type.map());
+
+      assert.isFalse(ComponentRegistry.isDerivedCurrent(cid1));
+    });
+  });
+
   it("populate()", () => {
     ComponentRegistry.populate("dummyentries");
     assert.equal(ComponentRegistry.entries, "dummyentries");
+  });
+
+  it("populate() drops the current derived fields marks", () => {
+    initComponentRegistryEntry(cid4);
+    ComponentRegistry.putComponentDerived(cid4, Type.map());
+    ComponentRegistry.populate(ComponentRegistry.entries);
+
+    assert.isFalse(ComponentRegistry.isDerivedCurrent(cid4));
   });
 
   it("putEntry()", () => {
@@ -323,6 +371,14 @@ describe("ComponentRegistry", () => {
         buildEntry(module1, emittedContext1, state1),
       );
     });
+  });
+
+  it("resetCurrentDerived()", () => {
+    initComponentRegistryEntry(cid4);
+    ComponentRegistry.putComponentDerived(cid4, Type.map());
+    ComponentRegistry.resetCurrentDerived();
+
+    assert.isFalse(ComponentRegistry.isDerivedCurrent(cid4));
   });
 
   it("putComponentStruct()", () => {

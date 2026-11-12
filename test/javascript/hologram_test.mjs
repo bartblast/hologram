@@ -497,6 +497,7 @@ describe("Hologram", () => {
       sinon.restore();
     });
 
+    // Registered as the last render left it, with its derived fields computed.
     const registered = (cid) => {
       ComponentRegistry.putEntry(
         cid,
@@ -505,6 +506,8 @@ describe("Hologram", () => {
           [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
         ]),
       );
+
+      ComponentRegistry.putComponentDerived(cid, Type.map());
 
       return cid;
     };
@@ -563,6 +566,43 @@ describe("Hologram", () => {
       const refreshStub = sinon.stub(Renderer, "refreshDerived");
 
       Hologram.executeAction(actionFor(registered(cid1)));
+
+      sinon.assert.notCalled(refreshStub);
+    });
+
+    // The registry keeps a component that left the page, and a delayed action can still reach it.
+    // No render computes its derived fields after its state or the rows they read change.
+    it("computes the target's derived fields again first when the last render didn't reach it", () => {
+      const refreshStub = sinon.stub(Renderer, "refreshDerived");
+
+      registered(cid1);
+      ComponentRegistry.resetCurrentDerived();
+
+      Hologram.executeAction(actionFor(cid1));
+
+      sinon.assert.calledOnceWithExactly(refreshStub, cid1);
+      sinon.assert.callOrder(refreshStub, callNamedFunctionStub);
+    });
+
+    it("computes the target's derived fields again first when the render after its last action didn't reach it", () => {
+      const refreshStub = sinon.stub(Renderer, "refreshDerived");
+
+      Hologram.executeAction(actionFor(registered(cid1)));
+      Hologram.executeAction(actionFor(cid1));
+
+      sinon.assert.calledOnceWithExactly(refreshStub, cid1);
+      sinon.assert.callOrder(callNamedFunctionStub, refreshStub);
+    });
+
+    it("leaves the target's derived fields as the last render computed them when the render after its last action reached it", () => {
+      renderStub.callsFake(() =>
+        ComponentRegistry.putComponentDerived(cid1, Type.map()),
+      );
+
+      const refreshStub = sinon.stub(Renderer, "refreshDerived");
+
+      Hologram.executeAction(actionFor(registered(cid1)));
+      Hologram.executeAction(actionFor(cid1));
 
       sinon.assert.notCalled(refreshStub);
     });

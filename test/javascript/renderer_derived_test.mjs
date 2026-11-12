@@ -495,6 +495,22 @@ describe("Renderer derived fields", () => {
       assert.deepStrictEqual(renderedVar("double"), Type.integer(10));
     });
 
+    // What tells executeAction the render reached it, so that it reads the fields as computed.
+    it("marks the fields current on a render, also for a component that declares none", () => {
+      defineComponent("MyApp.Plain", {});
+
+      render(statefulNode("MyApp.Plain"));
+
+      ComponentRegistry.putComponentStruct(
+        CID,
+        ComponentRegistry.getComponentStruct(CID),
+      );
+
+      render(statefulNode("MyApp.Plain"));
+
+      assert.isTrue(ComponentRegistry.isDerivedCurrent(CID));
+    });
+
     it("raises when init stores a derived field before it is computed", () => {
       defineComponent("MyApp.Stored", {
         derived: [
@@ -1341,6 +1357,31 @@ describe("Renderer derived fields", () => {
       );
     });
 
+    it("marks the page's fields current", () => {
+      definePage();
+
+      Renderer.renderPage(
+        Type.alias("MyApp.Page"),
+        Type.map([[Type.atom("name"), Type.bitstring("ada")]]),
+      );
+
+      assert.isTrue(ComponentRegistry.isDerivedCurrent(Type.bitstring("page")));
+    });
+
+    it("leaves a component the render didn't reach not current", () => {
+      definePage();
+      defineComponent("MyApp.OffPage", {});
+
+      render(statefulNode("MyApp.OffPage"));
+
+      Renderer.renderPage(
+        Type.alias("MyApp.Page"),
+        Type.map([[Type.atom("name"), Type.bitstring("ada")]]),
+      );
+
+      assert.isFalse(ComponentRegistry.isDerivedCurrent(CID));
+    });
+
     it("holds the fields in the page struct", () => {
       definePage();
 
@@ -1360,6 +1401,107 @@ describe("Renderer derived fields", () => {
   });
 
   describe("an action", () => {
+    const action = Type.actionStruct({
+      name: Type.atom("pick"),
+      params: Type.map(),
+      target: CID,
+    });
+
+    // A page the component isn't on, so its render doesn't reach the component.
+    const renderOtherPage = () => {
+      defineComponent("MyApp.OtherPage", {});
+
+      defineFunction("MyApp.OtherPage", "__layout_module__", 0, () =>
+        Type.alias("MyApp.OtherLayout"),
+      );
+      defineFunction("MyApp.OtherPage", "__layout_props__", 0, () =>
+        Type.list(),
+      );
+      defineFunction("MyApp.OtherPage", "__params__", 0, () => Type.list());
+
+      defineComponent("MyApp.OtherLayout", {});
+
+      ComponentRegistry.putEntry(
+        Type.bitstring("page"),
+        Type.map([
+          [Type.atom("module"), Type.alias("MyApp.OtherPage")],
+          [Type.atom("struct"), Type.componentStruct()],
+        ]),
+      );
+
+      Renderer.renderPage(Type.alias("MyApp.OtherPage"), Type.map());
+    };
+
+    // The registry keeps a component that left the page, and a delayed action can still reach it.
+    it("is handed the derived fields computed from its state when no render reached it since its last action", () => {
+      defineComponent("MyApp.Doubled", {
+        derived: [
+          derivedEntry(
+            "double",
+            Type.atom("integer"),
+            ["step"],
+            (step) => Type.integer(step.value * 2n),
+            true,
+          ),
+        ],
+        state: [declaration("step", [[Type.atom("default"), Type.integer(1)]])],
+      });
+
+      render(statefulNode("MyApp.Doubled"));
+
+      let actionStruct = null;
+
+      sinon
+        .stub(Interpreter, "callNamedFunction")
+        .callsFake((_module, _fun, args) => {
+          actionStruct = args.data[2];
+
+          return putState(actionStruct, "step", Type.integer(5));
+        });
+
+      sinon.stub(Hologram, "render").callsFake(() => null);
+
+      Hologram.executeAction(action);
+      Hologram.executeAction(action);
+
+      assert.deepStrictEqual(
+        fieldOf(fieldOf(actionStruct, "derived"), "double"),
+        Type.integer(10),
+      );
+    });
+
+    it("is handed the derived fields as the rows stand when a row changed before a render that didn't reach it", () => {
+      defineRipe("MyApp.RipeOffPage");
+
+      render(statefulNode("MyApp.RipeOffPage"));
+
+      LocalDatabase.putRow(ROW, rowNamed("r2", true, "apple"));
+
+      renderOtherPage();
+
+      // The render took in the row change.
+      SyncStream.rowsChangedSinceRender = false;
+
+      let actionStruct = null;
+
+      sinon
+        .stub(Interpreter, "callNamedFunction")
+        .callsFake((_module, _fun, args) => {
+          actionStruct = args.data[2];
+
+          return actionStruct;
+        });
+
+      sinon.stub(Hologram, "render").callsFake(() => null);
+
+      Hologram.executeAction(action);
+
+      assert.deepStrictEqual(
+        names(fieldOf(fieldOf(actionStruct, "derived"), "ripe")),
+        ["banana", "apple", "cherry"],
+      );
+    });
+
     it("is handed the derived fields as the rows stand when a frame changed them since the last render", () => {
       defineRipe("MyApp.RipeAction");
 
