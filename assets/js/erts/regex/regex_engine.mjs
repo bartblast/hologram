@@ -298,7 +298,9 @@ export default class RegexEngine {
   // runOpts.firstNewlinePosition, when given with firstline, is the first
   // newline position at or after the start position (Infinity when there is
   // none), already looked up by matchGlobal() so its attempts don't each
-  // scan for it again.
+  // scan for it again. runOpts.subjectCache goes to the interpreter, which
+  // keeps data derived from the subject in it, so matchGlobal() passes one
+  // cache to all its attempts.
   static match(compiled, subject, runOpts = {}) {
     const anchored = runOpts.anchored === true;
     const startPosition = runOpts.startPosition ?? 0;
@@ -362,6 +364,7 @@ export default class RegexEngine {
       notemptyAtStart: runOpts.notemptyAtStart === true,
       noteol: runOpts.noteol === true,
       startPosition: startPosition,
+      subjectCache: runOpts.subjectCache,
     });
   }
 
@@ -383,8 +386,17 @@ export default class RegexEngine {
     // the earlier lookup found no newline before it.
     let firstNewlinePosition = -1;
 
+    // One subject cache for all attempts, so the interpreter derives data
+    // from the subject once per run instead of once per attempt
+    const subjectCache = {graphemeSegments: null};
+
     const attemptOpts = (startPosition, extraOpts = {}) => {
-      const opts = {...runOpts, ...extraOpts, startPosition: startPosition};
+      const opts = {
+        ...runOpts,
+        ...extraOpts,
+        startPosition: startPosition,
+        subjectCache: subjectCache,
+      };
 
       if (runOpts.firstline === true) {
         if (firstNewlinePosition < startPosition) {

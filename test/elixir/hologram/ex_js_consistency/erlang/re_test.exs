@@ -1140,6 +1140,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
                {:match, [[{2, 0}], [{2, 1}]]}
     end
 
+    test "global \\X segments the subject once per run" do
+      subject = String.duplicate("é", 300)
+      expected = for k <- 0..299, do: [{2 * k, 2}]
+
+      assert :re.run(subject, "\\X", [:global, :unicode]) == {:match, expected}
+    end
+
+    test "global \\X segments the subject once per run with empty matches" do
+      subject = String.duplicate("é", 50)
+      expected = for k <- 0..49, do: [{2 * k, 0}]
+
+      assert :re.run(subject, "(?=\\X)", [:global, :unicode]) == {:match, expected}
+    end
+
     test "compile-time firstline pattern applies when running" do
       {:ok, compiled} = :re.compile("b", [:firstline])
 

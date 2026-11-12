@@ -2279,6 +2279,55 @@ describe("Erlang_Re", () => {
       assertGlobalMatchResult(result, [[[2, 0]], [[2, 1]]]);
     });
 
+    it("global \\X segments the subject once per run", () => {
+      const segmentSpy = sinon.spy(ERTS.graphemeSegmenter, "segment");
+
+      let result;
+
+      try {
+        result = run(Type.bitstring("é".repeat(300)), Type.bitstring("\\X"), [
+          Type.atom("global"),
+          Type.atom("unicode"),
+        ]);
+      } finally {
+        segmentSpy.restore();
+      }
+
+      const expected = [];
+
+      for (let k = 0; k < 300; k++) {
+        expected.push([[2 * k, 2]]);
+      }
+
+      assertGlobalMatchResult(result, expected);
+      assert.equal(segmentSpy.callCount, 1);
+    });
+
+    it("global \\X segments the subject once per run with empty matches", () => {
+      const segmentSpy = sinon.spy(ERTS.graphemeSegmenter, "segment");
+
+      let result;
+
+      try {
+        result = run(
+          Type.bitstring("é".repeat(50)),
+          Type.bitstring("(?=\\X)"),
+          [Type.atom("global"), Type.atom("unicode")],
+        );
+      } finally {
+        segmentSpy.restore();
+      }
+
+      const expected = [];
+
+      for (let k = 0; k < 50; k++) {
+        expected.push([[2 * k, 0]]);
+      }
+
+      assertGlobalMatchResult(result, expected);
+      assert.equal(segmentSpy.callCount, 1);
+    });
+
     it("compile-time firstline pattern applies when running", () => {
       const compiled = compilePattern("b", [Type.atom("firstline")]);
 
