@@ -539,7 +539,6 @@ defmodule Hologram.Template.Renderer do
       |> cast_props(module)
       |> inject_props_from_context(module, env.context)
       |> inject_default_prop_values(module)
-      |> inject_props_from_query(module)
       |> validate_props(module, env.parent_module)
 
     key_scope = component_key_scope(explicit_key(props_dom), props, env.key_scope)
@@ -987,7 +986,7 @@ defmodule Hologram.Template.Renderer do
     }
   end
 
-  # A derived field the build registered as a query runs it the way a query prop runs its own.
+  # A derived field the build registered as a query runs it against the database, policies applied.
   defp derived_compute_opts(module) do
     [
       registered_query?: &QueryCache.derived_query?(module, &1),
@@ -1223,46 +1222,12 @@ defmodule Hologram.Template.Renderer do
   defp filter_allowed_props(props_dom, module) do
     registered_prop_names =
       module.__props__()
-      |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] || opts[:from_query] end)
+      |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] end)
       |> Enum.map(fn {name, _type, _opts} -> to_string(name) end)
 
     allowed_prop_names = ["cid" | registered_prop_names]
 
     Enum.filter(props_dom, fn {name, _value_dom} -> name in allowed_prop_names end)
-  end
-
-  defp from_query_arg!(module, prop_name, nil, _props) do
-    raise ArgumentError,
-      message:
-        "from_query capture for prop #{inspect(prop_name)} in #{inspect(module)} has an argument position no clause names - it cannot bind a prop"
-  end
-
-  defp from_query_arg!(module, prop_name, param_name, props) do
-    case Map.fetch(props, param_name) do
-      {:ok, value} ->
-        value
-
-      :error ->
-        raise ArgumentError,
-          message:
-            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)} - no like-named prop is set"
-    end
-  end
-
-  defp from_query_args!(_module, _prop_name, capture, _props) when is_function(capture, 0) do
-    []
-  end
-
-  defp from_query_args!(module, prop_name, _capture, props) do
-    param_names = QueryCache.prop_params(module, prop_name)
-
-    if param_names == nil do
-      raise ArgumentError,
-        message:
-          "no registered params for from_query prop #{inspect(prop_name)} in #{inspect(module)} - the query cache holds no entry for it"
-    end
-
-    Enum.map(param_names, &from_query_arg!(module, prop_name, &1, props))
   end
 
   defp has_cid_prop?(props) do
@@ -1392,20 +1357,6 @@ defmodule Hologram.Template.Renderer do
       |> Enum.into(%{})
 
     Map.merge(props, props_from_context)
-  end
-
-  # Runs after the other prop sources - a parameterized query capture binds
-  # like-named props, which template values, context, and defaults supply.
-  # Every query reads its arguments from the props the component was GIVEN, never from the
-  # accumulator - so what one query answers can never reach another's arguments, and the order
-  # these run in cannot change what any of them returns. The build refuses such a binding
-  # outright; this is the same rule holding by construction rather than by check.
-  defp inject_props_from_query(props, module) do
-    module.__props__()
-    |> Enum.filter(fn {_name, _type, opts} -> opts[:from_query] end)
-    |> Enum.reduce(props, fn {name, _type, opts}, acc ->
-      Map.put(acc, name, run_prop_query!(module, name, opts[:from_query], props))
-    end)
   end
 
   defp invalid_dynamic_tag_value_message(value) do
@@ -1939,19 +1890,8 @@ defmodule Hologram.Template.Renderer do
     |> Enum.reject(&is_nil/1)
   end
 
-  defp run_prop_query!(module, prop_name, capture, props) do
-    args = from_query_args!(module, prop_name, capture, props)
-
-    term =
-      capture
-      |> apply(args)
-      |> Stage.normalize()
-
-    run_query!(module, prop_name, args, term)
-  end
-
-  # Runs the given normalized query term a query prop or a derived field of the given module is
-  # defined by, for the given name and the arguments its builder was called with.
+  # Runs the given normalized query term a derived field of the given module is defined by, for the
+  # given name and the arguments its function was called with.
   defp run_query!(module, name, args, term) do
     # A path reads rows the query does not return, and the client answers the query over what it
     # holds - so the rows along the paths are read with it, the read policy deciding which, and

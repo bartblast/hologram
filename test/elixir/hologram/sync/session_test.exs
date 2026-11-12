@@ -65,7 +65,6 @@ defmodule Hologram.Sync.SessionTest do
 
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
       entries: %{},
-      prop_params: %{},
       windows: %{
         @board_window => Stage.normalize(Module2),
         @other_window => Stage.normalize(PolicyModule1),
@@ -1165,7 +1164,6 @@ defmodule Hologram.Sync.SessionTest do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
-        prop_params: %{},
         windows: %{
           @board_window => Stage.normalize(Module2),
           @other_window => other_window_term()
@@ -1346,7 +1344,6 @@ defmodule Hologram.Sync.SessionTest do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
-        prop_params: %{},
         windows: %{
           @board_window => Stage.normalize(Module2),
           @other_window => other_window_term()
@@ -1400,7 +1397,6 @@ defmodule Hologram.Sync.SessionTest do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
-        prop_params: %{},
         windows: %{
           @bare_label_window => Stage.normalize(Module29),
           @board_window => Stage.normalize(Module2),
@@ -1962,7 +1958,6 @@ defmodule Hologram.Sync.SessionTest do
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
       entries: %{},
       permission_checking?: true,
-      prop_params: %{},
       windows: %{
         @project_window => Stage.normalize(PolicyProject),
         @other_window => Stage.normalize(PolicyModule1),

@@ -2062,18 +2062,10 @@ export default class Renderer {
   // Based on filter_allowed_props/2
   // Takes an array of prop tuples, as returned by #expandPropSpreads().
   //
-  // A from_query prop is not a prop a template may set, the way a from_context one is not: both
-  // are resolved from a source of their own. Today the query stage overwrites whatever a template
-  // passed anyway, so refusing it here changes no resolved value - it is the admission rule that
-  // is kept identical to the server's, and it stops being redundant the moment a query prop can
-  // answer from somewhere other than a fresh run.
+  // A from_context prop is not a prop a template may set: it is resolved from a source of its own.
   static #filterAllowedProps(propDoms, moduleProxy) {
     const registeredPropNames = Renderer.#getPropDefinitions(moduleProxy)
-      .data.filter(
-        (prop) =>
-          Renderer.#contextKey(prop.data[2]) === null &&
-          Renderer.#fromQueryCapture(prop.data[2]) === null,
-      )
+      .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
       .map((prop) => $.toBitstring(prop.data[0]));
 
     const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
@@ -2093,54 +2085,6 @@ export default class Renderer {
         (attrDom) => $.#eventAttributeName(attrDom) === name,
       ) ?? null
     );
-  }
-
-  // Based on from_query_arg!/4
-  static #fromQueryArg(module, propName, paramName, props) {
-    if (paramName === null) {
-      Interpreter.raiseArgumentError(
-        `from_query capture for prop ${Interpreter.inspect(propName)} in ${module} has an argument position no clause names - it cannot bind a prop`,
-      );
-    }
-
-    const name = Type.atom(paramName);
-    const entry = props.data[Type.encodeMapKey(name)];
-
-    if (!entry) {
-      Interpreter.raiseArgumentError(
-        `from_query for prop ${Interpreter.inspect(propName)} in ${module} binds argument ${Interpreter.inspect(name)} - no like-named prop is set`,
-      );
-    }
-
-    return entry[1];
-  }
-
-  // Based on from_query_args!/4
-  //
-  // A capture takes its arguments from the like-named props, and which names those are is what
-  // the build baked: an encoded function carries no argument names of its own. A zero-arity
-  // capture asks for nothing, which is why it needs no baked entry.
-  static #fromQueryArgs(module, propName, capture, props) {
-    if (capture.arity === 0) {
-      return [];
-    }
-
-    const paramNames =
-      globalThis.Hologram.sync?.propParams?.[module]?.[propName.value];
-
-    if (!paramNames) {
-      Interpreter.raiseArgumentError(
-        `no registered params for from_query prop ${Interpreter.inspect(propName)} in ${module} - the query cache holds no entry for it`,
-      );
-    }
-
-    return paramNames.map((paramName) =>
-      Renderer.#fromQueryArg(module, propName, paramName, props),
-    );
-  }
-
-  static #fromQueryCapture(opts) {
-    return Interpreter.accessKeywordListElement(opts, Type.atom("from_query"));
   }
 
   // Which props carry a required: or values: option is a property of the module, not of the render,
@@ -2323,50 +2267,6 @@ export default class Renderer {
     );
 
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
-  }
-
-  // Based on run_prop_query!/4
-  //
-  // The data layer answers the query (see DataLayer.answerPropQuery). The handle is read without
-  // `?.`: a query reads rows of entity types, which only a build that declares them has, and that
-  // build ships the data layer.
-  static #runPropQuery(alias, propName, capture, props) {
-    const module = Interpreter.moduleExName(alias);
-    const args = Renderer.#fromQueryArgs(module, propName, capture, props);
-
-    return Hologram.dataLayer.answerPropQuery(module, propName, args, capture);
-  }
-
-  // Based on inject_props_from_query/2
-  //
-  // The last prop source, as on the server: a parameterized capture binds like-named props, and
-  // template values, context and defaults are what supply them - so they must all be in before
-  // this runs. Each resolved query prop joins them, which is what lets a later one bind it.
-  // Every query reads its arguments from the props the component was GIVEN, never from the
-  // accumulator - so what one query answers can never reach another's arguments, and the order
-  // these run in cannot change what any of them returns. The build refuses such a binding
-  // outright; this is the same rule holding by construction rather than by check.
-  static #injectPropsFromQuery(props, moduleProxy, alias) {
-    return Renderer.#getPropDefinitions(moduleProxy).data.reduce(
-      (acc, prop) => {
-        const capture = Renderer.#fromQueryCapture(prop.data[2]);
-
-        if (capture === null) {
-          return acc;
-        }
-
-        const propName = prop.data[0];
-
-        // Optimized (mutates map)
-        acc.data[Type.encodeMapKey(propName)] = [
-          propName,
-          Renderer.#runPropQuery(alias, propName, capture, props),
-        ];
-
-        return acc;
-      },
-      Utils.shallowCloneObject(props),
-    );
   }
 
   // Based on invalid_dynamic_tag_value_message/1
@@ -3191,7 +3091,6 @@ export default class Renderer {
     );
 
     props = Renderer.#injectDefaultPropValues(props, moduleProxy);
-    props = Renderer.#injectPropsFromQuery(props, moduleProxy, dom.data[1]);
 
     Renderer.#validateProps(props, moduleProxy, dom.data[1], parentModule);
 

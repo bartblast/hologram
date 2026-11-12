@@ -910,7 +910,8 @@ defmodule Hologram.Entity do
   end
 
   # A server-only attribute holds its sentinel in a struct on its way to the client - the page
-  # context and a from_query prop both carry one - so the field admits it beside the declared type.
+  # context and a derived field's rows both carry one - so the field admits it beside the declared
+  # type.
   defp attribute_field_type_ast(type, opts) do
     sentinel_types =
       if opts[:server_only] == true do

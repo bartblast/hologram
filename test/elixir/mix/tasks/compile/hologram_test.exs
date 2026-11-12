@@ -27,9 +27,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, as: QueryExtractorModule53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84, as: QueryExtractorModule84
-  alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
-  alias Hologram.Test.Fixtures.Component.Module13, as: ComponentModule13
-  alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
+  alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
   alias Hologram.Test.Fixtures.Component.Module43, as: ComponentModule43
   alias Hologram.Test.Fixtures.Component.Module54, as: ComponentModule54
   alias Hologram.Test.Fixtures.Component.Module55, as: ComponentModule55
@@ -152,9 +150,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   # This project's components include the ones the extractor and the validators exist to REFUSE -
-  # a capture that recurses, one that reads a field off an integer, a query on a type declaring no
-  # allow lines. A real app has none, so the task sweeps every component there and the build fails
-  # on the first mistake, which is the point. Here they are filtered by ASKING the builder rather
+  # a derived field whose helper recurses, one that reads a field off an integer, a query on a
+  # type declaring no allow lines. A real app has none, so the task sweeps every component there and the
+  # build fails on the first mistake, which is the point. Here they are filtered by ASKING the builder rather
   # than by listing modules, so a negative fixture added later joins the filter instead of breaking
   # this suite.
   defp buildable_component_modules do
@@ -182,16 +180,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
     Hologram.MisuseError -> false
   end
 
-  # Only a component declaring a from_query prop or a derived field can be refused - one without
-  # produces no terms, so neither the extractor nor the validations have anything to object to.
-  # Asking the cheap question first keeps this out of the suite's timing.
+  # Only a component declaring a derived field can be refused - one without produces no terms, so
+  # neither the extractor nor the validations have anything to object to. Asking the cheap question
+  # first keeps this out of the suite's timing.
   defp declares_query?(module) do
-    query_prop? =
-      Reflection.has_function?(module, :__props__, 0) and
-        Enum.any?(module.__props__(), fn {_name, _type, opts} -> opts[:from_query] end)
-
-    query_prop? or
-      (Reflection.has_function?(module, :__derived__, 0) and module.__derived__() != [])
+    Reflection.has_function?(module, :__derived__, 0) and module.__derived__() != []
   end
 
   # A page whose template holds a link to another page, and that page.
@@ -261,7 +254,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   # How many components' registered queries are extracted while the given function runs.
   defp count_extractions(fun) do
-    count_calls({QueryExtractor, :extract_module_queries, 3}, fun)
+    count_calls({QueryExtractor, :extract_derived_queries, 3}, fun)
   end
 
   # How many times the page windows PLT and the queries PLT are dumped while the given function
@@ -1124,7 +1117,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
              :derived_queries,
              :entries,
              :permission_checking?,
-             :prop_params,
              :windows
            ]
 
@@ -1588,21 +1580,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert count_extractions(fn -> run(opts) end) == 2
     end
 
-    # Module14's query is a remote capture of a function of Module13, which is no component.
-    test "an edit of a module a component's capture points at extracts that component's queries",
-         %{opts: opts} do
+    # No page reaches Module40, so the call graph doesn't hold it, and its kept entry goes stale with
+    # an edit of the component itself.
+    test "an edit of a component no page reaches extracts its queries", %{opts: opts} do
       run(opts)
 
-      %{components: components} = cache_state().data_layer
+      refute ComponentModule40 in CallGraph.modules(cache_state().call_graph)
 
-      assert ComponentModule13 in components[ComponentModule14].targets
+      fake_edit(ComponentModule40)
 
-      num_pointing =
-        Enum.count(components, fn {_module, queries} -> ComponentModule13 in queries.targets end)
-
-      fake_edit(ComponentModule13)
-
-      assert count_extractions(fn -> run(opts) end) == num_pointing
+      assert count_extractions(fn -> run(opts) end) == 1
     end
 
     # Page 23 is the one page that reaches Module54, whose derived field calls a function of
@@ -1841,7 +1828,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         module_infos: module_infos
       } = cache_state()
 
-      removed_entry = %{prop_params: [], targets: [], terms: []}
+      removed_entry = %{derived_queries: [], terms: []}
       components = Map.put(data_layer.components, :removed_component, removed_entry)
       Cache.put_data_layer(%{data_layer | components: components})
 
@@ -1953,39 +1940,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert cache_state().runtime == nil
       assert count_data_layer_dumps(fn -> run(opts) end) == [0, 0]
       assert cache_state().data_layer == data_layer
-    end
-
-    # A builder's argument names bind the consuming component's like-named props, so a component
-    # whose capture names a prop it does not declare fails the build once a page reaches it. The
-    # page is made to reach one through an edge in the kept graph, and the edit is of a module no
-    # page reaches, so the patch leaves that edge in place. The page and the component have no kept
-    # entries, as ones new to the build: a kept page reach is listed again only when the edit can
-    # move it, and a kept component is validated with its queries, when they are extracted again.
-    test "refuses a component a page reaches whose query binds a prop it does not declare", %{
-      opts: opts
-    } do
-      run(opts)
-
-      data_layer = cache_state().data_layer
-
-      Cache.put_data_layer(%{
-        data_layer
-        | components: Map.delete(data_layer.components, ComponentModule11),
-          pages: Map.delete(data_layer.pages, Module1)
-      })
-
-      CallGraph.add_edge(
-        cache_state().call_graph,
-        {Module1, :template, 0},
-        {ComponentModule11, :template, 0}
-      )
-
-      fake_edit(@unreached_module)
-
-      expected_msg =
-        "test/elixir/support/fixtures/component/module_11.ex: from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
-
-      assert_error Hologram.CompileError, expected_msg, fn -> run(opts) end
     end
   end
 

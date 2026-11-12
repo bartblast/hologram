@@ -25,11 +25,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Sync.Frame
 
   alias Hologram.Test.Fixtures.Component.Module1, as: ComponentModule1
-  alias Hologram.Test.Fixtures.Component.Module11, as: ComponentModule11
-  alias Hologram.Test.Fixtures.Component.Module13, as: ComponentModule13
-  alias Hologram.Test.Fixtures.Component.Module14, as: ComponentModule14
-  alias Hologram.Test.Fixtures.Component.Module16, as: ComponentModule16
-  alias Hologram.Test.Fixtures.Component.Module24, as: ComponentModule24
   alias Hologram.Test.Fixtures.Component.Module39, as: ComponentModule39
   alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
   alias Hologram.Test.Fixtures.Component.Module41, as: ComponentModule41
@@ -129,7 +124,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module47
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1, as: QueryExtractorModule1
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84, as: QueryExtractorModule84
 
   @app "(hologram #{Application.spec(:hologram, :vsn)})"
@@ -173,13 +167,12 @@ defmodule Hologram.CompilerTest do
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
     permission_checking?: false,
-    prop_params: %{},
     role_modules: []
   }
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", propParams: {}, protocolVersion: 1};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", protocolVersion: 1};/
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -1668,15 +1661,6 @@ defmodule Hologram.CompilerTest do
       assert queries.entries == Registry.build([module_40_term, module_41_term], false)
     end
 
-    test "collects the prop params of the given components", %{entity_types: entity_types} do
-      component_queries =
-        extract_component_queries([ComponentModule11], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      assert queries.prop_params == %{{ComponentModule11, :entities} => [:min_b]}
-    end
-
     test "collects the derived fields the components register as queries", %{
       entity_types: entity_types
     } do
@@ -1764,17 +1748,6 @@ defmodule Hologram.CompilerTest do
       refute build_queries(component_queries, entity_types, false).permission_checking?
     end
 
-    test "leaves out a component declaring no parameterized capture", %{
-      entity_types: entity_types
-    } do
-      component_queries =
-        extract_component_queries([QueryExtractorModule1], entity_types, PLT.start())
-
-      queries = build_queries(component_queries, entity_types, false)
-
-      assert queries.prop_params == %{}
-    end
-
     test "collects a registered query reading a type with server-only attributes it does not reference",
          %{entity_types: entity_types} do
       component_queries =
@@ -1795,7 +1768,7 @@ defmodule Hologram.CompilerTest do
         |> include([pinned_count, recent_messages])
         |> Stage.normalize()
 
-      component_queries = %{DerivedQueries => %{prop_params: [], targets: [], terms: [term]}}
+      component_queries = %{DerivedQueries => %{derived_queries: [], terms: [term]}}
 
       queries = build_queries(component_queries, entity_types, false)
 
@@ -1864,7 +1837,7 @@ defmodule Hologram.CompilerTest do
         |> filter(any(items))
         |> Stage.normalize()
 
-      component_queries = %{QuantifiedQueries => %{prop_params: [], targets: [], terms: [term]}}
+      component_queries = %{QuantifiedQueries => %{derived_queries: [], terms: [term]}}
 
       expected_msg =
         "the registered query in QuantifiedQueries filters through " <>
@@ -1918,7 +1891,7 @@ defmodule Hologram.CompilerTest do
         |> filter(any(secret <- secrets, secret.token == "x"))
         |> Stage.normalize()
 
-      component_queries = %{QuantifiedQueries => %{prop_params: [], targets: [], terms: [term]}}
+      component_queries = %{QuantifiedQueries => %{derived_queries: [], terms: [term]}}
 
       expected_msg =
         "the registered query in QuantifiedQueries filters or sorts on " <>
@@ -2003,7 +1976,7 @@ defmodule Hologram.CompilerTest do
         |> Stage.include(:secrets)
         |> Stage.normalize()
 
-      component_queries = %{ComponentModule1 => %{prop_params: [], targets: [], terms: [term]}}
+      component_queries = %{ComponentModule1 => %{derived_queries: [], terms: [term]}}
 
       expected_msg =
         "the registered query in Hologram.Test.Fixtures.Component.Module1 filters or sorts on " <>
@@ -2118,12 +2091,6 @@ defmodule Hologram.CompilerTest do
       refute MapSet.member?(sync_constants.entity_types, Entity12)
     end
 
-    test "collects the argument names of the parameterized captures those components declare", %{
-      sync_constants: sync_constants
-    } do
-      assert sync_constants.prop_params[ComponentModule24] == [entities: [:min_b]]
-    end
-
     test "collects the derived fields those components register as queries", %{
       sync_constants: sync_constants
     } do
@@ -2134,14 +2101,6 @@ defmodule Hologram.CompilerTest do
       sync_constants: sync_constants
     } do
       assert sync_constants.derived_queries[PageModule19] == [:ripe]
-    end
-
-    # A zero-arity capture binds nothing, so there is nothing to name - the client reads its
-    # absence the same way it reads an empty list.
-    test "leaves out a component declaring no parameterized capture", %{
-      sync_constants: sync_constants
-    } do
-      refute Map.has_key?(sync_constants.prop_params, ComponentModule16)
     end
 
     # The grant type reaches the model by being CHECKED rather than by being queried - its window
@@ -2287,7 +2246,6 @@ defmodule Hologram.CompilerTest do
                entity_types: MapSet.new(),
                model_hash: nil,
                permission_checking?: false,
-               prop_params: %{},
                role_modules: []
              }
     end
@@ -2309,7 +2267,7 @@ defmodule Hologram.CompilerTest do
   describe "build_sync_constants_js/1" do
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", protocolVersion: #{Frame.protocol_version()}};/
     end
 
     test "renders the derived fields each component registers as queries" do
@@ -2319,7 +2277,7 @@ defmodule Hologram.CompilerTest do
       }
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", protocolVersion: #{Frame.protocol_version()}};/
     end
 
     # A client asked whether a user holds a global role refuses an unknown one by these keys and
@@ -2328,7 +2286,7 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", propParams: {}, protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", protocolVersion: #{Frame.protocol_version()}};/
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -5014,35 +4972,6 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/"frameworkAttributes":[],/)
     end
 
-    # A capture travels in the bundle and is called there, but an encoded function carries no
-    # argument names - and those names are what each argument binds by.
-    test "injects the argument names each query prop binds by", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      prop_params = %{ComponentModule24 => [entities: [:min_b, :max_b]]}
-      sync_constants = %{@empty_sync_constants | prop_params: prop_params}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      # The names are written in argument order, not sorted: they are read positionally, so the
-      # order IS the mapping from a prop to the argument it is passed as.
-      assert String.contains?(
-               js,
-               ~s/propParams: {"Hologram.Test.Fixtures.Component.Module24":{"entities":["min_b","max_b"]}}/
-             )
-    end
-
     test "injects the wire format the bundle speaks" do
       js =
         build_runtime_js([], PLT.start(), PLT.start(), MapSet.new(), [], @empty_sync_constants_js,
@@ -7130,15 +7059,6 @@ defmodule Hologram.CompilerTest do
       [entity_types: Reflection.list_entities(), ir_plt: PLT.start()]
     end
 
-    test "builds the capture targets the PLT lacks into it", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      extract_component_queries([ComponentModule14], entity_types, ir_plt)
-
-      assert PLT.member?(ir_plt, ComponentModule13)
-    end
-
     test "builds the modules a derived field calls that the PLT lacks into it", %{
       entity_types: entity_types,
       ir_plt: ir_plt
@@ -7169,52 +7089,9 @@ defmodule Hologram.CompilerTest do
                ir_plt
              ) ==
                %{
-                 ComponentModule40 => %{
-                   derived_queries: [:entities],
-                   prop_params: [],
-                   targets: [ComponentModule40],
-                   terms: [module_40_term]
-                 },
-                 ComponentModule41 => %{
-                   derived_queries: [:entities],
-                   prop_params: [],
-                   targets: [ComponentModule41],
-                   terms: [module_41_term]
-                 }
+                 ComponentModule40 => %{derived_queries: [:entities], terms: [module_40_term]},
+                 ComponentModule41 => %{derived_queries: [:entities], terms: [module_41_term]}
                }
-    end
-
-    test "extracts the argument names of a component's parameterized capture", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
-
-      assert extract_component_queries([ComponentModule11], entity_types, ir_plt) == %{
-               ComponentModule11 => %{
-                 derived_queries: [],
-                 prop_params: [entities: [:min_b]],
-                 targets: [ComponentModule11],
-                 terms: [term]
-               }
-             }
-    end
-
-    test "reads the IR of the capture targets the PLT holds instead of building it", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      build_missing_ir!(ir_plt, [ComponentModule13])
-
-      count =
-        count_calls({IR, :for_module, 2}, fn ->
-          extract_component_queries([ComponentModule14], entity_types, ir_plt)
-        end)
-
-      assert count == 0
     end
 
     test "reads the IR of the modules a derived field calls the PLT holds instead of building it",
@@ -7232,20 +7109,12 @@ defmodule Hologram.CompilerTest do
       assert count == 0
     end
 
-    test "records the module a remote capture points at", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      assert %{ComponentModule14 => %{targets: [ComponentModule13]}} =
-               extract_component_queries([ComponentModule14], entity_types, ir_plt)
-    end
-
-    test "records nothing for a component declaring no query prop", %{
+    test "records nothing for a component declaring no derived field", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do
       assert extract_component_queries([ComponentModule1], entity_types, ir_plt) == %{
-               ComponentModule1 => %{derived_queries: [], prop_params: [], targets: [], terms: []}
+               ComponentModule1 => %{derived_queries: [], terms: []}
              }
     end
 
@@ -7258,8 +7127,6 @@ defmodule Hologram.CompilerTest do
       assert queries == %{
                QueryExtractorModule84 => %{
                  derived_queries: [:ripe],
-                 prop_params: [],
-                 targets: [QueryExtractorModule84],
                  terms: [%Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}]
                }
              }

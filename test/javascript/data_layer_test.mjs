@@ -1,11 +1,6 @@
 "use strict";
 
-import {
-  assert,
-  contextFixture,
-  defineRuntimeGlobals,
-  sinon,
-} from "./support/helpers.mjs";
+import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
 import Batches from "../../assets/js/batches.mjs";
 import DataLayer from "../../assets/js/data_layer.mjs";
@@ -44,7 +39,6 @@ describe("DataLayer", () => {
             serverOnly: [],
           },
         },
-        propParams: {},
       };
 
       Model.reset();
@@ -64,6 +58,12 @@ describe("DataLayer", () => {
         title: "Call Ann",
         title$sort: "call ann",
       });
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = null;
+      delete globalThis.Hologram.sync;
     });
 
     it("answers a count from the local database", () => {
@@ -223,49 +223,23 @@ describe("DataLayer", () => {
         Type.integer(42),
       );
     });
-  });
-
-  describe("answerPropQuery()", () => {
-    const TASK = "MyApp.Task";
 
     const count = ManuallyPortedElixirHologramQueryStage["count/1"];
     const filter = ManuallyPortedElixirHologramQueryStage["filter/2"];
+    const sort = ManuallyPortedElixirHologramQueryStage["sort/2"];
 
-    // A builder as transpiled app code: it pipes the ported query stages and returns the plain
-    // term, and it arrives here boxed the way any capture does.
-    const builder = (arity, build) =>
-      Type.anonymousFunction(
-        arity,
-        [
-          {
-            params: (_context) =>
-              Array.from({length: arity}, (_item, index) =>
-                Type.variablePattern(`$${index + 1}`),
-              ),
-            guards: [],
-            body: (bodyContext) =>
-              build(
-                ...Array.from(
-                  {length: arity},
-                  (_item, index) => bodyContext.vars[`$${index + 1}`],
-                ),
-              ),
-          },
-        ],
-        contextFixture(),
-      );
-
-    const countCapture = () =>
-      builder(1, (done) =>
+    const notDoneCount = () =>
+      DataLayer.normalizeQuery(
         count(
           filter(
             Type.alias(TASK),
-            Type.list([Type.tuple([Type.atom("done"), done])]),
+            Type.list([Type.tuple([Type.atom("done"), Type.boolean(false)])]),
           ),
         ),
       );
 
-    const notDone = [Type.boolean(false)];
+    const sortedByTitle = () =>
+      DataLayer.normalizeQuery(sort(Type.alias(TASK), Type.atom("title")));
 
     // The struct type and the title of each boxed task, in the order the result holds them.
     const boxedTasks = (result) =>
@@ -274,100 +248,34 @@ describe("DataLayer", () => {
         task.data[Type.encodeMapKey(Type.atom("title"))][1].text,
       ]);
 
-    const sort = ManuallyPortedElixirHologramQueryStage["sort/2"];
-
     const allTasks = () => [
       [Type.alias(TASK), "Buy milk"],
       [Type.alias(TASK), "Call Ann"],
-      [Type.alias(TASK), "Draft memo"],
     ];
 
-    const taskRow = (id, title, done) => ({
-      done: done,
-      id: id,
-      title: title,
-      title$sort: title.toLowerCase(),
-    });
-
-    beforeEach(() => {
-      globalThis.Hologram.sync = {
-        model: {
-          [TASK]: {
-            attributes: {done: "boolean", id: "uuid", title: "string"},
-            relationships: {},
-            serverOnly: [],
-          },
-        },
-        propParams: {},
-      };
-
-      Model.reset();
-      LocalDatabase.reset();
-      LocalDatabase.actorUserId = null;
-      GlobalRegistry.set("connectPageModule", null);
-
-      LocalDatabase.putRow(TASK, taskRow("t1", "Buy milk", false));
-      LocalDatabase.putRow(TASK, taskRow("t2", "Call Ann", true));
-      LocalDatabase.putRow(TASK, taskRow("t3", "Draft memo", false));
-    });
-
-    afterEach(() => {
-      LocalDatabase.reset();
-      LocalDatabase.actorUserId = null;
-      delete globalThis.Hologram.sync;
-    });
-
-    it("answers from the local database, boxed for the template", () => {
-      const capture = builder(0, () =>
-        sort(Type.alias(TASK), Type.atom("title")),
-      );
-
-      const result = DataLayer.answerPropQuery(
+    it("answers rows from the local database, boxed for the template", () => {
+      const result = DataLayer.answerDerivedQuery(
         "MyApp.Listing",
         Type.atom("tasks"),
         [],
-        capture,
+        sortedByTitle(),
       );
 
       assert.deepStrictEqual(boxedTasks(result), allTasks());
-    });
-
-    it("counts locally when the page carried nothing for the count", () => {
-      const result = DataLayer.answerPropQuery(
-        "MyApp.NothingCarried",
-        Type.atom("count"),
-        notDone,
-        countCapture(),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(2));
-    });
-
-    it("answers with the carried count before the marker arrives", () => {
-      LocalDatabase.syncCounts = {"MyApp.Carried/count/false": 42};
-
-      const result = DataLayer.answerPropQuery(
-        "MyApp.Carried",
-        Type.atom("count"),
-        notDone,
-        countCapture(),
-      );
-
-      assert.deepStrictEqual(result, Type.integer(42));
     });
 
     it("counts locally once the whole pot is complete", () => {
       LocalDatabase.syncCounts = {"MyApp.Complete/count/false": 42};
       LocalDatabase.markSynced("all");
 
-      const result = DataLayer.answerPropQuery(
+      const result = DataLayer.answerDerivedQuery(
         "MyApp.Complete",
         Type.atom("count"),
-        notDone,
-        countCapture(),
+        [Type.boolean(false)],
+        notDoneCount(),
       );
 
-      assert.deepStrictEqual(result, Type.integer(2));
+      assert.deepStrictEqual(result, Type.integer(1));
     });
 
     // The page scope covers the page this client connected on, and nothing else - a component on
@@ -377,14 +285,14 @@ describe("DataLayer", () => {
       LocalDatabase.syncCounts = {"MyApp.ConnectPage/count/false": 42};
       LocalDatabase.markSynced("page");
 
-      const result = DataLayer.answerPropQuery(
+      const result = DataLayer.answerDerivedQuery(
         "MyApp.ConnectPage",
         Type.atom("count"),
-        notDone,
-        countCapture(),
+        [Type.boolean(false)],
+        notDoneCount(),
       );
 
-      assert.deepStrictEqual(result, Type.integer(2));
+      assert.deepStrictEqual(result, Type.integer(1));
     });
 
     it("keeps carrying at the page marker for a page reached since", () => {
@@ -392,29 +300,29 @@ describe("DataLayer", () => {
       LocalDatabase.syncCounts = {"MyApp.NavigatedTo/count/false": 42};
       LocalDatabase.markSynced("page");
 
-      const result = DataLayer.answerPropQuery(
+      const result = DataLayer.answerDerivedQuery(
         "MyApp.NavigatedTo",
         Type.atom("count"),
-        notDone,
-        countCapture(),
+        [Type.boolean(false)],
+        notDoneCount(),
       );
 
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
-    // Two instances of one component answer two counts, and the arguments their builders were
+    // Two instances of one component answer two counts, and the arguments their functions were
     // called with are what tell them apart.
-    it("reads the count of the arguments the builder was called with", () => {
+    it("reads the count of the arguments the function was called with", () => {
       LocalDatabase.syncCounts = {
         "MyApp.TwoInstances/count/false": 42,
         "MyApp.TwoInstances/count/true": 7,
       };
 
-      const result = DataLayer.answerPropQuery(
+      const result = DataLayer.answerDerivedQuery(
         "MyApp.TwoInstances",
         Type.atom("count"),
         [Type.boolean(true)],
-        countCapture(),
+        notDoneCount(),
       );
 
       assert.deepStrictEqual(result, Type.integer(7));
@@ -422,36 +330,30 @@ describe("DataLayer", () => {
 
     // Two arguments are two values, not their concatenation: 1 and 23 must not read the key
     // 12 and 3 wrote.
-    it("separates the arguments a multi-argument builder was called with", () => {
-      const capture = builder(2, (_from, _to) => count(Type.alias(TASK)));
-
+    it("separates the arguments a function reading two fields was called with", () => {
       LocalDatabase.syncCounts = {
         "MyApp.TwoArgs/count/1,23": 42,
         "MyApp.TwoArgs/count/123": 7,
       };
 
-      const result = DataLayer.answerPropQuery(
+      const result = DataLayer.answerDerivedQuery(
         "MyApp.TwoArgs",
         Type.atom("count"),
         [Type.integer(1), Type.integer(23)],
-        capture,
+        DataLayer.normalizeQuery(count(Type.alias(TASK))),
       );
 
       assert.deepStrictEqual(result, Type.integer(42));
     });
 
     it("leaves a query that does not count alone", () => {
-      const capture = builder(0, () =>
-        sort(Type.alias(TASK), Type.atom("title")),
-      );
-
       LocalDatabase.syncCounts = {"MyApp.NotCounting/tasks/": 42};
 
-      const result = DataLayer.answerPropQuery(
+      const result = DataLayer.answerDerivedQuery(
         "MyApp.NotCounting",
         Type.atom("tasks"),
         [],
-        capture,
+        sortedByTitle(),
       );
 
       assert.deepStrictEqual(boxedTasks(result), allTasks());
@@ -462,11 +364,11 @@ describe("DataLayer", () => {
 
       LocalDatabase.actorUserId = "u1";
 
-      DataLayer.answerPropQuery(
+      DataLayer.answerDerivedQuery(
         "MyApp.Listing",
         Type.atom("tasks"),
         [],
-        builder(0, () => Type.alias(TASK)),
+        DataLayer.normalizeQuery(Type.alias(TASK)),
       );
 
       assert.deepStrictEqual(running.firstCall.args[1], {actorUserId: "u1"});

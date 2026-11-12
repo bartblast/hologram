@@ -13,8 +13,8 @@ import {
 
 defineModel();
 
-// Every from_query prop of a page, re-evaluated - which is what one render costs under the
-// naive re-run the reactivity ruling chose.
+// Every derived field holding a query on a page, re-evaluated - which is what one render costs
+// under the naive re-run the reactivity ruling chose.
 LocalDatabase.reset();
 Deltas.apply(fillFrame(2_000));
 

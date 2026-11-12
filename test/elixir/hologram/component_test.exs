@@ -11,16 +11,12 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Server
   alias Hologram.Server.Broadcast
   alias Hologram.Test.Fixtures.Component.Module1
-  alias Hologram.Test.Fixtures.Component.Module10
   alias Hologram.Test.Fixtures.Component.Module2
   alias Hologram.Test.Fixtures.Component.Module3
-  alias Hologram.Test.Fixtures.Component.Module35
   alias Hologram.Test.Fixtures.Component.Module36
   alias Hologram.Test.Fixtures.Component.Module4
   alias Hologram.Test.Fixtures.Component.Module5
   alias Hologram.Test.Fixtures.Component.Module7
-  alias Hologram.Test.Fixtures.Component.Module8
-  alias Hologram.Test.Fixtures.Component.Module9
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
   @server %Server{cid: "page"}
@@ -65,48 +61,12 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  test "__entities_from_query__/0 shim delegates to the private query function" do
-    assert Module35.__entities_from_query__() == filter(Entity2, a: true)
-  end
-
-  test "__entities_from_query__/0 shim evaluates an inline from_query function" do
-    assert Module10.__entities_from_query__() == filter(Entity2, a: true)
-  end
-
-  test "__from_query_delegations__/0 is absent for inline-only from_query functions" do
-    Code.ensure_loaded!(Module10)
-
-    refute function_exported?(Module10, :__from_query_delegations__, 0)
-  end
-
-  test "__from_query_delegations__/0 maps delegation shims to their targets" do
-    assert Module35.__from_query_delegations__() == [__entities_from_query__: :entities_query]
-  end
-
   test "__is_hologram_component__/0" do
     assert Module1.__is_hologram_component__()
   end
 
   test "__props__/0" do
     assert Module4.__props__() == [{:a, :string, []}, {:b, :integer, [default: 222]}]
-  end
-
-  test "__props__/0 keeps an imported from_query capture on its source module" do
-    assert Module8.__props__() == [
-             {:entities, [Entity2], [from_query: &Module9.shared_query/0]}
-           ]
-  end
-
-  test "__props__/0 rewrites a local from_query capture to a generated shim capture" do
-    assert Module35.__props__() == [
-             {:entities, [Entity2], [from_query: &Module35.__entities_from_query__/0]}
-           ]
-  end
-
-  test "__props__/0 rewrites an inline from_query function to a generated shim capture" do
-    assert Module10.__props__() == [
-             {:entities, [Entity2], [from_query: &Module10.__entities_from_query__/0]}
-           ]
   end
 
   test "__state__/0" do
@@ -1085,7 +1045,7 @@ defmodule Hologram.ComponentTest do
 
     test "raises when an option is not supported" do
       expected_error_msg =
-        ~s/invalid option :some_option for prop "b" in Hologram.Test.Fixtures.Component.UnsupportedPropOpt, expected one of: :default, :from_context, :from_query, :required, :values/
+        ~s/invalid option :some_option for prop "b" in Hologram.Test.Fixtures.Component.UnsupportedPropOpt, expected one of: :default, :from_context, :required, :values/
 
       assert_error Hologram.CompileError, expected_error_msg, fn ->
         Code.eval_string("""
@@ -1372,14 +1332,14 @@ defmodule Hologram.ComponentTest do
       assert module.__props__() == [{:a, :string, [default: "abc"]}]
     end
 
-    test "raises on the from_query capture shorthand" do
+    test "raises on a from_query option, which derived fields replaced" do
       code = ~s'''
-      defmodule Hologram.ComponentTest.ShorthandFixture do
+      defmodule Hologram.ComponentTest.FromQueryFixture do
         use Hologram.Component
 
         alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
-        prop :entities, [Entity2], from_query: &Enum.member?([&1], &1)
+        prop :entities, [Entity2], from_query: &Hologram.Test.Fixtures.Component.Module9.shared_query/0
 
         @impl Component
         def template do
@@ -1389,7 +1349,7 @@ defmodule Hologram.ComponentTest do
       '''
 
       expected_msg =
-        "from_query for prop :entities uses the &(...) capture shorthand - use fn syntax or a &fun/arity capture instead"
+        ~s/invalid option :from_query for prop "entities" in Hologram.ComponentTest.FromQueryFixture, expected one of: :default, :from_context, :required, :values/
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.compile_string(code)

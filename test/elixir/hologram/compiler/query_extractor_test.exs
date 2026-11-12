@@ -10,8 +10,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Stage
   alias Hologram.Reflection
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module10
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module100
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module101
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module102
@@ -41,23 +39,16 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module126
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module127
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module128
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module2
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module23
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module27
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module4
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module130
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module54
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module55
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module6
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module64
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module74
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module75
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module76
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module77
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module78
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module80
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module81
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module82
@@ -67,7 +58,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module87
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module88
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module89
-  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module9
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module90
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module91
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module92
@@ -77,14 +67,7 @@ defmodule Hologram.Compiler.QueryExtractorTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module96
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module97
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module99
-  alias Hologram.Test.Fixtures.Component.Module10, as: Component10
-  alias Hologram.Test.Fixtures.Component.Module11, as: Component11
-  alias Hologram.Test.Fixtures.Component.Module12, as: Component12
-  alias Hologram.Test.Fixtures.Component.Module14, as: Component14
-  alias Hologram.Test.Fixtures.Component.Module22, as: Component22
-  alias Hologram.Test.Fixtures.Component.Module23, as: Component23
-  alias Hologram.Test.Fixtures.Component.Module25, as: Component25
-  alias Hologram.Test.Fixtures.Component.Module27, as: Component27
+  alias Hologram.Test.Fixtures.Component.Module1, as: Component1
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module18, as: Entity18
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
@@ -495,11 +478,20 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       refute Map.has_key?(queries, :raising)
     end
 
+    test "registers a query whose function ignores the field an underscored argument reads", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      assert extract_derived_queries(Module130, entity_types, ir_plt) == [
+               entities: [%Query{entity: Entity2, filter: [{:a, :==, true}], sort: [id: :asc]}]
+             ]
+    end
+
     test "registers nothing for a module declaring no derived field", %{
       entity_types: entity_types,
       ir_plt: ir_plt
     } do
-      assert extract_derived_queries(Module1, entity_types, ir_plt) == []
+      assert extract_derived_queries(Component1, entity_types, ir_plt) == []
     end
 
     test "raises on a field building a query that returns a value on a branch", %{
@@ -1869,295 +1861,6 @@ defmodule Hologram.Compiler.QueryExtractorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         extract_derived_queries(Module125, entity_types, ir_plt)
-      end
-    end
-  end
-
-  describe "extract_module_queries/3" do
-    test "extracts a guarded capture ignoring the guard", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      expected_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
-
-      assert extract_module_queries(Module10, entity_types, ir_plt) == [expected_term]
-    end
-
-    test "extracts each clause of a multi-clause capture as a variant", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      nil_clause_term =
-        Entity2
-        |> filter(a: true)
-        |> Stage.normalize()
-
-      bound_clause_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
-
-      assert extract_module_queries(Module9, entity_types, ir_plt) == [
-               nil_clause_term,
-               bound_clause_term
-             ]
-    end
-
-    test "extracts normalized terms from from_query props", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      expected_term =
-        Entity2
-        |> filter(a: true)
-        |> sort(c)
-        |> Stage.normalize()
-
-      assert extract_module_queries(Module1, entity_types, ir_plt) == [expected_term]
-    end
-
-    test "extracts placeholders from a local parameterized capture through its shim", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      expected_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
-
-      assert extract_module_queries(Module2, entity_types, ir_plt) == [expected_term]
-    end
-
-    test "extracts placeholders from a remote parameterized capture in argument order", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      expected_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b} and c == ^%Placeholder{name: :search})
-        |> Stage.normalize()
-
-      assert extract_module_queries(Module6, entity_types, ir_plt) == [expected_term]
-    end
-
-    test "extracts placeholders from an inline from_query function", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      expected_term =
-        Entity2
-        |> filter(b >= ^%Placeholder{name: :min_b})
-        |> Stage.normalize()
-
-      assert extract_module_queries(Module23, entity_types, ir_plt) == [expected_term]
-    end
-
-    test "yields no terms for modules without prop declarations", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      assert extract_module_queries(Entity2, entity_types, ir_plt) == []
-    end
-
-    test "raises on a capture targeting an undefined function", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      # Defined at runtime - a compile-time fixture cannot hold a missing-target
-      # capture, because the fun value inlined into __props__/0 trips the
-      # compiler's undefined-remote warning.
-      code = ~s'''
-      defmodule Hologram.Compiler.QueryExtractorTest.UndefinedTargetFixture do
-        use Hologram.Component
-
-        alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19
-        alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
-
-        prop :entities, [Entity2], from_query: Function.capture(Module19, :missing_query, 1)
-
-        @impl Component
-        def template do
-          ~HOLO""
-        end
-      end
-      '''
-
-      {_result, _diagnostics} = Code.with_diagnostics(fn -> Code.compile_string(code) end)
-
-      expected_msg =
-        "query capture for prop :entities in Hologram.Compiler.QueryExtractorTest.UndefinedTargetFixture targets undefined function Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19.missing_query/1"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(
-          Hologram.Compiler.QueryExtractorTest.UndefinedTargetFixture,
-          entity_types,
-          ir_plt
-        )
-      end
-    end
-
-    test "raises on a destructured query capture argument", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      expected_msg =
-        "test/elixir/support/fixtures/compiler/query_extractor/module_8.ex:15: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module8 destructures an argument - arguments must be plain names, each binding to the like-named component assign"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module8, entity_types, ir_plt)
-      end
-    end
-
-    test "raises on a non-capture from_query value", %{entity_types: entity_types, ir_plt: ir_plt} do
-      expected_msg =
-        "test/elixir/support/fixtures/compiler/query_extractor/module_3.ex: from_query for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module3 must be a function capture, got: 123"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module3, entity_types, ir_plt)
-      end
-    end
-
-    test "raises on a query capture argument named vars", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      expected_msg =
-        "test/elixir/support/fixtures/compiler/query_extractor/module_7.ex:15: query capture for prop :entities in Hologram.Test.Fixtures.Compiler.QueryExtractor.Module7 names an argument vars - the name is reserved, name arguments after the component assigns they bind to"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_module_queries(Module7, entity_types, ir_plt)
-      end
-    end
-  end
-
-  describe "extract_prop_params/2" do
-    test "builds the IR of a module the PLT lacks into it" do
-      ir_plt = PLT.start()
-
-      extract_prop_params(Component11, ir_plt)
-
-      assert PLT.member?(ir_plt, Component11)
-    end
-
-    test "names an argument the builder reads a field from", %{ir_plt: ir_plt} do
-      assert extract_prop_params(Module27, ir_plt) == [entities: [:entity]]
-    end
-
-    test "names arguments of a local parameterized capture through its shim", %{ir_plt: ir_plt} do
-      assert extract_prop_params(Component11, ir_plt) == [entities: [:min_b]]
-    end
-
-    test "names arguments of a remote parameterized capture merging clauses", %{ir_plt: ir_plt} do
-      assert extract_prop_params(Component14, ir_plt) == [entities: [:min_b]]
-    end
-
-    test "names arguments of an inline parameterized function", %{ir_plt: ir_plt} do
-      assert extract_prop_params(Component12, ir_plt) == [entities: [:min_b]]
-    end
-
-    # The PLT holds Module27's IR under Component11's key, so the names tell which IR was read: both
-    # builders are entities_query/1, Module27's names its argument entity, Component11's min_b.
-    test "reads the IR the PLT holds instead of building it" do
-      ir_plt = PLT.put(PLT.start(), Component11, IR.for_module(Module27))
-
-      assert extract_prop_params(Component11, ir_plt) == [entities: [:entity]]
-    end
-
-    test "yields no entries for modules without prop declarations", %{ir_plt: ir_plt} do
-      assert extract_prop_params(Entity2, ir_plt) == []
-    end
-
-    test "yields no entries for zero-arity captures", %{ir_plt: ir_plt} do
-      assert extract_prop_params(Module1, ir_plt) == []
-    end
-
-    test "raises when clauses name one argument position differently", %{ir_plt: ir_plt} do
-      expected_msg =
-        "test/elixir/support/fixtures/component/module_25.ex:18: query capture for prop :entities in Hologram.Test.Fixtures.Component.Module25 names argument 1 differently across its clauses (:min_b, :max_b) - one argument position binds one prop, and which prop it is has to be known before any clause is chosen, so every clause must name it alike. Rename them to the prop this argument binds, leave the position a literal or an underscored name in the clauses that do not use it, or bind through an adapter naming it once: from_query: fn min_b -> your_query(min_b) end"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        extract_prop_params(Component25, ir_plt)
-      end
-    end
-  end
-
-  describe "extract_queries/3" do
-    test "collects queries from the given modules in order, skipping query-less ones", %{
-      entity_types: entity_types,
-      ir_plt: ir_plt
-    } do
-      module_1_term =
-        Entity2
-        |> filter(a: true)
-        |> sort(c)
-        |> Stage.normalize()
-
-      module_4_term =
-        Entity2
-        |> filter(b: 123)
-        |> Stage.normalize()
-
-      assert extract_queries([Module1, Entity2, Module4], entity_types, ir_plt) == [
-               module_1_term,
-               module_4_term
-             ]
-    end
-  end
-
-  describe "validate_slot_bindings!/2" do
-    test "passes a capture binding declared props" do
-      assert validate_slot_bindings!(Component22, entities: [:min_b]) == :ok
-    end
-
-    test "passes a module without prop declarations" do
-      assert validate_slot_bindings!(Entity2, []) == :ok
-    end
-
-    test "passes a zero-arity capture" do
-      assert validate_slot_bindings!(Component10, []) == :ok
-    end
-
-    test "raises when a local capture argument binds no declared prop" do
-      expected_msg =
-        "test/elixir/support/fixtures/component/module_11.ex: from_query for prop :entities in Hologram.Test.Fixtures.Component.Module11 binds argument :min_b - no like-named prop is declared"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_slot_bindings!(Component11, entities: [:min_b])
-      end
-    end
-
-    # A shared builder's argument names are a cross-module contract - each consumer is validated
-    # against its own declared slots.
-    test "raises when a remote capture argument binds no declared prop" do
-      expected_msg =
-        "test/elixir/support/fixtures/component/module_14.ex: from_query for prop :entities in Hologram.Test.Fixtures.Component.Module14 binds argument :min_b - no like-named prop is declared"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_slot_bindings!(Component14, entities: [:min_b])
-      end
-    end
-
-    # Slots are what a component is GIVEN. A query's answer is not that, and binding one would
-    # make a query depend on another query with nothing ordering the two - the injector runs them
-    # in declaration order, so the same pair resolves or raises by which was written first.
-    test "raises when a capture argument binds a from_query prop of the same component" do
-      expected_msg =
-        "test/elixir/support/fixtures/component/module_27.ex: from_query for prop :derived in Hologram.Test.Fixtures.Component.Module27 binds argument :entities, which is a from_query prop of the same component - a query argument binds a value the component is GIVEN, never one another query produced"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_slot_bindings!(Component27, entities: [:min_b], derived: [:entities])
-      end
-    end
-
-    test "raises when an argument position is named by no clause" do
-      expected_msg =
-        "test/elixir/support/fixtures/component/module_23.ex: from_query capture for prop :entities in Hologram.Test.Fixtures.Component.Module23 has an argument position no clause names - it cannot bind a prop"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        validate_slot_bindings!(Component23, entities: [nil])
       end
     end
   end

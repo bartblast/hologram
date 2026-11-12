@@ -18,7 +18,6 @@ defmodule Hologram.DB.QueryCacheTest do
   alias Hologram.Query.Stage
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84
-  alias Hologram.Test.Fixtures.Component.Module11
   alias Hologram.Test.Fixtures.Component.Module40
   alias Hologram.Test.Fixtures.Component.Module41
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
@@ -42,7 +41,6 @@ defmodule Hologram.DB.QueryCacheTest do
       derived_queries: MapSet.new([{Module40, :entities}, {Module41, :entities}]),
       entries: entries,
       permission_checking?: false,
-      prop_params: %{},
       windows: expected_windows(entries)
     }
   end
@@ -157,24 +155,6 @@ defmodule Hologram.DB.QueryCacheTest do
       init(nil)
 
       refute permission_checking?()
-    end
-  end
-
-  describe "prop_params/2" do
-    test "returns the argument names of a parameterized from_query prop" do
-      dump_query_cache(QueryCacheStub, [Module11])
-
-      init(nil)
-
-      assert prop_params(Module11, :entities) == [:min_b]
-    end
-
-    test "returns nil for a prop without registered placeholders" do
-      dump_query_cache(QueryCacheStub, [Module11])
-
-      init(nil)
-
-      assert prop_params(Module11, :unknown) == nil
     end
   end
 

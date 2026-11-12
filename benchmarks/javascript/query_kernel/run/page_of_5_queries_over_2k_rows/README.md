@@ -5,7 +5,8 @@ Argument: five terms over a 2,000-row table - a plain filter, a filter sorted by
 50 rows, a comparison taking 20, a count, and a single-result lookup by id
 
 What it prices: one render's worth of query evaluation under the naive re-run the reactivity
-ruling chose - every from_query prop of a page re-evaluated, against a 16.7 ms frame.
+ruling chose - every derived field holding a query on a page re-evaluated, against a 16.7 ms
+frame.
 
 ## System
 

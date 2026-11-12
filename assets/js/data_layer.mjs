@@ -28,10 +28,10 @@ import Type from "./type.mjs";
 export default class DataLayer {
   // Based on run_query!/4
   //
-  // Answers the given normalized term a derived field or a query prop of the given module is
-  // defined by, for the given name and the arguments its function was called with. The result is
-  // boxed here and nowhere else: rows live plain, and this is the boundary where one becomes
-  // something a template can read.
+  // Answers the given normalized term a derived field of the given module is defined by, for the
+  // given name and the arguments its function was called with. The result is boxed here and
+  // nowhere else: rows live plain, and this is the boundary where one becomes something a
+  // template can read.
   static answerDerivedQuery(module, name, args, term) {
     const carried = $.#carriedCount(module, name, args, term);
 
@@ -44,19 +44,6 @@ export default class DataLayer {
     });
 
     return Model.boxResult(term, result);
-  }
-
-  // Based on run_prop_query!/4
-  //
-  // The builder is ordinary transpiled code piping the ported query stages, so calling it yields
-  // the plain term the kernel evaluates - normalized first, exactly as the server normalizes
-  // before running, so the client answers the same query the same way.
-  static answerPropQuery(module, propName, args, capture) {
-    const term = ManuallyPortedElixirHologramQueryStage["normalize/1"](
-      Interpreter.callAnonymousFunction(capture, args),
-    );
-
-    return $.answerDerivedQuery(module, propName, args, term);
   }
 
   // What the data layer needs before the page mounts: the replica identity, the durable store and

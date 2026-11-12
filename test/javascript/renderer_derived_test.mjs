@@ -237,7 +237,6 @@ describe("Renderer derived fields", () => {
         },
       },
       derivedQueries: {},
-      propParams: {},
     };
 
     ComponentRegistry.clear();

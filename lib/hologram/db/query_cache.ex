@@ -108,17 +108,6 @@ defmodule Hologram.DB.QueryCache do
   end
 
   @doc """
-  Returns the ordered argument names of the parameterized from_query capture
-  declared for the given component prop, or nil when the prop declares none.
-  """
-  @spec prop_params(module, atom) :: list(atom | nil) | nil
-  def prop_params(module, prop_name) do
-    key = impl().persistent_term_key()
-
-    Map.get(:persistent_term.get(key).prop_params, {module, prop_name})
-  end
-
-  @doc """
   Re-reads the query cache from the compiler's dump - the live-reload path after
   a dev code change, where the recompile that precedes it has rewritten the dump.
   A no-op when the database is not running (no entities declared at boot).

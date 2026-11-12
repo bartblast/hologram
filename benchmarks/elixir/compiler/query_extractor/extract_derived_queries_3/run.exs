@@ -21,33 +21,33 @@ ir_plt =
     QueryPropComponent
   ])
 
-# The per-component cost the build pays once per component whose queries it extracts. The
-# parameterized cases read the capture target's IR from the IR PLT and walk it once - the
-# no-capture case is the fast path every component without a query prop takes.
+# The per-component cost the build pays once per component whose queries it extracts. The cases
+# with a derived field read its function's IR from the IR PLT and walk it once - the no-field case
+# is the fast path every component without a derived field takes.
 #
 # The two argument-entity cases differ only in how many candidates the recorded stages are
 # replayed over, and that is the point: the walk happens ONCE either way, so the gap between them
-# is the replay alone. An extractor that went back to re-walking the capture's body per candidate
+# is the replay alone. An extractor that went back to re-walking the function's body per candidate
 # would not show up in either number on its own - it shows up in the distance between them.
 Benchee.run(
   %{
-    "no parameterized captures" => fn ->
-      QueryExtractor.extract_module_queries(PlainPropComponent, all_entity_types, ir_plt)
+    "no derived fields" => fn ->
+      QueryExtractor.extract_derived_queries(PlainPropComponent, all_entity_types, ir_plt)
     end,
-    "capture naming its entity" => fn ->
-      QueryExtractor.extract_module_queries(QueryPropComponent, all_entity_types, ir_plt)
+    "field naming its entity" => fn ->
+      QueryExtractor.extract_derived_queries(QueryPropComponent, all_entity_types, ir_plt)
     end,
-    "capture whose entity is an argument, 1 candidate" => fn ->
-      QueryExtractor.extract_module_queries(EntityPropComponent, one_entity_type, ir_plt)
+    "field whose entity is an argument, 1 candidate" => fn ->
+      QueryExtractor.extract_derived_queries(EntityPropComponent, one_entity_type, ir_plt)
     end,
-    "capture whose entity is an argument, #{length(all_entity_types)} candidates" => fn ->
-      QueryExtractor.extract_module_queries(EntityPropComponent, all_entity_types, ir_plt)
+    "field whose entity is an argument, #{length(all_entity_types)} candidates" => fn ->
+      QueryExtractor.extract_derived_queries(EntityPropComponent, all_entity_types, ir_plt)
     end
   },
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Compiler.QueryExtractor.extract_module_queries/3",
+     description: "Hologram.Compiler.QueryExtractor.extract_derived_queries/3",
      file: Path.join(__DIR__, "README.md")}
   ],
   time: 10

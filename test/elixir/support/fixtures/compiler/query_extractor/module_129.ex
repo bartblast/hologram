@@ -1,19 +1,16 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Component.Module22 do
+defmodule Hologram.Test.Fixtures.Compiler.QueryExtractor.Module129 do
   use Hologram.Component
-  use Hologram.DB
 
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
-  prop :entities, [Entity2], from_query: &entities_query/1
   prop :min_b, :integer
+
+  derived :entities, [Entity2], fn min_b -> Module19.bounded_query(min_b) end
 
   @impl Component
   def template do
     ~HOLO""
-  end
-
-  defp entities_query(min_b) do
-    filter(Entity2, b >= ^min_b)
   end
 end

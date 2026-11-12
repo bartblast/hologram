@@ -4,10 +4,10 @@ defmodule Hologram.Sync.Carry do
   # What a page's own render resolved - its rows, and the counts nothing but a number came back
   # for - gathered as it renders and handed to the client with the page.
   #
-  # What it buys: from the first client render, every `from_query` prop answers from the client's
-  # own database rather than from a value the server passed down - no second evaluation path, no
-  # swap when the stream finishes filling. The two executors agreeing is what makes that first
-  # render match the HTML the server sent.
+  # What it buys: from the first client render, every derived field holding a query answers from
+  # the client's own database rather than from a value the server passed down - no second
+  # evaluation path, no swap when the stream finishes filling. The two executors agreeing is what
+  # makes that first render match the HTML the server sent.
   #
   # Rows are spelled the way a frame spells them, so the client reads them through the same
   # ingest as everything else. What arrives this way is applied INSERT-ONLY there: what a page
@@ -50,7 +50,7 @@ defmodule Hologram.Sync.Carry do
   end
 
   @doc """
-  Records the given count under the key naming the query prop or derived field that answered it.
+  Records the given count under the key naming the derived field that answered it.
 
   A counting query answers with a number and no rows, so nothing about it can be re-derived from
   the rows a page carries - the client is told the number itself, and holds it until its own database is
@@ -139,7 +139,7 @@ defmodule Hologram.Sync.Carry do
   end
 
   @doc """
-  Returns the counts gathered so far, keyed by query prop, and clears what was gathered.
+  Returns the counts gathered so far, keyed by derived field, and clears what was gathered.
   """
   @spec take_counts() :: %{String.t() => integer}
   def take_counts do

@@ -12,10 +12,10 @@ entity_types = Reflection.list_entities()
 ir_plt = Compiler.build_missing_ir!(PLT.start(), component_modules)
 
 # What the compile task pays to extract the registered queries of every component of the build: the
-# terms of each from_query prop, the argument names of the parameterized captures and the modules
-# the captures point at. A cold compile pays it for every component. A compile that derives the data
-# layer pays it only for the components whose queries the edit can have changed, and an edit of an
-# entity type, a role or a policy, which can change all of them.
+# terms each derived field builds, and the names of the fields that build one. A cold compile pays
+# it for every component. A compile that derives the data layer pays it only for the components
+# whose queries the edit can have changed, and an edit of an entity type, a role or a policy, which
+# can change all of them.
 Benchee.run(
   %{
     "extract_component_queries/3" => fn ->

@@ -27,7 +27,6 @@ defmodule Hologram.Sync.EvaluatorsTest do
 
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
       entries: %{},
-      prop_params: %{},
       windows: %{@window_id => Stage.normalize(Module2)}
     })
 
@@ -67,7 +66,6 @@ defmodule Hologram.Sync.EvaluatorsTest do
 
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
-        prop_params: %{},
         windows: %{}
       })
 
