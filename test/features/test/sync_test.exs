@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.SyncTest do
   import Hologram.DB.EntityOperations, only: [delete: 2, update: 3]
 
   alias Hologram.DB
+  alias Hologram.Policy
   alias Hologram.Test.SyncClient
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
@@ -458,6 +459,46 @@ defmodule HologramFeatureTests.SyncTest do
     # The marker is an instruction to discard, so what follows has to be everything again.
     {data, _refilled_client} =
       await_deltas_carrying(resyncing_client, ~s["title":"sent_again_after_resync"])
+
+    assert data =~ ~s["put_entity":]
+  end
+
+  # A deploy that changes only policies moves no row and leaves the model hash as it was, so the
+  # client's place is the one thing that can say its rows were judged by other rules. The lever is
+  # the server's own policy hash: standing another one in the cache `Policy.hash/0` answers from is
+  # what a node running a build with other rules answers by, provoked without building one.
+  feature "tells a client returning under other rules to start over", %{session: _session} do
+    %{public: true, title: "held_under_the_old_rules"}
+    |> Document.new()
+    |> DB.create!()
+
+    filled_client = drain_initial_sync(connect())
+
+    # There to produce a frame after the store is complete, which is the first one carrying a place.
+    %{public: true, title: "dated_under_the_old_rules"}
+    |> Document.new()
+    |> DB.create!()
+
+    {dating_data, departing_client} =
+      await_deltas_carrying(filled_client, ~s["title":"dated_under_the_old_rules"])
+
+    cursor = cursor_of(dating_data)
+
+    :ok = SyncClient.close(departing_client)
+
+    on_exit(&Policy.reset_model_facts_cache/0)
+    :persistent_term.put({Policy, :hash}, "fedcba9876543210fedcba9876543210")
+    assert Policy.hash() == "fedcba9876543210fedcba9876543210"
+
+    returning_client = connect(cursor: cursor)
+
+    {resync, resyncing_client} = SyncClient.await_frame(returning_client, "sync_resync")
+    assert resync["data"] =~ ~s["reason":"policy_hash"]
+
+    # Everything again, the row the client was filled with among it - which a resumed client is
+    # never sent again.
+    {data, _refilled_client} =
+      await_deltas_carrying(resyncing_client, ~s["title":"held_under_the_old_rules"])
 
     assert data =~ ~s["put_entity":]
   end
