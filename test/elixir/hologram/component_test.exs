@@ -760,6 +760,48 @@ defmodule Hologram.ComponentTest do
       assert diagnostics == []
     end
 
+    test "warns about a module attribute the body reads that is never set" do
+      {_result, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedUnsetAttribute do
+            use Hologram.Component
+
+            derived :label, :string, fn -> @missing_label end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert [%{message: message, position: 4, severity: :warning}] = diagnostics
+      assert message =~ "@missing_label"
+    end
+
+    test "reads a module attribute set to nil without a warning" do
+      {{{:module, module, _binary, _result}, _bindings}, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedNilAttribute do
+            use Hologram.Component
+
+            @label nil
+
+            derived :label, :string, fn -> @label end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert diagnostics == []
+      assert module.__derived_label__() == nil
+    end
+
     test "counts an alias the body reads as used" do
       {_result, diagnostics} =
         Code.with_diagnostics(fn ->

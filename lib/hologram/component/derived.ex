@@ -506,15 +506,14 @@ defmodule Hologram.Component.Derived do
 
   # Returns the given AST with the names resolved, and the names the body has declared once it has
   # run - the ones declared before it, and the ones it declares for what follows it in its block.
-  defp resolve_names({:@, _meta, [{attribute, _attribute_meta, context}]}, declared, _env)
+  # The attribute is read as written, so Elixir warns about one never set as it does anywhere else.
+  defp resolve_names({:@, _meta, [{attribute, _attribute_meta, context}]} = ast, declared, _env)
        when is_atom(attribute) and is_atom(context) do
     fragment =
       {:unquote, [],
        [
          quote do
-           __MODULE__
-           |> Module.get_attribute(unquote(attribute))
-           |> Macro.escape()
+           Macro.escape(unquote(ast))
          end
        ]}
 
