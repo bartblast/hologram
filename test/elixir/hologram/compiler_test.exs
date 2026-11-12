@@ -71,6 +71,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module45, as: Entity45
   alias Hologram.Test.Fixtures.Entity.Module46, as: Entity46
   alias Hologram.Test.Fixtures.Entity.Module47, as: Entity47
+  alias Hologram.Test.Fixtures.Entity.Module48, as: Entity48
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
@@ -2317,6 +2318,17 @@ defmodule Hologram.CompilerTest do
       sync_constants: sync_constants
     } do
       assert sync_constants.policy_hash == nil
+    end
+
+    # A tab of a checking build hands a tab of another build the entries a server would, which
+    # include every type the derived fields and inverses of its types lead to - Module48 declares no
+    # rule and nothing reaches it but Module49's inverse.
+    test "names a type an inverse of a checked type leads to when a page checks permissions",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants =
+        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
+
+      assert MapSet.member?(sync_constants.entity_types, Entity48)
     end
 
     # Whatever the pages reach, like the model hash: the running app compares it with the rules of

@@ -366,6 +366,30 @@ describe("Tabs", () => {
       });
     });
 
+    // A tab whose bundle was current when its stream connected is handed no rules, and a tab
+    // joining it with an older bundle still needs the ones the group syncs under.
+    it("hands over this bundle's own rules when the server handed this tab none", () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      globalThis.Hologram.sync = {
+        model: {"MyApp.Doc": {policy: {}}},
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      try {
+        Tabs.postState();
+      } finally {
+        delete globalThis.Hologram.sync;
+      }
+
+      assert.deepStrictEqual(posting.firstCall.args[0].rules, {
+        policy_hash: "0123456789abcdef",
+        protocol_version: 1,
+        rules: {"MyApp.Doc": {constraints: {}, defaults: {}, policy: {}}},
+      });
+    });
+
     it("hands over the rules the server handed this tab in place of its bundle's", () => {
       const posting = sinon.stub(Tabs, "post");
       const rules = {

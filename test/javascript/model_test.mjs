@@ -1582,6 +1582,92 @@ describe("Model", () => {
     });
   });
 
+  describe("serializedEntries()", () => {
+    const FOLDER = "MyApp.Folder";
+
+    const folder = {
+      attributes: {
+        archived: "boolean",
+        count: "integer",
+        due_on: "date",
+        id: "uuid",
+        name: "string",
+        note: "string",
+        opened_at: "datetime",
+        score: "float",
+        title: "string",
+      },
+      constraints: {
+        count: {
+          in: {first: 0, last: 100, step: 5},
+          max: Type.integer(10),
+          min: Type.integer(1),
+        },
+        due_on: {
+          max: Type.struct("Date", [
+            [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+            [Type.atom("day"), Type.integer(31)],
+            [Type.atom("month"), Type.integer(12)],
+            [Type.atom("year"), Type.integer(2030)],
+          ]),
+        },
+        score: {max: Type.float(5.0), min: Type.integer(0)},
+        name: {
+          format: {
+            opts: Type.list([
+              Type.atom("dotall"),
+              Type.tuple([Type.atom("newline"), Type.atom("anycrlf")]),
+            ]),
+            source: "@",
+          },
+          optional: true,
+        },
+      },
+      defaults: {
+        archived: Type.boolean(false),
+        note: Type.nil(),
+        opened_at: Type.struct("DateTime", [
+          [Type.atom("calendar"), Type.alias("Calendar.ISO")],
+          [Type.atom("day"), Type.integer(1)],
+          [Type.atom("hour"), Type.integer(9)],
+          [
+            Type.atom("microsecond"),
+            Type.tuple([Type.integer(0), Type.integer(6)]),
+          ],
+          [Type.atom("minute"), Type.integer(30)],
+          [Type.atom("month"), Type.integer(1)],
+          [Type.atom("second"), Type.integer(0)],
+          [Type.atom("std_offset"), Type.integer(0)],
+          [Type.atom("time_zone"), Type.bitstring("Etc/UTC")],
+          [Type.atom("utc_offset"), Type.integer(0)],
+          [Type.atom("year"), Type.integer(2026)],
+          [Type.atom("zone_abbr"), Type.bitstring("UTC")],
+        ]),
+        score: Type.float(2.5),
+        title: Type.bitstring("untitled"),
+      },
+      derived: {},
+      inverses: {},
+      operations: [],
+      policy: {read: [{predicates: [], to: null, via: null}]},
+      relationships: {},
+    };
+
+    // A tab whose bundle never held the type takes the entry in as the bundle that baked it holds
+    // it - which is what handing the group's rules to a tab built with others comes down to.
+    it("hands over each entry the way replaceRules() takes it in", () => {
+      globalThis.Hologram.sync = {model: {[FOLDER]: folder}};
+
+      const entries = Model.serializedEntries();
+
+      globalThis.Hologram.sync = {model: {}};
+
+      Model.replaceRules(entries);
+
+      assert.deepStrictEqual(globalThis.Hologram.sync.model[FOLDER], folder);
+    });
+  });
+
   // IMPORTANT!
   // The messages here are the server's, pinned by the same-named cases in describe
   // "validate_operation!/2" of test/elixir/hologram/policy_test.exs, and the list by its

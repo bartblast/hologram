@@ -5,6 +5,7 @@ import Calendar from "./calendar.mjs";
 import Deserializer from "./deserializer.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import Serializer from "./serializer.mjs";
 import SortKey from "./sort_key.mjs";
 import Type from "./type.mjs";
 
@@ -487,6 +488,19 @@ export default class Model {
     Model.#entries = {};
   }
 
+  // The model entries this client holds, in the shape a server hands them over in (see
+  // Hologram.Compiler.render_rules/1): the terms among the defaults and constraints serialized,
+  // where the rest is the data it already is - so a tab of this browser built with other rules can
+  // take them in through replaceRules().
+  static serializedEntries() {
+    return Object.fromEntries(
+      Object.entries(globalThis.Hologram.sync.model).map(([type, entry]) => [
+        type,
+        Model.#serializedTerms(entry),
+      ]),
+    );
+  }
+
   // A datetime as the wire spells it, from a count of milliseconds - six fractional digits, the
   // same rule #unboxDateTime follows, so an instant this client derives compares as a plain string
   // with one the server sent. toISOString writes exactly three, which is all a millisecond has.
@@ -766,6 +780,46 @@ export default class Model {
     }
 
     return [];
+  }
+
+  // A constraint's term serialized the way a frame carries it, from the one the bundle baked.
+  static #serializedConstraint(option, value) {
+    switch (option) {
+      case "format":
+        return {...value, opts: Serializer.serialize(value.opts, "client")};
+
+      case "max":
+      case "min":
+        return Serializer.serialize(value, "client");
+
+      default:
+        return value;
+    }
+  }
+
+  // The given entry with the terms among its defaults and constraints serialized.
+  static #serializedTerms(entry) {
+    const defaults = Object.entries(entry.defaults ?? {}).map(
+      ([name, value]) => [name, Serializer.serialize(value, "client")],
+    );
+
+    const constraints = Object.entries(entry.constraints ?? {}).map(
+      ([name, options]) => [
+        name,
+        Object.fromEntries(
+          Object.entries(options).map(([option, value]) => [
+            option,
+            Model.#serializedConstraint(option, value),
+          ]),
+        ),
+      ],
+    );
+
+    return {
+      ...entry,
+      constraints: Object.fromEntries(constraints),
+      defaults: Object.fromEntries(defaults),
+    };
   }
 
   // A constraint's term as the bundle bakes it, from the serialized one a frame carries.

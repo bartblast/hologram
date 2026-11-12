@@ -473,6 +473,55 @@ describe("SyncStream", () => {
     });
   });
 
+  describe("rulesForGroup()", () => {
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+      SyncStream.rules = null;
+    });
+
+    it("hands on the rules a server handed this tab", () => {
+      const frame = {
+        policy_hash: "fedcba9876543210",
+        protocol_version: 1,
+        rules: {},
+      };
+
+      globalThis.Hologram.sync = {model: {}, policyHash: "0123456789abcdef"};
+      SyncStream.rules = frame;
+
+      assert.deepStrictEqual(SyncStream.rulesForGroup(), frame);
+    });
+
+    // A server hands over its rules exactly when a bundle's differ from them, so a tab it handed
+    // none answers by the ones the group syncs under.
+    it("hands on this bundle's own rules when a server handed it none", () => {
+      globalThis.Hologram.sync = {
+        model: {"MyApp.Doc": {attributes: {id: "uuid"}, policy: {}}},
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      assert.deepStrictEqual(SyncStream.rulesForGroup(), {
+        policy_hash: "0123456789abcdef",
+        protocol_version: 1,
+        rules: {
+          "MyApp.Doc": {
+            attributes: {id: "uuid"},
+            constraints: {},
+            defaults: {},
+            policy: {},
+          },
+        },
+      });
+    });
+
+    it("hands on nothing from a bundle checking no permissions", () => {
+      globalThis.Hologram.sync = {model: {}, policyHash: null};
+
+      assert.isNull(SyncStream.rulesForGroup());
+    });
+  });
+
   describe("scheduleRender()", () => {
     afterEach(() => {
       SyncStream.renderScheduled = false;

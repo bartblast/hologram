@@ -2399,11 +2399,15 @@ defmodule Hologram.Compiler do
 
     reached_entity_types = MapSet.union(queried_entity_types, mentioned_entity_types)
 
+    # A checking build also holds every type the derived fields and inverses of its types lead to,
+    # the set a server hands a client built with other rules (see render_rules/1) - so a tab of
+    # this build can hand a tab of another the same entries the server would.
     entity_types =
       if permission_checking? do
         reached_entity_types
         |> MapSet.put(RoleGrant)
         |> MapSet.union(checked_entity_types(all_entity_types))
+        |> rules_entity_types()
       else
         reached_entity_types
       end

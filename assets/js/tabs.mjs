@@ -316,14 +316,14 @@ export default class Tabs {
 
   // What this tab knows that a tab joining cannot read out of the store: the identity in use, the
   // place the stream has reached, the scopes the server has declared complete, and the rules the
-  // server handed over in place of the bundle's, if it did.
+  // stream syncs under, for a tab whose bundle answers by others.
   static postState() {
     Tabs.post({
       cursor: SyncStream.syncCursor,
       kind: "state",
       page: GlobalRegistry.get("connectPageModule"),
       replica: Replica.current(),
-      rules: SyncStream.rules,
+      rules: SyncStream.rulesForGroup(),
       synced: LocalDatabase.syncedScopes(),
     });
   }

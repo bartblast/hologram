@@ -20,7 +20,7 @@ export default class SyncStream {
 
   // The last rules a server handed this client in place of its bundle's, as the frame carried
   // them - kept so a tab joining the group answers by the rules the group syncs under (see
-  // Tabs.postState). Null while the bundle's own are current.
+  // rulesForGroup). Null while the bundle's own are current.
   static rules = null;
 
   // Whether a frame or a batch changed rows since the last render, which computed the derived
@@ -301,6 +301,28 @@ export default class SyncStream {
 
         return null;
     }
+  }
+
+  // The rules the group's stream syncs under, as a frame carries them, for a tab joining it (see
+  // Tabs.postState): the ones a server handed this tab, or, when it handed none, this bundle's own
+  // - a server hands over its rules exactly when a bundle's differ from them. None for a bundle
+  // that checks no permissions, which is shipped no rules to hand on.
+  static rulesForGroup() {
+    if ($.rules !== null) {
+      return $.rules;
+    }
+
+    const sync = globalThis.Hologram.sync;
+
+    if (!sync?.policyHash) {
+      return null;
+    }
+
+    return {
+      policy_hash: sync.policyHash,
+      protocol_version: sync.protocolVersion,
+      rules: Model.serializedEntries(),
+    };
   }
 
   // One render per animation frame, however many frames arrive in between: a fill lands as a
