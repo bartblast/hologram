@@ -268,6 +268,9 @@ defmodule Hologram.Component.Derived do
 
   defp declaration_name({{name, _args, _arg_names, _body, _line}, _type}), do: name
 
+  # The name is a derived field's own, written in the module's source, so the atoms it makes are
+  # bounded by the code itself.
+  # sobelow_skip ["DOS.BinToAtom"]
   # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
   defp function_name(name), do: :"__derived_#{name}__"
 
