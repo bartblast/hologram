@@ -4325,6 +4325,25 @@ defmodule Hologram.Compiler do
     MapSet.union(checked_types, related_checked_entity_types(checked_types))
   end
 
+  # The type of the rows the given derived field declaration holds, if it holds rows.
+  defp derived_row_types({_name, [target], _opts}), do: [target]
+
+  defp derived_row_types({_name, type, _opts}) do
+    if Reflection.alias?(type), do: [type], else: []
+  end
+
+  # The types the derived fields holding rows and the inverses of the given entity type lead to.
+  defp led_to_entity_types(entity_type) do
+    derived_targets = Enum.flat_map(entity_type.__derived__(), &derived_row_types/1)
+
+    inverse_targets =
+      Enum.map(entity_type.__inverse_relationships__(), fn {name, _type, _opts} ->
+        Entity.inverse_relationship(entity_type, name).target
+      end)
+
+    derived_targets ++ inverse_targets
+  end
+
   # Read gives nil: not an Elixir module.
   # Puts the new entry in place of the old one and says what that was, with the module and the old
   # entry: an addition, an edit (another digest), a touch (the same digest, another mtime or size), a
@@ -4408,20 +4427,7 @@ defmodule Hologram.Compiler do
   defp rules_entity_types(entity_types) do
     led_to =
       entity_types
-      |> Enum.flat_map(fn entity_type ->
-        derived_targets =
-          Enum.flat_map(entity_type.__derived__(), fn
-            {_name, [target], _opts} -> [target]
-            {_name, type, _opts} -> if Reflection.alias?(type), do: [type], else: []
-          end)
-
-        inverse_targets =
-          Enum.map(entity_type.__inverse_relationships__(), fn {name, _type, _opts} ->
-            Entity.inverse_relationship(entity_type, name).target
-          end)
-
-        derived_targets ++ inverse_targets
-      end)
+      |> Enum.flat_map(&led_to_entity_types/1)
       |> MapSet.new()
 
     if MapSet.subset?(led_to, entity_types) do
