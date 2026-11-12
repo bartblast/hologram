@@ -1347,6 +1347,184 @@ describe("Model", () => {
     });
   });
 
+  describe("replaceRules()", () => {
+    const DOC = "MyApp.Doc";
+    const FOLDER = "MyApp.Folder";
+
+    const readRule = (predicates) => ({predicates, to: null, via: null});
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [DOC]: {
+            attributes: {archived: "boolean", id: "uuid", public: "boolean"},
+            derived: {
+              kept: {definition: {value: "k"}, kind: "scalar", type: "string"},
+              label: {definition: {value: "a"}, kind: "scalar", type: "string"},
+            },
+            inverses: {
+              kept_notes: {
+                forward: "doc",
+                reference: true,
+                sort: [],
+                toMany: true,
+                type: TASK,
+              },
+            },
+            operations: ["archive"],
+            policy: {read: [readRule([["public", "==", true]])]},
+            relationships: {},
+          },
+          [TASK]: {
+            attributes: {id: "uuid"},
+            derived: {},
+            inverses: {},
+            operations: [],
+            policy: {read: [readRule([])]},
+            relationships: {},
+          },
+        },
+        policyHash: "aaaa",
+      };
+
+      Model.reset();
+    });
+
+    it("takes a held type's rules from its entry", () => {
+      const policy = {
+        read: [
+          readRule([
+            ["public", "==", true],
+            ["archived", "==", false],
+          ]),
+        ],
+      };
+
+      Model.replaceRules({
+        [DOC]: {derived: {}, inverses: {}, operations: [], policy},
+      });
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].policy,
+        policy,
+      );
+    });
+
+    // The bundle's own code can still ask about an operation the new build dropped, and is denied
+    // it by the rules - none - rather than refused as one the type never declared.
+    it("joins the operations its entry names to a held type's own", () => {
+      Model.replaceRules({
+        [DOC]: {derived: {}, inverses: {}, operations: ["publish"], policy: {}},
+      });
+
+      assert.deepStrictEqual(globalThis.Hologram.sync.model[DOC].operations, [
+        "archive",
+        "publish",
+      ]);
+    });
+
+    // The bundle's own code can still read a field the new build dropped, so nothing is taken
+    // away - a field the entry defines anew replaces the bundle's, and one it adds joins it.
+    it("adds and redefines a held type's derived fields and inverses, removing none", () => {
+      const relabel = {
+        definition: {value: "b"},
+        kind: "scalar",
+        type: "string",
+      };
+      const shout = {definition: {value: "c"}, kind: "scalar", type: "string"};
+      const notes = {
+        forward: "doc",
+        reference: true,
+        sort: [],
+        toMany: true,
+        type: TASK,
+      };
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {label: relabel, shout},
+          inverses: {notes},
+          operations: [],
+          policy: {},
+        },
+      });
+
+      const doc = globalThis.Hologram.sync.model[DOC];
+      const held = {definition: {value: "k"}, kind: "scalar", type: "string"};
+
+      assert.deepStrictEqual(doc.derived, {kept: held, label: relabel, shout});
+      assert.deepStrictEqual(Object.keys(doc.inverses), [
+        "kept_notes",
+        "notes",
+      ]);
+    });
+
+    it("keeps everything else of a held type the bundle baked", () => {
+      Model.replaceRules({
+        [DOC]: {
+          attributes: {id: "uuid"},
+          derived: {},
+          inverses: {},
+          operations: [],
+          policy: {},
+        },
+      });
+
+      assert.deepStrictEqual(globalThis.Hologram.sync.model[DOC].attributes, {
+        archived: "boolean",
+        id: "uuid",
+        public: "boolean",
+      });
+    });
+
+    // Left out, a type declares no rule and no role - the server's default deny.
+    it("takes away the rules of a held type the entries leave out, keeping its operations", () => {
+      Model.replaceRules({});
+
+      const doc = globalThis.Hologram.sync.model[DOC];
+
+      assert.deepStrictEqual(doc.policy, {});
+      assert.deepStrictEqual(doc.operations, ["archive"]);
+    });
+
+    // Rules a deploy added can read a type the bundle never carried, whose rows arrive with them.
+    it("takes the whole entry of a type the client does not hold", () => {
+      const folder = {
+        attributes: {archived: "boolean", id: "uuid"},
+        derived: {},
+        inverses: {},
+        operations: [],
+        policy: {},
+        relationships: {},
+      };
+
+      Model.replaceRules({[FOLDER]: folder});
+
+      assert.deepStrictEqual(globalThis.Hologram.sync.model[FOLDER], folder);
+    });
+
+    it("answers from the replaced entries from then on", () => {
+      Model.entry(DOC);
+
+      const relabel = {
+        definition: {value: "b"},
+        kind: "scalar",
+        type: "string",
+      };
+
+      Model.replaceRules({
+        [DOC]: {
+          derived: {label: relabel},
+          inverses: {},
+          operations: [],
+          policy: {},
+        },
+      });
+
+      assert.deepStrictEqual(Model.entry(DOC).derived.label, relabel);
+    });
+  });
+
   // IMPORTANT!
   // The messages here are the server's, pinned by the same-named cases in describe
   // "validate_operation!/2" of test/elixir/hologram/policy_test.exs, and the list by its

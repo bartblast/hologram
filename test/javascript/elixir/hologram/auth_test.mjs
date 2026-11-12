@@ -390,6 +390,41 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // A server enforcing rules other than the ones the bundle was built with hands them over, with
+    // the derived fields they read, and the check answers by those from then on - the field as the
+    // new build defines it, not as this tab last computed it.
+    it("answers by rules and derived fields the server handed over in place of the bundle's", () => {
+      defineModel({read: [rule({predicates: [["label", "==", "Plans!"]]})]});
+
+      const plans = document({title: "Plans"});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), plans),
+        Type.boolean(true),
+      );
+
+      Model.replaceRules({
+        [DOCUMENT]: {
+          derived: {
+            label: {
+              definition: {concat: [{name: "title"}, {value: "?"}]},
+              kind: "scalar",
+              type: "string",
+              values: null,
+            },
+          },
+          inverses: {},
+          operations: [],
+          policy: {read: [rule({predicates: [["label", "==", "Plans?"]]})]},
+        },
+      });
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({title: "Plans"})),
+        Type.boolean(true),
+      );
+    });
+
     it("answers a per-role operation keyed by a tuple", () => {
       defineModel({"grant_role:viewer": [rule({to: [["own", ["editor"]]]})]});
 

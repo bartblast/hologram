@@ -361,8 +361,28 @@ describe("Tabs", () => {
         kind: "state",
         page: "MyApp.TodosPage",
         replica: {id: "r-group", token: "statement-group"},
+        rules: null,
         synced: ["page"],
       });
+    });
+
+    it("hands over the rules the server handed this tab in place of its bundle's", () => {
+      const posting = sinon.stub(Tabs, "post");
+      const rules = {
+        policy_hash: "fedcba9876543210",
+        protocol_version: 1,
+        rules: {},
+      };
+
+      SyncStream.rules = rules;
+
+      try {
+        Tabs.postState();
+      } finally {
+        SyncStream.rules = null;
+      }
+
+      assert.deepStrictEqual(posting.firstCall.args[0].rules, rules);
     });
   });
 
@@ -552,6 +572,60 @@ describe("Tabs", () => {
       });
 
       assert.equal(SyncStream.syncCursor, "place-2");
+    });
+
+    // The group's rows were judged under the rules its stream was handed, so a tab whose bundle
+    // answers by others takes those.
+    it("takes the rules the group syncs under when its bundle's are others", () => {
+      const rules = {
+        policy_hash: "fedcba9876543210",
+        protocol_version: 1,
+        rules: {},
+      };
+
+      globalThis.Hologram.sync = {policyHash: "0123456789abcdef"};
+
+      try {
+        Tabs.receive({
+          cursor: null,
+          kind: "state",
+          page: PAGE,
+          replica: {id: null, token: null},
+          rules,
+          synced: [],
+        });
+      } finally {
+        delete globalThis.Hologram.sync;
+      }
+
+      sinon.assert.calledOnceWithExactly(
+        SyncStream.receiveFrame,
+        "sync_rules",
+        rules,
+      );
+    });
+
+    it("keeps its bundle's rules when they are the ones the group syncs under", () => {
+      globalThis.Hologram.sync = {policyHash: "fedcba9876543210"};
+
+      try {
+        Tabs.receive({
+          cursor: null,
+          kind: "state",
+          page: PAGE,
+          replica: {id: null, token: null},
+          rules: {
+            policy_hash: "fedcba9876543210",
+            protocol_version: 1,
+            rules: {},
+          },
+          synced: [],
+        });
+      } finally {
+        delete globalThis.Hologram.sync;
+      }
+
+      sinon.assert.notCalled(SyncStream.receiveFrame);
     });
 
     it("takes no scope for a page this tab is not on", () => {

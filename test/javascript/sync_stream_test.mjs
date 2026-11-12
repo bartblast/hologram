@@ -78,6 +78,7 @@ describe("SyncStream", () => {
     GlobalRegistry.set("syncStaleReason", null);
     SyncStream.renderScheduled = false;
     SyncStream.rowsChangedSinceRender = false;
+    SyncStream.rules = null;
     SyncStream.syncCursor = null;
   });
 
@@ -280,6 +281,31 @@ describe("SyncStream", () => {
         page: "MyApp.BoardPage",
         protocol_version: 1,
       });
+    });
+
+    // The rules it answers permission checks by, so a server enforcing others hands it those.
+    it("names the rules a bundle checking permissions answers by", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      assert.equal(
+        SyncStream.buildGreeting(pageModule).policy_hash,
+        "0123456789abcdef",
+      );
+    });
+
+    // A bundle that checks nothing is shipped no rules, and a server has none to hand it.
+    it("names no rules for a bundle checking no permissions", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: null,
+        protocolVersion: 1,
+      };
+
+      assert.notProperty(SyncStream.buildGreeting(pageModule), "policy_hash");
     });
 
     // One sync session per browser: the tab that leads is served sync and hands what it receives
@@ -831,6 +857,80 @@ describe("SyncStream", () => {
     });
   });
 
+  describe("sync_rules event", () => {
+    const DOC = "MyApp.Doc";
+
+    const policy = {
+      read: [{predicates: [["archived", "==", false]], to: null, via: null}],
+    };
+
+    const envelope = () =>
+      JSON.stringify({
+        policy_hash: "fedcba9876543210",
+        protocol_version: 1,
+        rules: {
+          [DOC]: {derived: {}, inverses: {}, operations: [], policy},
+        },
+      });
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [DOC]: {
+            attributes: {archived: "boolean", id: "uuid"},
+            derived: {},
+            inverses: {},
+            operations: [],
+            policy: {},
+            relationships: {},
+          },
+        },
+        policyHash: "0123456789abcdef",
+      };
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    // A tab joining the group answers by the rules the group syncs under, which the stream handed
+    // over to this tab alone.
+    it("keeps the frame for the tabs joining later", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      assert.deepStrictEqual(SyncStream.rules, JSON.parse(envelope()));
+    });
+
+    it("takes the rules the server enforces", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].policy,
+        policy,
+      );
+    });
+
+    // So a reconnect greets as current and is not handed them again.
+    it("answers by the hash the rules go by from then on", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      assert.equal(globalThis.Hologram.sync.policyHash, "fedcba9876543210");
+    });
+
+    // What a permission check answers can change with them, so the page is drawn again.
+    it("asks for a repaint", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      assert.equal(animationFrames.length, 1);
+    });
+
+    it("leaves the page where it is", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      sinon.assert.notCalled(globalThis.window.location.reload);
+    });
+  });
+
   describe("synced event", () => {
     const envelope = (scope, cursor = null) =>
       JSON.stringify({cursor: cursor, protocol_version: 1, scope: scope});
@@ -927,27 +1027,45 @@ describe("SyncStream", () => {
       assert.isTrue(persisting.calledBefore(posting));
     });
 
-    it("hands over a completeness marker, a resync and a stale-bundle notice too", () => {
+    it("hands over a completeness marker, a resync, a stale-bundle notice and the rules too", () => {
+      globalThis.Hologram.sync = {model: {}, policyHash: null};
+
       const posting = sinon.stub(Tabs, "post");
 
-      eventSource.listeners.synced({
-        data: JSON.stringify({cursor: null, protocol_version: 1, scope: "all"}),
-      });
+      try {
+        eventSource.listeners.synced({
+          data: JSON.stringify({
+            cursor: null,
+            protocol_version: 1,
+            scope: "all",
+          }),
+        });
 
-      eventSource.listeners.sync_resync({
-        data: JSON.stringify({
-          protocol_version: 1,
-          reason: "cursor_unreadable",
-        }),
-      });
+        eventSource.listeners.sync_resync({
+          data: JSON.stringify({
+            protocol_version: 1,
+            reason: "cursor_unreadable",
+          }),
+        });
 
-      eventSource.listeners.sync_reload({
-        data: JSON.stringify({protocol_version: 1, reason: "model_hash"}),
-      });
+        eventSource.listeners.sync_reload({
+          data: JSON.stringify({protocol_version: 1, reason: "model_hash"}),
+        });
+
+        eventSource.listeners.sync_rules({
+          data: JSON.stringify({
+            policy_hash: "fedcba9876543210",
+            protocol_version: 1,
+            rules: {},
+          }),
+        });
+      } finally {
+        delete globalThis.Hologram.sync;
+      }
 
       assert.deepStrictEqual(
         posting.args.map(([message]) => message.event),
-        ["synced", "sync_resync", "sync_reload"],
+        ["synced", "sync_resync", "sync_reload", "sync_rules"],
       );
     });
   });

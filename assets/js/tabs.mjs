@@ -315,13 +315,15 @@ export default class Tabs {
   }
 
   // What this tab knows that a tab joining cannot read out of the store: the identity in use, the
-  // place the stream has reached, and the scopes the server has declared complete.
+  // place the stream has reached, the scopes the server has declared complete, and the rules the
+  // server handed over in place of the bundle's, if it did.
   static postState() {
     Tabs.post({
       cursor: SyncStream.syncCursor,
       kind: "state",
       page: GlobalRegistry.get("connectPageModule"),
       replica: Replica.current(),
+      rules: SyncStream.rules,
       synced: LocalDatabase.syncedScopes(),
     });
   }
@@ -397,6 +399,15 @@ export default class Tabs {
 
     if (SyncStream.syncCursor === null && message.cursor !== null) {
       SyncStream.syncCursor = message.cursor;
+    }
+
+    // The rows the group holds were judged under the rules the stream was handed, so a tab whose
+    // bundle answers by others takes those - a page served by a node still on the old build, say.
+    if (
+      message.rules &&
+      message.rules.policy_hash !== globalThis.Hologram.sync?.policyHash
+    ) {
+      SyncStream.receiveFrame("sync_rules", message.rules);
     }
 
     for (const scope of message.synced) {
