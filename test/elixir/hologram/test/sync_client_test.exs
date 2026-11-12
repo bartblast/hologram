@@ -58,6 +58,12 @@ defmodule Hologram.Test.SyncClientTest do
       assert params[:cursor] == "g8uxAAAAZQ"
     end
 
+    test "names the rules a bundle checking permissions was built with" do
+      params = greeting_params(page: "MyApp.BoardPage", policy_hash: "0123456789abcdef")
+
+      assert params[:policy_hash] == "0123456789abcdef"
+    end
+
     test "names no place on a first visit" do
       params = greeting_params(page: "MyApp.BoardPage")
 

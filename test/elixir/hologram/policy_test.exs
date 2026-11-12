@@ -917,6 +917,23 @@ defmodule Hologram.PolicyTest do
       assert hash([HashedTask]) != rules_hash
     end
 
+    # An enum's values order what a comparison with one of them decides, whatever the body says.
+    test "gives a type a new hash when the declaration of a derived field its rules read changes" do
+      high_first = """
+      attribute :score, :integer
+
+      derived :rank, :enum, [values: [:high, :low]], fn score ->
+        if score > 5, do: :high, else: :low
+      end
+
+      allow :read, when: rank > :high
+      """
+
+      low_first = String.replace(high_first, "[:high, :low]", "[:low, :high]")
+
+      assert hash_of_project(high_first) != hash_of_project(low_first)
+    end
+
     test "gives a type the same hash when a derived field no rule reads changes" do
       put_derived_definitions([HashedNote])
 

@@ -15,7 +15,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
@@ -62,7 +64,10 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module39, as: Entity39
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module40, as: Entity40
+  alias Hologram.Test.Fixtures.Entity.Module42, as: Entity42
   alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
+  alias Hologram.Test.Fixtures.Entity.Module44, as: Entity44
+  alias Hologram.Test.Fixtures.Entity.Module45, as: Entity45
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
@@ -167,14 +172,29 @@ defmodule Hologram.CompilerTest do
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
     permission_checking?: false,
+    policy_hash: nil,
     role_modules: []
   }
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", protocolVersion: 1};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1};/
 
   @tmp_dir Reflection.tmp_dir()
+
+  # The client's model a checking build bakes for the given entity types, as the client reads it.
+  defp baked_model(entity_types) do
+    sync_constants = %{
+      @empty_sync_constants
+      | entity_types: MapSet.new(entity_types),
+        permission_checking?: true
+    }
+
+    [_statement, model] =
+      Regex.run(~r/model: (\{.*\}), modelHash/, build_sync_constants_js(sync_constants))
+
+    Jason.decode!(model)
+  end
 
   # Bundles an entry file that runs the given JavaScript, in a tmp dir of the given name, with a
   # js dir of its own, and returns the inputs the bundle recorded. Each file written through
@@ -220,6 +240,12 @@ defmodule Hologram.CompilerTest do
     File.mkdir!(opts[:static_dir])
 
     opts
+  end
+
+  defp decoded_rules(entity_types) do
+    entity_types
+    |> render_rules()
+    |> Jason.decode!()
   end
 
   # What the data layer folds its outputs from, for the given pages, derived the way the compile task
@@ -2044,7 +2070,14 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "build_sync_constants/3" do
-    setup %{call_graph: call_graph, module_info_plt: module_info_plt} do
+    # A build checking permissions hashes the rules of every entity type, which read the derived
+    # fields' definitions - put where the compile puts them before it derives the constants.
+    setup %{call_graph: call_graph, ir_plt: ir_plt, module_info_plt: module_info_plt} do
+      Reflection.list_entities()
+      |> resolve_derived_definitions(ir_plt)
+      |> Map.fetch!(:definitions)
+      |> Derived.put_definitions()
+
       sync_constants =
         derive_sync_constants(Reflection.list_pages(), call_graph, module_info_plt, [])
 
@@ -2246,6 +2279,7 @@ defmodule Hologram.CompilerTest do
                entity_types: MapSet.new(),
                model_hash: nil,
                permission_checking?: false,
+               policy_hash: nil,
                role_modules: []
              }
     end
@@ -2262,12 +2296,36 @@ defmodule Hologram.CompilerTest do
 
       assert sync_constants.model_hash == expected
     end
+
+    # A client that checks nothing is shipped empty rules, so none of them can fall behind.
+    test "records no policy hash when no page checks permissions on the client", %{
+      sync_constants: sync_constants
+    } do
+      assert sync_constants.policy_hash == nil
+    end
+
+    # Whatever the pages reach, like the model hash: the running app compares it with the rules of
+    # every entity type it enforces.
+    test "records the hash of every entity type's rules when a page checks permissions",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      sync_constants =
+        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
+
+      assert sync_constants.policy_hash == Policy.hash(Reflection.list_entities())
+    end
   end
 
   describe "build_sync_constants_js/1" do
+    test "renders the policy hash the sync constants carry" do
+      sync_constants = %{@empty_sync_constants | policy_hash: "my_policy_hash"}
+
+      assert build_sync_constants_js(sync_constants) ==
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}};/
+    end
+
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}};/
     end
 
     test "renders the derived fields each component registers as queries" do
@@ -2277,7 +2335,7 @@ defmodule Hologram.CompilerTest do
       }
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}};/
     end
 
     # A client asked whether a user holds a global role refuses an unknown one by these keys and
@@ -2286,7 +2344,7 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}};/
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -9482,6 +9540,42 @@ defmodule Hologram.CompilerTest do
 
     test "returns no module when every module is kept", %{ir_plt: ir_plt} do
       assert prune_ir_plt(ir_plt, [Module1, Module2, Module3]) == []
+    end
+  end
+
+  describe "render_rules/1" do
+    # A client swaps these in for the rules its bundle was built with, so an entry reads the way the
+    # bundle spells it.
+    test "renders the entry of a type declaring rules the way a checking build bakes it" do
+      put_derived_definitions([Entity42])
+
+      label = "Hologram.Test.Fixtures.Entity.Module42"
+
+      assert decoded_rules([Entity42])[label] == baked_model([Entity42])[label]
+    end
+
+    # Rules a deploy added can read a type the client's bundle never held, and the client needs its
+    # entry to hold the rows the rule reads and follow the path to them.
+    test "renders a type declaring no rule or role that a rule reads through a relationship" do
+      label = "Hologram.Test.Fixtures.Entity.Module44"
+
+      assert decoded_rules([Entity44, Entity45])[label] ==
+               baked_model([Entity44, Entity45])[label]
+    end
+
+    # A type declaring no rule and no role is one the client reads as the server's default deny, by
+    # finding no entry for it.
+    test "leaves out a type declaring no rule and no role that no rule reads" do
+      rules = decoded_rules([Entity44])
+
+      assert Map.keys(rules) == ["Hologram.Auth.RoleGrant"]
+    end
+
+    # The grant store's rules are the framework's, baked into every checking build.
+    test "renders the grant store's entry" do
+      label = "Hologram.Auth.RoleGrant"
+
+      assert decoded_rules([]) == %{label => baked_model([RoleGrant])[label]}
     end
   end
 

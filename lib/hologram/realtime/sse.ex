@@ -7,7 +7,6 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.DB.Oplog
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
-  alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -20,6 +19,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Handshake, as: SyncHandshake
+  alias Hologram.Sync.Rules
   alias Hologram.Sync.Session, as: SyncSession
 
   # Read only when the host app enables the test seams - see maybe_delay_attach/1.
@@ -176,6 +176,7 @@ defmodule Hologram.Realtime.SSE do
           cursor: params["cursor"],
           model_hash: model_hash,
           page: page_module(page),
+          policy_hash: params["policy_hash"],
           protocol_version: parse_protocol_version(protocol_version),
           replica_id: params["replica_id"],
           replica_token: params["replica_token"]
@@ -284,6 +285,15 @@ defmodule Hologram.Realtime.SSE do
       {:sync_resync, reason} ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = Frame.encode_resync_envelope(id, reason)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
+      {:sync_rules, policy_hash, rules} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = Frame.encode_rules_envelope(id, policy_hash, rules)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}
@@ -973,12 +983,18 @@ defmodule Hologram.Realtime.SSE do
     greeting = greeting(conn)
 
     case SyncHandshake.check(greeting) do
-      {:sync, page, cursor} ->
-        # The rules this session judges rows by, read once for both the door a returning client
-        # passes and the places the session hands over: read twice, a live reload between the two
-        # reads could let a client resume under the old rules and be handed places vouching for
-        # the new ones.
-        policy_hash = Policy.hash()
+      # The rules the handshake compared the client's with are the ones this session judges rows
+      # by, read once for the frame handing them over, the door a returning client passes and the
+      # places the session hands over: read again, a live reload between two reads could let a
+      # client resume under the old rules and be handed places vouching for the new ones.
+      {:sync, page, cursor, policy_hash, stale_rules?} ->
+        # Ahead of anything the gap or the session sends, so the client answers by the rules the
+        # rows that follow were judged under from the first render they reach. A change of identity
+        # starts syncing again with the same greeting and hands them over again, which a client
+        # takes the same way.
+        if stale_rules? do
+          send(self(), {:sync_rules, policy_hash, Rules.rendered()})
+        end
 
         # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
         # answers FALSE when it does not resume, and a session reads "no gap" from nil alone -

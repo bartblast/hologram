@@ -163,6 +163,7 @@ defmodule Hologram.Compiler do
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
           permission_checking?: boolean,
+          policy_hash: String.t() | nil,
           role_modules: list(module)
         }
 
@@ -2306,7 +2307,8 @@ defmodule Hologram.Compiler do
   @doc """
   Returns what the client's data layer is compiled with, derived from what the data layer keeps of
   each page's reach (see `build_kept_page_reach/3`) and the registered queries of the components
-  the pages reach (see `extract_component_queries/3`). Nothing is extracted or walked here.
+  the pages reach (see `extract_component_queries/3`). Nothing is extracted or walked here, beyond
+  the rules every entity type declares, which the policy hash is taken over.
 
   `:entity_types` are the types a client can ever hold or mention - every window's own type and
   everything it includes, plus every entity type the pages' client code mentions. A client
@@ -2339,6 +2341,11 @@ defmodule Hologram.Compiler do
   `:model_hash` is the hash of the project's data model, of every entity type and global role the
   module info PLT records, whatever the pages reach. It is nil when the PLT records no entity type:
   the application declares no data model.
+
+  `:policy_hash` is the hash of the rules of those same entity types (see `Hologram.Policy.hash/1`)
+  when the clients check permissions, and nil otherwise: a client that checks nothing is shipped
+  empty rules, so no deploy can leave its rules behind the server's. A client greets with it, and a
+  server running other rules sends it the ones it enforces.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
@@ -2408,6 +2415,7 @@ defmodule Hologram.Compiler do
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
       permission_checking?: permission_checking?,
+      policy_hash: policy_hash(all_entity_types, permission_checking?),
       role_modules: if(permission_checking?, do: role_modules, else: [])
     }
   end
@@ -2416,8 +2424,9 @@ defmodule Hologram.Compiler do
   Builds the JavaScript statement that sets the client's data layer constants,
   `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/3`): the
   derived fields whose function builds a query, the global roles with the role modules carrying
-  each, the model of the entity types the client holds, the hash of the project's data model, and
-  the sync protocol version.
+  each, the model of the entity types the client holds, the hash of the project's data model, the
+  hash of the rules it was rendered with (`null` for a client that checks nothing), and the sync
+  protocol version.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2438,8 +2447,9 @@ defmodule Hologram.Compiler do
   can.
 
   The model is rendered from what the entity types declare when this is called, which is why the
-  compile task keeps the statement with the runtime bundle it built: a policy that changed moves
-  the JavaScript while the sync constants stay the same.
+  compile task keeps the statement with the runtime bundle it built, and builds the constants and
+  the statement together: the rules the model renders are the ones the policy hash was taken over
+  only while nothing between the two moved them.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_js_1/README.md
   """
@@ -2454,7 +2464,9 @@ defmodule Hologram.Compiler do
       derived_queries = render_derived_queries(sync_constants.derived_queries)
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
-      ~s/globalThis.Hologram.sync = {derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", protocolVersion: #{Frame.protocol_version()}};/
+      policy_hash = Jason.encode!(sync_constants.policy_hash)
+
+      ~s/globalThis.Hologram.sync = {derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 
@@ -2620,6 +2632,25 @@ defmodule Hologram.Compiler do
     Enum.each(dropped_modules, &PLT.delete(ir_plt, &1))
 
     dropped_modules
+  end
+
+  @doc """
+  Renders, as a JSON object keyed by label, the client's model entry of every entity type a build
+  checking permissions bakes whatever the pages reach, out of the given ones - those declaring a
+  rule or a role, the types their rules read through relationships, and the grant store - each the
+  way that build bakes it.
+
+  What a server sends a client whose bundle was built with other rules but the same model, so it
+  answers permission checks the way the server does without reloading. A whole entry rather than
+  its rules alone, because rules a deploy added can read a type the client's bundle never held. A
+  type left out declares no rule and no role, which is the server's own default deny.
+  """
+  @spec render_rules(list(module)) :: String.t()
+  def render_rules(entity_types) do
+    entity_types
+    |> checked_entity_types()
+    |> MapSet.put(RoleGrant)
+    |> render_entity_model(true)
   end
 
   @doc """
@@ -4107,6 +4138,12 @@ defmodule Hologram.Compiler do
 
     put_compared_module_info(plt, module, old_info, new_info)
   end
+
+  # The hash of the rules of the given entity types, for clients that check permissions alone - the
+  # others are shipped no rules to fall behind.
+  defp policy_hash(_entity_types, false = _permission_checking?), do: nil
+
+  defp policy_hash(entity_types, _permission_checking?), do: Policy.hash(entity_types)
 
   # $-prefixed entries are the framework's own ($key, event bindings), never something the author
   # declared with prop/3, so they are not props as far as a usage is concerned.

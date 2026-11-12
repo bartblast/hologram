@@ -8,6 +8,7 @@ defmodule Hologram.Application do
   alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Runtime.ContentSecurityPolicy
+  alias Hologram.Sync.Rules
 
   @impl Application
   def start(_type, _args) do
@@ -17,6 +18,7 @@ defmodule Hologram.Application do
     Model.reset_caches()
     Policy.reset_model_facts_cache()
     Edges.reset_index_cache()
+    Rules.reset_cache()
 
     # Before anything starts, so a policy no page could be served under fails the boot of the app
     # rather than its first request.

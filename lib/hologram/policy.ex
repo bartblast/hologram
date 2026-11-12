@@ -1330,29 +1330,25 @@ defmodule Hologram.Policy do
     quantifier_links ++ field_links
   end
 
-  # What the policy hash covers of the given entity type: its rules, each operation's sorted, the
-  # operations its lines name, and what the rules read beyond the row's stored values. A derived
-  # field's definition and an inverse's declaration are code the model hash never sees, so a rule
-  # reading one changes what it decides when they change.
-  defp rules_term(entity_type) do
-    rules = build(entity_type)
-
+  # What the given entity type's rules read beyond the stored values of the rows they are read on,
+  # each sorted: the derived fields their conditions read, on any row and through other derived
+  # fields, and the inverses their chains walk, theirs and those of the derived fields'
+  # definitions - each as the type declaring it and its name.
+  defp rule_reads(entity_type) do
     predicates =
-      rules
+      entity_type
+      |> build()
       |> Map.values()
       |> Enum.concat()
       |> Enum.flat_map(& &1.predicates)
 
-    derived =
-      entity_type
-      |> Derived.read_fields(predicates)
-      |> Enum.map(fn {type, name} -> {type, name, Derived.definition(type, name)} end)
+    derived = Derived.read_fields(entity_type, predicates)
 
     # A derived field's definition names the relationships it reads but not what an inverse among
     # them reverses, so the inverses its definition walks are taken with the rules' own.
     definition_inverses =
-      Enum.flat_map(derived, fn {type, _name, definition} ->
-        definition_inverses(type, definition)
+      Enum.flat_map(derived, fn {type, name} ->
+        definition_inverses(type, Derived.definition(type, name))
       end)
 
     inverses =
@@ -1363,14 +1359,33 @@ defmodule Hologram.Policy do
       |> Enum.uniq()
       |> Enum.sort()
 
+    %{derived: derived, inverses: inverses}
+  end
+
+  # What the policy hash covers of the given entity type: its rules, each operation's sorted, the
+  # operations its lines name, and what the rules read beyond the row's stored values. A derived
+  # field's declaration and definition and an inverse's declaration are code the model hash never
+  # sees, so a rule reading one changes what it decides when they change - a derived enum's values
+  # order what a comparison with one of them decides as much as its body does.
+  defp rules_term(entity_type) do
+    reads = rule_reads(entity_type)
+
+    rules =
+      entity_type
+      |> build()
+      |> Map.new(fn {operation, operation_rules} -> {operation, Enum.sort(operation_rules)} end)
+
     %{
-      derived: derived,
-      inverses: inverses,
+      derived:
+        Enum.map(reads.derived, fn {type, name} ->
+          {type, List.keyfind(type.__derived__(), name, 0), Derived.definition(type, name)}
+        end),
+      inverses:
+        Enum.map(reads.inverses, fn {type, name} ->
+          {type, name, Entity.inverse_relationship(type, name)}
+        end),
       operations: operations(entity_type),
-      rules:
-        Map.new(rules, fn {operation, operation_rules} ->
-          {operation, Enum.sort(operation_rules)}
-        end)
+      rules: rules
     }
   end
 
@@ -1405,9 +1420,9 @@ defmodule Hologram.Policy do
     end
   end
 
-  # The inverses the given chain walks from the given entity type, each as the type declaring it,
-  # its name and what it reverses. A chain may run through a derived field holding rows, whose own
-  # inverses its definition answers for.
+  # The inverses the given chain walks from the given entity type, each as the type declaring it and
+  # its name. A chain may run through a derived field holding rows, whose own inverses its
+  # definition answers for.
   defp walked_inverses(entity_type, chain) do
     chain
     |> Enum.with_index()
@@ -1416,7 +1431,7 @@ defmodule Hologram.Policy do
 
       case Entity.inverse_relationship(hop_type, name) do
         nil -> []
-        inverse -> [{hop_type, name, inverse}]
+        _inverse -> [{hop_type, name}]
       end
     end)
   end
