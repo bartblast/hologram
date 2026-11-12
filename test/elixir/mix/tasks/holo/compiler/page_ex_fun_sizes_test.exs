@@ -33,11 +33,14 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizesTest do
         \{\{Hologram\.Test\.Fixtures\.LayoutFixture, :__state__, 0\}, [[:alnum:]]+\},
         \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
           :__layout_props__, 0\}, [[:alnum:]]+\},
+        \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
+          :__derived__, 0\}, [[:alnum:]]+\},
         \{\{Hologram\.Test\.Fixtures\.LayoutFixture, :init, 2\}, [[:alnum:]]+\},
         \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
           :fun_1, 0\}, [[:alnum:]]+\},
         \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
-          :fun_2, 0\}, [[:alnum:]]+\}
+          :fun_2, 0\}, [[:alnum:]]+\},
+        \{\{Hologram\.Test\.Fixtures\.LayoutFixture, :__derived__, 0\}, [[:alnum:]]+\}
       \]
       """)
 

@@ -41,6 +41,7 @@ import Renderer from "../../assets/js/renderer.mjs";
 import ScriptRegistry from "../../assets/js/script_registry.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Sse from "../../assets/js/sse.mjs";
+import SyncStream from "../../assets/js/sync_stream.mjs";
 import Throttler from "../../assets/js/throttler.mjs";
 import Type from "../../assets/js/type.mjs";
 import UncaughtErrorOverlay from "../../assets/js/uncaught_error_overlay.mjs";
@@ -491,9 +492,12 @@ describe("Hologram", () => {
     afterEach(() => {
       ComponentRegistry.clear();
       Batches.reset();
+      Hologram.dataLayer = null;
+      SyncStream.rowsChangedSinceRender = false;
       sinon.restore();
     });
 
+    // Registered as the last render left it, with its derived fields computed.
     const registered = (cid) => {
       ComponentRegistry.putEntry(
         cid,
@@ -502,6 +506,8 @@ describe("Hologram", () => {
           [Type.atom("struct"), Type.componentStruct({nextAction: Type.nil()})],
         ]),
       );
+
+      ComponentRegistry.putComponentDerived(cid, Type.map());
 
       return cid;
     };
@@ -537,6 +543,68 @@ describe("Hologram", () => {
       }
 
       sinon.assert.notCalled(callNamedFunctionStub);
+    });
+
+    // A frame can change rows while the render it scheduled waits for an animation frame, and the
+    // action reads the derived fields the last render computed.
+    it("computes the target's derived fields again first when rows changed since the last render", () => {
+      setDataLayer();
+      SyncStream.rowsChangedSinceRender = true;
+
+      const refreshStub = sinon.stub(Renderer, "refreshDerived");
+
+      Hologram.executeAction(actionFor(registered(cid1)));
+
+      sinon.assert.calledOnceWithExactly(refreshStub, cid1);
+      sinon.assert.callOrder(refreshStub, callNamedFunctionStub);
+    });
+
+    it("leaves the target's derived fields as the last render computed them when no rows changed", () => {
+      setDataLayer();
+      SyncStream.rowsChangedSinceRender = false;
+
+      const refreshStub = sinon.stub(Renderer, "refreshDerived");
+
+      Hologram.executeAction(actionFor(registered(cid1)));
+
+      sinon.assert.notCalled(refreshStub);
+    });
+
+    // The registry keeps a component that left the page, and a delayed action can still reach it.
+    // No render computes its derived fields after its state or the rows they read change.
+    it("computes the target's derived fields again first when the last render didn't reach it", () => {
+      const refreshStub = sinon.stub(Renderer, "refreshDerived");
+
+      registered(cid1);
+      ComponentRegistry.resetCurrentDerived();
+
+      Hologram.executeAction(actionFor(cid1));
+
+      sinon.assert.calledOnceWithExactly(refreshStub, cid1);
+      sinon.assert.callOrder(refreshStub, callNamedFunctionStub);
+    });
+
+    it("computes the target's derived fields again first when the render after its last action didn't reach it", () => {
+      const refreshStub = sinon.stub(Renderer, "refreshDerived");
+
+      Hologram.executeAction(actionFor(registered(cid1)));
+      Hologram.executeAction(actionFor(cid1));
+
+      sinon.assert.calledOnceWithExactly(refreshStub, cid1);
+      sinon.assert.callOrder(callNamedFunctionStub, refreshStub);
+    });
+
+    it("leaves the target's derived fields as the last render computed them when the render after its last action reached it", () => {
+      renderStub.callsFake(() =>
+        ComponentRegistry.putComponentDerived(cid1, Type.map()),
+      );
+
+      const refreshStub = sinon.stub(Renderer, "refreshDerived");
+
+      Hologram.executeAction(actionFor(registered(cid1)));
+      Hologram.executeAction(actionFor(cid1));
+
+      sinon.assert.notCalled(refreshStub);
     });
 
     it("dispatches to a registered target", () => {
@@ -6366,6 +6434,8 @@ describe("Hologram", () => {
       Renderer.isPageArrival = false;
       Renderer.listenerBindings = [];
       Renderer.resetFocusCandidates();
+      Hologram.dataLayer = null;
+      SyncStream.rowsChangedSinceRender = false;
       sinon.restore();
     });
 
@@ -6387,6 +6457,16 @@ describe("Hologram", () => {
 
       Hologram.virtualDocument = {sel: "html", data: {}, children: []};
     };
+
+    it("marks the rows as the ones it computes the derived fields from", () => {
+      stubRender(() => null);
+      setDataLayer();
+      SyncStream.rowsChangedSinceRender = true;
+
+      Hologram.render();
+
+      assert.isFalse(SyncStream.rowsChangedSinceRender);
+    });
 
     describe("Phoenix's live reload iframe", () => {
       const stubFirstRender = () => {

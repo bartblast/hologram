@@ -7,14 +7,11 @@ defmodule Hologram.Benchmarks.Fixtures.Components.QueryPropComponent do
 
   alias Hologram.Benchmarks.Fixtures.Entity1
 
-  prop :entities, [Entity1], from_query: &entities_query/1
   prop :min_position, :integer
+
+  derived :entities, [Entity1], fn min_position -> filter(Entity1, position >= ^min_position) end
 
   def template do
     ~HOLO""
-  end
-
-  defp entities_query(min_position) do
-    filter(Entity1, position >= ^min_position)
   end
 end

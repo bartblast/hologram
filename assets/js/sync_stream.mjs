@@ -17,6 +17,10 @@ import Tabs from "./tabs.mjs";
 export default class SyncStream {
   static renderScheduled = false;
 
+  // Whether a frame or a batch changed rows since the last render, which computed the derived
+  // fields from the rows it saw (see DataLayer.rowsChangedSinceRender).
+  static rowsChangedSinceRender = false;
+
   // The place in the log this client has been brought up to, kept across reconnects rather than
   // with the stream that delivered it: the listeners are registered again on every new stream,
   // and a place held with them would be dropped exactly when the client needs it to say what it
@@ -223,6 +227,11 @@ export default class SyncStream {
 
         if (frame.reason === "identity") {
           LocalDatabase.reset();
+
+          // The derived fields the last render computed read the rows just dropped, so an action
+          // run before the refill's first render computes its target's again (see
+          // DataLayer.rowsChangedSinceRender).
+          $.rowsChangedSinceRender = true;
         } else {
           LocalDatabase.beginRefill();
         }
@@ -263,6 +272,10 @@ export default class SyncStream {
   // goes, and an action dispatched by one of those renders again - a repaint started from inside
   // this handler would be a repaint started from inside a repaint.
   static scheduleRender() {
+    // Set even when a render is already on its way: what it computes, it computes from the rows as
+    // they stand when it runs, and until then they are newer than what the last render saw.
+    $.rowsChangedSinceRender = true;
+
     if ($.renderScheduled) {
       return;
     }

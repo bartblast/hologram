@@ -7,7 +7,10 @@ defmodule HologramFeatureTests.Components.Queries.Component11 do
   prop :min_priority, :atom
   prop :page_size, :integer
   prop :skipped_title, :string
-  prop :tickets, [Ticket], from_query: &tickets_query/3
+
+  derived :tickets, [Ticket], fn min_priority, skipped_title, page_size ->
+    tickets_query(min_priority, skipped_title, page_size)
+  end
 
   def template do
     ~HOLO"""

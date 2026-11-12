@@ -77,6 +77,7 @@ describe("SyncStream", () => {
     GlobalRegistry.set("connectPageModule", null);
     GlobalRegistry.set("syncStaleReason", null);
     SyncStream.renderScheduled = false;
+    SyncStream.rowsChangedSinceRender = false;
     SyncStream.syncCursor = null;
   });
 
@@ -413,6 +414,17 @@ describe("SyncStream", () => {
       assert.deepStrictEqual(LocalDatabase.carriedEntries(), []);
     });
 
+    // The rows the last render computed the derived fields from are gone, so an action run before
+    // the refill's first render must not read those fields as they were.
+    it("marks rows changed since the last render on a resync naming a change of identity", () => {
+      SyncStream.rowsChangedSinceRender = false;
+
+      SyncStream.receiveFrame("sync_resync", {reason: "identity"});
+
+      assert.isTrue(SyncStream.rowsChangedSinceRender);
+      assert.equal(animationFrames.length, 0);
+    });
+
     // Nothing is repainted here on purpose - the refill's own frames schedule that.
     it("keeps what it holds on a resync, awaiting the refill", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "held"});
@@ -432,6 +444,33 @@ describe("SyncStream", () => {
 
       assert.isNull(SyncStream.syncCursor);
       assert.equal(animationFrames.length, 0);
+    });
+  });
+
+  describe("scheduleRender()", () => {
+    afterEach(() => {
+      SyncStream.renderScheduled = false;
+      SyncStream.rowsChangedSinceRender = false;
+      sinon.restore();
+    });
+
+    it("marks rows changed since the last render", () => {
+      sinon.stub(window, "requestAnimationFrame");
+
+      SyncStream.rowsChangedSinceRender = false;
+
+      SyncStream.scheduleRender();
+
+      assert.isTrue(SyncStream.rowsChangedSinceRender);
+    });
+
+    it("marks rows changed while a render is already scheduled", () => {
+      SyncStream.renderScheduled = true;
+      SyncStream.rowsChangedSinceRender = false;
+
+      SyncStream.scheduleRender();
+
+      assert.isTrue(SyncStream.rowsChangedSinceRender);
     });
   });
 

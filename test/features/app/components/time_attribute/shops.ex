@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.Components.TimeAttribute.Shops do
 
   # Ordered by the time itself, so where a shop with no opening hour lands is something the DOM
   # says rather than something a scenario has to take on faith.
-  prop :shops, [Shop], from_query: &shops_query/0
+  derived :shops, [Shop], &shops_query/0
 
   def template do
     ~HOLO"""

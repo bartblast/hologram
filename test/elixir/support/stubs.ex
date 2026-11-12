@@ -120,8 +120,8 @@ defmodule Hologram.Test.Stubs do
     :persistent_term.erase(stub.persistent_term_key())
 
     dump_query_cache(stub, [
-      Hologram.Test.Fixtures.Compiler.QueryExtractor.Module1,
-      Hologram.Test.Fixtures.Component.Module11
+      Hologram.Test.Fixtures.Component.Module40,
+      Hologram.Test.Fixtures.Component.Module41
     ])
 
     if start_link do

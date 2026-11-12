@@ -23,18 +23,29 @@ defmodule Hologram.Compiler.QueryExtractor do
   # closures it runs, which start from states of their own.
   @derived_reads_key {__MODULE__, :derived_reads}
 
+  # Where a component or page derived field's walk built queries with query stages, in walk order,
+  # and which of those places a later stage, a function of the project or a variant's result took -
+  # across every variant of the field, since a query one variant drops another may return. `values`
+  # maps the queries of the variant being walked to where they were built. Gathered across the
+  # closures the walk runs.
+  @derived_stages_key {__MODULE__, :derived_stages}
+
   # Fork enumeration uses throw for non-local exit: on an undecided branch the
   # evaluation aborts, and the driver restarts it from the body with one more
   # branch choice appended (depth-first over the choice tree).
   @fork_signal :hologram_query_extractor_fork
   @prune_signal :hologram_query_extractor_prune
 
+  # The query stages that return a query. The other stages change an entity - an attribute, a
+  # counter, a relationship or a claim - and return it, and trust/1 returns what it is given.
+  @query_building_stages [:count, :filter, :include, :one, :paginate, :skip, :sort, :take]
+
   defmodule SymbolicQuery do
     @moduledoc false
 
     # A query the build cannot execute yet, because a position the WINDOW is derived from - the
     # entity that says which table to download, an include name that says which relationship
-    # travels with it - is an argument. Nothing is built while the capture is walked: each stage
+    # travels with it - is an argument. Nothing is built while the function is walked: each stage
     # asked of it is recorded, and the record is replayed through Hologram.Query.Stage once the
     # candidates are known. So the developer's code runs once, and only the recorded stages -
     # a short list of data - are replayed per candidate.
@@ -51,13 +62,13 @@ defmodule Hologram.Compiler.QueryExtractor do
   @doc """
   Resolves the definition of the given derived field of the given entity type by walking the
   field's clause of the type's `__derived_definition__/1` over its IR - the way a body calling a
-  query builder of another module is resolved, since the builder is written for the values it will
-  be given, and a field of the row has none while the definition is built.
+  query builder is resolved, since the builder is written for the values it will be given, and a
+  field of the row has none while the definition is built.
 
   What the walk reads stands in for the row's fields as `Hologram.Entity.Derived.field/2` builds
   them - a query over a set, a row field, a related row - and goes where a query goes: query stages
-  and `Hologram.Entity.Derived` run natively over them, a call into another module of the project is
-  followed into its IR with them, and a dot on a related row reads the longer path. The result is
+  and `Hologram.Entity.Derived` run natively over them, a call into the entity type's own functions or
+  another module of the project is followed into its IR with them, and a dot on a related row reads the longer path. The result is
   normalized as `Hologram.Entity.Derived.resolve/2` normalizes it, and returned with the modules
   whose functions the walk followed - the ones whose edits can change it besides the entity types'.
   A branch on a value the build knows takes the clause that value takes, as an extraction's does.
@@ -88,7 +99,7 @@ defmodule Hologram.Compiler.QueryExtractor do
     try do
       # Every branch of a derived field's walk is decided or refused, so the walk builds one
       # definition.
-      [definition] = evaluate_variants!(clause.body, %{}, context, [], false)
+      [definition] = evaluate_variants!(clause.body, %{}, context, [])
 
       read_modules =
         @derived_reads_key
@@ -102,151 +113,79 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   @doc """
-  Extracts the registered query terms declared by the given module - the normalized
-  terms of every `from_query:` capture on the module's prop declarations.
+  Extracts the registered query terms of the given component or page module's derived fields, each
+  field's name with the normalized terms its function builds - leaving out a field whose function
+  builds no query, which holds a plain value.
 
-  A zero-arity capture is invoked at build time (query builders are pure term
-  constructors) and its result normalized. A capture with arguments is evaluated
-  symbolically over its IR - each argument becomes a placeholder flowing into
-  the term as a `{:placeholder, name}` leaf named after the argument, resolving through
-  the generated from_query shim when the capture points at one. A branch on a
-  value the build knows - a case, a cond, a call to a multi-clause helper - takes
-  the clause that value takes, its patterns and guards read in order as Elixir
-  reads them, and a known value no clause matches is refused where the code would
-  raise. A branch on an argument forks the evaluation: every clause the value could
-  take yields its own variant term, as does every capture head clause, and all
-  variants are extracted (deduplicated per capture) - a variant that cannot occur
-  at runtime is over-approximation, costing a registry entry, never correctness. A
-  literal head pattern fixes its argument concretely in that variant.
+  A field's function builds a query when it, or a function of the project it calls, calls a query
+  stage, or returns an entity type, which stands for every row of it. Any other function is not
+  walked: what it computes is plain Elixir, which the build has no need to follow.
 
-  Calls interpret transitively: local helpers and placeholder-receiving functions
-  compiled into the project build evaluate over their own IR (recursion is
-  rejected), placeholder-free remote calls and query stage calls run natively, and
-  single-clause anonymous functions evaluate on invocation with their captured
-  scope (a branch inside one only on a value the build knows).
+  A function that builds a query is evaluated symbolically over its IR - each argument becomes a
+  placeholder flowing into the term as a `{:placeholder, name}` leaf named after the field it
+  reads. A branch on a value the build knows - a case, a cond, a call to a multi-clause helper -
+  takes the clause that value takes, its patterns and guards read in order as Elixir reads them,
+  and a known value no clause matches is refused where the code would raise. A branch on an
+  argument forks the evaluation: every clause the value could take yields its own variant term,
+  and all variants are extracted (deduplicated per field) - a variant that cannot occur at runtime
+  is over-approximation, costing a registry entry, never correctness. Every variant must be a
+  query.
 
-  ANYTHING THE BUILD CAN EVALUATE IS PART OF THE QUERY, ANYTHING IT CANNOT IS A
-  PLACEHOLDER. That is the whole rule, and what it serves is the sync window - which
-  rows a client downloads - never validation, which happens when the query runs
-  against real values on either tier. A call the build cannot make yields a
-  placeholder named for the argument it derives from.
+  Calls interpret transitively: local helpers and placeholder-receiving functions compiled into
+  the project build evaluate over their own IR (recursion is rejected), placeholder-free remote
+  calls and query stage calls run natively, and single-clause anonymous functions evaluate on
+  invocation with their captured scope (a branch inside one only on a value the build knows).
 
-  Where a placeholder may land follows from the window, not from the term. A
-  position `Hologram.Query.Window` drops or empties takes one as a leaf: a filter
-  attribute or value, an ordering key or direction, a view bound. A position the
-  window is DERIVED from cannot - the entity says which table to download, an
-  include name says which relationship travels with it - so a query holding one is
-  not built while the capture is walked at all: the stages asked of it are RECORDED,
-  and the record is replayed through the builder once per candidate of a finite set
-  (every entity type of the build, or the query's entity's declared relationships),
-  keeping the variants the builder admits. The developer's code is walked once, and
-  only the recorded stages are replayed. What narrows the set is the builder's own
-  validation, whatever stage refuses: `filter(entity.type, done: false)` keeps
-  precisely the types declaring a boolean `done`, and a candidate a LATER stage
-  cannot satisfy - an entity declaring no relationship to include - is dropped rather
-  than failing the build.
+  ANYTHING THE BUILD CAN EVALUATE IS PART OF THE QUERY, ANYTHING IT CANNOT IS A PLACEHOLDER. That
+  is the whole rule, and what it serves is the sync window - which rows a client downloads - never
+  validation, which happens when the query runs against real values on either tier. A call the
+  build cannot make yields a placeholder named for the argument it derives from.
 
-  Raises Hologram.CompileError when a from_query value is not a function capture,
-  when a capture argument is destructured instead of a plain name, when a capture
-  argument is named vars (reserved), when a case clause or function head uses a
-  composite pattern, when a known value matches no clause, when a helper recurses,
-  when an anonymous function has multiple clauses, arity above 3, or a branch on
-  an argument, when a body uses a construct
-  symbolic evaluation does not cover, when a placeholder stands somewhere the build
-  can neither drop nor enumerate (a whole predicates list, a paginate option map), or
-  when no candidate survives - a prop with no window would read
-  rows nothing ever fills. Zero-arity captures are free of these limits - they
-  evaluate concretely at build time.
+  Where a placeholder may land follows from the window, not from the term. A position
+  `Hologram.Query.Window` drops or empties takes one as a leaf: a filter attribute or value, an
+  ordering key or direction, a view bound. A position the window is DERIVED from cannot - the
+  entity says which table to download, an include name says which relationship travels with it -
+  so a query holding one is not built while the function is walked at all: the stages asked of it
+  are RECORDED, and the record is replayed through the builder once per candidate of a finite set
+  (every entity type of the build, or the query's entity's declared relationships), keeping the
+  variants the builder admits and, over entity types, the ones the field's type names. The
+  developer's code is walked once, and only the recorded stages are replayed. What narrows the set
+  is the builder's own validation, whatever stage refuses: `filter(entity_type, done: false)` keeps
+  precisely the types declaring a boolean `done`, and a candidate a LATER stage cannot satisfy - an
+  entity declaring no relationship to include - is dropped rather than failing the build.
 
-  The entity types are the replay's candidate set for a placeholder in an entity
-  position. They are taken as an argument so that a build computes them once and
-  passes the one list to every extraction, rather than every extraction reading
-  them.
+  Raises Hologram.CompileError when a field's function builds a query but returns something else, a
+  query of another shape than the field's type - a set of rows, one row or a count - or of another
+  entity type, a query over another derived field's rows, a query used as a value, when a case
+  clause or function head uses a composite pattern, when a known value matches no clause, when a
+  helper recurses, when an anonymous function has multiple clauses, arity above 3, or a branch on
+  an argument, when a body uses a construct symbolic evaluation does not cover, when a placeholder
+  stands somewhere the build can neither drop nor enumerate (a whole predicates list, a paginate
+  option map), or when no candidate survives - a derived field with no window would read rows
+  nothing ever fills.
 
-  The IR a capture is walked over is read from the given IR PLT, the compile's: a
-  module the PLT lacks is built into it (see Hologram.Compiler.build_missing_ir!/2),
-  so that no module's IR is built twice in a compile.
+  The entity types are the replay's candidate set for a placeholder in an entity position. They
+  are taken as an argument so that a build computes them once and passes the one list to every
+  extraction, rather than every extraction reading them.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/extract_module_queries_3/README.md
+  The IR a function is walked over is read from the given IR PLT, the compile's: a module the PLT
+  lacks is built into it (see Hologram.Compiler.build_missing_ir!/2), so that no module's IR is
+  built twice in a compile.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/query_extractor/extract_derived_queries_3/README.md
   """
-  @spec extract_module_queries(module, list(module), PLT.t()) :: list(Query.t())
-  def extract_module_queries(module, entity_types, ir_plt) do
-    if Reflection.has_function?(module, :__props__, 0) do
-      Enum.flat_map(module.__props__(), &prop_queries!(module, &1, entity_types, ir_plt))
+  @spec extract_derived_queries(module, list(module), PLT.t()) :: [{atom, [Query.t()]}]
+  def extract_derived_queries(module, entity_types, ir_plt) do
+    if Reflection.has_function?(module, :__derived__, 0) do
+      derived_names = Enum.map(module.__derived__(), & &1.name)
+
+      module.__derived__()
+      |> Enum.filter(&builds_query?(&1.function, entity_types, ir_plt))
+      |> Enum.map(fn entry ->
+        {entry.name, derived_queries!(module, entry, derived_names, entity_types, ir_plt)}
+      end)
     else
       []
-    end
-  end
-
-  @doc """
-  Extracts the ordered argument names of every parameterized from_query capture
-  on the given module's prop declarations. Names merge positionally across the
-  capture target's clauses (resolving through the generated from_query shim when
-  the capture points at one) - a position no clause binds as a plain variable
-  yields nil. Zero-arity captures and modules without prop declarations yield no
-  entries.
-
-  One position takes ONE name across every clause. The name is what says which
-  prop feeds the argument, and the value is chosen before clause dispatch happens,
-  so two clauses naming a position differently pose a question nothing can answer.
-  Clauses that do not use a position leave it a literal or an underscored name and
-  cost nothing.
-
-  Raises Hologram.CompileError when a position carries more than one distinct
-  name.
-
-  The names are read from compiled beams rather than recorded by the prop macro
-  into the prop's own opts, because a remote capture's names are unreadable while
-  the consuming component compiles: a target module compiling in the same batch
-  exists only in memory, and its beam - the only carrier of its clauses - is
-  written when the batch ends. The beam is read through its IR, from the given IR
-  PLT, as extract_module_queries/3 reads it.
-  """
-  @spec extract_prop_params(module, PLT.t()) :: keyword(list(atom | nil))
-  def extract_prop_params(module, ir_plt) do
-    if Reflection.has_function?(module, :__props__, 0) do
-      Enum.flat_map(module.__props__(), &prop_params(module, &1, ir_plt))
-    else
-      []
-    end
-  end
-
-  @doc """
-  Extracts the registered query terms declared by the given modules - the
-  concatenated extract_module_queries/3 results in module order.
-  """
-  @spec extract_queries(list(module), list(module), PLT.t()) :: list(Query.t())
-  def extract_queries(modules, entity_types, ir_plt) do
-    Enum.flat_map(modules, &extract_module_queries(&1, entity_types, ir_plt))
-  end
-
-  @doc """
-  Validates that every parameterized from_query capture on the given module's prop
-  declarations binds only the module's declared reactive slots - today, the props it
-  is given, which is every declared prop except the ones from_query itself fills. A
-  builder's argument names bind the like-named slots of the consuming component, so a
-  shared builder is validated against each consumer's own slots.
-
-  Raises Hologram.CompileError when a capture argument names no declared slot, when it
-  names a from_query prop of the same component, or when an argument position is named
-  by no clause of the capture's target. Modules without parameterized captures pass
-  vacuously.
-
-  The argument names are the ones extract_prop_params/2 extracted from the module, so
-  that the check reads no IR of its own.
-  """
-  @spec validate_slot_bindings!(module, keyword(list(atom | nil))) :: :ok
-  def validate_slot_bindings!(module, prop_params) do
-    case prop_params do
-      [] ->
-        :ok
-
-      prop_params ->
-        names = %{queries: query_prop_names(module), slots: declared_slot_names(module)}
-
-        Enum.each(prop_params, fn {prop_name, param_names} ->
-          Enum.each(param_names, &validate_slot_binding!(module, prop_name, &1, names))
-        end)
     end
   end
 
@@ -288,6 +227,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   # asked of that record joins it. One record covers a query whose entity AND include name both
   # arrive at run time - the replay expands both, over the product of the two candidate sets.
   defp apply_query_stage!(function, [%Placeholder{} = base | rest_args], state, context) do
+    refuse_derived_rows_source!(base, context)
+
     {%SymbolicQuery{base: base, stages: [{function, rest_args, context.line}]}, state}
   end
 
@@ -310,6 +251,33 @@ defmodule Hologram.Compiler.QueryExtractor do
     {apply_authored_stage!(function, arg_values, context), state}
   end
 
+  # A dot on a placeholder names the read it stands for after the argument, so the argument is the
+  # name's root.
+  defp refuse_derived_rows_source!(%Placeholder{name: name}, context) do
+    root =
+      name
+      |> Atom.to_string()
+      |> String.split(".")
+      |> hd()
+
+    case Map.get(context, :derived_value) do
+      %{inputs: inputs, subject: subject} ->
+        input = Enum.find(inputs, &(Atom.to_string(&1) == root))
+
+        if input do
+          compile_error!(
+            "#{subject} runs a query over derived field #{inspect(input)}'s rows - a query reads an entity type, so filter the rows in Elixir or build the query from the same inputs",
+            context
+          )
+        end
+
+      nil ->
+        :ok
+    end
+
+    :ok
+  end
+
   defp relationship_names(%Query{entity: entity_type}), do: relationship_names(entity_type)
 
   # Every name an include takes, inverses included.
@@ -318,7 +286,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   # A stage call the developer wrote is theirs to read, so a refusal from it is reraised carrying
-  # the prop it belongs to, which the error cannot know.
+  # the derived field it belongs to, which the error cannot know.
   defp apply_authored_stage!(function, arg_values, context) do
     apply(Stage, function, arg_values)
   rescue
@@ -350,6 +318,17 @@ defmodule Hologram.Compiler.QueryExtractor do
               __STACKTRACE__
   end
 
+  defp body_reaches_query?(body, {_reaches?, seen}, module, tail?, entity_types, ir_plt) do
+    # The id tells this body's binds from another's: a variable's version is unique within a
+    # function only.
+    scope = %{bindings: plain_binds(body, %{}), id: make_ref(), module: module}
+
+    case scan_reaches_query?([{body, tail?}], scope, entity_types, ir_plt, seen) do
+      {true, next_seen} -> {:halt, {true, next_seen}}
+      {false, next_seen} -> {:cont, {false, next_seen}}
+    end
+  end
+
   defp bound_again(bound, value, outcome, bindings) do
     cond do
       unknown_value?(bound) or unknown_value?(value) -> {:cont, {:unknown, bindings}}
@@ -369,9 +348,9 @@ defmodule Hologram.Compiler.QueryExtractor do
     end)
   end
 
-  # A call the field's own clause makes into another module is a query builder: followed into its
-  # IR, whatever it is given, since it builds the query the definition is - so it returns a query
-  # term.
+  # A call the field's own clause makes, local or into another module, is a query builder: followed
+  # into its IR, whatever it is given, since it builds the query the definition is - so it returns a
+  # query term.
   defp builder_call!(module, function, arg_values, state, context) do
     spelled = "#{inspect(module)}.#{function}/#{length(arg_values)}"
 
@@ -392,6 +371,18 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
 
     {value, state_after_call}
+  end
+
+  # Whether the given derived field's function builds a query - calls a stage that returns a query,
+  # or returns an entity type, itself or through a function of the project it calls. Only the IR is
+  # read, nothing is run, so a function computing a plain value costs the build nothing.
+  defp builds_query?(capture, entity_types, ir_plt) do
+    info = Function.info(capture)
+    mfa = {info[:module], info[:name], info[:arity]}
+
+    {reaches?, _seen} = reaches_query?(mfa, true, entity_types, ir_plt, MapSet.new())
+
+    reaches?
   end
 
   defp call_binding!(%IR.Variable{name: name, version: version}, value, _context),
@@ -530,7 +521,8 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   # A read the build performs for real, so a bad one is a bad builder - reported like every other
-  # build refusal here, naming the prop the ArgumentError-free raisers of Map cannot know about.
+  # build refusal here, naming the derived field the ArgumentError-free raisers of Map cannot know
+  # about.
   defp concrete_field!(value, field, context) when is_map(value) do
     case Map.fetch(value, field) do
       {:ok, field_value} ->
@@ -580,25 +572,13 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp contains_placeholder?(_other), do: false
 
+  defp contains_query?(value), do: queries_in(value) != []
+
   # The file a refusal is located in: the module being walked - or, in a derived field's own clause,
   # the file the field is declared in, which the clause is generated into.
   defp context_file(%{derived: %{at_field?: true, file: file}}), do: file
 
   defp context_file(context), do: source_file(context.current_module)
-
-  # The set a builder argument may bind - the component's declared reactive slots, which today
-  # means the props it is GIVEN and nothing else. Declared state and derived values extend this
-  # set later without reshaping the check.
-  #
-  # A prop that from_query fills is not one of them: it is what a query PRODUCED, not something
-  # the component was handed. Binding one would make a query's answer depend on another query's,
-  # which nothing here orders - the injector runs them in declaration order, so the same two
-  # declarations resolve or raise depending on which was written first.
-  defp declared_slot_names(module) do
-    module.__props__()
-    |> Enum.reject(fn {_name, _type, opts} -> opts[:from_query] end)
-    |> Enum.map(fn {name, _type, _opts} -> name end)
-  end
 
   # The clause of the entity type's __derived_definition__/1 the field's definition is built by.
   defp derived_clause!(entity_type, name, ir_plt) do
@@ -610,15 +590,118 @@ defmodule Hologram.Compiler.QueryExtractor do
     Enum.find(clauses, &match?(%IR.FunctionClause{params: [%IR.AtomType{value: ^name}]}, &1))
   end
 
+  defp derived_call?(module, context), do: context.derived != nil and module == Derived
+
   # Whether the walk stands in the derived field's own clause, where a builder is called from.
   defp derived_level?(%{derived: %{at_field?: true}}), do: true
 
   defp derived_level?(_context), do: false
 
-  defp query_prop_names(module) do
-    module.__props__()
-    |> Enum.filter(fn {_name, _type, opts} -> opts[:from_query] end)
-    |> Enum.map(fn {name, _type, _opts} -> name end)
+  defp derived_queries!(module, entry, derived_names, entity_types, ir_plt) do
+    info = Function.info(entry.function)
+    target_module = info[:module]
+
+    {_fun_key, {_visibility, [clause]}} =
+      target_module
+      |> module_funs(ir_plt)
+      |> List.keyfind({info[:name], info[:arity]}, 0)
+
+    subject = "derived field #{inspect(entry.name)} in #{inspect(module)}"
+
+    context = %{
+      current_module: target_module,
+      derived: nil,
+      derived_value: %{inputs: Enum.filter(entry.args, &(&1 in derived_names)), subject: subject},
+      entity_types: entity_types,
+      ir_plt: ir_plt,
+      line: nil,
+      stack: [frame(target_module, info[:name], info[:arity], clause.line)],
+      subject: subject
+    }
+
+    env = head_env(clause)
+
+    variants =
+      try do
+        Process.put(@derived_stages_key, %{places: %{}, used: MapSet.new(), values: %{}})
+
+        walked_variants = evaluate_variants!(clause.body, env, context, [])
+        refuse_dropped_queries!(context)
+
+        walked_variants
+      after
+        Process.delete(@derived_stages_key)
+      end
+
+    terms =
+      variants
+      |> Enum.flat_map(
+        &derived_variant_terms!(&1, entry, subject, module, clause.line, entity_types)
+      )
+      |> Enum.uniq()
+
+    if terms == [] do
+      {message, line} =
+        no_window_refusal(
+          subject,
+          "a derived field with no window would read rows nothing ever fills",
+          variants
+        )
+
+      compile_error!(message, target_module, line || clause.line)
+    end
+
+    terms
+  end
+
+  # A query over an entity type a placeholder holds is replayed over every entity type, and the
+  # replays the field's type doesn't name are dropped - the type is what pins the entity the
+  # runtime reads, which checks the term against the type again. Every other query is the one term
+  # it is, and has to match.
+  defp derived_variant_terms!(
+         %SymbolicQuery{base: %Placeholder{}} = query,
+         entry,
+         subject,
+         module,
+         line,
+         entity_types
+       ) do
+    replays =
+      query
+      |> resolve(entity_types)
+      |> Enum.map(&Stage.normalize/1)
+
+    case Enum.filter(replays, &query_of_type?(&1, entry.type)) do
+      [] when replays != [] ->
+        compile_error!(
+          "#{subject} is declared #{inspect(entry.type)}, but its query, over the entity type #{query.base.name} holds, is never #{type_description(entry.type)}",
+          module,
+          line
+        )
+
+      matching ->
+        matching
+    end
+  end
+
+  defp derived_variant_terms!(variant, entry, subject, module, line, entity_types) do
+    cond do
+      is_struct(variant, Query) or is_struct(variant, SymbolicQuery) or variant in entity_types ->
+        variant
+        |> resolve(entity_types)
+        |> Enum.map(&Stage.normalize/1)
+        |> Enum.map(&validate_derived_term!(&1, entry, subject, module, line))
+
+      contains_query?(variant) ->
+        compile_error!(query_as_value_message(subject), module, line)
+
+      true ->
+        compile_error!(
+          "#{subject} builds a query, but returns #{spelled_value(variant)} - a derived field holding rows returns the query, and a value computed from the rows is a derived field of its own",
+          module,
+          line
+        )
+    end
   end
 
   defp evaluate!(%IR.AnonymousFunctionType{arity: arity, clauses: [clause]}, state, context) do
@@ -633,6 +716,40 @@ defmodule Hologram.Compiler.QueryExtractor do
   end
 
   defp evaluate!(%IR.AtomType{value: value}, state, _context), do: {value, state}
+
+  # An interpolation in a derived field is walked for what it interpolates, so a query among it is
+  # refused as a value. Strings the build knows join into the string the code builds, and one
+  # interpolating a value the build doesn't know is only known at runtime.
+  defp evaluate!(
+         %IR.BitstringType{segments: segments, line: line},
+         state,
+         %{derived_value: _derived_value} = context
+       ) do
+    context = with_line(context, line)
+
+    {values, new_state} =
+      segments
+      |> Enum.map(& &1.value)
+      |> evaluate_enum!(state, context)
+
+    known_string? =
+      Enum.all?(values, &is_binary/1) and
+        Enum.all?(segments, &(&1.modifiers in [[type: :binary], [type: :utf8]]))
+
+    cond do
+      contains_placeholder?(values) ->
+        {%Placeholder{name: first_placeholder_name(values)}, new_state}
+
+      known_string? ->
+        {Enum.join(values), new_state}
+
+      true ->
+        compile_error!(
+          "#{context.subject} uses #{inspect(IR.BitstringType)} - the construct is not extractable yet",
+          context
+        )
+    end
+  end
 
   defp evaluate!(%IR.Block{expressions: expressions}, state, context) do
     Enum.reduce(expressions, {nil, state}, fn expression, {_value, acc_state} ->
@@ -680,8 +797,8 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   # Reading a field off a placeholder yields another placeholder, named for the path read.
   #
-  # Nothing executes the extracted term - both tiers call the real builder with the component's real
-  # prop values - so the leaf only has to say that the value is unknown until the query runs.
+  # Nothing executes the extracted term - both tiers call the real function with the component's
+  # real field values - so the leaf only has to say that the value is unknown until the query runs.
   # sobelow_skip ["DOS.BinToAtom"]
   defp evaluate!(%IR.DotOperator{left: left, right: right, line: line}, state, context) do
     context = with_line(context, line)
@@ -737,7 +854,13 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     {arg_values, state_after_args} = evaluate_enum!(args, state, context)
 
-    interpret_call!(context.current_module, function, arg_values, state_after_args, context)
+    # In a derived field's own clause a local call is the entity type's own query builder, held to
+    # what a builder of another module is.
+    if derived_level?(context) do
+      builder_call!(context.current_module, function, arg_values, state_after_args, context)
+    else
+      interpret_call!(context.current_module, function, arg_values, state_after_args, context)
+    end
   end
 
   defp evaluate!(%IR.MapType{data: data}, state, context) do
@@ -768,6 +891,16 @@ defmodule Hologram.Compiler.QueryExtractor do
     {value, %{new_state | env: Map.put(new_state.env, {name, version}, value)}}
   end
 
+  # A match on _ or an underscored name in a derived field binds nothing, so only the right side is
+  # walked.
+  defp evaluate!(
+         %IR.MatchOperator{left: %IR.MatchPlaceholder{}, right: right, line: line},
+         state,
+         %{derived_value: _derived_value} = context
+       ) do
+    evaluate!(right, state, with_line(context, line))
+  end
+
   defp evaluate!(%IR.MatchOperator{}, _state, context) do
     compile_error!(
       "#{context.subject} pattern-matches in its body - only plain variable binds are extractable yet",
@@ -787,9 +920,14 @@ defmodule Hologram.Compiler.QueryExtractor do
 
     cond do
       target_module in [Query, Stage] ->
-        apply_query_stage!(function, arg_values, state_after_args, context)
+        {value, state_after_stage} =
+          apply_query_stage!(function, arg_values, state_after_args, context)
 
-      context.derived != nil and target_module == Derived ->
+        record_stage(arg_values, value, context)
+
+        {value, state_after_stage}
+
+      derived_call?(target_module, context) ->
         {apply_derived!(function, arg_values, context), state_after_args}
 
       derived_level?(context) ->
@@ -801,12 +939,16 @@ defmodule Hologram.Compiler.QueryExtractor do
       not contains_placeholder?(arg_values) ->
         record_derived_read(target_module, context)
 
-        {apply(target_module, function, arg_values), state_after_args}
+        {native_call!(target_module, function, arg_values, context), state_after_args}
 
       interpretable_module?(target_module) ->
         interpret_call!(target_module, function, arg_values, state_after_args, context)
 
+      # What the call does with a query it is given is only known at runtime, and so is what it
+      # returns.
       true ->
+        record_used_queries(arg_values, context)
+
         {%Placeholder{name: first_placeholder_name(arg_values)}, state_after_args}
     end
   end
@@ -884,15 +1026,19 @@ defmodule Hologram.Compiler.QueryExtractor do
     {Enum.reverse(reversed_values), new_state}
   end
 
-  defp evaluate_variants!(body, env, context, choices, forked?) do
+  defp evaluate_variants!(body, env, context, choices) do
     result =
       try do
+        reset_derived_stages(context)
+
         {term, _state} =
           evaluate!(
             body,
-            %{choices: choices, env: env, forked?: forked?, funs_cache: %{}},
+            %{choices: choices, env: env, forked?: false, funs_cache: %{}},
             context
           )
+
+        record_returned(term, context)
 
         {:term, term}
       catch
@@ -909,7 +1055,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
       {:fork, clause_count} ->
         Enum.flat_map(0..(clause_count - 1), fn choice ->
-          evaluate_variants!(body, env, context, List.insert_at(choices, -1, choice), forked?)
+          evaluate_variants!(body, env, context, List.insert_at(choices, -1, choice))
         end)
     end
   end
@@ -921,7 +1067,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
       nil ->
         compile_error!(
-          "#{context.subject} calls undefined function #{inspect(module)}.#{function}/#{arity}",
+          undefined_function_message(context.subject, module, function, arity),
           context
         )
     end
@@ -960,6 +1106,18 @@ defmodule Hologram.Compiler.QueryExtractor do
   # shape it reads the compiler's own frames by.
   defp frame(module, function, arity, line) do
     {module, function, arity, [file: source_file(module), line: line]}
+  end
+
+  # Hologram's own modules answer what an app asks of them - can?/3 reads grants through queries of
+  # its own - so a call into one builds no query of the field's. The suite's fixtures are compiled
+  # into the same application, under Hologram.Test.
+  defp framework_module?(module) do
+    test_module? =
+      module
+      |> Atom.to_string()
+      |> String.starts_with?("Elixir.Hologram.Test.")
+
+    :application.get_application(module) == {:ok, :hologram} and not test_module?
   end
 
   defp guard_call(module, function, args) do
@@ -1034,8 +1192,9 @@ defmodule Hologram.Compiler.QueryExtractor do
        when struct in [IR.AtomType, IR.FloatType, IR.IntegerType, IR.StringType],
        do: {:known, value}
 
-  # A guard construct the walk does not evaluate leaves a capture's clause undecided, forked as any
-  # other. A derived field's walk has to decide it, so there it is refused for what it is.
+  # A guard construct the walk does not evaluate leaves the clause undecided in a component derived
+  # field's walk, forked as any other. An entity derived field's walk has to decide it, so there it
+  # is refused for what it is.
   defp guard_value(_ir, _env, %{derived: nil}), do: :unknown
 
   defp guard_value(ir, _env, context) do
@@ -1079,45 +1238,15 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  # TODO: an argument named vars will bind the full assigns bag once that
-  # convention lands - until then the name is reserved.
-  defp head_binding!(module, prop_name, %IR.Variable{name: :vars}, line) do
-    compile_error!(
-      "query capture for prop #{inspect(prop_name)} in #{inspect(module)} names an argument vars - the name is reserved, name arguments after the component assigns they bind to",
-      module,
-      line
-    )
-  end
-
-  defp head_binding!(_module, _prop_name, %IR.Variable{name: name, version: version}, _line) do
-    {{name, version}, %Placeholder{name: name}}
-  end
-
-  defp head_binding!(_module, _prop_name, %IR.AtomType{}, _line), do: nil
-
-  defp head_binding!(_module, _prop_name, %IR.FloatType{}, _line), do: nil
-
-  defp head_binding!(_module, _prop_name, %IR.IntegerType{}, _line), do: nil
-
-  defp head_binding!(_module, _prop_name, %IR.MatchPlaceholder{}, _line), do: nil
-
-  defp head_binding!(_module, _prop_name, %IR.StringType{}, _line), do: nil
-
-  defp head_binding!(module, prop_name, _param_ir, line) do
-    compile_error!(
-      "query capture for prop #{inspect(prop_name)} in #{inspect(module)} destructures an argument - arguments must be plain names, each binding to the like-named component assign",
-      module,
-      line
-    )
-  end
-
-  defp head_env!(module, prop_name, clause) do
-    Enum.reduce(clause.params, %{}, fn param_ir, env ->
-      case head_binding!(module, prop_name, param_ir, clause.line) do
-        {name, value} -> Map.put(env, name, value)
-        nil -> env
-      end
+  # A derived field's function names the fields it reads, so each argument is a placeholder named
+  # for its field. An underscored name reads a field the function doesn't use, and binds nothing.
+  defp head_env(clause) do
+    clause.params
+    |> Enum.flat_map(fn
+      %IR.Variable{name: name, version: version} -> [{{name, version}, %Placeholder{name: name}}]
+      %IR.MatchPlaceholder{} -> []
     end)
+    |> Map.new()
   end
 
   defp interpret_anonymous!(clause, arg_values, closure_env, context) do
@@ -1163,8 +1292,7 @@ defmodule Hologram.Compiler.QueryExtractor do
         )
       end)
 
-    no_match =
-      "#{context.subject} calls #{inspect(module)}.#{function}/#{arity} with #{Enum.map_join(arg_values, ", ", &spelled_argument/1)}, which no clause matches - the code raises FunctionClauseError there"
+    no_match = no_clause_message(context.subject, module, function, arg_values)
 
     {choice, state_after_choice} = choose_clause!(candidates, state_after_funs, no_match, context)
 
@@ -1200,10 +1328,7 @@ defmodule Hologram.Compiler.QueryExtractor do
   # What the developer asked for, read off the record rather than off the candidates' refusals: the
   # first candidate of a build is a framework entity type, so quoting ITS refusal would answer a
   # question about the developer's model with the grant store's columns.
-  defp no_window_refusal(module, prop_name, variants) do
-    prefix = "query capture for prop #{inspect(prop_name)} in #{inspect(module)}"
-    tail = "a prop with no window would read rows nothing ever fills"
-
+  defp no_window_refusal(prefix, tail, variants) do
     case Enum.find_value(variants, &relationshipless_include/1) do
       nil ->
         {clause, line} = asked_for(variants)
@@ -1275,10 +1400,6 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp known_values(values), do: Enum.map(values, fn {:known, value} -> value end)
 
-  # A position named by some clauses and left a literal by others merges to the one name - that is
-  # what this is for, and it is how a `def q(nil)` clause sits beside a `def q(min_b)` one. Two
-  # clauses naming it DIFFERENTLY is the shape that cannot merge, since the caller must pick a
-  # prop's value before any clause is chosen.
   # A function the walk enters is no derived field's own clause, wherever it is defined.
   defp leave_field(nil), do: nil
 
@@ -1288,30 +1409,6 @@ defmodule Hologram.Compiler.QueryExtractor do
     flat_pairs
     |> Enum.chunk_every(2)
     |> Map.new(fn [key, value] -> {key, value} end)
-  end
-
-  defp merged_placeholder_names(module, prop_name, clauses, arity) do
-    Enum.map(0..(arity - 1), fn index ->
-      clauses
-      |> Enum.map(&param_name(&1, index))
-      |> Enum.reject(&is_nil/1)
-      |> Enum.uniq()
-      |> merged_param_name!(module, prop_name, index, hd(clauses).line)
-    end)
-  end
-
-  defp merged_param_name!([], _module, _prop_name, _index, _line), do: nil
-
-  defp merged_param_name!([name], _module, _prop_name, _index, _line), do: name
-
-  defp merged_param_name!(names, module, prop_name, index, line) do
-    spelled = Enum.map_join(names, ", ", &inspect/1)
-
-    compile_error!(
-      "query capture for prop #{inspect(prop_name)} in #{inspect(module)} names argument #{index + 1} differently across its clauses (#{spelled}) - one argument position binds one prop, and which prop it is has to be known before any clause is chosen, so every clause must name it alike. Rename them to the prop this argument binds, leave the position a literal or an underscored name in the clauses that do not use it, or bind through an adapter naming it once: from_query: fn #{hd(names)} -> your_query(#{hd(names)}) end",
-      module,
-      line
-    )
   end
 
   # A module the PLT holds is read from it, one it lacks is built into it, so that the next read of
@@ -1332,11 +1429,51 @@ defmodule Hologram.Compiler.QueryExtractor do
     IR.aggregate_module_funs(ir)
   end
 
-  defp param_name(clause, index) do
-    case Enum.at(clause.params, index) do
-      %IR.Variable{name: name} -> name
-      _pattern -> nil
+  # A call the build runs for real. In a derived field's walk, a call that fails on a query it was
+  # given used the query as a value - iterated its rows, measured it, turned it into a string - and a
+  # function of the project that took one without failing is a builder, which took it as its source.
+  defp native_call!(module, function, arg_values, %{derived_value: _derived_value} = context) do
+    value = apply(module, function, arg_values)
+
+    if interpretable_module?(module) do
+      record_used_queries(arg_values, context)
     end
+
+    value
+  rescue
+    error -> native_failure!(error, __STACKTRACE__, context)
+  end
+
+  defp native_call!(module, function, arg_values, _context),
+    do: apply(module, function, arg_values)
+
+  # A call the build ran failed. A function that doesn't exist, or one of the project or a dependency
+  # that no clause of matches, is reported as the walk reports one it follows. A call that failed on
+  # a query it was given used the query as a value. Any other failure is the app's own.
+  defp native_failure!(%UndefinedFunctionError{} = error, _stacktrace, context) do
+    message =
+      undefined_function_message(context.subject, error.module, error.function, error.arity)
+
+    compile_error!(message, context)
+  end
+
+  @spec native_failure!(Exception.t(), Exception.stacktrace(), map) :: no_return
+  defp native_failure!(error, stacktrace, context) do
+    cond do
+      project_clause_failure?(error, stacktrace) ->
+        [{module, function, args, _location} | _frames] = stacktrace
+        compile_error!(no_clause_message(context.subject, module, function, args), context)
+
+      query_failure?(error, stacktrace) ->
+        compile_error!(query_as_value_message(context.subject), context)
+
+      true ->
+        reraise error, stacktrace
+    end
+  end
+
+  defp no_clause_message(subject, module, function, arg_values) do
+    "#{subject} calls #{inspect(module)}.#{function}/#{length(arg_values)} with #{Enum.map_join(arg_values, ", ", &spelled_argument/1)}, which no clause matches - the code raises FunctionClauseError there"
   end
 
   # Whether a clause head's pattern matches a value: always for a name or _, by the literal's equality
@@ -1357,20 +1494,6 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp pattern_outcome(pattern, _value, binder), do: binder.(pattern)
 
-  defp prop_params(module, {name, _type, opts}, ir_plt) do
-    with {:ok, capture} <- Keyword.fetch(opts, :from_query),
-         true <- is_function(capture) and not is_function(capture, 0) do
-      {_target_module, _fun_name, _arity, clauses} =
-        resolve_capture_clauses!(module, name, capture, ir_plt)
-
-      arity = Function.info(capture)[:arity]
-
-      [{name, merged_placeholder_names(module, name, clauses, arity)}]
-    else
-      _absent_zero_arity_or_non_capture -> []
-    end
-  end
-
   defp module_funs_cached(module, state, ir_plt) do
     case state.funs_cache do
       %{^module => funs} ->
@@ -1383,63 +1506,160 @@ defmodule Hologram.Compiler.QueryExtractor do
     end
   end
 
-  defp prop_queries!(module, {name, _type, opts}, entity_types, ir_plt) do
-    case Keyword.fetch(opts, :from_query) do
-      {:ok, capture} -> prop_query!(module, name, capture, entity_types, ir_plt)
-      :error -> []
-    end
+  # The plain binds a function body makes, by variable: what a variable the field's result comes
+  # from holds, so the scan follows it there. A variable is bound once at each version, so one map
+  # holds every bind of the body, the ones inside its branches and functions too.
+  defp plain_binds(
+         %IR.MatchOperator{left: %IR.Variable{name: name, version: version}, right: right},
+         binds
+       ),
+       do: plain_binds(right, Map.put(binds, {name, version}, right))
+
+  defp plain_binds(node, binds) when is_struct(node) do
+    node
+    |> Map.from_struct()
+    |> Map.values()
+    |> plain_binds(binds)
   end
 
-  defp prop_query!(_module, _prop_name, capture, _entity_types, _ir_plt)
-       when is_function(capture, 0) do
-    [Stage.normalize(capture.())]
+  defp plain_binds(node, binds) when is_list(node), do: Enum.reduce(node, binds, &plain_binds/2)
+
+  defp plain_binds(node, binds) when is_tuple(node) do
+    node
+    |> Tuple.to_list()
+    |> plain_binds(binds)
   end
 
-  defp prop_query!(module, prop_name, capture, entity_types, ir_plt) when is_function(capture) do
-    {target_module, fun_name, arity, clauses} =
-      resolve_capture_clauses!(module, prop_name, capture, ir_plt)
+  defp plain_binds(_node, binds), do: binds
 
-    # The capture's own frame opens the stack, so a refusal in its body has a path to show even
-    # when it called nothing - the innermost frame is always the function being walked, which is
-    # what makes the whole list read as a stacktrace rather than a list of callers.
-    context = %{
-      current_module: target_module,
-      derived: nil,
-      entity_types: entity_types,
-      ir_plt: ir_plt,
-      line: nil,
-      stack: [frame(target_module, fun_name, arity, nil)],
-      subject: "query capture for prop #{inspect(prop_name)} in #{inspect(module)}"
-    }
+  # A function of the project or a dependency fails on a clause it doesn't have for its arguments,
+  # whichever of them it is - the walk reports that as it reports a clause it follows.
+  defp project_clause_failure?(
+         %FunctionClauseError{module: module, function: function},
+         [{module, function, args, _location} | _frames]
+       )
+       when is_list(args),
+       do: interpretable_module?(module)
 
-    variants =
-      Enum.flat_map(clauses, fn clause ->
-        env = head_env!(module, prop_name, clause)
+  defp project_clause_failure?(_error, _stacktrace), do: false
 
-        evaluate_variants!(clause.body, env, context, [], length(clauses) > 1)
-      end)
+  # The queries a value holds, itself one or inside lists, tuples, maps and structs.
+  defp queries_in(%Query{} = query), do: [query]
 
-    terms =
-      variants
-      |> Enum.flat_map(&resolve(&1, entity_types))
-      |> Enum.map(&Stage.normalize/1)
-      |> Enum.uniq()
+  defp queries_in(%SymbolicQuery{} = query), do: [query]
 
-    if terms == [] do
-      {message, line} = no_window_refusal(module, prop_name, variants)
+  defp queries_in(list) when is_list(list), do: Enum.flat_map(list, &queries_in/1)
 
-      compile_error!(message, target_module, line || hd(clauses).line)
-    end
-
-    terms
+  defp queries_in(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> queries_in()
   end
 
-  defp prop_query!(module, prop_name, value, _entity_types, _ir_plt) do
+  defp queries_in(map) when is_map(map) do
+    map
+    |> Map.to_list()
+    |> queries_in()
+  end
+
+  defp queries_in(_other), do: []
+
+  defp query_as_value_message(subject) do
+    "#{subject} uses a query as a value - a query describes rows, so declare it as a derived field and read that"
+  end
+
+  defp query_description(%Query{cardinality: :count, entity: entity}),
+    do: "a count of #{inspect(entity)} rows"
+
+  defp query_description(%Query{cardinality: :one, entity: entity}),
+    do: "one #{inspect(entity)} row"
+
+  defp query_description(%Query{entity: entity}), do: "a set of #{inspect(entity)} rows"
+
+  # A call fails on a query it was given when a protocol the query doesn't implement was asked of it -
+  # Enumerable, String.Chars - or when an Erlang or Elixir function was handed it in place of a list,
+  # a number or a string, which its frame shows with the arguments it was called with.
+  defp query_failure?(%Protocol.UndefinedError{value: value}, _stacktrace),
+    do: contains_query?(value)
+
+  defp query_failure?(_error, [{_module, _function, args, _location} | _frames])
+       when is_list(args),
+       do: contains_query?(args)
+
+  defp query_failure?(_error, _stacktrace), do: false
+
+  defp query_of_type?(%Query{cardinality: :set, entity: entity}, [entity]), do: true
+
+  defp query_of_type?(%Query{cardinality: :one, entity: entity}, entity), do: true
+
+  defp query_of_type?(%Query{cardinality: :count}, :integer), do: true
+
+  defp query_of_type?(_term, _type), do: false
+
+  @spec raise_derived_type_mismatch!(Query.t(), map, String.t(), module, pos_integer | nil) ::
+          no_return
+  defp raise_derived_type_mismatch!(term, entry, subject, module, line) do
     compile_error!(
-      "from_query for prop #{inspect(prop_name)} in #{inspect(module)} must be a function capture, got: #{inspect(value)}",
+      "#{subject} is declared #{inspect(entry.type)}, but its query is #{query_description(term)}",
       module,
-      nil
+      line
     )
+  end
+
+  # Whether the given function calls a stage that returns a query, or returns an entity type when
+  # its result is the field's (tail? true), itself or through the functions of the project it
+  # calls - each walked once per position, so recursion ends.
+  defp reaches_query?({module, function, arity} = mfa, tail?, entity_types, ir_plt, seen) do
+    key = {mfa, tail?}
+
+    if MapSet.member?(seen, key) do
+      {false, seen}
+    else
+      seen = MapSet.put(seen, key)
+
+      fun =
+        module
+        |> module_funs(ir_plt)
+        |> List.keyfind({function, arity}, 0)
+
+      case fun do
+        {_fun_key, {_visibility, clauses}} ->
+          bodies = Enum.map(clauses, & &1.body)
+
+          Enum.reduce_while(
+            bodies,
+            {false, seen},
+            &body_reaches_query?(&1, &2, module, tail?, entity_types, ir_plt)
+          )
+
+        nil ->
+          {false, seen}
+      end
+    end
+  end
+
+  # A query the walk built is kept with where it was built, in walk order, and among the queries of
+  # the variant being walked, so a later use of it finds the place.
+  defp record_built(value, context) do
+    if is_struct(value, Query) or is_struct(value, SymbolicQuery) do
+      stages = Process.get(@derived_stages_key)
+      key = {context_file(context), context.line}
+
+      place = %{
+        file: context_file(context),
+        line: context.line,
+        order: map_size(stages.places),
+        stack: context.stack
+      }
+
+      Process.put(@derived_stages_key, %{
+        stages
+        | places: Map.put_new(stages.places, key, place),
+          values: Map.update(stages.values, value, [key], &[key | &1])
+      })
+    end
+
+    :ok
   end
 
   # A project module whose function a derived field's walk follows or runs is one whose edit can
@@ -1449,6 +1669,67 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp record_derived_read(module, _context) do
     if interpretable_module?(module) do
       Process.put(@derived_reads_key, MapSet.put(Process.get(@derived_reads_key), module))
+    end
+
+    :ok
+  end
+
+  # A query a variant returns is the field's query, so the place that built it is used.
+  defp record_returned(term, %{derived_value: _derived_value} = context) do
+    if is_struct(term, Query) or is_struct(term, SymbolicQuery) do
+      record_used_queries([term], context)
+    end
+
+    :ok
+  end
+
+  defp record_returned(_term, _context), do: :ok
+
+  # A stage takes its query argument as its source, and the query it builds is kept with where it
+  # was built.
+  defp record_stage(arg_values, value, %{derived_value: _derived_value} = context) do
+    record_used_queries(Enum.take(arg_values, 1), context)
+    record_built(value, context)
+  end
+
+  defp record_stage(_arg_values, _value, _context), do: :ok
+
+  defp record_used_queries(values, %{derived_value: _derived_value}) do
+    stages = Process.get(@derived_stages_key)
+
+    used_places =
+      values
+      |> queries_in()
+      |> Enum.flat_map(&Map.get(stages.values, &1, []))
+
+    Process.put(@derived_stages_key, %{
+      stages
+      | used: MapSet.union(stages.used, MapSet.new(used_places))
+    })
+
+    :ok
+  end
+
+  defp record_used_queries(_values, _context), do: :ok
+
+  # A place that built a query no variant returned, and no stage or function of the project took,
+  # sent its query somewhere else - into a value, or nowhere. The first such place in walk order is
+  # refused.
+  defp refuse_dropped_queries!(context) do
+    %{places: places, used: used} = Process.get(@derived_stages_key)
+
+    dropped =
+      places
+      |> Enum.reject(fn {key, _place} -> MapSet.member?(used, key) end)
+      |> Enum.map(fn {_key, place} -> place end)
+      |> Enum.min_by(& &1.order, fn -> nil end)
+
+    if dropped do
+      raise Hologram.CompileError,
+        message: query_as_value_message(context.subject),
+        file: dropped.file,
+        line: dropped.line,
+        stack: dropped.stack
     end
 
     :ok
@@ -1490,8 +1771,16 @@ defmodule Hologram.Compiler.QueryExtractor do
     MisuseError -> []
   end
 
+  # Each variant is walked from the start, so the queries it holds start empty.
+  defp reset_derived_stages(%{derived_value: _derived_value}) do
+    Process.put(@derived_stages_key, %{Process.get(@derived_stages_key) | values: %{}})
+  end
+
+  defp reset_derived_stages(_context), do: :ok
+
   # A record becomes the queries it admits: over every entity type of the build when the entity
   # itself is unknown, over the one it already names when only an include name is.
+
   defp resolve(%SymbolicQuery{base: %Placeholder{}, stages: stages}, entity_types) do
     Enum.flat_map(entity_types, &replay(Enum.reverse(stages), &1))
   end
@@ -1502,42 +1791,250 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   defp resolve(term, _entity_types), do: [term]
 
-  defp resolve_capture_clauses!(prop_module, prop_name, capture, ir_plt) do
-    capture_info = Function.info(capture)
-    target_module = capture_info[:module]
+  defp scan_args_reach_query?(nodes, scope, entity_types, ir_plt, seen) do
+    nodes
+    |> Enum.map(&{&1, false})
+    |> scan_reaches_query?(scope, entity_types, ir_plt, seen)
+  end
 
-    fun_name = shim_target(target_module, capture_info[:name])
-    arity = capture_info[:arity]
+  defp scan_node_reaches_query?(
+         %IR.AtomType{value: value},
+         tail?,
+         _scope,
+         entity_types,
+         _ir_plt,
+         seen
+       ),
+       do: {tail? and value in entity_types, seen}
 
-    funs = module_funs(target_module, ir_plt)
+  defp scan_node_reaches_query?(
+         %IR.Block{expressions: expressions},
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    pairs = Enum.with_index(expressions, &{&1, tail? and &2 == length(expressions) - 1})
 
-    case List.keyfind(funs, {fun_name, arity}, 0) do
-      {_fun_key, {_visibility, clauses}} ->
-        {target_module, fun_name, arity, clauses}
+    scan_reaches_query?(pairs, scope, entity_types, ir_plt, seen)
+  end
 
-      nil ->
-        compile_error!(
-          "query capture for prop #{inspect(prop_name)} in #{inspect(prop_module)} targets undefined function #{inspect(target_module)}.#{fun_name}/#{arity}",
-          prop_module,
-          nil
-        )
+  defp scan_node_reaches_query?(
+         %IR.Case{condition: condition, clauses: clauses},
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    pairs = [
+      {condition, false}
+      | Enum.flat_map(clauses, &[{&1.match, false}, {&1.guards, false}, {&1.body, tail?}])
+    ]
+
+    scan_reaches_query?(pairs, scope, entity_types, ir_plt, seen)
+  end
+
+  defp scan_node_reaches_query?(
+         %IR.Cond{clauses: clauses},
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    pairs = Enum.flat_map(clauses, &[{&1.condition, false}, {&1.body, tail?}])
+
+    scan_reaches_query?(pairs, scope, entity_types, ir_plt, seen)
+  end
+
+  defp scan_node_reaches_query?(
+         %IR.LocalFunctionCall{function: function, args: args},
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    case reaches_query?({scope.module, function, length(args)}, tail?, entity_types, ir_plt, seen) do
+      {true, next_seen} -> {true, next_seen}
+      {false, next_seen} -> scan_args_reach_query?(args, scope, entity_types, ir_plt, next_seen)
     end
   end
 
-  # A generated delegation shim hides the authored builder - the component's
-  # delegations reflection maps it back. An inline-hoisted shim is the authored
-  # builder itself and is not listed there.
-  defp shim_target(module, fun_name) do
-    if function_exported?(module, :__from_query_delegations__, 0) do
-      Keyword.get(module.__from_query_delegations__(), fun_name, fun_name)
+  # A match evaluates to its right side.
+  defp scan_node_reaches_query?(
+         %IR.MatchOperator{left: left, right: right},
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    scan_reaches_query?([{left, false}, {right, tail?}], scope, entity_types, ir_plt, seen)
+  end
+
+  defp scan_node_reaches_query?(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: target},
+           function: function,
+           args: args
+         },
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       )
+       when target in [Query, Stage] do
+    cond do
+      function in @query_building_stages ->
+        {true, seen}
+
+      # trust/1 returns what it is given, so its argument stands where the call does.
+      function == :trust ->
+        args
+        |> Enum.map(&{&1, tail?})
+        |> scan_reaches_query?(scope, entity_types, ir_plt, seen)
+
+      true ->
+        scan_args_reach_query?(args, scope, entity_types, ir_plt, seen)
+    end
+  end
+
+  defp scan_node_reaches_query?(
+         %IR.RemoteFunctionCall{
+           module: %IR.AtomType{value: target},
+           function: function,
+           args: args
+         },
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    if interpretable_module?(target) and not framework_module?(target) do
+      case reaches_query?({target, function, length(args)}, tail?, entity_types, ir_plt, seen) do
+        {true, next_seen} ->
+          {true, next_seen}
+
+        {false, next_seen} ->
+          scan_args_reach_query?(args, scope, entity_types, ir_plt, next_seen)
+      end
     else
-      fun_name
+      scan_args_reach_query?(args, scope, entity_types, ir_plt, seen)
     end
   end
 
-  # An argument among the values gets a message of its own. The value it stands for arrives long
-  # after the build, so what went wrong is that a query's SHAPE was asked to depend on it - and
-  # naming the placeholder would show a compiler internal to someone who wrote a prop.
+  defp scan_node_reaches_query?(
+         %IR.Try{
+           body: body,
+           rescue_clauses: rescues,
+           catch_clauses: catches,
+           else_clauses: elses,
+           after_block: after_block
+         },
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    branches =
+      Enum.map(rescues ++ catches ++ elses, &{&1, false}) ++
+        Enum.map(rescues ++ catches ++ elses, &{&1.body, tail?})
+
+    scan_reaches_query?(
+      [{body, tail?}, {after_block, false} | branches],
+      scope,
+      entity_types,
+      ir_plt,
+      seen
+    )
+  end
+
+  # A variable the field's result comes from holds what its bind's right side evaluates to. Each
+  # bind is followed once per body: the scan stops at the first query it finds, so a bind followed
+  # before found none, and following it again from another branch would only repeat the work.
+  defp scan_node_reaches_query?(
+         %IR.Variable{name: name, version: version},
+         true,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    followed = {:bind, scope.id, {name, version}}
+
+    with false <- MapSet.member?(seen, followed),
+         {:ok, bound} <- Map.fetch(scope.bindings, {name, version}) do
+      scan_reaches_query?(
+        [{bound, true}],
+        scope,
+        entity_types,
+        ir_plt,
+        MapSet.put(seen, followed)
+      )
+    else
+      _skipped -> {false, seen}
+    end
+  end
+
+  defp scan_node_reaches_query?(
+         %IR.With{clauses: clauses, body: body, else_clauses: else_clauses},
+         tail?,
+         scope,
+         entity_types,
+         ir_plt,
+         seen
+       ) do
+    pairs =
+      [{clauses, false}, {body, tail?}] ++
+        Enum.flat_map(
+          else_clauses || [],
+          &[{&1.match, false}, {&1.guards, false}, {&1.body, tail?}]
+        )
+
+    scan_reaches_query?(pairs, scope, entity_types, ir_plt, seen)
+  end
+
+  defp scan_node_reaches_query?(node, _tail?, scope, entity_types, ir_plt, seen)
+       when is_struct(node) do
+    node
+    |> Map.from_struct()
+    |> Map.values()
+    |> scan_args_reach_query?(scope, entity_types, ir_plt, seen)
+  end
+
+  defp scan_node_reaches_query?(node, _tail?, scope, entity_types, ir_plt, seen)
+       when is_list(node),
+       do: scan_args_reach_query?(node, scope, entity_types, ir_plt, seen)
+
+  defp scan_node_reaches_query?(node, _tail?, scope, entity_types, ir_plt, seen)
+       when is_tuple(node) do
+    node
+    |> Tuple.to_list()
+    |> scan_args_reach_query?(scope, entity_types, ir_plt, seen)
+  end
+
+  defp scan_node_reaches_query?(_node, _tail?, _scope, _entity_types, _ir_plt, seen),
+    do: {false, seen}
+
+  # Walks the given IR nodes, each with whether it stands where the field's result comes from, for
+  # a call of a stage that returns a query, a call into the project reaching one, and an entity type
+  # in that position - through a block's last expression, a branch's bodies, a call's callee and a
+  # variable's bind.
+  defp scan_reaches_query?([], _scope, _entity_types, _ir_plt, seen), do: {false, seen}
+
+  defp scan_reaches_query?([{node, tail?} | rest], scope, entity_types, ir_plt, seen) do
+    case scan_node_reaches_query?(node, tail?, scope, entity_types, ir_plt, seen) do
+      {true, next_seen} -> {true, next_seen}
+      {false, next_seen} -> scan_reaches_query?(rest, scope, entity_types, ir_plt, next_seen)
+    end
+  end
+
   # A module compiled in memory - a fixture defined inside a test file, or anything built at run
   # time - records "nofile" as its source, which locates nothing. The name arrives absolutized
   # against the working directory, so it is the basename that identifies it.
@@ -1565,7 +2062,14 @@ defmodule Hologram.Compiler.QueryExtractor do
   defp spelled_argument(%Placeholder{name: name}), do: Atom.to_string(name)
 
   defp spelled_argument(value), do: inspect(value)
+  # A value only known at runtime has no spelling, since nothing computed it.
+  defp spelled_value(%Placeholder{}), do: "a value only known at runtime"
 
+  defp spelled_value(value), do: inspect(value)
+
+  # An argument among the values gets a message of its own. The value it stands for arrives long
+  # after the build, so what went wrong is that a query's SHAPE was asked to depend on it - and
+  # naming the placeholder would show a compiler internal to someone who wrote a derived field.
   defp stage_error_message(function, arg_values, error, context) do
     prefix = context.subject
 
@@ -1626,7 +2130,7 @@ defmodule Hologram.Compiler.QueryExtractor do
 
   # The head frame is the function the walk is inside, so its line moves with the walk - that is
   # what makes a caller's frame name the line it called FROM rather than the line it started at.
-  # There is always one: the capture's own frame opens the stack before its body is walked.
+  # There is always one: the derived field's own frame opens the stack before its body is walked.
   defp relocated_stack([{module, function, arity, _location} | rest_frames], line) do
     [frame(module, function, arity, line) | rest_frames]
   end
@@ -1646,35 +2150,24 @@ defmodule Hologram.Compiler.QueryExtractor do
     )
   end
 
-  defp unknown_value?(value), do: contains_placeholder?(value) or stand_in?(value)
+  defp type_description([entity]), do: "a set of #{inspect(entity)} rows"
 
-  defp validate_slot_binding!(module, prop_name, nil, _slot_names) do
-    compile_error!(
-      "from_query capture for prop #{inspect(prop_name)} in #{inspect(module)} has an argument position no clause names - it cannot bind a prop",
-      module,
-      nil
-    )
+  defp type_description(:integer), do: "a count"
+
+  defp type_description(entity), do: "one #{inspect(entity)} row"
+
+  defp undefined_function_message(subject, module, function, arity) do
+    "#{subject} calls undefined function #{inspect(module)}.#{function}/#{arity}"
   end
 
-  defp validate_slot_binding!(module, prop_name, placeholder_name, names) do
-    cond do
-      placeholder_name in names.slots ->
-        :ok
+  defp unknown_value?(value), do: contains_placeholder?(value) or stand_in?(value)
 
-      placeholder_name in names.queries ->
-        compile_error!(
-          "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(placeholder_name)}, which is a from_query prop of the same component - a query argument binds a value the component is GIVEN, never one another query produced",
-          module,
-          nil
-        )
-
-      true ->
-        compile_error!(
-          "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(placeholder_name)} - no like-named prop is declared",
-          module,
-          nil
-        )
+  defp validate_derived_term!(term, entry, subject, module, line) do
+    if not query_of_type?(term, entry.type) do
+      raise_derived_type_mismatch!(term, entry, subject, module, line)
     end
+
+    term
   end
 
   defp weaker(:match, outcome), do: outcome

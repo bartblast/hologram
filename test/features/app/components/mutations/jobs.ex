@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.Components.Mutations.Jobs do
 
   # The jobs reach this list through the ordinary read path - a registered query filled by the sync
   # stream - so a job the worker moved to done shows here without the page being fetched again.
-  prop :jobs, [RestockItem], from_query: &jobs_query/0
+  derived :jobs, [RestockItem], &jobs_query/0
 
   def template do
     ~HOLO"""

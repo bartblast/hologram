@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">extract_component_queries/3</td>
-    <td style="white-space: nowrap; text-align: right">11.32 K</td>
-    <td style="white-space: nowrap; text-align: right">88.33 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.96%</td>
-    <td style="white-space: nowrap; text-align: right">87.79 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">108.63 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">11.11 K</td>
+    <td style="white-space: nowrap; text-align: right">89.98 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;85.34%</td>
+    <td style="white-space: nowrap; text-align: right">86.83 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">166.38 &micro;s</td>
   </tr>
 
 </table>

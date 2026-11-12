@@ -4,7 +4,7 @@ defmodule HologramFeatureTests.Components.Queries.Component15 do
 
   alias HologramFeatureTests.Entities.Stop
 
-  prop :active_stops, [Stop], from_query: &active_stops_query/0
+  derived :active_stops, [Stop], &active_stops_query/0
 
   def template do
     ~HOLO"""

@@ -3,11 +3,13 @@ defmodule Hologram.Component do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
+  alias Hologram.Component.Derived
   alias Hologram.Realtime.Channel
   alias Hologram.Server
   alias Hologram.Server.Broadcast
 
-  defstruct emitted_context: %{},
+  defstruct derived: %{},
+            emitted_context: %{},
             next_action: nil,
             next_command: nil,
             next_page: nil,
@@ -32,6 +34,7 @@ defmodule Hologram.Component do
   end
 
   @type t :: %__MODULE__{
+          derived: %{atom => any},
           emitted_context: %{atom => any} | %{{module, atom} => any},
           next_action: Action.t() | nil,
           next_command: Command.t() | nil,
@@ -68,7 +71,7 @@ defmodule Hologram.Component do
 
   @optional_callbacks [action: 3, command: 3]
 
-  @prop_opt_keys [:default, :from_context, :from_query, :required, :values]
+  @prop_opt_keys [:default, :from_context, :required, :values]
 
   @state_opt_keys [:default]
 
@@ -106,7 +109,8 @@ defmodule Hologram.Component do
         import Hologram.Auth, only: [can?: 3, has_role?: 2, has_role?: 3]
 
         import Hologram.Component,
-          only: unquote([prop: 2, prop: 3, state: 2, state: 3] ++ __helper_imports__())
+          only:
+            unquote([derived: 3, prop: 2, prop: 3, state: 2, state: 3] ++ __helper_imports__())
 
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Server, only: unquote(Hologram.Server.__helper_imports__())
@@ -140,7 +144,7 @@ defmodule Hologram.Component do
         defoverridable init: 2, init: 3
       end,
       maybe_register_colocated_template_markup(template_path),
-      register_from_query_shims_accumulator(),
+      Derived.register_accumulator(),
       register_props_accumulator(),
       register_state_accumulator()
     ]
@@ -159,10 +163,8 @@ defmodule Hologram.Component do
       end
 
     state_clause = build_state_clause()
-    delegations_clause = build_from_query_delegations_clause(env)
-    shim_clauses = build_from_query_shim_clauses(env)
 
-    [template_clause, props_clause, state_clause, delegations_clause | shim_clauses]
+    Enum.concat([[template_clause, props_clause, state_clause], Derived.reflection(env)])
   end
 
   @doc """
@@ -252,41 +254,45 @@ defmodule Hologram.Component do
 
   @doc """
   Accumulates the given property definition in __props__ module attribute.
-
-  A local function capture given as the :from_query option is replaced with a
-  capture of a generated public function (named `__<prop name>_from_query__`)
-  that delegates to the local one, because local functions are not callable at
-  module-body scope. The delegation allows the query function to be private.
-  A capture resolving to an import stays on its source module.
-
-  An inline `fn` literal given as the :from_query option is hoisted into the
-  generated function - its clauses become the function's clauses, so the fn's
-  argument names are the authored param names. The `&(...)` capture shorthand
-  is not accepted - it raises with fn syntax as the alternative.
   """
   @spec prop(atom, atom, T.opts()) :: Macro.t()
   defmacro prop(name, type, opts \\ []) do
     validate_prop_opts!(opts, name, __CALLER__.module)
 
-    {opts, shim} = rewrite_from_query_value(opts, name, __CALLER__)
+    quote do
+      prop_name = unquote(name)
 
-    accumulate_prop =
-      quote do
-        prop_name = unquote(name)
+      Hologram.Component.validate_free_of_state!(prop_name, "a prop", __MODULE__)
 
-        Hologram.Component.validate_free_of_state!(prop_name, "a prop", __MODULE__)
-
-        Module.put_attribute(__MODULE__, :__props__, {prop_name, unquote(type), unquote(opts)})
-      end
-
-    if shim do
-      quote do
-        Module.put_attribute(__MODULE__, :__from_query_shims__, unquote(Macro.escape(shim)))
-        unquote(accumulate_prop)
-      end
-    else
-      accumulate_prop
+      Module.put_attribute(__MODULE__, :__props__, {prop_name, unquote(type), unquote(opts)})
     end
+  end
+
+  @doc """
+  Declares a derived field: a value computed from the component's other fields, read-only, and
+  computed again when what it reads changes. A page declares them too, from its params.
+
+  The definition is a function whose arguments name what it reads - props (params on a page), state
+  entries and other derived fields - and whose body reads only them. The body is any Elixir, and
+  inside a query a bare name is the queried row's and `^name` pins an argument:
+
+      derived :open_tasks, [Task], fn project_id, only_mine ->
+        query = filter(Task, project_id == ^project_id)
+
+        if only_mine, do: filter(query, mine == true), else: query
+      end
+
+      derived :summary, :string, fn open_tasks -> "\#{length(open_tasks)} open" end
+
+  A capture of a zero-arity function stands for the function calling it, `&tags_query/0` for
+  `fn -> tags_query() end`.
+
+  The template reads a derived field like any other value, `{@summary}`, and a handler reads it as
+  `component.derived.summary`.
+  """
+  @spec derived(atom, any, Macro.t()) :: Macro.t()
+  defmacro derived(name, type, definition) do
+    Derived.declaration(name, type, definition, __CALLER__)
   end
 
   @doc """
@@ -500,18 +506,6 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Returns the AST of code that registers __from_query_shims__ module attribute,
-  which accumulates the specs of delegation functions to generate for local
-  from_query captures.
-  """
-  @spec register_from_query_shims_accumulator() :: AST.t()
-  def register_from_query_shims_accumulator do
-    quote do
-      Module.register_attribute(__MODULE__, :__from_query_shims__, accumulate: true)
-    end
-  end
-
-  @doc """
   Returns the AST of code that registers __props__ module attribute.
   """
   @spec register_props_accumulator() :: AST.t()
@@ -591,102 +585,9 @@ defmodule Hologram.Component do
     %{server | broadcasts: [broadcast | server.broadcasts]}
   end
 
-  defp build_from_query_delegations_clause(env) do
-    delegations =
-      env.module
-      |> Module.get_attribute(:__from_query_shims__)
-      |> Enum.flat_map(fn
-        {:delegate, shim_name, fun_name, _arity} -> [{shim_name, fun_name}]
-        {:inline, _shim_name, _fn_clauses} -> []
-      end)
-
-    if delegations != [] do
-      quote do
-        @doc false
-        @spec __from_query_delegations__() :: keyword(atom)
-        def __from_query_delegations__, do: unquote(delegations)
-      end
-    end
-  end
-
-  defp build_from_query_shim({:delegate, shim_name, fun_name, arity}, env) do
-    args = Macro.generate_arguments(arity, env.module)
-
-    quote do
-      @doc false
-      def unquote(shim_name)(unquote_splicing(args)) do
-        unquote(fun_name)(unquote_splicing(args))
-      end
-    end
-  end
-
-  defp build_from_query_shim({:inline, shim_name, fn_clauses}, _env) do
-    Enum.map(fn_clauses, &build_inline_shim_clause(shim_name, &1))
-  end
-
-  defp build_from_query_shim_clauses(env) do
-    env.module
-    |> Module.get_attribute(:__from_query_shims__)
-    |> Enum.map(&build_from_query_shim(&1, env))
-    |> List.flatten()
-  end
-
-  defp build_inline_shim_clause(
-         shim_name,
-         {:->, _clause_meta, [[{:when, _when_meta, params_and_guard}], body]}
-       ) do
-    {params, [guard]} = Enum.split(params_and_guard, -1)
-
-    quote do
-      @doc false
-      def unquote(shim_name)(unquote_splicing(params)) when unquote(guard) do
-        unquote(body)
-      end
-    end
-  end
-
-  defp build_inline_shim_clause(shim_name, {:->, _clause_meta, [params, body]}) do
-    quote do
-      @doc false
-      def unquote(shim_name)(unquote_splicing(params)) do
-        unquote(body)
-      end
-    end
-  end
-
-  defp classify_from_query_value(
-         {:&, _capture_meta, [{:/, _slash_meta, [{fun_name, _fun_meta, context}, arity]}]},
-         env
-       )
-       when is_atom(fun_name) and is_atom(context) and is_integer(arity) do
-    if Macro.Env.lookup_import(env, {fun_name, arity}) == [] do
-      {:local, fun_name, arity}
-    else
-      :imported
-    end
-  end
-
-  defp classify_from_query_value({:&, _capture_meta, [{:/, _slash_meta, _target}]}, _env) do
-    :remote
-  end
-
-  defp classify_from_query_value({:&, _capture_meta, [_shorthand_body]}, _env), do: :shorthand
-
-  defp classify_from_query_value({:fn, _fn_meta, fn_clauses}, _env) do
-    {:inline, fn_clauses, inline_arity(hd(fn_clauses))}
-  end
-
-  defp classify_from_query_value(_value, _env), do: :other
-
   defp holder_names(definitions, holder) do
     Enum.map(definitions, fn {name, _type, _opts} -> {name, holder} end)
   end
-
-  defp inline_arity({:->, _clause_meta, [[{:when, _when_meta, params_and_guard}], _body]}) do
-    length(params_and_guard) - 1
-  end
-
-  defp inline_arity({:->, _clause_meta, [params, _body]}), do: length(params)
 
   defp normalize_except({_kind, _id} = identity), do: [identity]
 
@@ -697,46 +598,6 @@ defmodule Hologram.Component do
       message:
         ~s/state "#{name}" in #{inspect(module)} has the same name as #{holder}, / <>
           "which it would shadow - give them different names"
-  end
-
-  # sobelow_skip ["DOS.BinToAtom"]
-  defp rewrite_from_query_value(opts, prop_name, env)
-       when is_list(opts) and is_atom(prop_name) do
-    case List.keyfind(opts, :from_query, 0) do
-      {:from_query, value} ->
-        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-        shim_name = :"__#{prop_name}_from_query__"
-
-        case classify_from_query_value(value, env) do
-          {:local, fun_name, arity} ->
-            {shim_opts(opts, shim_name, arity), {:delegate, shim_name, fun_name, arity}}
-
-          {:inline, fn_clauses, arity} ->
-            {shim_opts(opts, shim_name, arity), {:inline, shim_name, fn_clauses}}
-
-          :shorthand ->
-            raise Hologram.CompileError,
-              message:
-                "from_query for prop #{inspect(prop_name)} uses the &(...) capture shorthand - use fn syntax or a &fun/arity capture instead"
-
-          _imported_or_other ->
-            {opts, nil}
-        end
-
-      nil ->
-        {opts, nil}
-    end
-  end
-
-  defp rewrite_from_query_value(opts, _prop_name, _env), do: {opts, nil}
-
-  defp shim_opts(opts, shim_name, arity) do
-    shim_capture =
-      quote do
-        &(__MODULE__.unquote(shim_name) / unquote(arity))
-      end
-
-    List.keyreplace(opts, :from_query, 0, {:from_query, shim_capture})
   end
 
   # The names declared so far that a state entry can't take, each with how the message describes

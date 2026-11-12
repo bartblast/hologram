@@ -430,6 +430,77 @@ defmodule Hologram.EntityTest do
     end
   end
 
+  describe "derived/3" do
+    test "counts an import a derived field's body calls as used" do
+      {_result, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.EntityTest.DerivedImportedBuilder do
+            use Hologram.Entity
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [member_messages: 1]
+
+            alias Hologram.Test.Fixtures.Entity.Module33
+            alias Hologram.Test.Fixtures.Entity.Module34
+
+            relationship :member, Module34, optional: true
+
+            derived :member_messages, [Module33], fn member -> member_messages(member) end
+
+            allow :read
+          end
+          """)
+        end)
+
+      assert diagnostics == []
+    end
+
+    test "raises on a capture of a zero-arity function of the entity type's own" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :featured in Hologram.EntityTest.InlineEntityFixture167 is a capture of featured/0, which reads no field of the row - an entity's derived field is computed from its row, so name the fields it reads: fn ... -> featured(...) end"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture167 do
+          use Hologram.Entity
+
+          derived :featured, :integer, &featured/0
+        end
+      end
+    end
+
+    test "raises on a capture of a zero-arity function of another module" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :constant in Hologram.EntityTest.InlineEntityFixture170 is a capture of Module53.constant/0, which reads no field of the row - an entity's derived field is computed from its row, so name the fields it reads: fn ... -> Module53.constant(...) end"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture170 do
+          use Hologram.Entity
+
+          derived :constant, :integer, &Module53.constant/0
+        end
+      end
+    end
+
+    test "raises on a capture of a function with arguments" do
+      line = __ENV__.line + 9
+
+      expected_msg =
+        "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: derived field :recent in Hologram.EntityTest.InlineEntityFixture171 is a capture of recent/1, which hides the fields it reads - write fn ... -> recent(...) end, naming them in the head"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture171 do
+          use Hologram.Entity
+
+          derived :recent, :integer, &recent/1
+        end
+      end
+    end
+  end
+
   describe "describe_inverse/2" do
     test "names the reference column an inverse of a to-one reads" do
       assert describe_inverse(Module26, :messages) ==

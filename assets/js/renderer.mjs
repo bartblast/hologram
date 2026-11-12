@@ -267,6 +267,31 @@ export default class Renderer {
     return Type.list(tree.map(Renderer.#decodeNode));
   }
 
+  // A sync frame can change rows while the render it schedules waits for an animation frame, so an
+  // action running in between - a delayed action, a command's reply - would read derived fields
+  // older than what a database read in the same action sees. And a component that left the page
+  // stays in the registry, where a delayed action can still reach it, but no render computes its
+  // derived fields again after its state or the rows they read change. This brings the target's
+  // up to date without rendering.
+  // Deps: [:maps.get/2]
+  static refreshDerived(cid) {
+    const componentStruct = ComponentRegistry.getComponentStruct(cid);
+    const moduleProxy = Interpreter.moduleProxy(
+      ComponentRegistry.getComponentModule(cid),
+    );
+
+    const derived = Renderer.#computeDerived(
+      moduleProxy,
+      Renderer.#getDerivedEntries(moduleProxy),
+      Erlang_Maps["get/2"](Type.atom("props"), componentStruct),
+      Erlang_Maps["get/2"](Type.atom("state"), componentStruct),
+      Type.map(),
+      false,
+    );
+
+    ComponentRegistry.putComponentDerived(cid, derived);
+  }
+
   // Based on render_tree/3
   //
   // WARNING: on navigation the server ships this client the same render as an evaluated tree
@@ -448,6 +473,8 @@ export default class Renderer {
     Renderer.refBindings = new Map();
     Renderer.resizeBindings = [];
 
+    ComponentRegistry.resetCurrentDerived();
+
     const pageModuleProxy = Interpreter.moduleProxy(pageModule);
 
     const cid = Type.bitstring("page");
@@ -455,6 +482,20 @@ export default class Renderer {
     // A page's params are its props, and it is re-rendered on every action like everything else,
     // so they are rewritten here for the same reason a component's are.
     ComponentRegistry.putComponentProps(cid, pageParams);
+
+    // Computed on every render, as a stateful component's are: the params, the state or the rows
+    // they read may have changed since the last one.
+    ComponentRegistry.putComponentDerived(
+      cid,
+      Renderer.#computeDerived(
+        pageModuleProxy,
+        Renderer.#getDerivedEntries(pageModuleProxy),
+        pageParams,
+        ComponentRegistry.getComponentState(cid),
+        Type.map(),
+        false,
+      ),
+    );
 
     const pageComponentStruct = ComponentRegistry.getComponentStruct(cid);
 
@@ -993,7 +1034,7 @@ export default class Renderer {
 
   // Based on build_layout_props_dom/2
   // Deps: [:maps.from_list/1, :maps.merge/2]
-  static #buildLayoutPropsDom(pageModuleProxy, pageState) {
+  static #buildLayoutPropsDom(pageModuleProxy, pageValues) {
     const propsFromPage = Erlang_Maps["from_list/1"](
       pageModuleProxy["__layout_props__/0"](),
     );
@@ -1003,10 +1044,13 @@ export default class Renderer {
       Type.map([[Type.atom("cid"), Type.bitstring("layout")]]),
     );
 
-    const propsWithPageState = Erlang_Maps["merge/2"](propsWithCid, pageState);
+    const propsWithPageValues = Erlang_Maps["merge/2"](
+      propsWithCid,
+      pageValues,
+    );
 
     return Type.list(
-      Object.values(propsWithPageState.data).map(([name, value]) =>
+      Object.values(propsWithPageValues.data).map(([name, value]) =>
         Type.tuple([
           Type.bitstring(name.value),
           Type.keywordList([[Type.atom("expression"), Type.tuple([value])]]),
@@ -1343,6 +1387,60 @@ export default class Renderer {
     return keyScope;
   }
 
+  // Based on Hologram.Component.Derived.compute/6
+  //
+  // Computes the given derived field entries in the order given, each function given its arguments
+  // by name: the props (params on a page), then the state, then the values computed so far. A
+  // query result is normalized, checked against the field's type and answered by the data layer;
+  // any other result is checked against the field's type. Returns the computed values with the new
+  // ones added.
+  //
+  // WARNING: must match compute/6 on the server, messages included - but for a value each tier
+  // spells with its own inspect, which spell structs and the key order of maps differently.
+  // Deps: [:maps.put/3]
+  static #computeDerived(
+    moduleProxy,
+    entries,
+    props,
+    state,
+    computed,
+    stateless,
+  ) {
+    if (entries.length === 0) {
+      return computed;
+    }
+
+    const module = Interpreter.moduleExName(moduleProxy.__exModule__);
+    let acc = computed;
+
+    for (const entry of entries) {
+      const args = entry.args.map((name) =>
+        Renderer.#derivedArgument(
+          name,
+          entry,
+          moduleProxy,
+          module,
+          props,
+          state,
+          acc,
+          stateless,
+        ),
+      );
+
+      const value = Renderer.#derivedValue(
+        Interpreter.callAnonymousFunction(entry.function, args),
+        entry,
+        moduleProxy,
+        module,
+        args,
+      );
+
+      acc = Erlang_Maps["put/3"](entry.name, value, acc);
+    }
+
+    return acc;
+  }
+
   // Whether rendered children hold trusted HTML, at any depth.
   static #containsTrustedHtml(childrenVdom) {
     return childrenVdom.some(
@@ -1474,6 +1572,111 @@ export default class Renderer {
       ([name], index) =>
         name.startsWith("$") || lastIndexByName.get(name) === index,
     );
+  }
+
+  // Based on Hologram.Component.Derived's argument!/7
+  static #derivedArgument(
+    name,
+    entry,
+    moduleProxy,
+    module,
+    props,
+    state,
+    computed,
+    stateless,
+  ) {
+    const key = Type.encodeMapKey(name);
+
+    if (key in props.data) {
+      return props.data[key][1];
+    }
+
+    if (stateless && Renderer.#getDeclaredStateNames(moduleProxy).has(key)) {
+      Interpreter.raiseError(
+        "Hologram.StateError",
+        `derived field ${Interpreter.inspect(entry.name)} in ${module} reads state ${Interpreter.inspect(name)}, which a component rendered without a cid doesn't have - give it a cid`,
+      );
+    }
+
+    if (key in state.data) {
+      return state.data[key][1];
+    }
+
+    if (key in computed.data) {
+      return computed.data[key][1];
+    }
+
+    Interpreter.raiseMisuseError(
+      `derived field ${Interpreter.inspect(entry.name)} in ${module} reads ${Interpreter.inspect(name)}, which is not set - ${Renderer.#derivedUnsetHint(moduleProxy, name)}`,
+    );
+  }
+
+  // Based on Hologram.Component.Derived's query_description/1
+  static #derivedQueryDescription(term) {
+    switch (term.cardinality) {
+      case "count":
+        return `a count of ${term.entity} rows`;
+
+      case "one":
+        return `one ${term.entity} row`;
+
+      default:
+        return `a set of ${term.entity} rows`;
+    }
+  }
+
+  // Based on Hologram.Component.Derived's unset_hint/2
+  //
+  // Names init/2 where the server names init/3: a component the server initialized has its state
+  // set by init/3 before the client sees it, so a state left unset here is one init/2 left unset.
+  static #derivedUnsetHint(moduleProxy, name) {
+    if (
+      Renderer.#getDeclaredStateNames(moduleProxy).has(Type.encodeMapKey(name))
+    ) {
+      return "give it a default or set it in init/2";
+    }
+
+    if ("__params__/0" in moduleProxy) {
+      return "pass it as a param of the page";
+    }
+
+    const definition = Renderer.#getPropDefinitions(moduleProxy).data.find(
+      (prop) => Interpreter.isStrictlyEqual(prop.data[0], name),
+    );
+
+    return definition && Renderer.#contextKey(definition.data[2]) !== null
+      ? "the context has no such key"
+      : "give it a default or pass it";
+  }
+
+  // Based on Hologram.Component.Derived's computed_value!/5
+  //
+  // The data layer answers the query (see DataLayer.answerDerivedQuery). The handle is read without
+  // `?.`: a query reads rows of entity types, which only a build that declares them has, and that
+  // build ships the data layer.
+  static #derivedValue(value, entry, moduleProxy, module, args) {
+    if (Renderer.#isRegisteredDerivedQuery(module, entry.name)) {
+      const term = Hologram.dataLayer.normalizeQuery(value);
+
+      Renderer.#validateDerivedQueryType(term, entry, module);
+
+      return Hologram.dataLayer.answerDerivedQuery(
+        module,
+        entry.name,
+        args,
+        term,
+      );
+    }
+
+    if (Renderer.#isDerivedQuery(value)) {
+      Interpreter.raiseMisuseError(
+        `derived field ${Interpreter.inspect(entry.name)} in ${module} returned a query the build didn't register - a query is built in the derived field's own function or the builders it calls, not passed in as data`,
+      );
+    }
+
+    Renderer.#validateDerivedValueType(value, entry, module);
+
+    return value;
   }
 
   static #determineInputType(tagName, attrs) {
@@ -1866,18 +2069,10 @@ export default class Renderer {
   // Based on filter_allowed_props/2
   // Takes an array of prop tuples, as returned by #expandPropSpreads().
   //
-  // A from_query prop is not a prop a template may set, the way a from_context one is not: both
-  // are resolved from a source of their own. Today the query stage overwrites whatever a template
-  // passed anyway, so refusing it here changes no resolved value - it is the admission rule that
-  // is kept identical to the server's, and it stops being redundant the moment a query prop can
-  // answer from somewhere other than a fresh run.
+  // A from_context prop is not a prop a template may set: it is resolved from a source of its own.
   static #filterAllowedProps(propDoms, moduleProxy) {
     const registeredPropNames = Renderer.#getPropDefinitions(moduleProxy)
-      .data.filter(
-        (prop) =>
-          Renderer.#contextKey(prop.data[2]) === null &&
-          Renderer.#fromQueryCapture(prop.data[2]) === null,
-      )
+      .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
       .map((prop) => $.toBitstring(prop.data[0]));
 
     const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
@@ -1897,54 +2092,6 @@ export default class Renderer {
         (attrDom) => $.#eventAttributeName(attrDom) === name,
       ) ?? null
     );
-  }
-
-  // Based on from_query_arg!/4
-  static #fromQueryArg(module, propName, paramName, props) {
-    if (paramName === null) {
-      Interpreter.raiseArgumentError(
-        `from_query capture for prop ${Interpreter.inspect(propName)} in ${module} has an argument position no clause names - it cannot bind a prop`,
-      );
-    }
-
-    const name = Type.atom(paramName);
-    const entry = props.data[Type.encodeMapKey(name)];
-
-    if (!entry) {
-      Interpreter.raiseArgumentError(
-        `from_query for prop ${Interpreter.inspect(propName)} in ${module} binds argument ${Interpreter.inspect(name)} - no like-named prop is set`,
-      );
-    }
-
-    return entry[1];
-  }
-
-  // Based on from_query_args!/4
-  //
-  // A capture takes its arguments from the like-named props, and which names those are is what
-  // the build baked: an encoded function carries no argument names of its own. A zero-arity
-  // capture asks for nothing, which is why it needs no baked entry.
-  static #fromQueryArgs(module, propName, capture, props) {
-    if (capture.arity === 0) {
-      return [];
-    }
-
-    const paramNames =
-      globalThis.Hologram.sync?.propParams?.[module]?.[propName.value];
-
-    if (!paramNames) {
-      Interpreter.raiseArgumentError(
-        `no registered params for from_query prop ${Interpreter.inspect(propName)} in ${module} - the query cache holds no entry for it`,
-      );
-    }
-
-    return paramNames.map((paramName) =>
-      Renderer.#fromQueryArg(module, propName, paramName, props),
-    );
-  }
-
-  static #fromQueryCapture(opts) {
-    return Interpreter.accessKeywordListElement(opts, Type.atom("from_query"));
   }
 
   // Which props carry a required: or values: option is a property of the module, not of the render,
@@ -1998,6 +2145,28 @@ export default class Renderer {
     }
 
     return moduleProxy.__declaredStateNames__;
+  }
+
+  // The module's derived field entries, read once and cached on the module proxy the way __props__
+  // is. A module compiled without derived fields - or defined by hand in a test - has none.
+  // Deps: [:maps.get/2]
+  static #getDerivedEntries(moduleProxy) {
+    if (!("__derivedEntries__" in moduleProxy)) {
+      moduleProxy.__derivedEntries__ =
+        "__derived__/0" in moduleProxy
+          ? moduleProxy["__derived__/0"]().data.map((entry) => ({
+              args: Erlang_Maps["get/2"](Type.atom("args"), entry).data,
+              function: Erlang_Maps["get/2"](Type.atom("function"), entry),
+              name: Erlang_Maps["get/2"](Type.atom("name"), entry),
+              readsState: Type.isTrue(
+                Erlang_Maps["get/2"](Type.atom("reads_state"), entry),
+              ),
+              type: Erlang_Maps["get/2"](Type.atom("type"), entry),
+            }))
+          : [];
+    }
+
+    return moduleProxy.__derivedEntries__;
   }
 
   static #getPropDefinitions(moduleProxy) {
@@ -2107,50 +2276,6 @@ export default class Renderer {
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
 
-  // Based on run_prop_query!/4
-  //
-  // The data layer answers the query (see DataLayer.answerPropQuery). The handle is read without
-  // `?.`: a query reads rows of entity types, which only a build that declares them has, and that
-  // build ships the data layer.
-  static #runPropQuery(alias, propName, capture, props) {
-    const module = Interpreter.moduleExName(alias);
-    const args = Renderer.#fromQueryArgs(module, propName, capture, props);
-
-    return Hologram.dataLayer.answerPropQuery(module, propName, args, capture);
-  }
-
-  // Based on inject_props_from_query/2
-  //
-  // The last prop source, as on the server: a parameterized capture binds like-named props, and
-  // template values, context and defaults are what supply them - so they must all be in before
-  // this runs. Each resolved query prop joins them, which is what lets a later one bind it.
-  // Every query reads its arguments from the props the component was GIVEN, never from the
-  // accumulator - so what one query answers can never reach another's arguments, and the order
-  // these run in cannot change what any of them returns. The build refuses such a binding
-  // outright; this is the same rule holding by construction rather than by check.
-  static #injectPropsFromQuery(props, moduleProxy, alias) {
-    return Renderer.#getPropDefinitions(moduleProxy).data.reduce(
-      (acc, prop) => {
-        const capture = Renderer.#fromQueryCapture(prop.data[2]);
-
-        if (capture === null) {
-          return acc;
-        }
-
-        const propName = prop.data[0];
-
-        // Optimized (mutates map)
-        acc.data[Type.encodeMapKey(propName)] = [
-          propName,
-          Renderer.#runPropQuery(alias, propName, capture, props),
-        ];
-
-        return acc;
-      },
-      Utils.shallowCloneObject(props),
-    );
-  }
-
   // Based on invalid_dynamic_tag_value_message/1
   static #invalidDynamicTagValueMessage(value) {
     return `dynamic tag expression must evaluate to a component module or an HTML tag name string, got: ${Interpreter.inspect(value)}`;
@@ -2178,6 +2303,79 @@ export default class Renderer {
     return inputType !== "checkbox" && inputType !== "radio";
   }
 
+  // Based on Hologram.Component.Derived's query?/1
+  //
+  // A query term is the plain object the ported query stages build, and an entity type stands for
+  // every row of it.
+  static #isDerivedQuery(value) {
+    if (value !== null && typeof value === "object" && "entity" in value) {
+      return true;
+    }
+
+    return Renderer.#isEntityTypeAlias(value);
+  }
+
+  // Based on Hologram.Component.Derived's value_of_type?/2
+  //
+  // nil stands for no value in every type, a float takes an integer as Elixir's arithmetic does, and
+  // a type with no test of its own takes anything.
+  static #isDerivedValueOfType(value, type) {
+    if (Type.isNil(value)) {
+      return true;
+    }
+
+    if (
+      Type.isList(type) &&
+      type.data.length === 1 &&
+      Type.isAtom(type.data[0])
+    ) {
+      const elementType = type.data[0];
+
+      if (!Renderer.#isEntityTypeAlias(elementType)) {
+        return true;
+      }
+
+      return (
+        Type.isList(value) &&
+        value.data.every((element) =>
+          Type.isStruct(element, Interpreter.moduleExName(elementType)),
+        )
+      );
+    }
+
+    if (!Type.isAtom(type)) {
+      return true;
+    }
+
+    switch (type.value) {
+      case "atom":
+        return Type.isAtom(value);
+
+      case "boolean":
+        return Type.isBoolean(value);
+
+      case "float":
+        return Type.isNumber(value);
+
+      case "integer":
+        return Type.isInteger(value);
+
+      case "list":
+        return Type.isList(value);
+
+      case "map":
+        return Type.isMap(value);
+
+      case "string":
+        return Type.isBinary(value);
+
+      default:
+        return Renderer.#isEntityTypeAlias(type)
+          ? Type.isStruct(value, Interpreter.moduleExName(type))
+          : true;
+    }
+  }
+
   // Based on nested_spread_value?/1
   // Maps and keyword lists compose nested attribute names, everything else is a leaf value. Structs
   // are excluded, since they are ordinary values which stringify through String.Chars, e.g. Date.
@@ -2187,6 +2385,19 @@ export default class Renderer {
       $.#eventAttributeName(attrDom) === "$drop" &&
       !Dispatch.isDisabled(attrDom.data[1])
     );
+  }
+
+  // Whether the given atom names an entity type this build carries - the client's answer to the
+  // server's Reflection.entity?/1 (see Model.isEntityType).
+  static #isEntityTypeAlias(term) {
+    return (
+      Type.isAlias(term) &&
+      Renderer.#isEntityTypeName(Interpreter.moduleExName(term))
+    );
+  }
+
+  static #isEntityTypeName(name) {
+    return Boolean(globalThis.Hologram.sync?.model?.[name]);
   }
 
   static #isModuleRegisteredForCid(cid, moduleProxy) {
@@ -2210,6 +2421,16 @@ export default class Renderer {
       Type.isTuple(value) &&
       value.data.length === 2 &&
       Interpreter.isStrictlyEqual(value.data[0], Type.atom("safe"))
+    );
+  }
+
+  // Based on QueryCache.derived_query?/2
+  //
+  // Whether the build registered the given derived field as a query, which the bundle's sync
+  // constants list by module.
+  static #isRegisteredDerivedQuery(module, name) {
+    return Boolean(
+      globalThis.Hologram.sync?.derivedQueries?.[module]?.includes(name.value),
     );
   }
 
@@ -2319,33 +2540,78 @@ export default class Renderer {
   // between renders, the registered entry describes a different component, so it is discarded and
   // the new module initializes fresh - state, emitted context, and action/command targeting all
   // follow the new module.
-  // Deps: [:maps.get/2]
+  // Deps: [:maps.get/2, :maps.merge/2, :maps.put/3]
   static #maybeInitComponent(cid, moduleProxy, props) {
     let componentState = Renderer.#isModuleRegisteredForCid(cid, moduleProxy)
       ? ComponentRegistry.getComponentState(cid)
       : null;
 
     let componentEmittedContext;
+    let derived = null;
 
     if (componentState === null) {
       // The declared defaults are in place before init/2 runs, so init/2 sees them and can override
       // them.
       //
+      // The derived fields reading only props are computed before init/2, so it reads them. The
+      // ones reading state hold a placeholder while it runs and are computed once it has returned,
+      // from the state it returned.
+      //
       // WARNING: must match the struct init_component/3 starts from on the server.
-      const initialComponentStruct = Type.componentStruct({
+      const entries = Renderer.#getDerivedEntries(moduleProxy);
+      const beforeInit = entries.filter((entry) => !entry.readsState);
+      const afterInit = entries.filter((entry) => entry.readsState);
+      const stateDefaults = Renderer.#getStateDefaults(moduleProxy);
+
+      const computedBeforeInit = Renderer.#computeDerived(
+        moduleProxy,
+        beforeInit,
         props,
-        state: Renderer.#getStateDefaults(moduleProxy),
+        stateDefaults,
+        Type.map(),
+        false,
+      );
+
+      const initialComponentStruct = Type.componentStruct({
+        derived: Erlang_Maps["merge/2"](
+          computedBeforeInit,
+          Renderer.#notComputed(afterInit),
+        ),
+        props,
+        state: stateDefaults,
       });
 
-      const componentStruct = moduleProxy["init/2"](
+      let componentStruct = moduleProxy["init/2"](
         props,
         initialComponentStruct,
       );
 
-      Renderer.validateDeclaredState(
-        Erlang_Maps["get/2"](Type.atom("state"), componentStruct),
+      const initState = Erlang_Maps["get/2"](
+        Type.atom("state"),
+        componentStruct,
+      );
+
+      Renderer.validateDeclaredState(initState, moduleProxy, "init/2");
+
+      // Only a field reading state is a placeholder while init runs, so a component declaring none
+      // has nothing to look for - and its state, which can hold every row it loaded, isn't walked.
+      if (afterInit.length > 0) {
+        Renderer.#validateStateComputed(initState, moduleProxy, "init/2");
+      }
+
+      derived = Renderer.#computeDerived(
         moduleProxy,
-        "init/2",
+        afterInit,
+        props,
+        initState,
+        computedBeforeInit,
+        false,
+      );
+
+      componentStruct = Erlang_Maps["put/3"](
+        Type.atom("derived"),
+        derived,
+        componentStruct,
       );
 
       ComponentRegistry.putEntry(
@@ -2372,7 +2638,7 @@ export default class Renderer {
         ComponentRegistry.getComponentEmittedContext(cid);
     }
 
-    return [componentState, componentEmittedContext];
+    return [componentState, componentEmittedContext, derived];
   }
 
   // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
@@ -2504,6 +2770,21 @@ export default class Renderer {
       : downcased;
   }
 
+  // Based on Hologram.Component.Derived.not_computed/1
+  //
+  // What the given derived fields hold while init runs: a placeholder each, since they read state,
+  // which init sets.
+  static #notComputed(entries) {
+    return Type.map(
+      entries.map((entry) => [
+        entry.name,
+        Type.struct("Hologram.Component.NotComputed", [
+          [Type.atom("field"), entry.name],
+        ]),
+      ]),
+    );
+  }
+
   // Returns true when the modifiers map carries a once modifier, which fires the binding a single
   // time then stops re-dispatching.
   // Deps: [:maps.is_key/2]
@@ -2537,6 +2818,27 @@ export default class Renderer {
     }
 
     return htmlVnode;
+  }
+
+  // Based on Hologram.Component.Derived's placeholders_in/2
+  //
+  // Adds to the given array the placeholders the given term holds, itself or anywhere inside a map,
+  // a list or a tuple (an improper list's tail too), and returns it.
+  static #placeholdersIn(term, acc = []) {
+    if (Type.isStruct(term, "Hologram.Component.NotComputed")) {
+      acc.push(term);
+    } else if (Type.isMap(term)) {
+      for (const [key, value] of Object.values(term.data)) {
+        Renderer.#placeholdersIn(key, acc);
+        Renderer.#placeholdersIn(value, acc);
+      }
+    } else if (Type.isList(term) || Type.isTuple(term)) {
+      for (const item of term.data) {
+        Renderer.#placeholdersIn(item, acc);
+      }
+    }
+
+    return acc;
   }
 
   // One handler for every drop target that declares no drop effect, so a re-render hands the
@@ -2794,6 +3096,7 @@ export default class Renderer {
   }
 
   // Based on render_tree/3 (component case)
+  // Deps: [:maps.merge/2]
   static #renderComponent(
     dom,
     context,
@@ -2821,7 +3124,6 @@ export default class Renderer {
     );
 
     props = Renderer.#injectDefaultPropValues(props, moduleProxy);
-    props = Renderer.#injectPropsFromQuery(props, moduleProxy, dom.data[1]);
 
     Renderer.#validateProps(props, moduleProxy, dom.data[1], parentModule);
 
@@ -2842,9 +3144,30 @@ export default class Renderer {
         componentKeyScope,
       );
     } else {
+      // A component rendered without a cid has no struct and no state, so its derived fields are
+      // computed from its props for this render alone.
+      //
+      // WARNING: must match the stateless branch of render_tree/3 on the server.
+      const entries = Renderer.#getDerivedEntries(moduleProxy);
+
+      const vars =
+        entries.length === 0
+          ? props
+          : Erlang_Maps["merge/2"](
+              props,
+              Renderer.#computeDerived(
+                moduleProxy,
+                entries,
+                props,
+                Type.map(),
+                Type.map(),
+                true,
+              ),
+            );
+
       return Renderer.#renderTemplate(
         moduleProxy,
-        props,
+        vars,
         expandedChildrenDom,
         context,
         defaultTarget,
@@ -3537,14 +3860,24 @@ export default class Renderer {
       pageComponentStruct,
     );
 
-    const vars = Erlang_Maps["merge/2"](pageParams, pageState);
+    const pageDerived = Erlang_Maps["get/2"](
+      Type.atom("derived"),
+      pageComponentStruct,
+    );
+
+    const vars = Erlang_Maps["merge/2"](
+      Erlang_Maps["merge/2"](pageParams, pageState),
+      pageDerived,
+    );
+
     const pageDom = Renderer.#evaluateTemplate(pageModuleProxy, vars);
 
     const layoutModule = pageModuleProxy["__layout_module__/0"]();
 
+    // The layout takes the page's state and derived fields as props, by name.
     const layoutPropsDom = Renderer.#buildLayoutPropsDom(
       pageModuleProxy,
-      pageState,
+      Erlang_Maps["merge/2"](pageState, pageDerived),
     );
 
     const pageNodes = Type.tuple([Type.atom("page"), pageDom]);
@@ -3721,7 +4054,7 @@ export default class Renderer {
   ) {
     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
 
-    const [componentState, componentEmittedContext] =
+    const [componentState, componentEmittedContext, initDerived] =
       Renderer.#maybeInitComponent(cid, moduleProxy, props);
 
     // Rewritten on every render rather than only at init, so a handler reading a prop gets the
@@ -3729,7 +4062,35 @@ export default class Renderer {
     // #maybeInitComponent, which is what creates the registry entry on a first render.
     ComponentRegistry.putComponentProps(cid, props);
 
-    const vars = Erlang_Maps["merge/2"](props, componentState);
+    // Computed again on every render after the first, which init's computed: the props, the state
+    // or the rows they read may have changed since the last one. A handler reads what the latest
+    // render computed - an action is always followed by a render - unless a frame changed rows
+    // since or the latest render did not reach the target, when executeAction computes the
+    // target's again first (see refreshDerived).
+    const entries = Renderer.#getDerivedEntries(moduleProxy);
+
+    const derived =
+      initDerived ??
+      Renderer.#computeDerived(
+        moduleProxy,
+        entries,
+        props,
+        componentState,
+        Type.map(),
+        false,
+      );
+
+    // Written even for a component that declares none, since the write is what tells
+    // executeAction the render reached it (see ComponentRegistry.isDerivedCurrent).
+    ComponentRegistry.putComponentDerived(cid, derived);
+
+    // WARNING: must match the vars of render_stateful_component/7 on the server.
+    const propsAndState = Erlang_Maps["merge/2"](props, componentState);
+
+    const vars =
+      entries.length === 0
+        ? propsAndState
+        : Erlang_Maps["merge/2"](propsAndState, derived);
     const mergedContext = Erlang_Maps["merge/2"](
       context,
       componentEmittedContext,
@@ -3922,6 +4283,39 @@ export default class Renderer {
     element.value = newValue;
   }
 
+  // Based on Hologram.Component.Derived's validate_query_type!/3
+  static #validateDerivedQueryType(term, entry, module) {
+    const type = entry.type;
+    let matches = false;
+
+    if (Type.isList(type) && type.data.length === 1) {
+      matches =
+        term.cardinality === "set" &&
+        term.entity === Interpreter.moduleExName(type.data[0]);
+    } else if (Type.isAtom(type) && type.value === "integer") {
+      matches = term.cardinality === "count";
+    } else if (Type.isAlias(type)) {
+      matches =
+        term.cardinality === "one" &&
+        term.entity === Interpreter.moduleExName(type);
+    }
+
+    if (!matches) {
+      Interpreter.raiseMisuseError(
+        `derived field ${Interpreter.inspect(entry.name)} in ${module} is declared ${Interpreter.inspect(type)}, but its query is ${Renderer.#derivedQueryDescription(term)}`,
+      );
+    }
+  }
+
+  // Based on Hologram.Component.Derived's validate_value_type!/3
+  static #validateDerivedValueType(value, entry, module) {
+    if (!Renderer.#isDerivedValueOfType(value, entry.type)) {
+      Interpreter.raiseMisuseError(
+        `derived field ${Interpreter.inspect(entry.name)} in ${module} is declared ${Interpreter.inspect(entry.type)}, but computed ${Interpreter.inspect(value)}`,
+      );
+    }
+  }
+
   // A component module is recognized by its __props__/0 function, which the compiler bundles for
   // every component it reaches (a page module carries __params__/0 instead). A module that isn't in
   // the bundle at all has no proxy: the compiler can follow only module atoms appearing as literals
@@ -4051,6 +4445,42 @@ export default class Renderer {
     }
 
     return key;
+  }
+
+  // Based on Hologram.Component.Derived.validate_state_computed!/3
+  //
+  // A state entry init copied a placeholder into would show it in every render after. Of several,
+  // the smallest key is named, and of several under it the smallest field, so the message doesn't
+  // depend on map order.
+  static #validateStateComputed(state, moduleProxy, handler) {
+    const stored = Object.values(state.data)
+      .map(([key, value]) => [key, Renderer.#placeholdersIn(value)])
+      .filter(([_key, placeholders]) => placeholders.length > 0);
+
+    if (stored.length === 0) {
+      return;
+    }
+
+    const key = Renderer.#smallestStateKey(stored.map(([key, _value]) => key));
+
+    const placeholders = stored.find(([storedKey, _placeholders]) =>
+      Interpreter.isStrictlyEqual(storedKey, key),
+    )[1];
+
+    const field = placeholders
+      .map(
+        (placeholder) =>
+          placeholder.data[Type.encodeMapKey(Type.atom("field"))][1],
+      )
+      .reduce((min, candidate) =>
+        Interpreter.compareTerms(candidate, min) < 0 ? candidate : min,
+      );
+    const module = Interpreter.moduleExName(moduleProxy.__exModule__);
+
+    Interpreter.raiseError(
+      "Hologram.StateError",
+      `${handler} of ${module} stored derived field ${Interpreter.inspect(field)} in state ${Interpreter.inspect(key)} before it was computed - it reads state, so it's computed after init`,
+    );
   }
 
   // WARNING: must match value_dom_to_text/1 on the server: parts evaluate raw and

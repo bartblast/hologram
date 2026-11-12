@@ -56,6 +56,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Protocol1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Struct1
+  alias Hologram.Test.Fixtures.Component.Module36, as: ComponentModule36
 
   alias String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, as: StringCharsModule12
 
@@ -167,6 +168,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   defp page_entry_mfas(page_module, layout_module) do
     [
+      {page_module, :__derived__, 0},
       {page_module, :__layout_module__, 0},
       {page_module, :__layout_props__, 0},
       {page_module, :__params__, 0},
@@ -174,6 +176,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       {page_module, :__state__, 0},
       {page_module, :action, 3},
       {page_module, :template, 0},
+      {layout_module, :__derived__, 0},
       {layout_module, :__props__, 0},
       {layout_module, :__state__, 0},
       {layout_module, :action, 3},
@@ -909,17 +912,32 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
+      assert has_vertex?(call_graph, {Module4, :__derived__, 0})
       assert has_vertex?(call_graph, {Module4, :__props__, 0})
       assert has_vertex?(call_graph, {Module4, :__state__, 0})
       assert has_vertex?(call_graph, {Module4, :action, 3})
       assert has_vertex?(call_graph, {Module4, :init, 2})
       assert has_vertex?(call_graph, {Module4, :template, 0})
 
+      assert has_edge?(call_graph, Module4, {Module4, :__derived__, 0})
       assert has_edge?(call_graph, Module4, {Module4, :__props__, 0})
       assert has_edge?(call_graph, Module4, {Module4, :__state__, 0})
       assert has_edge?(call_graph, Module4, {Module4, :action, 3})
       assert has_edge?(call_graph, Module4, {Module4, :init, 2})
       assert has_edge?(call_graph, Module4, {Module4, :template, 0})
+    end
+
+    test "module definition IR, component module's derived field reflection reaches each field's function",
+         %{empty_call_graph: call_graph} do
+      module_ir = IR.for_module(ComponentModule36)
+
+      build(call_graph, module_ir)
+
+      assert has_edge?(
+               call_graph,
+               {ComponentModule36, :__derived__, 0},
+               {ComponentModule36, :__derived_full_name__, 2}
+             )
     end
 
     test "module definition IR, struct module adds struct-specific edges", %{
@@ -2845,6 +2863,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == [
                {Enum, :reverse, 1},
                {Enum, :to_list, 1},
+               {Module14, :__derived__, 0},
                {Module14, :__layout_module__, 0},
                {Module14, :__layout_props__, 0},
                {Module14, :__params__, 0},
@@ -2852,6 +2871,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                {Module14, :__state__, 0},
                {Module14, :action, 3},
                {Module14, :template, 0},
+               {Module15, :__derived__, 0},
                {Module15, :__props__, 0},
                {Module15, :__state__, 0},
                {Module15, :action, 3},

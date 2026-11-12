@@ -17,7 +17,9 @@ defmodule Hologram.DB.QueryCacheTest do
   alias Hologram.Query.Registry
   alias Hologram.Query.Stage
   alias Hologram.Reflection
-  alias Hologram.Test.Fixtures.Component.Module11
+  alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84
+  alias Hologram.Test.Fixtures.Component.Module40
+  alias Hologram.Test.Fixtures.Component.Module41
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module33
 
@@ -25,8 +27,10 @@ defmodule Hologram.DB.QueryCacheTest do
 
   setup :set_mox_global
 
+  # The derived fields of Module40 and Module41 build the queries the cache serves.
   setup do
     setup_query_cache(QueryCacheStub, false)
+    dump_query_cache(QueryCacheStub, [Module40, Module41])
   end
 
   defp expected_data do
@@ -34,9 +38,9 @@ defmodule Hologram.DB.QueryCacheTest do
 
     %{
       derived: %{},
+      derived_queries: MapSet.new([{Module40, :entities}, {Module41, :entities}]),
       entries: entries,
       permission_checking?: false,
-      prop_params: %{{Module11, :entities} => [:min_b]},
       windows: expected_windows(entries)
     }
   end
@@ -52,24 +56,48 @@ defmodule Hologram.DB.QueryCacheTest do
   end
 
   defp expected_entries do
-    module_1_term =
+    module_40_term =
       Entity2
       |> filter(a: true)
       |> sort(c)
       |> Stage.normalize()
 
-    module_11_term =
+    module_41_term =
       Entity2
       |> filter(b >= ^%Placeholder{name: :min_b})
       |> Stage.normalize()
 
-    Registry.build([module_1_term, module_11_term], false)
+    Registry.build([module_40_term, module_41_term], false)
   end
 
   test "entries/0" do
     init(nil)
 
     assert entries() == expected_entries()
+  end
+
+  describe "derived_query?/2" do
+    test "returns true for a derived field the build registered as a query" do
+      dump_query_cache(QueryCacheStub, [Module84])
+
+      init(nil)
+
+      assert derived_query?(Module84, :ripe)
+    end
+
+    test "returns false when no query cache has started" do
+      :persistent_term.erase(QueryCacheStub.persistent_term_key())
+
+      refute derived_query?(Module84, :ripe)
+    end
+
+    test "returns false for a derived field computing a plain value" do
+      dump_query_cache(QueryCacheStub, [Module84])
+
+      init(nil)
+
+      refute derived_query?(Module84, :ripe_total)
+    end
   end
 
   describe "fetch/1" do
@@ -116,7 +144,7 @@ defmodule Hologram.DB.QueryCacheTest do
 
   describe "permission_checking?/0" do
     test "returns true for a build with a page checking permissions on the client" do
-      dump_query_cache(QueryCacheStub, [Module11], true)
+      dump_query_cache(QueryCacheStub, [Module40], true)
 
       init(nil)
 
@@ -127,20 +155,6 @@ defmodule Hologram.DB.QueryCacheTest do
       init(nil)
 
       refute permission_checking?()
-    end
-  end
-
-  describe "prop_params/2" do
-    test "returns the argument names of a parameterized from_query prop" do
-      init(nil)
-
-      assert prop_params(Module11, :entities) == [:min_b]
-    end
-
-    test "returns nil for a prop without registered placeholders" do
-      init(nil)
-
-      assert prop_params(Module11, :unknown) == nil
     end
   end
 
@@ -177,14 +191,14 @@ defmodule Hologram.DB.QueryCacheTest do
     assert :persistent_term.get(key) == expected_data()
 
     # What live reload does: the recompile ahead of it rewrites the dump, and this reads it again.
-    dump_query_cache(QueryCacheStub, [Module11])
+    dump_query_cache(QueryCacheStub, [Module84])
 
     reload()
 
     reloaded = :persistent_term.get(key)
 
     assert reloaded != expected_data()
-    assert reloaded.prop_params == %{{Module11, :entities} => [:min_b]}
+    assert reloaded.derived_queries == MapSet.new([{Module84, :ripe}])
   end
 
   test "dump_path/0 reads from the build directory" do

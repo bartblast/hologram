@@ -4,10 +4,11 @@ defmodule HologramFeatureTests.Components.Queries.Component7 do
 
   alias HologramFeatureTests.Entities.Ticket
 
-  prop :tickets, [Ticket], from_query: &tickets_query/0
-  prop :urgent_tickets, [Ticket], from_query: &urgent_tickets_query/0
+  derived :tickets, [Ticket], &tickets_query/0
+  derived :urgent_tickets, [Ticket], &urgent_tickets_query/0
 
-  # No init/3, deliberately: the prop is rendered as it resolves. On the server that is the
+  # No init/3, deliberately: the derived fields are rendered as they resolve. On the server that is
+  # the
   # query against Postgres, and on the client the same query against the client's own database -
   # which is what makes a change arriving on the stream reach this DOM without anyone asking.
   def template do

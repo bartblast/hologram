@@ -4,9 +4,9 @@ defmodule HologramFeatureTests.Components.Queries.Component1 do
 
   alias HologramFeatureTests.Entities.Product
 
-  prop :products, [Product], from_query: &products_query/0
+  derived :products, [Product], &products_query/0
 
-  # No init/3, deliberately: the prop is rendered as it resolves. On the server that is the
+  # No init/3, deliberately: the derived field is rendered as it resolves. On the server that is the
   # query against Postgres, and on the client the same query against the client's own database -
   # which is what makes a change arriving on the stream reach this DOM without anyone asking.
   def template do

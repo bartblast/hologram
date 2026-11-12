@@ -24,7 +24,7 @@ defmodule Hologram.Compiler.CacheTest do
 
   defp data_layer_state do
     %{
-      components: %{Module1 => %{prop_params: [], targets: [], terms: []}},
+      components: %{Module1 => %{derived_queries: [], terms: []}},
       pages: %{
         Module2 => %{
           checks_permissions?: false,

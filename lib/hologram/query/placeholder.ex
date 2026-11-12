@@ -2,10 +2,10 @@ defmodule Hologram.Query.Placeholder do
   @moduledoc false
 
   # Stands for what a build cannot know. The symbolic evaluator gives one to every argument of a
-  # from_query builder, and to every value computed from one, so a term can be extracted from a
-  # builder nobody has called yet - it becomes a {:placeholder, name} leaf wherever it lands.
+  # derived field's function, and to every value computed from one, so a term can be extracted from
+  # a function nobody has called yet - it becomes a {:placeholder, name} leaf wherever it lands.
   #
-  # It is never bound to a value. Both tiers run the REAL builder with the component's REAL props
+  # It is never bound to a value. Both tiers run the REAL function with the component's REAL fields
   # and normalize THAT, so a placeholder exists only between extraction and the window derivation
   # that drops it. The name says which argument the value came from, for reading a term.
   #

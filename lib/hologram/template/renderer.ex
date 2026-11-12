@@ -11,6 +11,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Component
+  alias Hologram.Component.Derived, as: ComponentDerived
   alias Hologram.DB
   alias Hologram.DB.QueryCache
   alias Hologram.DB.QueryRunner
@@ -483,7 +484,7 @@ defmodule Hologram.Template.Renderer do
     |> Auth.carried_grants()
     |> Carry.collect()
 
-    component_registry_for_client = hollow_props(component_registry_with_page_struct)
+    component_registry_for_client = hollow_struct(component_registry_with_page_struct)
 
     # The values a mount reads, grouped because they travel together, and returned as terms for the
     # controller to serialize: into the first page's boot data block, or into a navigation's
@@ -538,7 +539,6 @@ defmodule Hologram.Template.Renderer do
       |> cast_props(module)
       |> inject_props_from_context(module, env.context)
       |> inject_default_prop_values(module)
-      |> inject_props_from_query(module)
       |> validate_props(module, env.parent_module)
 
     key_scope = component_key_scope(explicit_key(props_dom), props, env.key_scope)
@@ -554,9 +554,23 @@ defmodule Hologram.Template.Renderer do
         key_scope
       )
     else
+      # A component rendered without a cid has no struct and no state, so its derived fields are
+      # computed from its props for this render alone.
+      #
+      # WARNING: must match the client renderer's #renderComponent.
+      derived =
+        ComponentDerived.compute(
+          module.__derived__(),
+          module,
+          props,
+          %{},
+          %{},
+          [{:stateless, true} | derived_compute_opts(module)]
+        )
+
       render_template(
         module,
-        props,
+        Map.merge(props, derived),
         expanded_children_dom,
         env.context,
         server_struct,
@@ -824,10 +838,10 @@ defmodule Hologram.Template.Renderer do
     |> String.replace(@style_text_escapable_chars, &Map.fetch!(@style_text_escapes, &1))
   end
 
-  defp build_layout_props_dom(page_module, page_state) do
+  defp build_layout_props_dom(page_module, page_values) do
     page_module.__layout_props__()
     |> Enum.into(%{cid: "layout"})
-    |> Map.merge(page_state)
+    |> Map.merge(page_values)
     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   end
 
@@ -970,6 +984,14 @@ defmodule Hologram.Template.Renderer do
       page_component_struct
       | emitted_context: Map.delete(context, {Hologram, :csp_nonce})
     }
+  end
+
+  # A derived field the build registered as a query runs it against the database, policies applied.
+  defp derived_compute_opts(module) do
+    [
+      registered_query?: &QueryCache.derived_query?(module, &1),
+      run_query: &run_query!(module, &1, &2, &3)
+    ]
   end
 
   # WARNING: must match the client renderer's #duplicateRefMessage (renderer.mjs).
@@ -1200,7 +1222,7 @@ defmodule Hologram.Template.Renderer do
   defp filter_allowed_props(props_dom, module) do
     registered_prop_names =
       module.__props__()
-      |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] || opts[:from_query] end)
+      |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] end)
       |> Enum.map(fn {name, _type, _opts} -> to_string(name) end)
 
     allowed_prop_names = ["cid" | registered_prop_names]
@@ -1208,53 +1230,20 @@ defmodule Hologram.Template.Renderer do
     Enum.filter(props_dom, fn {name, _value_dom} -> name in allowed_prop_names end)
   end
 
-  defp from_query_arg!(module, prop_name, nil, _props) do
-    raise ArgumentError,
-      message:
-        "from_query capture for prop #{inspect(prop_name)} in #{inspect(module)} has an argument position no clause names - it cannot bind a prop"
-  end
-
-  defp from_query_arg!(module, prop_name, param_name, props) do
-    case Map.fetch(props, param_name) do
-      {:ok, value} ->
-        value
-
-      :error ->
-        raise ArgumentError,
-          message:
-            "from_query for prop #{inspect(prop_name)} in #{inspect(module)} binds argument #{inspect(param_name)} - no like-named prop is set"
-    end
-  end
-
-  defp from_query_args!(_module, _prop_name, capture, _props) when is_function(capture, 0) do
-    []
-  end
-
-  defp from_query_args!(module, prop_name, _capture, props) do
-    param_names = QueryCache.prop_params(module, prop_name)
-
-    if param_names == nil do
-      raise ArgumentError,
-        message:
-          "no registered params for from_query prop #{inspect(prop_name)} in #{inspect(module)} - the query cache holds no entry for it"
-    end
-
-    Enum.map(param_names, &from_query_arg!(module, prop_name, &1, props))
-  end
-
   defp has_cid_prop?(props) do
     Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
 
-  # The client works every struct's props out again during its first render, so sending them would
-  # put each prop value in the payload a second time - once inside the parent's state, once as the
-  # child's props - for the client to immediately overwrite. The key stays and holds an empty map:
-  # the client reads the field with :maps.get/2, which raises on a key that isn't there. What this
+  # The client works every struct's props and derived fields out again during its first render, so
+  # sending them would put each value in the payload a second time - a prop once inside the parent's
+  # state and once as the child's props, a derived field's rows once beside the rows the page
+  # carries - for the client to immediately overwrite. The keys stay and hold an empty map: the
+  # client reads the fields with :maps.get/2, which raises on a key that isn't there. What this
   # relies on is that nothing runs a handler before that first render, which is why #mountPage
   # (hologram.mjs) says so where it orders its drains.
-  defp hollow_props(component_registry) do
+  defp hollow_struct(component_registry) do
     Map.new(component_registry, fn {cid, %{module: module, struct: struct}} ->
-      {cid, %{module: module, struct: %{struct | props: %{}}}}
+      {cid, %{module: module, struct: %{struct | derived: %{}, props: %{}}}}
     end)
   end
 
@@ -1294,9 +1283,24 @@ defmodule Hologram.Template.Renderer do
   # The declared state defaults are in place before init runs, so init sees them and can override
   # them, and a component or page with nothing else to set up needs no init at all.
   #
+  # The derived fields reading only props are computed before init, so init reads them. The ones
+  # reading state hold a placeholder while init runs and are computed once it has returned, from
+  # the state it returned - so the template renders once, with what init set.
+  #
   # WARNING: the struct it starts from must match the client renderer's #maybeInitComponent.
   defp init_component(module, props, server_struct) do
-    initial_component_struct = %Component{props: props, state: state_defaults(module)}
+    {before_init, after_init} = ComponentDerived.split_by_init(module.__derived__())
+    state_defaults = state_defaults(module)
+    compute_opts = derived_compute_opts(module)
+
+    computed_before_init =
+      ComponentDerived.compute(before_init, module, props, state_defaults, %{}, compute_opts)
+
+    initial_component_struct = %Component{
+      derived: Map.merge(computed_before_init, ComponentDerived.not_computed(after_init)),
+      props: props,
+      state: state_defaults
+    }
 
     init_result =
       if Reflection.has_function?(module, :init, 3) do
@@ -1319,7 +1323,23 @@ defmodule Hologram.Template.Renderer do
 
     validate_declared_state(component_struct.state, module, "init/3")
 
-    {%{component_struct | props: props}, %{returned_server_struct | cid: nil}}
+    # Only a field reading state is a placeholder while init runs, so a component declaring none
+    # has nothing to look for - and its state, which can hold every row it loaded, isn't walked.
+    if after_init != [] do
+      ComponentDerived.validate_state_computed!(component_struct.state, module, "init/3")
+    end
+
+    derived =
+      ComponentDerived.compute(
+        after_init,
+        module,
+        props,
+        component_struct.state,
+        computed_before_init,
+        compute_opts
+      )
+
+    {%{component_struct | derived: derived, props: props}, %{returned_server_struct | cid: nil}}
   end
 
   defp inject_default_prop_values(props, module) do
@@ -1342,20 +1362,6 @@ defmodule Hologram.Template.Renderer do
       |> Enum.into(%{})
 
     Map.merge(props, props_from_context)
-  end
-
-  # Runs after the other prop sources - a parameterized query capture binds
-  # like-named props, which template values, context, and defaults supply.
-  # Every query reads its arguments from the props the component was GIVEN, never from the
-  # accumulator - so what one query answers can never reach another's arguments, and the order
-  # these run in cannot change what any of them returns. The build refuses such a binding
-  # outright; this is the same rule holding by construction rather than by check.
-  defp inject_props_from_query(props, module) do
-    module.__props__()
-    |> Enum.filter(fn {_name, _type, opts} -> opts[:from_query] end)
-    |> Enum.reduce(props, fn {name, _type, opts}, acc ->
-      Map.put(acc, name, run_prop_query!(module, name, opts[:from_query], props))
-    end)
   end
 
   defp invalid_dynamic_tag_value_message(value) do
@@ -1701,16 +1707,24 @@ defmodule Hologram.Template.Renderer do
          page_module,
          params,
          %{
+           derived: page_derived,
            emitted_context: page_emitted_context,
            state: page_state
          },
          server_struct
        ) do
-    vars = Map.merge(params, page_state)
+    # WARNING: must match the client renderer's #renderPageInsideLayout.
+    vars =
+      params
+      |> Map.merge(page_state)
+      |> Map.merge(page_derived)
+
     page_dom = page_module.template().(vars)
 
     layout_module = page_module.__layout_module__()
-    layout_props_dom = build_layout_props_dom(page_module, page_state)
+
+    # The layout takes the page's state and derived fields as props, by name.
+    layout_props_dom = build_layout_props_dom(page_module, Map.merge(page_state, page_derived))
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
     render_tree(
@@ -1732,7 +1746,12 @@ defmodule Hologram.Template.Renderer do
     server_struct = %{server_struct | cid: props.cid}
     {component_struct, mutated_server_struct} = init_component(module, props, server_struct)
 
-    vars = Map.merge(props, component_struct.state)
+    # WARNING: must match the client renderer's #renderStatefulComponent.
+    vars =
+      props
+      |> Map.merge(component_struct.state)
+      |> Map.merge(component_struct.derived)
+
     merged_context = Map.merge(context, component_struct.emitted_context)
 
     {tree, children_component_registry, final_server_struct} =
@@ -1876,14 +1895,9 @@ defmodule Hologram.Template.Renderer do
     |> Enum.reject(&is_nil/1)
   end
 
-  defp run_prop_query!(module, prop_name, capture, props) do
-    args = from_query_args!(module, prop_name, capture, props)
-
-    term =
-      capture
-      |> apply(args)
-      |> Stage.normalize()
-
+  # Runs the given normalized query term a derived field of the given module is defined by, for the
+  # given name and the arguments its function was called with.
+  defp run_query!(module, name, args, term) do
     # A path reads rows the query does not return, and the client answers the query over what it
     # holds - so the rows along the paths are read with it, the read policy deciding which, and
     # carried beside the rows it returns. A client checking permissions answers each rule over what
@@ -1899,7 +1913,7 @@ defmodule Hologram.Template.Renderer do
 
     stored = QueryRunner.run_policied(read_term, DB.mapping(), Auth.user_id())
 
-    # Gathered as the prop resolves, so the client is handed the rows this render read - which is
+    # Gathered as the query resolves, so the client is handed the rows this render read - which is
     # what lets its own first render answer the same query from its own database rather than from
     # a value passed down beside it. Gathered as stored: the server's verdicts on a carried row read
     # its server-only values, and the wire leaves those out of what the client is told.
@@ -1910,7 +1924,7 @@ defmodule Hologram.Template.Renderer do
     # A count has no rows behind it, so carried rows cannot re-derive one - the number itself is
     # handed over, and the client holds it until its own database is complete enough to count.
     if is_integer(result) do
-      Carry.collect_count(module, prop_name, args, result)
+      Carry.collect_count(module, name, args, result)
     end
 
     if read_term == term, do: result, else: included_as_asked(result, term)

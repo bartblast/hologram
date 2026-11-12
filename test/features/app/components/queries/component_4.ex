@@ -6,7 +6,8 @@ defmodule HologramFeatureTests.Components.Queries.Component4 do
   alias HologramFeatureTests.Entities.Review
 
   prop :product, Product
-  prop :reviews, [Review], from_query: &reviews_query/1
+
+  derived :reviews, [Review], fn product -> reviews_query(product) end
 
   def template do
     ~HOLO"""

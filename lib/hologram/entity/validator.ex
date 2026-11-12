@@ -316,39 +316,25 @@ defmodule Hologram.Entity.Validator do
   end
 
   @doc """
-  Validates the function a derived field is declared with, as written, before its body is lowered:
-  a function of one clause whose arguments are distinct bare names, with no pattern, default or
-  guard - each one names a field.
+  Validates that the given derived field definition is no capture of a zero-arity function, which
+  reads no field of the row - a derived field of an entity type is computed from its row, so such a
+  function can only return a query of every row of a type or a value fixed at build time. A capture
+  of a function with arguments is refused where captures are read (see `Hologram.Derived`).
 
   Returns :ok, or raises Hologram.CompileError located at the declaration.
   """
-  @spec validate_derived_function!(Macro.t(), Macro.t(), Macro.Env.t()) :: :ok
-  def validate_derived_function!(name, definition, env) do
-    field = "derived field #{Macro.to_string(name)} in #{inspect(env.module)}"
+  @spec validate_derived_capture!(Macro.t(), Macro.t(), Macro.Env.t()) :: :ok
+  def validate_derived_capture!(name, definition, env) do
+    case Hologram.Derived.captured(definition) do
+      {spelled, 0} ->
+        raise Hologram.CompileError,
+          file: env.file,
+          line: env.line,
+          message:
+            "derived field #{Macro.to_string(name)} in #{inspect(env.module)} is a capture of #{spelled}/0, which reads no field of the row - an entity's derived field is computed from its row, so name the fields it reads: fn ... -> #{spelled}(...) end"
 
-    case definition do
-      {:fn, _meta, [{:->, _arrow_meta, [[{:when, _when_meta, when_args}], _body]}]} ->
-        guard = List.last(when_args)
-
-        derived_function_error!(
-          "the function of #{field} takes no guard, got: when #{Macro.to_string(guard)} - its arguments name the fields it reads",
-          env
-        )
-
-      {:fn, _meta, [{:->, _arrow_meta, [args, _body]}]} ->
-        validate_derived_args!(field, args, env)
-
-      {:fn, _meta, clauses} ->
-        derived_function_error!(
-          "the function of #{field} has #{length(clauses)} clauses - a derived field's function has one clause, since its head names the fields it reads",
-          env
-        )
-
-      _definition ->
-        derived_function_error!(
-          "#{field} is defined by a function whose arguments name the fields it reads, got: #{Macro.to_string(definition)} - write it as fn fields -> ... end, calling a shared query builder from the body if one computes it",
-          env
-        )
+      _other ->
+        :ok
     end
   end
 
@@ -375,7 +361,7 @@ defmodule Hologram.Entity.Validator do
     |> Enum.each(fn {name, args, _body} ->
       location = Map.fetch!(locations, name)
 
-      Enum.each(args, &validate_derived_head_arg!(module, name, &1, field_names, location))
+      Hologram.Derived.validate_head!(module, name, args, field_names, location)
     end)
   end
 
@@ -684,11 +670,6 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
-  @spec derived_function_error!(String.t(), Macro.Env.t()) :: no_return
-  defp derived_function_error!(message, env) do
-    raise Hologram.CompileError, message: message, file: env.file, line: env.line
-  end
-
   defp derived_type_valid?(type),
     do: type in @valid_attribute_types or relationship_type_valid?(type)
 
@@ -757,7 +738,7 @@ defmodule Hologram.Entity.Validator do
       |> declared_fields()
       |> Enum.map(fn {field_name, _declaration} -> field_name end)
 
-    Enum.sort(["created_at", "id", "updated_at"] ++ declared_names)
+    ["created_at", "id", "updated_at"] ++ declared_names
   end
 
   # The first target that appears earlier in the list, nil when every target appears once.
@@ -1223,59 +1204,6 @@ defmodule Hologram.Entity.Validator do
     end
 
     validate_default_constraints!(module, name, type, opts, value)
-  end
-
-  # Each argument names a field, so it is a bare name, written once - a pattern, a default or a
-  # guard would make the head say something other than which fields the body reads.
-  defp validate_derived_args!(field, args, env) do
-    Enum.each(args, fn
-      {arg_name, _meta, context}
-      when is_atom(arg_name) and is_atom(context) and
-             arg_name not in [:_, :__MODULE__, :__ENV__, :__CALLER__, :__DIR__, :__STACKTRACE__] ->
-        :ok
-
-      arg ->
-        derived_function_error!(
-          "the arguments of #{field}'s function name fields, each a bare name, got: #{Macro.to_string(arg)} - a pattern, a default or the underscore has no field to name",
-          env
-        )
-    end)
-
-    arg_names = Enum.map(args, fn {arg_name, _meta, _context} -> arg_name end)
-
-    case arg_names -- Enum.uniq(arg_names) do
-      [] ->
-        :ok
-
-      [repeated_name | _repeated_names] ->
-        derived_function_error!(
-          "#{repeated_name} is named twice in the head of #{field}'s function - each argument names a field once",
-          env
-        )
-    end
-  end
-
-  defp validate_derived_head_arg!(module, name, name, _field_names, {file, line}) do
-    raise Hologram.CompileError,
-      file: file,
-      line: line,
-      message:
-        "derived field #{inspect(name)} in #{inspect(module)} reads itself - a derived field is computed from other fields"
-  end
-
-  defp validate_derived_head_arg!(module, name, arg, field_names, {file, line}) do
-    if Atom.to_string(arg) not in field_names do
-      listed =
-        field_names
-        |> List.delete(Atom.to_string(name))
-        |> Enum.join(", ")
-
-      raise Hologram.CompileError,
-        file: file,
-        line: line,
-        message:
-          "#{arg} is not a field of #{inspect(module)} - the arguments of derived field #{inspect(name)}'s function name the fields it reads: #{listed}"
-    end
   end
 
   defp validate_derived_values!(module, name, :enum, opts) do

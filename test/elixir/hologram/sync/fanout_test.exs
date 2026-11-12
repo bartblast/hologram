@@ -31,7 +31,6 @@ defmodule Hologram.Sync.FanoutTest do
 
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
       entries: %{},
-      prop_params: %{},
       windows: %{
         @board_window => Stage.normalize(Module2),
         @other_window => Stage.normalize(PolicyModule1)

@@ -5,7 +5,8 @@ defmodule HologramFeatureTests.Components.Queries.Component8 do
   alias HologramFeatureTests.Entities.Review
 
   prop :sort_field, :atom
-  prop :reviews, [Review], from_query: &reviews_query/1
+
+  derived :reviews, [Review], fn sort_field -> reviews_query(sort_field) end
 
   def template do
     ~HOLO"""

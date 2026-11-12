@@ -5,7 +5,8 @@ defmodule HologramFeatureTests.Components.Queries.Component13 do
   alias HologramFeatureTests.Entities.Ticket
 
   prop :skipped_title, :string
-  prop :tickets, [Ticket], from_query: &tickets_query/1
+
+  derived :tickets, [Ticket], fn skipped_title -> tickets_query(skipped_title) end
 
   def template do
     ~HOLO"""

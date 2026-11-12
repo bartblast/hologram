@@ -97,7 +97,6 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.CompileInputs
   alias Hologram.Compiler.DataModelInputs
-  alias Hologram.Compiler.QueryExtractor
   alias Hologram.Compiler.Tracer
   alias Hologram.DB.Mapper
   alias Hologram.Entity.Derived
@@ -419,8 +418,14 @@ defmodule Mix.Tasks.Compile.Hologram do
       # Whether the kept derived definitions can be out of date (see derived_stale?/3).
       derived_stale? = derived_stale?(cache.data_layer, module_digests_diff, data_model_changed?)
 
+      # A page declares derived fields as a component does, so the data layer tracks the queries of
+      # both.
       tracked_component_modules =
-        list_tracked_component_modules(cache.data_layer, component_modules, new_module_info_plt)
+        list_tracked_component_modules(
+          cache.data_layer,
+          component_modules ++ page_modules,
+          new_module_info_plt
+        )
 
       # The components whose registered queries the data layer extracts again, if it derives at all
       # (see list_stale_components/7). Listed once both walks are done: a component a walk built
@@ -493,7 +498,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         sync_constants_js(data_layer_kept?, %{
           call_graph: call_graph,
           call_graph_for_runtime: call_graph_for_runtime,
-          component_modules: component_modules,
+          component_modules: component_modules ++ page_modules,
           derived_stale?: derived_stale?,
           entity_types: entity_types,
           ir_plt: ir_plt,
@@ -1250,9 +1255,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   #
   # The registered queries of a component are extracted again only when the edit can have changed
   # them (see list_stale_components/7), and of a component a page reaches that has no entry; every
-  # other component keeps the entry the last derivation left. A component's slot bindings are the
-  # argument names its extraction produced, so they are validated for the components extracted
-  # again, once they are.
+  # other component keeps the entry the last derivation left.
   #
   # The derived definitions are put where the build reads them before anything is derived, since the
   # windows and the registered queries read what the derived fields they name are defined as. The
@@ -1323,15 +1326,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     fresh_component_queries =
       Compiler.extract_component_queries(fresh_components, entity_types, ir_plt)
-
-    # A builder's argument names bind the consuming component's like-named declared slots, and
-    # a remote capture makes those names a cross-module contract - so a renamed argument fails
-    # the build here, every reachable consumer at once, rather than one render at a time.
-    reached_components
-    |> Enum.filter(&Map.has_key?(fresh_component_queries, &1))
-    |> Enum.each(fn module ->
-      QueryExtractor.validate_slot_bindings!(module, fresh_component_queries[module].prop_params)
-    end)
 
     component_queries = Map.merge(kept_component_queries, fresh_component_queries)
 
@@ -1780,8 +1774,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   # The components whose registered queries are extracted again: every tracked one when nothing is
   # kept or the data model changed (see data_model_changed?/2), else the ones with no kept entry,
   # the ones a walk of this compile built into the graph, the ones the edit reaches in the graph,
-  # and the ones the graph does not hold whose module or capture targets were edited or removed
-  # (see stale_component?/3).
+  # and the ones the graph does not hold whose module was edited or removed (see
+  # stale_component?/2).
   defp list_stale_components(nil, component_modules, _diff, _reaching, _built, _changed?, _graph) do
     component_modules
   end
@@ -1805,19 +1799,15 @@ defmodule Mix.Tasks.Compile.Hologram do
     changed_modules =
       MapSet.new(module_digests_diff.edited_modules ++ module_digests_diff.removed_modules)
 
-    Enum.filter(component_modules, fn module ->
-      case Map.fetch(kept_data_layer.components, module) do
-        {:ok, kept_entry} ->
-          stale_component?(module, kept_entry, %{
-            built_modules: built_module_set,
-            changed_modules: changed_modules,
-            graph_modules: graph_modules,
-            reaching_modules: reaching_modules
-          })
+    sets = %{
+      built_modules: built_module_set,
+      changed_modules: changed_modules,
+      graph_modules: graph_modules,
+      reaching_modules: reaching_modules
+    }
 
-        :error ->
-          true
-      end
+    Enum.filter(component_modules, fn module ->
+      not Map.has_key?(kept_data_layer.components, module) or stale_component?(module, sets)
     end)
   end
 
@@ -1909,13 +1899,13 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   # Whether a kept component entry can be out of date. A component the graph holds is linked to
-  # every function its queries run (its prop declarations call its capture targets), so it is stale
-  # when the edit reaches it. A component a walk of this compile built into the graph was not in it
-  # before, so its entry can predate an edit the graph could not see. A component the graph does
-  # not hold is stale when it or a module its captures point at was edited or removed. An edit of a
+  # every function its queries run (its derived field declarations call its derived fields'
+  # functions), so it is stale when the edit reaches it. A component a walk of this compile built
+  # into the graph was not in it before, so its entry can predate an edit the graph could not see.
+  # A component the graph does not hold is stale when it was edited or removed. An edit of a
   # helper beyond those leaves its entry as it was: no page reaches the component, so nothing reads
   # the entry, and the compile in which a page starts reaching it builds it into the graph.
-  defp stale_component?(module, kept_entry, sets) do
+  defp stale_component?(module, sets) do
     cond do
       MapSet.member?(sets.built_modules, module) ->
         true
@@ -1924,8 +1914,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         MapSet.member?(sets.reaching_modules, module)
 
       true ->
-        MapSet.member?(sets.changed_modules, module) or
-          Enum.any?(kept_entry.targets, &MapSet.member?(sets.changed_modules, &1))
+        MapSet.member?(sets.changed_modules, module)
     end
   end
 

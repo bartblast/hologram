@@ -7,7 +7,7 @@ defmodule HologramFeatureTests.Components.Mutations.Items do
   # The items reach this list through the ordinary read path - a registered query filled by the
   # sync stream - so a counter moved by a batch POSTed from the page shows its new value here
   # without the page being fetched again.
-  prop :items, [Item], from_query: &items_query/0
+  derived :items, [Item], &items_query/0
 
   def template do
     ~HOLO"""

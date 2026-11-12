@@ -309,6 +309,87 @@ defmodule Hologram.Sync.CarryTest do
       assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/"p1",true) => 7}
     end
 
+    # The client spells the key with no limit, so a long argument is spelled in full here too.
+    test "spells an argument holding over 50 items in full" do
+      collect_count(Module2, :total, [Enum.to_list(1..51)], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/#{inspect(Enum.to_list(1..51), limit: :infinity)}" =>
+                 7
+             }
+    end
+
+    # The rows a derived field passes on are an argument like any other. A row is spelled by its type
+    # and id, the parts both tiers are sure to hold alike, and the client spells the same key (see
+    # the data layer's answerDerivedQuery() tests).
+    test "spells an entity row by its type and id" do
+      row = Module2.new(id: "01a1cbe6-0000-7000-8000-000000000001", a: true, c: "banana")
+
+      collect_count(Module2, :total, [[row]], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/[Hologram.Test.Fixtures.Entity.Module2#01a1cbe6-0000-7000-8000-000000000001]" =>
+                 7
+             }
+    end
+
+    test "spells a tuple by its items" do
+      collect_count(Module2, :total, [{1, "a"}], 7)
+
+      assert take_counts() == %{~s(Hologram.Test.Fixtures.Entity.Module2/total/{1, "a"}) => 7}
+    end
+
+    test "spells a struct by its fields, sorted by name" do
+      collect_count(Module2, :total, [~D[2026-01-02]], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/%Date{calendar: Calendar.ISO, day: 2, month: 1, year: 2026}" =>
+                 7
+             }
+    end
+
+    test "spells a map by its entries, sorted by key" do
+      collect_count(Module2, :total, [%{b: 1, a: 2}], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/%{:a => 2, :b => 1}" => 7
+             }
+    end
+
+    # Two structs of one row are two keys that spell alike.
+    test "spells a map whose keys spell alike by its entries, sorted by value" do
+      map = %{Module2.new(id: "x", a: true) => 2, Module2.new(id: "x", a: false) => 1}
+
+      collect_count(Module2, :total, [map], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/%{Hologram.Test.Fixtures.Entity.Module2#x => 1, Hologram.Test.Fixtures.Entity.Module2#x => 2}" =>
+                 7
+             }
+    end
+
+    test "spells an improper list with its tail after a bar" do
+      collect_count(Module2, :total, [[1 | 2]], 7)
+
+      assert take_counts() == %{"Hologram.Test.Fixtures.Entity.Module2/total/[1 | 2]" => 7}
+    end
+
+    test "spells a float by its bits" do
+      collect_count(Module2, :total, [1.0e20], 7)
+
+      assert take_counts() == %{
+               "Hologram.Test.Fixtures.Entity.Module2/total/float:4415af1d78b58c40" => 7
+             }
+    end
+
+    test "sorts a map's entries in code point order" do
+      collect_count(Module2, :total, [%{"😀" => 2, "！" => 1}], 7)
+
+      assert take_counts() == %{
+               ~s(Hologram.Test.Fixtures.Entity.Module2/total/%{"！" => 1, "😀" => 2}) => 7
+             }
+    end
+
     test "keys props of one component apart" do
       collect_count(Module2, :open_total, [], 7)
       collect_count(Module2, :done_total, [], 3)

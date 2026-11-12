@@ -4,7 +4,7 @@ defmodule HologramFeatureTests.Components.Policies.Component9 do
 
   alias HologramFeatureTests.Entities.Milestone
 
-  prop :milestones, [Milestone], from_query: &milestones_query/0
+  derived :milestones, [Milestone], &milestones_query/0
 
   def template do
     ~HOLO"""

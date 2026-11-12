@@ -96,6 +96,7 @@ defmodule Hologram.Entity do
   defmacro __before_compile__(env) do
     Validator.validate_roles!(env.module)
     Validator.validate_derived_heads!(env.module)
+    DerivedExpression.validate_own_builders!(env.module)
 
     system_attributes =
       @system_attributes
@@ -287,6 +288,15 @@ defmodule Hologram.Entity do
         |> filter(created_at > ^last_read_at)
         |> count()
       end
+
+  A query builder computes the field when the body calls it where a query goes, a function of
+  another module or of the entity type's own, the fields passed in by position. A local call named
+  like a query stage is that stage:
+
+      derived :recent_messages, [MyApp.Message], fn messages -> recent(messages) end
+
+  A field reads its row, so a capture of a function, which leaves the fields it reads unwritten, is
+  refused: a zero-arity one reads no field at all, and one with arguments hides them.
 
   The options go between the type and the function, bracketed, since the function comes last:
   `values:` names an enum's values, in the order sorts and comparisons read them.
@@ -900,7 +910,8 @@ defmodule Hologram.Entity do
   end
 
   # A server-only attribute holds its sentinel in a struct on its way to the client - the page
-  # context and a from_query prop both carry one - so the field admits it beside the declared type.
+  # context and a derived field's rows both carry one - so the field admits it beside the declared
+  # type.
   defp attribute_field_type_ast(type, opts) do
     sentinel_types =
       if opts[:server_only] == true do
@@ -943,7 +954,11 @@ defmodule Hologram.Entity do
   end
 
   defp derived_declaration(name, type, opts, definition, env) do
-    Validator.validate_derived_function!(name, definition, env)
+    Validator.validate_derived_capture!(name, definition, env)
+
+    definition = Hologram.Derived.function(name, definition, env)
+
+    Hologram.Derived.validate_function!(name, definition, env)
 
     {args, body, builder_call?} = DerivedExpression.function(name, definition, env)
     location = {env.file, env.line}
@@ -1005,8 +1020,8 @@ defmodule Hologram.Entity do
       @spec __derived__() :: list({atom, atom | module | list(module), keyword})
       def __derived__, do: Enum.sort(@__derived__)
 
-      # The derived fields whose function calls a query builder of another module - the build
-      # resolves those by following the builder.
+      # The derived fields whose function calls a query builder - the build resolves those by
+      # following the builder.
       @doc false
       @spec __derived_builder_calls__() :: list(atom)
       def __derived_builder_calls__, do: Enum.sort(@__derived_builder_calls__)

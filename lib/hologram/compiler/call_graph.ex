@@ -1262,6 +1262,7 @@ defmodule Hologram.Compiler.CallGraph do
     layout_module = layout_module(page_module, module_info_plt)
 
     [
+      {page_module, :__derived__, 0},
       {page_module, :__layout_module__, 0},
       {page_module, :__layout_props__, 0},
       {page_module, :__params__, 0},
@@ -1269,6 +1270,7 @@ defmodule Hologram.Compiler.CallGraph do
       {page_module, :__state__, 0},
       {page_module, :action, 3},
       {page_module, :template, 0},
+      {layout_module, :__derived__, 0},
       {layout_module, :__props__, 0},
       {layout_module, :__state__, 0},
       {layout_module, :action, 3},
@@ -1840,6 +1842,7 @@ defmodule Hologram.Compiler.CallGraph do
   # This is because we lack precise information about which specific component functions will be used.
   defp add_component_call_graph_edges(call_graph, module) do
     call_graph
+    |> add_edge(module, {module, :__derived__, 0})
     |> add_edge(module, {module, :__props__, 0})
     |> add_edge(module, {module, :__state__, 0})
     |> add_edge(module, {module, :action, 3})

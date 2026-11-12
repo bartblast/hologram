@@ -7,10 +7,12 @@ defmodule HologramFeatureTests.Components.Policies.Component5 do
   alias HologramFeatureTests.Roles.Admin
 
   prop :current_user, User, from_context: {Hologram, :user}
-  prop :documents, [Document], from_query: &documents_query/0
+
+  derived :documents, [Document], &documents_query/0
 
   # Checked while RENDERING, so the checks ship to the client and answer again on every render the
-  # stream or an action schedules. No init/3: both props are rendered as they resolve.
+  # stream or an action schedules. No init/3: the prop and the derived field are rendered as they
+  # resolve.
   def template do
     ~HOLO"""
     <p>

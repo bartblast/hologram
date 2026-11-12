@@ -5,7 +5,8 @@ defmodule HologramFeatureTests.Components.Queries.Component6 do
   alias HologramFeatureTests.Entities.Review
 
   prop :entity_type, :atom
-  prop :rows, [Review], from_query: &rows_query/1
+
+  derived :rows, [Review], fn entity_type -> rows_query(entity_type) end
 
   def template do
     ~HOLO"""

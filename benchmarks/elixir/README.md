@@ -388,20 +388,20 @@ do load        0.22 K - 326.65x slower +4.53 ms
 ```
 
 
-### ✅ compiler » query_extractor » extract_module_queries_3
+### ✅ compiler » query_extractor » extract_derived_queries_3
 
 ```
-Name                                                         ips        average  deviation         median         99th %
-no parameterized captures                              2836.72 K        0.35 μs  ±2357.77%        0.29 μs        0.50 μs
-capture naming its entity                               127.92 K        7.82 μs   ±171.30%        7.33 μs       22.08 μs
-capture whose entity is an argument, 1 candidate        103.48 K        9.66 μs    ±62.75%        9.08 μs       22.13 μs
-capture whose entity is an argument, 21 candidates       14.26 K       70.12 μs     ±9.37%       71.54 μs       87.04 μs
+Name                                                       ips        average  deviation         median         99th %
+no derived fields                                    2824.92 K        0.35 μs  ±4334.57%        0.25 μs        0.46 μs
+field naming its entity                                58.26 K       17.17 μs   ±292.71%       14.21 μs       81.50 μs
+field whose entity is an argument, 1 candidate         57.26 K       17.46 μs    ±91.88%       15.83 μs       47.07 μs
+field whose entity is an argument, 21 candidates       13.03 K       76.74 μs   ±231.43%       71.50 μs      159.21 μs
 
 Comparison: 
-no parameterized captures                              2836.72 K
-capture naming its entity                               127.92 K - 22.18x slower +7.46 μs
-capture whose entity is an argument, 1 candidate        103.48 K - 27.41x slower +9.31 μs
-capture whose entity is an argument, 21 candidates       14.26 K - 198.91x slower +69.77 μs
+no derived fields                                    2824.92 K
+field naming its entity                                58.26 K - 48.49x slower +16.81 μs
+field whose entity is an argument, 1 candidate         57.26 K - 49.33x slower +17.11 μs
+field whose entity is an argument, 21 candidates       13.03 K - 216.80x slower +76.39 μs
 ```
 
 

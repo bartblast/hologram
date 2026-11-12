@@ -11,35 +11,54 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Server
   alias Hologram.Server.Broadcast
   alias Hologram.Test.Fixtures.Component.Module1
-  alias Hologram.Test.Fixtures.Component.Module10
   alias Hologram.Test.Fixtures.Component.Module2
   alias Hologram.Test.Fixtures.Component.Module3
-  alias Hologram.Test.Fixtures.Component.Module35
+  alias Hologram.Test.Fixtures.Component.Module36
   alias Hologram.Test.Fixtures.Component.Module4
   alias Hologram.Test.Fixtures.Component.Module5
   alias Hologram.Test.Fixtures.Component.Module7
-  alias Hologram.Test.Fixtures.Component.Module8
-  alias Hologram.Test.Fixtures.Component.Module9
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
   @server %Server{cid: "page"}
 
-  test "__entities_from_query__/0 shim delegates to the private query function" do
-    assert Module35.__entities_from_query__() == filter(Entity2, a: true)
-  end
+  describe "__derived__/0" do
+    test "lists the derived fields in the order they can be computed" do
+      assert Module36.__derived__() == [
+               %{
+                 args: [:first_name, :last_name],
+                 function: &Module36.__derived_full_name__/2,
+                 name: :full_name,
+                 reads_state: false,
+                 type: :string
+               },
+               %{
+                 args: [:full_name, :shout],
+                 function: &Module36.__derived_greeting__/2,
+                 name: :greeting,
+                 reads_state: true,
+                 type: :string
+               },
+               %{
+                 args: [],
+                 function: &Module36.__derived_motto__/0,
+                 name: :motto,
+                 reads_state: false,
+                 type: :string
+               }
+             ]
+    end
 
-  test "__entities_from_query__/0 shim evaluates an inline from_query function" do
-    assert Module10.__entities_from_query__() == filter(Entity2, a: true)
-  end
+    test "lists no derived fields for a component declaring none" do
+      assert Module4.__derived__() == []
+    end
 
-  test "__from_query_delegations__/0 is absent for inline-only from_query functions" do
-    Code.ensure_loaded!(Module10)
+    test "holds each derived field's function" do
+      assert Module36.__derived_greeting__("Ada Lovelace", true) == "HI ADA LOVELACE"
+    end
 
-    refute function_exported?(Module10, :__from_query_delegations__, 0)
-  end
-
-  test "__from_query_delegations__/0 maps delegation shims to their targets" do
-    assert Module35.__from_query_delegations__() == [__entities_from_query__: :entities_query]
+    test "holds the function a zero-arity capture stands for" do
+      assert Module36.__derived_motto__() == "Hello"
+    end
   end
 
   test "__is_hologram_component__/0" do
@@ -48,24 +67,6 @@ defmodule Hologram.ComponentTest do
 
   test "__props__/0" do
     assert Module4.__props__() == [{:a, :string, []}, {:b, :integer, [default: 222]}]
-  end
-
-  test "__props__/0 keeps an imported from_query capture on its source module" do
-    assert Module8.__props__() == [
-             {:entities, [Entity2], [from_query: &Module9.shared_query/0]}
-           ]
-  end
-
-  test "__props__/0 rewrites a local from_query capture to a generated shim capture" do
-    assert Module35.__props__() == [
-             {:entities, [Entity2], [from_query: &Module35.__entities_from_query__/0]}
-           ]
-  end
-
-  test "__props__/0 rewrites an inline from_query function to a generated shim capture" do
-    assert Module10.__props__() == [
-             {:entities, [Entity2], [from_query: &Module10.__entities_from_query__/0]}
-           ]
   end
 
   test "__state__/0" do
@@ -113,6 +114,1364 @@ defmodule Hologram.ComponentTest do
 
     test "raises ArgumentError for an invalid channel" do
       assert_raise ArgumentError, fn -> delete_subscription(@server, "not_a_valid_channel") end
+    end
+  end
+
+  describe "derived/3" do
+    test "stands a capture of a zero-arity function of another module for the function calling it" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedRemoteCapture do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          derived :entities, [Entity2], &Hologram.Test.Fixtures.Component.Module9.shared_query/0
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() == filter(Entity2, a: true)
+    end
+
+    test "reads a bare name inside a query as the queried row's" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedRowName do
+          use Hologram.Component
+          use Hologram.DB
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn -> filter(Entity2, b == true) end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() == filter(Entity2, b == true)
+    end
+
+    test "reads a bare name inside a piped query as the queried row's" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedPipedRowName do
+          use Hologram.Component
+          use Hologram.DB
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn -> Entity2 |> filter(b == true) |> sort(b) end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() ==
+               Entity2
+               |> filter(b == true)
+               |> sort(b)
+    end
+
+    test "reads a bare name inside a query through an alias of Hologram.Query as the queried row's" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedAliasedRowName do
+          use Hologram.Component
+
+          require Hologram.Query, as: Q
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn -> Q.filter(Entity2, b == true) end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() == filter(Entity2, b == true)
+    end
+
+    test "reads a bare name inside a query macro the body imports as the queried row's" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyImport do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn ->
+            import Hologram.Query, only: [filter: 2]
+
+            filter(Entity2, b == true)
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() == filter(Entity2, b == true)
+    end
+
+    test "reads a bare name inside a query through an alias the body declares as the queried row's" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAlias do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn ->
+            require Hologram.Query, as: Q
+
+            Q.filter(Entity2, b == true)
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() == filter(Entity2, b == true)
+    end
+
+    test "reads a bare name inside a query through an alias the body declares with as: after another option as the queried row's" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasAsAfterOption do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn ->
+            require Hologram.Query, warn: false, as: Q
+
+            Q.filter(Entity2, b == true)
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() == filter(Entity2, b == true)
+    end
+
+    test "reads a bare name inside a query through a multi-alias the body declares as the queried row's" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyMultiAliasQuery do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn ->
+            alias Hologram.{Query}
+            require Query
+
+            Query.filter(Entity2, b == true)
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_entities__() == filter(Entity2, b == true)
+    end
+
+    test "reads a capture of a function named like a prop as no variable" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedCaptureNamedLikeProp do
+          use Hologram.Component
+
+          prop :label, :string
+          prop :items, :list
+
+          derived :labels, :list, fn items -> Enum.map(items, &label/1) end
+
+          def template do
+            ~HOLO""
+          end
+
+          defp label(item), do: "#\{item}!"
+        end
+        """)
+
+      assert module.__derived_labels__([1, 2]) == ["1!", "2!"]
+    end
+
+    test "reads a bitstring type specifier named like a prop as no variable" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedSpecifierNamedLikeProp do
+          use Hologram.Component
+
+          prop :binary, :string
+          prop :text, :string
+
+          derived :initial, :string, fn text ->
+            <<first::binary-size(1), _rest::binary>> = text
+            first
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_initial__("Ada") == "A"
+    end
+
+    test "reads a module attribute's value at the declaration" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedAttributeAtLine do
+          use Hologram.Component
+
+          @limit 1
+
+          derived :limit, :integer, fn -> @limit end
+
+          @limit 2
+
+          def later_limit, do: @limit
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_limit__() == 1
+    end
+
+    test "reads an alias the body declares over the module's alias of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasShadow do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Hologram.Test.Fixtures.Page.Module1, as: Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Page.Module1
+    end
+
+    test "reads an alias the body declares without as: over the module's alias of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasShadowLastSegment do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Hologram.Test.Fixtures.Page.Module1.Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Page.Module1.Target
+    end
+
+    test "reads the module's alias in the body before the body declares its own of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasAfterUse do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            before = Target
+            alias Hologram.Test.Fixtures.Page.Module1, as: Target
+            {before, Target}
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() ==
+               {Hologram.Test.Fixtures.Component.Module1, Hologram.Test.Fixtures.Page.Module1}
+    end
+
+    test "reads the target of an alias the body declares through the module's alias it shadows" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasOnShadowed do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Target.Sub, as: Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Component.Module1.Sub
+    end
+
+    test "reads the module's alias at the declaration after a block the body declares one in" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasInBlock do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          prop :flag, :boolean
+
+          derived :target, :any, fn flag ->
+            if flag do
+              alias Hologram.Test.Fixtures.Page.Module1, as: Target
+              _ = Target
+            end
+
+            Target
+          end
+
+          alias Hologram.Test.Fixtures.Page.Module2, as: Target
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__(false) == Hologram.Test.Fixtures.Component.Module1
+    end
+
+    test "reads a member of a multi-alias the body declares relative to its base" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyMultiAlias do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Hologram.Test.Fixtures.{Target.Sub}
+            Sub
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Target.Sub
+    end
+
+    test "reads a require the body declares with as: over the module's alias of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyRequireAs do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            require Hologram.Test.Fixtures.Page.Module1, as: Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Page.Module1
+    end
+
+    test "reads an alias the body declares with as: after another option over the module's alias of the same name" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasAsLast do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          derived :target, :any, fn ->
+            alias Hologram.Test.Fixtures.Page.Module1, warn: false, as: Target
+            Target
+          end
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__() == Hologram.Test.Fixtures.Page.Module1
+    end
+
+    test "reads the module's alias in a case clause after another clause declares one" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedBodyAliasInClause do
+          use Hologram.Component
+
+          alias Hologram.Test.Fixtures.Component.Module1, as: Target
+
+          prop :flag, :boolean
+
+          derived :target, :any, fn flag ->
+            case flag do
+              true ->
+                alias Hologram.Test.Fixtures.Page.Module1, as: Target
+                Target
+
+              false ->
+                Target
+            end
+          end
+
+          alias Hologram.Test.Fixtures.Page.Module2, as: Target
+
+          def module_target, do: Target
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert module.__derived_target__(false) == Hologram.Test.Fixtures.Component.Module1
+    end
+
+    test "calls a function the module imports at the declaration after a later import drops it" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedImportAtLine do
+            use Hologram.Component
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [constant: 0]
+
+            derived :value, :integer, fn -> constant() end
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, except: [constant: 0]
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_value__() == 5
+    end
+
+    test "calls a function the module imports at the declaration through a pipe after a later import drops it" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedPipedImportAtLine do
+            use Hologram.Component
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [capitalized: 1]
+
+            prop :nickname, :string
+
+            derived :label, :string, fn nickname -> nickname |> capitalized() end
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, except: [capitalized: 1]
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_label__("ada") == "Ada"
+    end
+
+    test "calls a function the module imports at the declaration inside a query's pin after a later import drops it" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedPinnedImportAtLine do
+            use Hologram.Component
+            use Hologram.DB
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [capitalized: 1]
+
+            alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+            prop :nickname, :string
+
+            derived :entities, [Entity2], fn nickname -> filter(Entity2, c == ^capitalized(nickname)) end
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, except: [capitalized: 1]
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_entities__("ada") == filter(Entity2, c == "Ada")
+    end
+
+    test "captures a function the module imports at the declaration after a later import drops it" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedCapturedImportAtLine do
+            use Hologram.Component
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [capitalized: 1]
+
+            prop :nicknames, :list
+
+            derived :labels, :list, fn nicknames -> Enum.map(nicknames, &capitalized/1) end
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, except: [capitalized: 1]
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_labels__(["ada"]) == ["Ada"]
+    end
+
+    test "calls a function an import the body declares brings in over the module's import of the same name" do
+      {{{:module, module, _binary, _result}, _bindings}, _diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedBodyImport do
+            use Hologram.Component
+
+            import Map, only: [new: 0]
+
+            derived :value, :any, fn ->
+              import Map, only: []
+              import MapSet, only: [new: 0]
+
+              new()
+            end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert module.__derived_value__() == MapSet.new()
+    end
+
+    test "counts an import the body calls as used" do
+      {_result, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedImportInBody do
+            use Hologram.Component
+
+            import Hologram.Test.Fixtures.Compiler.QueryExtractor.Module53, only: [constant: 0]
+
+            derived :value, :integer, fn -> constant() end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert diagnostics == []
+    end
+
+    test "warns about a module attribute the body reads that is never set" do
+      {_result, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedUnsetAttribute do
+            use Hologram.Component
+
+            derived :label, :string, fn -> @missing_label end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert [%{message: message, position: 4, severity: :warning}] = diagnostics
+      assert message =~ "@missing_label"
+    end
+
+    test "reads a module attribute set to nil without a warning" do
+      {{{:module, module, _binary, _result}, _bindings}, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedNilAttribute do
+            use Hologram.Component
+
+            @label nil
+
+            derived :label, :string, fn -> @label end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert diagnostics == []
+      assert module.__derived_label__() == nil
+    end
+
+    test "counts an alias the body reads as used" do
+      {_result, diagnostics} =
+        Code.with_diagnostics(fn ->
+          Code.eval_string("""
+          defmodule Hologram.Test.Fixtures.Component.DerivedAliasInBody do
+            use Hologram.Component
+
+            alias Hologram.Test.Fixtures.Component.Module9
+
+            derived :entities, :list, fn -> Module9.shared_query() end
+
+            def template do
+              ~HOLO""
+            end
+          end
+          """)
+        end)
+
+      assert diagnostics == []
+    end
+
+    test "marks a derived field reading state through another derived field as reading state" do
+      {{:module, module, _binary, _result}, _bindings} =
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedStateThroughField do
+          use Hologram.Component
+
+          state :step, :integer, default: 1
+
+          derived :double, :integer, fn step -> step * 2 end
+          derived :quadruple, :integer, fn double -> double * 2 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+
+      assert Enum.map(module.__derived__(), &{&1.name, &1.reads_state}) == [
+               double: true,
+               quadruple: true
+             ]
+    end
+
+    test "raises on a name that is not an atom" do
+      expected_msg =
+        "nofile:4: the name of derived field \"total\" in Hologram.Test.Fixtures.Component.DerivedStringName must be an atom"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedStringName do
+          use Hologram.Component
+
+          derived "total", :integer, fn -> 1 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a function with a guard" do
+      expected_msg =
+        "nofile:6: the function of derived field :double in Hologram.Test.Fixtures.Component.DerivedGuard takes no guard, got: when is_integer(count) - its arguments name the fields it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedGuard do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          derived :double, :integer, fn count when is_integer(count) -> count * 2 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a function with two clauses" do
+      expected_msg =
+        "nofile:6: the function of derived field :double in Hologram.Test.Fixtures.Component.DerivedTwoClauses has 2 clauses - a derived field's function has one clause, since its head names the fields it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedTwoClauses do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          derived :double, :integer, fn
+            0 -> 0
+            count -> count * 2
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a definition that is no function" do
+      expected_msg =
+        "nofile:4: derived field :double in Hologram.Test.Fixtures.Component.DerivedNoFunction is defined by a function whose arguments name the fields it reads, got: 2 - write it as fn fields -> ... end, calling a shared query builder from the body if one computes it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedNoFunction do
+          use Hologram.Component
+
+          derived :double, :integer, 2
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on the capture shorthand" do
+      expected_msg =
+        "nofile:6: derived field :double in Hologram.Test.Fixtures.Component.DerivedShorthand is defined by a function whose arguments name the fields it reads, got: &(&1 * 2) - write it as fn fields -> ... end, calling a shared query builder from the body if one computes it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedShorthand do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          derived :double, :integer, &(&1 * 2)
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on an argument that is a pattern" do
+      expected_msg =
+        "nofile:6: the arguments of derived field :total in Hologram.Test.Fixtures.Component.DerivedPatternArgument's function name fields, each a bare name, got: %{count: count} - a pattern, a default or the underscore has no field to name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedPatternArgument do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          derived :total, :integer, fn %{count: count} -> count end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on an underscore argument" do
+      expected_msg =
+        "nofile:4: the arguments of derived field :total in Hologram.Test.Fixtures.Component.DerivedUnderscoreArgument's function name fields, each a bare name, got: _ - a pattern, a default or the underscore has no field to name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedUnderscoreArgument do
+          use Hologram.Component
+
+          derived :total, :integer, fn _ -> 1 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on an argument named twice" do
+      expected_msg =
+        "nofile:6: count is named twice in the head of derived field :total in Hologram.Test.Fixtures.Component.DerivedRepeatedArgument's function - each argument names a field once"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedRepeatedArgument do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          derived :total, :integer, fn count, count -> count end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a capture of a function with arguments" do
+      expected_msg =
+        "nofile:6: derived field :double in Hologram.Test.Fixtures.Component.DerivedCaptureWithArguments is a capture of double/1, which hides the fields it reads - write fn ... -> double(...) end, naming them in the head"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedCaptureWithArguments do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          derived :double, :integer, &double/1
+
+          def template do
+            ~HOLO""
+          end
+
+          defp double(count), do: count * 2
+        end
+        """)
+      end
+    end
+
+    test "raises on a head naming what is no field" do
+      expected_msg =
+        "nofile:8: total is not a field of Hologram.Test.Fixtures.Component.DerivedUnknownName - the arguments of derived field :double's function name the fields it reads: count, step"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedUnknownName do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          state :step, :integer
+
+          derived :double, :integer, fn total -> total * 2 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a head naming a field of a component declaring none" do
+      expected_msg =
+        "nofile:4: total is not a field of Hologram.Test.Fixtures.Component.DerivedNothingToRead - the arguments of derived field :double's function name the fields it reads, and Hologram.Test.Fixtures.Component.DerivedNothingToRead declares none"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedNothingToRead do
+          use Hologram.Component
+
+          derived :double, :integer, fn total -> total * 2 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a head naming its own field" do
+      expected_msg =
+        "nofile:4: derived field :double in Hologram.Test.Fixtures.Component.DerivedSelfRead reads itself - a derived field is computed from other fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedSelfRead do
+          use Hologram.Component
+
+          derived :double, :integer, fn double -> double * 2 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on derived fields reading each other in a cycle" do
+      expected_msg =
+        "nofile:6: derived fields in Hologram.Test.Fixtures.Component.DerivedCycle read each other in a cycle: :a, :b"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedCycle do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          derived :a, :integer, fn b -> b end
+          derived :b, :integer, fn a -> a end
+          derived :c, :integer, fn count -> count end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a cycle naming its fields only, not a field reading it" do
+      expected_msg =
+        "nofile:5: derived fields in Hologram.Test.Fixtures.Component.DerivedCycleReader read each other in a cycle: :a, :b"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedCycleReader do
+          use Hologram.Component
+
+          derived :c, :integer, fn a -> a end
+          derived :a, :integer, fn b -> b end
+          derived :b, :integer, fn a -> a end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on the first of two cycles" do
+      expected_msg =
+        "nofile:4: derived fields in Hologram.Test.Fixtures.Component.DerivedTwoCycles read each other in a cycle: :a, :b"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedTwoCycles do
+          use Hologram.Component
+
+          derived :a, :integer, fn b -> b end
+          derived :b, :integer, fn a -> a end
+          derived :x, :integer, fn y -> y end
+          derived :y, :integer, fn x -> x end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a name a prop declares" do
+      expected_msg =
+        "nofile:4: derived field :count in Hologram.Test.Fixtures.Component.DerivedPropName has the same name as a prop, which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedPropName do
+          use Hologram.Component
+
+          derived :count, :integer, fn -> 1 end
+
+          prop :count, :integer
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a name a state entry declares" do
+      expected_msg =
+        "nofile:6: derived field :count in Hologram.Test.Fixtures.Component.DerivedStateName has the same name as a state entry, which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedStateName do
+          use Hologram.Component
+
+          state :count, :integer
+
+          derived :count, :integer, fn -> 1 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on the name of the cid prop" do
+      expected_msg =
+        "nofile:4: derived field :cid in Hologram.Test.Fixtures.Component.DerivedCidName has the same name as the cid prop, which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedCidName do
+          use Hologram.Component
+
+          derived :cid, :string, fn -> "x" end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a name another derived field declares" do
+      expected_msg =
+        "nofile:5: derived field :total in Hologram.Test.Fixtures.Component.DerivedRepeatedName has the same name as another derived field, which it would shadow - give them different names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedRepeatedName do
+          use Hologram.Component
+
+          derived :total, :integer, fn -> 1 end
+          derived :total, :integer, fn -> 2 end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a body reading a prop its head doesn't name" do
+      expected_msg =
+        "nofile:7: step is a prop of Hologram.Test.Fixtures.Component.DerivedUnnamedRead, which derived field :total's function doesn't name - add it to the head to read it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedUnnamedRead do
+          use Hologram.Component
+
+          prop :count, :integer
+          prop :step, :integer
+
+          derived :total, :integer, fn count -> count + step end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a body reading a derived field its head doesn't name" do
+      expected_msg =
+        "nofile:7: double is a derived field of Hologram.Test.Fixtures.Component.DerivedUnnamedField, which derived field :total's function doesn't name - add it to the head to read it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedUnnamedField do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          derived :double, :integer, fn count -> count * 2 end
+          derived :total, :integer, fn count -> count + double end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a body reading its own field" do
+      expected_msg =
+        "nofile:6: derived field :total in Hologram.Test.Fixtures.Component.DerivedOwnNameRead reads itself - a derived field is computed from other fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedOwnNameRead do
+          use Hologram.Component
+
+          prop :count, :integer
+
+          derived :total, :integer, fn count -> count + total end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a body binding a local named like a state entry" do
+      expected_msg =
+        "nofile:6: step is a state entry of Hologram.Test.Fixtures.Component.DerivedShadowingLocal, so derived field :total's function can't bind a local of that name - give the local another name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedShadowingLocal do
+          use Hologram.Component
+
+          state :step, :integer
+
+          derived :total, :integer, fn ->
+            step = 2
+            step * 2
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a body binding a local named like its own field" do
+      expected_msg =
+        "nofile:4: total is the name of derived field :total in Hologram.Test.Fixtures.Component.DerivedOwnNameLocal, so its function can't bind a local of that name - give the local another name"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedOwnNameLocal do
+          use Hologram.Component
+
+          derived :total, :integer, fn ->
+            total = 2
+            total * 2
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a body reading a prop its head doesn't name through an alias shadowing Hologram.Query" do
+      expected_msg =
+        "nofile:8: limit is a prop of Hologram.Test.Fixtures.Component.DerivedShadowedQueryAlias, which derived field :value's function doesn't name - add it to the head to read it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedShadowedQueryAlias do
+          use Hologram.Component
+
+          alias Hologram.Query
+
+          prop :limit, :integer
+
+          derived :value, :any, fn ->
+            alias Hologram.Test.Fixtures.Component.Module1, as: Query
+            Query.take(1, limit)
+          end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a query pinning a prop its head doesn't name" do
+      expected_msg =
+        "nofile:9: b is a prop of Hologram.Test.Fixtures.Component.DerivedUnnamedPin, which derived field :entities's function doesn't name - add it to the head to read it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedUnnamedPin do
+          use Hologram.Component
+          use Hologram.DB
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn -> filter(Entity2, b == ^b) end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a piped query pinning a prop its head doesn't name" do
+      expected_msg =
+        "nofile:9: b is a prop of Hologram.Test.Fixtures.Component.DerivedUnnamedPipedPin, which derived field :entities's function doesn't name - add it to the head to read it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedUnnamedPipedPin do
+          use Hologram.Component
+          use Hologram.DB
+
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn -> Entity2 |> filter(b == ^b) end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a qualified query macro pinning a prop its head doesn't name" do
+      expected_msg =
+        "nofile:9: b is a prop of Hologram.Test.Fixtures.Component.DerivedUnnamedQualifiedPin, which derived field :entities's function doesn't name - add it to the head to read it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedUnnamedQualifiedPin do
+          use Hologram.Component
+
+          alias Hologram.Query
+          alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
+
+          prop :b, :string
+
+          derived :entities, [Entity2], fn -> Query.filter(Entity2, b == ^b) end
+
+          def template do
+            ~HOLO""
+          end
+        end
+        """)
+      end
+    end
+
+    test "raises on a prop its head doesn't name passed to a function of the component's own named like a query macro" do
+      expected_msg =
+        "nofile:6: b is a prop of Hologram.Test.Fixtures.Component.DerivedOwnFilter, which derived field :total's function doesn't name - add it to the head to read it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.eval_string("""
+        defmodule Hologram.Test.Fixtures.Component.DerivedOwnFilter do
+          use Hologram.Component
+
+          prop :b, :integer
+
+          derived :total, :integer, fn -> filter(1, b) end
+
+          def template do
+            ~HOLO""
+          end
+
+          defp filter(left, right), do: left + right
+        end
+        """)
+      end
     end
   end
 
@@ -189,7 +1548,7 @@ defmodule Hologram.ComponentTest do
 
     test "raises when an option is not supported" do
       expected_error_msg =
-        ~s/invalid option :some_option for prop "b" in Hologram.Test.Fixtures.Component.UnsupportedPropOpt, expected one of: :default, :from_context, :from_query, :required, :values/
+        ~s/invalid option :some_option for prop "b" in Hologram.Test.Fixtures.Component.UnsupportedPropOpt, expected one of: :default, :from_context, :required, :values/
 
       assert_error Hologram.CompileError, expected_error_msg, fn ->
         Code.eval_string("""
@@ -476,14 +1835,14 @@ defmodule Hologram.ComponentTest do
       assert module.__props__() == [{:a, :string, [default: "abc"]}]
     end
 
-    test "raises on the from_query capture shorthand" do
+    test "raises on a from_query option, which derived fields replaced" do
       code = ~s'''
-      defmodule Hologram.ComponentTest.ShorthandFixture do
+      defmodule Hologram.ComponentTest.FromQueryFixture do
         use Hologram.Component
 
         alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
 
-        prop :entities, [Entity2], from_query: &Enum.member?([&1], &1)
+        prop :entities, [Entity2], from_query: &Hologram.Test.Fixtures.Component.Module9.shared_query/0
 
         @impl Component
         def template do
@@ -493,7 +1852,7 @@ defmodule Hologram.ComponentTest do
       '''
 
       expected_msg =
-        "from_query for prop :entities uses the &(...) capture shorthand - use fn syntax or a &fun/arity capture instead"
+        ~s/invalid option :from_query for prop "entities" in Hologram.ComponentTest.FromQueryFixture, expected one of: :default, :from_context, :required, :values/
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         Code.compile_string(code)
