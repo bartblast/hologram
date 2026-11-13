@@ -1037,6 +1037,25 @@ defmodule Hologram.PolicyTest do
       assert hash_of_project(through_project) != hash_of_project(through_archive)
     end
 
+    # A quantifier over a derived set reads its rows' own relationships too, past the definition.
+    test "gives a type a new hash when an inverse a rule reads on a derived set's rows changes" do
+      through_idol = """
+      relationship :idol, Hologram.PolicyTest.HashedProject, optional: true
+      relationship :parent, Hologram.PolicyTest.HashedProject, optional: true
+
+      relationship :fans, [Hologram.PolicyTest.HashedProject], inverse: idol
+      relationship :kids, [Hologram.PolicyTest.HashedProject], inverse: parent
+
+      derived :first_kids, [Hologram.PolicyTest.HashedProject], fn kids -> take(kids, 2) end
+
+      allow :read, when: any(kid <- first_kids, any(kid.fans))
+      """
+
+      through_parent = String.replace(through_idol, "inverse: idol", "inverse: parent")
+
+      assert hash_of_project(through_idol) != hash_of_project(through_parent)
+    end
+
     test "gives a type the same hash when an inverse no rule walks changes" do
       through_project = """
       attribute :public, :boolean

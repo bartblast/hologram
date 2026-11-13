@@ -1357,9 +1357,15 @@ defmodule Hologram.Policy do
         definition_inverses(type, Derived.definition(type, name))
       end)
 
+    # The chains the conditions follow, a quantifier over a derived set's rows included - which the
+    # related chains leave out, since a client answers such a quantifier from the server's verdict,
+    # while what the server decides still turns on the inverses its condition walks.
+    condition_chains = Stage.relationship_chains(predicates)
+
     inverses =
       entity_type
       |> related_chains()
+      |> Enum.concat(condition_chains)
       |> Enum.flat_map(&walked_inverses(entity_type, &1))
       |> Enum.concat(definition_inverses)
       |> Enum.uniq()
