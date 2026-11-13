@@ -76,7 +76,7 @@ defmodule Hologram.Sync.Session do
   is the log having moved since, a gap that outgrew a replay or a deploy landing in between.
 
   `:gap_end` is the place of the last effect the read that decided this client resumes found, or
-  nil when it found none. A catch-up frame vouches for no more than it: the session's own read can
+  nil when it found none. A catch-up frame names no place past it: the session's own read can
   name effects whose rounds have not reached it yet, and a frame dating those would let a client
   cut off right then come back past changes it never held.
 
@@ -709,11 +709,14 @@ defmodule Hologram.Sync.Session do
   # resumable: a client cut off after three of ten batches comes back dated to the third and is
   # given the rest, instead of starting the gap again. The batches are read in log order, so the
   # place of a batch's last effect is a place everything before it has been applied to.
-  # The batch raises the watermark only by the effects a frame may vouch for (see `:gap_end`): a
-  # write of this replica's own past it may be in no round the session has read, and a client told
-  # it is applied would drop it while still holding the row from before it.
+  #
+  # The batch raises the watermark by every one of this replica's effects in it, wherever the
+  # deciding read ended: a row going out with this replica's write in it and a number saying the
+  # write isn't has the client apply the write a second time. The rows come from the windows' last
+  # rounds, and one can be older than a write here - the client then shows the row from before its
+  # write until the window's round for it arrives.
   defp tell_batch(state, judged, effects) do
-    updated = remember_applied(state, Enum.filter(effects, &vouched_for?(state, &1)))
+    updated = remember_applied(state, effects)
     deltas = Catchup.deltas(effects, judged.touched, updated.actor_user_id)
 
     if deltas != [] do
@@ -951,10 +954,6 @@ defmodule Hologram.Sync.Session do
   end
 
   defp replaying?(state), do: state.catching_up
-
-  defp vouched_for?(%{gap_end: nil}, _effect), do: false
-
-  defp vouched_for?(state, effect), do: {effect.tx, effect.seq} <= state.gap_end
 
   # The rows the gap names, or that entered a window during the catch-up, that this window lets the
   # client see, as its last round has them. An edge names its target as well as its source, since

@@ -356,27 +356,24 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _cursor, _deltas, 9}
     end
 
-    # A write of this replica's own past what the deciding read found may be in no round the
-    # session has read yet, so the frame carrying the row from before it can't say it is applied.
-    test "raises the watermark no further than the read that decided the client resumes" do
+    # The write landed after the read that decided the client resumes, and the window's round
+    # already holds it - the frame carrying the row says the write is in, or the client would apply
+    # it a second time.
+    test "raises the watermark for this replica's batch past the read that decided the client resumes" do
       moved = create("moved while away")
       windows(%{@page => [@board_window]})
-      hold_windows([@board_window])
+      hold_silently(@board_window)
 
-      gap = [
-        gap_effect(moved.id, {900, 1}, ref(@replica_id, 4)),
-        gap_effect(Entity.generate_id(), {900, 2}, ref(@replica_id, 9))
-      ]
+      written = %{gap_effect(moved.id, {900, 1}, ref(@replica_id, 4)) | revisions: %{"c" => 5}}
 
-      start_session!(
-        applied_seq: 3,
-        fill_place: {200, 0},
-        gap: gap,
-        gap_end: {900, 1},
-        replica_id: @replica_id
-      )
+      session =
+        start_session!(applied_seq: 3, gap: [written], gap_end: nil, replica_id: @replica_id)
 
-      assert_receive {:sync_deltas, _cursor, _deltas, 4}
+      ResultStore.put(@board_window, 1, [with_revisions(moved, %{c: 5})])
+      send(session, {:round, @board_window, 1, [], nil})
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id}], 4}
+      assert id == moved.id
     end
 
     # A gap arrives in batches rather than one frame, so the memory a replay costs is bounded by

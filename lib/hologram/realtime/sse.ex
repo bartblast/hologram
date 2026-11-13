@@ -557,7 +557,7 @@ defmodule Hologram.Realtime.SSE do
 
     # The session reads the gap again for itself rather than being handed this one, so only what
     # this read decided travels on: whether the client resumes at all, from where, and how far
-    # this read reached - a frame vouches for no more than that, since the session's own read can
+    # this read reached - a frame names no place past that, since the session's own read can
     # name effects whose rounds have not reached it yet.
     start = %{
       cursor: if(gap, do: cursor),
