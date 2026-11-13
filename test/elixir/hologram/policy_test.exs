@@ -990,6 +990,53 @@ defmodule Hologram.PolicyTest do
       assert hash_of_project(through_project) != hash_of_project(through_archive)
     end
 
+    # A derived query's filter can read the owning row, which sits above the rows the query reads.
+    test "gives a type a new hash when an inverse a derived query reading the owning row walks changes" do
+      through_project = """
+      attribute :seats, :string
+
+      relationship :members, [Hologram.PolicyTest.HashedMember], inverse: project
+
+      derived :seated_count, :integer, fn members, seats ->
+        members
+        |> filter(seat == ^seats)
+        |> count()
+      end
+
+      allow :read, when: seated_count > 0
+      """
+
+      through_archive = String.replace(through_project, "inverse: project", "inverse: archive")
+
+      assert hash_of_project(through_project) != hash_of_project(through_archive)
+    end
+
+    # The raw form, since it's the only way a filter's name of the owning row reaches an inverse: the
+    # quantifier's source is the owning row's alumni, read from inside the query over its members.
+    test "gives a type a new hash when an inverse of the owning row a derived query's filter walks changes" do
+      through_project = """
+      relationship :alumni, [Hologram.PolicyTest.HashedMember], inverse: project
+      relationship :members, [Hologram.PolicyTest.HashedMember], inverse: archive
+
+      derived :alumni_count, :integer, fn members ->
+        members
+        |> filter(^[{:any, {{:outer, 1, [:alumni]}, [seat: "x"]}}])
+        |> count()
+      end
+
+      allow :read, when: alumni_count > 0
+      """
+
+      through_archive =
+        String.replace(
+          through_project,
+          "alumni, [Hologram.PolicyTest.HashedMember], inverse: project",
+          "alumni, [Hologram.PolicyTest.HashedMember], inverse: archive"
+        )
+
+      assert hash_of_project(through_project) != hash_of_project(through_archive)
+    end
+
     test "gives a type the same hash when an inverse no rule walks changes" do
       through_project = """
       attribute :public, :boolean

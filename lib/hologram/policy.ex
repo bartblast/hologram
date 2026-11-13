@@ -916,10 +916,16 @@ defmodule Hologram.Policy do
 
   # The inverses the given derived field definition of the given entity type walks: along a query's
   # chain and its filter's, along a condition's chains, and along a path to a related row's value.
+  #
+  # A query's filter is read on the rows its chain leads to, with the owning row above them - which
+  # an outer name reads - so its chains are resolved through both and walked from the owning row.
   defp definition_inverses(_owner, {:query, %Query{} = term}) do
     {source_owner, chain} = term.source
 
-    walked_inverses(source_owner, chain) ++ clause_inverses(term.entity, term.filter)
+    term.filter
+    |> Stage.relationship_chains([chain, []])
+    |> then(&[chain | &1])
+    |> Enum.flat_map(&walked_inverses(source_owner, &1))
   end
 
   defp definition_inverses(owner, {:concat, operands}) do
