@@ -130,13 +130,27 @@ describe("Tabs", () => {
 
   const stubs = () => ({onLead: () => {}, onMessage: () => {}});
 
+  // A group is only ever formed by a bundle with a data model, whose rules a tab hands on. What an
+  // earlier file left there goes back afterwards.
+  let originalSync;
+
   beforeEach(() => {
     openChannels = [];
     releases = [];
+
+    originalSync = globalThis.Hologram.sync;
+
+    globalThis.Hologram.sync = {
+      model: {},
+      policyHash: "0123456789abcdef",
+      protocolVersion: 1,
+    };
   });
 
   afterEach(async () => {
     await Tabs.leave();
+
+    globalThis.Hologram.sync = originalSync;
 
     releases.forEach((release) => release());
     openChannels.forEach((channel) => channel.close());
@@ -377,10 +391,12 @@ describe("Tabs", () => {
         protocolVersion: 1,
       };
 
+      SyncStream.served = true;
+
       try {
         Tabs.postState();
       } finally {
-        delete globalThis.Hologram.sync;
+        SyncStream.served = false;
       }
 
       assert.deepStrictEqual(posting.firstCall.args[0].rules, {
@@ -609,18 +625,14 @@ describe("Tabs", () => {
 
       globalThis.Hologram.sync = {policyHash: "0123456789abcdef"};
 
-      try {
-        Tabs.receive({
-          cursor: null,
-          kind: "state",
-          page: PAGE,
-          replica: {id: null, token: null},
-          rules,
-          synced: [],
-        });
-      } finally {
-        delete globalThis.Hologram.sync;
-      }
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        rules,
+        synced: [],
+      });
 
       sinon.assert.calledOnceWithExactly(
         SyncStream.receiveFrame,
@@ -632,22 +644,18 @@ describe("Tabs", () => {
     it("keeps its bundle's rules when they are the ones the group syncs under", () => {
       globalThis.Hologram.sync = {policyHash: "fedcba9876543210"};
 
-      try {
-        Tabs.receive({
-          cursor: null,
-          kind: "state",
-          page: PAGE,
-          replica: {id: null, token: null},
-          rules: {
-            policy_hash: "fedcba9876543210",
-            protocol_version: 1,
-            rules: {},
-          },
-          synced: [],
-        });
-      } finally {
-        delete globalThis.Hologram.sync;
-      }
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        rules: {
+          policy_hash: "fedcba9876543210",
+          protocol_version: 1,
+          rules: {},
+        },
+        synced: [],
+      });
 
       sinon.assert.notCalled(SyncStream.receiveFrame);
     });

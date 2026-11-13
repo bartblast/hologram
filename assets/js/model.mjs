@@ -444,8 +444,8 @@ export default class Model {
   }
 
   // Takes the model entries a server enforcing other rules than this bundle was built with hands
-  // over (see Hologram.Compiler.render_rules/1): the entry of every type a checking build bakes
-  // whatever the pages reach, so a type it leaves out declares no rule and no role.
+  // over (see Hologram.Compiler.render_rules/1): the entry of every type a build bakes whatever the
+  // pages reach, so a type it leaves out declares no rule and no role.
   //
   // A type this client holds takes the entry's rules, and its operations, derived fields and
   // inverses join the ones the bundle baked - added or redefined, never taken away, because the

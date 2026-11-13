@@ -11,9 +11,9 @@ alias Hologram.Compiler
 # read of the beams.
 #
 # The fixtures give it 110 pages, 10 of which reach the two components with a parameterized
-# query. The result names 11 of the 21 entity types, the ones the argument-entity query fits, and
-# the prop params of both components. No page checks permissions, so neither the grant type nor
-# the policied types join.
+# query. The result names the entity types the argument-entity query fits and the prop params of
+# both components, with the grant type, the policied types and the types they lead to, which every
+# build with a data model bakes, and the hash of every type's rules.
 Benchee.run(
   %{
     "build_sync_constants/3" => fn {reach_by_page, component_queries, module_info_plt} ->

@@ -41,8 +41,8 @@ defmodule Hologram.Sync.Handshake do
   once here so that whatever the client is served is judged by the rules it was compared with.
   `stale_rules?` is whether the bundle was built with rules other than those - a deploy that
   changed only policies leaves the model hash as it was, so a client is served with them either
-  way, and told the current ones beside its rows. A bundle that checks no permissions names no
-  rules, and has none to fall behind.
+  way, and told the current ones beside its rows. A greeting naming no rules - a test client's,
+  every bundle names them - is taken as current.
 
   Answers `:held` for a greeting arriving while the data model is under a hold (see
   `Hologram.Entity.Model.hold/0`): neither the model nor its hash can be read until it is released,

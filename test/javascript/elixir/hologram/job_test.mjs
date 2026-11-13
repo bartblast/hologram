@@ -185,10 +185,9 @@ describe("Elixir_Hologram_Job", () => {
       assert.deepStrictEqual(Batches.current().writes, []);
     });
 
-    // The server refuses one more thing here that this tier cannot see: a job type declaring no
-    // allow lines, under an acting user. A build that checks no permissions bakes an empty policy
-    // for every type, so the client cannot tell that state from a type declaring none - the
-    // server's denial arrives as the batch's rejection instead.
+    // The server refuses one more thing here that this tier does not check: a job type declaring
+    // no allow lines, under an acting user - the server's denial arrives as the batch's rejection
+    // instead.
     it("raises for a module that is not a job type", () => {
       assertBoxedError(
         () => create(task, values([["title", Type.bitstring("x")]])),

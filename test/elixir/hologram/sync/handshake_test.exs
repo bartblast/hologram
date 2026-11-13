@@ -71,7 +71,7 @@ defmodule Hologram.Sync.HandshakeTest do
                {:sync, MyApp.BoardPage, nil, @policy_hash, false}
     end
 
-    # A bundle that checks no permissions is shipped empty rules, which no deploy can leave behind.
+    # Every bundle names the rules it answers by, so a greeting naming none is a test client's.
     test "serves a client naming no rules as current" do
       assert check(greeting(%{policy_hash: nil})) ==
                {:sync, MyApp.BoardPage, nil, @policy_hash, false}

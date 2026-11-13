@@ -23,6 +23,11 @@ export default class SyncStream {
   // rulesForGroup). Null while the bundle's own are current.
   static rules = null;
 
+  // Whether this tab's own stream has served it sync since the page loaded - so its bundle's rules
+  // are the ones the server enforces, or it was handed those (see rulesForGroup). Until then they
+  // are only what the bundle was built with, which a deploy since can have left behind.
+  static served = false;
+
   // Whether a frame or a batch changed rows since the last render, which computed the derived
   // fields from the rows it saw (see DataLayer.rowsChangedSinceRender).
   static rowsChangedSinceRender = false;
@@ -34,10 +39,10 @@ export default class SyncStream {
   static syncCursor = null;
 
   // What the client tells the server so it can be kept up to date: the wire format this bundle
-  // speaks, the model it was built against, the page it is on, and - for a bundle that checks
-  // permissions - the rules it answers them by. All but the page are baked into the bundle rather
-  // than read from the page, because what they answer is whether THIS JavaScript is stale - a value
-  // the current server put in the page would always agree with it.
+  // speaks, the model it was built against, the page it is on, and the rules it answers permission
+  // checks by. All but the page are baked into the bundle rather than read from the page, because
+  // what they answer is whether THIS JavaScript is stale - a value the current server put in the
+  // page would always agree with it.
   //
   // A greeting asking for everything also marks what this client holds as awaiting the fill.
   static buildGreeting(pageModule) {
@@ -68,11 +73,8 @@ export default class SyncStream {
       protocol_version: sync.protocolVersion,
     };
 
-    // The rules this client holds, which are the bundle's until a server hands it others. A bundle
-    // that checks nothing is shipped no rules, and names none.
-    if (sync.policyHash) {
-      greeting.policy_hash = sync.policyHash;
-    }
+    // The rules this client holds, which are the bundle's until a server hands it others.
+    greeting.policy_hash = sync.policyHash;
 
     // A client arriving for the first time has no place to name, and asks for everything it may
     // see. One coming back names where it got to, and is told only what moved since.
@@ -118,6 +120,8 @@ export default class SyncStream {
   static listen(eventSource) {
     eventSource.addEventListener("sync_deltas", (event) => {
       const frame = JSON.parse(event.data);
+
+      $.served = true;
       const written = $.receiveFrame("sync_deltas", frame);
 
       // Behind memory, and only what the STREAM delivered: the rows this frame wrote, and the
@@ -143,6 +147,8 @@ export default class SyncStream {
     eventSource.addEventListener("sync_resync", (event) => {
       const frame = JSON.parse(event.data);
 
+      $.served = true;
+
       $.receiveFrame("sync_resync", frame);
 
       // The stored rows go with the place that dated them, for the same reason the memory ones
@@ -165,6 +171,8 @@ export default class SyncStream {
 
     eventSource.addEventListener("synced", (event) => {
       const frame = JSON.parse(event.data);
+
+      $.served = true;
 
       $.receiveFrame("synced", frame);
 
@@ -305,18 +313,19 @@ export default class SyncStream {
 
   // The rules the group's stream syncs under, as a frame carries them, for a tab joining it (see
   // Tabs.postState): the ones a server handed this tab, or, when it handed none, this bundle's own
-  // - a server hands over its rules exactly when a bundle's differ from them. None for a bundle
-  // that checks no permissions, which is shipped no rules to hand on.
+  // - a server hands over its rules exactly when a bundle's differ from them, and before anything
+  // else it serves. None before this tab's stream has served it anything: a bundle built before a
+  // deploy would hand on rules the deploy left behind.
   static rulesForGroup() {
     if ($.rules !== null) {
       return $.rules;
     }
 
-    const sync = globalThis.Hologram.sync;
-
-    if (!sync?.policyHash) {
+    if (!$.served) {
       return null;
     }
+
+    const sync = globalThis.Hologram.sync;
 
     return {
       policy_hash: sync.policyHash,

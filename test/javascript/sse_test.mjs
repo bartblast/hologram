@@ -192,7 +192,11 @@ describe("Sse", () => {
     // has to open a stream again for the server to hear about it.
     it("closes the stream and opens a new one carrying the current identity", async () => {
       setDataLayer();
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
 
       sinon
         .stub(Hologram, "pageModule")
@@ -378,7 +382,11 @@ describe("Sse", () => {
     // An app without a data model has no data layer to greet for or to listen with: the stream
     // carries its realtime traffic and nothing else.
     it("greets with nothing and listens for no sync kind without a data layer", async () => {
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
       sinon
         .stub(Hologram, "pageModule")
         .returns(Type.atom("Elixir.MyApp.BoardPage"));
@@ -401,7 +409,11 @@ describe("Sse", () => {
 
     it("opens the EventSource with the sync greeting when the bundle carries one", async () => {
       setDataLayer();
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
       sinon
         .stub(Hologram, "pageModule")
         .returns(Type.atom("Elixir.MyApp.BoardPage"));
@@ -412,7 +424,7 @@ describe("Sse", () => {
 
       sinon.assert.calledOnceWithExactly(
         globalThis.EventSource,
-        "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id&model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1",
+        "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id&model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1&policy_hash=0123456789abcdef",
       );
     });
 
@@ -420,7 +432,11 @@ describe("Sse", () => {
     // is where a client cut off part way through a fill comes back.
     it("marks every held row when it greets with no place", async () => {
       setDataLayer();
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
       sinon
         .stub(Hologram, "pageModule")
         .returns(Type.atom("Elixir.MyApp.BoardPage"));
@@ -437,7 +453,11 @@ describe("Sse", () => {
 
     it("leaves the rows alone when it greets with a place", async () => {
       setDataLayer();
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
       sinon
         .stub(Hologram, "pageModule")
         .returns(Type.atom("Elixir.MyApp.BoardPage"));
@@ -456,7 +476,11 @@ describe("Sse", () => {
     // rows this browser holds rightly. The same goes for a page that has not mounted.
     it("leaves the rows alone for a tab greeting with no sync at all", async () => {
       setDataLayer();
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
       sinon
         .stub(Hologram, "pageModule")
         .returns(Type.atom("Elixir.MyApp.BoardPage"));
@@ -479,7 +503,11 @@ describe("Sse", () => {
     // one that delivered it - a reconnect is exactly when the client needs to say what it has.
     it("opens the EventSource naming the place a previous stream left it at", async () => {
       setDataLayer();
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
       sinon
         .stub(Hologram, "pageModule")
         .returns(Type.atom("Elixir.MyApp.BoardPage"));
@@ -495,7 +523,7 @@ describe("Sse", () => {
 
       sinon.assert.calledWithExactly(
         globalThis.EventSource,
-        "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id&model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1&cursor=Nzc4LjA",
+        "/hologram/sse?instance_id=test-instance-id&handshake_id=abc-handshake-id&model_hash=a3f9c2&page=MyApp.BoardPage&protocol_version=1&policy_hash=0123456789abcdef&cursor=Nzc4LjA",
       );
     });
 
@@ -722,7 +750,11 @@ describe("Sse", () => {
     // the network is worth trying again.
     it("sends the pending batches again when the stream comes back", async () => {
       // A build that ships the data layer carries its sync constants.
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
       setDataLayer();
       stubHandshakeResponse();
 

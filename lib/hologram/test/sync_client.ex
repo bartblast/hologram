@@ -51,8 +51,8 @@ defmodule Hologram.Test.SyncClient do
   handshake, then GET the SSE stream carrying the sync greeting. The greeting's `:model_hash`
   and `:protocol_version` default to this build's own - a test speaking as a stale client
   overrides them - and `:page` names the page the client claims to be on. `:cursor` is the place
-  a returning client hands back, absent for a first visit, and `:policy_hash` the rules a bundle
-  that checks permissions was built with, absent for one that checks none.
+  a returning client hands back, absent for a first visit, and `:policy_hash` the rules a bundle was
+  built with, absent for a client the server is to take as current.
   """
   @spec connect(String.t(), keyword) :: t
   def connect(base_url, opts) do
@@ -86,7 +86,8 @@ defmodule Hologram.Test.SyncClient do
 
   The `:model_hash` and `:protocol_version` default to this build's own, so a client built here
   claims what is true of it. A `:cursor` travels only when given, the same as the browser's
-  first visit, and so does a `:policy_hash`, the same as a bundle that checks no permissions.
+  first visit, and so does a `:policy_hash` - a client naming no rules is served as one holding the
+  current ones.
   """
   @spec greeting_params(keyword) :: keyword
   def greeting_params(opts) do
