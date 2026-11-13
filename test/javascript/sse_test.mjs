@@ -504,6 +504,7 @@ describe("Sse", () => {
     it("opens the EventSource naming the place a previous stream left it at", async () => {
       setDataLayer();
       globalThis.Hologram.sync = {
+        model: {},
         modelHash: "a3f9c2",
         policyHash: "0123456789abcdef",
         protocolVersion: 1,

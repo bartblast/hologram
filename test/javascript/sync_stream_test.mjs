@@ -29,6 +29,7 @@ registerWebApis();
 describe("SyncStream", () => {
   let animationFrames;
   let eventSource;
+  let postingState;
   let originalWindow;
 
   beforeEach(() => {
@@ -65,6 +66,10 @@ describe("SyncStream", () => {
     };
 
     SyncStream.listen(eventSource);
+
+    // What a stream's first frame tells the group (see markServed) is the business of the tests
+    // that ask about it.
+    postingState = sinon.stub(Tabs, "postState");
   });
 
   // Everything a frame can leave behind, so no file that runs after this one starts mid-repaint, on
@@ -511,6 +516,40 @@ describe("SyncStream", () => {
       });
 
       assert.isTrue(SyncStream.served);
+    });
+
+    // A tab that joined before then was handed no rules, and takes them from the state told again.
+    it("tells the group its state again the first time this tab's stream serves it", () => {
+      const marker = {
+        data: JSON.stringify({
+          cursor: null,
+          protocol_version: 1,
+          scope: "page",
+        }),
+      };
+
+      Tabs.name = "hologram.1.a3f9c2.anonymous";
+
+      try {
+        eventSource.listeners.synced(marker);
+        eventSource.listeners.synced(marker);
+      } finally {
+        Tabs.name = null;
+      }
+
+      assert.isTrue(postingState.calledOnce);
+    });
+
+    it("tells nobody when this tab is in no group", () => {
+      eventSource.listeners.synced({
+        data: JSON.stringify({
+          cursor: null,
+          protocol_version: 1,
+          scope: "page",
+        }),
+      });
+
+      assert.isFalse(postingState.called);
     });
 
     it("hands on the rules a server handed this tab", () => {

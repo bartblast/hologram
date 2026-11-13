@@ -121,7 +121,7 @@ export default class SyncStream {
     eventSource.addEventListener("sync_deltas", (event) => {
       const frame = JSON.parse(event.data);
 
-      $.served = true;
+      $.markServed();
       const written = $.receiveFrame("sync_deltas", frame);
 
       // Behind memory, and only what the STREAM delivered: the rows this frame wrote, and the
@@ -147,7 +147,7 @@ export default class SyncStream {
     eventSource.addEventListener("sync_resync", (event) => {
       const frame = JSON.parse(event.data);
 
-      $.served = true;
+      $.markServed();
 
       $.receiveFrame("sync_resync", frame);
 
@@ -172,7 +172,7 @@ export default class SyncStream {
     eventSource.addEventListener("synced", (event) => {
       const frame = JSON.parse(event.data);
 
-      $.served = true;
+      $.markServed();
 
       $.receiveFrame("synced", frame);
 
@@ -186,6 +186,23 @@ export default class SyncStream {
 
       $.tell("synced", frame);
     });
+  }
+
+  // Records that this tab's stream has served it, and the first time, tells the group again what
+  // it knows: a tab that joined before then was handed no rules, since this bundle's own were not
+  // yet known to be the ones the server enforces (see rulesForGroup), and a tab built with others
+  // takes them from this. Only a tab leading a group has a stream that serves it, and a tab in no
+  // group has nobody to tell.
+  static markServed() {
+    if ($.served) {
+      return;
+    }
+
+    $.served = true;
+
+    if (Tabs.name !== null) {
+      Tabs.postState();
+    }
   }
 
   // What a frame does to MEMORY - shared by the stream that delivered it and by a tab that was
