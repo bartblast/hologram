@@ -15,13 +15,16 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Entity.Derived
   alias Hologram.Entity.Model
+  alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Placeholder
   alias Hologram.Query.Registry
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
+  alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
 
   alias Hologram.Test.Fixtures.Component.Module1, as: ComponentModule1
@@ -62,7 +65,13 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module39, as: Entity39
   alias Hologram.Test.Fixtures.Entity.Module4, as: Entity4
   alias Hologram.Test.Fixtures.Entity.Module40, as: Entity40
+  alias Hologram.Test.Fixtures.Entity.Module42, as: Entity42
   alias Hologram.Test.Fixtures.Entity.Module43, as: Entity43
+  alias Hologram.Test.Fixtures.Entity.Module44, as: Entity44
+  alias Hologram.Test.Fixtures.Entity.Module45, as: Entity45
+  alias Hologram.Test.Fixtures.Entity.Module46, as: Entity46
+  alias Hologram.Test.Fixtures.Entity.Module47, as: Entity47
+  alias Hologram.Test.Fixtures.Entity.Module48, as: Entity48
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
@@ -166,15 +175,28 @@ defmodule Hologram.CompilerTest do
     derived_queries: %{},
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
-    permission_checking?: false,
+    policy_hash: nil,
     role_modules: []
   }
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", protocolVersion: 1};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1};/
 
   @tmp_dir Reflection.tmp_dir()
+
+  # The client's model a build bakes for the given entity types, as the client reads it.
+  defp baked_model(entity_types) do
+    sync_constants = %{
+      @empty_sync_constants
+      | entity_types: MapSet.new(entity_types)
+    }
+
+    [_statement, model] =
+      Regex.run(~r/model: (\{.*\}), modelHash/, build_sync_constants_js(sync_constants))
+
+    Jason.decode!(model)
+  end
 
   # Bundles an entry file that runs the given JavaScript, in a tmp dir of the given name, with a
   # js dir of its own, and returns the inputs the bundle recorded. Each file written through
@@ -220,6 +242,12 @@ defmodule Hologram.CompilerTest do
     File.mkdir!(opts[:static_dir])
 
     opts
+  end
+
+  defp decoded_rules(entity_types) do
+    entity_types
+    |> render_rules()
+    |> Jason.decode!()
   end
 
   # What the data layer folds its outputs from, for the given pages, derived the way the compile task
@@ -446,6 +474,18 @@ defmodule Hologram.CompilerTest do
     |> PLT.put(Module2, info)
     |> PLT.put(Module3, info)
     |> PLT.put(Hologram.JS, info)
+  end
+
+  # The given term as a sync frame carries it, decoded.
+  defp serialized(term) do
+    term
+    |> Serializer.serialize!()
+    |> Jason.decode!()
+  end
+
+  # An entry without the members whose terms the runtime script and a sync frame spell differently.
+  defp without_terms(entry) do
+    Map.drop(entry, ["constraints", "defaults"])
   end
 
   defp write_js_input(test_tmp_dir, relative_path, content) do
@@ -2044,7 +2084,14 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "build_sync_constants/3" do
-    setup %{call_graph: call_graph, module_info_plt: module_info_plt} do
+    # A build checking permissions hashes the rules of every entity type, which read the derived
+    # fields' definitions - put where the compile puts them before it derives the constants.
+    setup %{call_graph: call_graph, ir_plt: ir_plt, module_info_plt: module_info_plt} do
+      Reflection.list_entities()
+      |> resolve_derived_definitions(ir_plt)
+      |> Map.fetch!(:definitions)
+      |> Derived.put_definitions()
+
       sync_constants =
         derive_sync_constants(Reflection.list_pages(), call_graph, module_info_plt, [])
 
@@ -2088,7 +2135,7 @@ defmodule Hologram.CompilerTest do
     test "leaves out a type no query reads and no page mentions", %{
       sync_constants: sync_constants
     } do
-      refute MapSet.member?(sync_constants.entity_types, Entity12)
+      refute MapSet.member?(sync_constants.entity_types, Entity10)
     end
 
     test "collects the derived fields those components register as queries", %{
@@ -2103,25 +2150,26 @@ defmodule Hologram.CompilerTest do
       assert sync_constants.derived_queries[PageModule19] == [:ripe]
     end
 
-    # The grant type reaches the model by being CHECKED rather than by being queried - its window
-    # is registered rather than extracted - so a client checking permissions locally would
-    # otherwise hold rows of a type the model never described. Both cases run over one page that
-    # queries no grants, so the flag is the only thing that differs between them.
-    test "names the grant type when a page checks permissions on the client", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      sync_constants =
-        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
-
-      assert MapSet.member?(sync_constants.entity_types, RoleGrant)
-    end
-
-    test "leaves the grant type out when no page checks permissions on the client", %{
+    # The grant type reaches the model by being checked rather than by being queried - its window
+    # is registered rather than extracted - so a client would otherwise hold rows of a type the
+    # model never described. The page queries no grants and checks no permissions, so the user
+    # entity type is the only thing it can come from.
+    test "names the grant type when the data model designates a user entity type", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
       sync_constants = derive_sync_constants([PageModule18], call_graph, module_info_plt, [])
+
+      assert MapSet.member?(sync_constants.entity_types, RoleGrant)
+    end
+
+    # No user entity type, no grant store.
+    test "leaves the grant type out when the data model designates no user entity type",
+         %{call_graph: call_graph, module_info_plt: module_info_plt} do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      sync_constants =
+        derive_sync_constants([PageModule18], call_graph, plt_without_user_entity, [PageModule18])
 
       refute MapSet.member?(sync_constants.entity_types, RoleGrant)
     end
@@ -2130,12 +2178,12 @@ defmodule Hologram.CompilerTest do
     # queried row - so which types get checked is not derivable from the queries, and every
     # policied type's rules ship. What stays out is exactly the types declaring neither a rule nor
     # a role, which is what lets the client read an ABSENT entry as the server's own default deny.
-    test "names every policied type when a page checks permissions on the client", %{
+    # Shipped whether or not a page checks, so any tab can hand its rules to a tab built with others.
+    test "names every policied type, whether or not a page checks permissions", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants =
-        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
+      sync_constants = derive_sync_constants([PageModule18], call_graph, module_info_plt, [])
 
       assert MapSet.member?(sync_constants.entity_types, PolicyEntity)
       refute MapSet.member?(sync_constants.entity_types, Entity4)
@@ -2143,101 +2191,62 @@ defmodule Hologram.CompilerTest do
 
     # Labels declare nothing, but a project's rule reads its labels, and a client answering the rule
     # holds the labels it reads.
-    test "names the type of a set a checked rule reads when a page checks permissions on the client",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      sync_constants =
-        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
+    test "names the type of a set a rule reads", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      sync_constants = derive_sync_constants([PageModule18], call_graph, module_info_plt, [])
 
       assert MapSet.member?(sync_constants.entity_types, LabelPolicyEntity)
     end
 
     # Shelves declare nothing, but a task's rule reads a shelf's cards, and a client follows the
     # rule's source through the shelf.
-    test "names a type a checked rule's set is read through when a page checks permissions on the client",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      sync_constants =
-        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
-
-      assert MapSet.member?(sync_constants.entity_types, ShelfPolicyEntity)
-    end
-
-    test "leaves unqueried policied types out when no page checks permissions on the client", %{
+    test "names a type a rule's set is read through", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
       sync_constants = derive_sync_constants([PageModule18], call_graph, module_info_plt, [])
 
-      refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
-    end
-
-    test "marks the constants as permission-checking when a page checks permissions on the client",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      sync_constants =
-        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
-
-      assert sync_constants.permission_checking?
+      assert MapSet.member?(sync_constants.entity_types, ShelfPolicyEntity)
     end
 
     # A role check validates and expands the role from the type's own declarations, so a type
-    # declaring roles ships to a checking client even when it declares no rule.
-    test "names a type declaring roles and no rule when a page checks permissions on the client",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      sync_constants =
-        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
+    # declaring roles ships even when it declares no rule.
+    test "names a type declaring roles and no rule", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      sync_constants = derive_sync_constants([PageModule18], call_graph, module_info_plt, [])
 
       assert MapSet.member?(sync_constants.entity_types, Entity12)
     end
 
     # A type a rule reads through a relationship declares nothing a check asks about, and the client
     # still needs its model to follow the relationship.
-    test "names a type a checked rule reaches through a relationship", %{
+    test "names a type a rule reaches through a relationship", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants =
-        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
+      sync_constants = derive_sync_constants([PageModule18], call_graph, module_info_plt, [])
 
       assert MapSet.member?(sync_constants.entity_types, Entity1)
     end
 
-    test "leaves an unqueried type declaring roles out when no page checks permissions on the client",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      sync_constants = derive_sync_constants([PageModule18], call_graph, module_info_plt, [])
-
-      refute MapSet.member?(sync_constants.entity_types, Entity12)
-    end
-
-    test "names the global roles when a page checks permissions on the client", %{
+    # A tab hands a tab of another build the entries a server would, which include every type the
+    # derived fields and inverses of its types lead to - Module48 declares no rule and nothing
+    # reaches it but Module49's inverse.
+    test "names a type an inverse of a policied type leads to", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
     } do
-      sync_constants =
-        derive_sync_constants([PageModule18], call_graph, module_info_plt, [PageModule18])
+      sync_constants = derive_sync_constants([PageModule18], call_graph, module_info_plt, [])
 
+      assert MapSet.member?(sync_constants.entity_types, Entity48)
+    end
+
+    test "names the global roles", %{sync_constants: sync_constants} do
       assert sync_constants.role_modules == [RoleModule1, RoleModule2]
-    end
-
-    test "leaves the global roles out when no page checks permissions on the client", %{
-      call_graph: call_graph,
-      module_info_plt: module_info_plt
-    } do
-      sync_constants = derive_sync_constants([PageModule18], call_graph, module_info_plt, [])
-
-      assert sync_constants.role_modules == []
-    end
-
-    # No user entity type, no grant store: a page checking permissions has nothing to check them
-    # against, so neither the grant type nor the policies ship.
-    test "leaves the grant type out when a page checks permissions and the data model designates no user entity type",
-         %{call_graph: call_graph, module_info_plt: module_info_plt} do
-      plt_without_user_entity = without_user_entity(module_info_plt)
-
-      sync_constants =
-        derive_sync_constants([PageModule18], call_graph, plt_without_user_entity, [PageModule18])
-
-      refute sync_constants.permission_checking?
-      refute MapSet.member?(sync_constants.entity_types, RoleGrant)
-      refute MapSet.member?(sync_constants.entity_types, PolicyEntity)
     end
 
     test "records no model hash when the module info PLT records no entity type" do
@@ -2245,7 +2254,7 @@ defmodule Hologram.CompilerTest do
                derived_queries: %{},
                entity_types: MapSet.new(),
                model_hash: nil,
-               permission_checking?: false,
+               policy_hash: nil,
                role_modules: []
              }
     end
@@ -2262,12 +2271,25 @@ defmodule Hologram.CompilerTest do
 
       assert sync_constants.model_hash == expected
     end
+
+    # Whatever the pages reach, like the model hash: the running app compares it with the rules of
+    # every entity type it enforces.
+    test "records the hash of every entity type's rules", %{sync_constants: sync_constants} do
+      assert sync_constants.policy_hash == Policy.hash(Reflection.list_entities())
+    end
   end
 
   describe "build_sync_constants_js/1" do
+    test "renders the policy hash the sync constants carry" do
+      sync_constants = %{@empty_sync_constants | policy_hash: "my_policy_hash"}
+
+      assert build_sync_constants_js(sync_constants) ==
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}};/
+    end
+
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}};/
     end
 
     test "renders the derived fields each component registers as queries" do
@@ -2277,7 +2299,7 @@ defmodule Hologram.CompilerTest do
       }
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}};/
     end
 
     # A client asked whether a user holds a global role refuses an unknown one by these keys and
@@ -2286,7 +2308,7 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}};/
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -4306,8 +4328,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4354,8 +4375,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4387,8 +4407,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4419,8 +4438,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4456,8 +4474,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4501,8 +4518,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4559,8 +4575,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: MapSet.new([BakedBoard, BakedCard, RoleGrant]),
-          permission_checking?: true
+        | entity_types: MapSet.new([BakedBoard, BakedCard, RoleGrant])
       }
 
       js =
@@ -4603,8 +4618,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4645,8 +4659,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4675,8 +4688,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4710,8 +4722,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4747,8 +4758,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4777,8 +4787,7 @@ defmodule Hologram.CompilerTest do
 
       sync_constants = %{
         @empty_sync_constants
-        | entity_types: entity_types,
-          permission_checking?: true
+        | entity_types: entity_types
       }
 
       js =
@@ -4799,60 +4808,9 @@ defmodule Hologram.CompilerTest do
              )
     end
 
-    # A build whose clients check nothing carries no rules for them to read - and an empty policy
-    # grants nothing, which is the answer a client that cannot check should give.
-    test "injects an empty policy when no page checks permissions on the client", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([PolicyEntity])}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"policy":{},"relationships":/)
-    end
-
-    # The grant type reaches the model by two routes - the check that needs it, and any ordinary
-    # query that reads grant rows - so its presence cannot stand in for the check. A build that
-    # read it that way would hand every client the whole authorization model because one component
-    # listed grants.
-    test "injects an empty policy when a query names the grant type and no page checks", %{
-      ir_plt: ir_plt,
-      runtime_mfas: runtime_mfas
-    } do
-      entity_types = MapSet.new([PolicyEntity, RoleGrant])
-      sync_constants = %{@empty_sync_constants | entity_types: entity_types}
-
-      js =
-        build_runtime_js(
-          runtime_mfas,
-          ir_plt,
-          PLT.start(),
-          MapSet.new(),
-          [],
-          build_sync_constants_js(sync_constants),
-          js_dir: @js_dir,
-          subsystems: [:data_layer]
-        )
-
-      assert String.contains?(js, ~s/"policy":{},"relationships":/)
-      refute String.contains?(js, ~s/"predicates":/)
-    end
-
     # The grant type has no server-only attributes and its relationships resolve to the app's
     # designated user entity, so it bakes like any other type once the model names it - by the
-    # check that needs it or by a query that reads grant rows, the entry being the same either
-    # way. What the CHECK gates is the policy, which is a separate case.
+    # user entity type or by a query that reads grant rows, the entry being the same either way.
     test "injects the grant type's model entry once the model names it", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
@@ -9482,6 +9440,80 @@ defmodule Hologram.CompilerTest do
 
     test "returns no module when every module is kept", %{ir_plt: ir_plt} do
       assert prune_ir_plt(ir_plt, [Module1, Module2, Module3]) == []
+    end
+  end
+
+  describe "render_rules/1" do
+    # A client swaps these in for the rules its bundle was built with, so an entry reads the way the
+    # bundle spells it.
+    test "renders the entry of a type declaring rules the way a build bakes it" do
+      put_derived_definitions([Entity42])
+
+      label = "Hologram.Test.Fixtures.Entity.Module42"
+
+      assert without_terms(decoded_rules([Entity42])[label]) ==
+               without_terms(baked_model([Entity42])[label])
+    end
+
+    # The runtime script spells them as JavaScript, and a sync frame carries JSON.
+    test "serializes the terms among the defaults" do
+      entry = decoded_rules([Entity13])["Hologram.Test.Fixtures.Entity.Module13"]
+
+      assert entry["defaults"] == %{"public" => serialized(false)}
+    end
+
+    test "serializes the terms among the constraints" do
+      entry = decoded_rules([Entity47])["Hologram.Test.Fixtures.Entity.Module47"]
+
+      assert entry["constraints"] == %{
+               "count" => %{"min" => serialized(1)},
+               "email" => %{
+                 "format" => %{
+                   "opts" => serialized([:dotall, {:newline, :anycrlf}]),
+                   "source" => "@"
+                 },
+                 "optional" => true
+               }
+             }
+    end
+
+    # A client boxing a row of a type the bundle never held reads the type's entry.
+    test "renders a type an inverse of a rendered type leads to" do
+      rules = decoded_rules([Entity44, Entity46])
+
+      assert Map.keys(rules) == [
+               "Hologram.Test.Fixtures.Entity.Module44",
+               "Hologram.Test.Fixtures.Entity.Module46"
+             ]
+    end
+
+    # Rules a deploy added can read a type the client's bundle never held, and the client needs its
+    # entry to hold the rows the rule reads and follow the path to them.
+    test "renders a type declaring no rule or role that a rule reads through a relationship" do
+      label = "Hologram.Test.Fixtures.Entity.Module44"
+
+      assert without_terms(decoded_rules([Entity44, Entity45])[label]) ==
+               without_terms(baked_model([Entity44, Entity45])[label])
+    end
+
+    # A type declaring no rule and no role is one the client reads as the server's default deny, by
+    # finding no entry for it.
+    test "leaves out a type declaring no rule and no role that no rule reads" do
+      assert decoded_rules([Entity4]) == %{}
+    end
+
+    # The grant store's rules are the framework's, baked into every build whose model has one.
+    test "renders the grant store's entry when the model holds it" do
+      label = "Hologram.Auth.RoleGrant"
+      rules = decoded_rules([RoleGrant])
+
+      assert Map.keys(rules) == [label]
+      assert without_terms(rules[label]) == without_terms(baked_model([RoleGrant])[label])
+    end
+
+    # A model with no user entity type has no grant store, and a client of it holds no grant rows.
+    test "leaves the grant store out of a model without one" do
+      assert decoded_rules([]) == %{}
     end
   end
 

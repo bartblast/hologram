@@ -21,10 +21,11 @@ import Type from "../../type.mjs";
 // DB.create refuses a job type and points here.
 //
 // Not ported: validate_creatable!/2, the server's early refusal of a job type declaring no allow
-// lines under an acting user. The client CANNOT tell that state apart - a build that checks no
-// permissions bakes an empty policy for every type, exactly as a type declaring none does - so the
-// check would refuse jobs that are perfectly creatable. The server's AccessDeniedError arrives as
-// the batch's rejection instead, which is what 2.7 says about every policy question.
+// lines under an acting user. The server's AccessDeniedError arrives as the batch's rejection
+// instead, which is what 2.7 says about every policy question.
+//
+// TODO: every build now bakes its rules, so an empty policy here is a job type declaring no allow
+// lines and nothing else - the refusal can be ported (#1420).
 function applyClaim(job, claim) {
   if (claim === null) {
     return job;

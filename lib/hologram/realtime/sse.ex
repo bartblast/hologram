@@ -7,6 +7,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.DB.Oplog
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
+  alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -16,9 +17,11 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Runtime.ReplicaIdentity
   alias Hologram.Runtime.Serializer
   alias Hologram.Runtime.Session
+  alias Hologram.StaleModelError
   alias Hologram.Sync.Catchup
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Handshake, as: SyncHandshake
+  alias Hologram.Sync.Rules
   alias Hologram.Sync.Session, as: SyncSession
 
   # Read only when the host app enables the test seams - see maybe_delay_attach/1.
@@ -163,6 +166,10 @@ defmodule Hologram.Realtime.SSE do
   end
 
   # Public so tests can read what a client said without standing up a stream to say it on.
+  #
+  # The rules are the ones the client holds now: those this stream handed it, once it has, rather
+  # than those its bundle greeted with. A change of identity starts syncing again from the same
+  # request, and a client already told the current rules is not told them twice.
   @doc false
   @spec greeting(Plug.Conn.t()) :: map
   def greeting(conn) do
@@ -175,6 +182,7 @@ defmodule Hologram.Realtime.SSE do
           cursor: params["cursor"],
           model_hash: model_hash,
           page: page_module(page),
+          policy_hash: conn.assigns[:hologram_sync_policy_hash] || params["policy_hash"],
           protocol_version: parse_protocol_version(protocol_version),
           replica_id: params["replica_id"],
           replica_token: params["replica_token"]
@@ -283,6 +291,15 @@ defmodule Hologram.Realtime.SSE do
       {:sync_resync, reason} ->
         id = System.unique_integer([:positive, :monotonic])
         chunk_data = Frame.encode_resync_envelope(id, reason)
+
+        case Plug.Conn.chunk(conn, chunk_data) do
+          {:ok, conn} -> {:cont, conn}
+          {:error, _reason} -> {:halt, conn}
+        end
+
+      {:sync_rules, policy_hash, rules} ->
+        id = System.unique_integer([:positive, :monotonic])
+        chunk_data = Frame.encode_rules_envelope(id, policy_hash, rules)
 
         case Plug.Conn.chunk(conn, chunk_data) do
           {:ok, conn} -> {:cont, conn}
@@ -501,6 +518,54 @@ defmodule Hologram.Realtime.SSE do
           :ignore -> {:cont, conn}
         end
     end
+  end
+
+  # Public so tests can start syncing under a hold without standing up a stream to start it on.
+  #
+  # Everything starting a sync session reads of the data model, read before anything is sent: the
+  # rules to hand a client built with others, what a returning client missed - or why it is to
+  # start over - and what each rule reads besides its own row. A hold can begin after the
+  # handshake found none, and every one of these refuses to read under it, so meeting one answers
+  # `:held` rather than raising - and with nothing sent yet, the client is told nothing it would
+  # have to take back when it is started again.
+  #
+  # A compile can also come and go between the handshake and these reads, held and released before
+  # any of them looked. The reads are then of rules other than the ones the handshake compared the
+  # client's with, and a returning client would resume under the old ones. So the rules are asked
+  # for once more after the reads, and other rules answer `:rules_changed`, for the start to be made
+  # again from the handshake.
+  @doc false
+  @spec read_sync_start(String.t() | nil, term | nil, String.t(), boolean, boolean) ::
+          {:ok, map} | :held | :rules_changed
+  def read_sync_start(cursor, user_id, policy_hash, stale_rules?, resume?) do
+    rules = if stale_rules?, do: Rules.rendered()
+
+    # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
+    # answers FALSE when it does not resume, and a session reads "no gap" from nil alone -
+    # anything else and it sets about replaying something it cannot walk.
+    {gap, grants_then, resync_reason} =
+      if resume?, do: gap(cursor, user_id, policy_hash), else: {nil, nil, nil}
+
+    # What a rule reads besides its own row, so a row the gap never names can be judged again
+    # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
+    # is sent every row it may see, so there is nothing to reach back for.
+    #
+    # Read from the runtime's cache rather than derived per resume: deriving grows with the
+    # model. A compile drops the cache, so a live reload is picked up by the next client that
+    # resumes.
+    edges = if gap, do: Edges.index()
+
+    start = %{
+      edges: edges,
+      gap: gap,
+      grants_then: grants_then,
+      resync_reason: resync_reason,
+      rules: rules
+    }
+
+    if Policy.hash() == policy_hash, do: {:ok, start}, else: :rules_changed
+  rescue
+    StaleModelError -> :held
   end
 
   # Public so tests can check what a greeting's identity is worth without standing up a stream.
@@ -856,6 +921,24 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
+  defp maybe_send_resync(nil), do: :ok
+
+  defp maybe_send_resync(reason) do
+    send(self(), {:sync_resync, reason})
+
+    :ok
+  end
+
+  # Remembered on the stream once sent, so the greeting a later start reads names the rules the
+  # client holds now (see greeting/1).
+  defp maybe_send_rules(conn, _policy_hash, nil = _rules), do: conn
+
+  defp maybe_send_rules(conn, policy_hash, rules) do
+    send(self(), {:sync_rules, policy_hash, rules})
+
+    Plug.Conn.assign(conn, :hologram_sync_policy_hash, policy_hash)
+  end
+
   # The session ids are handed back unchanged: only the sync session moves.
   defp maybe_start_held_sync(conn, session_id, user_id, {:held, resume?}) do
     {conn, sync_session} = start_syncing(conn, user_id, resume?)
@@ -908,17 +991,12 @@ defmodule Hologram.Realtime.SSE do
   # either told what it missed, or told to let go of what it holds - and is then filled the same
   # way a first arrival is. Deciding it here rather than in the session keeps the session a reader
   # of rounds and nothing else, and puts the answer beside the reload notice it stands next to.
-  defp gap(nil, _user_id), do: {nil, nil}
+  defp gap(nil, _user_id, _policy_hash), do: {nil, nil, nil}
 
-  defp gap(cursor, user_id) do
-    case Catchup.gap(cursor, user_id) do
-      {:ok, effects, grants_then} ->
-        {effects, grants_then}
-
-      {:full_resync, reason} ->
-        send(self(), {:sync_resync, reason})
-
-        {nil, nil}
+  defp gap(cursor, user_id, policy_hash) do
+    case Catchup.gap(cursor, user_id, policy_hash) do
+      {:ok, effects, grants_then} -> {effects, grants_then, nil}
+      {:full_resync, reason} -> {nil, nil, reason}
     end
   end
 
@@ -961,6 +1039,37 @@ defmodule Hologram.Realtime.SSE do
     Process.send_after(self(), :refresh_receipts, interval_ms)
   end
 
+  # Ahead of anything the session sends: the rules first, so the client answers by the rules the
+  # rows that follow were judged under from the first render they reach, then the instruction to
+  # let go of what it holds, when it has to.
+  defp start_session(conn, greeting, user_id, page, policy_hash, start) do
+    conn = maybe_send_rules(conn, policy_hash, start.rules)
+    :ok = maybe_send_resync(start.resync_reason)
+
+    replica_id = verified_replica_id(greeting, conn, user_id)
+
+    # Read HERE rather than in the session, so the database work of starting a stream stays in
+    # the process that already does it - and so the session is a state machine over what it is
+    # handed rather than a reader of its own.
+    applied_seq = replica_id && Record.highest_confirmed_seq(replica_id)
+
+    {:ok, session} =
+      SyncSession.start_link(
+        actor_user_id: user_id,
+        applied_seq: applied_seq,
+        client: self(),
+        edges: start.edges,
+        fill_place: {Oplog.current_xmin(), 0},
+        gap: start.gap,
+        grants_then: start.grants_then,
+        page: page,
+        policy_hash: policy_hash,
+        replica_id: replica_id
+      )
+
+    {conn, session}
+  end
+
   # The session is linked, so it goes when the connection does - what a client holds is only
   # worth keeping while there is a client to tell about it. Handed back so the connection can
   # reach it later: who the client IS can change while the stream stays open, and the session
@@ -972,42 +1081,26 @@ defmodule Hologram.Realtime.SSE do
     greeting = greeting(conn)
 
     case SyncHandshake.check(greeting) do
-      {:sync, page, cursor} ->
-        # Named rather than written inline as `resume? && gap(cursor, user_id)`: that answers
-        # FALSE when it does not resume, and a session reads "no gap" from nil alone - anything
-        # else and it sets about replaying something it cannot walk.
-        {gap, grants_then} = if resume?, do: gap(cursor, user_id), else: {nil, nil}
+      # The rules the handshake compared the client's with are the ones this session judges rows
+      # by, read once for the frame handing them over, the door a returning client passes and the
+      # places the session hands over: read again for each, a live reload between two reads could
+      # let a client resume under the old rules and be handed places vouching for the new ones.
+      # They are asked for once more after the start reads, as a check that nothing moved them.
+      {:sync, page, cursor, policy_hash, stale_rules?} ->
+        case read_sync_start(cursor, user_id, policy_hash, stale_rules?, resume?) do
+          {:ok, start} ->
+            start_session(conn, greeting, user_id, page, policy_hash, start)
 
-        # What a rule reads besides its own row, so a row the gap never names can be judged again
-        # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
-        # is sent every row it may see, so there is nothing to reach back for.
-        #
-        # Read from the runtime's cache rather than derived per resume: deriving grows with the
-        # model. A compile drops the cache, so a live reload is picked up by the next client that
-        # resumes.
-        edges = if gap, do: Edges.index()
+          # A hold began after the handshake looked: the client waits for the compile like one
+          # arriving under it, and nothing was sent it yet that it would have to unlearn.
+          :held ->
+            {conn, {:held, resume?}}
 
-        replica_id = verified_replica_id(greeting, conn, user_id)
-
-        # Read HERE rather than in the session, so the database work of starting a stream stays in
-        # the process that already does it - and so the session is a state machine over what it is
-        # handed rather than a reader of its own.
-        applied_seq = replica_id && Record.highest_confirmed_seq(replica_id)
-
-        {:ok, session} =
-          SyncSession.start_link(
-            actor_user_id: user_id,
-            applied_seq: applied_seq,
-            client: self(),
-            edges: edges,
-            fill_place: {Oplog.current_xmin(), 0},
-            gap: gap,
-            grants_then: grants_then,
-            page: page,
-            replica_id: replica_id
-          )
-
-        {conn, session}
+          # The rules changed after the handshake, and nothing was sent yet: the start is made
+          # again from the handshake, under the rules the build enforces now.
+          :rules_changed ->
+            start_syncing(conn, user_id, resume?)
+        end
 
       {:reload, reason} ->
         send(self(), {:sync_reload, reason})

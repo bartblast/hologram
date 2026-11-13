@@ -38,6 +38,13 @@ defmodule Hologram.Sync.Session do
   back to a place its rows are known to cover. Without it a batch already routed but not yet
   delivered would fall outside every claim a frame makes.
 
+  `:policy_hash` is the hash of the rules this session judges rows by (see
+  `Hologram.Policy.hash/0`), taken once where the session is started and stamped on every place a
+  frame hands over: a place is a claim about what the client holds, and what it holds is what these
+  rules let it see. Taken once rather than read per frame, because the rules can change under a
+  running session - a live reload does that - and a place stamped with the new rules would vouch
+  for rows the old ones decided.
+
   `:replica_id` is the browser's own copy of the data, when the client presented one this stream
   could vouch for - it is what tells this session's frames which of the effects they carry are
   that browser's own doing. Absent for a client that presented none, and then no frame names a
@@ -99,6 +106,7 @@ defmodule Hologram.Sync.Session do
       page_windows: MapSet.new(),
       pending: MapSet.new(),
       places: %{},
+      policy_hash: Keyword.fetch!(opts, :policy_hash),
       replica_id: Keyword.get(opts, :replica_id),
       resuming: gap != nil,
       shift: %{appeared: %{}, vanished: %{}},
@@ -303,9 +311,13 @@ defmodule Hologram.Sync.Session do
   end
 
   # A returning client holds verdicts it was told before this session began, on rows the gap may
-  # never name - and a deploy may have changed what they decide, since policies reach no model hash
-  # and a changed clause is a new key. So every row of a type with a deciding quantifier that the
-  # catch-up did not already hand over with its verdicts is told them, after the rows themselves.
+  # never name. A gap under other rules never gets here - it is sent everything again - but two
+  # things can still leave those verdicts stale with nothing in the gap saying so: a client cut off
+  # after the last batch of an earlier catch-up, before its verdicts went out, comes back with an
+  # empty gap, and a deploy that starts checking permissions in the browser changes no rule while
+  # the rows it was sent carry no verdicts at all. So every row of a type with a deciding quantifier
+  # that the catch-up did not already hand over with its verdicts is told them, after the rows
+  # themselves.
   defp tell_verdicts(state) do
     state.verdict_rows
     |> Map.drop(Map.keys(state.told_verdicts))
@@ -393,7 +405,7 @@ defmodule Hologram.Sync.Session do
     if holds_a_whole_pot?(state) do
       %{seq: seq, tx: tx} = List.last(effects)
 
-      Cursor.encode(tx, seq)
+      Cursor.encode(tx, seq, state.policy_hash)
     end
   end
 
@@ -424,7 +436,7 @@ defmodule Hologram.Sync.Session do
 
       case place do
         nil -> nil
-        {tx, seq} -> Cursor.encode(tx, seq)
+        {tx, seq} -> Cursor.encode(tx, seq, state.policy_hash)
       end
     end
   end

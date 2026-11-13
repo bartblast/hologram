@@ -374,10 +374,28 @@ defmodule Hologram.Realtime.SSETest do
                cursor: nil,
                model_hash: "a3f9c2",
                page: MyApp.BoardPage,
+               policy_hash: nil,
                protocol_version: 1,
                replica_id: nil,
                replica_token: nil
              }
+    end
+
+    test "reads the rules a bundle checking permissions was built with" do
+      conn = Plug.Test.conn(:get, sync_query_string("&policy_hash=0123456789abcdef"))
+
+      assert greeting(conn).policy_hash == "0123456789abcdef"
+    end
+
+    # A change of identity starts syncing again from the same request, and a client this stream
+    # already handed the current rules is not handed them twice.
+    test "reads the rules this stream handed the client over the ones its bundle greeted with" do
+      conn =
+        :get
+        |> Plug.Test.conn(sync_query_string("&policy_hash=0123456789abcdef"))
+        |> Plug.Conn.assign(:hologram_sync_policy_hash, "fedcba9876543210")
+
+      assert greeting(conn).policy_hash == "fedcba9876543210"
     end
 
     test "reads the replica a client presents" do
@@ -608,6 +626,18 @@ defmodule Hologram.Realtime.SSETest do
 
       assert updated_conn.resp_body =~ "event: sync_resync\nid: "
       assert updated_conn.resp_body =~ ~s["reason":"retention"]
+    end
+  end
+
+  describe "process_message/4 on {:sync_rules, policy_hash, rules}" do
+    test "pushes a sync_rules SSE event" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_rules, "0123456789abcdef", ~s({"policies":{}})})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ "event: sync_rules\nid: "
+      assert updated_conn.resp_body =~ ~s("rules":{"policies":{}})
     end
   end
 

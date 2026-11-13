@@ -435,6 +435,24 @@ defmodule Hologram.Sync.FrameTest do
     end
   end
 
+  describe "encode_rules_envelope/3" do
+    # The rules arrive rendered, so they are carried as JSON rather than as a string holding it.
+    test "wraps the rules and their hash in a sync_rules SSE event envelope" do
+      rules = ~s({"derived":{},"inverses":{},"policies":{}})
+
+      assert "event: sync_rules\nid: 42\ndata: " <> data =
+               encode_rules_envelope(42, "0123456789abcdef", rules)
+
+      assert String.ends_with?(data, "\n\n")
+
+      assert Jason.decode!(data) == %{
+               "policy_hash" => "0123456789abcdef",
+               "protocol_version" => 1,
+               "rules" => %{"derived" => %{}, "inverses" => %{}, "policies" => %{}}
+             }
+    end
+  end
+
   describe "encode_synced_envelope/3" do
     test "wraps the completeness marker in a synced SSE event envelope" do
       payload = %{cursor: nil, protocol_version: 1, scope: :page}

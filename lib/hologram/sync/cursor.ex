@@ -1,7 +1,9 @@
 defmodule Hologram.Sync.Cursor do
   @moduledoc false
 
-  # Where a client got to in the oplog, as a string it stores and hands back without reading.
+  # Where a client got to in the oplog, and under which rules, as a string it stores and hands back
+  # without reading. The rules ride along because a deploy can change them without moving a row:
+  # what a client holds at a place is what those rules let it see, not what the current ones do.
   # Opaque by convention, not by secrecy: what a place is made of can change without the protocol
   # changing because the client never interprets one, not because it could not. Nothing here hides
   # the place or depends on its being hidden.
@@ -23,25 +25,29 @@ defmodule Hologram.Sync.Cursor do
   @max_tx 18_446_744_073_709_551_615
 
   @doc """
-  Returns the cursor naming the given place in the log.
+  Returns the cursor naming the given place in the log, under the rules with the given policy hash
+  (see `Hologram.Policy.hash/1`) - the rules the rows a client holds there were judged by. A place
+  is only worth resuming from under the rules that decided what it holds.
   """
-  @spec encode(non_neg_integer, non_neg_integer) :: String.t()
-  def encode(tx, seq) do
-    "#{tx}.#{seq}"
+  @spec encode(non_neg_integer, non_neg_integer, String.t()) :: String.t()
+  def encode(tx, seq, policy_hash) do
+    "#{tx}.#{seq}.#{policy_hash}"
   end
 
   @doc """
-  Returns the place the given cursor names, or `:error` for one this build cannot read - which
-  includes a place no row of the log could carry, since the columns it would be compared against
-  have ceilings and an Elixir integer does not.
+  Returns the place the given cursor names and the policy hash it was judged under, or `:error` for
+  one this build cannot read - which includes a place no row of the log could carry, since the
+  columns it would be compared against have ceilings and an Elixir integer does not, and a cursor
+  naming no rules, as one written before cursors named them does.
   """
-  @spec decode(term) :: {:ok, non_neg_integer, non_neg_integer} | :error
+  @spec decode(term) :: {:ok, non_neg_integer, non_neg_integer, String.t()} | :error
   def decode(cursor) when is_binary(cursor) do
-    with [tx, seq] <- String.split(cursor, "."),
+    with [tx, seq, policy_hash] <- String.split(cursor, "."),
          {tx, ""} <- Integer.parse(tx),
          {seq, ""} <- Integer.parse(seq),
-         true <- in_range?(tx, @max_tx) and in_range?(seq, @max_seq) do
-      {:ok, tx, seq}
+         true <- in_range?(tx, @max_tx) and in_range?(seq, @max_seq),
+         true <- policy_hash?(policy_hash) do
+      {:ok, tx, seq, policy_hash}
     else
       _unreadable -> :error
     end
@@ -50,4 +56,6 @@ defmodule Hologram.Sync.Cursor do
   def decode(_not_a_cursor), do: :error
 
   defp in_range?(value, ceiling), do: value >= 0 and value <= ceiling
+
+  defp policy_hash?(policy_hash), do: String.match?(policy_hash, ~r/\A[0-9a-f]+\z/)
 end

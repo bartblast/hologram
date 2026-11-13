@@ -390,6 +390,48 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // A server enforcing rules other than the ones the bundle was built with hands them over, with
+    // the derived fields they read, and the check answers by those from then on - the field as the
+    // new build defines it, not as this tab last computed it.
+    it("answers by rules and derived fields the server handed over in place of the bundle's", () => {
+      defineModel({read: [rule({predicates: [["label", "==", "Plans!"]]})]});
+
+      const plans = document({title: "Plans"});
+
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), plans),
+        Type.boolean(true),
+      );
+
+      Model.replaceRules({
+        [DOCUMENT]: {
+          derived: {
+            label: {
+              definition: {concat: [{name: "title"}, {value: "?"}]},
+              kind: "scalar",
+              type: "string",
+              values: null,
+            },
+          },
+          inverses: {},
+          operations: [],
+          policy: {read: [rule({predicates: [["label", "==", "Notes?"]]})]},
+        },
+      });
+
+      // The bundle's rule granted this one, and the new rule doesn't.
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), plans),
+        Type.boolean(false),
+      );
+
+      // Granted only by the new rule over the field as the new build defines it.
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({title: "Notes"})),
+        Type.boolean(true),
+      );
+    });
+
     it("answers a per-role operation keyed by a tuple", () => {
       defineModel({"grant_role:viewer": [rule({to: [["own", ["editor"]]]})]});
 
@@ -2750,9 +2792,9 @@ describe("Elixir_Hologram_Auth", () => {
   });
 
   // A case this side alone has - the reference always holds every type. An entry absent from a
-  // permission-checking build is a type declaring NO policy (the build ships an entry for every
-  // policied type, checked or not), and a policy-less type is denied by the server's own
-  // default - so no is the server's answer, not a fallback.
+  // build is a type declaring NO policy (the build ships an entry for every policied type, whether
+  // a page reaches it or not), and a policy-less type is denied by the server's own default - so
+  // no is the server's answer, not a fallback.
   describe("a type the model does not carry", () => {
     it("denies without asking the model for an entry", () => {
       const unmodelled = Type.map([

@@ -107,6 +107,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Policy.Edges
   alias Hologram.Policy.Validator, as: PolicyValidator
   alias Hologram.Reflection
+  alias Hologram.Sync.Rules
 
   # How long an empty lock file is respected before it is presumed abandoned
   # (see the empty-content clause of validate_lock_file_and_proceed_accordingly/2).
@@ -1355,8 +1356,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
 
     # The runtime bundle sets the client's data layer constants, so what they render to is one of
-    # its inputs: a policy that changed moves the JavaScript while the constants stay the same (see
-    # Hologram.Compiler.build_sync_constants_js/1).
+    # its inputs: the model they render reads what the entity types declare now, so the two are
+    # built together (see Hologram.Compiler.build_sync_constants_js/1).
     sync_constants_js = Compiler.build_sync_constants_js(sync_constants)
 
     # Both dumps once everything above passed, so that a derivation that raises leaves the dumps of
@@ -1761,6 +1762,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     Model.put_facts(entity_types, role_modules, user_entity)
     Policy.reset_model_facts_cache()
     Edges.reset_index_cache()
+    Rules.reset_cache()
   end
 
   # The components of the build. Overridable so this project's own test suite can compile: it

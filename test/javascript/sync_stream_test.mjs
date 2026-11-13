@@ -29,6 +29,7 @@ registerWebApis();
 describe("SyncStream", () => {
   let animationFrames;
   let eventSource;
+  let postingState;
   let originalWindow;
 
   beforeEach(() => {
@@ -65,6 +66,10 @@ describe("SyncStream", () => {
     };
 
     SyncStream.listen(eventSource);
+
+    // What a stream's first frame tells the group (see markServed) is the business of the tests
+    // that ask about it.
+    postingState = sinon.stub(Tabs, "postState");
   });
 
   // Everything a frame can leave behind, so no file that runs after this one starts mid-repaint, on
@@ -78,6 +83,8 @@ describe("SyncStream", () => {
     GlobalRegistry.set("syncStaleReason", null);
     SyncStream.renderScheduled = false;
     SyncStream.rowsChangedSinceRender = false;
+    SyncStream.rules = null;
+    SyncStream.served = false;
     SyncStream.syncCursor = null;
   });
 
@@ -273,11 +280,16 @@ describe("SyncStream", () => {
     });
 
     it("tells the server what the bundle speaks, what it was built against, and where it is", () => {
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
 
       assert.deepStrictEqual(SyncStream.buildGreeting(pageModule), {
         model_hash: "a3f9c2",
         page: "MyApp.BoardPage",
+        policy_hash: "0123456789abcdef",
         protocol_version: 1,
       });
     });
@@ -287,7 +299,11 @@ describe("SyncStream", () => {
     it("says nothing for a tab that does not lead its group", () => {
       // The bundle DOES carry sync here, or this would answer nothing for a reason that has
       // nothing to do with which tab leads.
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
 
       Tabs.leader = false;
 
@@ -299,7 +315,11 @@ describe("SyncStream", () => {
     });
 
     it("says nothing before the page has mounted", () => {
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
 
       assert.deepStrictEqual(SyncStream.buildGreeting(null), {});
     });
@@ -307,19 +327,29 @@ describe("SyncStream", () => {
     // A client coming back names where it got to, and is told what moved since instead of
     // everything it may see.
     it("names the place the client has been brought up to", () => {
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
       SyncStream.syncCursor = "Nzc4LjA";
 
       assert.deepStrictEqual(SyncStream.buildGreeting(pageModule), {
         cursor: "Nzc4LjA",
         model_hash: "a3f9c2",
         page: "MyApp.BoardPage",
+        policy_hash: "0123456789abcdef",
         protocol_version: 1,
       });
     });
 
     it("names no place for a client arriving with nothing", () => {
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
 
       assert.notProperty(SyncStream.buildGreeting(pageModule), "cursor");
     });
@@ -327,7 +357,11 @@ describe("SyncStream", () => {
     // The pair the browser is presenting, unchanged - what earns this client frames that say how
     // far its own writes are in.
     it("presents the replica identity the browser holds", () => {
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
       Replica.adopt({id: "r1", token: "SFMyNTY.stated"});
 
       const greeting = SyncStream.buildGreeting(pageModule);
@@ -339,7 +373,11 @@ describe("SyncStream", () => {
     // An id is only worth the statement beside it, so half a pair is presented as none - the
     // server reads an id with no statement as no identity at all.
     it("presents neither half when the browser holds no identity", () => {
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
 
       const greeting = SyncStream.buildGreeting(pageModule);
 
@@ -348,7 +386,11 @@ describe("SyncStream", () => {
     });
 
     it("presents neither half for an id with no statement beside it", () => {
-      globalThis.Hologram.sync = {modelHash: "a3f9c2", protocolVersion: 1};
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
       Replica.adopt({id: "r1", token: null});
 
       const greeting = SyncStream.buildGreeting(pageModule);
@@ -444,6 +486,108 @@ describe("SyncStream", () => {
 
       assert.isNull(SyncStream.syncCursor);
       assert.equal(animationFrames.length, 0);
+    });
+  });
+
+  describe("rulesForGroup()", () => {
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+      SyncStream.rules = null;
+    });
+
+    // A bundle built before a deploy would hand on rules the deploy left behind.
+    it("hands on nothing before this tab's stream has served it", () => {
+      globalThis.Hologram.sync = {
+        model: {},
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      assert.isNull(SyncStream.rulesForGroup());
+    });
+
+    it("counts a frame of this tab's own stream as being served", () => {
+      eventSource.listeners.synced({
+        data: JSON.stringify({
+          cursor: null,
+          protocol_version: 1,
+          scope: "page",
+        }),
+      });
+
+      assert.isTrue(SyncStream.served);
+    });
+
+    // A tab that joined before then was handed no rules, and takes them from the state told again.
+    it("tells the group its state again the first time this tab's stream serves it", () => {
+      const marker = {
+        data: JSON.stringify({
+          cursor: null,
+          protocol_version: 1,
+          scope: "page",
+        }),
+      };
+
+      Tabs.name = "hologram.1.a3f9c2.anonymous";
+
+      try {
+        eventSource.listeners.synced(marker);
+        eventSource.listeners.synced(marker);
+      } finally {
+        Tabs.name = null;
+      }
+
+      assert.isTrue(postingState.calledOnce);
+    });
+
+    it("tells nobody when this tab is in no group", () => {
+      eventSource.listeners.synced({
+        data: JSON.stringify({
+          cursor: null,
+          protocol_version: 1,
+          scope: "page",
+        }),
+      });
+
+      assert.isFalse(postingState.called);
+    });
+
+    it("hands on the rules a server handed this tab", () => {
+      const frame = {
+        policy_hash: "fedcba9876543210",
+        protocol_version: 1,
+        rules: {},
+      };
+
+      globalThis.Hologram.sync = {model: {}, policyHash: "0123456789abcdef"};
+      SyncStream.rules = frame;
+
+      assert.deepStrictEqual(SyncStream.rulesForGroup(), frame);
+    });
+
+    // A server hands over its rules exactly when a bundle's differ from them, so a tab it served
+    // and handed none answers by the ones the group syncs under.
+    it("hands on this bundle's own rules when a server served it and handed it none", () => {
+      SyncStream.served = true;
+
+      globalThis.Hologram.sync = {
+        model: {"MyApp.Doc": {attributes: {id: "uuid"}, policy: {}}},
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      assert.deepStrictEqual(SyncStream.rulesForGroup(), {
+        policy_hash: "0123456789abcdef",
+        protocol_version: 1,
+        rules: {
+          "MyApp.Doc": {
+            attributes: {id: "uuid"},
+            constraints: {},
+            defaults: {},
+            policy: {},
+          },
+        },
+      });
     });
   });
 
@@ -831,6 +975,80 @@ describe("SyncStream", () => {
     });
   });
 
+  describe("sync_rules event", () => {
+    const DOC = "MyApp.Doc";
+
+    const policy = {
+      read: [{predicates: [["archived", "==", false]], to: null, via: null}],
+    };
+
+    const envelope = () =>
+      JSON.stringify({
+        policy_hash: "fedcba9876543210",
+        protocol_version: 1,
+        rules: {
+          [DOC]: {derived: {}, inverses: {}, operations: [], policy},
+        },
+      });
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [DOC]: {
+            attributes: {archived: "boolean", id: "uuid"},
+            derived: {},
+            inverses: {},
+            operations: [],
+            policy: {},
+            relationships: {},
+          },
+        },
+        policyHash: "0123456789abcdef",
+      };
+    });
+
+    afterEach(() => {
+      delete globalThis.Hologram.sync;
+    });
+
+    // A tab joining the group answers by the rules the group syncs under, which the stream handed
+    // over to this tab alone.
+    it("keeps the frame for the tabs joining later", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      assert.deepStrictEqual(SyncStream.rules, JSON.parse(envelope()));
+    });
+
+    it("takes the rules the server enforces", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      assert.deepStrictEqual(
+        globalThis.Hologram.sync.model[DOC].policy,
+        policy,
+      );
+    });
+
+    // So a reconnect greets as current and is not handed them again.
+    it("answers by the hash the rules go by from then on", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      assert.equal(globalThis.Hologram.sync.policyHash, "fedcba9876543210");
+    });
+
+    // What a permission check answers can change with them, so the page is drawn again.
+    it("asks for a repaint", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      assert.equal(animationFrames.length, 1);
+    });
+
+    it("leaves the page where it is", () => {
+      eventSource.listeners.sync_rules({data: envelope()});
+
+      sinon.assert.notCalled(globalThis.window.location.reload);
+    });
+  });
+
   describe("synced event", () => {
     const envelope = (scope, cursor = null) =>
       JSON.stringify({cursor: cursor, protocol_version: 1, scope: scope});
@@ -927,27 +1145,45 @@ describe("SyncStream", () => {
       assert.isTrue(persisting.calledBefore(posting));
     });
 
-    it("hands over a completeness marker, a resync and a stale-bundle notice too", () => {
+    it("hands over a completeness marker, a resync, a stale-bundle notice and the rules too", () => {
+      globalThis.Hologram.sync = {model: {}, policyHash: "0123456789abcdef"};
+
       const posting = sinon.stub(Tabs, "post");
 
-      eventSource.listeners.synced({
-        data: JSON.stringify({cursor: null, protocol_version: 1, scope: "all"}),
-      });
+      try {
+        eventSource.listeners.synced({
+          data: JSON.stringify({
+            cursor: null,
+            protocol_version: 1,
+            scope: "all",
+          }),
+        });
 
-      eventSource.listeners.sync_resync({
-        data: JSON.stringify({
-          protocol_version: 1,
-          reason: "cursor_unreadable",
-        }),
-      });
+        eventSource.listeners.sync_resync({
+          data: JSON.stringify({
+            protocol_version: 1,
+            reason: "cursor_unreadable",
+          }),
+        });
 
-      eventSource.listeners.sync_reload({
-        data: JSON.stringify({protocol_version: 1, reason: "model_hash"}),
-      });
+        eventSource.listeners.sync_reload({
+          data: JSON.stringify({protocol_version: 1, reason: "model_hash"}),
+        });
+
+        eventSource.listeners.sync_rules({
+          data: JSON.stringify({
+            policy_hash: "fedcba9876543210",
+            protocol_version: 1,
+            rules: {},
+          }),
+        });
+      } finally {
+        delete globalThis.Hologram.sync;
+      }
 
       assert.deepStrictEqual(
         posting.args.map(([message]) => message.event),
-        ["synced", "sync_resync", "sync_reload"],
+        ["synced", "sync_resync", "sync_reload", "sync_rules"],
       );
     });
   });

@@ -2,8 +2,10 @@
 
 import Bitstring from "./bitstring.mjs";
 import Calendar from "./calendar.mjs";
+import Deserializer from "./deserializer.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import Serializer from "./serializer.mjs";
 import SortKey from "./sort_key.mjs";
 import Type from "./type.mjs";
 
@@ -441,8 +443,62 @@ export default class Model {
     );
   }
 
+  // Takes the model entries a server enforcing other rules than this bundle was built with hands
+  // over (see Hologram.Compiler.render_rules/1): the entry of every type a build bakes whatever the
+  // pages reach, so a type it leaves out declares no rule and no role.
+  //
+  // A type this client holds takes the entry's rules, and its operations, derived fields and
+  // inverses join the ones the bundle baked - added or redefined, never taken away, because the
+  // bundle's own code can still ask about an operation or read a field the new build dropped. An
+  // operation left without rules is denied, which is what the new build answers for it. A type the
+  // client holds that the entries leave out keeps everything but its rules, which go, the server's
+  // default deny. A type the client does not hold is taken whole: rules a deploy added can read a
+  // type the bundle never carried, and a derived field redefined can lead to one, whose rows arrive
+  // with them. Its defaults and constraints arrive serialized, since a frame carries JSON where the
+  // bundle spells their terms as JavaScript, and are taken in as the bundle would have baked them.
+  // Every other part of a held entry stays the bundle's - the model is the same, which is what the
+  // handshake checked before sending these.
+  static replaceRules(entries) {
+    const model = globalThis.Hologram.sync.model;
+
+    for (const [type, held] of Object.entries(model)) {
+      const entry = entries[type];
+
+      model[type] = entry
+        ? {
+            ...held,
+            derived: {...held.derived, ...entry.derived},
+            inverses: {...held.inverses, ...entry.inverses},
+            operations: [
+              ...new Set([...(held.operations ?? []), ...entry.operations]),
+            ].sort(),
+            policy: entry.policy,
+          }
+        : {...held, policy: {}};
+    }
+
+    for (const [type, entry] of Object.entries(entries)) {
+      model[type] ??= Model.#deserializedTerms(entry);
+    }
+
+    Model.reset();
+  }
+
   static reset() {
     Model.#entries = {};
+  }
+
+  // The model entries this client holds, in the shape a server hands them over in (see
+  // Hologram.Compiler.render_rules/1): the terms among the defaults and constraints serialized,
+  // where the rest is the data it already is - so a tab of this browser built with other rules can
+  // take them in through replaceRules().
+  static serializedEntries() {
+    return Object.fromEntries(
+      Object.entries(globalThis.Hologram.sync.model).map(([type, entry]) => [
+        type,
+        Model.#serializedTerms(entry),
+      ]),
+    );
   }
 
   // A datetime as the wire spells it, from a count of milliseconds - six fractional digits, the
@@ -724,6 +780,86 @@ export default class Model {
     }
 
     return [];
+  }
+
+  // A constraint's term serialized the way a frame carries it, from the one the bundle baked.
+  static #serializedConstraint(option, value) {
+    switch (option) {
+      case "format":
+        return {...value, opts: Serializer.serialize(value.opts, "client")};
+
+      case "max":
+      case "min":
+        return Serializer.serialize(value, "client");
+
+      default:
+        return value;
+    }
+  }
+
+  // The given entry with the terms among its defaults and constraints serialized.
+  static #serializedTerms(entry) {
+    const defaults = Object.entries(entry.defaults ?? {}).map(
+      ([name, value]) => [name, Serializer.serialize(value, "client")],
+    );
+
+    const constraints = Object.entries(entry.constraints ?? {}).map(
+      ([name, options]) => [
+        name,
+        Object.fromEntries(
+          Object.entries(options).map(([option, value]) => [
+            option,
+            Model.#serializedConstraint(option, value),
+          ]),
+        ),
+      ],
+    );
+
+    return {
+      ...entry,
+      constraints: Object.fromEntries(constraints),
+      defaults: Object.fromEntries(defaults),
+    };
+  }
+
+  // A constraint's term as the bundle bakes it, from the serialized one a frame carries.
+  static #deserializedConstraint(option, value) {
+    switch (option) {
+      case "format":
+        return {...value, opts: Deserializer.deserialize(value.opts)};
+
+      case "max":
+      case "min":
+        return Deserializer.deserialize(value);
+
+      default:
+        return value;
+    }
+  }
+
+  // The given entry with the terms among its defaults and constraints as the bundle bakes them.
+  static #deserializedTerms(entry) {
+    const defaults = Object.entries(entry.defaults ?? {}).map(
+      ([name, value]) => [name, Deserializer.deserialize(value)],
+    );
+
+    const constraints = Object.entries(entry.constraints ?? {}).map(
+      ([name, options]) => [
+        name,
+        Object.fromEntries(
+          Object.entries(options).map(([option, value]) => [
+            option,
+            Model.#deserializedConstraint(option, value),
+          ]),
+        ),
+      ],
+    );
+
+    return {
+      ...entry,
+      constraints: Object.fromEntries(constraints),
+      defaults: Object.fromEntries(defaults),
+    };
   }
 
   static #field(struct, name) {

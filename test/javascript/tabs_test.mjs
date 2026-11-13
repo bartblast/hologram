@@ -130,13 +130,27 @@ describe("Tabs", () => {
 
   const stubs = () => ({onLead: () => {}, onMessage: () => {}});
 
+  // A group is only ever formed by a bundle with a data model, whose rules a tab hands on. What an
+  // earlier file left there goes back afterwards.
+  let originalSync;
+
   beforeEach(() => {
     openChannels = [];
     releases = [];
+
+    originalSync = globalThis.Hologram.sync;
+
+    globalThis.Hologram.sync = {
+      model: {},
+      policyHash: "0123456789abcdef",
+      protocolVersion: 1,
+    };
   });
 
   afterEach(async () => {
     await Tabs.leave();
+
+    globalThis.Hologram.sync = originalSync;
 
     releases.forEach((release) => release());
     openChannels.forEach((channel) => channel.close());
@@ -361,8 +375,54 @@ describe("Tabs", () => {
         kind: "state",
         page: "MyApp.TodosPage",
         replica: {id: "r-group", token: "statement-group"},
+        rules: null,
         synced: ["page"],
       });
+    });
+
+    // A tab whose bundle was current when its stream connected is handed no rules, and a tab
+    // joining it with an older bundle still needs the ones the group syncs under.
+    it("hands over this bundle's own rules when the server handed this tab none", () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      globalThis.Hologram.sync = {
+        model: {"MyApp.Doc": {policy: {}}},
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      SyncStream.served = true;
+
+      try {
+        Tabs.postState();
+      } finally {
+        SyncStream.served = false;
+      }
+
+      assert.deepStrictEqual(posting.firstCall.args[0].rules, {
+        policy_hash: "0123456789abcdef",
+        protocol_version: 1,
+        rules: {"MyApp.Doc": {constraints: {}, defaults: {}, policy: {}}},
+      });
+    });
+
+    it("hands over the rules the server handed this tab in place of its bundle's", () => {
+      const posting = sinon.stub(Tabs, "post");
+      const rules = {
+        policy_hash: "fedcba9876543210",
+        protocol_version: 1,
+        rules: {},
+      };
+
+      SyncStream.rules = rules;
+
+      try {
+        Tabs.postState();
+      } finally {
+        SyncStream.rules = null;
+      }
+
+      assert.deepStrictEqual(posting.firstCall.args[0].rules, rules);
     });
   });
 
@@ -552,6 +612,52 @@ describe("Tabs", () => {
       });
 
       assert.equal(SyncStream.syncCursor, "place-2");
+    });
+
+    // The group's rows were judged under the rules its stream was handed, so a tab whose bundle
+    // answers by others takes those.
+    it("takes the rules the group syncs under when its bundle's are others", () => {
+      const rules = {
+        policy_hash: "fedcba9876543210",
+        protocol_version: 1,
+        rules: {},
+      };
+
+      globalThis.Hologram.sync = {policyHash: "0123456789abcdef"};
+
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        rules,
+        synced: [],
+      });
+
+      sinon.assert.calledOnceWithExactly(
+        SyncStream.receiveFrame,
+        "sync_rules",
+        rules,
+      );
+    });
+
+    it("keeps its bundle's rules when they are the ones the group syncs under", () => {
+      globalThis.Hologram.sync = {policyHash: "fedcba9876543210"};
+
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        rules: {
+          policy_hash: "fedcba9876543210",
+          protocol_version: 1,
+          rules: {},
+        },
+        synced: [],
+      });
+
+      sinon.assert.notCalled(SyncStream.receiveFrame);
     });
 
     it("takes no scope for a page this tab is not on", () => {

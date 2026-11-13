@@ -320,6 +320,44 @@ defmodule HologramFeatureTests.PoliciesTest do
     |> assert_text(css("#pinnable_memos"), ~r/^own_memo,shared_memo$/)
   end
 
+  # A tab built with other rules than the server enforces - here, one whose pin rule admitted no
+  # memo - is handed the server's when its stream connects, and answers by them from the next
+  # render, without reloading. The tab is made stale by hand: its pin rule emptied and its hash
+  # changed, which is what a bundle from before a deploy that widened the rule looks like.
+  feature "answers by the rules a server enforcing other ones hands over", %{session: session} do
+    %{body: "shared_memo", shared: true}
+    |> Memo.new()
+    |> DB.create!()
+
+    session =
+      session
+      |> visit(Page2)
+      |> assert_text(css("#pinnable_memos"), ~r/^shared_memo$/)
+
+    execute_script(session, """
+    const sync = globalThis.Hologram.sync;
+    sync.model["HologramFeatureTests.Entities.Memo"].policy.pin = [];
+    sync.policyHash = "0123456789abcdef0123456789abcdef";
+    """)
+
+    # A row arriving repaints the page, which shows the emptied rule at work before the server says
+    # anything.
+    %{body: "second_memo", shared: true}
+    |> Memo.new()
+    |> DB.create!()
+
+    session
+    |> assert_text(css("#memos"), ~r/^second_memo,shared_memo$/)
+    |> assert_text(css("#pinnable_memos"), ~r/^$/)
+    |> mark_this_page_load()
+
+    simulate_sse_disconnect(current_instance_id(session))
+
+    session
+    |> assert_text(css("#pinnable_memos"), ~r/^second_memo,shared_memo$/)
+    |> assert_same_page_load()
+  end
+
   # The bookings whose guests fit their capacity - charlie exactly. The browser checks the rule
   # again over its own rows once they land, so the page the server sent is read as well: it
   # carries the answer the server's evaluator gave.

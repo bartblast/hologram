@@ -8,14 +8,25 @@ import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
+import Model from "./model.mjs";
 import Replica from "./replica.mjs";
 import Tabs from "./tabs.mjs";
 
-// The sync half of the realtime stream: what the client greets the server with, the four sync
+// The sync half of the realtime stream: what the client greets the server with, the five sync
 // kinds the stream delivers, and what a frame does to memory - shared with the tabs that are
 // handed a frame by the tab holding the stream.
 export default class SyncStream {
   static renderScheduled = false;
+
+  // The last rules a server handed this client in place of its bundle's, as the frame carried
+  // them - kept so a tab joining the group answers by the rules the group syncs under (see
+  // rulesForGroup). Null while the bundle's own are current.
+  static rules = null;
+
+  // Whether this tab's own stream has served it sync since the page loaded - so its bundle's rules
+  // are the ones the server enforces, or it was handed those (see rulesForGroup). Until then they
+  // are only what the bundle was built with, which a deploy since can have left behind.
+  static served = false;
 
   // Whether a frame or a batch changed rows since the last render, which computed the derived
   // fields from the rows it saw (see DataLayer.rowsChangedSinceRender).
@@ -28,9 +39,10 @@ export default class SyncStream {
   static syncCursor = null;
 
   // What the client tells the server so it can be kept up to date: the wire format this bundle
-  // speaks, the model it was built against, and the page it is on. The first two are baked into
-  // the bundle rather than read from the page, because what they answer is whether THIS
-  // JavaScript is stale - a value the current server put in the page would always agree with it.
+  // speaks, the model it was built against, the page it is on, and the rules it answers permission
+  // checks by. All but the page are baked into the bundle rather than read from the page, because
+  // what they answer is whether THIS JavaScript is stale - a value the current server put in the
+  // page would always agree with it.
   //
   // A greeting asking for everything also marks what this client holds as awaiting the fill.
   static buildGreeting(pageModule) {
@@ -60,6 +72,9 @@ export default class SyncStream {
       page: pageModuleName,
       protocol_version: sync.protocolVersion,
     };
+
+    // The rules this client holds, which are the bundle's until a server hands it others.
+    greeting.policy_hash = sync.policyHash;
 
     // A client arriving for the first time has no place to name, and asks for everything it may
     // see. One coming back names where it got to, and is told only what moved since.
@@ -96,15 +111,17 @@ export default class SyncStream {
     return greeting;
   }
 
-  // The four sync kinds carry JSON rather than the JavaScript every other kind on this
+  // The five sync kinds carry JSON rather than the JavaScript every other kind on this
   // stream is written in - a delta holds the values a database stores, and spelling those as
   // source costs ten times the bytes on the payload a whole-app fill is mostly made of.
   //
-  // Each of the four hands its MEMORY work to receiveFrame and does its own STORING here,
+  // Each of the five hands its MEMORY work to receiveFrame and does its own STORING here,
   // which is what separates what a frame means from who received it.
   static listen(eventSource) {
     eventSource.addEventListener("sync_deltas", (event) => {
       const frame = JSON.parse(event.data);
+
+      $.markServed();
       const written = $.receiveFrame("sync_deltas", frame);
 
       // Behind memory, and only what the STREAM delivered: the rows this frame wrote, and the
@@ -130,6 +147,8 @@ export default class SyncStream {
     eventSource.addEventListener("sync_resync", (event) => {
       const frame = JSON.parse(event.data);
 
+      $.markServed();
+
       $.receiveFrame("sync_resync", frame);
 
       // The stored rows go with the place that dated them, for the same reason the memory ones
@@ -140,8 +159,20 @@ export default class SyncStream {
       $.tell("sync_resync", frame);
     });
 
+    // Nothing is stored: the rules arrive on every connection that greets with older ones, and a
+    // page load brings the bundle they came from.
+    eventSource.addEventListener("sync_rules", (event) => {
+      const frame = JSON.parse(event.data);
+
+      $.receiveFrame("sync_rules", frame);
+
+      $.tell("sync_rules", frame);
+    });
+
     eventSource.addEventListener("synced", (event) => {
       const frame = JSON.parse(event.data);
+
+      $.markServed();
 
       $.receiveFrame("synced", frame);
 
@@ -157,9 +188,26 @@ export default class SyncStream {
     });
   }
 
+  // Records that this tab's stream has served it, and the first time, tells the group again what
+  // it knows: a tab that joined before then was handed no rules, since this bundle's own were not
+  // yet known to be the ones the server enforces (see rulesForGroup), and a tab built with others
+  // takes them from this. Only a tab leading a group has a stream that serves it, and a tab in no
+  // group has nobody to tell.
+  static markServed() {
+    if ($.served) {
+      return;
+    }
+
+    $.served = true;
+
+    if (Tabs.name !== null) {
+      Tabs.postState();
+    }
+  }
+
   // What a frame does to MEMORY - shared by the stream that delivered it and by a tab that was
   // handed it by another tab, since a frame means the same thing wherever it arrives from.
-  // Answers the rows a deltas frame wrote, and nothing for the other three kinds.
+  // Answers the rows a deltas frame wrote, and nothing for the other four kinds.
   //
   // What is deliberately NOT here is the storing. Which caller writes the frame down is a question
   // about ROLES rather than about frames: one tab of a browser holds the stream and stores what it
@@ -240,6 +288,21 @@ export default class SyncStream {
 
         return null;
 
+      // The rules the server enforces, handed over because this bundle was built with others, on a
+      // deploy that changed only policies: taken in place, so permission checks answer by them from
+      // the next render, without throwing away what the person was doing. The hash they go by is
+      // what this client greets with from then on.
+      case "sync_rules":
+        $.rules = frame;
+
+        Model.replaceRules(frame.rules);
+
+        globalThis.Hologram.sync.policyHash = frame.policy_hash;
+
+        $.scheduleRender();
+
+        return null;
+
       // The place a client that was filled and then left alone would otherwise never get. A
       // deltas frame carries none until the pot is whole, and once it is whole a quiet app
       // produces no further frame at all - so without this the client would hold everything it
@@ -263,6 +326,29 @@ export default class SyncStream {
 
         return null;
     }
+  }
+
+  // The rules the group's stream syncs under, as a frame carries them, for a tab joining it (see
+  // Tabs.postState): the ones a server handed this tab, or, when it handed none, this bundle's own
+  // - a server hands over its rules exactly when a bundle's differ from them, and before anything
+  // else it serves. None before this tab's stream has served it anything: a bundle built before a
+  // deploy would hand on rules the deploy left behind.
+  static rulesForGroup() {
+    if ($.rules !== null) {
+      return $.rules;
+    }
+
+    if (!$.served) {
+      return null;
+    }
+
+    const sync = globalThis.Hologram.sync;
+
+    return {
+      policy_hash: sync.policyHash,
+      protocol_version: sync.protocolVersion,
+      rules: Model.serializedEntries(),
+    };
   }
 
   // One render per animation frame, however many frames arrive in between: a fill lands as a

@@ -29,6 +29,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
+  alias Hologram.Runtime.Serializer
   alias Hologram.Sync.Frame
 
   # The declaration options a write is judged against, which is why they are the ones baked into
@@ -162,7 +163,7 @@ defmodule Hologram.Compiler do
           derived_queries: %{module => [atom]},
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
-          permission_checking?: boolean,
+          policy_hash: String.t() | nil,
           role_modules: list(module)
         }
 
@@ -483,8 +484,7 @@ defmodule Hologram.Compiler do
 
   Whether the app has a grant store at all is not asked here: a data model with no user entity
   type has none - the framework's grant entity joins the data model only with one - and what
-  registers the grants window checks that where it reads this list (see `build_page_windows/3`
-  and `build_sync_constants/3`).
+  registers the grants window checks that where it reads this list (see `build_page_windows/3`).
   """
   @spec pages_checking_permissions([{module, page_reach}]) :: list(module)
   def pages_checking_permissions(reach_by_page) do
@@ -499,8 +499,9 @@ defmodule Hologram.Compiler do
   store to check them against, or false otherwise - from what the data layer keeps of each page's
   reach (see `build_kept_page_reach/3`) and the given module info PLT.
 
-  What it gates is build-wide: the rules and roles the client is compiled with, and the related
-  rows a checking client's windows download beside the rows its queries return.
+  What it gates is build-wide: the related rows a checking client's windows download beside the
+  rows its queries return, and the server's verdicts its rows carry. The rules and roles ship
+  with every build that has a data model (see `build_sync_constants/3`).
   """
   @spec permission_checking?(%{module => kept_page_reach}, PLT.t()) :: boolean
   def permission_checking?(reach_by_page, module_info_plt) do
@@ -2306,7 +2307,8 @@ defmodule Hologram.Compiler do
   @doc """
   Returns what the client's data layer is compiled with, derived from what the data layer keeps of
   each page's reach (see `build_kept_page_reach/3`) and the registered queries of the components
-  the pages reach (see `extract_component_queries/3`). Nothing is extracted or walked here.
+  the pages reach (see `extract_component_queries/3`). Nothing is extracted or walked here, beyond
+  the rules every entity type declares, which the policy hash is taken over.
 
   `:entity_types` are the types a client can ever hold or mention - every window's own type and
   everything it includes, plus every entity type the pages' client code mentions. A client
@@ -2318,27 +2320,33 @@ defmodule Hologram.Compiler do
   keyed by component - the fields the client answers from its database rather than computing a
   value of.
 
-  When any of the pages checks permissions on the client and the given module info PLT records a
-  user entity type (`:permission_checking?`), the grant type joins the entity types: those clients
-  hold grant rows, and a row of a type the model does not name cannot be read back at all. No query
-  names that type - the grants window is registered rather than extracted - so it is added here
-  rather than derived.
+  When the given module info PLT records a user entity type, the grant type joins the entity
+  types: a client holds grant rows, and a row of a type the model does not name cannot be read back
+  at all. No query names that type - the grants window is registered rather than extracted - so it
+  is added here rather than derived.
 
-  Every entity type declaring a policy or a role joins them too: a check's argument is whatever a
+  Every entity type declaring a policy or a role joins them too, with every type those types' rules
+  read through relationships and every type the derived fields holding rows and the inverses of all
+  of these lead to, whether or not a page checks permissions. A check's argument is whatever a
   template passes - a constructed struct as often as a queried row, `can?(user, :create, %Task{})`
   being the ordinary spelling of a create check - so which types get checked is not derivable from
   the queries. Shipping every such type's rules and roles is what lets the client answer every
   check the way the server would - a role check validates and expands the role from the type's
-  own declarations, rules or none. What is left out is exactly the types declaring neither, which
-  is what lets the client read an ABSENT entry as the server's own default deny.
+  own declarations, rules or none. What is left out is exactly the types declaring neither and
+  led to by none, which is what lets the client read an ABSENT entry as the server's own default
+  deny. And every build ships them, rather than only one whose pages check, so that any tab of a
+  browser can hand its rules to a tab built with other ones (see `render_rules/1`).
 
-  `:role_modules` are the project's global role modules when the clients check permissions, and
-  none otherwise: a client asking whether a user holds a global role needs every one of them to
-  refuse an unknown one and to expand the one asked about.
+  `:role_modules` are the project's global role modules: a client asking whether a user holds a
+  global role needs every one of them to refuse an unknown one and to expand the one asked about.
 
   `:model_hash` is the hash of the project's data model, of every entity type and global role the
   module info PLT records, whatever the pages reach. It is nil when the PLT records no entity type:
   the application declares no data model.
+
+  `:policy_hash` is the hash of the rules of those same entity types (see `Hologram.Policy.hash/1`),
+  nil with the model hash. A client greets with it, and a server running other rules sends it the
+  ones it enforces.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
@@ -2358,12 +2366,6 @@ defmodule Hologram.Compiler do
     # One listing, from the module info PLT, for the mentions, the checked set and the model hash.
     all_entity_types = Reflection.list_entities(module_info_plt)
     role_modules = Reflection.list_roles(module_info_plt)
-
-    # Rules and roles are baked only when some page checks permissions, and then for every type
-    # declaring a rule or a role, reached or not. Trimming them to the reached types would save at
-    # most about 0.5 KB gzipped on the feature test app, and a type that reaches the client as data
-    # the compiler cannot see would be denied there while the server allows it.
-    permission_checking? = permission_checking?(reach_by_page, module_info_plt)
 
     # A page mentions an entity type however it spells the mention: `%Task{}` compiles to a call
     # to `Task.__struct__/1`, `Task.new(...)` calls an MFA of `Task`, and `Entity.new(Task, ...)`
@@ -2391,24 +2393,24 @@ defmodule Hologram.Compiler do
 
     reached_entity_types = MapSet.union(queried_entity_types, mentioned_entity_types)
 
+    # Rules and roles are baked for every type declaring a rule or a role, reached or not, and for
+    # the types those lead to - the set a server hands a client built with other rules (see
+    # render_rules/1), so a tab of this build can hand a tab of another the same entries the server
+    # would. Trimming them to the reached types would save at most about 0.5 KB gzipped on the
+    # feature test app, and a type that reaches the client as data the compiler cannot see would be
+    # denied there while the server allows it.
     entity_types =
-      if permission_checking? do
-        reached_entity_types
-        |> MapSet.put(RoleGrant)
-        |> MapSet.union(checked_entity_types(all_entity_types))
-      else
-        reached_entity_types
-      end
+      reached_entity_types
+      |> MapSet.union(checked_entity_types(all_entity_types))
+      |> put_grant_type(all_entity_types)
+      |> rules_entity_types()
 
-    # The flag is carried rather than recovered from the type set: a component query reading grant
-    # rows puts the type there too, and a build that bakes every policy because someone LISTED
-    # grants would hand each client the whole authorization model to read for nothing.
     %{
       derived_queries: derived_queries(component_modules, component_queries),
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
-      permission_checking?: permission_checking?,
-      role_modules: if(permission_checking?, do: role_modules, else: [])
+      policy_hash: policy_hash(all_entity_types),
+      role_modules: role_modules
     }
   end
 
@@ -2416,8 +2418,8 @@ defmodule Hologram.Compiler do
   Builds the JavaScript statement that sets the client's data layer constants,
   `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/3`): the
   derived fields whose function builds a query, the global roles with the role modules carrying
-  each, the model of the entity types the client holds, the hash of the project's data model, and
-  the sync protocol version.
+  each, the model of the entity types the client holds, the hash of the project's data model, the
+  hash of the rules it was rendered with, and the sync protocol version.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2432,14 +2434,15 @@ defmodule Hologram.Compiler do
   bundle sync?" check would pass on a bundle that never syncs.
 
   This is NOT the same as the build's own `:entity_types` being empty, which says only that no
-  page reaches a query and no page checks permissions on the client. Such an app HAS a database
+  page reaches a query, no type declares a rule or a role, and the model has no user entity type. Such an app HAS a database
   and will answer a greeting, so its bundle keeps saying so: the client greets, its session
   opens with no windows, and its model is empty because nothing syncs yet - not because nothing
   can.
 
   The model is rendered from what the entity types declare when this is called, which is why the
-  compile task keeps the statement with the runtime bundle it built: a policy that changed moves
-  the JavaScript while the sync constants stay the same.
+  compile task keeps the statement with the runtime bundle it built, and builds the constants and
+  the statement together: the rules the model renders are the ones the policy hash was taken over
+  only while nothing between the two moved them.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_js_1/README.md
   """
@@ -2448,13 +2451,14 @@ defmodule Hologram.Compiler do
     if sync_constants.model_hash == nil do
       ~s/globalThis.Hologram.sync = null;/
     else
-      model =
-        render_entity_model(sync_constants.entity_types, sync_constants.permission_checking?)
+      model = render_entity_model(sync_constants.entity_types)
 
       derived_queries = render_derived_queries(sync_constants.derived_queries)
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
-      ~s/globalThis.Hologram.sync = {derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", protocolVersion: #{Frame.protocol_version()}};/
+      policy_hash = Jason.encode!(sync_constants.policy_hash)
+
+      ~s/globalThis.Hologram.sync = {derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}};/
     end
   end
 
@@ -2620,6 +2624,38 @@ defmodule Hologram.Compiler do
     Enum.each(dropped_modules, &PLT.delete(ir_plt, &1))
 
     dropped_modules
+  end
+
+  @doc """
+  Renders, as a JSON object keyed by label, the client's model entry of every entity type a build
+  bakes whatever the pages reach, out of the given ones - those declaring a rule or a role, the
+  types their rules read through relationships, and the grant store when the model has one - and of
+  every type the derived fields and inverses of those entries lead to, each the way that build
+  bakes it, but for the terms among its defaults and constraints, which are serialized (see
+  `Hologram.Runtime.Serializer`) where the runtime script spells them as JavaScript.
+
+  What a server sends a client whose bundle was built with other rules but the same model, so it
+  answers permission checks the way the server does without reloading. A whole entry rather than
+  its rules alone, because rules a deploy added can read a type the client's bundle never held, and
+  a derived field it redefined can lead to one. A type left out of the checked ones declares no
+  rule and no role, which is the server's own default deny.
+  """
+  @spec render_rules(list(module)) :: String.t()
+  def render_rules(entity_types) do
+    entity_types
+    |> checked_entity_types()
+    |> put_grant_type(entity_types)
+    |> rules_entity_types()
+    |> Enum.sort()
+    |> Enum.map(fn entity_type ->
+      entry =
+        entity_type
+        |> entity_model_members(&Serializer.serialize!/1)
+        |> render_json_object()
+
+      {Codec.encode_enum_value(entity_type), entry}
+    end)
+    |> render_json_object()
   end
 
   @doc """
@@ -4108,6 +4144,22 @@ defmodule Hologram.Compiler do
     put_compared_module_info(plt, module, old_info, new_info)
   end
 
+  # The hash of the rules of the given entity types, or nil for a project that declares no entity
+  # type, the way its model hash is.
+  defp policy_hash([]), do: nil
+
+  defp policy_hash(entity_types), do: Policy.hash(entity_types)
+
+  # The grant store, when the given entity types of a data model hold it - which they do exactly
+  # when it designates a user entity type.
+  defp put_grant_type(entity_types, all_entity_types) do
+    if RoleGrant in all_entity_types do
+      MapSet.put(entity_types, RoleGrant)
+    else
+      entity_types
+    end
+  end
+
   # $-prefixed entries are the framework's own ($key, event bindings), never something the author
   # declared with prop/3, so they are not props as far as a usage is concerned.
   defp prop_entries(props) do
@@ -4260,7 +4312,7 @@ defmodule Hologram.Compiler do
 
   defp static_prop_value(_value_dom), do: :unknown
 
-  # The types a client checking permissions can be asked about: those declaring a rule, and those
+  # The types a permission check can ask about: those declaring a rule, and those
   # declaring a role, since a role check validates and expands the role from the type's own
   # declarations - and every type those rules read rows of through relationships. RoleGrant's
   # policy is framework-supplied rather than declared, so its empty __policies__ does not exclude
@@ -4272,6 +4324,25 @@ defmodule Hologram.Compiler do
       |> MapSet.new()
 
     MapSet.union(checked_types, related_checked_entity_types(checked_types))
+  end
+
+  # The type of the rows the given derived field declaration holds, if it holds rows.
+  defp derived_row_types({_name, [target], _opts}), do: [target]
+
+  defp derived_row_types({_name, type, _opts}) do
+    if Reflection.alias?(type), do: [type], else: []
+  end
+
+  # The types the derived fields holding rows and the inverses of the given entity type lead to.
+  defp led_to_entity_types(entity_type) do
+    derived_targets = Enum.flat_map(entity_type.__derived__(), &derived_row_types/1)
+
+    inverse_targets =
+      Enum.map(entity_type.__inverse_relationships__(), fn {name, _type, _opts} ->
+        Entity.inverse_relationship(entity_type, name).target
+      end)
+
+    derived_targets ++ inverse_targets
   end
 
   # Read gives nil: not an Elixir module.
@@ -4350,6 +4421,23 @@ defmodule Hologram.Compiler do
       Enum.flat_map(edges, &edge_entity_types(checked_type, &1))
     end)
     |> MapSet.new()
+  end
+
+  # The given entity types with every type their derived fields holding rows and their inverses
+  # lead to, and those types' own in turn: a client boxing a row of one reads the type's entry.
+  defp rules_entity_types(entity_types) do
+    led_to =
+      entity_types
+      |> Enum.flat_map(&led_to_entity_types/1)
+      |> MapSet.new()
+
+    if MapSet.subset?(led_to, entity_types) do
+      entity_types
+    else
+      entity_types
+      |> MapSet.union(led_to)
+      |> rules_entity_types()
+    end
   end
 
   # The kept pages whose MFAs moved, and the ones whose MFAs are unchanged, with their states. A
@@ -4438,22 +4526,25 @@ defmodule Hologram.Compiler do
   # The inner keys are the option names as Elixir spells them (min_length, not minLength) rather
   # than in the camelCase of their neighbours, because they are also the words a violation is
   # reported in - one spelling, written by the build and read back in the answer.
-  defp render_constraints(entity_type) do
+  #
+  # The terms among them - a bound, a pattern's options - are written by the given function: as
+  # JavaScript for the runtime script, and serialized for a sync frame, which carries JSON.
+  defp render_constraints(entity_type, encode_term) do
     entity_type.__attributes__()
     |> Enum.filter(fn {_name, _type, opts} ->
       Enum.any?(@baked_constraint_opts, &Keyword.has_key?(opts, &1))
     end)
     |> Enum.map(fn {name, _type, opts} ->
-      {Atom.to_string(name), render_attribute_constraints(opts)}
+      {Atom.to_string(name), render_attribute_constraints(opts, encode_term)}
     end)
     |> render_json_object()
   end
 
-  defp render_attribute_constraints(opts) do
+  defp render_attribute_constraints(opts, encode_term) do
     @baked_constraint_opts
     |> Enum.flat_map(fn key ->
       case Keyword.fetch(opts, key) do
-        {:ok, value} -> [{Atom.to_string(key), render_constraint_value(key, value)}]
+        {:ok, value} -> [{Atom.to_string(key), render_constraint_value(key, value, encode_term)}]
         :error -> []
       end
     end)
@@ -4463,8 +4554,8 @@ defmodule Hologram.Compiler do
   # A bound travels as the ENCODED TERM its literal becomes, for the reason a default does: a
   # violation names the bound the declaration wrote, and a float attribute takes both `max: 5` and
   # `max: 5.0`, which the wire spells alike.
-  defp render_constraint_value(key, value) when key in [:max, :min] do
-    Encoder.encode_term!(value)
+  defp render_constraint_value(key, value, encode_term) when key in [:max, :min] do
+    encode_term.(value)
   end
 
   # A pattern travels as its source and its options rather than as a compiled one: a compiled
@@ -4475,11 +4566,11 @@ defmodule Hologram.Compiler do
   # The options travel as an ENCODED TERM rather than as their names, because not all of them are
   # names: ~r/x/s reads back as [:dotall, {:newline, :anycrlf}], and a tuple has no name to write.
   # Model.normalize_value/1 keeps the same list whole for the same reason.
-  defp render_constraint_value(:format, value) do
+  defp render_constraint_value(:format, value, encode_term) do
     opts =
       value
       |> Regex.opts()
-      |> Encoder.encode_term!()
+      |> encode_term.()
 
     source =
       value
@@ -4491,7 +4582,7 @@ defmodule Hologram.Compiler do
 
   # A range travels as its three parts, the step included - `in: 0..100//5` admits 5 and refuses
   # 7, so a client told only the ends would answer differently from the server.
-  defp render_constraint_value(:in, value) do
+  defp render_constraint_value(:in, value, _encode_term) do
     render_json_object([
       {"first", Jason.encode!(value.first)},
       {"last", Jason.encode!(value.last)},
@@ -4499,7 +4590,7 @@ defmodule Hologram.Compiler do
     ])
   end
 
-  defp render_constraint_value(_key, value), do: Jason.encode!(value)
+  defp render_constraint_value(_key, value, _encode_term), do: Jason.encode!(value)
 
   # A set's declared order, spelled the way a term spells one - each entry a name and a direction.
   defp render_declared_order(target, sort) do
@@ -4517,14 +4608,14 @@ defmodule Hologram.Compiler do
   #
   # Only the attributes declaring one are named - an attribute with no default has nothing to
   # apply, and the reader fills its field the way an absent value is filled anyway.
-  defp render_defaults(entity_type) do
+  defp render_defaults(entity_type, encode_term) do
     entity_type.__attributes__()
     |> Enum.filter(fn {_name, _type, opts} -> Keyword.has_key?(opts, :default) end)
     |> Enum.map(fn {name, _type, opts} ->
       default =
         opts
         |> Keyword.fetch!(:default)
-        |> Encoder.encode_term!()
+        |> encode_term.()
 
       {Atom.to_string(name), default}
     end)
@@ -4752,15 +4843,21 @@ defmodule Hologram.Compiler do
   # An enum attribute's declared value list travels too, spelled the way the rows spell their
   # values: the order a list declares IS the type's order, and ordering by an enum attribute
   # sorts by a value's position in it - which the client can only follow if it is told the list.
-  defp render_entity_model(entity_types, permission_checking?) do
+  defp render_entity_model(entity_types) do
     entity_types
-    |> Enum.map(
-      &{Codec.encode_enum_value(&1), render_entity_model_entry(&1, permission_checking?)}
-    )
+    |> Enum.map(&{Codec.encode_enum_value(&1), render_entity_model_entry(&1)})
     |> render_json_object()
   end
 
-  defp render_entity_model_entry(entity_type, permission_checking?) do
+  defp render_entity_model_entry(entity_type) do
+    entity_type
+    |> entity_model_members(&Encoder.encode_term!/1)
+    |> render_json_object()
+  end
+
+  # The members of the client's model entry of the given entity type, each rendered, by name, the
+  # terms among the defaults and constraints written by the given function.
+  defp entity_model_members(entity_type, encode_term) do
     attributes =
       entity_type.__attributes__()
       |> Enum.concat(entity_type.__system_attributes__())
@@ -4773,22 +4870,22 @@ defmodule Hologram.Compiler do
       |> Enum.sort()
       |> Jason.encode!()
 
-    render_json_object([
+    [
       {"attributes", attributes},
-      {"constraints", render_constraints(entity_type)},
+      {"constraints", render_constraints(entity_type, encode_term)},
       {"creatorRoles", render_creator_roles(entity_type)},
-      {"defaults", render_defaults(entity_type)},
+      {"defaults", render_defaults(entity_type, encode_term)},
       {"derived", render_derived(entity_type)},
       {"enumValues", render_enum_values(entity_type)},
       {"expandedRoles", render_expanded_roles(entity_type)},
       {"frameworkAttributes", render_framework_attributes(entity_type)},
       {"inverses", render_inverses(entity_type)},
       {"operations", render_operations(entity_type)},
-      {"policy", render_policy(entity_type, permission_checking?)},
+      {"policy", render_policy(entity_type)},
       {"relationships", render_relationships(entity_type)},
       {"roles", render_roles(entity_type)},
       {"serverOnly", server_only}
-    ])
+    ]
   end
 
   # A type with no enum attributes carries an empty object rather than nothing at all - the reader
@@ -4859,9 +4956,7 @@ defmodule Hologram.Compiler do
 
   # The operations a type can be asked about, framework ones included - the client's copy of
   # Policy.operations/1, so validateOperation in assets/js/model.mjs refuses what
-  # Policy.validate_operation!/2 refuses without a second hand-ported list. Baked whether or not
-  # the build checks permissions: a build that checks nothing still runs authorize/2 in an action,
-  # and its policy key is empty by design.
+  # Policy.validate_operation!/2 refuses without a second hand-ported list.
   defp render_operations(entity_type) do
     entity_type
     |> Policy.operations()
@@ -4963,21 +5058,10 @@ defmodule Hologram.Compiler do
   # type, the ingest and read paths already fetch the entry, and every type named here is one the
   # model names anyway.
   #
-  # A build whose clients check nothing carries an empty policy per type - not the rules with
-  # nobody to read them. An empty policy grants nothing, which is what a client that cannot check
-  # should answer.
-  #
-  # TODO: this clause exists only for the gate the compile task computes from
-  # pages_checking_permissions/2. The modularization work decides whether that gate stays; if
-  # every build with a user entity bakes its rules, this clause and the flag are pruned together.
-  defp render_policy(_entity_type, false = _permission_checking?) do
-    render_json_object([])
-  end
-
   # A per-role grant lifecycle operation is keyed the way the client spells it when asking -
   # Policy.operation_key/1 here and operationKey in assets/js/elixir/hologram/auth.mjs are a
   # hand-ported pair, so the two must agree.
-  defp render_policy(entity_type, _permission_checking?) do
+  defp render_policy(entity_type) do
     entity_type
     |> Policy.build()
     |> Enum.map(fn {operation, rules} ->

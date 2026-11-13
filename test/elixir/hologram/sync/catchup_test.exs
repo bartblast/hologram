@@ -29,6 +29,7 @@ defmodule Hologram.Sync.CatchupTest do
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+  @policy_hash "0123456789abcdef0123456789abcdef"
   @target_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e10"
 
   use_module_stub :query_cache
@@ -297,14 +298,14 @@ defmodule Hologram.Sync.CatchupTest do
     end
   end
 
-  describe "gap/2" do
+  describe "gap/3" do
     test "returns the effects written since the client was last told" do
       seed(200)
       seed(201)
 
       [{tx, seq}, _second] = places()
 
-      assert {:ok, [effect], nil} = gap(Cursor.encode(tx, seq), nil)
+      assert {:ok, [effect], nil} = gap(Cursor.encode(tx, seq, @policy_hash), nil, @policy_hash)
       assert effect.tx == 201
     end
 
@@ -313,19 +314,19 @@ defmodule Hologram.Sync.CatchupTest do
 
       [{tx, seq}] = places()
 
-      assert gap(Cursor.encode(tx, seq), nil) == {:ok, [], nil}
+      assert gap(Cursor.encode(tx, seq, @policy_hash), nil, @policy_hash) == {:ok, [], nil}
     end
 
     test "sends everything again to a client whose place cannot be read" do
       seed(200)
 
-      assert gap("not a cursor", nil) == {:full_resync, :cursor}
+      assert gap("not a cursor", nil, @policy_hash) == {:full_resync, :cursor}
     end
 
     test "sends everything again to a client that named no place at all" do
       seed(200)
 
-      assert gap(nil, nil) == {:full_resync, :cursor}
+      assert gap(nil, nil, @policy_hash) == {:full_resync, :cursor}
     end
 
     # A place beyond what the log's columns hold used to reach the driver and raise there, on a
@@ -337,7 +338,31 @@ defmodule Hologram.Sync.CatchupTest do
 
       forged = "99999999999999999999999.0"
 
-      assert gap(forged, nil) == {:full_resync, :cursor}
+      assert gap(forged, nil, @policy_hash) == {:full_resync, :cursor}
+    end
+
+    # A deploy that changes who may read a row moves no row, so only the place's own record of the
+    # rules says what the client holds was decided by others - even when nothing moved since.
+    test "sends everything again to a client judged under other rules" do
+      seed(200)
+
+      [{tx, seq}] = places()
+
+      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210")
+
+      assert gap(cursor, nil, @policy_hash) == {:full_resync, :policy_hash}
+    end
+
+    # Asked before the log is, so a client judged under other rules is not first told its place is
+    # out of reach - both send everything again, but only one says why.
+    test "sends everything again under other rules even when the place predates the log" do
+      seed(200)
+
+      [{tx, _seq}] = places()
+
+      cursor = Cursor.encode(tx - 1, 0, "fedcba9876543210fedcba9876543210")
+
+      assert gap(cursor, nil, @policy_hash) == {:full_resync, :policy_hash}
     end
 
     test "sends everything again when the client's place predates the log" do
@@ -345,11 +370,13 @@ defmodule Hologram.Sync.CatchupTest do
 
       [{tx, _seq}] = places()
 
-      assert gap(Cursor.encode(tx - 1, 0), nil) == {:full_resync, :retention}
+      assert gap(Cursor.encode(tx - 1, 0, @policy_hash), nil, @policy_hash) ==
+               {:full_resync, :retention}
     end
 
     test "sends everything again when the log holds nothing to answer with" do
-      assert gap(Cursor.encode(200, 1), nil) == {:full_resync, :retention}
+      assert gap(Cursor.encode(200, 1, @policy_hash), nil, @policy_hash) ==
+               {:full_resync, :retention}
     end
 
     # The door that keeps a returning client from killing its own connection: the gap is read on the
@@ -363,7 +390,8 @@ defmodule Hologram.Sync.CatchupTest do
 
       [{tx, seq} | _rest] = places()
 
-      assert gap(Cursor.encode(tx, seq), nil) == {:full_resync, :gap_too_large}
+      assert gap(Cursor.encode(tx, seq, @policy_hash), nil, @policy_hash) ==
+               {:full_resync, :gap_too_large}
     end
 
     test "replays a gap that fits" do
@@ -371,7 +399,7 @@ defmodule Hologram.Sync.CatchupTest do
 
       [{tx, seq} | _rest] = places()
 
-      assert {:ok, effects, nil} = gap(Cursor.encode(tx, seq), nil)
+      assert {:ok, effects, nil} = gap(Cursor.encode(tx, seq, @policy_hash), nil, @policy_hash)
       assert length(effects) == 2
     end
 
@@ -384,7 +412,8 @@ defmodule Hologram.Sync.CatchupTest do
 
       # The gap is refused WHOLE, not up to the deploy: a replay stopping short would leave the
       # client holding rows of one model and a place that says it holds rows of both.
-      assert gap(Cursor.encode(tx, seq), nil) == {:full_resync, :model_hash}
+      assert gap(Cursor.encode(tx, seq, @policy_hash), nil, @policy_hash) ==
+               {:full_resync, :model_hash}
     end
 
     test "answers the grants a client held before one was revoked while it was away" do
@@ -403,7 +432,9 @@ defmodule Hologram.Sync.CatchupTest do
 
       seed_grant(201, "del_entity", revoked)
 
-      assert {:ok, [_effect], [grant]} = gap(Cursor.encode(tx, seq), actor.id)
+      assert {:ok, [_effect], [grant]} =
+               gap(Cursor.encode(tx, seq, @policy_hash), actor.id, @policy_hash)
+
       assert grant.id == revoked.id
       assert grant.role == :viewer
       assert grant.user_id == actor.id
@@ -425,7 +456,8 @@ defmodule Hologram.Sync.CatchupTest do
 
       seed_grant(201, "del_entity", other_grant)
 
-      assert {:ok, [_effect], nil} = gap(Cursor.encode(tx, seq), actor.id)
+      assert {:ok, [_effect], nil} =
+               gap(Cursor.encode(tx, seq, @policy_hash), actor.id, @policy_hash)
     end
 
     test "answers no grants for an anonymous client" do
@@ -443,7 +475,7 @@ defmodule Hologram.Sync.CatchupTest do
 
       seed_grant(201, "del_entity", grant)
 
-      assert {:ok, [_effect], nil} = gap(Cursor.encode(tx, seq), nil)
+      assert {:ok, [_effect], nil} = gap(Cursor.encode(tx, seq, @policy_hash), nil, @policy_hash)
     end
 
     test "answers no grants when the gap holds none" do
@@ -456,7 +488,8 @@ defmodule Hologram.Sync.CatchupTest do
 
       [{tx, seq}, _second] = places()
 
-      assert {:ok, [_effect], nil} = gap(Cursor.encode(tx, seq), actor.id)
+      assert {:ok, [_effect], nil} =
+               gap(Cursor.encode(tx, seq, @policy_hash), actor.id, @policy_hash)
     end
 
     # The model door answers first, so a grant effect is never compared as a module against a
@@ -477,7 +510,8 @@ defmodule Hologram.Sync.CatchupTest do
       seed(201, "written under another model")
       seed_grant(202, "del_entity", grant)
 
-      assert gap(Cursor.encode(tx, seq), actor.id) == {:full_resync, :model_hash}
+      assert gap(Cursor.encode(tx, seq, @policy_hash), actor.id, @policy_hash) ==
+               {:full_resync, :model_hash}
     end
 
     test "replays a gap whose effects were all written under the current model" do
@@ -489,7 +523,7 @@ defmodule Hologram.Sync.CatchupTest do
 
       # The effect from before the client's place is of another model and is none of its business:
       # what it was away for is what comes after.
-      assert {:ok, [effect], nil} = gap(Cursor.encode(tx, seq), nil)
+      assert {:ok, [effect], nil} = gap(Cursor.encode(tx, seq, @policy_hash), nil, @policy_hash)
       assert effect.tx == 201
     end
   end

@@ -5,7 +5,7 @@ defmodule Hologram.Sync.Frame do
   # events as their own chunk kinds rather than on a connection of their own, so a tab keeps one
   # stream and sync inherits its handshake, heartbeats and reconnect.
   #
-  # These four kinds carry JSON where every other chunk on that stream carries JavaScript source.
+  # These five kinds carry JSON where every other chunk on that stream carries JavaScript source.
   # The others hand over arbitrary terms and need an encoder that can spell any of them - a delta
   # holds values a database stores, and paying ten times the bytes to say so, on the payload a
   # whole-app fill is mostly made of, buys nothing.
@@ -126,9 +126,10 @@ defmodule Hologram.Sync.Frame do
   Builds the SSE event-stream chunk telling a client to drop everything it holds, because what
   follows is the whole of what it may see rather than what changed.
 
-  Sent when a returning client cannot be told what it missed - its place could not be read, the
-  place predates the log, or the gap spans a change of model. The reason says which, for the sake
-  of whoever is looking at why a client paid for a resync, and the client does the same thing
+  Sent when a returning client cannot be told what it missed - its place could not be read, it was
+  judged under rules other than the current ones, the place predates the log, the gap is too big to
+  be worth replaying, or the gap spans a change of model. The reason says which, for the sake of
+  whoever is looking at why a client paid for a resync, and the client does the same thing
   whichever it is.
 
   It is its own chunk rather than a flag on the rows that follow, because there may be none: a
@@ -155,6 +156,27 @@ defmodule Hologram.Sync.Frame do
     payload = %{protocol_version: @protocol_version, reason: reason}
 
     "event: sync_reload\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
+  end
+
+  @doc """
+  Builds the SSE event-stream chunk handing a client the rules this build enforces, rendered (see
+  `Hologram.Compiler.render_rules/1`), with the hash they go by.
+
+  Sent to a client whose bundle was built with other rules but the same model - a deploy that
+  changed only policies - so it answers permission checks the way the server does from its next
+  render, without reloading. The hash is what the client greets with from then on, so a reconnect
+  is not sent them again. The rules are spliced in as rendered rather than encoded again: they are
+  JSON already, cached once for every client a deploy sends back.
+  """
+  @spec encode_rules_envelope(integer, String.t(), String.t()) :: String.t()
+  def encode_rules_envelope(id, policy_hash, rules) do
+    payload = %{
+      policy_hash: policy_hash,
+      protocol_version: @protocol_version,
+      rules: Jason.Fragment.new(rules)
+    }
+
+    "event: sync_rules\nid: #{id}\ndata: #{Jason.encode!(payload)}\n\n"
   end
 
   @doc """
