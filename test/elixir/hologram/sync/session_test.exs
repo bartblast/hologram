@@ -14,12 +14,14 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Auth.RoleGrant
   alias Hologram.Commons.PLT
   alias Hologram.DB
+  alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
   alias Hologram.Entity
   alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Sync.Catchup
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
@@ -154,9 +156,15 @@ defmodule Hologram.Sync.SessionTest do
   # Allowed after starting rather than before, since the pid is what is being allowed - the same
   # shape hold_windows/1 uses. The session's first read is several messages and a query past the
   # continue that starts it, so the allow is not on a knife edge.
+  #
+  # A test names what a returning client missed as `gap:` and, when its grants moved, `grants_then:`
+  # - the effects and grants the session reads through `:read_gap`. They are handed over as a
+  # reader answering them, dated by the gap's last effect as the read deciding the client resumes
+  # dates it.
   defp start_session!(opts) do
     opts =
       opts
+      |> resume_opts()
       |> Keyword.put_new(:client, self())
       |> Keyword.put_new(:page, @page)
       |> Keyword.put_new(:policy_hash, @policy_hash)
@@ -166,6 +174,55 @@ defmodule Hologram.Sync.SessionTest do
     :ok = DBConnection.Ownership.ownership_allow(DB.pool_name(), self(), session, [])
 
     session
+  end
+
+  defp resume_opts(opts) do
+    {gap, without_gap} = Keyword.pop(opts, :gap)
+    {grants_then, session_opts} = Keyword.pop(without_gap, :grants_then)
+
+    cond do
+      gap ->
+        session_opts
+        |> Keyword.put(:read_gap, fn -> {:ok, gap, grants_then} end)
+        |> Keyword.put_new(:gap_end, gap_end(gap))
+
+      grants_then ->
+        raise ArgumentError, "grants_then: names the grants a gap starts from, so it needs a gap:"
+
+      true ->
+        session_opts
+    end
+  end
+
+  defp gap_end([]), do: nil
+
+  defp gap_end(gap) do
+    %{seq: seq, tx: tx} = List.last(gap)
+
+    {tx, seq}
+  end
+
+  # The place of the newest effect the log holds - what a client that last heard of it would come
+  # back from.
+  defp last_place do
+    statement =
+      ~s|SELECT "tx", "seq" FROM "hologram_system"."oplog" ORDER BY "tx" DESC, "seq" DESC LIMIT 1|
+
+    {:ok, %Postgrex.Result{rows: [[tx, seq]]}} = Connection.query(statement)
+
+    {tx, seq}
+  end
+
+  # A reader over the log, as the doors hand one over. It lets itself into the sandbox, since the
+  # session calls it before a test could let the session in.
+  defp read_gap_from(cursor) do
+    test_pid = self()
+
+    fn ->
+      :ok = DBConnection.Ownership.ownership_allow(DB.pool_name(), test_pid, self(), [])
+
+      Catchup.gap(cursor, nil, @policy_hash)
+    end
   end
 
   # The page windows are a build artifact read from a dump file, so a test says what the build
@@ -374,6 +431,75 @@ defmodule Hologram.Sync.SessionTest do
       assert [%{data: patch, op: :patch_entity}] = deltas
       assert patch.c == "moved again, this time watched"
     end
+
+    # The gap read from the log itself rather than handed over, which is what a client coming back
+    # through the doors is given.
+    test "tells a returning client what the log says it missed" do
+      moved = create("before leaving")
+      untouched = create("untouched while away")
+      {tx, seq} = last_place()
+      cursor = Cursor.encode(tx, seq, @policy_hash)
+
+      DB.update(Module2, moved.id, %{c: "moved while away"})
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      {gap_end_tx, gap_end_seq} = gap_end = last_place()
+
+      start_supervised!(
+        {Session,
+         client: self(),
+         gap_end: gap_end,
+         page: @page,
+         policy_hash: @policy_hash,
+         read_gap: read_gap_from(cursor)}
+      )
+
+      assert_receive {:sync_deltas, frame_cursor, deltas, _applied_seq}
+      assert Cursor.decode(frame_cursor) == {:ok, gap_end_tx, gap_end_seq, @policy_hash}
+      assert [%{data: data, id: id, op: :put_entity}] = deltas
+      assert id == moved.id
+      assert data.c == "moved while away"
+
+      refute Enum.any?(deltas, &(&1.id == untouched.id))
+    end
+
+    # The gap outgrew what a replay carries between the read that decided the client resumes and
+    # the session's own - the same answer a client gets at the doors, reached through them.
+    test "cuts the client off when the log says it has to be sent everything again" do
+      moved = create("before leaving")
+      {tx, seq} = last_place()
+      cursor = Cursor.encode(tx, seq, @policy_hash)
+
+      DB.update(Module2, moved.id, %{c: "moved while away"})
+      DB.update(Module2, moved.id, %{c: "moved again while away"})
+
+      put_app_env(:sync, gap_limit: 1)
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      test_pid = self()
+      read_gap = read_gap_from(cursor)
+
+      {connection, ref} =
+        spawn_monitor(fn ->
+          Session.start_link(
+            client: test_pid,
+            page: @page,
+            policy_hash: @policy_hash,
+            read_gap: read_gap
+          )
+
+          Process.sleep(:infinity)
+        end)
+
+      assert_receive {:DOWN, ^ref, :process, ^connection, {:full_resync, :gap_too_large}}
+
+      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
+      refute_received {:sync_synced, _scope, _cursor}
+    end
   end
 
   # A grant given or taken away while a client was gone moves ONE row and changes what it may see
@@ -484,6 +610,30 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
       assert_receive {:sync_deltas, _cursor, _shift_deltas, _applied_seq}
       assert_receive {:sync_synced, :page, _cursor}
+    end
+
+    test "dates the shift no further than the read that decided the client resumes", %{
+      user: user
+    } do
+      revoked = gated_row()
+      windows(%{@page => [@other_window]})
+      hold_windows([@other_window])
+
+      start_session!(
+        actor_user_id: user.id,
+        gap: [
+          gap_effect(Entity.generate_id(), {900, 7}),
+          gap_effect(Entity.generate_id(), {900, 8})
+        ],
+        gap_end: {900, 7},
+        grants_then: [viewer_grant(user.id, revoked)]
+      )
+
+      assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
+      assert_receive {:sync_deltas, shift_cursor, shift_deltas, _applied_seq}
+      assert [%{id: id, op: :unsync_entity}] = shift_deltas
+      assert id == revoked.id
+      assert Cursor.decode(shift_cursor) == {:ok, 900, 7, @policy_hash}
     end
 
     # The shift is judged per window and merged by id: a window with nothing to say about grants
@@ -1219,6 +1369,35 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
       assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
+    end
+
+    # The session's own read can reach further than the one that decided the client resumes, and
+    # the rounds behind those effects may not have reached it yet - so a batch vouches for no more
+    # than that first read found.
+    test "dates a replayed batch no further than the read that decided the client resumes" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(
+        fill_place: {200, 0},
+        gap: [gap_effect(moved.id, {900, 7}), gap_effect(Entity.generate_id(), {900, 8})],
+        gap_end: {900, 7}
+      )
+
+      assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
+    end
+
+    test "dates no replayed batch when the read that decided the client resumes found nothing" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(fill_place: {200, 0}, gap: [gap_effect(moved.id, {900, 7})], gap_end: nil)
+
+      assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
+      assert cursor == nil
     end
 
     # The rules the session judged its rows by, not whatever rules are current when a frame goes

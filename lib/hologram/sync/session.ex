@@ -53,28 +53,34 @@ defmodule Hologram.Sync.Session do
   `:applied_seq` is how far that replica's batches had been applied when this session began. A
   session cannot work it out from the rounds it sees: the first fill is read from the rows as
   they stand, and the batches behind those values were applied before anything here was watching.
-  Read where the replica is identified and handed over, rather than looked up here, which keeps
-  the database out of this process entirely.
+  Read where the replica is identified and handed over, rather than looked up here, since the
+  process identifying the replica already reads the database for it.
 
   A frame carries the place the client may resume from only once it holds a whole pot: mid-fill
   there is nothing coherent to resume from, and a place handed over early is a claim the client
   cannot honour.
 
-  `:gap` is what a returning client missed - absent for one arriving with nothing, in which case
-  every row it may see is sent. Given a gap, the client keeps what it already holds and is told
-  only about the rows the gap names. Whether a gap can be had at all is decided before the session
-  starts, since it is a question about the log rather than about this client.
+  `:read_gap` reads what a returning client missed - absent for one arriving with nothing, in which
+  case every row it may see is sent. It answers what `Hologram.Sync.Catchup.gap/3` answers: the
+  effects since the client's place and the grants it held there, or why it has to be sent
+  everything again, which ends the session with `{:full_resync, reason}` so the client comes back
+  through the doors. Given one, the client keeps what it already holds and is told only about the
+  rows the gap names. Handed over as a reader rather than as the effects, because the session
+  decides when the log is read, and the read runs in its process. Whether a gap can be had at all
+  is decided before the session starts, since it is a question about the log rather than about
+  this client - the session's own read finding it can't is the log having moved since, a gap that
+  outgrew a replay or a deploy landing in between.
+
+  `:gap_end` is the place of the last effect the read that decided this client resumes found, or
+  nil when it found none. A catch-up frame vouches for no more than it: the session's own read can
+  name effects whose rounds have not reached it yet, and a frame dating those would let a client
+  cut off right then come back past changes it never held.
 
   `:edges` is the policy dependency index, given to a returning client alone - what each rule
   reads besides the row it judges, so a row the gap never names can be judged again when the row
   DECIDING it moved. A rule saying `via:` reads a related row, and that row going private hides
   everything leaning on it without any of them moving. Absent for a first arrival, which is sent
   every row it may see.
-
-  `:grants_then` is what that client's grants were at the place its gap starts from, given only
-  when they are not what they are now. The rows a grant change hid or revealed are named by no
-  effect, so they are worked out by judging the client's rows under both sets - absent for a
-  first arrival, and for a returning client whose own grants nobody touched.
 
   Windows that nothing downloads are skipped rather than refused, which is how a client naming a
   page this build does not have still gets the rest of the build's windows.
@@ -89,8 +95,9 @@ defmodule Hologram.Sync.Session do
   @impl GenServer
   def init(opts) do
     # Read once and asked about once: whether this client is resuming IS whether it arrived with a
-    # gap, and two reads of the same option are two chances for them to say different things.
-    gap = Keyword.get(opts, :gap)
+    # gap to read, and two reads of the same option are two chances for them to say different
+    # things.
+    read_gap = Keyword.get(opts, :read_gap)
 
     state = %{
       actor_user_id: Keyword.get(opts, :actor_user_id),
@@ -99,16 +106,18 @@ defmodule Hologram.Sync.Session do
       client: Keyword.fetch!(opts, :client),
       edges: Keyword.get(opts, :edges),
       fill_place: Keyword.get(opts, :fill_place),
-      gap: gap,
-      grants_then: Keyword.get(opts, :grants_then),
+      gap: nil,
+      gap_end: Keyword.get(opts, :gap_end),
+      grants_then: nil,
       held: %{},
       page: Keyword.fetch!(opts, :page),
       page_windows: MapSet.new(),
       pending: MapSet.new(),
       places: %{},
       policy_hash: Keyword.fetch!(opts, :policy_hash),
+      read_gap: read_gap,
       replica_id: Keyword.get(opts, :replica_id),
-      resuming: gap != nil,
+      resuming: read_gap != nil,
       shift: %{appeared: %{}, vanished: %{}},
       told_verdicts: %{},
       touched: %{},
@@ -120,7 +129,21 @@ defmodule Hologram.Sync.Session do
   end
 
   @impl GenServer
+  def handle_continue(:subscribe, %{read_gap: nil} = state) do
+    {:noreply, subscribe(state)}
+  end
+
   def handle_continue(:subscribe, state) do
+    case state.read_gap.() do
+      {:ok, gap, grants_then} ->
+        {:noreply, subscribe(%{state | gap: gap, grants_then: grants_then})}
+
+      {:full_resync, reason} ->
+        {:stop, {:full_resync, reason}, state}
+    end
+  end
+
+  defp subscribe(state) do
     page_window_ids = PageWindows.lookup(state.page)
     background_window_ids = PageWindows.all() -- page_window_ids
     window_ids = page_window_ids ++ background_window_ids
@@ -136,9 +159,7 @@ defmodule Hologram.Sync.Session do
 
     # A client with nothing to wait for is told so at once: one left waiting for a marker that
     # never comes would never read its own store.
-    subscribed = Enum.reduce(window_ids, announce(seeded), &subscribe_to_window/2)
-
-    {:noreply, subscribed}
+    Enum.reduce(window_ids, announce(seeded), &subscribe_to_window/2)
   end
 
   @impl GenServer
@@ -398,14 +419,18 @@ defmodule Hologram.Sync.Session do
   end
 
   # A gap of nothing dates nothing - the client keeps the place it came back from, as a frame
-  # mid-fill leaves it.
+  # mid-fill leaves it. Neither does a gap the deciding read found empty: what this session read
+  # since is past every place a frame may vouch for (see `:gap_end`).
   defp batch_cursor(_state, []), do: nil
+
+  defp batch_cursor(%{gap_end: nil}, _effects), do: nil
 
   defp batch_cursor(state, effects) do
     if holds_a_whole_pot?(state) do
       %{seq: seq, tx: tx} = List.last(effects)
+      {capped_tx, capped_seq} = min({tx, seq}, state.gap_end)
 
-      Cursor.encode(tx, seq, state.policy_hash)
+      Cursor.encode(capped_tx, capped_seq, state.policy_hash)
     end
   end
 
