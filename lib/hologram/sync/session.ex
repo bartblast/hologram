@@ -109,9 +109,7 @@ defmodule Hologram.Sync.Session do
       cut: nil,
       edges: Keyword.get(opts, :edges),
       fill_place: Keyword.get(opts, :fill_place),
-      gap: nil,
       gap_end: Keyword.get(opts, :gap_end),
-      grants_then: nil,
       held: %{},
       page: Keyword.fetch!(opts, :page),
       page_windows: MapSet.new(),
@@ -121,10 +119,7 @@ defmodule Hologram.Sync.Session do
       read_gap: read_gap,
       replica_id: Keyword.get(opts, :replica_id),
       resuming: read_gap != nil,
-      shift: %{appeared: %{}, vanished: %{}},
       told_verdicts: %{},
-      touched: %{},
-      verdict_rows: %{},
       verdicts_checked: nil,
       versions: %{}
     }
@@ -299,10 +294,10 @@ defmodule Hologram.Sync.Session do
   defp catch_up(state) do
     case state.read_gap.() do
       {:ok, gap, grants_then} ->
-        case judge_gap(%{state | gap: gap, grants_then: grants_then}) do
+        case judge_gap(state, gap, grants_then) do
           {:ok, judged} ->
-            judged
-            |> tell_gap()
+            state
+            |> tell_gap(judged)
             |> announce_scopes()
 
           :behind_the_ring ->
@@ -323,56 +318,54 @@ defmodule Hologram.Sync.Session do
   end
 
   # Judged against each window's last round, one window's rows read at a time: which of them the
-  # gap named, which a grant change or a moved related row decided differently, and the ones whose
-  # verdicts the client may hold.
-  defp judge_gap(state) do
+  # gap named (`touched`), which a grant change or a moved related row decided differently
+  # (`shift`), and the ones whose verdicts the client may hold (`verdict_rows`). Nothing of it
+  # outlives the catch-up, so it is a value the frames are told from, never part of the session.
+  defp judge_gap(state, gap, grants_then) do
     named_ids =
-      state.gap
+      gap
       |> Enum.flat_map(&gap_ids/1)
       |> MapSet.new()
 
+    unjudged = %{
+      gap: gap,
+      shift: %{appeared: %{}, vanished: %{}},
+      touched: %{},
+      verdict_rows: %{}
+    }
+
     state.versions
     |> Enum.sort()
-    |> Enum.reduce_while({:ok, state}, fn {window_id, version}, {:ok, acc} ->
+    |> Enum.reduce_while({:ok, unjudged}, fn {window_id, version}, {:ok, acc} ->
       case ResultStore.fetch(window_id, version) do
         nil -> {:halt, :behind_the_ring}
-        result -> {:cont, {:ok, judge_window(acc, result, named_ids)}}
+        result -> {:cont, {:ok, judge_window(acc, state, result, grants_then, named_ids)}}
       end
     end)
   end
 
-  defp judge_window(state, result, named_ids) do
+  defp judge_window(judged, state, result, grants_then, named_ids) do
     %{appeared: visible} = Diff.deltas(result, MapSet.new(), state.actor_user_id, [])
 
-    state
+    judged
     |> remember_touched(visible, named_ids)
     |> remember_verdict_rows(visible)
-    |> remember_shift(result)
-    |> remember_reach(result)
+    |> remember_shift(state, result, grants_then)
+    |> remember_reach(state, result)
   end
 
   # What the client missed, told from the rows as they stand now rather than from the log's own
   # account of them. Everything it holds that the gap never touched is still true, and is left
   # alone - which is the whole saving over sending it the lot.
-  defp tell_gap(state) do
+  defp tell_gap(state, judged) do
     caught_up =
-      state.gap
+      judged.gap
       |> Enum.chunk_every(Catchup.rows_per_frame())
-      |> Enum.reduce(state, &tell_batch(&2, &1))
-      |> tell_shift()
-      |> tell_verdicts()
+      |> Enum.reduce(state, &tell_batch(&2, judged, &1))
+      |> tell_shift(judged)
+      |> tell_verdicts(judged)
 
-    %{
-      caught_up
-      | catching_up: false,
-        gap: nil,
-        grants_then: nil,
-        shift: %{appeared: %{}, vanished: %{}},
-        read_gap: nil,
-        touched: %{},
-        verdict_rows: %{},
-        versions: %{}
-    }
+    %{caught_up | catching_up: false, read_gap: nil, versions: %{}}
   end
 
   # What a grant change decided differently, told after the rows the gap named and before the
@@ -381,16 +374,16 @@ defmodule Hologram.Sync.Session do
   # have the client apply an answer to a question it was given the answer to. The target of an
   # edge the replay handed over beside it can be put again here - the same row as it now stands,
   # which a second put leaves as it was.
-  defp tell_shift(state) do
-    named = MapSet.new(state.gap, & &1.entity_id)
+  defp tell_shift(state, judged) do
+    named = MapSet.new(judged.gap, & &1.entity_id)
 
     puts =
-      state.shift.appeared
+      judged.shift.appeared
       |> shift_rows(named)
       |> Enum.map(&Frame.put_entity(&1, Frame.row_verdicts(state.actor_user_id, &1)))
 
     unsyncs =
-      state.shift.vanished
+      judged.shift.vanished
       |> shift_rows(named)
       |> Enum.map(&Frame.unsync_entity(&1.id, &1.__struct__))
 
@@ -398,7 +391,7 @@ defmodule Hologram.Sync.Session do
     |> Enum.concat(unsyncs)
     |> Enum.chunk_every(Catchup.rows_per_frame())
     |> Enum.reduce(state, fn deltas, acc ->
-      send(acc.client, {:sync_deltas, batch_cursor(acc, acc.gap), deltas, acc.applied_seq})
+      send(acc.client, {:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
 
       remember_verdicts(acc, deltas)
     end)
@@ -412,8 +405,8 @@ defmodule Hologram.Sync.Session do
   # the rows it was sent carry no verdicts at all. So every row of a type with a deciding quantifier
   # that the catch-up did not already hand over with its verdicts is told them, after the rows
   # themselves.
-  defp tell_verdicts(state) do
-    state.verdict_rows
+  defp tell_verdicts(state, judged) do
+    judged.verdict_rows
     |> Map.drop(Map.keys(state.told_verdicts))
     |> Map.values()
     |> Enum.sort_by(& &1.id)
@@ -424,7 +417,7 @@ defmodule Hologram.Sync.Session do
       news = %{appeared: [], edges: [], patched: patched, unsynced: []}
       deltas = Frame.deltas(news, acc.actor_user_id)
 
-      send(acc.client, {:sync_deltas, batch_cursor(acc, acc.gap), deltas, acc.applied_seq})
+      send(acc.client, {:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
 
       remember_verdicts(acc, deltas)
     end)
@@ -437,32 +430,32 @@ defmodule Hologram.Sync.Session do
   end
 
   # Judged per window, merged by id: visibility is per ROW and per client rather than per window,
-  # so two windows holding the same row agree about it and the later one writes what the earlier
-  # one did.
+  # so two windows holding the same row agree about it. What appeared keeps the newest copy, since
+  # it is handed over whole (see `merge_newest/2`); what vanished goes by id alone.
   #
   # Two sources feed the one accumulator, and they answer different questions about the same
   # rows: what the client's GRANTS moving decided differently, and what a row the gap names now
-  # decides about the rows leaning on it. Both end up in the batch `tell_shift/1` sends.
-  defp merge_shift(state, shift) do
-    appeared = merge_newest(state.shift.appeared, Map.new(shift.appeared, &{&1.id, &1}))
-    vanished = Map.merge(state.shift.vanished, Map.new(shift.vanished, &{&1.id, &1}))
+  # decides about the rows leaning on it. Both end up in the batch `tell_shift/2` sends.
+  defp merge_shift(judged, shift) do
+    appeared = merge_newest(judged.shift.appeared, Map.new(shift.appeared, &{&1.id, &1}))
+    vanished = Map.merge(judged.shift.vanished, Map.new(shift.vanished, &{&1.id, &1}))
 
-    %{state | shift: %{appeared: appeared, vanished: vanished}}
+    %{judged | shift: %{appeared: appeared, vanished: vanished}}
   end
 
   # Only for a client that was handed a dependency index - a first arrival has nothing to reach
   # back for.
-  defp remember_reach(%{edges: nil} = state, _result), do: state
+  defp remember_reach(judged, %{edges: nil}, _result), do: judged
 
-  defp remember_reach(state, result) do
-    merge_shift(state, Diff.reach(result, state.actor_user_id, state.gap, state.edges))
+  defp remember_reach(judged, state, result) do
+    merge_shift(judged, Diff.reach(result, state.actor_user_id, judged.gap, state.edges))
   end
 
   # Only when the gap came back with grants to judge against.
-  defp remember_shift(%{grants_then: nil} = state, _result), do: state
+  defp remember_shift(judged, _state, _result, nil), do: judged
 
-  defp remember_shift(state, result) do
-    merge_shift(state, Diff.shift(result, state.actor_user_id, state.grants_then))
+  defp remember_shift(judged, state, result, grants_then) do
+    merge_shift(judged, Diff.shift(result, state.actor_user_id, grants_then))
   end
 
   # Each batch claims ITS OWN last place rather than the whole gap's, which is what makes a replay
@@ -472,9 +465,9 @@ defmodule Hologram.Sync.Session do
   # The batch raises the watermark only by the effects a frame may vouch for (see `:gap_end`): a
   # write of this replica's own past it may be in no round the session has read, and a client told
   # it is applied would drop it while still holding the row from before it.
-  defp tell_batch(state, effects) do
+  defp tell_batch(state, judged, effects) do
     updated = remember_applied(state, Enum.filter(effects, &vouched_for?(state, &1)))
-    deltas = Catchup.deltas(effects, updated.touched, updated.actor_user_id)
+    deltas = Catchup.deltas(effects, judged.touched, updated.actor_user_id)
 
     if deltas != [] do
       send(
@@ -624,13 +617,13 @@ defmodule Hologram.Sync.Session do
 
   # The rows the client may see whose type has a deciding quantifier, from every window, so the
   # verdicts it holds from before this session can be told again once it is caught up.
-  defp remember_verdict_rows(state, visible) do
+  defp remember_verdict_rows(judged, visible) do
     rows =
       visible
       |> Enum.filter(&(Policy.deciding_quantifiers(&1.__struct__) != []))
       |> Map.new(&{&1.id, &1})
 
-    %{state | verdict_rows: merge_newest(state.verdict_rows, rows)}
+    %{judged | verdict_rows: merge_newest(judged.verdict_rows, rows)}
   end
 
   # The windows' last rounds were read at different moments, so two copies of one row can hold
@@ -661,15 +654,15 @@ defmodule Hologram.Sync.Session do
   defp vouched_for?(state, effect), do: {effect.tx, effect.seq} <= state.gap_end
 
   # The rows the gap names, as a window's last round has them - an edge naming its target as well
-  # as its source, since the target's inverse of it moves too - and only those, so what is held
-  # here is bounded by what moved rather than by what the client holds.
-  defp remember_touched(state, visible, named_ids) do
+  # as its source, since the target's inverse of it moves too - and only those, so the judgment
+  # grows with what moved rather than with what the client holds.
+  defp remember_touched(judged, visible, named_ids) do
     rows =
       visible
       |> Enum.filter(&MapSet.member?(named_ids, &1.id))
       |> Map.new(&{&1.id, &1})
 
-    %{state | touched: merge_newest(state.touched, rows)}
+    %{judged | touched: merge_newest(judged.touched, rows)}
   end
 
   defp gap_ids(%{data: %{"target_id" => target_id}, entity_id: entity_id, op: op})
