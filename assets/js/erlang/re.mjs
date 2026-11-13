@@ -629,9 +629,11 @@ const Erlang_Re = {
           ? [...groupMap.names.keys()].sort(ERTS.regex.compareByUtf8Bytes)
           : null;
 
-      // In byte mode JS string indices are byte offsets already
+      // In byte mode JS string indices are byte offsets already. In unicode
+      // mode one converter serves all captures, so a global run walks the
+      // subject once instead of once per capture.
       const toByteOffset = entry.unicode
-        ? (index) => ERTS.regex.utf16IndexToByteOffset(subjectText, index)
+        ? ERTS.regex.utf16IndexToByteOffsetConverter(subjectText)
         : (index) => index;
 
       const buildValue = (capture) => {

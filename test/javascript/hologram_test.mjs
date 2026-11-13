@@ -5493,6 +5493,91 @@ describe("Hologram", () => {
     });
   });
 
+  describe("isBackForwardLoad()", () => {
+    let getEntriesByTypeStub;
+    let originalNavigation;
+    let originalPerformanceNavigation;
+
+    const restoreOwnProperty = (object, key, original) => {
+      if (original === undefined) {
+        delete object[key];
+      } else {
+        Object.defineProperty(object, key, original);
+      }
+    };
+
+    const stubNavigationType = (type) =>
+      getEntriesByTypeStub.withArgs("navigation").returns([{type}]);
+
+    beforeEach(() => {
+      originalNavigation = Object.getOwnPropertyDescriptor(
+        performance,
+        "navigation",
+      );
+
+      originalPerformanceNavigation = Object.getOwnPropertyDescriptor(
+        globalThis,
+        "PerformanceNavigation",
+      );
+
+      getEntriesByTypeStub = sinon
+        .stub(performance, "getEntriesByType")
+        .returns([]);
+
+      globalThis.PerformanceNavigation = {TYPE_BACK_FORWARD: 2};
+    });
+
+    afterEach(() => {
+      getEntriesByTypeStub.restore();
+      restoreOwnProperty(performance, "navigation", originalNavigation);
+
+      restoreOwnProperty(
+        globalThis,
+        "PerformanceNavigation",
+        originalPerformanceNavigation,
+      );
+    });
+
+    it("is true for a document loaded by Back or Forward", () => {
+      stubNavigationType("back_forward");
+      assert.isTrue(Hologram.isBackForwardLoad());
+    });
+
+    // A link or location.assign() to the URL the tab already shows keeps the entry and its state.
+    it("is false for a document loaded by a navigation", () => {
+      stubNavigationType("navigate");
+      assert.isFalse(Hologram.isBackForwardLoad());
+    });
+
+    it("is false for a reloaded document", () => {
+      stubNavigationType("reload");
+      assert.isFalse(Hologram.isBackForwardLoad());
+    });
+
+    it("goes by the navigation entry over the deprecated API", () => {
+      stubNavigationType("navigate");
+      performance.navigation = {type: 2};
+
+      assert.isFalse(Hologram.isBackForwardLoad());
+    });
+
+    describe("with no navigation entry", () => {
+      it("is true when the deprecated API records Back or Forward", () => {
+        performance.navigation = {type: 2};
+        assert.isTrue(Hologram.isBackForwardLoad());
+      });
+
+      it("is false when the deprecated API records another type", () => {
+        performance.navigation = {type: 0};
+        assert.isFalse(Hologram.isBackForwardLoad());
+      });
+
+      it("is false when nothing records it", () => {
+        assert.isFalse(Hologram.isBackForwardLoad());
+      });
+    });
+  });
+
   describe("isDocumentSnapshotRestorable()", () => {
     const snapshot = (fields = {}) => ({
       identityTag: "tag-1",
@@ -5515,14 +5600,14 @@ describe("Hologram", () => {
     });
 
     it("restores a snapshot taken for the identity the document was rendered for", () => {
-      assert.isTrue(Hologram.isDocumentSnapshotRestorable(snapshot(), false));
+      assert.isTrue(Hologram.isDocumentSnapshotRestorable(snapshot(), true));
     });
 
     it("passes over a snapshot taken for another identity", () => {
       assert.isFalse(
         Hologram.isDocumentSnapshotRestorable(
           snapshot({identityTag: "tag-2"}),
-          false,
+          true,
         ),
       );
     });
@@ -5534,26 +5619,27 @@ describe("Hologram", () => {
       assert.isFalse(
         Hologram.isDocumentSnapshotRestorable(
           snapshot({identityTag: null}),
-          false,
+          true,
         ),
       );
 
-      assert.isFalse(Hologram.isDocumentSnapshotRestorable(untagged, false));
+      assert.isFalse(Hologram.isDocumentSnapshotRestorable(untagged, true));
     });
 
-    it("passes over a snapshot on a reload", () => {
-      assert.isFalse(Hologram.isDocumentSnapshotRestorable(snapshot(), true));
+    // A reload, or a link to the URL the tab already shows, which keeps the entry and its state.
+    it("passes over a snapshot when the document was not loaded by Back or Forward", () => {
+      assert.isFalse(Hologram.isDocumentSnapshotRestorable(snapshot(), false));
     });
 
     it("passes over a missing snapshot", () => {
-      assert.isFalse(Hologram.isDocumentSnapshotRestorable(null, false));
+      assert.isFalse(Hologram.isDocumentSnapshotRestorable(null, true));
     });
 
     it("passes over a snapshot that does not fit the code", () => {
       globalThis.Hologram.config.liveReload = true;
       globalThis.Hologram.initialPageDigest = "page-2";
 
-      assert.isFalse(Hologram.isDocumentSnapshotRestorable(snapshot(), false));
+      assert.isFalse(Hologram.isDocumentSnapshotRestorable(snapshot(), true));
     });
   });
 

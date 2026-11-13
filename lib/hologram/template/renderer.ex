@@ -974,6 +974,30 @@ defmodule Hologram.Template.Renderer do
     {name, value_dom_to_text(value_dom)}
   end
 
+  # WARNING: must match the client renderer's #evaluateTemplate.
+  #
+  # A template reads `@name` as `vars.name`, so a var the template doesn't have fails as a KeyError
+  # on the vars map, which names neither the var nor the template. The template gets the map with
+  # a marker key put in, which is what tells that KeyError apart from one raised on any other map -
+  # one the template holds or builds. The one way around it is a template handing the bare `vars`
+  # on to a helper that reads a missing key from it. The marker costs a copy of the map per render,
+  # the rescue nothing until something raises.
+  defp evaluate_template(module, vars) do
+    marked_vars = Map.put(vars, :__hologram_vars__, true)
+    module.template().(marked_vars)
+  rescue
+    error in KeyError ->
+      case error do
+        %KeyError{key: key, term: %{__hologram_vars__: true}} when is_atom(key) ->
+          reraise Hologram.MisuseError,
+                  [message: undefined_var_message(key, module, vars)],
+                  __STACKTRACE__
+
+        _error ->
+          reraise error, __STACKTRACE__
+      end
+  end
+
   defp expand_attribute(attr_dom)
 
   # A spread's own entries are sorted by name, so that rendering is reproducible: map key order is
@@ -1553,7 +1577,7 @@ defmodule Hologram.Template.Renderer do
          server_struct
        ) do
     vars = Map.merge(params, page_state)
-    page_dom = page_module.template().(vars)
+    page_dom = evaluate_template(page_module, vars)
 
     layout_module = page_module.__layout_module__()
     layout_props_dom = build_layout_props_dom(page_module, page_state)
@@ -1623,8 +1647,8 @@ defmodule Hologram.Template.Renderer do
       slots_parent_module: parent_module
     }
 
-    vars
-    |> module.template().()
+    module
+    |> evaluate_template(vars)
     |> render_tree(env, server_struct)
   end
 
@@ -1784,6 +1808,24 @@ defmodule Hologram.Template.Renderer do
   defp undeclared_state_message(key, module, handler) do
     "state key #{inspect(key)} isn't an atom, but #{handler} put it in " <>
       ~s/"#{Reflection.module_name(module)}" - state is declared with atom names/
+  end
+
+  # WARNING: must match the client renderer's #undefinedVarMessage.
+  # Only atom keys are listed, since only those can be read with `@`.
+  defp undefined_var_message(key, module, vars) do
+    names =
+      vars
+      |> Map.keys()
+      |> Enum.filter(&is_atom/1)
+      |> Enum.sort()
+
+    available_vars =
+      case names do
+        [] -> "no vars are available"
+        names -> "available vars: " <> Enum.map_join(names, ", ", &("@" <> Atom.to_string(&1)))
+      end
+
+    ~s/undefined var @#{key} in the template of "#{Reflection.module_name(module)}", #{available_vars}/
   end
 
   # The build judges a literal $data_transfer. This judges the value it renders with, literal or not.

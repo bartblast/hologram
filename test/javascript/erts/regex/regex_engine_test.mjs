@@ -1057,4 +1057,72 @@ describe("RegexEngine", () => {
       assert.equal(RegexEngine.utf16IndexToByteOffset("", 0), 0);
     });
   });
+
+  describe("utf16IndexToByteOffsetConverter()", () => {
+    // a: 1 byte / 1 UTF-16 unit, é: 2 bytes / 1 unit, €: 3 bytes / 1 unit, 😀: 4 bytes / 2 units
+    const text = "aé€😀";
+
+    it("returns 0 for index 0", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
+
+      assert.equal(convert(0), 0);
+    });
+
+    it("converts index after 1-byte code point", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
+
+      assert.equal(convert(1), 1);
+    });
+
+    it("converts index after 2-byte code point", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
+
+      assert.equal(convert(2), 3);
+    });
+
+    it("converts index after 3-byte code point", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
+
+      assert.equal(convert(3), 6);
+    });
+
+    it("converts index after 4-byte code point", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
+
+      assert.equal(convert(5), 10);
+    });
+
+    it("converts index inside a surrogate pair to the offset after the pair", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
+
+      assert.equal(convert(4), 10);
+    });
+
+    it("returns 0 for empty text", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter("");
+
+      assert.equal(convert(0), 0);
+    });
+
+    it("converts index before an already converted one", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
+
+      assert.equal(convert(5), 10);
+      assert.equal(convert(2), 3);
+    });
+
+    it("converts index after an already converted one", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
+
+      assert.equal(convert(1), 1);
+      assert.equal(convert(5), 10);
+    });
+
+    it("converts the same index twice", () => {
+      const convert = RegexEngine.utf16IndexToByteOffsetConverter(text);
+
+      assert.equal(convert(3), 6);
+      assert.equal(convert(3), 6);
+    });
+  });
 });
