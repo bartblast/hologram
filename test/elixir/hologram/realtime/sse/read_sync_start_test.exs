@@ -7,10 +7,21 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
+  alias Hologram.Policy
   alias Hologram.Sync.Cursor
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
   @policy_hash "0123456789abcdef0123456789abcdef"
+
+  # The rules this build enforces, stood in the cache so a test can name them: hashing the suite's
+  # whole model reads derived field definitions no test of the sync start puts.
+  setup do
+    on_exit(&Policy.reset_model_facts_cache/0)
+
+    :persistent_term.put({Policy, :hash}, @policy_hash)
+
+    :ok
+  end
 
   defp seed(tx) do
     statement = """
@@ -38,6 +49,16 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
       assert read_sync_start("1.2.0123", nil, @policy_hash, true, true) == :held
     end
 
+    # Nothing else is read for a first arrival with current rules, so the check that the rules
+    # stayed the ones the handshake compared is what meets the hold.
+    test "waits for the compile when a hold began before a first arrival's start" do
+      on_exit(&Model.release/0)
+
+      Model.hold()
+
+      assert read_sync_start(nil, nil, @policy_hash, false, true) == :held
+    end
+
     # A place the log still reaches, and an effect after it the client missed: a gap holding
     # effects is compared against the model, which is the read the hold refuses.
     test "waits for the compile when a hold began before a returning client's catch-up" do
@@ -51,6 +72,13 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
       cursor = Cursor.encode(tx, seq, @policy_hash)
 
       assert read_sync_start(cursor, nil, @policy_hash, false, true) == :held
+    end
+
+    # A compile held and released between the handshake and these reads leaves them read under
+    # rules other than the ones the handshake compared the client's with.
+    test "starts over when the rules changed after the handshake" do
+      assert read_sync_start(nil, nil, "fedcba9876543210fedcba9876543210", false, true) ==
+               :rules_changed
     end
 
     test "reads nothing for a client arriving for the first time with current rules" do

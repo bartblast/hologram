@@ -7,6 +7,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.DB.Oplog
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
+  alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Realtime
   alias Hologram.Realtime.Handshake
@@ -527,9 +528,15 @@ defmodule Hologram.Realtime.SSE do
   # handshake found none, and every one of these refuses to read under it, so meeting one answers
   # `:held` rather than raising - and with nothing sent yet, the client is told nothing it would
   # have to take back when it is started again.
+  #
+  # A compile can also come and go between the handshake and these reads, held and released before
+  # any of them looked. The reads are then of rules other than the ones the handshake compared the
+  # client's with, and a returning client would resume under the old ones. So the rules are asked
+  # for once more after the reads, and other rules answer `:rules_changed`, for the start to be made
+  # again from the handshake.
   @doc false
   @spec read_sync_start(String.t() | nil, term | nil, String.t(), boolean, boolean) ::
-          {:ok, map} | :held
+          {:ok, map} | :held | :rules_changed
   def read_sync_start(cursor, user_id, policy_hash, stale_rules?, resume?) do
     rules = if stale_rules?, do: Rules.rendered()
 
@@ -548,14 +555,15 @@ defmodule Hologram.Realtime.SSE do
     # resumes.
     edges = if gap, do: Edges.index()
 
-    {:ok,
-     %{
-       edges: edges,
-       gap: gap,
-       grants_then: grants_then,
-       resync_reason: resync_reason,
-       rules: rules
-     }}
+    start = %{
+      edges: edges,
+      gap: gap,
+      grants_then: grants_then,
+      resync_reason: resync_reason,
+      rules: rules
+    }
+
+    if Policy.hash() == policy_hash, do: {:ok, start}, else: :rules_changed
   rescue
     StaleModelError -> :held
   end
@@ -1075,8 +1083,9 @@ defmodule Hologram.Realtime.SSE do
     case SyncHandshake.check(greeting) do
       # The rules the handshake compared the client's with are the ones this session judges rows
       # by, read once for the frame handing them over, the door a returning client passes and the
-      # places the session hands over: read again, a live reload between two reads could let a
-      # client resume under the old rules and be handed places vouching for the new ones.
+      # places the session hands over: read again for each, a live reload between two reads could
+      # let a client resume under the old rules and be handed places vouching for the new ones.
+      # They are asked for once more after the start reads, as a check that nothing moved them.
       {:sync, page, cursor, policy_hash, stale_rules?} ->
         case read_sync_start(cursor, user_id, policy_hash, stale_rules?, resume?) do
           {:ok, start} ->
@@ -1086,6 +1095,11 @@ defmodule Hologram.Realtime.SSE do
           # arriving under it, and nothing was sent it yet that it would have to unlearn.
           :held ->
             {conn, {:held, resume?}}
+
+          # The rules changed after the handshake, and nothing was sent yet: the start is made
+          # again from the handshake, under the rules the build enforces now.
+          :rules_changed ->
+            start_syncing(conn, user_id, resume?)
         end
 
       {:reload, reason} ->
