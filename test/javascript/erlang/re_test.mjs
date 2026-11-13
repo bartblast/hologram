@@ -6,6 +6,7 @@ import {
   buildArgumentErrorMsg,
   buildMultiArgumentErrorMsg,
   defineRuntimeGlobals,
+  sinon,
 } from "../support/helpers.mjs";
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
@@ -2233,6 +2234,100 @@ describe("Erlang_Re", () => {
       assertMatchResult(result, [[2, 1]]);
     });
 
+    it("global firstline looks up the first newline once per run", () => {
+      const subject = "a".repeat(300);
+      const charCodeAtSpy = sinon.spy(String.prototype, "charCodeAt");
+
+      let result;
+
+      try {
+        result = run(Type.bitstring(subject), Type.bitstring("a"), [
+          Type.atom("global"),
+          Type.atom("firstline"),
+        ]);
+      } finally {
+        charCodeAtSpy.restore();
+      }
+
+      const expected = [];
+
+      for (let k = 0; k < 300; k++) {
+        expected.push([[k, 1]]);
+      }
+
+      assertGlobalMatchResult(result, expected);
+      assert.isAtMost(charCodeAtSpy.callCount, 4 * subject.length);
+    });
+
+    it("global firstline looks up the newline again past a crossing match", () => {
+      const result = run(
+        Type.bitstring("a\nab\nb"),
+        Type.bitstring("a\\na|b"),
+        [Type.atom("global"), Type.atom("firstline")],
+      );
+
+      assertGlobalMatchResult(result, [[[0, 3]], [[3, 1]]]);
+    });
+
+    it("global firstline looks up the newline again for a retry past it", () => {
+      const result = run(
+        Type.bitstring("a\nb\nb"),
+        Type.bitstring("a\\n\\K|b"),
+        [Type.atom("global"), Type.atom("firstline")],
+      );
+
+      assertGlobalMatchResult(result, [[[2, 0]], [[2, 1]]]);
+    });
+
+    it("global \\X segments the subject once per run", () => {
+      const segmentSpy = sinon.spy(ERTS.graphemeSegmenter, "segment");
+
+      let result;
+
+      try {
+        result = run(Type.bitstring("é".repeat(300)), Type.bitstring("\\X"), [
+          Type.atom("global"),
+          Type.atom("unicode"),
+        ]);
+      } finally {
+        segmentSpy.restore();
+      }
+
+      const expected = [];
+
+      for (let k = 0; k < 300; k++) {
+        expected.push([[2 * k, 2]]);
+      }
+
+      assertGlobalMatchResult(result, expected);
+      assert.equal(segmentSpy.callCount, 1);
+    });
+
+    it("global \\X segments the subject once per run with empty matches", () => {
+      const segmentSpy = sinon.spy(ERTS.graphemeSegmenter, "segment");
+
+      let result;
+
+      try {
+        result = run(
+          Type.bitstring("é".repeat(50)),
+          Type.bitstring("(?=\\X)"),
+          [Type.atom("global"), Type.atom("unicode")],
+        );
+      } finally {
+        segmentSpy.restore();
+      }
+
+      const expected = [];
+
+      for (let k = 0; k < 50; k++) {
+        expected.push([[2 * k, 0]]);
+      }
+
+      assertGlobalMatchResult(result, expected);
+      assert.equal(segmentSpy.callCount, 1);
+    });
+
     it("compile-time firstline pattern applies when running", () => {
       const compiled = compilePattern("b", [Type.atom("firstline")]);
 
@@ -2328,6 +2423,50 @@ describe("Erlang_Re", () => {
       ]);
 
       assertGlobalMatchResult(result, [[[0, 0]], [[4, 0]]]);
+    });
+
+    it("global reports byte offsets of captures before the match start in unicode mode", () => {
+      const result = run(
+        Type.bitstring("aé😀b"),
+        Type.bitstring("(?<=(é😀))b|é"),
+        [Type.atom("global"), Type.atom("unicode")],
+      );
+
+      assertGlobalMatchResult(result, [
+        [[1, 2]],
+        [
+          [7, 1],
+          [1, 6],
+        ],
+      ]);
+    });
+
+    it("global converts byte offsets in one pass over a unicode subject", () => {
+      // The spy counts every codePointAt() call of the run, so the pattern
+      // takes the native route and never matches empty: the interpreter and
+      // the empty-match scan advance read code points too
+      const subject = "é ".repeat(100);
+      const codePointAtSpy = sinon.spy(String.prototype, "codePointAt");
+
+      let result;
+
+      try {
+        result = run(Type.bitstring(subject), Type.bitstring("é"), [
+          Type.atom("global"),
+          Type.atom("unicode"),
+        ]);
+      } finally {
+        codePointAtSpy.restore();
+      }
+
+      const expected = [];
+
+      for (let k = 0; k < 100; k++) {
+        expected.push([[3 * k, 2]]);
+      }
+
+      assertGlobalMatchResult(result, expected);
+      assert.isAtMost(codePointAtSpy.callCount, 2 * subject.length);
     });
 
     it("global starts at the offset", () => {

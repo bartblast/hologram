@@ -50,7 +50,7 @@ defmodule HologramFeatureTests.Events.Change.Page1 do
         <input $change="handle_radio_change" type="radio" name="radio_group" id="radio_elem_1" value="option_1" checked={@radio == "option_1"} />
         <label for="radio_elem_1">Radio Option 1</label>
         <br />
-        <input type="radio" name="radio_group" id="radio_elem_2" value="option_2" checked={@radio == "option_2"} />
+        <input $change="handle_radio_change" type="radio" name="radio_group" id="radio_elem_2" value="option_2" checked={@radio == "option_2"} />
         <label for="radio_elem_2">Radio Option 2</label>
         <br /><br />
 

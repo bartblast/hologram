@@ -266,6 +266,20 @@ defmodule HologramFeatureTests.NavigationTest do
       |> assert_text("Page result: nil")
     end
 
+    # The mark makes the asserts wait for the new document: the old one shows the same page, and
+    # the new one shows the server's HTML until the client has mounted, snapshot or not.
+    feature "full load of the same page resets component state", %{session: session} do
+      session
+      |> visit(Page1)
+      |> click(button("Put page 1 result A"))
+      |> assert_text("Page 1 result A")
+      |> mark_document()
+      |> click(link("Page 1 plain link"))
+      |> wait_for_unmarked_document()
+      |> assert_page(Page1)
+      |> assert_text("Page result: nil")
+    end
+
     feature "back navigation preserves component state", %{session: session} do
       session
       |> visit(Page1)

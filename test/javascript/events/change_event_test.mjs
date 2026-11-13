@@ -14,7 +14,7 @@ describe("ChangeEvent", () => {
 
       const event = {
         target: target,
-        currentTarget: target, // For individual field events, currentTarget == target
+        currentTarget: target, // For individual field events, currentTarget = target
       };
 
       const result = ChangeEvent.buildEventParam(event);
@@ -26,7 +26,8 @@ describe("ChangeEvent", () => {
     });
 
     it("handles radio inputs", () => {
-      const target = {tagName: "INPUT", type: "radio", checked: false};
+      const dom = new JSDOM(`<input type="radio" value="large" checked>`);
+      const target = dom.window.document.querySelector("input");
 
       const event = {
         target: target,
@@ -37,7 +38,24 @@ describe("ChangeEvent", () => {
 
       assert.deepStrictEqual(
         result,
-        Type.map([[Type.atom("value"), Type.boolean(false)]]),
+        Type.map([[Type.atom("value"), Type.bitstring("large")]]),
+      );
+    });
+
+    it("handles radio inputs without a value attribute", () => {
+      const dom = new JSDOM(`<input type="radio" checked>`);
+      const target = dom.window.document.querySelector("input");
+
+      const event = {
+        target: target,
+        currentTarget: target, // For individual field events, currentTarget = target
+      };
+
+      const result = ChangeEvent.buildEventParam(event);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.atom("value"), Type.bitstring("on")]]),
       );
     });
 

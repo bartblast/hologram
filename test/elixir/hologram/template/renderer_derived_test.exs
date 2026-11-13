@@ -413,7 +413,7 @@ defmodule Hologram.Template.RendererDerivedTest do
       %{tree: tree} = render_page(Module152, %{name: "ada"}, @server, initial_page?: true)
 
       assert print_dom(tree) ==
-               ~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;ada!&quot;, prop_3: &quot;ADA&quot;}'
+               ~s'layout vars = %{__hologram_vars__: true, cid: &quot;layout&quot;, prop_1: &quot;ada!&quot;, prop_3: &quot;ADA&quot;}'
     end
 
     test "holds the derived fields in the page struct, emptied for the client" do

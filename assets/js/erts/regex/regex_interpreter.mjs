@@ -72,6 +72,10 @@ export default class RegexInterpreter {
   // (everywhere or at the start position only) during backtracking, so a
   // longer match at the same position can still be found.
   //
+  // opts.subjectCache holds data derived from the subject alone, so calls on
+  // the same subject can share it instead of each deriving it again. It is
+  // {graphemeSegments: null} to start, filled in when first needed.
+  //
   // Matching uses continuation-passing style: each node matcher calls the
   // continuation with the position after itself, and returning false makes
   // the caller backtrack to its next alternative.
@@ -105,9 +109,10 @@ export default class RegexInterpreter {
       openGroups: [],
       // Mutable scalars boxed to stay shared by reference when option
       // settings copy the state, like the capture and mark containers
-      shared: {depth: 0, graphemeSegments: null, reportedStart: null, steps: 0},
+      shared: {depth: 0, reportedStart: null, steps: 0},
       startOffset: startPosition,
       subject: subject,
+      subjectCache: opts.subjectCache ?? {graphemeSegments: null},
       subroutines: $.#buildSubroutineTable(ast),
       ungreedy: effectiveOpts.ungreedy === true,
       unicode: effectiveOpts.unicode === true,
@@ -703,13 +708,14 @@ export default class RegexInterpreter {
       case "graphemeCluster": {
         if (position >= state.subject.length) return false;
 
-        if (state.shared.graphemeSegments === null) {
-          state.shared.graphemeSegments = ERTS.graphemeSegmenter.segment(
-            state.subject,
-          );
-        }
+        // Kept per subject, since finding the segment at a position in a
+        // fresh split walks the subject from the start
+        state.subjectCache.graphemeSegments ??= ERTS.graphemeSegmenter.segment(
+          state.subject,
+        );
 
-        const segment = state.shared.graphemeSegments.containing(position);
+        const segment =
+          state.subjectCache.graphemeSegments.containing(position);
 
         return continuation(segment.index + segment.segment.length);
       }

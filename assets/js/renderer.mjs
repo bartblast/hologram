@@ -10,6 +10,7 @@ import ElementRefRegistry from "./element_ref_registry.mjs";
 import EventListeners from "./event_listeners.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import Hologram from "./hologram.mjs";
+import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Identifier from "./identifier.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -1966,10 +1967,50 @@ export default class Renderer {
     return Type.tuple([name, evaluatedValue]);
   }
 
+  // Based on evaluate_template/2
+  //
+  // WARNING: must match evaluate_template/2 on the server: the same KeyErrors become the same
+  // Hologram.MisuseError, every other error passes through untouched.
+  //
+  // A template reads `@name` as `vars.name`, so a var the template doesn't have fails as a
+  // KeyError on the vars map, which names neither the var nor the template. The template gets the
+  // map with a marker key put in, which is what tells that KeyError apart from one raised on any
+  // other map - one the template holds or builds. The one way around it is a template handing the
+  // bare `vars` on to a helper that reads a missing key from it. The marker costs a copy of the
+  // map per render, the catch nothing until something raises.
+  // The new error carries the KeyError's stacktrace, as the server's reraise does, since that's
+  // where the template's own frame is - a raise from here would only see the renderer's.
+  // Deps: [:maps.get/2, :maps.put/3]
   static #evaluateTemplate(moduleProxy, vars) {
-    return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
+    const markedVars = Erlang_Maps["put/3"](
+      Type.atom("__hologram_vars__"),
+      Type.boolean(true),
       vars,
-    ]);
+    );
+
+    try {
+      return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
+        markedVars,
+      ]);
+    } catch (error) {
+      if (!Renderer.#isUndefinedVarError(error)) {
+        throw error;
+      }
+
+      const key = Erlang_Maps["get/2"](Type.atom("key"), error.struct);
+
+      const misuseError = new HologramBoxedError(
+        Type.errorStruct(
+          "Hologram.MisuseError",
+          Renderer.#undefinedVarMessage(key, moduleProxy.__exModule__, vars),
+        ),
+      );
+
+      misuseError.stacktrace = error.stacktrace;
+      misuseError.rederive(Interpreter.boxStacktrace(error));
+
+      throw misuseError;
+    }
   }
 
   // Decides whether a live event satisfies an attribute's modifier filters. Modifiers are a
@@ -2436,6 +2477,40 @@ export default class Renderer {
 
   static #isTrustedHtml(value) {
     return Type.isStruct(value, "Hologram.Template.TrustedHTML");
+  }
+
+  // Tells apart the KeyError a template raises for a var it doesn't have, see #evaluateTemplate.
+  // A struct is null when its derivation was skipped or faulted.
+  // Deps: [:maps.get/2, :maps.get/3]
+  static #isUndefinedVarError(error) {
+    if (
+      !(error instanceof HologramBoxedError) ||
+      error.kind.value !== "error" ||
+      error.struct === null
+    ) {
+      return false;
+    }
+
+    const struct = error.struct;
+
+    if (
+      !Interpreter.isStrictlyEqual(
+        Erlang_Maps["get/2"](Type.atom("__struct__"), struct),
+        Type.alias("KeyError"),
+      )
+    ) {
+      return false;
+    }
+
+    const term = Erlang_Maps["get/2"](Type.atom("term"), struct);
+
+    return (
+      Type.isAtom(Erlang_Maps["get/2"](Type.atom("key"), struct)) &&
+      Type.isMap(term) &&
+      Type.isTrue(
+        Erlang_Maps["get/3"](Type.atom("__hologram_vars__"), term, Type.nil()),
+      )
+    );
   }
 
   // Based on item_key_part/1
@@ -4262,6 +4337,28 @@ export default class Renderer {
     return (
       `state "${key.value}" isn't declared in "${moduleName}", but ${handler} put it - ` +
       Renderer.#undeclaredStateHint(key, moduleProxy)
+    );
+  }
+
+  // Based on undefined_var_message/3
+  //
+  // WARNING: must match undefined_var_message/3 on the server character for character.
+  //
+  // Only atom keys are listed, since only those can be read with `@`.
+  static #undefinedVarMessage(key, module, vars) {
+    const names = Object.values(vars.data)
+      .map(([name]) => name)
+      .filter((name) => Type.isAtom(name))
+      .sort(Interpreter.compareTerms);
+
+    const availableVars =
+      names.length === 0
+        ? "no vars are available"
+        : "available vars: " + names.map(({value}) => `@${value}`).join(", ");
+
+    return (
+      `undefined var @${key.value} in the template of ` +
+      `"${Interpreter.moduleExName(module)}", ${availableVars}`
     );
   }
 

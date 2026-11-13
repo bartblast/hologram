@@ -675,19 +675,46 @@ export default class Hologram {
 
   // Made public to make tests easier
   //
+  // Whether the browser loaded this document by going back or forward to its history entry. The
+  // answer describes how the document was loaded, not the navigations within it, which the
+  // History API makes without the browser recording a new type, so it means something only while
+  // the document starts. A browser that keeps no record of it answers no.
+  static isBackForwardLoad() {
+    const entry =
+      "getEntriesByType" in performance
+        ? performance.getEntriesByType("navigation")[0]
+        : undefined;
+
+    if (entry !== undefined) {
+      return entry.type === "back_forward";
+    }
+
+    // Older browsers record it only through the deprecated API.
+    return (
+      performance.navigation !== undefined &&
+      performance.navigation.type === PerformanceNavigation.TYPE_BACK_FORWARD
+    );
+  }
+
+  // Made public to make tests easier
+  //
   // Whether the snapshot of the history entry a new document is loaded for can be restored into
-  // it: only for Back and Forward, not for a reload; only for the identity the server has just
-  // rendered the document for, since a snapshot taken for another can hold another user's state;
-  // and only into the code it was taken with, as a snapshot that does not fit mounts from the
-  // state the server has just rendered instead.
+  // it: only when the document was loaded by Back or Forward; only for the identity the server
+  // has just rendered the document for, since a snapshot taken for another can hold another
+  // user's state; and only into the code it was taken with, as a snapshot that does not fit
+  // mounts from the state the server has just rendered instead.
+  //
+  // Any other load that finds the entry's id renders what the server has just sent: a reload, or
+  // a link or location.assign() to the URL the tab already shows, which Chrome makes a load of the
+  // same entry with its state kept.
   //
   // A snapshot with no identity tag is passed over too: it was taken before snapshots were tagged,
   // or after the identity changed under its page, and can hold anyone's state. So the first Back
   // past a reload or an external site after an upgrade renders the page fresh, once.
-  static isDocumentSnapshotRestorable(pageSnapshot, isPageReload) {
+  static isDocumentSnapshotRestorable(pageSnapshot, isBackForwardLoad) {
     return (
       pageSnapshot !== null &&
-      !isPageReload &&
+      isBackForwardLoad &&
       IdentityTracker.isCurrentTag(pageSnapshot.identityTag) &&
       LiveReload.snapshotFits(
         pageSnapshot,
@@ -2010,12 +2037,14 @@ export default class Hologram {
     // document was loaded for, under that URL.
     $.pagePath = window.location.pathname;
 
-    // Check if there's already a history state (e.g., when navigating back from external page)
+    // The entry carries an id when the tab has been on it before: gone back or forward to,
+    // reloaded, or, in Chrome, loaded again under the same URL. Its snapshot is restored only for
+    // Back and Forward (see isDocumentSnapshotRestorable).
     if (history.state) {
       $.historyId = history.state;
       const pageSnapshot = await $.#getPageSnapshot(history.state);
 
-      if ($.isDocumentSnapshotRestorable(pageSnapshot, $.#isPageReload())) {
+      if ($.isDocumentSnapshotRestorable(pageSnapshot, $.isBackForwardLoad())) {
         $.#documentSnapshot = pageSnapshot;
       }
     } else {
@@ -2109,27 +2138,6 @@ export default class Hologram {
 
   static #isPageModuleRegistered(pageModule) {
     return $.#registeredPageModules.has(pageModule.value);
-  }
-
-  // Note: Although using the History API makes it impossible to use the Performance API for detecting
-  // what was the last navigation type, when the page is reloaded the navigation type will
-  // always be "reload". But the type remains the same for succeeding navigation types within
-  // Hologram navigation, hence the additional check for whether the app was already initiated.
-  // In case of the new Performance API, there will always be only one entry due to History API use.
-  static #isPageReload() {
-    // New Performance API
-    if ("getEntriesByType" in performance) {
-      return (
-        !$.#isInitiated &&
-        performance.getEntriesByType("navigation")[0].type === "reload"
-      );
-    }
-
-    // Old Performance API
-    return (
-      !$.#isInitiated &&
-      performance.navigation.type === PerformanceNavigation.TYPE_RELOAD
-    );
   }
 
   static #isPrefetchPageTimedOut(mapKey) {
