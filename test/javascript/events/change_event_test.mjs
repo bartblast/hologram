@@ -51,7 +51,7 @@ describe("ChangeEvent", () => {
         currentTarget: target, // For individual field events, currentTarget = target
       };
 
-      const result = ChangeEvent.buildOperationParam(event);
+      const result = ChangeEvent.buildEventParam(event);
 
       assert.deepStrictEqual(
         result,
