@@ -586,6 +586,10 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(gap_end: last_place(), read_gap: read_gap_from(cursor))
     end
 
+    defp with_revisions(row, revisions) do
+      %{row | __meta__: %{row.__meta__ | revisions: revisions}}
+    end
+
     test "tells a returning client about a row renamed while it was being caught up" do
       moved = create("before leaving")
       renamed = create("old title")
@@ -816,6 +820,32 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, _cursor, [%{data: patch, id: id, op: :patch_entity}], _seq}
       assert id == renamed.id
       assert patch.c == "new title"
+    end
+
+    # A write of two columns under an older stamp leaves the row's highest revision where it was,
+    # so the revisions can't say which copy is newer - the moment each window was read can. The
+    # newer copy sits in the window between the other two by id, so neither the first nor the last
+    # window judged by id holds it.
+    test "tells a row three windows hold as the window read last has it" do
+      row = create("before leaving")
+      windows(%{@page => [@board_window, @other_window, @reach_window]})
+      Enum.each([@board_window, @other_window, @reach_window], &hold_silently/1)
+
+      session = start_session!(gap: [gap_effect(row.id)])
+
+      older = with_revisions(%{row | c: "older"}, %{a: 10, b: 100, c: 10})
+      newer = with_revisions(%{row | a: false, c: "newer"}, %{a: 20, b: 100, c: 20})
+
+      ResultStore.put(@board_window, 1, [older], 1)
+      ResultStore.put(@other_window, 1, [newer], 3)
+      ResultStore.put(@reach_window, 1, [older], 2)
+
+      Enum.each([@board_window, @other_window, @reach_window], fn window_id ->
+        send(session, {:round, window_id, 1, [], nil})
+      end)
+
+      assert_receive {:sync_deltas, _cursor, [%{data: data, op: :put_entity}], _applied_seq}
+      assert {data.a, data.c} == {false, "newer"}
     end
 
     # Both windows hold the row; the board window's round for the change was read while the client

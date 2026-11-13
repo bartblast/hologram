@@ -321,6 +321,18 @@ defmodule Hologram.Sync.Session do
   # gap named (`touched`), which a grant change or a moved related row decided differently
   # (`shift`), and the ones whose verdicts the client may hold (`verdict_rows`). Nothing of it
   # outlives the catch-up, so it is a value the frames are told from, never part of the session.
+  #
+  # The windows' last rounds were read at different moments, so two copies of one row can differ:
+  # a window whose round for a change is still queued has the row as it was. So the windows are
+  # judged in the order their rounds were read and a later copy wins, holding every write an
+  # earlier one does - its values and the sets it includes alike. Judged in any other order, the
+  # older copy could win, and the round that would correct it was already passed over while the
+  # client was catching up. Nothing on the row itself can stand in for that order: a column's
+  # revision moves only when that column is written, and a pair moves none.
+  #
+  # The order is when each query was asked for, not when the database took its snapshot: two
+  # windows' queries waiting on the pool can be answered in the other order, and a write landing
+  # between those two snapshots is then held by the copy that loses.
   defp judge_gap(state, gap, grants_then) do
     named_ids =
       gap
@@ -334,14 +346,38 @@ defmodule Hologram.Sync.Session do
       verdict_rows: %{}
     }
 
-    state.versions
-    |> Enum.sort()
-    |> Enum.reduce_while({:ok, unjudged}, fn {window_id, version}, {:ok, acc} ->
-      case ResultStore.fetch(window_id, version) do
-        nil -> {:halt, :behind_the_ring}
-        result -> {:cont, {:ok, judge_window(acc, state, result, grants_then, named_ids)}}
-      end
-    end)
+    with {:ok, ordered} <- read_order(state.versions) do
+      Enum.reduce_while(ordered, {:ok, unjudged}, fn {window_id, version}, {:ok, acc} ->
+        judge_next(acc, state, window_id, version, grants_then, named_ids)
+      end)
+    end
+  end
+
+  defp judge_next(judged, state, window_id, version, grants_then, named_ids) do
+    case ResultStore.fetch(window_id, version) do
+      nil -> {:halt, :behind_the_ring}
+      result -> {:cont, {:ok, judge_window(judged, state, result, grants_then, named_ids)}}
+    end
+  end
+
+  # The windows' last rounds, earliest read first. A round gone from the ring already is the same
+  # cliff here as when its rows are read.
+  defp read_order(versions) do
+    read_ats =
+      Enum.map(versions, fn {window_id, version} ->
+        {ResultStore.read_at(window_id, version), window_id, version}
+      end)
+
+    if Enum.any?(read_ats, fn {read_at, _window_id, _version} -> is_nil(read_at) end) do
+      :behind_the_ring
+    else
+      ordered =
+        read_ats
+        |> Enum.sort()
+        |> Enum.map(fn {_read_at, window_id, version} -> {window_id, version} end)
+
+      {:ok, ordered}
+    end
   end
 
   defp judge_window(judged, state, result, grants_then, named_ids) do
@@ -430,14 +466,14 @@ defmodule Hologram.Sync.Session do
   end
 
   # Judged per window, merged by id: visibility is per ROW and per client rather than per window,
-  # so two windows holding the same row agree about it. What appeared keeps the newest copy, since
-  # it is handed over whole (see `merge_newest/2`); what vanished goes by id alone.
+  # so two windows holding the same row agree about it, and the later read writes what the earlier
+  # one did.
   #
   # Two sources feed the one accumulator, and they answer different questions about the same
   # rows: what the client's GRANTS moving decided differently, and what a row the gap names now
   # decides about the rows leaning on it. Both end up in the batch `tell_shift/2` sends.
   defp merge_shift(judged, shift) do
-    appeared = merge_newest(judged.shift.appeared, Map.new(shift.appeared, &{&1.id, &1}))
+    appeared = merge_later(judged.shift.appeared, Map.new(shift.appeared, &{&1.id, &1}))
     vanished = Map.merge(judged.shift.vanished, Map.new(shift.vanished, &{&1.id, &1}))
 
     %{judged | shift: %{appeared: appeared, vanished: vanished}}
@@ -623,28 +659,13 @@ defmodule Hologram.Sync.Session do
       |> Enum.filter(&(Policy.deciding_quantifiers(&1.__struct__) != []))
       |> Map.new(&{&1.id, &1})
 
-    %{judged | verdict_rows: merge_newest(judged.verdict_rows, rows)}
+    %{judged | verdict_rows: merge_later(judged.verdict_rows, rows)}
   end
 
-  # The windows' last rounds were read at different moments, so two copies of one row can hold
-  # different values: a window whose round for a change is still queued has the row as it was.
-  # The copy the later write reached is kept - its revisions are the higher ones - whichever window
-  # it came from, and it takes what the other copy included and it did not. Kept by window order
-  # instead, the older values could win, and the round that would correct them was already passed
-  # over while the client was catching up.
-  defp merge_newest(rows, more_rows) do
-    Map.merge(rows, more_rows, fn _id, row, other ->
-      {newer, older} =
-        if newest_revision(other) > newest_revision(row), do: {other, row}, else: {row, other}
-
-      Entity.merge_copies(newer, older)
-    end)
-  end
-
-  defp newest_revision(row) do
-    row.__meta__.revisions
-    |> Map.values()
-    |> Enum.max(fn -> 0 end)
+  # A copy from a window read later keeps its own values and takes what the earlier copy included
+  # and it did not.
+  defp merge_later(rows, later_rows) do
+    Map.merge(rows, later_rows, fn _id, earlier, later -> Entity.merge_copies(later, earlier) end)
   end
 
   defp replaying?(state), do: state.catching_up
@@ -662,7 +683,7 @@ defmodule Hologram.Sync.Session do
       |> Enum.filter(&MapSet.member?(named_ids, &1.id))
       |> Map.new(&{&1.id, &1})
 
-    %{judged | touched: merge_newest(judged.touched, rows)}
+    %{judged | touched: merge_later(judged.touched, rows)}
   end
 
   defp gap_ids(%{data: %{"target_id" => target_id}, entity_id: entity_id, op: op})
