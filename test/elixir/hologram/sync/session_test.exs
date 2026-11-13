@@ -1116,6 +1116,300 @@ defmodule Hologram.Sync.SessionTest do
       assert deltas == [Frame.put_entity(gated, Frame.row_verdicts(user.id, gated))]
     end
 
+    # The parent turned private while the windows filled, so the window's last round no longer
+    # carries the child the client held under it.
+    test "takes away a row that left every window while the client was being caught up" do
+      child =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), child) == [
+               %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # The child's grant was taken away while the client was gone, so no round lets it see the child,
+    # and the parent turned private takes the child out of the window too. The grants it held before
+    # it went away let it see the child, so it may still hold it.
+    test "takes away a row a revoked grant covered once it left every window" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      child = DB.create!(PolicyModule1.new())
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          gap: [gap_effect(Entity.generate_id())],
+          grants_then: [viewer_grant(user.id, child)]
+        )
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), child) == [
+               %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # A row the client could never see says nothing to it when it leaves - windows are shared, and
+    # carry rows of every user.
+    test "says nothing of a row the client could never see leaving every window" do
+      hidden = DB.create!(PolicyModule1.new())
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [hidden]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), hidden) == []
+    end
+
+    # The window's previous round left the ring before the next one could be compared with it, so
+    # what left the window between them can't be known.
+    test "cuts the client off when a window's previous round left the ring before its next one" do
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      ResultStore.put(@board_window, 1, [])
+      send(session, {:round, @board_window, 1, [], nil})
+      settle([], session)
+
+      # Round 4 landing drops round 1 from the ring, while round 2 is still there to be read.
+      Enum.each(2..4, &ResultStore.put(@board_window, &1, []))
+
+      ref = Process.monitor(session)
+      send(session, {:round, @board_window, 2, [], nil})
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :behind_the_ring}
+    end
+
+    # The child leaves the board window, but the other window's last round still lets the client see
+    # it, so it hasn't left every window.
+    test "keeps a row that left one window while another window's last round shows it" do
+      child =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      ResultStore.put(@other_window, 1, [child])
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert deltas_for(caught_up_deltas(), child) == []
+    end
+
+    test "keeps a row that left a window and came back to it" do
+      child =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [parent])
+      send(session, {:round, @board_window, 2, [], nil})
+      ResultStore.put(@board_window, 3, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 3, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), child) == []
+    end
+
+    test "takes away once a row that left every window and that the gap names" do
+      child =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [%{gap_effect(child.id) | type: PolicyModule1}])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [parent])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), child) == [
+               %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # The child reads through its parent, which went private while the client was gone, so no round
+    # lets the client see the child - but it could before the parent moved, so it may hold it.
+    test "takes away a row a moved related row hid once it left every window" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyModule1.new())
+
+      child =
+        %{parent_id: parent.id}
+        |> PolicyModule5.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          edges: Edges.derive([PolicyModule5]),
+          gap: [related_effect(parent.id, PolicyModule1, %{"public" => 1})]
+        )
+
+      ResultStore.put(@board_window, 1, [child])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), child) == [
+               %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module5"}
+             ]
+    end
+
+    # A row that left every window is taken away before the gap's batches, in a frame claiming no
+    # place: a client cut off after the last batch comes back with nothing left to replay, and no
+    # round carrying the row to take it away then.
+    test "takes away a row that left every window first, in a frame claiming no place" do
+      child =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyParent.new())
+      missing_id = Entity.generate_id()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(missing_id)])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [parent])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert_receive {:sync_deltas, nil, first_deltas, _applied_seq}
+
+      assert first_deltas == [
+               %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+
+      assert_receive {:sync_deltas, batch_cursor, [%{id: ^missing_id}], _applied_seq}
+      assert batch_cursor != nil
+    end
+
+    # The row left the board window, and the other window's last round carries it hidden since a
+    # grant was taken away - the shift takes it away, and nothing takes it away again.
+    test "takes away once a row that left every window and that a revoked grant hid" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      child = DB.create!(PolicyModule1.new())
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          gap: [gap_effect(Entity.generate_id())],
+          grants_then: [viewer_grant(user.id, child)]
+        )
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [parent])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      ResultStore.put(@other_window, 1, [child])
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert deltas_for(caught_up_deltas(), child) == [
+               %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
     # The row went public between the two reads, so the window read later outdates the hidden copy.
     test "hands over a row the gap names once a window read later shows it" do
       user =

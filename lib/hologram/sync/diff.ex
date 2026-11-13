@@ -21,7 +21,7 @@ defmodule Hologram.Sync.Diff do
   """
   @spec carried(%{ids: MapSet.t(), rows: map}, String.t() | nil) :: {map, MapSet.t()}
   def carried(result, actor_user_id) do
-    members = members(result.rows)
+    members = carried_rows(result)
 
     visible_ids =
       members
@@ -29,6 +29,15 @@ defmodule Hologram.Sync.Diff do
       |> member_ids_of()
 
     {members, visible_ids}
+  end
+
+  @doc """
+  Returns every row a round carries, keyed by id - the roots and every row embedded under them,
+  however deep, each id's copies merged into one - whoever may see them.
+  """
+  @spec carried_rows(%{ids: MapSet.t(), rows: map}) :: map
+  def carried_rows(result) do
+    members(result.rows)
   end
 
   @doc """
