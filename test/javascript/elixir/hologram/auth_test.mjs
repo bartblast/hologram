@@ -415,12 +415,19 @@ describe("Elixir_Hologram_Auth", () => {
           },
           inverses: {},
           operations: [],
-          policy: {read: [rule({predicates: [["label", "==", "Plans?"]]})]},
+          policy: {read: [rule({predicates: [["label", "==", "Notes?"]]})]},
         },
       });
 
+      // The bundle's rule granted this one, and the new rule doesn't.
       assert.deepStrictEqual(
-        can(Type.nil(), Type.atom("read"), document({title: "Plans"})),
+        can(Type.nil(), Type.atom("read"), plans),
+        Type.boolean(false),
+      );
+
+      // Granted only by the new rule over the field as the new build defines it.
+      assert.deepStrictEqual(
+        can(Type.nil(), Type.atom("read"), document({title: "Notes"})),
         Type.boolean(true),
       );
     });
