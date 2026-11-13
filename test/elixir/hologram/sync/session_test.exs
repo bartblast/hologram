@@ -26,6 +26,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
+  alias Hologram.Sync.Frame
   alias Hologram.Sync.PageWindows
   alias Hologram.Sync.ResultStore
   alias Hologram.Sync.Session
@@ -40,6 +41,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyProject
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyLabel
+  alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyParent
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
   use_module_stub :query_cache
@@ -112,7 +114,7 @@ defmodule Hologram.Sync.SessionTest do
 
   # One entry naming a row of ANOTHER type, with the columns that moved on it - what decides
   # whether a row leaning on that one is worth judging again. Written as an override of the plain
-  # entry rather than as more parameters on it, so the four call sites read as what they are.
+  # entry rather than as more parameters on it, so the call sites read as what they are.
   defp related_effect(entity_id, type, revisions) do
     entity_id
     |> gap_effect()
@@ -846,6 +848,204 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_deltas, _cursor, [%{data: data, op: :put_entity}], _applied_seq}
       assert {data.a, data.c} == {false, "newer"}
+    end
+
+    # The row went private between the two windows' reads, so the window read later carries it
+    # hidden from this client - which outdates the copy the earlier window let it see.
+    test "drops a row the gap names once a window read later hides it" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      named = %{gap_effect(row.id) | type: PolicyModule1}
+
+      session = start_session!(actor_user_id: user.id, gap: [named])
+
+      ResultStore.put(@board_window, 1, [row], 1)
+      ResultStore.put(@other_window, 1, [%{row | public: false}], 2)
+      send(session, {:round, @board_window, 1, [], nil})
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               %{id: row.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # The window read later carries the row only under another row - still a copy of it, read
+    # later, and hidden from this client.
+    test "drops a row the gap names once a window read later carries it hidden under another" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [%{gap_effect(row.id) | type: PolicyModule1}])
+
+      ResultStore.put(@board_window, 1, [row], 1)
+      ResultStore.put(@other_window, 1, [%{parent | children: [%{row | public: false}]}], 2)
+      send(session, {:round, @board_window, 1, [], nil})
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               %{id: row.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # The other way round: the row went public between the two reads, so the window read later
+    # outdates the hidden copy.
+    test "hands over a row the gap names once a window read later shows it" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      named = %{gap_effect(row.id) | type: PolicyModule1}
+
+      session = start_session!(actor_user_id: user.id, gap: [named])
+
+      ResultStore.put(@board_window, 1, [%{row | public: false}], 1)
+      ResultStore.put(@other_window, 1, [row], 2)
+      send(session, {:round, @board_window, 1, [], nil})
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert deltas == [Frame.put_entity(row, Frame.row_verdicts(user.id, row))]
+    end
+
+    # The child went private between the two reads, so the parent kept from the earlier window
+    # can't go on listing it.
+    test "takes a row a window read later hides out of the lists of the rows handed over" do
+      child =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      gap = [
+        %{gap_effect(parent.id, {200, 1}) | type: PolicyParent},
+        %{gap_effect(child.id, {200, 2}) | type: PolicyModule1}
+      ]
+
+      session = start_session!(gap: gap)
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}], 1)
+      ResultStore.put(@other_window, 1, [%{child | public: false}], 2)
+      send(session, {:round, @board_window, 1, [], nil})
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      listing_nothing = %{parent | children: []}
+
+      assert Enum.filter(deltas, &(&1.id == parent.id)) == [
+               Frame.put_entity(listing_nothing, Frame.row_verdicts(nil, listing_nothing))
+             ]
+
+      assert Enum.filter(deltas, &(&1.id == child.id)) == [
+               %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # A related row moving makes the child appear in the earlier window, but the window read later
+    # has the child under another parent the client can't see through.
+    test "hands over nothing a related row revealed once a window read later hides it" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      public_parent =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      private_parent = DB.create!(PolicyModule1.new())
+
+      child =
+        %{parent_id: public_parent.id}
+        |> PolicyModule5.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @reach_window]})
+      hold_silently(@board_window)
+      hold_silently(@reach_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          edges: Edges.derive([PolicyModule5]),
+          gap: [related_effect(public_parent.id, PolicyModule1, %{"public" => 1})]
+        )
+
+      ResultStore.put(@reach_window, 1, [child], 1)
+      ResultStore.put(@board_window, 1, [%{child | parent_id: private_parent.id}], 2)
+      send(session, {:round, @reach_window, 1, [], nil})
+      send(session, {:round, @board_window, 1, [], nil})
+
+      assert deltas_for(caught_up_deltas(), child) == []
+    end
+
+    # A grant taken away while the client was gone hides the row in the earlier window, but the
+    # window read later has it public, so the client keeps it.
+    test "takes nothing away that a window read later shows" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      row = DB.create!(PolicyModule1.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          gap: [gap_effect(Entity.generate_id())],
+          grants_then: [viewer_grant(user.id, row)]
+        )
+
+      ResultStore.put(@board_window, 1, [row], 1)
+      ResultStore.put(@other_window, 1, [%{row | public: true}], 2)
+      send(session, {:round, @board_window, 1, [], nil})
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert deltas_for(caught_up_deltas(), row) == []
     end
 
     # Both windows hold the row; the board window's round for the change was read while the client
@@ -2460,6 +2660,24 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:sync_deltas, nil, deltas, _applied_seq}
       assert deltas == [verdicts_patch(project, true)]
+    end
+
+    # The project went private between the two windows' reads, so the client may no longer hold it
+    # and has no verdicts of it to be told.
+    test "tells no verdicts of a row a window read later hides", %{project: project} do
+      windows(%{@page => [@project_window, @public_project_window]})
+      hold_silently(@project_window)
+      hold_silently(@public_project_window)
+
+      session = start_session!(gap: [])
+
+      ResultStore.put(@project_window, 1, [project], 1)
+      ResultStore.put(@public_project_window, 1, [%{project | public: false}], 2)
+      send(session, {:round, @project_window, 1, [], nil})
+      send(session, {:round, @public_project_window, 1, [], nil})
+
+      assert_receive {:sync_synced, :all, _cursor}
+      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
     end
 
     test "tells a returning client that missed nothing the verdicts of the rows it holds", %{

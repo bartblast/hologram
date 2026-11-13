@@ -20,6 +20,9 @@ defmodule Hologram.Sync.DiffTest do
   alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
+  alias Hologram.Test.Fixtures.Policy.Module26, as: PolicySpace
+  alias Hologram.Test.Fixtures.Policy.Module27, as: PolicyComment
+  alias Hologram.Test.Fixtures.Policy.Module29, as: PolicyMark
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
@@ -873,6 +876,30 @@ defmodule Hologram.Sync.DiffTest do
     end
   end
 
+  describe "member_ids/1" do
+    test "returns the ids of the rows a round carries at its root and embedded under them" do
+      channel =
+        %{name: "general"}
+        |> Module26.new()
+        |> DB.create!()
+
+      message =
+        %{body: "hi", channel_id: channel.id, position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      ids = member_ids(result([%{channel | messages: [message]}]))
+
+      assert ids == MapSet.new([channel.id, message.id])
+    end
+
+    test "returns the ids of rows nobody may read" do
+      hidden = DB.create!(PolicyModule1.new())
+
+      assert member_ids(result([hidden])) == MapSet.new([hidden.id])
+    end
+  end
+
   describe "shift/3" do
     setup do
       user =
@@ -1207,6 +1234,50 @@ defmodule Hologram.Sync.DiffTest do
                appeared: [],
                vanished: [hidden_message]
              }
+    end
+  end
+
+  describe "unlist/2" do
+    test "takes the given rows out of every embedded list, however deep" do
+      channel =
+        %{name: "general"}
+        |> Module26.new()
+        |> DB.create!()
+
+      kept =
+        %{body: "kept", channel_id: channel.id, position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      dropped =
+        %{body: "dropped", channel_id: channel.id, position: 2}
+        |> Module28.new()
+        |> DB.create!()
+
+      row = %{channel | messages: [kept, dropped]}
+
+      assert unlist(row, MapSet.new([dropped.id])) == %{channel | messages: [kept]}
+    end
+
+    test "takes the given rows out of the lists of embedded rows too" do
+      kept = PolicyMark.new()
+      dropped = PolicyMark.new()
+      comment = %{PolicyComment.new() | marks: [kept, dropped]}
+      space = %{PolicySpace.new() | comments: [comment]}
+
+      assert unlist(space, MapSet.new([dropped.id])) == %{
+               space
+               | comments: [%{comment | marks: [kept]}]
+             }
+    end
+
+    test "leaves a row listing none of the given rows as it is" do
+      channel =
+        %{name: "general"}
+        |> Module26.new()
+        |> DB.create!()
+
+      assert unlist(channel, MapSet.new([Entity.generate_id()])) == channel
     end
   end
 end

@@ -325,7 +325,8 @@ defmodule Hologram.Sync.Session do
   # The windows' last rounds were read at different moments, so two copies of one row can differ:
   # a window whose round for a change is still queued has the row as it was. So the windows are
   # judged in the order their rounds were read and a later copy wins, holding every write an
-  # earlier one does - its values and the sets it includes alike. Judged in any other order, the
+  # earlier one does - its values and the sets it includes alike. A later copy the client may not
+  # see wins too: the row is taken away rather than handed over. Judged in any other order, the
   # older copy could win, and the round that would correct it was already passed over while the
   # client was catching up. Nothing on the row itself can stand in for that order: a column's
   # revision moves only when that column is written, and a pair moves none.
@@ -384,6 +385,7 @@ defmodule Hologram.Sync.Session do
     %{appeared: visible} = Diff.deltas(result, MapSet.new(), state.actor_user_id, [])
 
     judged
+    |> supersede(result, visible)
     |> remember_touched(visible, named_ids)
     |> remember_verdict_rows(visible)
     |> remember_shift(state, result, grants_then)
@@ -466,8 +468,7 @@ defmodule Hologram.Sync.Session do
   end
 
   # Judged per window, merged by id: visibility is per ROW and per client rather than per window,
-  # so two windows holding the same row agree about it, and the later read writes what the earlier
-  # one did.
+  # so a later window's judgment of a row supersedes an earlier one's (see `supersede/3`).
   #
   # Two sources feed the one accumulator, and they answer different questions about the same
   # rows: what the client's GRANTS moving decided differently, and what a row the gap names now
@@ -660,6 +661,42 @@ defmodule Hologram.Sync.Session do
       |> Map.new(&{&1.id, &1})
 
     %{judged | verdict_rows: merge_later(judged.verdict_rows, rows)}
+  end
+
+  # What this window says of a row's visibility outdates what every window judged before it said,
+  # since its copy was read later. A row it carries and the client may not see is dropped from what
+  # is handed over, and taken out of the lists of the rows that are - an earlier copy was scrubbed
+  # against what the client could see then. A row it carries and the client may see is no longer
+  # one to take away. A row it doesn't carry at all says nothing: its query may simply not reach it.
+  defp supersede(judged, result, visible) do
+    visible_ids = MapSet.new(visible, & &1.id)
+
+    hidden_ids =
+      result
+      |> Diff.member_ids()
+      |> MapSet.difference(visible_ids)
+
+    shift = %{
+      appeared: forget_hidden(judged.shift.appeared, hidden_ids),
+      vanished: Map.drop(judged.shift.vanished, MapSet.to_list(visible_ids))
+    }
+
+    %{
+      judged
+      | shift: shift,
+        touched: forget_hidden(judged.touched, hidden_ids),
+        verdict_rows: Map.drop(judged.verdict_rows, MapSet.to_list(hidden_ids))
+    }
+  end
+
+  defp forget_hidden(rows, hidden_ids) do
+    if Enum.empty?(hidden_ids) do
+      rows
+    else
+      rows
+      |> Map.drop(MapSet.to_list(hidden_ids))
+      |> Map.new(fn {id, row} -> {id, Diff.unlist(row, hidden_ids)} end)
+    end
   end
 
   # A copy from a window read later keeps its own values and takes what the earlier copy included

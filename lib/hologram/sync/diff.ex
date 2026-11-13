@@ -72,10 +72,7 @@ defmodule Hologram.Sync.Diff do
       |> members()
       |> Map.filter(fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
 
-    visible_ids =
-      visible
-      |> Map.keys()
-      |> MapSet.new()
+    visible_ids = member_ids_of(visible)
 
     appeared_ids = MapSet.difference(visible_ids, held_ids)
     held_visible_ids = MapSet.intersection(visible_ids, held_ids)
@@ -102,6 +99,17 @@ defmodule Hologram.Sync.Diff do
       patched: patched,
       vanished: vanished(held_ids, visible_ids)
     }
+  end
+
+  @doc """
+  Returns the ids of every row a round carries - the roots and every row embedded under them,
+  however deep - whoever may see them.
+  """
+  @spec member_ids(%{ids: MapSet.t(), rows: map}) :: MapSet.t()
+  def member_ids(result) do
+    result.rows
+    |> members()
+    |> member_ids_of()
   end
 
   @doc """
@@ -156,7 +164,7 @@ defmodule Hologram.Sync.Diff do
     }
 
     visible = Map.filter(members, fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
-    visible_ids = member_ids(visible)
+    visible_ids = member_ids_of(visible)
 
     reached = Map.filter(members, fn {_id, row} -> reached?(row, edges, gap) end)
 
@@ -198,8 +206,8 @@ defmodule Hologram.Sync.Diff do
         Auth.can?(actor_user_id, :read, row, grants_then)
       end)
 
-    now_ids = member_ids(visible_now)
-    then_ids = member_ids(visible_then)
+    now_ids = member_ids_of(visible_now)
+    then_ids = member_ids_of(visible_then)
 
     # Scrubbed on the same terms `deltas/4` scrubs an appearing row, and untestable here as long
     # as no fixture gates a type that embeds a to-many: the only such parent is readable by
@@ -217,6 +225,16 @@ defmodule Hologram.Sync.Diff do
       |> Enum.map(&Map.fetch!(visible_then, &1))
 
     %{appeared: appeared, vanished: vanished}
+  end
+
+  @doc """
+  Returns the given row with the rows of the given ids taken out of every embedded to-many list,
+  however deep - for a row scrubbed against what the client could see in one round, when another
+  round shows some of what it lists hidden.
+  """
+  @spec unlist(struct, MapSet.t()) :: struct
+  def unlist(row, ids) do
+    keep_embedded(row, &(not MapSet.member?(ids, &1.id)))
   end
 
   defp attribute_names(nil), do: MapSet.new()
@@ -347,7 +365,27 @@ defmodule Hologram.Sync.Diff do
 
   defp hidden_target?(_edge, _visible_ids), do: false
 
-  defp member_ids(members) do
+  # Every included to-many set, however deep, keeps only the rows the given function keeps. A
+  # single embedded row stays as it is - the wire never spells one (a reference field carries the
+  # id), so there is nothing to take out.
+  defp keep_embedded(row, keep?) do
+    updates =
+      for name <- Entity.includable_names(row.__struct__),
+          targets = Map.fetch!(row, name),
+          is_list(targets) do
+        {name, keep_targets(targets, keep?)}
+      end
+
+    struct(row, updates)
+  end
+
+  defp keep_targets(targets, keep?) do
+    targets
+    |> Enum.filter(keep?)
+    |> Enum.map(&keep_embedded(&1, keep?))
+  end
+
+  defp member_ids_of(members) do
     members
     |> Map.keys()
     |> MapSet.new()
@@ -457,25 +495,11 @@ defmodule Hologram.Sync.Diff do
   defp revision_names(_effect), do: :all
 
   # What leaves here is what this client may see, embedded lists included: an unreadable member
-  # loses its slot in every included set, however deep, not only its own deltas. A single embedded
-  # row stays as it is - the wire never spells one (a reference field carries the id), so there is
-  # nothing to hide. Scrubbing at the source rather than at the spelling covers every path a
-  # row takes out, the catch-up store included.
+  # loses its slot in every included set, however deep, not only its own deltas. Scrubbing at the
+  # source rather than at the spelling covers every path a row takes out, the catch-up store
+  # included.
   defp scrub(row, visible_ids) do
-    updates =
-      for name <- Entity.includable_names(row.__struct__),
-          targets = Map.fetch!(row, name),
-          is_list(targets) do
-        {name, scrub_targets(targets, visible_ids)}
-      end
-
-    struct(row, updates)
-  end
-
-  defp scrub_targets(targets, visible_ids) do
-    targets
-    |> Enum.filter(&MapSet.member?(visible_ids, &1.id))
-    |> Enum.map(&scrub(&1, visible_ids))
+    keep_embedded(row, &MapSet.member?(visible_ids, &1.id))
   end
 
   defp union_moved(:all, _names), do: :all
