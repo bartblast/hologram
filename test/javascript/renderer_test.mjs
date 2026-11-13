@@ -25,6 +25,11 @@ import {defineModule117Fixture} from "./support/fixtures/renderer/module_117.mjs
 import {defineModule118Fixture} from "./support/fixtures/renderer/module_118.mjs";
 import {defineModule119Fixture} from "./support/fixtures/renderer/module_119.mjs";
 import {defineModule120Fixture} from "./support/fixtures/renderer/module_120.mjs";
+import {defineModule122Fixture} from "./support/fixtures/renderer/module_122.mjs";
+import {defineModule123Fixture} from "./support/fixtures/renderer/module_123.mjs";
+import {defineModule124Fixture} from "./support/fixtures/renderer/module_124.mjs";
+import {defineModule125Fixture} from "./support/fixtures/renderer/module_125.mjs";
+import {defineModule176Fixture} from "./support/fixtures/renderer/module_176.mjs";
 import {defineModule12Fixture} from "./support/fixtures/renderer/module_12.mjs";
 import {defineModule14Fixture} from "./support/fixtures/renderer/module_14.mjs";
 import {defineModule15Fixture} from "./support/fixtures/renderer/module_15.mjs";
@@ -98,6 +103,7 @@ import {defineClientOnlyModule10Fixture} from "./support/fixtures/renderer/clien
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
 import Bitstring from "../../assets/js/bitstring.mjs";
+import CallStack from "../../assets/js/erts/call_stack.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import DragEvent from "../../assets/js/events/drag_event.mjs";
 import ElementRefRegistry from "../../assets/js/element_ref_registry.mjs";
@@ -126,6 +132,11 @@ defineModule117Fixture();
 defineModule118Fixture();
 defineModule119Fixture();
 defineModule120Fixture();
+defineModule122Fixture();
+defineModule123Fixture();
+defineModule124Fixture();
+defineModule125Fixture();
+defineModule176Fixture();
 defineModule12Fixture();
 defineModule14Fixture();
 defineModule15Fixture();
@@ -5942,7 +5953,7 @@ describe("Renderer", () => {
       );
 
       const expected = [
-        'component vars = %{prop_1: "abc", prop_2: :xyz, prop_3: 123}',
+        'component vars = %{__hologram_vars__: true, prop_1: "abc", prop_2: :xyz, prop_3: 123}',
       ];
 
       assert.deepStrictEqual(result, expected);
@@ -5971,7 +5982,9 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      const expected = ["component vars = %{prop_2: :xyz}"];
+      const expected = [
+        "component vars = %{__hologram_vars__: true, prop_2: :xyz}",
+      ];
 
       assert.deepStrictEqual(result, expected);
     });
@@ -6045,8 +6058,9 @@ describe("Renderer", () => {
             defaultTarget,
             parentTagName,
           ),
-        "KeyError",
-        buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
+        "Hologram.MisuseError",
+        'undefined var @aaa in the template of "Hologram.Test.Fixtures.Template.Renderer.Module38", ' +
+          "no vars are available",
       );
     });
 
@@ -6177,7 +6191,9 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      assert.deepStrictEqual(result, ["component vars = %{aaa: :small}"]);
+      assert.deepStrictEqual(result, [
+        "component vars = %{__hologram_vars__: true, aaa: :small}",
+      ]);
     });
 
     it("prop value not in the :values list", () => {
@@ -6226,7 +6242,9 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      assert.deepStrictEqual(result, ["component vars = %{}"]);
+      assert.deepStrictEqual(result, [
+        "component vars = %{__hologram_vars__: true}",
+      ]);
     });
   });
 
@@ -6280,7 +6298,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+        'component vars = %{__hologram_vars__: true, prop_1: "my_value_1", prop_2: 2}',
       ]);
     });
 
@@ -6295,7 +6313,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1", prop_2: 2}',
+        'component vars = %{__hologram_vars__: true, prop_1: "my_value_1", prop_2: 2}',
       ]);
     });
 
@@ -6307,7 +6325,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1"}',
+        'component vars = %{__hologram_vars__: true, prop_1: "my_value_1"}',
       ]);
     });
 
@@ -6320,7 +6338,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        'component vars = %{my_prop_1: "my_value_1"}',
+        'component vars = %{__hologram_vars__: true, my_prop_1: "my_value_1"}',
       ]);
     });
 
@@ -6335,7 +6353,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1"}',
+        'component vars = %{__hologram_vars__: true, prop_1: "my_value_1"}',
       ]);
     });
 
@@ -6374,7 +6392,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        "component vars = %{my_prop_2: %{my_nested_key: 1}}",
+        "component vars = %{__hologram_vars__: true, my_prop_2: %{my_nested_key: 1}}",
       ]);
     });
 
@@ -6391,7 +6409,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        "component vars = %{my_prop_3: [my_nested_key: 1]}",
+        "component vars = %{__hologram_vars__: true, my_prop_3: [my_nested_key: 1]}",
       ]);
     });
 
@@ -6401,7 +6419,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        "component vars = %{my_prop_1: nil}",
+        "component vars = %{__hologram_vars__: true, my_prop_1: nil}",
       ]);
     });
 
@@ -6411,7 +6429,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module86, propsDom), [
-        "component vars = %{my_prop_1: false}",
+        "component vars = %{__hologram_vars__: true, my_prop_1: false}",
       ]);
     });
 
@@ -6422,7 +6440,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_2"}',
+        'component vars = %{__hologram_vars__: true, prop_1: "my_value_2"}',
       ]);
     });
 
@@ -6433,7 +6451,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_2"}',
+        'component vars = %{__hologram_vars__: true, prop_1: "my_value_2"}',
       ]);
     });
 
@@ -6444,7 +6462,7 @@ describe("Renderer", () => {
       ];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_2"}',
+        'component vars = %{__hologram_vars__: true, prop_1: "my_value_2"}',
       ]);
     });
 
@@ -6464,7 +6482,7 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{cid: "my_component", prop_1: "my_value"}',
+        'component vars = %{__hologram_vars__: true, cid: "my_component", prop_1: "my_value"}',
       ]);
     });
 
@@ -6510,7 +6528,9 @@ describe("Renderer", () => {
           Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module65"),
           propsDom,
         ),
-        ['component vars = %{prop_1: "abc", prop_2: :my_value, prop_3: 123}'],
+        [
+          'component vars = %{__hologram_vars__: true, prop_1: "abc", prop_2: :my_value, prop_3: 123}',
+        ],
       );
     });
 
@@ -6518,7 +6538,7 @@ describe("Renderer", () => {
       const propsDom = [namedProp("prop_1", "my_value_1"), spread(Type.map())];
 
       assert.deepStrictEqual(renderComponent(module16, propsDom), [
-        'component vars = %{prop_1: "my_value_1"}',
+        'component vars = %{__hologram_vars__: true, prop_1: "my_value_1"}',
       ]);
     });
 
@@ -6672,11 +6692,82 @@ describe("Renderer", () => {
             defaultTarget,
             parentTagName,
           ),
+        "Hologram.MisuseError",
+        'undefined var @b in the template of "Hologram.Test.Fixtures.Template.Renderer.Module17", ' +
+          "available vars: @a",
+      );
+    });
+
+    it("with a missing key read from a var's value", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module123"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("a"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.map()])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
         "KeyError",
-        buildKeyErrorMsg(
-          Type.atom("b"),
-          Type.map([[Type.atom("a"), Type.bitstring("111")]]),
-        ),
+        buildKeyErrorMsg(Type.atom("b"), Type.map()),
+      );
+    });
+
+    it("with a missing key read from a map the template builds, template without vars", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module176"),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "KeyError",
+        buildKeyErrorMsg(Type.atom("b"), Type.map()),
+      );
+    });
+
+    it("with a missing key read by a helper the template calls, template without vars", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module125"),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "KeyError",
+        buildKeyErrorMsg(Type.atom("b"), Type.map()),
       );
     });
   });
@@ -7193,7 +7284,7 @@ describe("Renderer", () => {
       );
 
       const expected =
-        'component vars = %{cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"}';
+        'component vars = %{__hologram_vars__: true, cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"}';
 
       assert.equal(result, expected);
     });
@@ -7257,14 +7348,46 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid, entry);
 
-      const expectedMessage = buildKeyErrorMsg(
-        Type.atom("c"),
-        Type.map([
-          [Type.atom("a"), Type.bitstring("111")],
-          [Type.atom("b"), Type.integer(222)],
-          [Type.atom("cid"), Type.bitstring("my_component")],
-        ]),
+      assertBoxedError(
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        "Hologram.MisuseError",
+        'undefined var @c in the template of "Hologram.Test.Fixtures.Template.Renderer.Module18", ' +
+          "available vars: @a, @b, @cid",
       );
+    });
+
+    it("with unregistered var used, state with nil and non-atom keys", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module124"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const entry = componentRegistryEntryFixture({
+        module: Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.Module124",
+        ),
+        state: Type.map([
+          [Type.atom("b"), Type.integer(222)],
+          [Type.bitstring("c"), Type.integer(333)],
+          [Type.nil(), Type.integer(444)],
+        ]),
+      });
+
+      ComponentRegistry.putEntry(cid, entry);
 
       assertBoxedError(
         () =>
@@ -7275,9 +7398,74 @@ describe("Renderer", () => {
             defaultTarget,
             parentTagName,
           ),
-        "KeyError",
-        expectedMessage,
+        "Hologram.MisuseError",
+        'undefined var @c in the template of "Hologram.Test.Fixtures.Template.Renderer.Module124", ' +
+          "available vars: @b, @cid, @nil",
       );
+    });
+
+    it("with unregistered var used, the error carries the stacktrace of the KeyError it replaces", () => {
+      const module = Type.alias(
+        "Hologram.Test.Fixtures.Template.Renderer.Module124",
+      );
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        module,
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const state = Type.map([[Type.atom("b"), Type.integer(222)]]);
+      const entry = componentRegistryEntryFixture({module, state});
+
+      ComponentRegistry.putEntry(cid, entry);
+
+      const vars = Type.map([
+        [Type.atom("__hologram_vars__"), Type.boolean(true)],
+        [Type.atom("b"), Type.integer(222)],
+        [Type.atom("cid"), cid],
+      ]);
+
+      CallStack.reset();
+      globalThis.Hologram.config.stacktraces = true;
+
+      let keyError;
+      let misuseError;
+
+      try {
+        try {
+          Interpreter.callAnonymousFunction(
+            Interpreter.moduleProxy(module)["template/0"](),
+            [vars],
+          );
+        } catch (error) {
+          keyError = error;
+        }
+
+        try {
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+        } catch (error) {
+          misuseError = error;
+        }
+      } finally {
+        globalThis.Hologram.config.stacktraces = false;
+        CallStack.reset();
+      }
+
+      assert.equal(misuseError.type, "Hologram.MisuseError");
+      assert.deepStrictEqual(misuseError.stacktrace, keyError.stacktrace);
     });
   });
 
@@ -8132,8 +8320,9 @@ describe("Renderer", () => {
 
       assertBoxedError(
         () => render(node),
-        "KeyError",
-        buildKeyErrorMsg(Type.atom("a"), Type.map()),
+        "Hologram.MisuseError",
+        'undefined var @a in the template of "Hologram.Test.Fixtures.Template.Renderer.Module2", ' +
+          "no vars are available",
       );
     });
 
@@ -11405,6 +11594,33 @@ describe("Renderer", () => {
       );
     });
 
+    it("with unregistered var used", () => {
+      const pageEntry = componentRegistryEntryFixture({
+        module: Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.Module122",
+        ),
+        state: Type.map([[Type.atom("b"), Type.integer(222)]]),
+      });
+
+      ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
+
+      initComponentRegistryEntry(
+        Type.bitstring("layout"),
+        Type.alias("Hologram.Test.Fixtures.LayoutFixture"),
+      );
+
+      assertBoxedError(
+        () =>
+          Renderer.renderPage(
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module122"),
+            Type.map(),
+          ),
+        "Hologram.MisuseError",
+        'undefined var @c in the template of "Hologram.Test.Fixtures.Template.Renderer.Module122", ' +
+          "available vars: @b",
+      );
+    });
+
     // This test case doesn't apply to the client renderer, because the client renderer receives already cast page params.
     // it("cast page params")
 
@@ -11425,7 +11641,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
+          'layout vars = %{__hologram_vars__: true, cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
         ]),
       ]);
 
@@ -11456,7 +11672,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
+          'layout vars = %{__hologram_vars__: true, cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
         ]),
       ]);
 
@@ -11488,7 +11704,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'page vars = %{key_1: "param_value_1", key_2: "param_value_2", key_3: "state_value_3"}',
+          'page vars = %{__hologram_vars__: true, key_1: "param_value_1", key_2: "param_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
@@ -11551,7 +11767,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", key_1: "prop_value_1", key_2: "prop_value_2", key_3: "state_value_3"}',
+          'layout vars = %{__hologram_vars__: true, cid: "layout", key_1: "prop_value_1", key_2: "prop_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 

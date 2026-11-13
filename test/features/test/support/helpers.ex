@@ -552,6 +552,14 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Marks the document the `session` shows, so that `wait_for_unmarked_document/2` can tell when
+  the browser has replaced it with a new one.
+  """
+  def mark_document(session) do
+    Browser.execute_script(session, "globalThis.__hologramMarkedDocument = true;")
+  end
+
+  @doc """
   Marks the current page load in the browser, so a later check can tell the DOM changed without
   the page being fetched again.
   """
@@ -1116,6 +1124,27 @@ defmodule HologramFeatureTests.Helpers do
       true ->
         :timer.sleep(100)
         wait_for_subscription(session, channel, count, cid, start_time)
+    end
+  end
+
+  @doc """
+  Blocks until the document `mark_document/1` marked has been replaced with a new one, then
+  returns the `session`. Raises if that does not happen within `@max_wait_time`.
+  """
+  def wait_for_unmarked_document(session, start_time \\ nil) do
+    start_time = start_time || current_time()
+
+    cond do
+      script_result(session, "return globalThis.__hologramMarkedDocument !== true;") ->
+        session
+
+      timed_out?(start_time) ->
+        raise Wallaby.ExpectationNotMetError,
+              "Timed out waiting for the browser to load a new document"
+
+      true ->
+        :timer.sleep(100)
+        wait_for_unmarked_document(session, start_time)
     end
   end
 
