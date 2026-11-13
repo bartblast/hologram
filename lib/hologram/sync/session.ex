@@ -6,8 +6,8 @@ defmodule Hologram.Sync.Session do
   #
   # What it keeps is membership, never rows: the rows live once per node in the result store,
   # and a hundred sessions reading one window read that one copy. The one exception is a returning
-  # client's catch-up, which keeps the hidden rows that left a window until it is over, bounded by
-  # what moved meanwhile.
+  # client's catch-up, which keeps the hidden rows that left a window and the rows that entered one
+  # until it is over, bounded by what moved meanwhile.
   #
   # A client is given every window this build downloads, not only the ones its page reads: a page
   # it navigates to is then answered from what it already has, with no server in the way. The page
@@ -107,6 +107,7 @@ defmodule Hologram.Sync.Session do
       actor_user_id: Keyword.get(opts, :actor_user_id),
       announced: MapSet.new(),
       applied_seq: Keyword.get(opts, :applied_seq),
+      arrived: MapSet.new(),
       catching_up: read_gap != nil,
       client: Keyword.fetch!(opts, :client),
       cut: nil,
@@ -216,7 +217,7 @@ defmodule Hologram.Sync.Session do
         deltas = Diff.deltas(result, held_ids, state.actor_user_id, transactions)
 
         state
-        |> remember_departed(window_id, result)
+        |> remember_moved(window_id, result)
         |> remember_version(window_id, version)
         |> send_deltas(window_id, deltas, transactions)
         |> remember(window_id, held, deltas)
@@ -323,11 +324,11 @@ defmodule Hologram.Sync.Session do
   end
 
   # Judged against each window's last round, one window's rows read at a time: which of them the
-  # gap named (`touched`), which a grant change or a moved related row decided differently
-  # (`shift`), the ones whose verdicts the client may hold (`verdict_rows`), and whether the client
-  # may see each row a window carries (`visibility`), beside the gap and the grants it held before
-  # it went away. Nothing of it outlives the catch-up, so it is a value the frames are told from,
-  # never part of the session.
+  # gap named or entered a window during the catch-up (`touched`), which a grant change or a moved
+  # related row decided differently (`shift`), the ones whose verdicts the client may hold
+  # (`verdict_rows`), and whether the client may see each row a window carries (`visibility`),
+  # beside the gap and the grants it held before it went away. Nothing of it outlives the catch-up,
+  # so it is a value the frames are told from, never part of the session.
   #
   # The windows' last rounds were read at different moments, so two copies of one row can differ:
   # a window whose round for a change is still queued has the row as it was. So the windows are
@@ -359,17 +360,21 @@ defmodule Hologram.Sync.Session do
       visibility: %{}
     }
 
+    # A row that entered a window while the client was being caught up is kept as a named one is,
+    # to be handed over as it stands once every window is judged.
+    kept_ids = MapSet.union(named_ids, state.arrived)
+
     with {:ok, ordered} <- read_order(state.versions) do
       Enum.reduce_while(ordered, {:ok, unjudged}, fn {window_id, version}, {:ok, acc} ->
-        judge_next(acc, state, window_id, version, grants_then, named_ids)
+        judge_next(acc, state, window_id, version, grants_then, kept_ids)
       end)
     end
   end
 
-  defp judge_next(judged, state, window_id, version, grants_then, named_ids) do
+  defp judge_next(judged, state, window_id, version, grants_then, kept_ids) do
     case ResultStore.fetch(window_id, version) do
       nil -> {:halt, :behind_the_ring}
-      result -> {:cont, {:ok, judge_window(judged, state, result, grants_then, named_ids)}}
+      result -> {:cont, {:ok, judge_window(judged, state, result, grants_then, kept_ids)}}
     end
   end
 
@@ -395,12 +400,12 @@ defmodule Hologram.Sync.Session do
 
   # The rows are kept as the window carries them, embedded lists whole: what the client may see of
   # those lists is known only once the windows read after this one have been judged too.
-  defp judge_window(judged, state, result, grants_then, named_ids) do
+  defp judge_window(judged, state, result, grants_then, kept_ids) do
     {members, visible_ids} = Diff.carried(result, state.actor_user_id)
 
     judged
     |> remember_visibility(members, visible_ids)
-    |> remember_touched(members, visible_ids, named_ids)
+    |> remember_touched(members, visible_ids, kept_ids)
     |> remember_verdict_rows(members, visible_ids)
     |> remember_shift(state, result, members, grants_then)
     |> remember_reach(state, result, members)
@@ -450,30 +455,42 @@ defmodule Hologram.Sync.Session do
   defp tell_gap(state, unsettled) do
     judged = settle(unsettled)
 
-    told_left = tell_left(state, judged)
+    told_moved = tell_moved(state, judged)
 
     caught_up =
       judged.gap
       |> Enum.chunk_every(Catchup.rows_per_frame())
-      |> Enum.reduce(told_left, &tell_batch(&2, judged, &1))
+      |> Enum.reduce(told_moved, &tell_batch(&2, judged, &1))
       |> tell_shift(judged)
       |> tell_verdicts(judged)
 
-    %{caught_up | catching_up: false, departed: %{}, read_gap: nil, versions: %{}}
+    %{
+      caught_up
+      | arrived: MapSet.new(),
+        catching_up: false,
+        departed: %{},
+        read_gap: nil,
+        versions: %{}
+    }
   end
 
-  # A row that left a window while the client was being caught up, and that no window's last round
-  # lets it see, has left every window - what a connected client is told when a row leaves the last
+  # What moved in or out of the windows while the client was being caught up, through nothing the gap
+  # names: the rows that entered a window are handed over (see `arrived_puts/2`), and the ones that
+  # left are taken away. A row that left a window, and that no window's last round lets the client
+  # see, has left every window - what a connected client is told when a row leaves the last
   # window holding it. Only a row the client may hold is taken away: one it could see in the round
   # it left, or a hidden one it could see before it went away, under the grants it held then or
   # before a related row the gap names moved - which, like the reach of the rows a last round
-  # carries, errs towards taking away. Rows the gap names or the shift takes away are spoken for
-  # there.
+  # carries, errs towards taking away. So does a row that entered a window during the catch-up
+  # and left again: it can't be told apart from one another window held from its first round, and
+  # taking away a row the client never had changes nothing. Rows the gap names or the shift takes
+  # away are spoken for there.
   #
   # Told first and dated by nothing: the batches after it each claim a place, and a client cut off
-  # after the last of them comes back with nothing left to replay and no round carrying these rows.
-  # Taking away a row twice changes nothing.
-  defp tell_left(state, judged) do
+  # after the last of them comes back with nothing left to replay, its windows already holding the
+  # rows that entered and no round carrying the ones that left. Handing over or taking away a row
+  # twice changes nothing.
+  defp tell_moved(state, judged) do
     vanished_ids =
       judged.shift.vanished
       |> Map.keys()
@@ -493,11 +510,16 @@ defmodule Hologram.Sync.Session do
 
     held_hidden = held_hidden(hidden, state, judged)
 
-    visible
-    |> Enum.map(fn {id, {:visible, type}} -> {id, type} end)
-    |> Enum.concat(held_hidden)
-    |> Enum.sort()
-    |> Enum.map(fn {id, type} -> Frame.unsync_entity(id, type) end)
+    unsyncs =
+      visible
+      |> Enum.map(fn {id, {:visible, type}} -> {id, type} end)
+      |> Enum.concat(held_hidden)
+      |> Enum.sort()
+      |> Enum.map(fn {id, type} -> Frame.unsync_entity(id, type) end)
+
+    state
+    |> arrived_puts(judged)
+    |> Enum.concat(unsyncs)
     |> Enum.chunk_every(Catchup.rows_per_frame())
     |> Enum.reduce(state, fn deltas, acc ->
       send(acc.client, {:sync_deltas, nil, deltas, acc.applied_seq})
@@ -505,6 +527,25 @@ defmodule Hologram.Sync.Session do
       acc
       |> remember_verdicts(deltas)
       |> forget_unsynced(deltas)
+    end)
+  end
+
+  # A row that entered a window while the client was being caught up, through nothing the gap
+  # names - a related row moving into a window's filter brings rows that never changed - and that
+  # the client may see once every window is judged, is handed over as it stands. The window lists it
+  # as held already, so no later round would. Rows the gap names or the shift hands over are spoken
+  # for there.
+  defp arrived_puts(state, judged) do
+    named_ids = MapSet.new(judged.gap, & &1.entity_id)
+
+    state.arrived
+    |> Enum.reject(&(MapSet.member?(named_ids, &1) or Map.has_key?(judged.shift.appeared, &1)))
+    |> Enum.sort()
+    |> Enum.flat_map(fn id ->
+      case Map.fetch(judged.touched, id) do
+        {:ok, row} -> [Frame.put_entity(row, Frame.row_verdicts(state.actor_user_id, row))]
+        :error -> []
+      end
     end)
   end
 
@@ -807,26 +848,28 @@ defmodule Hologram.Sync.Session do
     end
   end
 
-  # The rows a window's round no longer carries that its previous round during the catch-up did -
-  # a parent turned private takes the rows embedded under it along. The catch-up judges each
-  # window's last round only, so a row that left before it is in no round the catch-up sees, and is
-  # kept here (see `departure/2`) until the catch-up decides whether it has left every window. A
-  # row coming back is no longer one that left. Bounded by what moved while the client was being
-  # caught up.
+  # The rows a window's round no longer carries that its previous round during the catch-up did - a
+  # parent turned private takes the rows embedded under it along - and the rows it carries that the
+  # previous round didn't. The catch-up judges each window's last round only, so a row that left
+  # before it is in no round the catch-up sees, and is kept here (see `departure/2`) until the
+  # catch-up decides whether it has left every window. A row coming back is no longer one that left,
+  # and neither is it one that arrived, since the client may still hold it. One that arrived stays
+  # so, wherever it goes after: whether it goes out is decided by the windows' last rounds. Bounded
+  # by what moved while the client was being caught up.
   #
   # The previous round is read back from the store, and one already gone cuts the client off the
   # way a round that can't be read does - a round sooner than before, since both have to still be
   # there.
-  defp remember_departed(%{catching_up: true} = state, window_id, result) do
+  defp remember_moved(%{catching_up: true} = state, window_id, result) do
     case Map.fetch(state.versions, window_id) do
-      {:ok, previous_version} -> remember_departed(state, window_id, result, previous_version)
+      {:ok, previous_version} -> remember_moved(state, window_id, result, previous_version)
       :error -> state
     end
   end
 
-  defp remember_departed(state, _window_id, _result), do: state
+  defp remember_moved(state, _window_id, _result), do: state
 
-  defp remember_departed(state, window_id, result, previous_version) do
+  defp remember_moved(state, window_id, result, previous_version) do
     case ResultStore.fetch(window_id, previous_version) do
       nil ->
         cut(state, :behind_the_ring)
@@ -837,9 +880,10 @@ defmodule Hologram.Sync.Session do
           |> Diff.carried_rows()
           |> Map.keys()
 
+        previous_rows = Diff.carried_rows(previous)
+
         left =
-          previous
-          |> Diff.carried_rows()
+          previous_rows
           |> Map.drop(carried_ids)
           |> Map.new(fn {id, row} -> {id, departure(row, state.actor_user_id)} end)
 
@@ -848,7 +892,16 @@ defmodule Hologram.Sync.Session do
           |> Map.drop(carried_ids)
           |> Map.merge(left)
 
-        %{state | departed: departed}
+        # A row coming back after it left during the catch-up is one the client may still hold,
+        # so it is neither one that left nor one that arrived.
+        entered =
+          Enum.reject(carried_ids, fn id ->
+            Map.has_key?(previous_rows, id) or Map.has_key?(state.departed, id)
+          end)
+
+        arrived = MapSet.union(state.arrived, MapSet.new(entered))
+
+        %{state | arrived: arrived, departed: departed}
     end
   end
 
@@ -903,12 +956,18 @@ defmodule Hologram.Sync.Session do
 
   defp vouched_for?(state, effect), do: {effect.tx, effect.seq} <= state.gap_end
 
-  # The rows the gap names that this window lets the client see, as its last round has them. An
-  # edge names its target as well as its source, since the target's inverse of it moves too. Only
-  # those rows are kept, so the rows held grow with what moved rather than with what the client
-  # holds. Whether a kept row goes out is decided once every window is judged.
-  defp remember_touched(judged, members, visible_ids, named_ids) do
-    rows = Map.take(members, MapSet.to_list(MapSet.intersection(named_ids, visible_ids)))
+  # The rows the gap names, or that entered a window during the catch-up, that this window lets the
+  # client see, as its last round has them. An edge names its target as well as its source, since
+  # the target's inverse of it moves too. Only those rows are kept, so the rows held grow with what
+  # moved while the client was away or being caught up - a related row bringing many rows into a
+  # window brings them all here. Whether a kept row goes out is decided once every window is judged.
+  defp remember_touched(judged, members, visible_ids, kept_ids) do
+    kept_visible_ids =
+      kept_ids
+      |> MapSet.intersection(visible_ids)
+      |> MapSet.to_list()
+
+    rows = Map.take(members, kept_visible_ids)
 
     %{judged | touched: merge_later(judged.touched, rows)}
   end
@@ -922,8 +981,8 @@ defmodule Hologram.Sync.Session do
 
   # A round reaching a client still being caught up tells nothing: the gap, read once every window
   # has filled, names whatever it changed, and is judged against the window's last round. What the
-  # round still keeps is what the window holds and the rows that left it (see
-  # `remember_departed/3`).
+  # round still keeps is what the window holds and the rows that left or entered it (see
+  # `remember_moved/3`).
   defp send_deltas(state, window_id, deltas, transactions) do
     if replaying?(state) do
       state

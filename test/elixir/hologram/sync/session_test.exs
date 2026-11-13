@@ -1365,7 +1365,8 @@ defmodule Hologram.Sync.SessionTest do
 
       finish_filling(session, @other_window)
 
-      assert_receive {:sync_deltas, nil, first_deltas, _applied_seq}
+      assert_receive {:sync_deltas, first_cursor, first_deltas, _applied_seq}
+      assert first_cursor == nil
 
       assert first_deltas == [
                %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
@@ -1408,6 +1409,202 @@ defmodule Hologram.Sync.SessionTest do
       assert deltas_for(caught_up_deltas(), child) == [
                %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
              ]
+    end
+
+    # A related row moving into the window's filter brings a row that never changed itself, so the
+    # gap doesn't name it - and the window lists it as held already.
+    test "hands over a row that entered a window while the client was being caught up" do
+      arriving =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      ResultStore.put(@board_window, 1, [])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [arriving])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), arriving) == [
+               Frame.put_entity(arriving, Frame.row_verdicts(nil, arriving))
+             ]
+    end
+
+    test "hands over nothing of a row that entered a window and left it again" do
+      passing =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      ResultStore.put(@board_window, 1, [])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [passing])
+      send(session, {:round, @board_window, 2, [], nil})
+      ResultStore.put(@board_window, 3, [])
+      send(session, {:round, @board_window, 3, [], nil})
+
+      finish_filling(session, @other_window)
+
+      # Taken away rather than handed over - which changes nothing for a client that never held it.
+      assert deltas_for(caught_up_deltas(), passing) == [
+               %{
+                 id: passing.id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Policy.Module1"
+               }
+             ]
+    end
+
+    # The row entered two windows and left one of them again - the other window still holds it.
+    test "hands over a row that entered two windows and left one of them" do
+      arriving =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window, @reach_window]})
+      Enum.each([@board_window, @other_window, @reach_window], &hold_silently/1)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      Enum.each([{1, []}, {2, [arriving]}, {3, []}], fn {version, rows} ->
+        ResultStore.put(@board_window, version, rows)
+        send(session, {:round, @board_window, version, [], nil})
+      end)
+
+      Enum.each([{1, []}, {2, [arriving]}], fn {version, rows} ->
+        ResultStore.put(@other_window, version, rows)
+        send(session, {:round, @other_window, version, [], nil})
+      end)
+
+      finish_filling(session, @reach_window)
+
+      assert deltas_for(caught_up_deltas(), arriving) == [
+               Frame.put_entity(arriving, Frame.row_verdicts(nil, arriving))
+             ]
+    end
+
+    # The related row flapped: the row entered, left and entered the window again.
+    test "hands over a row that entered a window, left it and entered it again" do
+      arriving =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      Enum.each([{1, []}, {2, [arriving]}, {3, []}, {4, [arriving]}], fn {version, rows} ->
+        ResultStore.put(@board_window, version, rows)
+        send(session, {:round, @board_window, version, [], nil})
+        settle([], session)
+      end)
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), arriving) == [
+               Frame.put_entity(arriving, Frame.row_verdicts(nil, arriving))
+             ]
+    end
+
+    # A row that entered a window and that a grant given while away reveals is handed over by the
+    # shift, and only once.
+    test "hands over once a row that entered a window and that a grant revealed" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      arriving = DB.create!(PolicyModule1.new())
+      Auth.grant_role(user, :viewer, arriving)
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          gap: [gap_effect(Entity.generate_id())],
+          grants_then: []
+        )
+
+      ResultStore.put(@board_window, 1, [])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [arriving])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), arriving) == [
+               Frame.put_entity(arriving, Frame.row_verdicts(user.id, arriving))
+             ]
+    end
+
+    # Handed over before the gap's batches, in a frame claiming no place, for the same reason as the
+    # rows that left every window.
+    test "hands over a row that entered a window first, in a frame claiming no place" do
+      arriving =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      missing_id = Entity.generate_id()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(missing_id)])
+
+      ResultStore.put(@board_window, 1, [])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [arriving])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert_receive {:sync_deltas, first_cursor, first_deltas, _applied_seq}
+      assert first_cursor == nil
+      assert first_deltas == [Frame.put_entity(arriving, Frame.row_verdicts(nil, arriving))]
+
+      assert_receive {:sync_deltas, batch_cursor, [%{id: ^missing_id}], _applied_seq}
+      assert batch_cursor != nil
+    end
+
+    test "hands over nothing of a row that entered a window hidden from the client" do
+      hidden = DB.create!(PolicyModule1.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      ResultStore.put(@board_window, 1, [])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [hidden])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), hidden) == []
     end
 
     # The row went public between the two reads, so the window read later outdates the hidden copy.
