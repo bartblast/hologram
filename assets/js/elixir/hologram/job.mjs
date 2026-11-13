@@ -25,7 +25,7 @@ import Type from "../../type.mjs";
 // instead, which is what 2.7 says about every policy question.
 //
 // TODO: every build now bakes its rules, so an empty policy here is a job type declaring no allow
-// lines and nothing else - the refusal can be ported.
+// lines and nothing else - the refusal can be ported (#1420).
 function applyClaim(job, claim) {
   if (claim === null) {
     return job;
