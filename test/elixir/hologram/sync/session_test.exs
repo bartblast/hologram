@@ -1049,6 +1049,73 @@ defmodule Hologram.Sync.SessionTest do
       assert caught_up_deltas() == [Frame.put_entity(shown, Frame.row_verdicts(nil, shown))]
     end
 
+    # The earlier window still lists the row as held when the catch-up takes it away. Once the row
+    # comes back into sight, that window's next round has to hand it over whole, not patch it.
+    test "hands a row the catch-up took away over whole once it is back in sight" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [%{gap_effect(row.id) | type: PolicyModule1}])
+
+      ResultStore.put(@board_window, 1, [row], 1)
+      ResultStore.put(@other_window, 1, [%{row | public: false}], 2)
+      send(session, {:round, @board_window, 1, [], nil})
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert caught_up_deltas() == [
+               %{id: row.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+
+      ResultStore.put(@board_window, 2, [row], 3)
+      send(session, {:round, @board_window, 2, transactions(row.id, ["public"]), nil})
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert deltas == [Frame.put_entity(row, Frame.row_verdicts(nil, row))]
+    end
+
+    # The grant is taken away while the windows fill, and no round of the window holding the row has
+    # told the session yet when the catch-up takes the row away. The grant comes back before one
+    # does, so that round has to hand the row over whole.
+    test "hands a row a revoked grant took away over whole once the grant is back" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      gated = DB.create!(PolicyModule1.new())
+      Auth.grant_role(user, :viewer, gated)
+
+      windows(%{@page => [@other_window, @board_window]})
+      prefill([@other_window])
+      hold_silently(@board_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          gap_end: nil,
+          read_gap: read_gap_from(cursor_now(), user.id)
+        )
+
+      Auth.revoke_role(user, :viewer, gated)
+      finish_filling(session, @board_window)
+
+      assert deltas_for(caught_up_deltas(), gated) == [
+               %{id: gated.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+
+      Auth.grant_role(user, :viewer, gated)
+      Evaluator.round(@other_window, [])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert deltas == [Frame.put_entity(gated, Frame.row_verdicts(user.id, gated))]
+    end
+
     # The row went public between the two reads, so the window read later outdates the hidden copy.
     test "hands over a row the gap names once a window read later shows it" do
       user =

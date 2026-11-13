@@ -453,6 +453,25 @@ defmodule Hologram.Sync.Session do
     %{caught_up | catching_up: false, read_gap: nil, versions: %{}}
   end
 
+  # A row a catch-up frame takes away is no longer the client's, whichever window lists it as held.
+  # A window can still list a row the catch-up judged hidden - its copy read before the window that
+  # hid it, or a grant or related row moving after its round was delivered - and left there, that
+  # window's next round would tell the row coming back into sight as a patch, or as nothing at all,
+  # to a client that no longer has it.
+  defp forget_unsynced(state, frame_deltas) do
+    unsynced =
+      frame_deltas
+      |> Enum.filter(&(&1.op == :unsync_entity))
+      |> Enum.map(& &1.id)
+
+    held =
+      Map.new(state.held, fn {window_id, window_held} ->
+        {window_id, Map.drop(window_held, unsynced)}
+      end)
+
+    %{state | held: held}
+  end
+
   # What a grant change decided differently, told after the rows the gap named and before the
   # client is told its store is answerable. A row the gap named is left out: the replay has
   # already handed it over as it stands, or already taken it away, and saying so twice would
@@ -478,7 +497,9 @@ defmodule Hologram.Sync.Session do
     |> Enum.reduce(state, fn deltas, acc ->
       send(acc.client, {:sync_deltas, batch_cursor(acc, judged.gap), deltas, acc.applied_seq})
 
-      remember_verdicts(acc, deltas)
+      acc
+      |> remember_verdicts(deltas)
+      |> forget_unsynced(deltas)
     end)
   end
 
@@ -565,7 +586,9 @@ defmodule Hologram.Sync.Session do
       )
     end
 
-    remember_verdicts(updated, deltas)
+    updated
+    |> remember_verdicts(deltas)
+    |> forget_unsynced(deltas)
   end
 
   # A gap of nothing dates nothing - the client keeps the place it came back from, as a frame
