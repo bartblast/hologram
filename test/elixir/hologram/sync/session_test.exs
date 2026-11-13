@@ -16,6 +16,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.Policy
   alias Hologram.Policy.Edges
@@ -171,9 +172,18 @@ defmodule Hologram.Sync.SessionTest do
 
     session = start_supervised!(Supervisor.child_spec({Session, opts}, id: make_ref()))
 
-    :ok = DBConnection.Ownership.ownership_allow(DB.pool_name(), self(), session, [])
+    allow_into_sandbox(session)
 
     session
+  end
+
+  # A gap reader over the log lets the session in itself when the session calls it, which can be
+  # before this test gets the chance - so being let in already is as good as letting it in.
+  defp allow_into_sandbox(pid, owner \\ self()) do
+    case DBConnection.Ownership.ownership_allow(DB.pool_name(), owner, pid, []) do
+      :ok -> :ok
+      {:already, :allowed} -> :ok
+    end
   end
 
   defp resume_opts(opts) do
@@ -215,13 +225,13 @@ defmodule Hologram.Sync.SessionTest do
 
   # A reader over the log, as the doors hand one over. It lets itself into the sandbox, since the
   # session calls it before a test could let the session in.
-  defp read_gap_from(cursor) do
+  defp read_gap_from(cursor, actor_user_id \\ nil) do
     test_pid = self()
 
     fn ->
-      :ok = DBConnection.Ownership.ownership_allow(DB.pool_name(), test_pid, self(), [])
+      allow_into_sandbox(self(), test_pid)
 
-      Catchup.gap(cursor, nil, @policy_hash)
+      Catchup.gap(cursor, actor_user_id, @policy_hash)
     end
   end
 
@@ -341,6 +351,29 @@ defmodule Hologram.Sync.SessionTest do
       )
 
       assert_receive {:sync_deltas, _cursor, _deltas, 9}
+    end
+
+    # A write of this replica's own past what the deciding read found may be in no round the
+    # session has read yet, so the frame carrying the row from before it can't say it is applied.
+    test "raises the watermark no further than the read that decided the client resumes" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      gap = [
+        gap_effect(moved.id, {900, 1}, ref(@replica_id, 4)),
+        gap_effect(Entity.generate_id(), {900, 2}, ref(@replica_id, 9))
+      ]
+
+      start_session!(
+        applied_seq: 3,
+        fill_place: {200, 0},
+        gap: gap,
+        gap_end: {900, 1},
+        replica_id: @replica_id
+      )
+
+      assert_receive {:sync_deltas, _cursor, _deltas, 4}
     end
 
     # A gap arrives in batches rather than one frame, so the memory a replay costs is bounded by
@@ -497,6 +530,410 @@ defmodule Hologram.Sync.SessionTest do
 
       assert_receive {:DOWN, ^ref, :process, ^connection, {:full_resync, :gap_too_large}}
 
+      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
+      refute_received {:sync_synced, _scope, _cursor}
+    end
+  end
+
+  # The gap is read once every window has filled, so whatever changed while the client was being
+  # caught up is in it. The silent window keeps the client being caught up while the test changes
+  # things, and is then filled by hand.
+  describe "start_link/1 - coming back while things change" do
+    # Reads every frame until the client is told its store is whole, the catch-up's included.
+    defp caught_up_deltas(acc \\ []) do
+      receive do
+        {:sync_deltas, _cursor, deltas, _applied_seq} -> caught_up_deltas(acc ++ deltas)
+        {:sync_synced, :page, _cursor} -> caught_up_deltas(acc)
+        {:sync_synced, :all, _cursor} -> acc
+      after
+        1_000 -> flunk("the client was never told it was caught up")
+      end
+    end
+
+    defp cursor_now do
+      {tx, seq} = last_place()
+
+      Cursor.encode(tx, seq, @policy_hash)
+    end
+
+    defp deltas_for(deltas, row) do
+      Enum.filter(deltas, &(&1.id == row.id))
+    end
+
+    defp finish_filling(session, window_id) do
+      ResultStore.put(window_id, 1, [])
+      send(session, {:round, window_id, 1, [], nil})
+    end
+
+    defp prefill(window_ids) do
+      hold_windows(window_ids)
+
+      Enum.each(window_ids, &Evaluator.round(&1, []))
+      wait_until(fn -> Enum.all?(window_ids, &(ResultStore.versions(&1) != [])) end)
+    end
+
+    # The board window filled, the other still filling, as a client coming back with a gap naming
+    # the given rows, each moved to the given title while it was away.
+    defp start_catching_up!(rows) do
+      windows(%{@page => [@board_window, @other_window]})
+      prefill([@board_window])
+      hold_silently(@other_window)
+
+      cursor = cursor_now()
+
+      Enum.each(rows, fn {row, title} -> DB.update(Module2, row.id, %{c: title}) end)
+
+      start_session!(gap_end: last_place(), read_gap: read_gap_from(cursor))
+    end
+
+    test "tells a returning client about a row renamed while it was being caught up" do
+      moved = create("before leaving")
+      renamed = create("old title")
+      session = start_catching_up!([{moved, "moved while away"}])
+
+      DB.update(Module2, renamed.id, %{c: "new title"})
+      Evaluator.round(@board_window, transactions(renamed.id, ["c"]))
+      settle([@board_window], session)
+
+      finish_filling(session, @other_window)
+
+      assert [%{data: data, op: :put_entity}] = deltas_for(caught_up_deltas(), renamed)
+      assert data.c == "new title"
+    end
+
+    test "hands over a row created while the client was being caught up" do
+      moved = create("before leaving")
+      session = start_catching_up!([{moved, "moved while away"}])
+
+      created = create("created while catching up")
+      Evaluator.round(@board_window, [])
+      settle([@board_window], session)
+
+      finish_filling(session, @other_window)
+
+      assert [%{data: data, op: :put_entity}] = deltas_for(caught_up_deltas(), created)
+      assert data.c == "created while catching up"
+    end
+
+    test "tells a returning client to drop a row deleted while it was being caught up" do
+      moved = create("before leaving")
+      deleted = create("deleted while catching up")
+      session = start_catching_up!([{moved, "moved while away"}])
+
+      DB.delete(Module2, deleted.id)
+      Evaluator.round(@board_window, [])
+      settle([@board_window], session)
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), deleted) == [
+               %{
+                 id: deleted.id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               }
+             ]
+    end
+
+    # The window's first round still held the row, and the gap names it - told from that round,
+    # the client would be handed back a row that no longer exists.
+    test "drops a row the gap names once it is deleted while the client is being caught up" do
+      moved = create("before leaving")
+      session = start_catching_up!([{moved, "moved while away"}])
+
+      DB.delete(Module2, moved.id)
+      Evaluator.round(@board_window, [])
+      settle([@board_window], session)
+
+      finish_filling(session, @other_window)
+
+      assert deltas_for(caught_up_deltas(), moved) == [
+               %{id: moved.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Entity.Module2"}
+             ]
+    end
+
+    test "tells a row the gap names once, as it stands after it changed again" do
+      moved = create("before leaving")
+      session = start_catching_up!([{moved, "moved while away"}])
+
+      DB.update(Module2, moved.id, %{c: "moved again while catching up"})
+      Evaluator.round(@board_window, transactions(moved.id, ["c"]))
+      settle([@board_window], session)
+
+      finish_filling(session, @other_window)
+
+      assert [%{data: data, op: :put_entity}] = deltas_for(caught_up_deltas(), moved)
+      assert data.c == "moved again while catching up"
+    end
+
+    # The change reached the running evaluator before the session took the window up, so the round
+    # the session reads already holds it and no round of its own will ever name it.
+    test "tells a change a running window took in before the session began" do
+      moved = create("before leaving")
+      renamed = create("old title")
+      windows(%{@page => [@board_window]})
+      prefill([@board_window])
+
+      cursor = cursor_now()
+      DB.update(Module2, moved.id, %{c: "moved while away"})
+      gap_end = last_place()
+
+      DB.update(Module2, renamed.id, %{c: "new title"})
+      Evaluator.round(@board_window, transactions(renamed.id, ["c"]))
+      wait_until(fn -> ResultStore.versions(@board_window) == [2, 1] end)
+
+      start_session!(gap_end: gap_end, read_gap: read_gap_from(cursor))
+
+      assert [%{data: data, op: :put_entity}] = deltas_for(caught_up_deltas(), renamed)
+      assert data.c == "new title"
+    end
+
+    # A window still starting its evaluator fills after the delete, so it never held the row and
+    # no round of its own can say it went.
+    test "drops a row deleted before a window still filling took it in" do
+      kept = create("kept")
+      deleted = create("deleted while catching up")
+      windows(%{@page => [@board_window]})
+      hold_silently(@board_window)
+
+      session = start_session!(gap_end: nil, read_gap: read_gap_from(cursor_now()))
+
+      DB.delete(Module2, deleted.id)
+
+      ResultStore.put(@board_window, 1, [kept])
+      send(session, {:round, @board_window, 1, [], nil})
+
+      assert caught_up_deltas() == [
+               %{
+                 id: deleted.id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               }
+             ]
+    end
+
+    test "drops what a related row hid while the client was being caught up" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      parent =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      child =
+        %{parent_id: parent.id}
+        |> PolicyModule5.new()
+        |> DB.create!()
+
+      windows(%{@page => [@reach_window, @board_window]})
+      prefill([@reach_window])
+      hold_silently(@board_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          edges: Edges.derive([PolicyModule5]),
+          gap_end: nil,
+          read_gap: read_gap_from(cursor_now(), user.id)
+        )
+
+      DB.update(PolicyModule1, parent.id, %{public: false})
+      Evaluator.round(@reach_window, [])
+      settle([@reach_window], session)
+
+      finish_filling(session, @board_window)
+
+      assert deltas_for(caught_up_deltas(), child) == [
+               %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module5"}
+             ]
+    end
+
+    test "drops what a grant revoked while the client was being caught up covered" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      gated = DB.create!(PolicyModule1.new())
+      Auth.grant_role(user, :viewer, gated)
+
+      windows(%{@page => [@other_window, @board_window]})
+      prefill([@other_window])
+      hold_silently(@board_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          gap_end: nil,
+          read_gap: read_gap_from(cursor_now(), user.id)
+        )
+
+      Auth.revoke_role(user, :viewer, gated)
+      Evaluator.round(@other_window, [])
+      settle([@other_window], session)
+
+      finish_filling(session, @board_window)
+
+      assert deltas_for(caught_up_deltas(), gated) == [
+               %{id: gated.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # The change lands just after the gap was read, so the gap doesn't name it and the window's
+    # round for it reaches the session once the client is caught up.
+    test "tells a change committed just after the gap was read once the client is caught up" do
+      renamed = create("old title")
+      windows(%{@page => [@board_window]})
+      prefill([@board_window])
+
+      test_pid = self()
+      read_from_cursor = read_gap_from(cursor_now())
+
+      # Holds the session between reading the gap and judging it, for the change to land there.
+      read_gap = fn ->
+        gap = read_from_cursor.()
+
+        send(test_pid, {:gap_read, self()})
+
+        receive do
+          :judge -> gap
+        end
+      end
+
+      start_session!(gap_end: nil, read_gap: read_gap)
+      assert_receive {:gap_read, session}
+
+      DB.update(Module2, renamed.id, %{c: "new title"})
+      Evaluator.round(@board_window, transactions(renamed.id, ["c"]))
+      wait_until(fn -> hd(ResultStore.versions(@board_window)) == 2 end)
+
+      send(session, :judge)
+
+      assert_receive {:sync_synced, :all, _cursor}
+      assert_receive {:sync_deltas, _cursor, [%{data: patch, id: id, op: :patch_entity}], _seq}
+      assert id == renamed.id
+      assert patch.c == "new title"
+    end
+
+    # Both windows hold the row; the board window's round for the change was read while the client
+    # was catching up, the other window's is still on its way. Its copy is the older one.
+    test "tells a row two windows hold as the window that took in its change has it" do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        windows: %{
+          @board_window => Stage.normalize(Module2),
+          @other_window => other_window_term(),
+          @reach_window => Stage.normalize(PolicyModule5)
+        }
+      })
+
+      moved = create("before leaving")
+      windows(%{@page => [@board_window, @other_window, @reach_window]})
+      prefill([@board_window, @other_window])
+      hold_silently(@reach_window)
+
+      session = start_session!(gap_end: nil, read_gap: read_gap_from(cursor_now()))
+
+      DB.update(Module2, moved.id, %{a: false, c: "moved while catching up"})
+      Evaluator.round(@board_window, transactions(moved.id, ["a", "c"]))
+      settle([@board_window], session)
+
+      finish_filling(session, @reach_window)
+
+      assert [%{data: data, op: :put_entity}] = deltas_for(caught_up_deltas(), moved)
+      assert data.c == "moved while catching up"
+    end
+
+    # The window starts its evaluator after the related row moved, so its first round already has
+    # the child hidden, and the session never held it there to see it go.
+    test "drops what a related row hid before a window still filling took it in" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      parent =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      child =
+        %{parent_id: parent.id}
+        |> PolicyModule5.new()
+        |> DB.create!()
+
+      windows(%{@page => [@reach_window]})
+      hold_silently(@reach_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          edges: Edges.derive([PolicyModule5]),
+          gap_end: nil,
+          read_gap: read_gap_from(cursor_now(), user.id)
+        )
+
+      DB.update(PolicyModule1, parent.id, %{public: false})
+
+      # What the window's evaluator would read once it starts.
+      rows =
+        PolicyModule5
+        |> Stage.normalize()
+        |> QueryRunner.run(DB.mapping())
+
+      ResultStore.put(@reach_window, 1, rows)
+      send(session, {:round, @reach_window, 1, [], nil})
+
+      assert deltas_for(caught_up_deltas(), child) == [
+               %{id: child.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module5"}
+             ]
+    end
+
+    # Read when the session began, the gap would miss what changed while the windows filled.
+    test "reads the gap only once every window has filled" do
+      windows(%{@page => [@board_window, @other_window]})
+      prefill([@board_window])
+      hold_silently(@other_window)
+
+      test_pid = self()
+
+      session =
+        start_session!(
+          gap_end: nil,
+          read_gap: fn ->
+            send(test_pid, :gap_read)
+
+            {:ok, [], nil}
+          end
+        )
+
+      settle([@board_window], session)
+      refute_received :gap_read
+
+      finish_filling(session, @other_window)
+
+      assert_receive :gap_read
+    end
+
+    # The board window's last round left the ring while the other window was still filling, so the
+    # gap has nothing left to be judged against.
+    test "cuts the client off when a window's last round left the ring before the gap was read" do
+      windows(%{@page => [@board_window, @other_window]})
+      prefill([@board_window])
+      hold_silently(@other_window)
+
+      session = start_session!(gap_end: nil, read_gap: fn -> {:ok, [], nil} end)
+      settle([@board_window], session)
+
+      Enum.each(2..4, &ResultStore.put(@board_window, &1, []))
+
+      ref = Process.monitor(session)
+      finish_filling(session, @other_window)
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :behind_the_ring}
       refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
       refute_received {:sync_synced, _scope, _cursor}
     end
