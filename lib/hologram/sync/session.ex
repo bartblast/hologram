@@ -169,6 +169,15 @@ defmodule Hologram.Sync.Session do
     {:stop, :evaluator_gone, state}
   end
 
+  # A session on its way out reads no more rounds, the ones still queued ahead of the cut message
+  # included. The round that cut it has already moved its window's place past itself, so any frame
+  # would claim a place past a change nobody told the client - and a later round of that same
+  # window, still in the store, would tell only its own changes while claiming its own place.
+  def handle_info({:round, _window_id, _version, _transactions, _place}, %{cut: cut} = state)
+      when cut != nil do
+    {:noreply, state}
+  end
+
   def handle_info({:round, window_id, version, transactions, place}, state) do
     events = Enum.flat_map(transactions, fn {_tx, events} -> events end)
 
@@ -178,6 +187,12 @@ defmodule Hologram.Sync.Session do
       |> remember_applied(events)
 
     {:noreply, deliver(updated, window_id, version, transactions)}
+  end
+
+  # A cut met while the windows are still being taken up leaves the rest of them to be subscribed
+  # to, and nothing of theirs is told either.
+  defp deliver(%{cut: cut} = state, _window_id, _version, _transactions) when cut != nil do
+    state
   end
 
   defp deliver(state, window_id, version, transactions) do

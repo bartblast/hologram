@@ -1951,6 +1951,74 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:DOWN, ^ref, :process, ^session, :behind_the_ring}
     end
 
+    # The dropped round already moved its window's place past itself, so a frame telling the other
+    # window's round would claim a place past a change the client never got.
+    test "tells nothing of another window's round queued ahead of the cut" do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        windows: %{
+          @board_window => Stage.normalize(Module2),
+          @other_window => other_window_term()
+        }
+      })
+
+      task = create("first")
+      windows(%{@page => [@board_window, @other_window]})
+      hold_windows([@board_window, @other_window])
+
+      session = start_session!(fill_place: {200, 0})
+      assert_receive {:sync_synced, :all, _cursor}
+      flush_messages()
+
+      ref = Process.monitor(session)
+      :sys.suspend(session)
+
+      # A version the ring dropped before this session got to it, carrying a change.
+      send(session, {:round, @board_window, 999, transactions(task.id, ["c"]), {250, 0}})
+
+      DB.update(Module2, task.id, %{c: "renamed"})
+      Evaluator.round(@other_window, transactions(task.id, ["c"]), {300, 0})
+      wait_until(fn -> Process.info(session, :message_queue_len) == {:message_queue_len, 2} end)
+
+      :sys.resume(session)
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :behind_the_ring}
+      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
+    end
+
+    # The window's next round is still in the store, so read it would tell only its own changes and
+    # claim its own place - past the one the ring dropped.
+    test "tells nothing of the same window's next round queued ahead of the cut" do
+      task = create("first")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      session = start_session!(fill_place: {200, 0})
+      assert_receive {:sync_synced, :all, _cursor}
+      flush_messages()
+
+      DB.update(Module2, task.id, %{c: "renamed"})
+
+      rows =
+        Module2
+        |> Stage.normalize()
+        |> QueryRunner.run(DB.mapping())
+
+      # The ring keeps the last three, so version 3 is gone and version 4 is still there.
+      Enum.each(2..6, &ResultStore.put(@board_window, &1, rows))
+
+      ref = Process.monitor(session)
+      :sys.suspend(session)
+
+      send(session, {:round, @board_window, 3, transactions(task.id, ["c"]), {250, 0}})
+      send(session, {:round, @board_window, 4, transactions(task.id, ["c"]), {260, 0}})
+
+      :sys.resume(session)
+
+      assert_receive {:DOWN, ^ref, :process, ^session, :behind_the_ring}
+      refute_received {:sync_deltas, _cursor, _deltas, _applied_seq}
+    end
+
     test "takes the connection with it, so the client comes back through the doors" do
       create("first")
       windows(%{@page => [@board_window]})
