@@ -194,6 +194,13 @@ defmodule Hologram.Sync.Catchup do
     end
   end
 
+  # A client judged under other rules is sent everything again like any other resync, so the rows
+  # it holds stay on screen until the marker ending the refill takes away the ones the current
+  # rules hide - not dropped at once, as for a change of identity. Those rows were the client's to
+  # see a moment ago and are already on the device, so hiding them before the refill lands
+  # protects nothing, and it would empty every returning client's pages on every deploy that
+  # touches a rule. It is the same window a grant revoked under a connected client has, until the
+  # round that takes its rows away.
   defp check_rules(policy_hash, policy_hash), do: :ok
 
   defp check_rules(_cursor_policy_hash, _policy_hash), do: {:full_resync, :policy_hash}
