@@ -319,17 +319,21 @@ defmodule Hologram.Sync.Session do
 
   # Judged against each window's last round, one window's rows read at a time: which of them the
   # gap named (`touched`), which a grant change or a moved related row decided differently
-  # (`shift`), and the ones whose verdicts the client may hold (`verdict_rows`). Nothing of it
-  # outlives the catch-up, so it is a value the frames are told from, never part of the session.
+  # (`shift`), the ones whose verdicts the client may hold (`verdict_rows`), and whether the client
+  # may see each row a window carries (`visibility`). Nothing of it outlives the catch-up, so it is
+  # a value the frames are told from, never part of the session.
   #
   # The windows' last rounds were read at different moments, so two copies of one row can differ:
   # a window whose round for a change is still queued has the row as it was. So the windows are
   # judged in the order their rounds were read and a later copy wins, holding every write an
-  # earlier one does - its values and the sets it includes alike. A later copy the client may not
-  # see wins too: the row is taken away rather than handed over. Judged in any other order, the
-  # older copy could win, and the round that would correct it was already passed over while the
-  # client was catching up. Nothing on the row itself can stand in for that order: a column's
-  # revision moves only when that column is written, and a pair moves none.
+  # earlier one does - its values and the sets it includes alike. What the client may see of a row
+  # is decided the same way, by the last window carrying it, and only once every window is judged
+  # is anything filtered by it: a row hidden by then is taken away rather than handed over, and the
+  # lists of the rows handed over name exactly what the client may see then, whatever an earlier
+  # window let it see. Judged in any other order, the older copy could win, and the round that
+  # would correct it was already passed over while the client was catching up. Nothing on the row
+  # itself can stand in for that order: a column's revision moves only when that column is
+  # written, and a pair moves none.
   #
   # The order is when each query was asked for, not when the database took its snapshot: two
   # windows' queries waiting on the pool can be answered in the other order, and a write landing
@@ -344,7 +348,8 @@ defmodule Hologram.Sync.Session do
       gap: gap,
       shift: %{appeared: %{}, vanished: %{}},
       touched: %{},
-      verdict_rows: %{}
+      verdict_rows: %{},
+      visibility: %{}
     }
 
     with {:ok, ordered} <- read_order(state.versions) do
@@ -381,21 +386,63 @@ defmodule Hologram.Sync.Session do
     end
   end
 
+  # The rows are kept as the window carries them, embedded lists whole: what the client may see of
+  # those lists is known only once the windows read after this one have been judged too.
   defp judge_window(judged, state, result, grants_then, named_ids) do
-    %{appeared: visible} = Diff.deltas(result, MapSet.new(), state.actor_user_id, [])
+    {members, visible_ids} = Diff.carried(result, state.actor_user_id)
 
     judged
-    |> supersede(result, visible)
-    |> remember_touched(visible, named_ids)
-    |> remember_verdict_rows(visible)
-    |> remember_shift(state, result, grants_then)
-    |> remember_reach(state, result)
+    |> remember_visibility(members, visible_ids)
+    |> remember_touched(members, visible_ids, named_ids)
+    |> remember_verdict_rows(members, visible_ids)
+    |> remember_shift(state, result, members, grants_then)
+    |> remember_reach(state, result, members)
+  end
+
+  # What the client may see as of the last window carrying each row, which every frame is filtered
+  # by. Ids alone, for every row a window carries - a row's lists can name any of them.
+  defp remember_visibility(judged, members, visible_ids) do
+    judgments = Map.new(members, fn {id, _row} -> {id, MapSet.member?(visible_ids, id)} end)
+
+    %{judged | visibility: Map.merge(judged.visibility, judgments)}
+  end
+
+  # Only what the client may see as of the last window judged goes out, with every list it embeds
+  # holding only what the client may see too. A row that left the client's sight by then is no row
+  # to hand over, and one shown again is no row to take away.
+  defp settle(judged) do
+    visible_ids =
+      judged.visibility
+      |> Enum.filter(fn {_id, visible?} -> visible? end)
+      |> MapSet.new(fn {id, _visible?} -> id end)
+
+    vanished =
+      Map.reject(judged.shift.vanished, fn {id, _row} -> MapSet.member?(visible_ids, id) end)
+
+    %{
+      judged
+      | shift: %{appeared: visible_only(judged.shift.appeared, visible_ids), vanished: vanished},
+        touched: visible_only(judged.touched, visible_ids),
+        # Not scrubbed: only their verdicts are told, and the verdicts read the sets they quantify
+        # over from the database, never from what the row embeds.
+        verdict_rows:
+          Map.filter(judged.verdict_rows, fn {id, _row} -> MapSet.member?(visible_ids, id) end)
+    }
+  end
+
+  # The rows that go out whole, with every list they embed holding only what the client may see.
+  defp visible_only(rows, visible_ids) do
+    rows
+    |> Map.filter(fn {id, _row} -> MapSet.member?(visible_ids, id) end)
+    |> Map.new(fn {id, row} -> {id, Diff.scrub(row, visible_ids)} end)
   end
 
   # What the client missed, told from the rows as they stand now rather than from the log's own
   # account of them. Everything it holds that the gap never touched is still true, and is left
   # alone - which is the whole saving over sending it the lot.
-  defp tell_gap(state, judged) do
+  defp tell_gap(state, unsettled) do
+    judged = settle(unsettled)
+
     caught_up =
       judged.gap
       |> Enum.chunk_every(Catchup.rows_per_frame())
@@ -468,13 +515,16 @@ defmodule Hologram.Sync.Session do
   end
 
   # Judged per window, merged by id: visibility is per ROW and per client rather than per window,
-  # so a later window's judgment of a row supersedes an earlier one's (see `supersede/3`).
+  # so a later window's judgment of a row supersedes an earlier one's. What appeared is kept as the
+  # window carries it, for its lists to be scrubbed once every window is judged.
   #
   # Two sources feed the one accumulator, and they answer different questions about the same
   # rows: what the client's GRANTS moving decided differently, and what a row the gap names now
   # decides about the rows leaning on it. Both end up in the batch `tell_shift/2` sends.
-  defp merge_shift(judged, shift) do
-    appeared = merge_later(judged.shift.appeared, Map.new(shift.appeared, &{&1.id, &1}))
+  defp merge_shift(judged, shift, members) do
+    appeared_ids = Enum.map(shift.appeared, & &1.id)
+
+    appeared = merge_later(judged.shift.appeared, Map.take(members, appeared_ids))
     vanished = Map.merge(judged.shift.vanished, Map.new(shift.vanished, &{&1.id, &1}))
 
     %{judged | shift: %{appeared: appeared, vanished: vanished}}
@@ -482,17 +532,19 @@ defmodule Hologram.Sync.Session do
 
   # Only for a client that was handed a dependency index - a first arrival has nothing to reach
   # back for.
-  defp remember_reach(judged, %{edges: nil}, _result), do: judged
+  defp remember_reach(judged, %{edges: nil}, _result, _members), do: judged
 
-  defp remember_reach(judged, state, result) do
-    merge_shift(judged, Diff.reach(result, state.actor_user_id, judged.gap, state.edges))
+  defp remember_reach(judged, state, result, members) do
+    shift = Diff.reach(result, state.actor_user_id, judged.gap, state.edges)
+
+    merge_shift(judged, shift, members)
   end
 
   # Only when the gap came back with grants to judge against.
-  defp remember_shift(judged, _state, _result, nil), do: judged
+  defp remember_shift(judged, _state, _result, _members, nil), do: judged
 
-  defp remember_shift(judged, state, result, grants_then) do
-    merge_shift(judged, Diff.shift(result, state.actor_user_id, grants_then))
+  defp remember_shift(judged, state, result, members, grants_then) do
+    merge_shift(judged, Diff.shift(result, state.actor_user_id, grants_then), members)
   end
 
   # Each batch claims ITS OWN last place rather than the whole gap's, which is what makes a replay
@@ -653,50 +705,16 @@ defmodule Hologram.Sync.Session do
   end
 
   # The rows the client may see whose type has a deciding quantifier, from every window, so the
-  # verdicts it holds from before this session can be told again once it is caught up.
-  defp remember_verdict_rows(judged, visible) do
+  # verdicts it holds from before this session can be told again once it is caught up. Only the
+  # ones this window lets it see: a row hidden here and shown later is taken from the later window,
+  # and one shown here and hidden later is dropped once every window is judged.
+  defp remember_verdict_rows(judged, members, visible_ids) do
     rows =
-      visible
-      |> Enum.filter(&(Policy.deciding_quantifiers(&1.__struct__) != []))
-      |> Map.new(&{&1.id, &1})
+      members
+      |> Map.take(MapSet.to_list(visible_ids))
+      |> Map.filter(fn {_id, row} -> Policy.deciding_quantifiers(row.__struct__) != [] end)
 
     %{judged | verdict_rows: merge_later(judged.verdict_rows, rows)}
-  end
-
-  # What this window says of a row's visibility outdates what every window judged before it said,
-  # since its copy was read later. A row it carries and the client may not see is dropped from what
-  # is handed over, and taken out of the lists of the rows that are - an earlier copy was scrubbed
-  # against what the client could see then. A row it carries and the client may see is no longer
-  # one to take away. A row it doesn't carry at all says nothing: its query may simply not reach it.
-  defp supersede(judged, result, visible) do
-    visible_ids = MapSet.new(visible, & &1.id)
-
-    hidden_ids =
-      result
-      |> Diff.member_ids()
-      |> MapSet.difference(visible_ids)
-
-    shift = %{
-      appeared: forget_hidden(judged.shift.appeared, hidden_ids),
-      vanished: Map.drop(judged.shift.vanished, MapSet.to_list(visible_ids))
-    }
-
-    %{
-      judged
-      | shift: shift,
-        touched: forget_hidden(judged.touched, hidden_ids),
-        verdict_rows: Map.drop(judged.verdict_rows, MapSet.to_list(hidden_ids))
-    }
-  end
-
-  defp forget_hidden(rows, hidden_ids) do
-    if Enum.empty?(hidden_ids) do
-      rows
-    else
-      rows
-      |> Map.drop(MapSet.to_list(hidden_ids))
-      |> Map.new(fn {id, row} -> {id, Diff.unlist(row, hidden_ids)} end)
-    end
   end
 
   # A copy from a window read later keeps its own values and takes what the earlier copy included
@@ -711,14 +729,12 @@ defmodule Hologram.Sync.Session do
 
   defp vouched_for?(state, effect), do: {effect.tx, effect.seq} <= state.gap_end
 
-  # The rows the gap names, as a window's last round has them - an edge naming its target as well
-  # as its source, since the target's inverse of it moves too - and only those, so the judgment
-  # grows with what moved rather than with what the client holds.
-  defp remember_touched(judged, visible, named_ids) do
-    rows =
-      visible
-      |> Enum.filter(&MapSet.member?(named_ids, &1.id))
-      |> Map.new(&{&1.id, &1})
+  # The rows the gap names that this window lets the client see, as its last round has them. An
+  # edge names its target as well as its source, since the target's inverse of it moves too. Only
+  # those rows are kept, so the rows held grow with what moved rather than with what the client
+  # holds. Whether a kept row goes out is decided once every window is judged.
+  defp remember_touched(judged, members, visible_ids, named_ids) do
+    rows = Map.take(members, MapSet.to_list(MapSet.intersection(named_ids, visible_ids)))
 
     %{judged | touched: merge_later(judged.touched, rows)}
   end

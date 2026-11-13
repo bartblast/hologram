@@ -42,6 +42,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyProject
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyLabel
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyParent
+  alias Hologram.Test.Fixtures.Policy.Module35, as: PolicyGatedParent
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
   use_module_stub :query_cache
@@ -911,8 +912,144 @@ defmodule Hologram.Sync.SessionTest do
              ]
     end
 
-    # The other way round: the row went public between the two reads, so the window read later
-    # outdates the hidden copy.
+    # The child went public between the two reads, so the parent from the earlier window, read
+    # while the client couldn't see the child, lists it once the later window shows it.
+    test "lists a row a window read later shows in the rows handed over" do
+      child =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      gap = [
+        %{gap_effect(parent.id, {200, 1}) | type: PolicyParent},
+        %{gap_effect(child.id, {200, 2}) | type: PolicyModule1}
+      ]
+
+      session = start_session!(gap: gap)
+
+      listing_hidden = %{parent | children: [%{child | public: false}]}
+
+      ResultStore.put(@board_window, 1, [listing_hidden], 1)
+      ResultStore.put(@other_window, 1, [child], 2)
+      send(session, {:round, @board_window, 1, [], nil})
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               Frame.put_entity(listing_hidden, Frame.row_verdicts(nil, listing_hidden)),
+               Frame.put_entity(child, Frame.row_verdicts(nil, child))
+             ]
+    end
+
+    # A grant given while the client was away reveals the parent, whose list holds a child the
+    # client may not see.
+    test "hands over a row a grant revealed listing only what the client may see" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      child = DB.create!(PolicyModule1.new())
+      parent = DB.create!(PolicyGatedParent.new())
+      Auth.grant_role(user, :viewer, parent)
+
+      windows(%{@page => [@board_window]})
+      hold_silently(@board_window)
+
+      missing_id = Entity.generate_id()
+
+      session =
+        start_session!(actor_user_id: user.id, gap: [gap_effect(missing_id)], grants_then: [])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}], 1)
+      send(session, {:round, @board_window, 1, [], nil})
+
+      listing_nothing = %{parent | children: []}
+
+      assert caught_up_deltas() == [
+               %{
+                 id: missing_id,
+                 op: :unsync_entity,
+                 type: "Hologram.Test.Fixtures.Entity.Module2"
+               },
+               Frame.put_entity(listing_nothing, Frame.row_verdicts(user.id, listing_nothing))
+             ]
+    end
+
+    # The grant reveals the parent in the earlier window, read while the client couldn't see the
+    # child; the window read later shows the child.
+    test "hands over a row a grant revealed listing what a window read later shows" do
+      user =
+        %{email: "catching-up@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      child =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyGatedParent.new())
+      Auth.grant_role(user, :viewer, parent)
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session =
+        start_session!(
+          actor_user_id: user.id,
+          gap: [%{gap_effect(child.id) | type: PolicyModule1}],
+          grants_then: []
+        )
+
+      listing_hidden = %{parent | children: [%{child | public: false}]}
+
+      ResultStore.put(@board_window, 1, [listing_hidden], 1)
+      ResultStore.put(@other_window, 1, [child], 2)
+      send(session, {:round, @board_window, 1, [], nil})
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert caught_up_deltas() == [
+               Frame.put_entity(child, Frame.row_verdicts(user.id, child)),
+               Frame.put_entity(listing_hidden, Frame.row_verdicts(user.id, listing_hidden))
+             ]
+    end
+
+    # The earlier window carries the parent hidden and listing a child; the window read later shows
+    # it without that list. What a hidden copy included is no part of what is handed over.
+    test "hands over a row a window read later shows as that window has it" do
+      child =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      parent = DB.create!(PolicyGatedParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [%{gap_effect(parent.id) | type: PolicyGatedParent}])
+
+      shown = %{parent | public: true}
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}], 1)
+      ResultStore.put(@other_window, 1, [shown], 2)
+      send(session, {:round, @board_window, 1, [], nil})
+      send(session, {:round, @other_window, 1, [], nil})
+
+      assert caught_up_deltas() == [Frame.put_entity(shown, Frame.row_verdicts(nil, shown))]
+    end
+
+    # The row went public between the two reads, so the window read later outdates the hidden copy.
     test "hands over a row the gap names once a window read later shows it" do
       user =
         %{email: "catching-up@example.com"}
