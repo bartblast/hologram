@@ -1509,7 +1509,18 @@ export default class Hologram {
     // removes it. So it is never older than the one in OPFS, unless the document died between a
     // write to OPFS and the removal that follows it. An entry left through a client-side
     // navigation and later by a full page load has both, and the one in OPFS is the older.
-    const serializedSnapshot = sessionStorage.getItem(snapshotKey);
+    let serializedSnapshot = null;
+
+    // A browser that denies the page storage access throws on any use of session storage. The
+    // copy in OPFS is then tried.
+    try {
+      serializedSnapshot = sessionStorage.getItem(snapshotKey);
+    } catch (error) {
+      console.error(
+        "Failed to read page snapshot from session storage:",
+        error,
+      );
+    }
 
     if (serializedSnapshot) {
       let deserializedSnapshot;

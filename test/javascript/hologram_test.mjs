@@ -4847,6 +4847,29 @@ describe("Hologram", () => {
         assert.strictEqual(App.instanceId, "opfs-instance");
       });
 
+      // A browser that denies the page storage access throws on any use of session storage.
+      it("restores the snapshot in OPFS when session storage can't be read", async () => {
+        const opfs = installOpfs();
+        Hologram.historyId = "history-opfs-left-12";
+
+        opfs.files.set(
+          "hologram_page_snapshot_history-opfs-12",
+          snapshotOf("opfs-instance"),
+        );
+
+        const getItemStub = sinon
+          .stub(Object.getPrototypeOf(sessionStorage), "getItem")
+          .throws(new DOMException("Access denied", "SecurityError"));
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-opfs-12"});
+        } finally {
+          getItemStub.restore();
+        }
+
+        assert.strictEqual(App.instanceId, "opfs-instance");
+      });
+
       it("reloads an entry whose snapshot in session storage can't be read back, over an older one in OPFS", async () => {
         const opfs = installOpfs();
         Hologram.historyId = "history-opfs-left-3";
