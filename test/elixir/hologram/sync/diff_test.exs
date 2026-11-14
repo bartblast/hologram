@@ -20,7 +20,11 @@ defmodule Hologram.Sync.DiffTest do
   alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
+  alias Hologram.Test.Fixtures.Policy.Module26, as: PolicySpace
+  alias Hologram.Test.Fixtures.Policy.Module27, as: PolicyComment
+  alias Hologram.Test.Fixtures.Policy.Module29, as: PolicyMark
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
+  alias Hologram.Test.Fixtures.Policy.Module35, as: PolicyGatedParent
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
   # Two ids ordered so a round of a few rows walks the first before the last - a map this small
@@ -66,6 +70,46 @@ defmodule Hologram.Sync.DiffTest do
     end)
 
     %{source | a: targets}
+  end
+
+  describe "carried/2" do
+    test "returns every row a round carries, at its root and embedded under them, keyed by id" do
+      channel =
+        %{name: "general"}
+        |> Module26.new()
+        |> DB.create!()
+
+      message =
+        %{body: "hi", channel_id: channel.id, position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      root = %{channel | messages: [message]}
+
+      assert {members, _visible_ids} = carried(result([root]), nil)
+      assert members == %{channel.id => root, message.id => message}
+    end
+
+    test "returns the ids of the rows the given user may read" do
+      shown =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      hidden = DB.create!(PolicyModule1.new())
+
+      assert {_members, visible_ids} = carried(result([shown, hidden]), nil)
+      assert visible_ids == MapSet.new([shown.id])
+    end
+
+    test "keeps a row's embedded lists whole, rows the user may not read included" do
+      parent = DB.create!(PolicyModule3.new())
+      hidden = DB.create!(PolicyModule1.new())
+      root = %{parent | children: [hidden]}
+
+      assert {members, _visible_ids} = carried(result([root]), nil)
+      assert members[parent.id] == root
+    end
   end
 
   describe "deltas/4 - appeared" do
@@ -873,6 +917,26 @@ defmodule Hologram.Sync.DiffTest do
     end
   end
 
+  describe "scrub/2" do
+    test "keeps only the given rows in every embedded list, however deep" do
+      kept = PolicyMark.new()
+      dropped = PolicyMark.new()
+      comment = %{PolicyComment.new() | marks: [kept, dropped]}
+      space = %{PolicySpace.new() | comments: [comment]}
+
+      visible_ids = MapSet.new([comment.id, kept.id])
+
+      assert scrub(space, visible_ids) == %{space | comments: [%{comment | marks: [kept]}]}
+    end
+
+    test "leaves a row whose lists name only the given rows as it is" do
+      comment = PolicyComment.new()
+      space = %{PolicySpace.new() | comments: [comment]}
+
+      assert scrub(space, MapSet.new([comment.id])) == space
+    end
+  end
+
   describe "shift/3" do
     setup do
       user =
@@ -910,6 +974,19 @@ defmodule Hologram.Sync.DiffTest do
 
       assert shift.appeared == [granted]
       assert shift.vanished == []
+    end
+
+    test "lists a row the current grants admit with only what the user may see embedded in it", %{
+      user: user
+    } do
+      hidden = DB.create!(PolicyModule1.new())
+      granted = DB.create!(PolicyGatedParent.new())
+
+      Auth.grant_role(user, :viewer, granted)
+
+      shift = shift(result([%{granted | children: [hidden]}]), user.id, [])
+
+      assert shift.appeared == [%{granted | children: []}]
     end
 
     test "lists nothing for a row visible under both", %{user: user} do

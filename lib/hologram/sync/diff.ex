@@ -13,6 +13,34 @@ defmodule Hologram.Sync.Diff do
   @pair_ops [:add_relationship, :del_relationship]
 
   @doc """
+  Returns every row a round carries, keyed by id - the roots and every row embedded under them,
+  however deep, each id's copies merged into one - and the ids of those the given user may read.
+
+  The rows are as the round holds them, embedded lists unscrubbed, for whoever judges several
+  rounds' copies of a row together to decide what the client may see once, from all of them.
+  """
+  @spec carried(%{ids: MapSet.t(), rows: map}, String.t() | nil) :: {map, MapSet.t()}
+  def carried(result, actor_user_id) do
+    members = carried_rows(result)
+
+    visible_ids =
+      members
+      |> Map.filter(fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
+      |> member_ids_of()
+
+    {members, visible_ids}
+  end
+
+  @doc """
+  Returns every row a round carries, keyed by id - the roots and every row embedded under them,
+  however deep, each id's copies merged into one - whoever may see them.
+  """
+  @spec carried_rows(%{ids: MapSet.t(), rows: map}) :: map
+  def carried_rows(result) do
+    members(result.rows)
+  end
+
+  @doc """
   Returns what changed for a client between the ids it holds and the round it is being told
   about: the rows that appeared, the rows whose values moved, and the ids that went away.
 
@@ -72,10 +100,7 @@ defmodule Hologram.Sync.Diff do
       |> members()
       |> Map.filter(fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
 
-    visible_ids =
-      visible
-      |> Map.keys()
-      |> MapSet.new()
+    visible_ids = member_ids_of(visible)
 
     appeared_ids = MapSet.difference(visible_ids, held_ids)
     held_visible_ids = MapSet.intersection(visible_ids, held_ids)
@@ -156,7 +181,7 @@ defmodule Hologram.Sync.Diff do
     }
 
     visible = Map.filter(members, fn {_id, row} -> Auth.can?(actor_user_id, :read, row) end)
-    visible_ids = member_ids(visible)
+    visible_ids = member_ids_of(visible)
 
     reached = Map.filter(members, fn {_id, row} -> reached?(row, edges, gap) end)
 
@@ -169,6 +194,19 @@ defmodule Hologram.Sync.Diff do
       |> Enum.map(&scrub(&1, visible_ids))
 
     %{appeared: appeared, vanished: Map.values(hidden_reached)}
+  end
+
+  @doc """
+  Returns the given row with every embedded to-many list, however deep, holding only the rows of
+  the given ids - what a client may see.
+
+  An unreadable member loses its slot in every included set, not only its own deltas, so no id list
+  names a row the client was not given. A single embedded row stays as it is - the wire never spells
+  one (a reference field carries the id), so there is nothing to hide.
+  """
+  @spec scrub(struct, MapSet.t()) :: struct
+  def scrub(row, visible_ids) do
+    keep_embedded(row, &MapSet.member?(visible_ids, &1.id))
   end
 
   @doc """
@@ -198,13 +236,11 @@ defmodule Hologram.Sync.Diff do
         Auth.can?(actor_user_id, :read, row, grants_then)
       end)
 
-    now_ids = member_ids(visible_now)
-    then_ids = member_ids(visible_then)
+    now_ids = member_ids_of(visible_now)
+    then_ids = member_ids_of(visible_then)
 
-    # Scrubbed on the same terms `deltas/4` scrubs an appearing row, and untestable here as long
-    # as no fixture gates a type that embeds a to-many: the only such parent is readable by
-    # everyone, so it is visible under both sets and never appears. Kept because the case is
-    # real - a client granted a parent while it was away receives it - not because a test binds it.
+    # Scrubbed on the same terms `deltas/4` scrubs an appearing row: a client granted a parent while
+    # it was away receives it, listing only the rows it may see.
     appeared =
       now_ids
       |> MapSet.difference(then_ids)
@@ -347,7 +383,27 @@ defmodule Hologram.Sync.Diff do
 
   defp hidden_target?(_edge, _visible_ids), do: false
 
-  defp member_ids(members) do
+  # Every included to-many set, however deep, keeps only the rows the given function keeps. A
+  # single embedded row stays as it is - the wire never spells one (a reference field carries the
+  # id), so there is nothing to take out.
+  defp keep_embedded(row, keep?) do
+    updates =
+      for name <- Entity.includable_names(row.__struct__),
+          targets = Map.fetch!(row, name),
+          is_list(targets) do
+        {name, keep_targets(targets, keep?)}
+      end
+
+    struct(row, updates)
+  end
+
+  defp keep_targets(targets, keep?) do
+    targets
+    |> Enum.filter(keep?)
+    |> Enum.map(&keep_embedded(&1, keep?))
+  end
+
+  defp member_ids_of(members) do
     members
     |> Map.keys()
     |> MapSet.new()
@@ -455,28 +511,6 @@ defmodule Hologram.Sync.Diff do
   end
 
   defp revision_names(_effect), do: :all
-
-  # What leaves here is what this client may see, embedded lists included: an unreadable member
-  # loses its slot in every included set, however deep, not only its own deltas. A single embedded
-  # row stays as it is - the wire never spells one (a reference field carries the id), so there is
-  # nothing to hide. Scrubbing at the source rather than at the spelling covers every path a
-  # row takes out, the catch-up store included.
-  defp scrub(row, visible_ids) do
-    updates =
-      for name <- Entity.includable_names(row.__struct__),
-          targets = Map.fetch!(row, name),
-          is_list(targets) do
-        {name, scrub_targets(targets, visible_ids)}
-      end
-
-    struct(row, updates)
-  end
-
-  defp scrub_targets(targets, visible_ids) do
-    targets
-    |> Enum.filter(&MapSet.member?(visible_ids, &1.id))
-    |> Enum.map(&scrub(&1, visible_ids))
-  end
 
   defp union_moved(:all, _names), do: :all
 

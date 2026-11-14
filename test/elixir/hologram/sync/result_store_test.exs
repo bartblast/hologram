@@ -78,7 +78,7 @@ defmodule Hologram.Sync.ResultStoreTest do
     end
   end
 
-  describe "put/3" do
+  describe "put/4" do
     test "keeps the versions that fit in the ring, newest first" do
       Enum.each(1..3, fn version -> put(@window_id, version, [row("round #{version}")]) end)
 
@@ -108,6 +108,34 @@ defmodule Hologram.Sync.ResultStoreTest do
 
       assert versions(@window_id) == [5, 4, 3]
       assert versions(@other_window_id) == [2, 1]
+    end
+  end
+
+  describe "read_at/2" do
+    test "returns when the given version's query was asked for" do
+      put(@window_id, 1, [row("first")], 42)
+
+      assert read_at(@window_id, 1) == 42
+    end
+
+    test "returns when the version was written when no moment is given" do
+      before_write = System.monotonic_time()
+      put(@window_id, 1, [row("first")])
+      after_write = System.monotonic_time()
+
+      assert read_at(@window_id, 1) in before_write..after_write
+    end
+
+    test "returns nil for a version that was never written" do
+      put(@window_id, 1, [row("first")], 42)
+
+      assert read_at(@window_id, 2) == nil
+    end
+
+    test "returns nil for a version that fell out of the ring" do
+      Enum.each(1..4, &put(@window_id, &1, [], &1))
+
+      assert read_at(@window_id, 1) == nil
     end
   end
 

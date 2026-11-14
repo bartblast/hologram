@@ -175,9 +175,13 @@ defmodule Hologram.Sync.Evaluator do
 
   defp run(state, transactions, place) do
     version = state.version + 1
+
+    # Taken as close before the query as the process can, since what it stands for is the moment
+    # the rows were read, and every write committed before that moment is in them.
+    read_at = System.monotonic_time()
     rows = QueryRunner.run(state.term, DB.mapping())
 
-    ResultStore.put(state.window_id, version, rows)
+    ResultStore.put(state.window_id, version, rows, read_at)
 
     # The rows themselves are never sent: a message is copied into every receiving process, which
     # would undo the point of holding one shared copy of them.

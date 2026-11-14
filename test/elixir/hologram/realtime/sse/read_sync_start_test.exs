@@ -8,6 +8,7 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   alias Hologram.DB.Connection
   alias Hologram.Entity.Model
   alias Hologram.Policy
+  alias Hologram.Policy.Edges
   alias Hologram.Sync.Cursor
 
   @entity_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
@@ -83,7 +84,54 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
 
     test "reads nothing for a client arriving for the first time with current rules" do
       assert read_sync_start(nil, nil, @policy_hash, false, true) ==
-               {:ok, %{edges: nil, gap: nil, grants_then: nil, resync_reason: nil, rules: nil}}
+               {:ok, %{cursor: nil, edges: nil, gap_end: nil, resync_reason: nil, rules: nil}}
+    end
+
+    # The session reads the gap again for itself, so what travels on is where it reads from and how
+    # far this read reached - the furthest a catch-up frame may vouch for.
+    test "hands on where a returning client resumes from and how far its gap reaches" do
+      {tx, seq} = seed(200)
+      gap_end = seed(201)
+
+      cursor = Cursor.encode(tx, seq, @policy_hash)
+
+      assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
+               {:ok,
+                %{
+                  cursor: cursor,
+                  edges: Edges.index(),
+                  gap_end: gap_end,
+                  resync_reason: nil,
+                  rules: nil
+                }}
+    end
+
+    test "hands on no gap end for a returning client that missed nothing" do
+      {tx, seq} = seed(200)
+
+      cursor = Cursor.encode(tx, seq, @policy_hash)
+
+      assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
+               {:ok,
+                %{
+                  cursor: cursor,
+                  edges: Edges.index(),
+                  gap_end: nil,
+                  resync_reason: nil,
+                  rules: nil
+                }}
+    end
+
+    # A client that has to be sent everything again resumes from nowhere - a cursor handed on would
+    # have the session replay a gap for a client being told to drop its store.
+    test "hands on no place to resume from for a client sent everything again" do
+      {tx, seq} = seed(200)
+
+      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210")
+
+      assert read_sync_start(cursor, nil, @policy_hash, false, true) ==
+               {:ok,
+                %{cursor: nil, edges: nil, gap_end: nil, resync_reason: :policy_hash, rules: nil}}
     end
   end
 end

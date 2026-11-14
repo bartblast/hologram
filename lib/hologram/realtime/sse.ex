@@ -523,8 +523,9 @@ defmodule Hologram.Realtime.SSE do
   # Public so tests can start syncing under a hold without standing up a stream to start it on.
   #
   # Everything starting a sync session reads of the data model, read before anything is sent: the
-  # rules to hand a client built with others, what a returning client missed - or why it is to
-  # start over - and what each rule reads besides its own row. A hold can begin after the
+  # rules to hand a client built with others, whether a returning client can be told what it missed
+  # - or why it is to start over - and what each rule reads besides its own row. The session reads
+  # the gap again for itself, after these are sent. A hold can begin after the
   # handshake found none, and every one of these refuses to read under it, so meeting one answers
   # `:held` rather than raising - and with nothing sent yet, the client is told nothing it would
   # have to take back when it is started again.
@@ -541,10 +542,9 @@ defmodule Hologram.Realtime.SSE do
     rules = if stale_rules?, do: Rules.rendered()
 
     # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
-    # answers FALSE when it does not resume, and a session reads "no gap" from nil alone -
-    # anything else and it sets about replaying something it cannot walk.
-    {gap, grants_then, resync_reason} =
-      if resume?, do: gap(cursor, user_id, policy_hash), else: {nil, nil, nil}
+    # answers FALSE when it does not resume, and everything below reads "no gap" from nil alone.
+    {gap, resync_reason} =
+      if resume?, do: gap(cursor, user_id, policy_hash), else: {nil, nil}
 
     # What a rule reads besides its own row, so a row the gap never names can be judged again
     # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
@@ -555,10 +555,14 @@ defmodule Hologram.Realtime.SSE do
     # resumes.
     edges = if gap, do: Edges.index()
 
+    # The session reads the gap again for itself rather than being handed this one, so only what
+    # this read decided travels on: whether the client resumes at all, from where, and how far
+    # this read reached - a frame names no place past that, since the session's own read can
+    # name effects whose rounds have not reached it yet.
     start = %{
+      cursor: if(gap, do: cursor),
       edges: edges,
-      gap: gap,
-      grants_then: grants_then,
+      gap_end: gap_end(gap),
       resync_reason: resync_reason,
       rules: rules
     }
@@ -989,15 +993,27 @@ defmodule Hologram.Realtime.SSE do
   # between nodes, which is not a shape to grow for a claim that needs no protecting.
   # A client arriving for the first time holds nothing and is simply filled. One coming back is
   # either told what it missed, or told to let go of what it holds - and is then filled the same
-  # way a first arrival is. Deciding it here rather than in the session keeps the session a reader
-  # of rounds and nothing else, and puts the answer beside the reload notice it stands next to.
-  defp gap(nil, _user_id, _policy_hash), do: {nil, nil, nil}
+  # way a first arrival is. Deciding it here rather than in the session puts the answer beside the
+  # reload notice it stands next to, both sent before the session's first frame.
+  defp gap(nil, _user_id, _policy_hash), do: {nil, nil}
 
   defp gap(cursor, user_id, policy_hash) do
     case Catchup.gap(cursor, user_id, policy_hash) do
-      {:ok, effects, grants_then} -> {effects, grants_then, nil}
-      {:full_resync, reason} -> {nil, nil, reason}
+      {:ok, effects, _grants_then} -> {effects, nil}
+      {:full_resync, reason} -> {nil, reason}
     end
+  end
+
+  # The place of the last effect the gap holds, or nil for a gap holding none - which dates
+  # nothing, as a gap of nothing never has.
+  defp gap_end(nil), do: nil
+
+  defp gap_end([]), do: nil
+
+  defp gap_end(effects) do
+    %{seq: seq, tx: tx} = List.last(effects)
+
+    {tx, seq}
   end
 
   defp own_identities(instance_id, session_id, user_id) do
@@ -1048,10 +1064,14 @@ defmodule Hologram.Realtime.SSE do
 
     replica_id = verified_replica_id(greeting, conn, user_id)
 
-    # Read HERE rather than in the session, so the database work of starting a stream stays in
-    # the process that already does it - and so the session is a state machine over what it is
-    # handed rather than a reader of its own.
+    # Read here, beside the identity it is read for.
     applied_seq = replica_id && Record.highest_confirmed_seq(replica_id)
+
+    # Handed over as a reader rather than read here, because the session decides WHEN the gap is
+    # read - which runs it in the session's process, query and memory alike. Closing over the
+    # cursor alone keeps the rest of `start` out of the session's heap.
+    cursor = start.cursor
+    read_gap = cursor && fn -> Catchup.gap(cursor, user_id, policy_hash) end
 
     {:ok, session} =
       SyncSession.start_link(
@@ -1060,10 +1080,10 @@ defmodule Hologram.Realtime.SSE do
         client: self(),
         edges: start.edges,
         fill_place: {Oplog.current_xmin(), 0},
-        gap: start.gap,
-        grants_then: start.grants_then,
+        gap_end: start.gap_end,
         page: page,
         policy_hash: policy_hash,
+        read_gap: read_gap,
         replica_id: replica_id
       )
 

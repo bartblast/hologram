@@ -29,7 +29,7 @@ defmodule Hologram.Sync.ResultStore do
   @spec fetch(String.t(), pos_integer) :: %{ids: MapSet.t(), rows: map} | nil
   def fetch(key, version) do
     case :ets.lookup(@table_name, {key, version}) do
-      [{_key_version, result}] -> result
+      [{_key_version, result, _read_at}] -> result
       [] -> nil
     end
   end
@@ -50,9 +50,12 @@ defmodule Hologram.Sync.ResultStore do
 
   Ids are kept beside the rows because membership is what a round is diffed by, and rebuilding
   the set per session would undo the sharing this store exists for.
+
+  `read_at` is when the round's query was asked for, in `System.monotonic_time/0` units - now,
+  unless given.
   """
-  @spec put(String.t(), pos_integer, list(struct)) :: :ok
-  def put(key, version, rows) do
+  @spec put(String.t(), pos_integer, list(struct), integer) :: :ok
+  def put(key, version, rows, read_at \\ System.monotonic_time()) do
     by_id = Map.new(rows, &{&1.id, &1})
 
     ids =
@@ -62,9 +65,20 @@ defmodule Hologram.Sync.ResultStore do
 
     result = %{ids: ids, rows: by_id}
 
-    :ets.insert(@table_name, {{key, version}, result})
+    :ets.insert(@table_name, {{key, version}, result, read_at})
 
     prune(key, version)
+  end
+
+  @doc """
+  Returns when the query behind the given window's version was asked for, in
+  `System.monotonic_time/0` units, or nil once that version has been pruned or was never written.
+
+  Only that moment is read, never the rows beside it.
+  """
+  @spec read_at(String.t(), pos_integer) :: integer | nil
+  def read_at(key, version) do
+    :ets.lookup_element(@table_name, {key, version}, 3, nil)
   end
 
   @doc """
@@ -91,7 +105,7 @@ defmodule Hologram.Sync.ResultStore do
   @spec versions(String.t()) :: list(pos_integer)
   def versions(key) do
     @table_name
-    |> :ets.match({{key, :"$1"}, :_})
+    |> :ets.match({{key, :"$1"}, :_, :_})
     |> Enum.map(fn [version] -> version end)
     |> Enum.sort(:desc)
   end
