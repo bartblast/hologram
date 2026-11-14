@@ -25,7 +25,7 @@ defmodule HologramSyncBenchmark.Application do
   # Hologram's mix.exs names its application callback only when it is built from a
   # `deps/hologram` folder, and this app takes it by path, so starting :hologram starts nothing.
   # Its supervisor is started here instead, ahead of the endpoint, as the callback would have
-  # started it before this app.
+  # started it before this app. Drop this once #1630 is fixed.
   #
   # Only on the server node, the one whose endpoint serves: the driver booting Hologram would make
   # it a second node syncing against the same database, and would claim the database for the

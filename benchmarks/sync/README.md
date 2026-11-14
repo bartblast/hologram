@@ -29,7 +29,7 @@ HOLOGRAM_START=1 mix run --no-start bench.exs --case boot
 
 1. `HOLOGRAM_START=1` makes the compile run the Hologram compiler, which builds the pages' windows and bundles. Without it the driver refuses to start.
 2. `--no-start` skips booting the app on the driver, which only the server node needs. The driver never starts Hologram either way, so the server node is the only node syncing.
-3. Postgres 14 or newer, on localhost with the `postgres`/`postgres` user. The driver creates the `hologram_sync_benchmark` database when it's missing.
+3. Postgres 15 or newer, on localhost with the `postgres`/`postgres` user. The driver creates the `hologram_sync_benchmark` database when it's missing.
 4. Every client holds a socket in the driver and one in the server, so raise the open file limit for big client counts, for example `ulimit -n 65536`.
 5. macOS caps a listen backlog at `kern.ipc.somaxconn`, 128 by default, which the `deploy` case's burst of connects overflows. Raise it with `sudo sysctl -w kern.ipc.somaxconn=4096`.
 6. The first compile in a fresh checkout runs `npm install` in the repo's `assets` folder, which can rewrite `assets/package-lock.json`. Undo that change.
