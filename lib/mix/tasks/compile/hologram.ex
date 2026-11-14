@@ -1772,8 +1772,9 @@ defmodule Mix.Tasks.Compile.Hologram do
   # here: the removal is by path, not owner-verified. Deciding that os_pid is dead
   # takes milliseconds (SystemUtils.os_process_alive?/1 shells out to ps or tasklist),
   # and by the time File.rm/1 runs, the file at this path may no longer be the one
-  # that was diagnosed. Two invocations reading the same lock left
-  # behind by a killed process both diagnose it dead; the first removes it, acquires
+  # that was diagnosed. Two invocations in different OS processes reading the same lock
+  # left behind by a killed process both diagnose it dead (two in one VM can't, since
+  # they take the stale check in turns, see with_lock/3); the first removes it, acquires
   # its own lock and starts compiling; the second's removal then deletes that live
   # lock, and both compile at once.
   #
@@ -1786,7 +1787,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   # is atomic and fails when the directory exists, with the OS-level PID in a file
   # inside it - which restructures acquisition, release and stale detection alike.
   # Worth doing only if this is ever actually observed: unlike the empty-lock race it
-  # needs a lock orphaned by a killed process, which the cleanup in with_lock/3
+  # needs a lock orphaned by a killed process, which the cleanup in with_file_lock/3
   # prevents on every normal exit, plus two invocations landing in the liveness check
   # within the same few milliseconds.
   defp remove_lock_for_dead_process(lock_path, os_pid) do
@@ -1794,6 +1795,15 @@ defmodule Mix.Tasks.Compile.Hologram do
       "Hologram: removing stale lock file (OS-level process #{os_pid} no longer exists)"
     )
 
+    File.rm(lock_path)
+  end
+
+  # Can't race an acquire in this VM, since the VM lock orders them (see with_lock/3), and another
+  # OS process never removes a lock naming a live process. Two containers that share the build dir
+  # and whose VMs got the same OS-level PID would take each other's live locks for their own, which
+  # isn't supported: the liveness check can't see into another container's processes anyway.
+  defp remove_lock_of_this_vm(lock_path) do
+    Logger.info("Hologram: removing stale lock file (no process of this VM holds it)")
     File.rm(lock_path)
   end
 
@@ -1880,18 +1890,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     end)
   end
 
-  # An empty lock file is a lock in the middle of being acquired, not an invalid one:
-  # with_lock/3 creates the file with File.open/2 and only then writes the owner's PID
-  # into it, so a concurrent invocation can read it in between and must leave it alone.
-  # Treating it as invalid would delete a lock that was just legitimately acquired and
-  # let both compilations run at once.
-  #
-  # The empty state cannot be removed outright. The textbook fix is to write the PID to
-  # a temp file and hard-link it into place - :file.make_link/2 is atomic and fails with
-  # :eexist when the target exists - but hard links are not dependable on Windows, which
-  # Hologram supports, and a platform fallback would reintroduce the very two-step
-  # acquisition the idiom exists to remove.
-  #
   # The :next_batch option answers with pages to build now: some of the remaining ones, and at least
   # one, since an empty batch would ask again forever.
   defp validate_batch!(:stop, _remaining_pages), do: :stop
@@ -1914,6 +1912,19 @@ defmodule Mix.Tasks.Compile.Hologram do
             inspect(batch)
   end
 
+  # An empty lock file is a lock in the middle of being acquired, not an invalid one:
+  # with_file_lock/3 creates the file with File.open/2 and only then writes the owner's PID
+  # into it, so an invocation in another OS process can read it in between and must leave
+  # it alone (one in this VM can't, see with_lock/3).
+  # Treating it as invalid would delete a lock that was just legitimately acquired and
+  # let both compilations run at once.
+  #
+  # The empty state cannot be removed outright. The textbook fix is to write the PID to
+  # a temp file and hard-link it into place - :file.make_link/2 is atomic and fails with
+  # :eexist when the target exists - but hard links are not dependable on Windows, which
+  # Hologram supports, and a platform fallback would reintroduce the very two-step
+  # acquisition the idiom exists to remove.
+  #
   # The one state left is an empty lock whose owner died between the two steps: nothing
   # would ever fill or remove it. Hence the grace period - an empty lock is respected
   # only while it is young, and the retry loop's stale check clears an abandoned one
@@ -1922,11 +1933,22 @@ defmodule Mix.Tasks.Compile.Hologram do
     maybe_remove_abandoned_empty_lock(lock_path)
   end
 
+  # A lock naming this VM's OS-level PID is held by no process of this VM, since each holder in it
+  # holds the VM lock as well, and so does the caller (see with_lock/3). Its holder was killed,
+  # which skips the removal in with_file_lock/3, or an earlier VM with the same OS-level PID left
+  # it, as after a container restart. The OS-level liveness check would always find this VM alive.
   defp validate_lock_file_and_proceed_accordingly(lock_path, os_pid_str) do
     case Integer.parse(os_pid_str) do
       {os_pid, _remainder} ->
-        if not SystemUtils.os_process_alive?(os_pid) do
-          remove_lock_for_dead_process(lock_path, os_pid)
+        cond do
+          Integer.to_string(os_pid) == System.pid() ->
+            remove_lock_of_this_vm(lock_path)
+
+          not SystemUtils.os_process_alive?(os_pid) ->
+            remove_lock_for_dead_process(lock_path, os_pid)
+
+          true ->
+            :ok
         end
 
       :error ->
@@ -1959,9 +1981,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     keep_template_modules(kept_template_modules, templatable_modules, validated_template_modules)
   end
 
-  # Runs the given function while it holds the lock at the given path, which the given name names in
-  # the log line of a wait and in the error of a failed acquire.
-  defp with_lock(lock_path, lock_name, fun) do
+  # Retries within itself, not with_lock/3: the VM lock is granted to its holder again, and the
+  # inner release would free the outer one.
+  defp with_file_lock(lock_path, lock_name, fun) do
     lock_path
     |> Path.dirname()
     |> File.mkdir_p!()
@@ -1987,10 +2009,37 @@ defmodule Mix.Tasks.Compile.Hologram do
       {:error, :eexist} ->
         Logger.info("Hologram: #{lock_name} already running, waiting...")
         :timer.sleep(1_000)
-        with_lock(lock_path, lock_name, fun)
+        with_file_lock(lock_path, lock_name, fun)
 
       {:error, reason} ->
         raise "Hologram: failed to acquire #{lock_name} lock: #{inspect(reason)}"
+    end
+  end
+
+  # Runs the given function while it holds the lock at the given path, which the given name names in
+  # the log line of a wait and in the error of a failed acquire.
+  #
+  # The lock file keeps out compiles in other OS processes. Within this VM a VM lock keeps them out,
+  # a :global lock on this node alone, taken before the file is touched and held until it is
+  # removed, so a process reading the file holds it too, and a lock file naming this VM's OS-level
+  # PID is then known to be stale (see validate_lock_file_and_proceed_accordingly/2). It is released
+  # when its holder dies, killed included, which the file isn't. Keyed by the name, not the path, so
+  # that two spellings of one path can't get two VM locks. Released on node() read again, since
+  # distribution may have started or stopped meanwhile, which would make a release on the old node
+  # name a no-op. Not re-entrant: the function must not take the same lock again.
+  defp with_lock(lock_path, lock_name, fun) do
+    vm_lock_id = {{__MODULE__, lock_name}, self()}
+
+    if :global.set_lock(vm_lock_id, [node()], 0) do
+      try do
+        with_file_lock(lock_path, lock_name, fun)
+      after
+        :global.del_lock(vm_lock_id, [node()])
+      end
+    else
+      Logger.info("Hologram: #{lock_name} already running, waiting...")
+      :timer.sleep(1_000)
+      with_lock(lock_path, lock_name, fun)
     end
   end
 end

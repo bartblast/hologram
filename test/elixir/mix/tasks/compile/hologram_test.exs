@@ -631,6 +631,25 @@ defmodule Mix.Tasks.Compile.HologramTest do
     :ok
   end
 
+  # Starts an OS process that lives until the calling process exits, which closes its stdin, and
+  # returns its OS-level PID. Both programs read stdin until EOF.
+  defp start_os_process do
+    {executable, args} =
+      case :os.type() do
+        {:win32, _name} -> {"findstr", ["x"]}
+        {:unix, _name} -> {"cat", []}
+      end
+
+    port =
+      executable
+      |> System.find_executable()
+      |> then(&Port.open({:spawn_executable, &1}, [:binary, args: args]))
+
+    {:os_pid, os_pid} = Port.info(port, :os_pid)
+
+    os_pid
+  end
+
   defp test_build_artifacts(opts) do
     test_call_graph(opts)
     test_chunk_bundles(opts)
@@ -842,7 +861,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert num_runtime_source_maps == 1
   end
 
-  # Helper function to wait for lock file to appear and return its content
+  # Helper function to wait for lock file to appear with content and return the content. An empty one
+  # is in the middle of being acquired.
   defp wait_for_lock_file(lock_path, timeout_ms, end_time \\ nil) do
     end_time = end_time || System.system_time(:millisecond) + timeout_ms
 
@@ -852,10 +872,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     if File.exists?(lock_path) do
       case File.read(lock_path) do
-        {:ok, content} ->
+        {:ok, content} when content != "" ->
           content
 
-        {:error, _reason} ->
+        _empty_or_error ->
           Process.sleep(10)
           wait_for_lock_file(lock_path, timeout_ms, end_time)
       end
@@ -3901,8 +3921,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "a compile waits for an install another process is running", %{opts: opts} do
-      # The current process is definitely running.
-      FileUtils.write_p!(@install_lock_path, "#{System.pid()}")
+      FileUtils.write_p!(@install_lock_path, "#{start_os_process()}")
 
       task =
         Task.async(fn ->
@@ -3917,6 +3936,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
       File.rm!(@install_lock_path)
 
       assert Task.await(task, :infinity) >= 2_000
+      refute File.exists?(@install_lock_path)
+    end
+
+    test "an install lock with this VM's OS-level PID is removed", %{opts: opts} do
+      # No process of this VM holds it: its holder was killed, or an earlier VM with the same OS-level
+      # PID left it.
+      FileUtils.write_p!(@install_lock_path, System.pid())
+
+      run(opts)
+
       refute File.exists?(@install_lock_path)
     end
   end
@@ -4015,9 +4044,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "valid lock file with running OS-level process is respected", %{opts: opts} do
-      # Create a lock file with the current process PID (which is definitely running)
-      current_os_pid = System.pid()
-      FileUtils.write_p!(@lock_path, "#{current_os_pid}")
+      FileUtils.write_p!(@lock_path, "#{start_os_process()}")
 
       assert File.exists?(@lock_path)
 
@@ -4041,6 +4068,41 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert duration >= 2_000
 
       # Lock should be cleaned up after successful compilation
+      refute File.exists?(@lock_path)
+    end
+
+    test "lock file with this VM's OS-level PID is removed", %{opts: opts} do
+      # No process of this VM holds it: its holder was killed, or an earlier VM with the same OS-level
+      # PID left it.
+      FileUtils.write_p!(@lock_path, System.pid())
+
+      run(opts)
+
+      refute File.exists?(@lock_path)
+    end
+
+    @tag :capture_log
+    test "lock file left by a compilation killed in this VM is removed", %{opts: opts} do
+      # A kill skips the compilation's own removal of the lock file.
+      {pid, ref} = spawn_monitor(fn -> run(opts) end)
+      wait_for_lock_file(@lock_path, 5_000)
+
+      # The processes the compilation is linked to exit along with it, and are waited for, so that
+      # none is still running when the next compilation starts.
+      {:links, links} = Process.info(pid, :links)
+      linked_refs = for linked when is_pid(linked) <- links, do: Process.monitor(linked)
+
+      Process.exit(pid, :kill)
+      assert_receive {:DOWN, ^ref, :process, ^pid, :killed}
+
+      for linked_ref <- linked_refs do
+        assert_receive {:DOWN, ^linked_ref, :process, _linked, _reason}, 5_000
+      end
+
+      assert File.read!(@lock_path) == System.pid()
+
+      run(opts)
+
       refute File.exists?(@lock_path)
     end
 
