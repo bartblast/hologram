@@ -339,6 +339,15 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   @doc """
+  Keeps the browser from putting the document the `session` shows into its back/forward cache,
+  so that coming back to it with Back or Forward loads a new document. Adds an `unload` listener,
+  which makes a page ineligible for Chrome's back/forward cache.
+  """
+  def keep_out_of_back_forward_cache(session) do
+    Browser.execute_script(session, "window.addEventListener('unload', () => {});")
+  end
+
+  @doc """
   Marks the document the `session` shows, so that `wait_for_unmarked_document/2` can tell when
   the browser has replaced it with a new one.
   """

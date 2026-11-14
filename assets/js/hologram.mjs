@@ -191,6 +191,17 @@ export default class Hologram {
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
 
+  // Numbers the snapshots saved, in the order they were made (see #writePageSnapshot).
+  static #snapshotSaveCount = 0;
+
+  // For each history entry whose snapshot is on its way to OPFS, the write in flight. The entry's
+  // next write waits for it (see #savePageSnapshot).
+  static #snapshotWrites = new Map();
+
+  // For each history entry whose copy in session storage a save on beforeunload wrote, that save's
+  // number (see #writePageSnapshot).
+  static #unloadSnapshotSaves = new Map();
+
   // Made public to make tests easier
   //
   // Asks the server who is logged in now, and loads the page afresh when that is another identity
@@ -1493,45 +1504,63 @@ export default class Hologram {
       return $.#pageSnapshots.get(snapshotKey);
     }
 
-    // Try OPFS second
+    // Session storage second. A copy there is written on beforeunload, or when a write to OPFS
+    // fails, both times with the page as it is then, and the next write to OPFS that succeeds
+    // removes it. So it is never older than the one in OPFS, unless the document died between a
+    // write to OPFS and the removal that follows it. An entry left through a client-side
+    // navigation and later by a full page load has both, and the one in OPFS is the older.
+    let serializedSnapshot = null;
+
+    // A browser that denies the page storage access throws on any use of session storage. The
+    // copy in OPFS is then tried.
+    try {
+      serializedSnapshot = sessionStorage.getItem(snapshotKey);
+    } catch (error) {
+      console.error(
+        "Failed to read page snapshot from session storage:",
+        error,
+      );
+    }
+
+    if (serializedSnapshot) {
+      let deserializedSnapshot;
+
+      // A stored snapshot that can't be read back counts as none, rather than Back failing for
+      // good: the entry's page is then loaded afresh. The copy in OPFS is not tried, as it is the
+      // older one.
+      try {
+        deserializedSnapshot = Deserializer.deserialize(serializedSnapshot);
+      } catch (error) {
+        console.error(
+          "Failed to restore page snapshot from session storage:",
+          error,
+        );
+
+        return null;
+      }
+
+      // Cache the deserialized snapshot in memory for faster subsequent access
+      $.#pageSnapshots.set(snapshotKey, deserializedSnapshot);
+
+      return deserializedSnapshot;
+    }
+
+    // OPFS last. A copy there that can't be read back counts as none too.
     try {
       const root = await navigator.storage.getDirectory();
       const fileHandle = await root.getFileHandle(snapshotKey, {create: false});
       const file = await fileHandle.getFile();
-      const serializedSnapshot = await file.text();
-      const deserializedSnapshot = Deserializer.deserialize(serializedSnapshot);
+      const serializedOpfsSnapshot = await file.text();
+
+      const deserializedSnapshot = Deserializer.deserialize(
+        serializedOpfsSnapshot,
+      );
 
       // Cache the deserialized snapshot in memory for faster subsequent access
       $.#pageSnapshots.set(snapshotKey, deserializedSnapshot);
 
       return deserializedSnapshot;
     } catch {
-      // Fall back to session storage if OPFS fails
-      const serializedSnapshot = sessionStorage.getItem(snapshotKey);
-
-      if (serializedSnapshot) {
-        let deserializedSnapshot;
-
-        // A stored snapshot that can't be read back counts as none, as an OPFS copy that can't be
-        // read is passed over above: the entry's page is then loaded afresh, rather than Back
-        // failing for good.
-        try {
-          deserializedSnapshot = Deserializer.deserialize(serializedSnapshot);
-        } catch (error) {
-          console.error(
-            "Failed to restore page snapshot from session storage:",
-            error,
-          );
-
-          return null;
-        }
-
-        // Cache the deserialized snapshot in memory for faster subsequent access
-        $.#pageSnapshots.set(snapshotKey, deserializedSnapshot);
-
-        return deserializedSnapshot;
-      }
-
       return null;
     }
   }
@@ -1542,6 +1571,15 @@ export default class Hologram {
       Type.atom("to"),
       Erlang_Maps["get/2"](Type.atom("params"), operation),
     );
+  }
+
+  // Made public to make tests easier
+  //
+  // Saves the page to session storage, which is written synchronously: a write to OPFS is async
+  // and may not finish before the document goes away.
+  static handleBeforeunloadEvent() {
+    $.#savePageSnapshot(true);
+    $.saveEts();
   }
 
   // Made public to make tests easier
@@ -1772,12 +1810,7 @@ export default class Hologram {
       $.handleUncaughtError(event.reason);
     });
 
-    window.addEventListener("beforeunload", () => {
-      // Force synchronous session storage save since async OPFS may not complete before page termination
-      Hologram.#savePageSnapshot(true);
-
-      Hologram.saveEts();
-    });
+    window.addEventListener("beforeunload", Hologram.handleBeforeunloadEvent);
 
     window.addEventListener("popstate", Hologram.handlePopstateEvent);
 
@@ -2624,9 +2657,12 @@ export default class Hologram {
   }
 
   static async #savePageSnapshot(forceSync = false) {
-    // The entry's snapshot is still waiting to be restored, and nothing has taken its place: the
-    // page is not mounted yet, so there is no state to save over it.
-    if ($.#documentSnapshot !== null) {
+    const pageModule = $.pageModule();
+
+    // The document has neither mounted a page nor restored one yet, while it starts and while the
+    // entry's snapshot waits to be restored. There is no state to save, and a save would put one
+    // with no page over the entry's snapshot.
+    if (pageModule === null) {
       return;
     }
 
@@ -2643,8 +2679,8 @@ export default class Hologram {
       identityPeriod: $.pageIdentityPeriod,
       identityTag: IdentityTracker.tagFor($.pageIdentityPeriod),
       instanceId: App.instanceId,
-      pageDigest: LiveReload.heldPageDigest(Hologram.#pageModule),
-      pageModule: Hologram.#pageModule,
+      pageDigest: LiveReload.heldPageDigest(pageModule),
+      pageModule: pageModule,
       pageParams: Hologram.#pageParams,
       runtimeDigest: $.#runtimeDigest(),
       scrollPosition: [window.scrollX, window.scrollY],
@@ -2654,6 +2690,7 @@ export default class Hologram {
     };
 
     const snapshotKey = $.#pageSnapshotKey($.historyId);
+    const saveNumber = ++$.#snapshotSaveCount;
 
     // Always save deserialized object to in-memory cache first (fastest)
     $.#pageSnapshots.set(snapshotKey, pageSnapshot);
@@ -2664,6 +2701,7 @@ export default class Hologram {
     if (forceSync) {
       try {
         sessionStorage.setItem(snapshotKey, serializedPageSnapshot);
+        $.#unloadSnapshotSaves.set(snapshotKey, saveNumber);
       } catch (error) {
         console.error(
           "Failed to save page snapshot to session storage:",
@@ -2674,7 +2712,38 @@ export default class Hologram {
       return;
     }
 
-    // For normal navigation: OPFS primary, session storage fallback
+    // One write to OPFS of an entry at a time, in the order the saves were made. Saves of an entry
+    // can overlap, since its id stays the history id until the next page is shown, and two writes
+    // at once can land in either order, so the earlier state could land last.
+    const previousWrite =
+      $.#snapshotWrites.get(snapshotKey) ?? Promise.resolve();
+
+    const write = previousWrite.then(() =>
+      $.#writePageSnapshot(snapshotKey, serializedPageSnapshot, saveNumber),
+    );
+
+    $.#snapshotWrites.set(snapshotKey, write);
+
+    await write;
+
+    if ($.#snapshotWrites.get(snapshotKey) === write) {
+      $.#snapshotWrites.delete(snapshotKey);
+    }
+  }
+
+  // Writes a snapshot to OPFS, with session storage as the fallback. Never rejects, since the
+  // entry's next write waits for it.
+  static async #writePageSnapshot(
+    snapshotKey,
+    serializedPageSnapshot,
+    saveNumber,
+  ) {
+    // A save on beforeunload made after this one has put the newer copy in session storage, which
+    // stays. The document can live on past beforeunload, when the unload is cancelled or the link
+    // was a download, and this write then still finishes.
+    const isSessionCopyNewer = () =>
+      ($.#unloadSnapshotSaves.get(snapshotKey) ?? 0) > saveNumber;
+
     try {
       const root = await navigator.storage.getDirectory();
       const fileHandle = await root.getFileHandle(snapshotKey, {create: true});
@@ -2682,14 +2751,22 @@ export default class Hologram {
       await writable.write(serializedPageSnapshot);
       await writable.close();
 
-      // Successfully saved to OPFS, clear session storage fallback if it exists
-      sessionStorage.removeItem(snapshotKey);
+      // Saved to OPFS, so an older copy in session storage goes
+      if (!isSessionCopyNewer()) {
+        sessionStorage.removeItem(snapshotKey);
+        $.#unloadSnapshotSaves.delete(snapshotKey);
+      }
     } catch (opfsError) {
       console.error("Failed to save page snapshot to OPFS:", opfsError);
+
+      if (isSessionCopyNewer()) {
+        return;
+      }
 
       // Fallback to session storage if OPFS fails
       try {
         sessionStorage.setItem(snapshotKey, serializedPageSnapshot);
+        $.#unloadSnapshotSaves.delete(snapshotKey);
       } catch (sessionStorageError) {
         console.error(
           "Failed to save page snapshot to session storage:",

@@ -11,6 +11,14 @@ defmodule HologramFeatureTests.NavigationTest do
   alias HologramFeatureTests.Navigation.Page8
   alias HologramFeatureTests.Routing.RouteWithPercentEncodedParamsPage
 
+  # Whether OPFS holds a snapshot of the history entry the browser is on.
+  @stored_in_opfs_script """
+  return navigator.storage
+    .getDirectory()
+    .then((root) => root.getFileHandle(`hologram_page_snapshot_${history.state}`))
+    .then(() => true, () => false);
+  """
+
   describe "link component" do
     feature "without params", %{session: session} do
       session
@@ -243,6 +251,35 @@ defmodule HologramFeatureTests.NavigationTest do
       |> wait_for_unmarked_document()
       |> assert_page(Page1)
       |> assert_text("Page result: nil")
+    end
+
+    # The page is left through a client-side navigation first, which stores its snapshot in OPFS,
+    # and then by a full page load, which stores a newer one in session storage. The new document
+    # Back loads restores the newer one. The script checks that the older one is in OPFS, and the
+    # mark makes the test fail if the browser brings the page back from its back/forward cache.
+    feature "back from a page outside the app restores the state the page was last left in", %{
+      session: session
+    } do
+      session
+      |> visit(Page1)
+      |> click(button("Put page 1 result A"))
+      |> assert_text("Page 1 result A")
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> go_back()
+      |> assert_page(Page1)
+      |> assert_text("Page 1 result A")
+      |> click(button("Put page 1 result B"))
+      |> assert_text("Page 1 result B")
+      |> assert_script_result(@stored_in_opfs_script, true)
+      |> keep_out_of_back_forward_cache()
+      |> mark_document()
+      |> click(link("External link"))
+      |> assert_text("External Page")
+      |> go_back()
+      |> assert_page(Page1)
+      |> wait_for_unmarked_document()
+      |> assert_text("Page 1 result B")
     end
 
     feature "back navigation preserves component state", %{session: session} do
