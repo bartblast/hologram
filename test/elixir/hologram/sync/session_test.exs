@@ -1201,6 +1201,45 @@ defmodule Hologram.Sync.SessionTest do
              ]
     end
 
+    # Kept whole until the catch-up judges it, but a row the client may not read stays out of what
+    # the process reports of itself, crash reports included.
+    test "reports a row that left a window hidden from the client by its type alone" do
+      hidden = DB.create!(PolicyModule1.new())
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [gap_effect(Entity.generate_id())])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [hidden]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      {:status, ^session, _module, [_pdict, _sys_state, _parent, _debug, status]} =
+        :sys.get_status(session)
+
+      [state] = for {:data, [{~c"State", state}]} <- status, do: state
+
+      assert state.departed[hidden.id] == {:hidden, PolicyModule1}
+    end
+
+    # A round carries the values every client's writes set, so the report of a session that stopped
+    # while reading one names the round without them.
+    test "reports the round it stopped on without the values it carried" do
+      transactions = transactions(Entity.generate_id(), ["c"])
+
+      status = %{
+        message: {:round, @board_window, 2, transactions, {300, 0}},
+        state: %{departed: %{}}
+      }
+
+      assert Session.format_status(status).message ==
+               {:round, @board_window, 2, :redacted, {300, 0}}
+    end
+
     # A row the client could never see says nothing to it when it leaves - windows are shared, and
     # carry rows of every user.
     test "says nothing of a row the client could never see leaving every window" do

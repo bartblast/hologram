@@ -154,6 +154,26 @@ defmodule Hologram.Sync.Session do
     {:noreply, subscribed}
   end
 
+  # What the process reports of itself - to `:sys.get_status/1`, and in the report a crash or a
+  # cut writes - leaves out what it holds of rows this client may not read: the rows that left a
+  # window hidden from it while it was being caught up (see `departure/2`), each named by its type
+  # alone, and the values the round it was reading carried, which are every client's. A log is no
+  # place for either.
+  @impl GenServer
+  def format_status(status) do
+    status
+    |> Map.update(:state, nil, fn state ->
+      %{state | departed: Map.new(state.departed, &redact_departure/1)}
+    end)
+    |> redact_message()
+  end
+
+  defp redact_message(%{message: {:round, window_id, version, _transactions, place}} = status) do
+    %{status | message: {:round, window_id, version, :redacted, place}}
+  end
+
+  defp redact_message(status), do: status
+
   @impl GenServer
   def handle_info({:cut, reason}, state) do
     {:stop, reason, state}
@@ -839,6 +859,10 @@ defmodule Hologram.Sync.Session do
   end
 
   defp remember_version(state, _window_id, _version), do: state
+
+  defp redact_departure({id, {:hidden, row}}), do: {id, {:hidden, row.__struct__}}
+
+  defp redact_departure(departure), do: departure
 
   # A row the client could see when it left is kept as its type alone, all its unsync needs. A
   # hidden one is kept whole, to be judged against what the client could see before it went away.
