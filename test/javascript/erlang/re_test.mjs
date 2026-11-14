@@ -825,6 +825,10 @@ describe("Erlang_Re", () => {
         code,
       ]);
 
+    beforeEach(() => {
+      ERTS.regexPatternRegistry.clear();
+    });
+
     it("imports an exported pattern", () => {
       const result = importPattern(
         buildExported("(a)b", [Type.atom("export"), Type.atom("caseless")]),
@@ -850,6 +854,148 @@ describe("Erlang_Re", () => {
       );
 
       assertRePattern(result, 0, 0, 1);
+    });
+
+    it("returns a new pattern ref on each call", () => {
+      const exported = buildExported("(a)é", [
+        Type.atom("export"),
+        Type.atom("unicode"),
+        Type.tuple([Type.atom("newline"), Type.atom("crlf")]),
+      ]);
+
+      const ref1 = assertRePattern(importPattern(exported), 1, 1, 1);
+      const ref2 = assertRePattern(importPattern(exported), 1, 1, 1);
+
+      assert.notDeepEqual(ref1, ref2);
+    });
+
+    it("matches through the second import of the same pattern", () => {
+      const exported = buildExported("ab", [Type.atom("export")]);
+
+      importPattern(exported);
+      const rePattern = importPattern(exported);
+
+      const result = Erlang_Re["run/3"](
+        Type.bitstring("xab"),
+        rePattern,
+        Type.list(),
+      );
+
+      assertMatchResult(result, [[1, 2]]);
+    });
+
+    it("applies each import's own options for the same source", () => {
+      const caseless = importPattern(
+        buildExported("ab", [Type.atom("export"), Type.atom("caseless")]),
+      );
+
+      const caseSensitive = importPattern(
+        buildExported("ab", [Type.atom("export")]),
+      );
+
+      const subject = Type.bitstring("AB");
+
+      assertMatchResult(Erlang_Re["run/3"](subject, caseless, Type.list()), [
+        [0, 2],
+      ]);
+
+      assert.deepEqual(
+        Erlang_Re["run/3"](subject, caseSensitive, Type.list()),
+        Type.atom("nomatch"),
+      );
+    });
+
+    describe("client-only behaviour", () => {
+      it("registers the pattern compiled by an earlier import of the same source and options", () => {
+        const exported = buildExported("ab", [Type.atom("export")]);
+
+        const ref1 = assertRePattern(importPattern(exported), 0, 0, 0);
+        const ref2 = assertRePattern(importPattern(exported), 0, 0, 0);
+
+        assert.strictEqual(
+          ERTS.regexPatternRegistry.get(ref2),
+          ERTS.regexPatternRegistry.get(ref1),
+        );
+      });
+
+      it("raises on options that share the import key of an earlier import", () => {
+        const source = Type.bitstring("ab");
+
+        assert.equal(
+          ERTS.regexPatternRegistry.importKey(
+            source,
+            Type.list([Type.atom("caseless"), Type.atom("unicode")]),
+          ),
+          ERTS.regexPatternRegistry.importKey(
+            source,
+            Type.list([Type.atom("caseless),atom(unicode")]),
+          ),
+        );
+
+        importPattern(
+          buildExported("ab", [
+            Type.atom("export"),
+            Type.atom("caseless"),
+            Type.atom("unicode"),
+          ]),
+        );
+
+        assertBoxedError(
+          () =>
+            importPattern(
+              buildExported("ab", [
+                Type.atom("export"),
+                Type.atom("caseless),atom(unicode"),
+              ]),
+            ),
+          "ArgumentError",
+          buildArgumentErrorMsg(1, "not an exported regular expression"),
+        );
+      });
+
+      it("raises on a source that shares the import key of an earlier import", () => {
+        const buildExportedFromTerm = (source) =>
+          Type.tuple([
+            Type.atom("re_exported_pattern"),
+            header,
+            source,
+            Type.list([Type.atom("export")]),
+            code,
+          ]);
+
+        const properSource = Type.list([Type.bitstring("a"), Type.integer(98)]);
+
+        const improperSource = Type.improperList([
+          Type.bitstring("a"),
+          Type.integer(98),
+        ]);
+
+        assert.equal(
+          ERTS.regexPatternRegistry.importKey(properSource, Type.list()),
+          ERTS.regexPatternRegistry.importKey(improperSource, Type.list()),
+        );
+
+        importPattern(buildExportedFromTerm(properSource));
+
+        assertBoxedError(
+          () => importPattern(buildExportedFromTerm(improperSource)),
+          "ArgumentError",
+          buildArgumentErrorMsg(1, "not an exported regular expression"),
+        );
+      });
+
+      // The server imports from the blobs and ignores the source
+      it("raises again on a repeated import of a tampered source", () => {
+        const exported = buildExported("(", [Type.atom("export")]);
+
+        for (let attempt = 0; attempt < 2; attempt++) {
+          assertBoxedError(
+            () => importPattern(exported),
+            "ArgumentError",
+            buildArgumentErrorMsg(1, "not an exported regular expression"),
+          );
+        }
+      });
     });
 
     it("raises ArgumentError on non-tuple term", () => {
