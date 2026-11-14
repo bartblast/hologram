@@ -122,7 +122,20 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_policy_module6",
                "test_fixtures_policy_module7",
                "test_fixtures_policy_module8",
-               "test_fixtures_policy_module9"
+               "test_fixtures_policy_module9",
+               "test_fixtures_policy_readers_module1",
+               "test_fixtures_policy_readers_module10",
+               "test_fixtures_policy_readers_module11",
+               "test_fixtures_policy_readers_module12",
+               "test_fixtures_policy_readers_module12_lists_$join",
+               "test_fixtures_policy_readers_module2",
+               "test_fixtures_policy_readers_module3",
+               "test_fixtures_policy_readers_module4",
+               "test_fixtures_policy_readers_module5",
+               "test_fixtures_policy_readers_module6",
+               "test_fixtures_policy_readers_module7",
+               "test_fixtures_policy_readers_module8",
+               "test_fixtures_policy_readers_module9"
              ]
     end
 
@@ -423,7 +436,19 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Policy.Module6",
                  "Hologram.Test.Fixtures.Policy.Module7",
                  "Hologram.Test.Fixtures.Policy.Module8",
-                 "Hologram.Test.Fixtures.Policy.Module9"
+                 "Hologram.Test.Fixtures.Policy.Module9",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module1",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module10",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module11",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module12",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module2",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module3",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module4",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module5",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module6",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module7",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module8",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module9"
                ],
                "hologram_role_grant_role_$enum" => [
                  "Hologram.Test.Fixtures.Role.Module1",
