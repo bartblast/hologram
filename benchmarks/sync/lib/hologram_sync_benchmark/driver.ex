@@ -7,16 +7,25 @@ defmodule HologramSyncBenchmark.Driver do
   # database, and runs the chosen case. The driver starts only what it needs itself - never
   # Hologram's application, which would make it a second node syncing against the same database.
 
+  alias HologramSyncBenchmark.Clients
   alias HologramSyncBenchmark.DB
   alias HologramSyncBenchmark.Entities.Card
   alias HologramSyncBenchmark.Peer
   alias HologramSyncBenchmark.Seed
 
-  @cases ~w(boot seed)
+  @board_page "HologramSyncBenchmark.BoardPage"
+
+  @cases ~w(boot seed smoke)
+
+  @connect_concurrency 50
 
   @default_cards 2_000
 
-  @switches [cards: :integer, case: :string]
+  @default_smoke_clients 10
+
+  @fill_timeout_ms 300_000
+
+  @switches [cards: :integer, case: :string, clients: :integer]
 
   @doc """
   Runs the benchmark with the given command line arguments and returns :ok.
@@ -67,13 +76,61 @@ defmodule HologramSyncBenchmark.Driver do
   end
 
   # Resets the database and seeds the board, printing what seeding cost the database - the check
-  # that a case can start from a known state, and that the counters move. Read inside the server
-  # node's life, after its boot, so the figure leaves out its connects and the schema check. It
-  # still holds the idle node's dispatcher polls over the settle.
+  # that a case can start from a known state, and that the counters move.
   defp run_case("seed", opts) do
     conn = DB.connect!()
     count = Keyword.get(opts, :cards, @default_cards)
 
+    seeding = seed_board!(conn, count)
+
+    IO.puts("Seeded #{count} cards")
+    IO.puts("Seeding cost #{inspect(seeding)}")
+  end
+
+  # Connects anonymous clients to a seeded board and prints how long each took to hold every
+  # card - the check that clients connect, sync and report.
+  defp run_case("smoke", opts) do
+    conn = DB.connect!()
+    count = Keyword.get(opts, :clients, @default_smoke_clients)
+
+    :ok = Clients.check_limits!(count, @connect_concurrency)
+    _seeding = seed_board!(conn, Keyword.get(opts, :cards, @default_cards))
+
+    Peer.with_peer(fn peer ->
+      clients = start_clients(peer, count, "/board", @board_page)
+
+      [] = Clients.prepare_all(clients, @connect_concurrency)
+      failures = Clients.connect_all(clients, @connect_concurrency)
+      reports = Clients.await_fills(clients, @fill_timeout_ms)
+
+      Clients.close_all(clients)
+
+      print_fills(reports, failures)
+    end)
+  end
+
+  defp print_fills(reports, failures) do
+    for {report, index} <- Enum.with_index(reports, 1) do
+      fill =
+        if report.synced_all_at do
+          "#{div(report.synced_all_at - report.connected_at, 1_000)} ms"
+        else
+          "no fill"
+        end
+
+      IO.puts(
+        "Client #{index}: #{fill}, #{report.bytes} bytes, #{report.connect_retries} retries" <>
+          if(report.failure, do: ", failed: #{inspect(report.failure)}", else: "")
+      )
+    end
+
+    IO.puts("#{length(failures)} clients failed to connect")
+  end
+
+  # Empties the database and seeds the given number of cards, returning what seeding cost it. Read
+  # inside the server node's life, after its boot, so the figure leaves out its connects and the
+  # schema check. It still holds the idle node's dispatcher polls over the settle.
+  defp seed_board!(conn, count) do
     :ok = DB.reset!(conn)
 
     {table, seeding} =
@@ -98,8 +155,23 @@ defmodule HologramSyncBenchmark.Driver do
       raise "seeding stored #{stored} cards, not #{count}"
     end
 
-    IO.puts("Seeded #{stored} cards")
-    IO.puts("Seeding cost #{inspect(seeding)}")
+    seeding
+  end
+
+  # The greeting names the server's model hash and protocol version, read from the server node,
+  # since the driver never boots Hologram.
+  defp start_clients(peer, count, cookie_path, page) do
+    opts = [
+      base_url: Peer.base_url(peer),
+      cookie_path: cookie_path,
+      model_hash: Peer.rpc(peer, Hologram.Entity.Model, :hash, []),
+      page: page,
+      protocol_version: Peer.rpc(peer, Hologram.Sync.Frame, :protocol_version, [])
+    ]
+
+    opts
+    |> List.duplicate(count)
+    |> Clients.start_all()
   end
 
   defp check_boot(peer) do
