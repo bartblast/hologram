@@ -72,6 +72,62 @@ defmodule Hologram.DB.QueryRunner do
     end
   end
 
+  @doc """
+  Decides which of the given users may read each of the rows of the given entity type with the
+  given ids, in one statement (see `Hologram.DB.QueryCompiler.recheck/3`), and reads each readable
+  row's current values.
+
+  Takes the row ids as canonical entity ids, and the users as ids, nil for an anonymous one. A user
+  id in any other spelling names no user the framework made, so it is never among a row's readers.
+  Returns a map from the id of every row one of them may read to the row, decoded as `run/3`
+  decodes it with no includes, and its readers: `:all` when a rule answering the same for every
+  user admits it, and otherwise the set of the given users who may read it, nil among them when an
+  anonymous user may. An id is left out when its row is gone or none of the given users may read
+  it.
+  """
+  @spec recheck(module, %{module => %{atom => any}}, Enumerable.t(), list(String.t() | nil)) ::
+          %{String.t() => {struct, :all | MapSet.t()}}
+  def recheck(entity_type, mapping, ids, user_ids) do
+    compiled = QueryCompiler.recheck(entity_type, mapping, nil in user_ids)
+
+    signed_in_user_ids =
+      user_ids
+      |> Enum.filter(&canonical_id?/1)
+      |> Enum.uniq()
+
+    values =
+      Enum.map(compiled.params, fn
+        :ids ->
+          Enum.map(ids, &Codec.encode(&1, :uuid))
+
+        :users ->
+          Enum.map(signed_in_user_ids, &Codec.encode(&1, :uuid))
+
+        {:value, encoded_value} ->
+          encoded_value
+
+        # Every user is read off a row of its own, so a slot for the acting user means a path
+        # the expression did not reach - answering it with anybody would be wrong for everybody else.
+        :actor ->
+          raise ArgumentError, "the recheck of #{inspect(entity_type)} binds an acting user"
+      end)
+
+    case Connection.query(compiled.sql, values) do
+      {:ok, %{rows: rows}} ->
+        term = Stage.normalize(entity_type)
+
+        Map.new(rows, fn row ->
+          {column_values, [everyone, anonymous, reader_ids]} = Enum.split(row, -3)
+          entity = decode_row(column_values, term, mapping)
+
+          {entity.id, {entity, readers(everyone, anonymous, reader_ids)}}
+        end)
+
+      {:error, error} ->
+        raise error
+    end
+  end
+
   # A path binds as the attribute it ends at, on the type its relationships lead to.
   # The relationships can run through a set a derived field holds - inside a quantifier over one.
   defp attribute_definition(entity_type, path) when is_list(path) do
@@ -152,6 +208,12 @@ defmodule Hologram.DB.QueryRunner do
     |> Enum.reduce(acc_with_filters, fn sub_term, inner_acc ->
       collect_param_definitions(sub_term, inner_acc)
     end)
+  end
+
+  # The validator's pattern also takes a canonical id followed by a newline, which no id the
+  # framework makes ends with and which the uuid encoder refuses.
+  defp canonical_id?(id) do
+    is_binary(id) and byte_size(id) == 36 and Validator.attribute_value_valid?(id, :uuid)
   end
 
   defp decode_embed(nil, _sub_term, _mapping), do: nil
@@ -341,6 +403,14 @@ defmodule Hologram.DB.QueryRunner do
   defp field_name(%{source: {:attribute, name}}), do: name
 
   defp field_name(%{source: {:relationship, name}}), do: String.to_existing_atom("#{name}_id")
+
+  defp readers(true, _anonymous, _reader_ids), do: :all
+
+  defp readers(false, anonymous, reader_ids) do
+    readers = MapSet.new(reader_ids, &Codec.decode(&1, :uuid))
+
+    if anonymous, do: MapSet.put(readers, nil), else: readers
+  end
 
   defp read_rules(entity_type) do
     entity_type
