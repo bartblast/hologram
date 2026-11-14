@@ -444,6 +444,35 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
       assert_re_pattern(:re.import(exported), 0, 0, 1)
     end
 
+    test "returns a new pattern ref on each call" do
+      {:ok, exported} = :re.compile("(a)é", [:export, :unicode, {:newline, :crlf}])
+
+      re_pattern_1 = :re.import(exported)
+      re_pattern_2 = :re.import(exported)
+
+      assert_re_pattern(re_pattern_1, 1, 1, 1)
+      assert_re_pattern(re_pattern_2, 1, 1, 1)
+
+      refute elem(re_pattern_1, 4) == elem(re_pattern_2, 4)
+    end
+
+    test "matches through the second import of the same pattern" do
+      {:ok, exported} = :re.compile("ab", [:export])
+
+      :re.import(exported)
+      re_pattern = :re.import(exported)
+
+      assert :re.run("xab", re_pattern) == {:match, [{1, 2}]}
+    end
+
+    test "applies each import's own options for the same source" do
+      {:ok, caseless} = :re.compile("ab", [:export, :caseless])
+      {:ok, case_sensitive} = :re.compile("ab", [:export])
+
+      assert :re.run("AB", :re.import(caseless)) == {:match, [{0, 2}]}
+      assert :re.run("AB", :re.import(case_sensitive)) == :nomatch
+    end
+
     test "raises ArgumentError on non-tuple term" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not an exported regular expression"),
