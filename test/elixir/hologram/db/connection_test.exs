@@ -321,10 +321,17 @@ defmodule Hologram.DB.ConnectionTest do
 
       # The drop is logged as an error, which is expected here and alarming in a CI log
       # that cannot tell an intended timeout from a real outage.
+      #
+      # The sleep is far longer than the timeout, because the driver enforces the timeout from
+      # the outside: a timer tells the pool, the pool tells the connection, and the connection
+      # opens a second one to cancel the statement before closing the socket. A reply that
+      # arrives before all that is returned as {:ok, _}, so with a sleep barely past the timeout
+      # a loaded runner lets the query finish first and the test fail. The timeout ends the wait
+      # either way, so the sleep's length costs nothing when it fires.
       {result, _log} =
         ExUnit.CaptureLog.with_log(fn ->
           with_connection(connection_pid, fn ->
-            with_timeout(50, fn -> query("SELECT pg_sleep(1)") end)
+            with_timeout(50, fn -> query("SELECT pg_sleep(30)") end)
           end)
         end)
 
