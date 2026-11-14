@@ -37,5 +37,4 @@ npm-debug.log
 /assets/hologram_js_deps_install.lock
 
 # Dialyzer PLTs.
-/priv/plts/*.plt
-/priv/plts/*.plt.hash
+/plts/

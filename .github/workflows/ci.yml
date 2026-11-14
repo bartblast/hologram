@@ -98,11 +98,12 @@ jobs:
           key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
 
       # Step: Define how to cache the lib Elixir build.
+      # The version suffix is part of the key, so no entry saved under an earlier version is restored.
       - name: Cache lib Elixir build
         id: cache-lib-elixir-build
         uses: actions/cache@v6
         env:
-          cache-name: cache-lib-elixir-build
+          cache-name: cache-lib-elixir-build-v2
         with:
           path: _build
           key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
@@ -208,11 +209,12 @@ jobs:
           key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
 
       # Step: Define how to cache the lib Elixir build.
+      # The version suffix is part of the key, so no entry saved under an earlier version is restored.
       - name: Cache lib Elixir build
         id: cache-lib-elixir-build
         uses: actions/cache@v6
         env:
-          cache-name: cache-lib-elixir-build
+          cache-name: cache-lib-elixir-build-v2
         with:
           path: _build
           key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
@@ -295,11 +297,12 @@ jobs:
           key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
 
       # Step: Define how to cache the lib Elixir build.
+      # The version suffix is part of the key, so no entry saved under an earlier version is restored.
       - name: Cache lib Elixir build
         id: cache-lib-elixir-build
         uses: actions/cache@v6
         env:
-          cache-name: cache-lib-elixir-build
+          cache-name: cache-lib-elixir-build-v2
         with:
           path: _build
           key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
@@ -375,7 +378,7 @@ jobs:
           key: |
             dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
           path: |
-            priv/plts
+            plts
 
       # Step: Create lib Dialyzer PLTs if no cache was found.
       - name: Create lib Dialyzer PLTs
@@ -393,7 +396,7 @@ jobs:
           key: |
             dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
           path: |
-            priv/plts
+            plts
 
       # Step: Run lib Elixir static code analysis with Dialyzer.
       - name: Run lib Elixir static code analysis with Dialyzer
