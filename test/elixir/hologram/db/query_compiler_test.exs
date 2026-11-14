@@ -34,6 +34,7 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Entity.Module6
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
@@ -41,8 +42,11 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyModule8
   alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
   alias Hologram.Test.Fixtures.Policy.Readers.Module1, as: ReadersModule1
+  alias Hologram.Test.Fixtures.Policy.Readers.Module10, as: ReadersModule10
   alias Hologram.Test.Fixtures.Policy.Readers.Module2, as: ReadersModule2
   alias Hologram.Test.Fixtures.Policy.Readers.Module3, as: ReadersModule3
+  alias Hologram.Test.Fixtures.Policy.Readers.Module8, as: ReadersModule8
+  alias Hologram.Test.Fixtures.Policy.Readers.Module9, as: ReadersModule9
   alias Hologram.Test.Fixtures.Role
 
   defp hop(number, entity_type, selected, correlated_on) do
@@ -3700,6 +3704,156 @@ defmodule Hologram.DB.QueryCompilerTest do
                ~s|AND strpos(COALESCE("body_$search", "body_$sort"), | <>
                  ~s|COALESCE("test_fixtures_entity_module26"."name_$search", "test_fixtures_entity_module26"."name_$sort")) > 0)|
              )
+    end
+  end
+
+  describe "recheck/3" do
+    @recheck_mapping Mapper.derive!(
+                       [
+                         Module14,
+                         Module41,
+                         PolicyModule1,
+                         PolicyModule19,
+                         PolicyModule2,
+                         PolicyModule3,
+                         PolicyModule6,
+                         ReadersModule1,
+                         ReadersModule10,
+                         ReadersModule2,
+                         ReadersModule3,
+                         ReadersModule8,
+                         ReadersModule9,
+                         RoleGrant
+                       ],
+                       [Role.Module1, Role.Module2]
+                     )
+
+    defp recheck_sql(entity_type, anonymous_sql, everyone_sql, readers_sql) do
+      table_name = Mapper.table_name(entity_type)
+
+      columns =
+        @recheck_mapping
+        |> Map.fetch!(entity_type)
+        |> Map.fetch!(:columns)
+        |> Enum.reject(&Mapper.derived?/1)
+        |> Enum.map_join(", ", &~s|"#{&1.name}"|)
+
+      ~s|SELECT * FROM (SELECT #{columns}, "$e"."$everyone", | <>
+        ~s|#{anonymous_sql} AS "$anonymous", #{readers_sql} AS "$readers" | <>
+        ~s|FROM "hologram_data"."#{table_name}" | <>
+        ~s|CROSS JOIN LATERAL (SELECT #{everyone_sql} AS "$everyone" OFFSET 0) AS "$e" | <>
+        ~s|WHERE "#{table_name}"."id" = ANY($1::uuid[]) OFFSET 0) AS "$rows" | <>
+        ~s|WHERE "$everyone" OR "$anonymous" OR cardinality("$readers") > 0|
+    end
+
+    defp tested_readers_sql(condition_sql) do
+      ~s|CASE WHEN "$e"."$everyone" THEN '{}'::uuid[] | <>
+        ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" | <>
+        ~s|FROM (SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user")) AS "$c"("$reader") | <>
+        ~s|WHERE #{condition_sql}) END|
+    end
+
+    test "decides a type whose rule admits everyone once per row" do
+      assert recheck(PolicyModule3, @recheck_mapping, false) == %{
+               params: [:ids],
+               sql: recheck_sql(PolicyModule3, "FALSE", "TRUE", "'{}'::uuid[]")
+             }
+    end
+
+    test "decides a type whose rules answer the same for every user once per row, never NULL" do
+      assert recheck(Module41, @recheck_mapping, false) == %{
+               params: [:ids, {:value, true}],
+               sql: recheck_sql(Module41, "FALSE", ~s|("public" = $2) IS TRUE|, "'{}'::uuid[]")
+             }
+    end
+
+    test "tests every user for a type whose rules all depend on the user" do
+      assert recheck(ReadersModule2, @recheck_mapping, false) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule2,
+                   "FALSE",
+                   "FALSE",
+                   tested_readers_sql(~s|"user_id" = "$c"."$reader"|)
+                 )
+             }
+    end
+
+    test "splits a type's rules into those deciding for everyone and those depending on the user" do
+      assert recheck(PolicyModule6, @recheck_mapping, false) == %{
+               params: [:ids, :users, {:value, true}],
+               sql:
+                 recheck_sql(
+                   PolicyModule6,
+                   "FALSE",
+                   ~s|("shared" = $3) IS TRUE|,
+                   tested_readers_sql(~s|"author_id" = "$c"."$reader"|)
+                 )
+             }
+    end
+
+    test "still reads the users beside a rule admitting everyone" do
+      assert recheck(ReadersModule10, @recheck_mapping, false) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule10,
+                   "FALSE",
+                   "TRUE",
+                   tested_readers_sql(~s|"assignee_id" = "$c"."$reader"|)
+                 )
+             }
+    end
+
+    test "admits nobody for a type with no read rules, reading no users" do
+      assert recheck(PolicyModule19, @recheck_mapping, false) == %{
+               params: [:ids],
+               sql: recheck_sql(PolicyModule19, "FALSE", "FALSE", "'{}'::uuid[]")
+             }
+    end
+
+    test "decides anonymous users by the rules folded for nobody" do
+      assert recheck(PolicyModule6, @recheck_mapping, true) == %{
+               params: [:ids, :users, {:value, true}, {:value, true}],
+               sql:
+                 recheck_sql(
+                   PolicyModule6,
+                   ~s|("shared" = $4) IS TRUE|,
+                   ~s|("shared" = $3) IS TRUE|,
+                   tested_readers_sql(~s|"author_id" = "$c"."$reader"|)
+                 )
+             }
+    end
+
+    test "admits every anonymous user when a rule admits everyone" do
+      assert recheck(ReadersModule10, @recheck_mapping, true) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule10,
+                   "TRUE",
+                   "TRUE",
+                   tested_readers_sql(~s|"assignee_id" = "$c"."$reader"|)
+                 )
+             }
+    end
+
+    test "admits no anonymous user when every rule names the acting user" do
+      assert recheck(ReadersModule1, @recheck_mapping, true) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule1,
+                   "FALSE",
+                   "FALSE",
+                   tested_readers_sql(
+                     ~s|EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_readers_module2" | <>
+                       ~s|AS "$q1" WHERE "$q1"."project_id" = "test_fixtures_policy_readers_module1"."id" | <>
+                       ~s|AND "user_id" = "$c"."$reader")|
+                   )
+                 )
+             }
     end
   end
 

@@ -8,6 +8,7 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Policy
+  alias Hologram.Policy.Readers
   alias Hologram.Query
   alias Hologram.Query.Stage
 
@@ -184,6 +185,84 @@ defmodule Hologram.DB.QueryCompiler do
 
     where_sql = where_clause(authored_conditions ++ policy_conditions)
     sql = statement(term, entity_mapping, where_sql, order_sql, include_sql)
+
+    %{params: Enum.reverse(all_reversed_params), sql: sql}
+  end
+
+  @doc """
+  Compiles the statement deciding, for the rows of the given entity type with the given ids, which
+  of the given users may read each one, and returning each readable row's current values.
+
+  Returns a map with :sql and :params as `compile/3` does. Params begin with two markers for the
+  caller to bind: `:ids` (`$1`), the row ids as a uuid array, and `:users` (`$2`), the ids of the
+  signed-in users as a uuid array holding no NULL - a rule naming the acting user only to deny,
+  like `owner_id != user_id()`, would admit a NULL one. `:users` is left out when no read rule
+  depends on the user, since the statement then reads no users. The rules' own slots follow, as
+  `{:value, _}`.
+
+  Each result row holds the row's columns in `compile/3`'s order, then three more:
+
+    * `$everyone` - a rule answering the same for every user admits the row (see
+      `Hologram.Policy.Readers.classify/2`), so every user may read it, anonymous ones included.
+      Such rules are decided once per row.
+    * `$anonymous` - an anonymous user may read the row. FALSE unless the given flag asks for it.
+    * `$readers` - the users of `:users` the rules depending on the user admit, each once, when
+      `$everyone` is false, and an empty array otherwise.
+
+  The two flags are never NULL - a rule comparing a missing value answers no.
+
+  A row none of them admits is left out, and so is an id with no row.
+
+  Every user is tested on every row for the rules depending on the user, each user read as the
+  acting user from a row of its own.
+  """
+  @spec recheck(module, %{module => %{atom => any}}, boolean) :: %{atom => any}
+  def recheck(entity_type, mapping, anonymous?) do
+    entity_mapping = Map.fetch!(mapping, entity_type)
+    quoted_table = Mapper.quote_identifier(entity_mapping.table)
+
+    classes = Readers.classify(entity_type)
+    independent_rules = for {:independent, rule} <- classes, do: rule
+    dependent_rules = for class <- classes, elem(class, 0) != :independent, do: elem(class, 1)
+
+    initial_params = if dependent_rules == [], do: [:ids], else: [:users, :ids]
+
+    {everyone_sql, params_after_everyone} =
+      recheck_flag_sql(entity_type, mapping, %{rules: independent_rules}, initial_params)
+
+    {anonymous_sql, params_after_anonymous} =
+      if anonymous? do
+        rules =
+          entity_type
+          |> Policy.build()
+          |> Map.get(:read, [])
+
+        recheck_flag_sql(
+          entity_type,
+          mapping,
+          %{anonymous?: true, rules: rules},
+          params_after_everyone
+        )
+      else
+        {"FALSE", params_after_everyone}
+      end
+
+    {readers_sql, all_reversed_params} =
+      recheck_readers_sql(entity_type, mapping, dependent_rules, params_after_anonymous)
+
+    # OFFSET 0 keeps Postgres from folding the subqueries into the statement around them, which
+    # would copy each flag and the readers into every place that reads them, and decide them again
+    # there.
+    inner_sql =
+      ~s|SELECT #{column_list(entity_mapping)}, "$e"."$everyone", | <>
+        ~s|#{anonymous_sql} AS "$anonymous", #{readers_sql} AS "$readers" | <>
+        ~s|FROM #{qualified_table(entity_mapping.table)} | <>
+        ~s|CROSS JOIN LATERAL (SELECT #{everyone_sql} AS "$everyone" OFFSET 0) AS "$e" | <>
+        ~s|WHERE #{quoted_table}."id" = ANY($1::uuid[]) OFFSET 0|
+
+    sql =
+      ~s|SELECT * FROM (#{inner_sql}) AS "$rows" | <>
+        ~s|WHERE "$everyone" OR "$anonymous" OR cardinality("$readers") > 0|
 
     %{params: Enum.reverse(all_reversed_params), sql: sql}
   end
@@ -1155,6 +1234,50 @@ defmodule Hologram.DB.QueryCompiler do
         ~s|WHERE #{inner_sql})|
 
     {[condition], new_params}
+  end
+
+  # A policy's condition on the recheck's row as one boolean - TRUE for an unconditional rule and
+  # FALSE for no rule.
+  defp recheck_condition_sql(entity_type, mapping, policy, reversed_params) do
+    context = policy_context(entity_type, mapping, policy)
+
+    case policy_conditions(policy, context, reversed_params) do
+      {[], new_params} -> {"TRUE", new_params}
+      {conditions, new_params} -> {Enum.join(conditions, " AND "), new_params}
+    end
+  end
+
+  # The same condition as a flag the statement returns, which a comparison against a missing value
+  # would otherwise leave NULL.
+  defp recheck_flag_sql(entity_type, mapping, policy, reversed_params) do
+    case recheck_condition_sql(entity_type, mapping, policy, reversed_params) do
+      {literal, new_params} when literal in ["FALSE", "TRUE"] -> {literal, new_params}
+      {condition_sql, new_params} -> {"(#{condition_sql}) IS TRUE", new_params}
+    end
+  end
+
+  # The users the rules depending on the user admit, each tested as the acting user, read off its
+  # own row of the candidates - every user of the users array. The names the recheck gives begin
+  # with a $ like the compiler's aliases, and no mapped column takes any of them, so a rule's bare
+  # column never resolves to them.
+  defp recheck_readers_sql(_entity_type, _mapping, [], reversed_params) do
+    {"'{}'::uuid[]", reversed_params}
+  end
+
+  defp recheck_readers_sql(entity_type, mapping, rules, reversed_params) do
+    policy = %{actor_sql: ~s|"$c"."$reader"|, rules: rules}
+
+    {condition_sql, new_params} =
+      recheck_condition_sql(entity_type, mapping, policy, reversed_params)
+
+    candidates_sql = ~s|SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user")|
+
+    readers_sql =
+      ~s|CASE WHEN "$e"."$everyone" THEN '{}'::uuid[] | <>
+        ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" | <>
+        ~s|FROM (#{candidates_sql}) AS "$c"("$reader") WHERE #{condition_sql}) END|
+
+    {readers_sql, new_params}
   end
 
   # A rule's own condition is about the row the policy is evaluated for, and reads the rows its paths

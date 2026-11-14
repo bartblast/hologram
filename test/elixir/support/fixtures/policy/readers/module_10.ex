@@ -10,4 +10,5 @@ defmodule Hologram.Test.Fixtures.Policy.Readers.Module10 do
   relationship :reviewer, Module14, optional: true
 
   allow :read
+  allow :read, when: assignee_id == user_id()
 end
