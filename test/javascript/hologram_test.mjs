@@ -7,6 +7,7 @@ import {
   registerWebApis,
   sinon,
   UUID_REGEX,
+  waitForEventLoop,
 } from "./support/helpers.mjs";
 
 import ActionQueue from "../../assets/js/action_queue.mjs";
@@ -4665,9 +4666,14 @@ describe("Hologram", () => {
         );
 
       // jsdom has no OPFS. A directory held in memory: a read finds the files the test put in it,
-      // and a write commits when it closes.
-      const installOpfs = () => {
-        const opfs = {files: new Map()};
+      // and a write commits when it closes, or, with commits held, when the test settles it.
+      const installOpfs = ({holdCommits = false} = {}) => {
+        const opfs = {
+          commits: [],
+          files: new Map(),
+          heldCommits: [],
+          writables: [],
+        };
 
         const directory = {
           getFileHandle: async (name, {create = false} = {}) => {
@@ -4679,14 +4685,38 @@ describe("Hologram", () => {
               createWritable: async () => {
                 let content;
 
-                return {
-                  close: async () => {
-                    opfs.files.set(name, content);
+                const writable = {
+                  close: () => {
+                    const commit = () => {
+                      opfs.files.set(name, content);
+                      opfs.commits.push(writable);
+                    };
+
+                    if (!holdCommits) {
+                      commit();
+                      return Promise.resolve();
+                    }
+
+                    return new Promise((resolve, reject) => {
+                      opfs.heldCommits.push({
+                        fail: () => reject(new Error("OPFS write failed")),
+                        name: name,
+                        succeed: () => {
+                          commit();
+                          resolve();
+                        },
+                        writable: writable,
+                      });
+                    });
                   },
                   write: async (data) => {
                     content = data;
                   },
                 };
+
+                opfs.writables.push(writable);
+
+                return writable;
               },
               getFile: async () => ({text: async () => opfs.files.get(name)}),
             };
@@ -4699,6 +4729,38 @@ describe("Hologram", () => {
         });
 
         return opfs;
+      };
+
+      // Settles the held commits newest first, failing the ones of the given writables, until
+      // none is held. A write made only once an earlier one settles is held after it, and settled
+      // then.
+      const settleCommitsNewestFirst = async (opfs, failing = []) => {
+        await waitForEventLoop();
+
+        for (;;) {
+          const held = opfs.heldCommits;
+
+          if (held.length === 0) {
+            return;
+          }
+
+          const newest = held.reduce((latest, commit) =>
+            opfs.writables.indexOf(commit.writable) >
+            opfs.writables.indexOf(latest.writable)
+              ? commit
+              : latest,
+          );
+
+          opfs.heldCommits.splice(opfs.heldCommits.indexOf(newest), 1);
+
+          if (failing.includes(newest.writable)) {
+            newest.fail();
+          } else {
+            newest.succeed();
+          }
+
+          await waitForEventLoop();
+        }
       };
 
       beforeEach(() => {
@@ -4806,6 +4868,89 @@ describe("Hologram", () => {
         assert.strictEqual(App.instanceId, instanceId);
       });
 
+      // The document can live on past beforeunload, when the unload is cancelled or the link was
+      // a download.
+      it("keeps the copy a save on beforeunload put in session storage when an earlier write to OPFS commits after it", async () => {
+        const opfs = installOpfs({holdCommits: true});
+        Hologram.historyId = "history-opfs-left-4";
+
+        const popstate = Hologram.handlePopstateEvent({
+          state: "history-opfs-4",
+        });
+
+        await waitForEventLoop();
+
+        Hologram.handleBeforeunloadEvent();
+
+        await settleCommitsNewestFirst(opfs);
+        await popstate;
+
+        assert.isNotNull(
+          sessionStorage.getItem("hologram_page_snapshot_history-opfs-left-4"),
+        );
+      });
+
+      it("keeps the copy a save on beforeunload put in session storage when an earlier write to OPFS fails after it", async () => {
+        const opfs = installOpfs({holdCommits: true});
+        Hologram.historyId = "history-opfs-left-9";
+
+        const popstate = Hologram.handlePopstateEvent({
+          state: "history-opfs-9",
+        });
+
+        await waitForEventLoop();
+
+        const earlierWritable = opfs.writables[0];
+
+        App.instanceId = "unload-instance";
+        Hologram.handleBeforeunloadEvent();
+
+        await settleCommitsNewestFirst(opfs, [earlierWritable]);
+        await popstate;
+
+        const sessionCopy = Deserializer.deserialize(
+          sessionStorage.getItem("hologram_page_snapshot_history-opfs-left-9"),
+        );
+
+        assert.strictEqual(sessionCopy.instanceId, "unload-instance");
+      });
+
+      // The copy left in session storage is the older one then.
+      it("removes the copy in session storage when a save on beforeunload couldn't write it", async () => {
+        const opfs = installOpfs({holdCommits: true});
+        Hologram.historyId = "history-opfs-left-10";
+        const snapshotKey = "hologram_page_snapshot_history-opfs-left-10";
+
+        sessionStorage.setItem(snapshotKey, snapshotOf("older-instance"));
+
+        const popstate = Hologram.handlePopstateEvent({
+          state: "history-opfs-10",
+        });
+
+        await waitForEventLoop();
+
+        const setItemStub = sinon
+          .stub(Object.getPrototypeOf(sessionStorage), "setItem")
+          .callsFake(function (key, value) {
+            if (key === snapshotKey) {
+              throw new DOMException("Quota exceeded", "QuotaExceededError");
+            }
+
+            return setItemStub.wrappedMethod.call(this, key, value);
+          });
+
+        try {
+          Hologram.handleBeforeunloadEvent();
+        } finally {
+          setItemStub.restore();
+        }
+
+        await settleCommitsNewestFirst(opfs);
+        await popstate;
+
+        assert.isNull(sessionStorage.getItem(snapshotKey));
+      });
+
       // No page has mounted in a document that is still starting.
       it("saves nothing on beforeunload before a page has mounted", () => {
         installOpfs();
@@ -4820,6 +4965,50 @@ describe("Hologram", () => {
         Hologram.handleBeforeunloadEvent();
 
         assert.strictEqual(sessionStorage.getItem(snapshotKey), storedSnapshot);
+      });
+
+      // A popstate while the page being left is still being saved saves it again, under the same
+      // entry.
+      it("leaves no copy in session storage when the earlier of two overlapping writes to OPFS fails", async () => {
+        const opfs = installOpfs({holdCommits: true});
+        Hologram.historyId = "history-opfs-left-5";
+
+        const firstPopstate = Hologram.handlePopstateEvent({
+          state: "history-opfs-5",
+        });
+
+        const secondPopstate = Hologram.handlePopstateEvent({
+          state: "history-opfs-6",
+        });
+
+        await waitForEventLoop();
+
+        const firstWritable = opfs.writables[0];
+
+        await settleCommitsNewestFirst(opfs, [firstWritable]);
+        await Promise.all([firstPopstate, secondPopstate]);
+
+        assert.isNull(
+          sessionStorage.getItem("hologram_page_snapshot_history-opfs-left-5"),
+        );
+      });
+
+      it("commits the writes to OPFS of one entry in the order its saves were made", async () => {
+        const opfs = installOpfs({holdCommits: true});
+        Hologram.historyId = "history-opfs-left-7";
+
+        const firstPopstate = Hologram.handlePopstateEvent({
+          state: "history-opfs-7",
+        });
+
+        const secondPopstate = Hologram.handlePopstateEvent({
+          state: "history-opfs-8",
+        });
+
+        await settleCommitsNewestFirst(opfs);
+        await Promise.all([firstPopstate, secondPopstate]);
+
+        assert.deepStrictEqual(opfs.commits, opfs.writables);
       });
     });
 
