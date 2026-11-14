@@ -455,7 +455,16 @@ defmodule Hologram.Sync.Session do
   defp tell_gap(state, unsettled) do
     judged = settle(unsettled)
 
-    told_moved = tell_moved(state, judged)
+    # The watermark is raised by every one of this replica's effects in the gap before any frame
+    # goes out, wherever the deciding read ended. Every row goes out as it stands, so an early frame
+    # can carry a row with a write of this replica's that only a later frame names - and a row going
+    # out with the write in it under a number saying it isn't has the client apply the write a
+    # second time. A window's round can be older than one of these writes, and the client then
+    # shows the row from before its write until that window's round arrives.
+    told_moved =
+      state
+      |> remember_applied(judged.gap)
+      |> tell_moved(judged)
 
     caught_up =
       judged.gap
@@ -709,24 +718,14 @@ defmodule Hologram.Sync.Session do
   # resumable: a client cut off after three of ten batches comes back dated to the third and is
   # given the rest, instead of starting the gap again. The batches are read in log order, so the
   # place of a batch's last effect is a place everything before it has been applied to.
-  #
-  # The batch raises the watermark by every one of this replica's effects in it, wherever the
-  # deciding read ended: a row going out with this replica's write in it and a number saying the
-  # write isn't has the client apply the write a second time. The rows come from the windows' last
-  # rounds, and one can be older than a write here - the client then shows the row from before its
-  # write until the window's round for it arrives.
   defp tell_batch(state, judged, effects) do
-    updated = remember_applied(state, effects)
-    deltas = Catchup.deltas(effects, judged.touched, updated.actor_user_id)
+    deltas = Catchup.deltas(effects, judged.touched, state.actor_user_id)
 
     if deltas != [] do
-      send(
-        updated.client,
-        {:sync_deltas, batch_cursor(updated, effects), deltas, updated.applied_seq}
-      )
+      send(state.client, {:sync_deltas, batch_cursor(state, effects), deltas, state.applied_seq})
     end
 
-    updated
+    state
     |> remember_verdicts(deltas)
     |> forget_unsynced(deltas)
   end

@@ -376,6 +376,31 @@ defmodule Hologram.Sync.SessionTest do
       assert id == moved.id
     end
 
+    # The first batch names the row for someone else's write, and the row as it stands already holds
+    # this replica's write that only the second batch names - the first frame says it is in.
+    test "raises the watermark before the first frame for this replica's batch a later frame names" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_silently(@board_window)
+
+      put_app_env(:sync, rows_per_frame: 1)
+
+      gap = [
+        %{gap_effect(moved.id, {900, 1}) | revisions: %{"a" => 3}},
+        %{gap_effect(moved.id, {900, 2}, ref(@replica_id, 4)) | revisions: %{"c" => 5}}
+      ]
+
+      session = start_session!(applied_seq: 3, gap: gap, replica_id: @replica_id)
+
+      ResultStore.put(@board_window, 1, [with_revisions(moved, %{a: 3, c: 5})])
+      send(session, {:round, @board_window, 1, [], nil})
+
+      assert_receive {:sync_deltas, first_cursor, [%{id: id}], first_applied_seq}
+
+      assert {Cursor.decode(first_cursor), id, first_applied_seq} ==
+               {{:ok, 900, 1, @policy_hash}, moved.id, 4}
+    end
+
     # A gap arrives in batches rather than one frame, so the memory a replay costs is bounded by
     # the batch rather than by how long the client was away - and each batch is dated by its own
     # last effect, so a client cut off part way comes back to the rest instead of the whole gap.
