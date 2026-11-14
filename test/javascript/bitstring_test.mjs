@@ -1460,6 +1460,34 @@ describe("Bitstring", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("reads every lowercase digit", () => {
+      const result = Bitstring.fromHex("0123456789abcdef");
+
+      const expected = {
+        type: "bitstring",
+        text: null,
+        bytes: new Uint8Array([1, 35, 69, 103, 137, 171, 205, 239]),
+        leftoverBitCount: 0,
+        hex: null,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("reads every uppercase digit", () => {
+      const result = Bitstring.fromHex("ABCDEF");
+
+      const expected = {
+        type: "bitstring",
+        text: null,
+        bytes: new Uint8Array([171, 205, 239]),
+        leftoverBitCount: 0,
+        hex: null,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("reads no bytes from an empty string", () => {
       const result = Bitstring.fromHex("");
 

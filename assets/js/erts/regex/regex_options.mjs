@@ -28,37 +28,40 @@ export function applyOptionSetting(flags, node) {
   return next;
 }
 
-// Merges start-of-pattern option verbs into the compile or match options.
-// The limit fields matter only to the interpreter, the other consumers
-// ignore them.
-export function mergeStartOptions(ast, opts) {
-  const effectiveOpts = {...opts};
+// Returns what a parsed pattern's start-of-pattern option verbs set, each
+// field left out when no verb sets it: newline and bsr_anycrlf hold the last
+// verb's value and beat the matching compile option, unicode is true when a
+// UTF verb is present, and matchLimit and matchLimitRecursion hold the lowest
+// value among their verbs. The limits matter only to the interpreter, which
+// takes the lower of a limit verb and the run limit, and uses a limit verb in
+// place of the default when no run limit is given.
+export function startOptionSettings(ast) {
+  const settings = {};
 
   for (const item of startOptions(ast)) {
     if (NEWLINE_VERBS[item.name] !== undefined) {
-      effectiveOpts.newline = NEWLINE_VERBS[item.name];
+      settings.newline = NEWLINE_VERBS[item.name];
     } else if (item.name === "BSR_ANYCRLF") {
-      effectiveOpts.bsr_anycrlf = true;
+      settings.bsr_anycrlf = true;
     } else if (item.name === "BSR_UNICODE") {
-      effectiveOpts.bsr_anycrlf = false;
+      settings.bsr_anycrlf = false;
     } else if (item.name === "LIMIT_DEPTH" || item.name === "LIMIT_RECURSION") {
-      // Limit verbs cap the limits, they can't raise them.
-      // LIMIT_RECURSION is the obsolete PCRE2 synonym of LIMIT_DEPTH.
-      effectiveOpts.matchLimitRecursion = Math.min(
-        effectiveOpts.matchLimitRecursion ?? Infinity,
+      // LIMIT_RECURSION is the obsolete PCRE2 synonym of LIMIT_DEPTH
+      settings.matchLimitRecursion = Math.min(
+        settings.matchLimitRecursion ?? Infinity,
         item.value,
       );
     } else if (item.name === "LIMIT_MATCH") {
-      effectiveOpts.matchLimit = Math.min(
-        effectiveOpts.matchLimit ?? Infinity,
+      settings.matchLimit = Math.min(
+        settings.matchLimit ?? Infinity,
         item.value,
       );
     } else if (item.name === "UTF" || item.name === "UTF8") {
-      effectiveOpts.unicode = true;
+      settings.unicode = true;
     }
   }
 
-  return effectiveOpts;
+  return settings;
 }
 
 // Yields the leading start-option items of a parsed pattern.
