@@ -317,34 +317,42 @@ defmodule Hologram.DB.ConnectionTest do
       # shows in a moment instead of after the driver's fifteen second default - and on a
       # connection of its own, because the pool answers a client that outstays its timeout
       # by dropping the connection, which on the shared pool would disturb every other test.
-      {:ok, connection_pid} = Postgrex.start_link(Config.connection_opts())
+      {:ok, connection_pid} =
+        [connection_listeners: [self()]]
+        |> Config.connection_opts()
+        |> Postgrex.start_link()
 
-      # The drop is logged as an error, which is expected here and alarming in a CI log
-      # that cannot tell an intended timeout from a real outage.
-      #
-      # The sleep is far longer than the timeout, because the driver enforces the timeout from
-      # the outside: a timer tells the pool, the pool tells the connection, and the connection
-      # opens a second one to cancel the statement before closing the socket. A reply that
-      # arrives before all that is returned as {:ok, _}, so with a sleep barely past the timeout
-      # a loaded runner lets the query finish first and the test fail. The timeout ends the wait
-      # either way, so the sleep's length costs nothing when it fires.
-      {result, _log} =
+      # The timeout counts from the moment the query asks for the connection, so a connect
+      # still in progress would spend it before the query reached the server.
+      assert_receive {:connected, _connection_process}, 15_000
+
+      # The drop is logged as an error, which is alarming in a CI log that cannot tell an
+      # intended timeout from a real outage - so it is captured, and checked below.
+      {_disconnected, log} =
         ExUnit.CaptureLog.with_log(fn ->
           with_connection(connection_pid, fn ->
-            with_timeout(50, fn -> query("SELECT pg_sleep(30)") end)
+            # Far longer than the timeout, so the timeout fires long before the statement
+            # could end on its own, however slow the runner.
+            with_timeout(50, fn -> query("SELECT pg_sleep(10)") end)
           end)
+
+          # The query can return before the drop is logged, when the timeout ran out before
+          # it reached the socket. The driver logs the drop before it closes the connection
+          # and reports the closed connection after, so waiting for that report means the
+          # log is in.
+          assert_receive {:disconnected, _connection_process}, 15_000
         end)
 
       GenServer.stop(connection_pid)
 
-      assert {:error, error} = result
-
-      # Which error arrives is the driver racing itself: it asks the server to cancel the
-      # statement and drops the connection, so the answer is the cancellation when the
-      # server replies first and a closed socket when it does not. Either way the timeout
-      # fired - without it the query returns {:ok, _}, which is what makes this an assertion
-      # about the timeout rather than about the driver's internals.
-      assert error.__struct__ in [DBConnection.ConnectionError, Postgrex.Error]
+      # The log rather than the result, because the result races. On the timeout the driver
+      # logs the drop, asks the server to cancel the statement, and closes the socket only
+      # once the cancel has gone through - so a cancel slower than the rest of the sleep lets
+      # the statement finish and return {:ok, _}. On Windows, which has no fork, the server
+      # launches a whole new process for the cancel, which on a loaded runner can take more
+      # than a second. Naming 50 ms, the log shows that this timeout was applied, not the
+      # driver's fifteen second default.
+      assert log =~ "checked out the connection for longer than 50ms"
     end
 
     test "leaves a query carrying its own timeout alone" do

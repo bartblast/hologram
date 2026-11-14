@@ -1,8 +1,6 @@
 name: CI
 
-# Define workflow that runs when changes are pushed to the
-# `dev` or `master` branch or pushed to a PR branch that targets the `dev`
-# or `master` branch.
+# Runs on every push to any branch and on every pull request.
 on:
   push:
     branches:
@@ -18,9 +16,23 @@ env:
 permissions:
   contents: read
 
+# TODO: a stopgap for a long CI queue, revert it once the queue stays short (#1632). Together
+# with the own-repo PR skip on each job, it drops runs nobody needs:
+# - A new push to a work branch or PR cancels the run still going for its previous push.
+# - Each push to master, dev or f-940/local-first gets a group of its own, so every commit there
+#   keeps its result. By default a shared group cancels a pending run when a newer one queues,
+#   even with cancel-in-progress off.
+# - A pull_request run for a PR from this repo skips every job, since the push run already
+#   tests the branch. A PR from a fork gets no push run here, so its pull_request run stays.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ (github.event_name == 'push' && contains(fromJSON('["master", "dev", "f-940/local-first"]'), github.ref_name) && github.run_id) || github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   lib_tests:
     runs-on: ${{ matrix.os }}
+    # TODO: remove with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository }}
     name: Lib Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
@@ -142,6 +154,8 @@ jobs:
 
   lib_compile_task_tests:
     runs-on: ${{ matrix.os }}
+    # TODO: remove with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository }}
     name: Lib Compile Task Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
@@ -245,6 +259,8 @@ jobs:
 
   lib_database_tests:
     runs-on: ${{ matrix.os }}
+    # TODO: remove with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository }}
     name: Lib Database Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
@@ -541,6 +557,8 @@ jobs:
 
   lib_checks:
     runs-on: ubuntu-latest
+    # TODO: remove with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository }}
     name: Lib Checks on ubuntu-latest, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
@@ -714,6 +732,8 @@ jobs:
 
   feature_tests:
     runs-on: ubuntu-latest
+    # TODO: remove with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository }}
     name: Feature Tests (partition ${{ matrix.partition }}) on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -941,7 +961,8 @@ jobs:
     # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
-    if: ${{ !cancelled() }}
+    # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
     name: Feature Tests over HTTPS on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1071,7 +1092,8 @@ jobs:
     # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
-    if: ${{ !cancelled() }}
+    # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
     name: Cluster Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1243,7 +1265,8 @@ jobs:
     # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
-    if: ${{ !cancelled() }}
+    # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
     name: Cowboy Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1407,7 +1430,8 @@ jobs:
     # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
-    if: ${{ !cancelled() }}
+    # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
     name: Ecosystem Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1571,7 +1595,8 @@ jobs:
     # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
-    if: ${{ !cancelled() }}
+    # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
     name: Minimal Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
@@ -1717,7 +1742,8 @@ jobs:
     # the account's limit of 20 concurrent jobs, not seven. Not a dependency: it runs however
     # the checks ended, and it is still done long before the longest jobs are.
     needs: lib_checks
-    if: ${{ !cancelled() }}
+    # TODO: go back to !cancelled() alone with the concurrency stopgap at the top of the file (#1632).
+    if: ${{ !cancelled() && (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) }}
     name: Umbrella Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:

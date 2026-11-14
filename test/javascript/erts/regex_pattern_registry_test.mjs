@@ -20,12 +20,15 @@ describe("RegexPatternRegistry", () => {
   it("clear()", () => {
     RegexPatternRegistry.put(ref1, "pattern_dummy_1");
     RegexPatternRegistry.put(ref2, "pattern_dummy_2");
+    RegexPatternRegistry.putImport("key_dummy", "imported_dummy");
 
     assert.equal(RegexPatternRegistry.patterns.size, 2);
+    assert.equal(RegexPatternRegistry.imports.size, 1);
 
     RegexPatternRegistry.clear();
 
     assert.equal(RegexPatternRegistry.patterns.size, 0);
+    assert.equal(RegexPatternRegistry.imports.size, 0);
   });
 
   describe("get()", () => {
@@ -40,6 +43,61 @@ describe("RegexPatternRegistry", () => {
       const result = RegexPatternRegistry.get(ref1);
 
       assert.isNull(result);
+    });
+  });
+
+  describe("getImport()", () => {
+    it("returns what was stored under the key", () => {
+      RegexPatternRegistry.putImport("key_dummy", "imported_dummy");
+      const result = RegexPatternRegistry.getImport("key_dummy");
+
+      assert.equal(result, "imported_dummy");
+    });
+
+    it("returns null when nothing was stored under the key", () => {
+      const result = RegexPatternRegistry.getImport("key_dummy");
+
+      assert.isNull(result);
+    });
+  });
+
+  describe("importKey()", () => {
+    const source = Type.bitstring("ab");
+
+    it("is the same for equal sources and options", () => {
+      const key1 = RegexPatternRegistry.importKey(
+        Type.bitstring("ab"),
+        Type.list([Type.atom("caseless")]),
+      );
+
+      const key2 = RegexPatternRegistry.importKey(
+        Type.bitstring("ab"),
+        Type.list([Type.atom("caseless")]),
+      );
+
+      assert.equal(key1, key2);
+    });
+
+    it("differs for different sources", () => {
+      const key1 = RegexPatternRegistry.importKey(source, Type.list());
+
+      const key2 = RegexPatternRegistry.importKey(
+        Type.bitstring("ac"),
+        Type.list(),
+      );
+
+      assert.notEqual(key1, key2);
+    });
+
+    it("differs for different options", () => {
+      const key1 = RegexPatternRegistry.importKey(source, Type.list());
+
+      const key2 = RegexPatternRegistry.importKey(
+        source,
+        Type.list([Type.atom("caseless")]),
+      );
+
+      assert.notEqual(key1, key2);
     });
   });
 
@@ -107,6 +165,20 @@ describe("RegexPatternRegistry", () => {
       assert.equal(RegexPatternRegistry.patterns.size, 1);
 
       assert.equal(RegexPatternRegistry.get(ref1), "pattern_dummy_2");
+    });
+  });
+
+  describe("putImport()", () => {
+    it("overwrites what was stored under the same key", () => {
+      RegexPatternRegistry.putImport("key_dummy", "imported_dummy_1");
+      RegexPatternRegistry.putImport("key_dummy", "imported_dummy_2");
+
+      assert.equal(RegexPatternRegistry.imports.size, 1);
+
+      assert.equal(
+        RegexPatternRegistry.getImport("key_dummy"),
+        "imported_dummy_2",
+      );
     });
   });
 });
