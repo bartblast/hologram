@@ -337,16 +337,19 @@ export default class Bitstring {
     };
   }
 
-  // Reads the hex digits of the bytes, two per byte, lowercase - the spelling a binary that is
-  // not valid UTF-8 arrives in, since a string literal can carry text and nothing else. The hex
-  // cache is left empty: maybeResolveHex() owns it and derives it from the bytes in one spelling,
-  // so a map key never depends on how a caller happened to write its hex.
+  // Reads the hex digits of the bytes, two per byte. A binary that is not valid UTF-8 arrives in
+  // lowercase hex, since a string literal can carry text and nothing else, and uppercase digits
+  // read too. The hex cache is left empty: maybeResolveHex() owns it and derives it from the
+  // bytes in one spelling, so a map key never depends on how a caller happened to write its hex.
+  //
+  // Each digit is decoded from its char code. The digits aren't validated: a character that is
+  // not a hex digit gives an arbitrary byte.
   static fromHex(hex) {
     const byteCount = hex.length >> 1;
     const bytes = new Uint8Array(byteCount);
 
     for (let i = 0, j = 0; j < byteCount; i += 2, j++) {
-      bytes[j] = parseInt(hex.slice(i, i + 2), 16);
+      bytes[j] = ($.#hexDigitValue(hex, i) << 4) | $.#hexDigitValue(hex, i + 1);
     }
 
     return $.fromBytes(bytes);
@@ -1345,6 +1348,14 @@ export default class Bitstring {
       leftoverBitCount: leftoverBits,
       hex: null,
     };
+  }
+
+  // Returns the value of the hex digit at the index: 0-9 by their code, a-f and A-F by their code
+  // with the lowercase bit set.
+  static #hexDigitValue(hex, index) {
+    const code = hex.charCodeAt(index);
+
+    return code <= 0x39 ? code - 0x30 : (code | 0x20) - 0x57;
   }
 
   static #isLittleEndian(segment) {
