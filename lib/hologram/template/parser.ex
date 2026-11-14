@@ -24,6 +24,9 @@ defmodule Hologram.Template.Parser do
   # See: https://html.spec.whatwg.org/multipage/syntax.html#raw-text-elements
   @raw_text_elems ~w(script style)
 
+  # The tokens that open a tag, a public comment or a doctype.
+  @tag_opening_symbols ~w(< <! <!-- </)
+
   @default_error_details StringUtils.normalize_newlines("""
                          Reason:
                          Unknown reason.
@@ -41,6 +44,14 @@ defmodule Hologram.Template.Parser do
                                         Remove the parent raw block to use the dynamic tag syntax.
                                         """)
 
+  @unclosed_end_tag_before_tag_details StringUtils.normalize_newlines("""
+                                       Reason:
+                                       Unclosed end tag.
+
+                                       Hint:
+                                       Close the previous tag with '>' character.
+                                       """)
+
   @unclosed_end_tag_details StringUtils.normalize_newlines("""
                             Reason:
                             Unclosed end tag.
@@ -48,6 +59,14 @@ defmodule Hologram.Template.Parser do
                             Hint:
                             Close the end tag with '>' character.
                             """)
+
+  @unclosed_start_tag_before_tag_details StringUtils.normalize_newlines("""
+                                         Reason:
+                                         Unclosed start tag.
+
+                                         Hint:
+                                         Close the previous tag with '>' character.
+                                         """)
 
   @unescaped_lt_char_details StringUtils.normalize_newlines("""
                              Reason:
@@ -237,6 +256,11 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:attribute_assignment, rest)
   end
 
+  def parse_tokens(context, :attribute_name, [{:symbol, symbol} = token | rest])
+      when symbol in @tag_opening_symbols do
+    raise_error(@unclosed_start_tag_before_tag_details, context, :attribute_name, token, rest)
+  end
+
   def parse_tokens(context, :attribute_name, [{:symbol, ">"} = token | rest]) do
     context
     |> set_attribute_name()
@@ -288,6 +312,11 @@ defmodule Hologram.Template.Parser do
     raise_error(@unclosed_end_tag_details, context, :end_tag_name, nil, [])
   end
 
+  def parse_tokens(context, :end_tag_name, [{:symbol, symbol} = token | rest])
+      when symbol in @tag_opening_symbols do
+    raise_error(@unclosed_end_tag_before_tag_details, context, :end_tag_name, token, rest)
+  end
+
   def parse_tokens(%{tag_name: ""} = context, :end_tag_name, [{:symbol, "-"} = token | rest]) do
     details =
       StringUtils.normalize_newlines("""
@@ -327,6 +356,19 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:end_tag, rest)
   end
 
+  def parse_tokens(context, :end_tag_name, [token | rest]) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Missing end tag name.
+
+      Hint:
+      Specify the tag name right after the '</' characters.
+      """)
+
+    raise_error(details, context, :end_tag_name, token, rest)
+  end
+
   # --- END TAG ---
 
   def parse_tokens(context, :end_tag, []) do
@@ -337,6 +379,11 @@ defmodule Hologram.Template.Parser do
     context
     |> add_processed_token(token)
     |> parse_tokens(:end_tag, rest)
+  end
+
+  def parse_tokens(context, :end_tag, [{:symbol, symbol} = token | rest])
+      when symbol in @tag_opening_symbols do
+    raise_error(@unclosed_end_tag_before_tag_details, context, :end_tag, token, rest)
   end
 
   def parse_tokens(context, :end_tag, [{:symbol, ">"} = token | rest]) do
@@ -665,6 +712,11 @@ defmodule Hologram.Template.Parser do
       """)
 
     raise_error(details, context, :start_tag, token, rest)
+  end
+
+  def parse_tokens(context, :start_tag, [{:symbol, symbol} = token | rest])
+      when symbol in @tag_opening_symbols do
+    raise_error(@unclosed_start_tag_before_tag_details, context, :start_tag, token, rest)
   end
 
   def parse_tokens(context, :start_tag, [{:symbol, "/>"} = token | rest]) do
