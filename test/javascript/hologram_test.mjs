@@ -2628,10 +2628,15 @@ describe("Hologram", () => {
     });
 
     describe("the snapshot of the page being left", () => {
-      let originalAssetManifest, serializeStub;
+      let originalAssetManifest, pageModuleStub, serializeStub;
 
       beforeEach(() => {
         originalAssetManifest = globalThis.Hologram.assetManifest;
+
+        // A page is on screen, so leaving it saves it.
+        pageModuleStub = sinon
+          .stub(Hologram, "pageModule")
+          .returns(Type.atom("Elixir.Hologram.Test.Fixtures.PageLeft"));
 
         globalThis.Hologram.assetManifest = {
           "hologram/runtime.js": "/hologram/runtime-abc.js",
@@ -2646,6 +2651,7 @@ describe("Hologram", () => {
       afterEach(() => {
         globalThis.Hologram.assetManifest = originalAssetManifest;
         delete window.requestAnimationFrame;
+        pageModuleStub.restore();
         serializeStub.restore();
         removeBundleScripts();
         clearIdentityTracker();
@@ -4103,9 +4109,8 @@ describe("Hologram", () => {
     });
 
     // The history's side of the navigation boundary. The handler needs a page to restore, and
-    // the only way in from outside is the storage it reads: a snapshot is seeded under the key
-    // the handler derives from the history id, and in jsdom the OPFS read throws into the
-    // session storage fallback.
+    // the only way in from outside is the storage it reads: a snapshot is seeded in session
+    // storage, which the handler reads before OPFS, under the key it derives from the history id.
     it("detaches the listeners of the page being left", async () => {
       const handler = sinon.spy();
       const instanceId = App.instanceId;
@@ -4628,6 +4633,194 @@ describe("Hologram", () => {
         Hologram.domEpoch = 0;
         Hologram.registryEpoch = 0;
       }
+    });
+
+    // An entry left through a client-side navigation has its snapshot in OPFS. Left again later by
+    // a full page load, it gets a newer one in session storage, and the one in OPFS stays.
+    describe("snapshots in OPFS", () => {
+      let consoleErrorStub,
+        fetchPageStub,
+        fetchStub,
+        instanceId,
+        originalHistoryId,
+        pageModuleStub,
+        reloadStub;
+
+      const pageModule = Type.atom(
+        "Elixir.Hologram.Test.Fixtures.RestoredFromStorage",
+      );
+
+      const snapshotOf = (snapshotInstanceId) =>
+        Serializer.serialize(
+          {
+            componentRegistryEntries: Type.map(),
+            identityPeriod: IdentityTracker.period,
+            instanceId: snapshotInstanceId,
+            pageModule: pageModule,
+            pageParams: Type.map(),
+            scrollPosition: [0, 0],
+            subscriptionReceipts: [],
+          },
+          "client",
+        );
+
+      // jsdom has no OPFS. A directory held in memory: a read finds the files the test put in it,
+      // and a write commits when it closes.
+      const installOpfs = () => {
+        const opfs = {files: new Map()};
+
+        const directory = {
+          getFileHandle: async (name, {create = false} = {}) => {
+            if (!create && !opfs.files.has(name)) {
+              throw new DOMException("File not found", "NotFoundError");
+            }
+
+            return {
+              createWritable: async () => {
+                let content;
+
+                return {
+                  close: async () => {
+                    opfs.files.set(name, content);
+                  },
+                  write: async (data) => {
+                    content = data;
+                  },
+                };
+              },
+              getFile: async () => ({text: async () => opfs.files.get(name)}),
+            };
+          },
+        };
+
+        Object.defineProperty(navigator, "storage", {
+          configurable: true,
+          value: {getDirectory: async () => directory},
+        });
+
+        return opfs;
+      };
+
+      beforeEach(() => {
+        instanceId = App.instanceId;
+        originalHistoryId = Hologram.historyId;
+
+        consoleErrorStub = sinon.stub(console, "error");
+        fetchPageStub = sinon.stub(Client, "fetchPage");
+        reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+
+        // A page is on screen, so leaving it saves it.
+        pageModuleStub = sinon
+          .stub(Hologram, "pageModule")
+          .returns(Type.atom("Elixir.Hologram.Test.Fixtures.PageLeft"));
+
+        // The tab does not hold the page's code, so the server is asked which bundle serves it.
+        fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            if (onSuccess) {
+              onSuccess("restored-1");
+            }
+
+            return Promise.resolve("restored-1");
+          });
+      });
+
+      afterEach(() => {
+        delete navigator.storage;
+
+        pageModuleStub.restore();
+        reloadStub.restore();
+        fetchStub.restore();
+        fetchPageStub.restore();
+        consoleErrorStub.restore();
+
+        document.head
+          .querySelectorAll("script[src^='/hologram/']")
+          .forEach((script) => script.remove());
+
+        ScriptRegistry.statuses.clear();
+        MountGate.require([]);
+        MountGate.cancel();
+        LiveReload.pageBundleDigests.delete(pageModule.value);
+
+        sessionStorage.clear();
+        ComponentRegistry.clear();
+        App.instanceId = instanceId;
+        Hologram.historyId = originalHistoryId;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      });
+
+      it("restores the snapshot in session storage over an older one in OPFS", async () => {
+        const opfs = installOpfs();
+        Hologram.historyId = "history-opfs-left-1";
+
+        opfs.files.set(
+          "hologram_page_snapshot_history-opfs-1",
+          snapshotOf("opfs-instance"),
+        );
+
+        sessionStorage.setItem(
+          "hologram_page_snapshot_history-opfs-1",
+          snapshotOf("session-storage-instance"),
+        );
+
+        await Hologram.handlePopstateEvent({state: "history-opfs-1"});
+
+        assert.strictEqual(App.instanceId, "session-storage-instance");
+      });
+
+      it("restores the snapshot in OPFS when session storage holds none", async () => {
+        const opfs = installOpfs();
+        Hologram.historyId = "history-opfs-left-2";
+
+        opfs.files.set(
+          "hologram_page_snapshot_history-opfs-2",
+          snapshotOf("opfs-instance"),
+        );
+
+        await Hologram.handlePopstateEvent({state: "history-opfs-2"});
+
+        assert.strictEqual(App.instanceId, "opfs-instance");
+      });
+
+      it("reloads an entry whose snapshot in session storage can't be read back, over an older one in OPFS", async () => {
+        const opfs = installOpfs();
+        Hologram.historyId = "history-opfs-left-3";
+
+        opfs.files.set(
+          "hologram_page_snapshot_history-opfs-3",
+          snapshotOf("opfs-instance"),
+        );
+
+        sessionStorage.setItem(
+          "hologram_page_snapshot_history-opfs-3",
+          "not a serialized snapshot",
+        );
+
+        await Hologram.handlePopstateEvent({state: "history-opfs-3"});
+
+        sinon.assert.calledOnce(reloadStub);
+        sinon.assert.notCalled(fetchPageStub);
+        assert.strictEqual(App.instanceId, instanceId);
+      });
+
+      // No page has mounted in a document that is still starting.
+      it("saves nothing on beforeunload before a page has mounted", () => {
+        installOpfs();
+        Hologram.historyId = "history-opfs-11";
+        pageModuleStub.returns(null);
+
+        const snapshotKey = "hologram_page_snapshot_history-opfs-11";
+        const storedSnapshot = snapshotOf("stored-instance");
+
+        sessionStorage.setItem(snapshotKey, storedSnapshot);
+
+        Hologram.handleBeforeunloadEvent();
+
+        assert.strictEqual(sessionStorage.getItem(snapshotKey), storedSnapshot);
+      });
     });
 
     // App code can push entries of its own with no state, which come with no id too.
