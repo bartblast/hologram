@@ -71,7 +71,9 @@ defmodule Hologram.DB.QueryCompiler do
   which drops the group from the statement. An empty rule list denies everything (`FALSE`) -
   default deny. The actor leaf binds ONE reserved slot allocated after the authored and include
   params and reused by every actor reference in the policy, so the caller binds the session's
-  user once.
+  user once. A policy giving `:actor_sql` renders that SQL expression in its place instead, at
+  every nesting level, and binds no slot for it - a statement deciding for many users at once
+  reads each one off a row of its own.
 
   An anonymous statement binds no actor at all. A predicate naming the actor is false for nobody,
   whichever way it points, and a grant reference is held by nobody, so those are folded away
@@ -302,6 +304,16 @@ defmodule Hologram.DB.QueryCompiler do
     end
   end
 
+  # The acting user as a policy reads it: the SQL expression the policy gives it - a statement
+  # deciding for many users at once reads each one off a row of its own - or else the one slot the
+  # caller binds.
+  defp actor_slot(%{actor_sql: actor_sql}, _column, reversed_params) when is_binary(actor_sql) do
+    {actor_sql, reversed_params}
+  end
+
+  defp actor_slot(_scope, column, reversed_params),
+    do: bind_slot({:actor}, column, reversed_params)
+
   # The actor leaf binds one reserved slot for the whole statement - every reference to it
   # reuses that placeholder, so the caller binds the session's user exactly once.
   defp bind_slot({:actor}, _column, reversed_params) do
@@ -431,6 +443,7 @@ defmodule Hologram.DB.QueryCompiler do
         scope.delegation_depth
       )
       |> Map.merge(%{
+        actor_sql: scope.actor_sql,
         outer: [scope | scope.outer],
         quantifier_depth: depth,
         source_depth: scope.source_depth
@@ -574,7 +587,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp condition({name, :==, value}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
-    {placeholder, new_params} = bind_slot(value, column, params_after_subject)
+    {placeholder, new_params} = value_slot(value, scope, column, params_after_subject)
 
     {"#{subject_sql} = #{placeholder}", new_params}
   end
@@ -587,7 +600,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp condition({name, :!=, value}, scope, reversed_params) do
     {subject_sql, column, params_after_subject} = subject_sql(scope, name, reversed_params)
-    {placeholder, new_params} = bind_slot(value, column, params_after_subject)
+    {placeholder, new_params} = value_slot(value, scope, column, params_after_subject)
 
     condition_sql = "#{subject_sql} != #{placeholder}"
 
@@ -699,6 +712,7 @@ defmodule Hologram.DB.QueryCompiler do
          delegation_depth \\ 0
        ) do
     %{
+      actor_sql: nil,
       delegation_depth: delegation_depth,
       entity_mapping: Map.fetch!(mapping, entity_type),
       entity_type: entity_type,
@@ -845,7 +859,11 @@ defmodule Hologram.DB.QueryCompiler do
             number,
             scope.delegation_depth
           )
-          |> Map.merge(%{qualified: true, source_depth: scope.source_depth})
+          |> Map.merge(%{
+            actor_sql: scope.actor_sql,
+            qualified: true,
+            source_depth: scope.source_depth
+          })
           |> path_end_sql(leaf, reversed_params)
 
         _later_hops ->
@@ -931,6 +949,7 @@ defmodule Hologram.DB.QueryCompiler do
     entity_mapping = Map.fetch!(mapping, entity_type)
 
     %{
+      actor_sql: Map.get(policy, :actor_sql),
       anonymous?: Map.get(policy, :anonymous?, false),
       delegation_depth: 0,
       entity_mapping: entity_mapping,
@@ -982,7 +1001,7 @@ defmodule Hologram.DB.QueryCompiler do
     role_names = reference_role_names(reference)
 
     {actor_placeholder, params_after_actor} =
-      bind_slot({:actor}, grant_column(context, "user_id"), reversed_params)
+      actor_slot(context, grant_column(context, "user_id"), reversed_params)
 
     {role_placeholder, params_after_roles} =
       enum_list_slot(role_names, grant_column(context, "role"), params_after_actor)
@@ -1079,18 +1098,34 @@ defmodule Hologram.DB.QueryCompiler do
          context,
          reversed_params
        ) do
+    target_rules =
+      context.entity_type
+      |> Entity.path_target(relationship_names)
+      |> Policy.build()
+      |> Map.get(delegated_operation, [])
+
+    delegation_conditions(
+      {delegated_operation, relationship_names, target_rules},
+      context,
+      reversed_params
+    )
+  end
+
+  # A delegation carrying its rules asks the related row those rules only - a part of the related
+  # type's policy, split apart by what decides it (see Hologram.Policy.Readers).
+  defp delegation_conditions(
+         {_delegated_operation, relationship_names, target_rules},
+         context,
+         reversed_params
+       ) do
     target_type = Entity.path_target(context.entity_type, relationship_names)
     target_mapping = Map.fetch!(context.mapping, target_type)
 
     {target_id_sql, params_after_chain} =
       chain_target_id_sql(context, relationship_names, reversed_params)
 
-    target_rules =
-      target_type
-      |> Policy.build()
-      |> Map.get(delegated_operation, [])
-
     target_policy = %{
+      actor_sql: context.actor_sql,
       anonymous?: context.anonymous?,
       rules: target_rules
     }
@@ -1136,6 +1171,7 @@ defmodule Hologram.DB.QueryCompiler do
         context.delegation_depth
       )
       |> Map.merge(%{
+        actor_sql: context.actor_sql,
         quantifier_depth: context.quantifier_depth,
         source_depth: context.source_depth
       })
@@ -1408,7 +1444,11 @@ defmodule Hologram.DB.QueryCompiler do
         scope.path_depth,
         scope.delegation_depth
       )
-      |> Map.merge(%{qualified: true, source_depth: scope.source_depth})
+      |> Map.merge(%{
+        actor_sql: scope.actor_sql,
+        qualified: true,
+        source_depth: scope.source_depth
+      })
       |> link_membership_sql(name, quoted_target, params_after_policy)
 
     where_sql = Enum.join([reached_sql | policy_conditions] ++ [link_sql], " AND ")
@@ -1459,6 +1499,7 @@ defmodule Hologram.DB.QueryCompiler do
         owner_scope.delegation_depth
       )
       |> Map.merge(%{
+        actor_sql: owner_scope.actor_sql,
         outer: [owner_scope | owner_scope.outer],
         quantifier_depth: owner_scope.quantifier_depth,
         source_depth: depth
@@ -1704,6 +1745,7 @@ defmodule Hologram.DB.QueryCompiler do
 
   defp include_policy(policy, entity_type) do
     %{
+      actor_sql: Map.get(policy, :actor_sql),
       anonymous?: Map.get(policy, :anonymous?, false),
       rules:
         entity_type
@@ -2138,6 +2180,15 @@ defmodule Hologram.DB.QueryCompiler do
   # computed from others can be missing.
   defp value_column(type, values) do
     %{null: true, source: :derived, sql_type: scalar_sql_type(type), type: type, values: values}
+  end
+
+  # What a comparison's value renders as: the acting user as the scope reads it, or a bound slot.
+  defp value_slot({:actor}, scope, column, reversed_params) do
+    actor_slot(scope, column, reversed_params)
+  end
+
+  defp value_slot(value, _scope, column, reversed_params) do
+    bind_slot(value, column, reversed_params)
   end
 
   defp where_clause([]), do: ""

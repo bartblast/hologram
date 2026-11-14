@@ -35,9 +35,14 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module6
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
+  alias Hologram.Test.Fixtures.Policy.Module6, as: PolicyModule6
   alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyModule8
   alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
+  alias Hologram.Test.Fixtures.Policy.Readers.Module1, as: ReadersModule1
+  alias Hologram.Test.Fixtures.Policy.Readers.Module2, as: ReadersModule2
+  alias Hologram.Test.Fixtures.Policy.Readers.Module3, as: ReadersModule3
   alias Hologram.Test.Fixtures.Role
 
   defp hop(number, entity_type, selected, correlated_on) do
@@ -1586,6 +1591,166 @@ defmodule Hologram.DB.QueryCompilerTest do
     end
   end
 
+  describe "compile/2 - acting user expressions" do
+    # A statement deciding for many users at once reads each one off a row of its own, so the policy
+    # names the column it is read from instead of binding a slot.
+    @actor_sql ~s|"$x"."$user"|
+
+    test "compares a name to the expression" do
+      mapping = Mapper.derive!([Module14], [])
+      term = Stage.normalize(Module14)
+      rules = [%{predicates: [{:id, :==, {:actor}}], to: nil, via: nil}]
+
+      assert %{params: [], sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE "id" = "$x"."$user" |)
+    end
+
+    test "compares a name to the expression in an inequality, nil kept unequal" do
+      mapping = Mapper.derive!([Module14, PolicyModule6], [])
+      term = Stage.normalize(PolicyModule6)
+      rules = [%{predicates: [{:author_id, :!=, {:actor}}], to: nil, via: nil}]
+
+      assert %{params: [], sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("author_id" != "$x"."$user" OR "author_id" IS NULL) |
+             )
+    end
+
+    test "reads the expression inside a quantifier's condition" do
+      mapping = Mapper.derive!([Module14, ReadersModule1, ReadersModule2, ReadersModule3], [])
+      term = Stage.normalize(ReadersModule1)
+      policy = %{actor_sql: @actor_sql, rules: Policy.build(ReadersModule1)[:read]}
+
+      assert %{params: [], sql: sql} = compile(term, mapping, policy)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_readers_module2" | <>
+                 ~s|AS "$q1" WHERE "$q1"."project_id" = "test_fixtures_policy_readers_module1"."id" | <>
+                 ~s|AND "user_id" = "$x"."$user")|
+             )
+    end
+
+    test "looks grants up for the expression" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
+      term = Stage.normalize(PolicyModule1)
+      rules = [%{predicates: [], to: [{:own, [:owner]}], via: nil}]
+
+      assert %{params: params, sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      refute :actor in params
+      assert String.contains?(sql, ~s|WHERE "$rg"."user_id" = "$x"."$user" AND "$rg"."role"|)
+    end
+
+    test "carries the expression into a delegated policy" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
+      term = Stage.normalize(PolicyModule1)
+      rules = [%{predicates: [], to: nil, via: {:read, [:parent]}}]
+
+      assert %{params: params, sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      refute :actor in params
+
+      assert String.contains?(
+               sql,
+               ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                 ~s|WHERE "$rg"."user_id" = "$x"."$user" |
+             )
+    end
+
+    test "carries the expression into the read policy of an included type" do
+      mapping =
+        Mapper.derive!([Module14, PolicyModule1, PolicyModule2, PolicyModule3, RoleGrant], [])
+
+      term =
+        PolicyModule3
+        |> include(children)
+        |> Stage.normalize()
+
+      policy = %{actor_sql: @actor_sql, rules: Policy.build(PolicyModule3)[:read]}
+
+      assert %{params: params, sql: sql} = compile(term, mapping, policy)
+
+      refute :actor in params
+      assert String.contains?(sql, ~s|WHERE "$rg"."user_id" = "$x"."$user" |)
+    end
+
+    test "carries the expression into the carried rules of a delegation, disjunctions included" do
+      mapping =
+        Mapper.derive!([Module14, PolicyModule1, PolicyModule2, PolicyModule5, RoleGrant], [])
+
+      term = Stage.normalize(PolicyModule5)
+
+      carried_rule = %{
+        predicates: [{:or, [[{:author_id, :==, {:actor}}], [{:public, :==, true}]]}],
+        to: nil,
+        via: nil
+      }
+
+      rules = [%{predicates: [], to: nil, via: {:read, [:parent], [carried_rule]}}]
+
+      assert %{params: [{:value, true}], sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      assert String.contains?(
+               sql,
+               ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module5"."parent_id" | <>
+                 ~s|AND (("author_id" = "$x"."$user") OR ("public" = $1)))|
+             )
+    end
+
+    test "binds the acting user's slot without an expression" do
+      mapping = Mapper.derive!([Module14], [])
+      term = Stage.normalize(Module14)
+      rules = [%{predicates: [{:id, :==, {:actor}}], to: nil, via: nil}]
+
+      assert %{params: [:actor], sql: sql} = compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE "id" = $1 |)
+    end
+  end
+
+  describe "compile/2 - delegations carrying their rules" do
+    test "asks the related row the carried rules only" do
+      mapping =
+        Mapper.derive!([Module14, PolicyModule1, PolicyModule2, PolicyModule5, RoleGrant], [])
+
+      term = Stage.normalize(PolicyModule5)
+      public_rule = %{predicates: [{:public, :==, true}], to: nil, via: nil}
+      rules = [%{predicates: [], to: nil, via: {:read, [:parent], [public_rule]}}]
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module5" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module1" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module5"."parent_id" | <>
+                   ~s|AND "public" = $1) ORDER BY "id" ASC|
+             }
+    end
+
+    test "never holds when it carries no rules" do
+      mapping =
+        Mapper.derive!([Module14, PolicyModule1, PolicyModule2, PolicyModule5, RoleGrant], [])
+
+      term = Stage.normalize(PolicyModule5)
+      rules = [%{predicates: [], to: nil, via: {:read, [:parent], []}}]
+
+      assert %{params: [], sql: sql} = compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s|"test_fixtures_policy_module5"."parent_id" AND FALSE)|)
+    end
+  end
+
   describe "compile/2 - derived counts and sets" do
     setup do
       put_derived_definitions([Module32, Module33, Module34, Module37, Module38, Module40])
@@ -2717,6 +2882,21 @@ defmodule Hologram.DB.QueryCompilerTest do
       assert String.contains?(
                sql,
                ~s|WHERE "$p1"."id" = "#{Mapper.table_name(PathSource2)}"."target_id" AND FALSE) = $1|
+             )
+    end
+
+    test "carries an acting user expression into a hop's read policy" do
+      mapping = path_mapping([Module14, PathSource2, PathTarget2])
+      term = path_term(PathSource2, [{[:target, :name], "x"}])
+      rules = Policy.build(PathSource2)[:read]
+
+      assert %{params: [{:value, "x"}], sql: sql} =
+               compile(term, mapping, %{actor_sql: ~s|"$x"."$user"|, rules: rules})
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "$p1"."id" = "#{Mapper.table_name(PathSource2)}"."target_id" | <>
+                 ~s|AND "owner_id" = "$x"."$user") = $1|
              )
     end
 
