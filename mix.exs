@@ -139,8 +139,11 @@ defmodule Hologram.MixProject do
         "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
       dialyzer: [
         plt_add_apps: [:ex_unit, :iex, :mix, :wallaby],
-        plt_core_path: Path.join(["priv", "plts", "core.plt"]),
-        plt_local_path: Path.join(["priv", "plts", "project.plt"])
+        # Never in "priv": Mix links the build priv dir to the project's priv dir when it has one,
+        # and only the CI job that holds the PLTs would have it, so the build caches of the CI jobs
+        # would differ.
+        plt_core_path: Path.join(["plts", "core.plt"]),
+        plt_local_path: Path.join(["plts", "project.plt"])
       ],
       docs: [
         authors: ["Bart Blast"],
