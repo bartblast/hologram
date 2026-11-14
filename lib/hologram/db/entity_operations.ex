@@ -683,10 +683,14 @@ defmodule Hologram.DB.EntityOperations do
   # UPDATE an update of a non-key column takes: an update changing a unique column takes FOR
   # UPDATE, and upgrading to it from the weaker lock can deadlock against an insert referencing
   # the row.
+  #
+  # A row that is not there is refused here, as the statement refuses it. Its absence locks
+  # nothing, so a row inserted with that id and committed before the statement runs would be the
+  # row the statement changes - with nothing read of what it held.
   defp current_row(_entity_type, _id, false = _enters_sets?, []), do: nil
 
   defp current_row(entity_type, id, _enters_sets?, _reference_fields) do
-    get(entity_type, id, lock: :update)
+    get(entity_type, id, lock: :update) || raise_missing_row!(entity_type, id)
   end
 
   # An update enters the locked sets its changed references name - see Hologram.DB.SetLock. A
@@ -694,7 +698,7 @@ defmodule Hologram.DB.EntityOperations do
   # nothing, so the current row (see current_row/4) tells the two apart.
   defp enter_sets!(links, entity_type, changes, current) do
     changed =
-      Map.filter(changes, fn {name, value} -> Map.get(current, name, :absent) != value end)
+      Map.filter(changes, fn {name, value} -> Map.fetch!(current, name) != value end)
 
     links
     |> SetLock.row_owners(entity_type, changed)
@@ -886,8 +890,7 @@ defmodule Hologram.DB.EntityOperations do
         end
 
       {:ok, %Postgrex.Result{num_rows: 0}} ->
-        raise MisuseError,
-              "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
+        raise_missing_row!(entity_type, id)
 
       # The writer explains nothing, the way insert/2 does not - update/3's merge point turns
       # what refused the write into an answer or re-raises it.
@@ -898,8 +901,8 @@ defmodule Hologram.DB.EntityOperations do
 
   # What each reference the update sets held before it, for those whose value it changes - nil for a
   # reference that was unset. A reference set to the value it holds moved nothing, so it is left
-  # out, and an update moving no reference records none. A row that is gone has nothing to record,
-  # and the update itself refuses it.
+  # out, and an update moving no reference records none - nor one whose row was not read, which is
+  # an update needing nothing of it.
   defp old_references(nil = _current, _changes, _reference_fields), do: nil
 
   defp old_references(current, changes, reference_fields) do
@@ -922,7 +925,7 @@ defmodule Hologram.DB.EntityOperations do
     current = current_row(entity_type, id, enters_sets?, reference_fields)
 
     if enters_sets? do
-      enter_sets!(links, entity_type, changes, current || %{})
+      enter_sets!(links, entity_type, changes, current)
     end
 
     old_references(current, changes, reference_fields)
@@ -930,6 +933,10 @@ defmodule Hologram.DB.EntityOperations do
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
+  end
+
+  defp raise_missing_row!(entity_type, id) do
+    raise MisuseError, "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
   end
 
   # The references the changes set, whose values before the update the effect records - what points

@@ -2053,6 +2053,19 @@ defmodule Hologram.DB.EntityOperationsTest do
       end
     end
 
+    test "raises when the id names no entity and the changes move a reference into a locked set" do
+      {:ok, space} = create(PolicyModule26.new())
+
+      nonexistent_id = Entity.generate_id()
+
+      expected_msg =
+        "cannot update Hologram.Test.Fixtures.Policy.Module27 - no entity with id #{inspect(nonexistent_id)}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        update(PolicyModule27, nonexistent_id, %{space_id: space.id})
+      end
+    end
+
     test "records no old value for a reference set to the value it holds" do
       {:ok, target} = create(Module1.new())
 
