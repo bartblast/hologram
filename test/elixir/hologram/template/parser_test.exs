@@ -2287,6 +2287,166 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("<div", expected_msg)
     end
 
+    test "unclosed start tag followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <div\\n  <code\\n>\\n</div>
+                ^
+        """)
+
+      test_syntax_error_msg("<div\n  <code\n>\n</div>", expected_msg)
+    end
+
+    test "unclosed start tag followed by an end tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <div </div>
+             ^
+        """)
+
+      test_syntax_error_msg("<div </div>", expected_msg)
+    end
+
+    test "unclosed start tag followed by a public comment" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <div <!-- abc -->
+             ^
+        """)
+
+      test_syntax_error_msg("<div <!-- abc -->", expected_msg)
+    end
+
+    test "unclosed start tag followed by a doctype" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <div <!DOCTYPE html>
+             ^
+        """)
+
+      test_syntax_error_msg("<div <!DOCTYPE html>", expected_msg)
+    end
+
+    test "unclosed start tag ending with an attribute name followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <div class<span>
+                  ^
+        """)
+
+      test_syntax_error_msg("<div class<span>", expected_msg)
+    end
+
+    test "unclosed start tag ending with an attribute name followed by an end tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <div class</div>
+                  ^
+        """)
+
+      test_syntax_error_msg("<div class</div>", expected_msg)
+    end
+
+    test "unclosed start tag ending with an attribute value followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <div class="abc"<span>
+                        ^
+        """)
+
+      test_syntax_error_msg("<div class=\"abc\"<span>", expected_msg)
+    end
+
+    test "unclosed start tag ending with a spread followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <div ...{@spread} <span>
+                          ^
+        """)
+
+      test_syntax_error_msg("<div ...{@spread} <span>", expected_msg)
+    end
+
+    test "unclosed start tag followed by a start tag inside a raw block" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        {%raw}<div <span>{/raw}
+                   ^
+        """)
+
+      test_syntax_error_msg("{%raw}<div <span>{/raw}", expected_msg)
+    end
+
+    test "unclosed script start tag followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <script <b>
+                ^
+        """)
+
+      test_syntax_error_msg("<script <b>", expected_msg)
+    end
+
     test "unclosed end tag" do
       expected_msg =
         normalize_newlines("""
@@ -2333,6 +2493,70 @@ defmodule Hologram.Template.ParserTest do
         """)
 
       test_syntax_error_msg("</{@module}", expected_msg)
+    end
+
+    test "unclosed end tag followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        </div <span>
+              ^
+        """)
+
+      test_syntax_error_msg("</div <span>", expected_msg)
+    end
+
+    test "unclosed end tag followed by an end tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        </div </span>
+              ^
+        """)
+
+      test_syntax_error_msg("</div </span>", expected_msg)
+    end
+
+    test "unclosed end tag without a tag name followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        </<span>
+          ^
+        """)
+
+      test_syntax_error_msg("</<span>", expected_msg)
+    end
+
+    test "unclosed dynamic end tag followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed end tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        </{@module} <span>
+                    ^
+        """)
+
+      test_syntax_error_msg("</{@module} <span>", expected_msg)
     end
 
     test "unclosed public comment" do
@@ -2621,6 +2845,22 @@ defmodule Hologram.Template.ParserTest do
         """)
 
       test_syntax_error_msg("<{@module}", expected_msg)
+    end
+
+    test "unclosed dynamic start tag followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
+
+        Hint:
+        Close the previous tag with '>' character.
+
+        <{@module} <span>
+                   ^
+        """)
+
+      test_syntax_error_msg("<{@module} <span>", expected_msg)
     end
 
     test "unclosed start tag containing a spread" do
