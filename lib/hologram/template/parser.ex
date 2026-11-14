@@ -356,6 +356,19 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:end_tag, rest)
   end
 
+  def parse_tokens(context, :end_tag_name, [token | rest]) do
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Missing end tag name.
+
+      Hint:
+      Specify the tag name right after the '</' characters.
+      """)
+
+    raise_error(details, context, :end_tag_name, token, rest)
+  end
+
   # --- END TAG ---
 
   def parse_tokens(context, :end_tag, []) do

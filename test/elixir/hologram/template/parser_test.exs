@@ -2559,6 +2559,70 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("</{@module} <span>", expected_msg)
     end
 
+    test "whitespace between the end tag opening and the tag name" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Missing end tag name.
+
+        Hint:
+        Specify the tag name right after the '</' characters.
+
+        </ div>
+          ^
+        """)
+
+      test_syntax_error_msg("</ div>", expected_msg)
+    end
+
+    test "end tag without a tag name" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Missing end tag name.
+
+        Hint:
+        Specify the tag name right after the '</' characters.
+
+        </>
+          ^
+        """)
+
+      test_syntax_error_msg("</>", expected_msg)
+    end
+
+    test "whitespace after the end tag opening followed by a start tag" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Missing end tag name.
+
+        Hint:
+        Specify the tag name right after the '</' characters.
+
+        </ <span>
+          ^
+        """)
+
+      test_syntax_error_msg("</ <span>", expected_msg)
+    end
+
+    test "symbol other than a tag name after the end tag opening" do
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Missing end tag name.
+
+        Hint:
+        Specify the tag name right after the '</' characters.
+
+        </=div>
+          ^
+        """)
+
+      test_syntax_error_msg("</=div>", expected_msg)
+    end
+
     test "unclosed public comment" do
       expected_msg =
         normalize_newlines("""
