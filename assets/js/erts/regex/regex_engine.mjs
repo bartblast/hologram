@@ -11,7 +11,7 @@ import {
   NEWLINE_VERBS,
 } from "./regex_newlines.mjs";
 
-import {mergeStartOptions} from "./regex_options.mjs";
+import {startOptionSettings} from "./regex_options.mjs";
 import RegexParseError from "./regex_parse_error.mjs";
 import RegexParser, {scanStartOptions} from "./regex_parser.mjs";
 import RegexTranslator from "./regex_translator.mjs";
@@ -363,8 +363,10 @@ export default class RegexEngine {
       notempty: runOpts.notempty === true,
       notemptyAtStart: runOpts.notemptyAtStart === true,
       noteol: runOpts.noteol === true,
+      startOptionSettings: compiled.startOptionSettings,
       startPosition: startPosition,
       subjectCache: runOpts.subjectCache,
+      subroutines: $.#subroutines(compiled),
     });
   }
 
@@ -576,18 +578,21 @@ export default class RegexEngine {
   static #compileValid(source, opts) {
     const ast = RegexParser.parse(source, opts);
     const groupMap = RegexAnalyzer.buildGroupMap(ast);
+    const settings = startOptionSettings(ast);
     const strategy = RegexAnalyzer.route(ast, groupMap, opts);
 
     const compiled = {
       ast: ast,
       groupMap: groupMap,
       groupMapping: null,
-      newlineType: $.#effectiveNewlineType(ast, opts),
+      newlineType: settings.newline ?? opts.newline ?? "lf",
       opts: opts,
       regexp: null,
       regexpSticky: null,
       source: source,
+      startOptionSettings: settings,
       strategy: strategy,
+      subroutines: null,
     };
 
     if (strategy === "native") {
@@ -600,12 +605,6 @@ export default class RegexEngine {
     }
 
     return compiled;
-  }
-
-  // A newline convention verb in the pattern beats the newline option,
-  // and the last verb wins.
-  static #effectiveNewlineType(ast, opts) {
-    return mergeStartOptions(ast, opts).newline ?? "lf";
   }
 
   // Returns the position where the first newline sequence at or after the
@@ -651,6 +650,18 @@ export default class RegexEngine {
     }
 
     return compiled.regexpSticky;
+  }
+
+  // The interpreter's subroutine table, built on first use, as patterns on
+  // the native route rarely reach the interpreter.
+  static #subroutines(compiled) {
+    if (compiled.subroutines === null) {
+      compiled.subroutines = RegexInterpreter.buildSubroutineTable(
+        compiled.ast,
+      );
+    }
+
+    return compiled.subroutines;
   }
 
   static #textFromBinaryCharData(binary) {

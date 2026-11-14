@@ -212,6 +212,25 @@ const Erlang_Re = {
       ),
     );
 
+    // The pattern compiled by an earlier import of the same source and
+    // options is registered under a fresh ref, since the server imports a
+    // new pattern on each call too. Different terms can share a map key, so
+    // the stored source and options are compared as well.
+    const key = ERTS.regexPatternRegistry.importKey(source, compileOptions);
+    const imported = ERTS.regexPatternRegistry.getImport(key);
+
+    if (
+      imported !== null &&
+      Interpreter.isStrictlyEqual(imported.source, source) &&
+      Interpreter.isStrictlyEqual(imported.options, compileOptions)
+    ) {
+      const ref = Erlang["make_ref/0"]();
+
+      ERTS.regexPatternRegistry.put(ref, imported.entry);
+
+      return Type.tuple([...imported.pattern.data.slice(0, 4), ref]);
+    }
+
     let result;
 
     try {
@@ -226,10 +245,19 @@ const Erlang_Re = {
       raiseNotExported();
     }
 
-    return result.data[1];
+    const pattern = result.data[1];
+
+    ERTS.regexPatternRegistry.putImport(key, {
+      entry: ERTS.regexPatternRegistry.lookupByTerm(pattern),
+      options: compileOptions,
+      pattern: pattern,
+      source: source,
+    });
+
+    return pattern;
   },
   // End import/1
-  // Deps: [:re.compile/2]
+  // Deps: [:erlang.make_ref/0, :re.compile/2]
 
   // Start inspect/2
   "inspect/2": (compiledPattern, item) => {

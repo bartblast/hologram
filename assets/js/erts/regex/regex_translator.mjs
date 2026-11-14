@@ -1,7 +1,7 @@
 "use strict";
 
 import {POSIX_SETS, SHORTHAND_SETS} from "./regex_char_sets.mjs";
-import {applyOptionSetting, mergeStartOptions} from "./regex_options.mjs";
+import {applyOptionSetting, startOptionSettings} from "./regex_options.mjs";
 
 // Chars that must be escaped inside a character class.
 const CLASS_METACHARS = new Set([..."\\]^-"]);
@@ -59,26 +59,27 @@ export default class RegexTranslator {
   // numbers, which diverge when the translation adds synthetic groups.
   // Only patterns routed to the native engine are translatable.
   static translate(ast, opts = {}) {
-    const effectiveOpts = mergeStartOptions(ast, opts);
+    const settings = startOptionSettings(ast);
+    const unicode = opts.unicode === true || settings.unicode === true;
 
     const context = {
-      bsrAnycrlf: effectiveOpts.bsr_anycrlf === true,
-      caseless: effectiveOpts.caseless === true,
-      dollarEndonly: effectiveOpts.dollar_endonly === true,
-      dotall: effectiveOpts.dotall === true,
-      maxCodePoint: effectiveOpts.unicode === true ? 0x10ffff : 0xff,
-      multiline: effectiveOpts.multiline === true,
-      newline: effectiveOpts.newline ?? "lf",
+      bsrAnycrlf: (settings.bsr_anycrlf ?? opts.bsr_anycrlf) === true,
+      caseless: opts.caseless === true,
+      dollarEndonly: opts.dollar_endonly === true,
+      dotall: opts.dotall === true,
+      maxCodePoint: unicode ? 0x10ffff : 0xff,
+      multiline: opts.multiline === true,
+      newline: settings.newline ?? opts.newline ?? "lf",
       // Group numbering state, shared across derived contexts
       state: {groupMapping: new Map(), jsGroupCount: 0},
-      ungreedy: effectiveOpts.ungreedy === true,
-      unicode: effectiveOpts.unicode === true,
+      ungreedy: opts.ungreedy === true,
+      unicode: unicode,
     };
 
     let flags = "";
 
-    if (effectiveOpts.caseless === true) flags += "i";
-    if (effectiveOpts.unicode === true) flags += "u";
+    if (opts.caseless === true) flags += "i";
+    if (unicode) flags += "u";
 
     return {
       source: $.#translateNode(ast, context),
