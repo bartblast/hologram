@@ -1,6 +1,8 @@
 defmodule Hologram.Migrator do
   @moduledoc false
 
+  require Logger
+
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
@@ -13,6 +15,10 @@ defmodule Hologram.Migrator do
   alias Hologram.Migration.Loader
   alias Hologram.Migration.Renderer
   alias Hologram.Reflection
+
+  # The ops the boot applies when the database holds an object under a name the current naming
+  # rule no longer derives - see heal_renames/3.
+  @rename_ops [:rename_constraint, :rename_enum_type, :rename_index, :rename_table]
 
   # Fixed application-defined key for the migration lock - serializes the whole boot
   # procedure of a deploy, whichever node gets there first. The value is frozen forever: a
@@ -326,8 +332,9 @@ defmodule Hologram.Migrator do
   model's history.
 
   The not-covered check runs first, before any database access - then the guard claims
-  or verifies the database, and the pending files apply from the model the applied ones
-  produce.
+  or verifies the database, objects standing under names the current naming rule no
+  longer derives are renamed (one info line each), and the pending files apply from the
+  model the applied ones produce. The index repair and the drift check come last.
   """
   @spec run(list(%{atom => any}), %{atom => any}, %{atom => any}) :: :ok
   def run(migrations, current_model, context) do
@@ -432,6 +439,29 @@ defmodule Hologram.Migrator do
     record_applied(version, context.timestamp, Model.hash(render.post_model))
 
     :applied
+  end
+
+  defp apply_renames(pre_model) do
+    expected =
+      pre_model
+      |> Mapper.derive_from_model!()
+      |> Schema.from_mapping()
+
+    renames =
+      Introspection.schema()
+      |> Schema.diff(expected)
+      |> Enum.filter(&(&1.op in @rename_ops))
+
+    if renames != [] do
+      {:ok, _result} =
+        Connection.transaction(fn ->
+          Enum.each(renames, &execute_statements(DDL.statements(&1)))
+        end)
+
+      Enum.each(renames, &log_rename/1)
+    end
+
+    :ok
   end
 
   defp changes_phrase([_one]), do: "change has"
@@ -603,6 +633,31 @@ defmodule Hologram.Migrator do
     {:ok, _result} = Connection.query(fill_statement, [encoded_value])
   end
 
+  # A database holding an object under a name the current naming rule no longer derives - one
+  # a release that changed the rule left behind - can't be fixed by a migration: replay derives
+  # both sides with the current rule, so there is no difference for a file to express. The
+  # boot renames it instead, in one transaction and ahead of the pending migrations, whose
+  # ops name objects by the current rule and would otherwise fail on the old name. The
+  # diff is against what the applied migrations derive, and only its renames apply: anything
+  # else it finds is the pending files' to change, the index repair's to rebuild, or the drift
+  # check's to refuse.
+  #
+  # Only a node whose chain holds every applied version heals. One that lacks some is an
+  # older release booting after a newer one migrated the database, which the drift check
+  # refuses anyway, so renaming the newer release's objects back would gain nothing. An
+  # older release that differs only by its naming rule does rename back, which is what it
+  # needs to boot once the newer nodes are stopped. Old and new nodes running against one
+  # database at once is a separate matter, not supported yet (#1627).
+  defp heal_renames(migrations, applied, pre_model) do
+    known_versions = MapSet.new(migrations, & &1.version)
+
+    if Enum.all?(applied, &MapSet.member?(known_versions, &1)) do
+      apply_renames(pre_model)
+    else
+      :ok
+    end
+  end
+
   defp hologram_schemas do
     statement = """
     SELECT nspname
@@ -622,6 +677,20 @@ defmodule Hologram.Migrator do
     Enum.map(rows, fn [index] -> index end)
   end
 
+  defp log_rename(op) do
+    kind =
+      case op.op do
+        :rename_constraint -> "constraint"
+        :rename_enum_type -> "enum type"
+        :rename_index -> "index"
+        :rename_table -> "table"
+      end
+
+    Logger.info(
+      ~s(Hologram: renamed #{kind} "#{op.from}" to "#{op.to}" to follow the current naming rule)
+    )
+  end
+
   defp raise_not_managed! do
     raise "the configured database contains Hologram schemas but no managed-database " <>
             "marker - it is not managed by migrations - drop the " <>
@@ -633,25 +702,24 @@ defmodule Hologram.Migrator do
   # already, which is the common case for every node of a deploy but the first.
   # Only what the model derives: an index the mapping does not name is drift for the
   # check to report, never something to create. A table the database does not have is
-  # drift as well, and the pattern skips it - creating its indexes would raise a relation
-  # error here, before check_drift!/1 gets to name the missing table as the cause.
+  # drift as well, and is skipped - creating its indexes would raise a relation error here,
+  # before check_drift!/1 gets to name the missing table as the cause. So is a name an index
+  # already holds, whatever its definition, and an index the diff recognises as renamed:
+  # building the derived one beside it would leave two, and the drift check names both.
   defp missing_indexes(mapping) do
     actual = Introspection.schema()
-    expected = Schema.from_mapping(mapping)
 
-    for {table, %{indexes: indexes}} <- expected.tables,
-        %{indexes: standing} <- [actual.tables[table]],
-        {index, definition} <- indexes,
-        not Map.has_key?(standing, index) do
-      %{
-        op: :create_index,
-        table: table,
-        index: index,
-        columns: definition.columns,
-        nulls_distinct: definition.nulls_distinct,
-        unique: definition.unique
-      }
-    end
+    held_names =
+      actual.tables
+      |> Enum.flat_map(fn {_table, definition} -> Map.keys(definition.indexes) end)
+      |> MapSet.new()
+
+    actual
+    |> Schema.diff(Schema.from_mapping(mapping))
+    |> Enum.filter(fn op ->
+      op.op == :create_index and Map.has_key?(actual.tables, op.table) and
+        not MapSet.member?(held_names, op.index)
+    end)
   end
 
   defp rebuild_and_create_indexes(mapping) do
@@ -694,6 +762,8 @@ defmodule Hologram.Migrator do
         migrations
         |> Enum.filter(&(&1.version in applied))
         |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
+
+      heal_renames(migrations, applied, pre_model)
 
       migrations
       |> pending(applied)
