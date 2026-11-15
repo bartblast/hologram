@@ -13,6 +13,7 @@ import Replica from "./replica.mjs";
 import Sse from "./sse.mjs";
 import SyncStream from "./sync_stream.mjs";
 import Tabs from "./tabs.mjs";
+import Type from "./type.mjs";
 
 // Which batch an action's writes go to, and what becomes of it when the action ends.
 //
@@ -49,10 +50,10 @@ export default class Batches {
   static #retryAttempts = 0;
 
   // The retry waiting to fire, and nothing while none is. Not cleared by the other wake-ups, and
-  // deliberately: a run of the loop ends either with the queue empty or with a retry it has just
-  // rescheduled itself, so a timer left standing by an earlier run never finds work - it is the
-  // guard and the empty queue that make it harmless, and a clear on every entry would be a line
-  // nothing could ever observe.
+  // deliberately: a run of the loop ends with the queue empty, with a retry it has just
+  // rescheduled itself, or - in a tab the server stopped - with its batches held, so a timer left
+  // standing by an earlier run never finds work - it is the guard, the empty queue and the hold
+  // that make it harmless, and a clear on every entry would be a line nothing could ever observe.
   static #retryTimer = null;
 
   static #running = null;
@@ -246,6 +247,19 @@ export default class Batches {
         // hand out again after a reload.
         await batch.recorded;
 
+        // A tab the server stopped over its model holds its writes rather than sending them to be
+        // refused: the server would roll back what the person did over a mismatch they did not
+        // cause. They stay in the queue, on the screen and in the store, until a reload takes the
+        // page to the new model - the store they are in is the old model's, which is where a
+        // reload leaves them.
+        //
+        // Asked here, after the store has been read and right before the send, rather than once on
+        // the way in: the queue is still taken up, so a batch another tab filed is on this tab's
+        // screen too, and a stop that arrives while a send is out stops the drain behind it.
+        if (SyncStream.holdsWrites()) {
+          return;
+        }
+
         batch.mark("sending");
 
         const answer = await Batches.#answerFor(batch);
@@ -304,14 +318,35 @@ export default class Batches {
           return;
         }
 
+        // A refusal that judges the BUILD rather than the writes is no verdict about them. The
+        // server refused the batch because this bundle was built against another model, which is
+        // what a stop over the model says - and a send can reach the server before the stream
+        // does, since opening the stream is what wakes the queue. So it is taken as that stop: the
+        // batch goes back to waiting, nothing is forgotten, settled or told to the group as
+        // answered, and the drain stops, with no retry - a reload is what moves it on. The server
+        // records nothing for such a refusal, so a later send of the same batch is judged afresh.
+        //
+        // Kept while the tab lives, and no longer than that: after a reload the new bundle opens
+        // another model's store, and the batch stays in the old one.
+        if (Batches.#refusesBuild(answer)) {
+          batch.mark("pending");
+
+          const frame = {reason: "model_hash"};
+
+          SyncStream.receiveFrame("sync_reload", frame);
+          SyncStream.tell("sync_reload", frame);
+
+          return;
+        }
+
         // A verdict is a verdict, whichever way it went: nothing is waiting on this batch any
         // more, and a later page load has no reason to take it up. Confirmed and refused alike -
-        // including the two refusals that judge the BUILD and the STAMPS rather than the writes
-        // (`:stale_build`, `:clock`), which the server does not record and would evaluate afresh
-        // on a resend. Keeping one for that resend was weighed and refused (D5): the rows are off
-        // the screen already, so a batch kept would come back days later as a write the user
-        // watched fail, and a device whose clock is permanently wrong would resend it on every
-        // page load with nothing in v1 able to discard it.
+        // including the refusal that judges the STAMPS rather than the writes (`:clock`), which the
+        // server does not record and would evaluate afresh on a resend. Keeping one for that resend
+        // was weighed and refused (D5): the rows are off the screen already, so a batch kept would
+        // come back days later as a write the user watched fail, and a device whose clock is
+        // permanently wrong would resend it on every page load with nothing in v1 able to discard
+        // it.
         Durability.forgetBatch(batch.seq);
 
         // Every tab of the group holds this batch and every one of them has to let it go - the
@@ -344,7 +379,9 @@ export default class Batches {
   // the server confirmed, and the set can be sparse: a batch can be refused with a later one
   // confirmed above it. Taking every batch at or below a maximum would then be wrong, were it not
   // for how the queue drains - flush() keeps ONE batch in flight and takes the head off `pending`
-  // BEFORE it reads the answer, so a refused batch leaves with the answer that refused it. While
+  // BEFORE it reads the answer, so a refused batch leaves with the answer that refused it. (A batch
+  // refused for the bundle rather than for its writes stays, but it was never applied, and nothing
+  // is sent after it once the tab holds its writes.) While
   // batch N is pending, nothing above N has been sent, so nothing above N can be confirmed, so a
   // number at or above N can only mean N ITSELF was confirmed - which is exactly when its effects
   // are in the base and landing it is right, answer lost or not.
@@ -545,6 +582,17 @@ export default class Batches {
 
       return {httpStatus: error.message, status: "failed"};
     }
+  }
+
+  // Whether the server refused a batch because this bundle was built against another model.
+  static #refusesBuild(answer) {
+    if (answer.status !== "rejected") {
+      return false;
+    }
+
+    const reason = Deserializer.deserialize(answer.reason);
+
+    return Type.isAtom(reason) && reason.value === "stale_build";
   }
 
   static #clearRetry() {

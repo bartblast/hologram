@@ -12,6 +12,7 @@ import Clock from "../../assets/js/clock.mjs";
 import Durability from "../../assets/js/durability.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
+import Logger from "../../assets/js/logger.mjs";
 import Model from "../../assets/js/model.mjs";
 import Mutations from "../../assets/js/mutations.mjs";
 import Overlay from "../../assets/js/overlay.mjs";
@@ -97,6 +98,8 @@ describe("Batches", () => {
     afterEach(() => {
       sinon.restore();
       LocalDatabase.reset();
+
+      SyncStream.stopReason = null;
     });
 
     const confirmed = (dropped = {}, kept = {}) => ({
@@ -135,6 +138,199 @@ describe("Batches", () => {
 
       assert.isFalse(sendStub.called);
       assert.equal(Batches.pending.length, 1);
+    });
+
+    // The server would refuse them over a mismatch the person did not cause, and roll back what
+    // they did.
+    it("holds every batch while the server stopped the tab over its model", async () => {
+      SyncStream.stopReason = "model_hash";
+
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isFalse(sendStub.called);
+      assert.equal(Batches.pending.length, 1);
+      assert.equal(Overlay.durability(TODO, "t1"), "applied");
+    });
+
+    // The write endpoint compares the model and nothing else, so these still land.
+    it("sends while the server stopped the tab over its protocol", async () => {
+      SyncStream.stopReason = "protocol_version";
+
+      sendStub.resolves(confirmed());
+      sealed(creating("t1", "first"));
+
+      await Batches.flush();
+
+      assert.isTrue(sendStub.calledOnce);
+    });
+
+    it("stops a drain in flight behind the batch it was sending when the tab is stopped", async () => {
+      sealed(creating("t1", "first"));
+      sealed(creating("t2", "second"));
+
+      sendStub.callsFake(async () => {
+        SyncStream.stopReason = "model_hash";
+
+        return confirmed();
+      });
+
+      await Batches.flush();
+
+      assert.isTrue(sendStub.calledOnce);
+      assert.deepStrictEqual(
+        Batches.pending.map((batch) => batch.seq),
+        [2],
+      );
+    });
+
+    // Held only after the store is read, so a batch another tab filed is on this tab's screen too.
+    it("takes up what the store holds while holding it", async () => {
+      SyncStream.stopReason = "model_hash";
+
+      sinon.stub(Durability, "batchesAbove").resolves([
+        {
+          actorUserId: null,
+          landed: [],
+          seq: 3,
+          writes: [creating("t3", "filed elsewhere")],
+        },
+      ]);
+
+      await Batches.flush();
+
+      assert.isFalse(sendStub.called);
+      assert.equal(Batches.pending.length, 1);
+      assert.equal(Overlay.durability(TODO, "t3"), "applied");
+    });
+
+    // The stop can arrive while the batch is still being written down.
+    it("holds a batch the tab was stopped while recording", async () => {
+      const batch = sealed(creating("t1", "first"));
+
+      let record;
+
+      batch.recorded = new Promise((resolve) => {
+        record = resolve;
+      });
+
+      const flushing = Batches.flush();
+
+      await waitForEventLoop();
+
+      SyncStream.stopReason = "model_hash";
+      record();
+
+      await flushing;
+
+      assert.isFalse(sendStub.called);
+      assert.equal(batch.state, "pending");
+    });
+
+    // A send can reach the server before the stream says the tab is stopped, since opening the
+    // stream is what wakes the queue.
+    describe("a batch refused because the bundle is behind the server", () => {
+      const staleBuild = () => ({
+        reason: Serializer.serialize(Type.atom("stale_build")),
+        status: "rejected",
+      });
+
+      let forgetting, posting;
+
+      beforeEach(() => {
+        forgetting = sinon.stub(Durability, "forgetBatch");
+        posting = sinon.stub(Tabs, "post");
+
+        sinon.stub(Logger, "debug");
+
+        sendStub.resolves(staleBuild());
+      });
+
+      it("keeps the batch waiting, its rows on the screen and in the store", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        assert.equal(Batches.pending.length, 1);
+        assert.equal(Batches.pending[0].state, "pending");
+        assert.deepStrictEqual(Batches.rejected, []);
+        assert.equal(Overlay.durability(TODO, "t1"), "applied");
+        assert.isFalse(forgetting.called);
+      });
+
+      it("stops the tab over its model and tells the group", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        assert.equal(SyncStream.stopReason, "model_hash");
+
+        // What puts the notice in front of the person.
+        assert.isTrue(renderStub.called);
+
+        assert.isTrue(
+          posting.calledWithMatch({
+            event: "sync_reload",
+            frame: {reason: "model_hash"},
+            kind: "frame",
+          }),
+        );
+
+        assert.isFalse(posting.calledWithMatch({kind: "answered"}));
+      });
+
+      // The batch behind it would be refused the same way.
+      it("sends nothing after it, and schedules no retry", async () => {
+        const clock = sinon.useFakeTimers();
+
+        try {
+          sealed(creating("t1", "first"));
+          sealed(creating("t2", "second"));
+
+          await Batches.flush();
+
+          assert.equal(clock.countTimers(), 0);
+
+          await Batches.flush();
+        } finally {
+          clock.restore();
+        }
+
+        assert.isTrue(sendStub.calledOnce);
+        assert.equal(Batches.pending.length, 2);
+      });
+
+      // The server checks the protocol before the model, so a deploy changing both stops the tab
+      // over the protocol - which lets writes through, and the refusal is what says the model moved.
+      it("holds the writes of a tab stopped over its protocol from then on", async () => {
+        SyncStream.stopReason = "protocol_version";
+
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+        await Batches.flush();
+
+        assert.equal(SyncStream.stopReason, "model_hash");
+        assert.isTrue(sendStub.calledOnce);
+        assert.equal(Batches.pending[0].state, "pending");
+      });
+
+      // What a reload onto the same model does, as a feature test sees it.
+      it("leaves the batch to be sent again under its own number", async () => {
+        sealed(creating("t1", "first"));
+
+        await Batches.flush();
+
+        SyncStream.stopReason = null;
+        sendStub.resolves(confirmed());
+
+        await Batches.flush();
+
+        assert.isTrue(sendStub.calledTwice);
+        assert.equal(sendStub.secondCall.args[0].seq, 1);
+        assert.deepStrictEqual(Batches.pending, []);
+      });
     });
 
     // The store is the order, not the messages: a batch filed by a tab that closed straight after
