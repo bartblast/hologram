@@ -19,7 +19,8 @@ defmodule Hologram.Migration.GeneratorTest do
   defp model(entities) do
     entries =
       Map.new(entities, fn {entity_type, entry_overrides} ->
-        entry = Map.merge(%{attributes: [], relationships: [], roles: []}, entry_overrides)
+        entry =
+          Map.merge(%{attributes: [], relationships: [], roles: [], uniques: []}, entry_overrides)
 
         {entity_type, entry}
       end)

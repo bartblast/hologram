@@ -94,8 +94,9 @@ defmodule Hologram.Entity.Model do
   modules.
 
   The term carries declared facts only: :entities maps each entity type module to its
-  :attributes, :relationships, and :roles in the reflection tuple shapes, and :roles maps
-  each global role module to its :extends list. Members are sorted by name and every opts
+  :attributes, :relationships, and :roles in the reflection tuple shapes and its :uniques, the
+  keys declared with unique, each the list of its field names in declared order, and :roles
+  maps each global role module to its :extends list. Members are sorted by name and every opts
   keyword list is sorted by key, so two terms describing the same model always compare
   equal. An entity role's :extends is stored as a sorted list of its targets without
   repeats, one target or many, so the two spellings of one target and any order of several
@@ -121,7 +122,8 @@ defmodule Hologram.Entity.Model do
         entry = %{
           attributes: normalize_members(entity_type.__attributes__()),
           relationships: normalize_members(entity_type.__relationships__()),
-          roles: normalize_roles(entity_type.__roles__())
+          roles: normalize_roles(entity_type.__roles__()),
+          uniques: entity_type.__uniques__()
         }
 
         {entity_type, entry}
@@ -387,7 +389,7 @@ defmodule Hologram.Entity.Model do
   defp apply_op(%{op: :create_entity} = op, model) do
     validate_absent!(model, op.entity)
 
-    entry = %{attributes: [], relationships: [], roles: []}
+    entry = %{attributes: [], relationships: [], roles: [], uniques: []}
 
     put_in(model, [:entities, op.entity], entry)
   end

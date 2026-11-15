@@ -21,6 +21,7 @@ defmodule Hologram.Entity.ModelTest do
   alias Hologram.Test.Fixtures.Entity.Module28
   alias Hologram.Test.Fixtures.Entity.Module29
   alias Hologram.Test.Fixtures.Entity.Module32
+  alias Hologram.Test.Fixtures.Entity.Module52
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
@@ -32,7 +33,7 @@ defmodule Hologram.Entity.ModelTest do
   defp task_model(entry_overrides) do
     entry =
       Map.merge(
-        %{attributes: [], relationships: [], roles: []},
+        %{attributes: [], relationships: [], roles: [], uniques: []},
         entry_overrides
       )
 
@@ -617,8 +618,8 @@ defmodule Hologram.Entity.ModelTest do
 
       assert fold(empty(), ops) == %{
                entities: %{
-                 MyApp.Draft => %{attributes: [], relationships: [], roles: []},
-                 MyApp.Sketch => %{attributes: [], relationships: [], roles: []}
+                 MyApp.Draft => %{attributes: [], relationships: [], roles: [], uniques: []},
+                 MyApp.Sketch => %{attributes: [], relationships: [], roles: [], uniques: []}
                },
                roles: %{},
                user_entity: nil
@@ -670,7 +671,9 @@ defmodule Hologram.Entity.ModelTest do
       ops = [%{op: :create_entity, entity: MyApp.Task, line: 3}]
 
       assert fold(empty(), ops) == %{
-               entities: %{MyApp.Task => %{attributes: [], relationships: [], roles: []}},
+               entities: %{
+                 MyApp.Task => %{attributes: [], relationships: [], roles: [], uniques: []}
+               },
                roles: %{},
                user_entity: nil
              }
@@ -688,7 +691,9 @@ defmodule Hologram.Entity.ModelTest do
       ops = [%{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch, line: 4}]
 
       assert fold(model, ops) == %{
-               entities: %{MyApp.Sketch => %{attributes: [], relationships: [], roles: []}},
+               entities: %{
+                 MyApp.Sketch => %{attributes: [], relationships: [], roles: [], uniques: []}
+               },
                roles: %{},
                user_entity: nil
              }
@@ -852,7 +857,7 @@ defmodule Hologram.Entity.ModelTest do
     test "points the relationships targeting a renamed entity type at its new name" do
       model = %{
         entities: %{
-          MyApp.Draft => %{attributes: [], relationships: [], roles: []},
+          MyApp.Draft => %{attributes: [], relationships: [], roles: [], uniques: []},
           MyApp.Task => %{
             attributes: [],
             relationships: [
@@ -860,7 +865,8 @@ defmodule Hologram.Entity.ModelTest do
               {:drafts, [MyApp.Draft], []},
               {:other, MyApp.Other, []}
             ],
-            roles: []
+            roles: [],
+            uniques: []
           }
         },
         roles: %{},
@@ -871,7 +877,7 @@ defmodule Hologram.Entity.ModelTest do
 
       assert fold(model, ops) == %{
                entities: %{
-                 MyApp.Sketch => %{attributes: [], relationships: [], roles: []},
+                 MyApp.Sketch => %{attributes: [], relationships: [], roles: [], uniques: []},
                  MyApp.Task => %{
                    attributes: [],
                    relationships: [
@@ -879,7 +885,8 @@ defmodule Hologram.Entity.ModelTest do
                      {:drafts, [MyApp.Sketch], []},
                      {:other, MyApp.Other, []}
                    ],
-                   roles: []
+                   roles: [],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -1566,7 +1573,9 @@ defmodule Hologram.Entity.ModelTest do
 
     test "derives an entry for an entity type without declarations" do
       assert from_modules([Module1]) == %{
-               entities: %{Module1 => %{attributes: [], relationships: [], roles: []}},
+               entities: %{
+                 Module1 => %{attributes: [], relationships: [], roles: [], uniques: []}
+               },
                roles: %{},
                user_entity: nil
              }
@@ -1576,8 +1585,16 @@ defmodule Hologram.Entity.ModelTest do
       assert from_modules([Module32]).entities[Module32] == %{
                attributes: [{:name, :string, []}],
                relationships: [],
-               roles: []
+               roles: [],
+               uniques: []
              }
+    end
+
+    test "records the keys declared with unique, sorted, each in its declared order" do
+      assert from_modules([Module52]).entities[Module52].uniques == [
+               [:position, :workspace],
+               [:workspace, :slug]
+             ]
     end
 
     test "derives attributes sorted by name" do
@@ -1590,7 +1607,8 @@ defmodule Hologram.Entity.ModelTest do
                      {:c, :string, []}
                    ],
                    relationships: [],
-                   roles: []
+                   roles: [],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -1608,7 +1626,8 @@ defmodule Hologram.Entity.ModelTest do
                      {:title, :string, []}
                    ],
                    relationships: [{:parent, Module1, [optional: true]}],
-                   roles: [{:editor, []}, {:owner, [extends: [:editor], granted_to: :creator]}]
+                   roles: [{:editor, []}, {:owner, [extends: [:editor], granted_to: :creator]}],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -1637,7 +1656,8 @@ defmodule Hologram.Entity.ModelTest do
       assert model.entities[Module26] == %{
                attributes: [{:name, :string, []}],
                relationships: [],
-               roles: []
+               roles: [],
+               uniques: []
              }
 
       assert model.entities[Module29].relationships == []
@@ -1686,7 +1706,8 @@ defmodule Hologram.Entity.ModelTest do
                  InlineExtendsListFixture => %{
                    attributes: [],
                    relationships: [],
-                   roles: [{:editor, []}, {:owner, [extends: [:editor, :viewer]]}, {:viewer, []}]
+                   roles: [{:editor, []}, {:owner, [extends: [:editor, :viewer]]}, {:viewer, []}],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -1750,7 +1771,8 @@ defmodule Hologram.Entity.ModelTest do
                      {:c, :string, []}
                    ],
                    relationships: [],
-                   roles: []
+                   roles: [],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -1770,7 +1792,8 @@ defmodule Hologram.Entity.ModelTest do
                  InlineRegexOptsFixture => %{
                    attributes: [{:email, :string, [format: {:regex, "@", [:caseless]}]}],
                    relationships: [],
-                   roles: []
+                   roles: [],
+                   uniques: []
                  }
                },
                roles: %{},
@@ -2045,7 +2068,16 @@ defmodule Hologram.Entity.ModelTest do
         |> task_model()
         |> hash()
 
-      assert model_hash == "b92542b48351dc50db3c1b9f2e0066e3"
+      assert model_hash == "df00ed75d925722e7a17f2d5bd17262f"
+    end
+
+    test "tells apart two terms differing only in their keys" do
+      attributes = [{:slug, :string, []}, {:title, :string, []}]
+
+      without_key = task_model(%{attributes: attributes})
+      with_key = task_model(%{attributes: attributes, uniques: [[:slug, :title]]})
+
+      assert hash(without_key) != hash(with_key)
     end
 
     test "terms describing the same model share a hash" do
@@ -2125,7 +2157,12 @@ defmodule Hologram.Entity.ModelTest do
       one_entity = task_model(%{attributes: [{:title, :string, []}]})
 
       two_entities =
-        put_in(one_entity, [:entities, Module1], %{attributes: [], relationships: [], roles: []})
+        put_in(one_entity, [:entities, Module1], %{
+          attributes: [],
+          relationships: [],
+          roles: [],
+          uniques: []
+        })
 
       refute hash(two_entities) == hash(one_entity)
     end

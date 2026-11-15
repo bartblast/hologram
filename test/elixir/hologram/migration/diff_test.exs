@@ -10,7 +10,7 @@ defmodule Hologram.Migration.DiffTest do
       Map.new(entities, fn {entity_type, entry_overrides} ->
         entry =
           Map.merge(
-            %{attributes: [], relationships: [], roles: []},
+            %{attributes: [], relationships: [], roles: [], uniques: []},
             entry_overrides
           )
 

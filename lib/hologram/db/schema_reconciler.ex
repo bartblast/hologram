@@ -312,6 +312,15 @@ defmodule Hologram.DB.SchemaReconciler do
     execute_statements(DDL.statements(op))
   end
 
+  # Asked again here, with the run's fills applied: an added column filled with its default, or
+  # a standing one whose NULLs a tightening filled, can make rows repeat a key they did not
+  # repeat when the preflight read them.
+  defp apply_op(%{op: :create_index, unique: true} = op, _mapping) do
+    Preflight.check_unique_index!(op)
+
+    execute_statements(DDL.statements(op))
+  end
+
   defp apply_op(op, _mapping), do: execute_statements(DDL.statements(op))
 
   defp apply_ops(ops, mapping) do

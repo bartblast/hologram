@@ -22,6 +22,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
   alias Hologram.Test.Fixtures.Entity.Module27
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module52
   alias Hologram.Test.Fixtures.Role
 
   @context %{
@@ -235,6 +236,35 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
   defp reconcile_context_with_grant_store(entity_types) do
     Map.put(@context, :mapping, Mapper.derive!(entity_types, Reflection.list_roles()))
+  end
+
+  # Module2's mapping gaining a column "z" with the given default and nullability, and a key
+  # over ("c", "z").
+  defp key_over_added_column_context(default, null) do
+    new_column = %{
+      name: "z",
+      type: :string,
+      sql_type: "text",
+      collation: "C",
+      enum_values: nil,
+      default: default,
+      null: null,
+      references: nil,
+      fk_constraint: nil,
+      index: nil,
+      source: {:attribute, :z}
+    }
+
+    [Module2]
+    |> reconcile_context()
+    |> update_in([:mapping, Module2, :columns], &[new_column | &1])
+    |> update_mapping_indexes(Module2, fn indexes ->
+      Map.put(indexes, "test_fixtures_entity_module2_c_z_$uidx", %{
+        columns: ["c", "z"],
+        nulls_distinct: true,
+        unique: true
+      })
+    end)
   end
 
   defp unique_column_context(null) do
@@ -647,6 +677,18 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       reconcile(context)
 
       assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "converges the index of each key declared with unique" do
+      context = reconcile_context([Module1, Module52])
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      assert Introspection.schema().tables["test_fixtures_entity_module52"].indexes[
+               "test_fixtures_entity_module52_workspace_id_slug_$uidx"
+             ] == %{columns: ["workspace_id", "slug"], nulls_distinct: true, unique: true}
     end
 
     test "renames an index standing under an old name instead of rebuilding it" do
@@ -1432,6 +1474,77 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       expected_msg =
         ~s{found 1 duplicate key in "test_fixtures_entity_module2" over ("c") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    test "raises when a key over a column added with a default meets rows repeating the rest" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["abc", "abc"])
+
+      expected_msg =
+        ~s{found 1 duplicate key in "test_fixtures_entity_module2" over ("c", "z") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(key_over_added_column_context("en", false))
+      end
+    end
+
+    test "builds a key over a column added with a default when no rows repeat the rest" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["abc", "abd"])
+
+      context = key_over_added_column_context("en", false)
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "builds a key over a column added without a default over rows repeating the rest" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["abc", "abc"])
+
+      context = key_over_added_column_context(nil, true)
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    # An optional column's default fills no existing row, so the rows hold NULL in it.
+    test "builds a key over an optional column added with a default over rows repeating the rest" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["abc", "abc"])
+
+      context = key_over_added_column_context("en", true)
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "raises when a key meets rows that repeat it once a tightened column is filled" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["abc", "abc"])
+
+      context =
+        [Module2]
+        |> reconcile_context()
+        |> update_mapping_column(Module2, "b", &%{&1 | default: 7, null: false})
+        |> update_mapping_indexes(Module2, fn indexes ->
+          Map.put(indexes, "test_fixtures_entity_module2_b_c_$uidx", %{
+            columns: ["b", "c"],
+            nulls_distinct: true,
+            unique: true
+          })
+        end)
+
+      expected_msg =
+        ~s{found 1 duplicate key in "test_fixtures_entity_module2" over ("b", "c") - } <>
           "a unique index cannot be built while rows repeat a key - " <>
           "update the rows or drop the unique declaration"
 

@@ -146,6 +146,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
       [{:created_at, :datetime, []}, {:id, :uuid, []}, {:updated_at, :datetime, []}]
     end
 
+    @spec __uniques__() :: list(list(atom))
+    def __uniques__, do: []
+
     @spec new(%{optional(atom) => any} | keyword) :: struct
     def new(values \\ []), do: Entity.new(__MODULE__, values)
   end

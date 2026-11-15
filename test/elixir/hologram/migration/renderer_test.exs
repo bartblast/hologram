@@ -11,7 +11,8 @@ defmodule Hologram.Migration.RendererTest do
   defp model(entities) do
     entries =
       Map.new(entities, fn {entity_type, entry_overrides} ->
-        entry = Map.merge(%{attributes: [], relationships: [], roles: []}, entry_overrides)
+        entry =
+          Map.merge(%{attributes: [], relationships: [], roles: [], uniques: []}, entry_overrides)
 
         {entity_type, entry}
       end)
@@ -806,8 +807,8 @@ defmodule Hologram.Migration.RendererTest do
     test "renders a global role rename as the grant store's value rename" do
       pre = %{
         entities: %{
-          MyApp.Task => %{attributes: [], relationships: [], roles: []},
-          UserEntity => %{attributes: [], relationships: [], roles: []}
+          MyApp.Task => %{attributes: [], relationships: [], roles: [], uniques: []},
+          UserEntity => %{attributes: [], relationships: [], roles: [], uniques: []}
         },
         roles: %{MyApp.Roles.Moderator => %{extends: []}},
         user_entity: UserEntity
@@ -1015,8 +1016,8 @@ defmodule Hologram.Migration.RendererTest do
     test "renders a global role addition as the grant store's value" do
       pre = %{
         entities: %{
-          MyApp.Task => %{attributes: [], relationships: [], roles: []},
-          UserEntity => %{attributes: [], relationships: [], roles: []}
+          MyApp.Task => %{attributes: [], relationships: [], roles: [], uniques: []},
+          UserEntity => %{attributes: [], relationships: [], roles: [], uniques: []}
         },
         roles: %{},
         user_entity: UserEntity

@@ -6,6 +6,21 @@ defmodule Hologram.DB.Preflight do
   alias Hologram.DB.DDL
 
   @doc """
+  Validates that the rows the given unique index op's table holds at this moment repeat no key
+  of the index.
+
+  Returns :ok, or raises naming the table, its columns and how many keys repeat. The check run!/3
+  makes before any DDL sees the rows as they stood then, so a run that fills a column on the way
+  asks again here, with every column of the index in place.
+  """
+  @spec check_unique_index!(%{atom => any}) :: :ok
+  def check_unique_index!(op) do
+    statement = DDL.duplicate_check_statement(op.table, op.columns, op.nulls_distinct)
+
+    raise_duplicate_keys!(op, count_result(statement))
+  end
+
+  @doc """
   Returns the encoded fill value for the given table's column, or :none when the column
   declares no default.
 
@@ -38,8 +53,9 @@ defmodule Hologram.DB.Preflight do
   surfacing from an apply is by definition a Hologram bug.
 
   A check against a table the ops create, or a unique index over a column they add, answers
-  zero without a query: the table holds no rows yet, and the column no value a row could
-  repeat.
+  zero without a query: the table holds no rows yet, and the column is not there to ask
+  about. A run that fills columns asks about its unique indexes again once they are filled
+  (see check_unique_index!/1).
 
   An enum rebuild's removed values exclude the ones an unscoped remap carries: those rows
   follow the value to its new label rather than losing it.
@@ -75,23 +91,17 @@ defmodule Hologram.DB.Preflight do
     check_null_tightening!(op, actual, mapping)
   end
 
-  # A column the run adds holds no key a row could repeat, so its index meets no duplicate.
-  # It is empty, or NULL in every row - a unique attribute declares no default, so nothing
-  # fills it before the index builds, and a required one meeting rows is refused by the
-  # required-column check first. NULL is never a duplicate key on a declared unique index,
-  # which keeps nulls distinct - the one index comparing nulls as values, the role grant
-  # store's, is born with its table.
+  # An index over a column the run adds is not asked about here: the column is not there to
+  # query. A unique attribute declares no default, so its column arrives NULL in every row, and
+  # NULL is never a duplicate key on a declared unique index, which keeps nulls distinct - the
+  # one index comparing nulls as values, the role grant store's, is born with its table. A key
+  # declared with unique may name a column that arrives filled with its default, though, and
+  # a run may fill the NULLs of a column that stands - so a run that fills columns asks again
+  # once they are filled, right before it builds the index (see check_unique_index!/1).
   defp check_op!(%{op: :create_index, unique: true} = op, actual, _mapping) do
     statement = DDL.duplicate_check_statement(op.table, op.columns, op.nulls_distinct)
-    count = count_existing(actual, op.table, op.columns, statement)
 
-    if count > 0 do
-      columns = Enum.map_join(op.columns, ", ", &~s("#{&1}"))
-
-      raise ~s{found #{count} duplicate #{pluralize_keys(count)} in "#{op.table}" } <>
-              "over (#{columns}) - a unique index cannot be built while rows repeat a " <>
-              "key - update the rows or drop the unique declaration"
-    end
+    raise_duplicate_keys!(op, count_existing(actual, op.table, op.columns, statement))
   end
 
   # An enum type this run creates has no values to lose - it reaches the database with
@@ -206,6 +216,16 @@ defmodule Hologram.DB.Preflight do
     {:ok, %{rows: [[count]]}} = Connection.query(statement)
 
     count
+  end
+
+  defp raise_duplicate_keys!(_op, 0), do: :ok
+
+  defp raise_duplicate_keys!(op, count) do
+    columns = Enum.map_join(op.columns, ", ", &~s("#{&1}"))
+
+    raise ~s{found #{count} duplicate #{pluralize_keys(count)} in "#{op.table}" } <>
+            "over (#{columns}) - a unique index cannot be built while rows repeat a " <>
+            "key - update the rows or drop the unique declaration"
   end
 
   defp pluralize_keys(1), do: "key"
