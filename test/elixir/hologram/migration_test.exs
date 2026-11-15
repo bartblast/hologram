@@ -1,7 +1,387 @@
+defmodule Hologram.MigrationTest.AliasReferenceTracer do
+  @moduledoc false
+
+  # Reports to the compiling process each reference to the traced alias, with the function
+  # it is made from - nil for a module-body reference, which is a compile-time dependency.
+  @spec trace(tuple | atom, Macro.Env.t()) :: :ok
+  def trace({:alias_reference, _meta, Hologram.MigrationTest.Traced = module}, env) do
+    send(self(), {:alias_reference, module, env.function})
+    :ok
+  end
+
+  def trace(_event, _env), do: :ok
+end
+
 defmodule Hologram.MigrationTest do
   use Hologram.Test.BasicCase, async: true
 
   import Hologram.Migration
+
+  alias Hologram.MigrationTest.AliasReferenceTracer
+
+  describe "__after_compile__/2" do
+    test "rejects a module referencing an entity by its pre-rename name" do
+      body = """
+      rename_entity MyApp.Old, MyApp.New
+
+      change_entity MyApp.Old do
+        add_attribute :title, :string
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260813091522.ex:7 references MyApp.Old, renamed on line 4 - " <>
+          "move the rename first and use MyApp.New"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "fails the build when an op cannot be evaluated" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :count, :integer, default: String.to_integer("x")
+      end
+      """
+
+      assert_raise ArgumentError, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+  end
+
+  describe "__hologram_migration__/0" do
+    test "returns the version, the path and the ops of the module body, in file order" do
+      module =
+        compile_migration("20260813091522", """
+        create_entity MyApp.Task do
+          add_attribute :title, :string
+        end
+
+        delete_entity MyApp.Archive
+        """)
+
+      assert module.__hologram_migration__() == %{
+               version: "20260813091522",
+               path: "app/migrations/20260813091522.ex",
+               ops: [
+                 %{op: :create_entity, entity: MyApp.Task, line: 4},
+                 %{
+                   op: :add_attribute,
+                   entity: MyApp.Task,
+                   name: :title,
+                   type: :string,
+                   opts: [],
+                   line: 5
+                 },
+                 %{op: :delete_entity, entity: MyApp.Archive, line: 8}
+               ]
+             }
+    end
+
+    test "returns no ops for a module without any" do
+      module = compile_migration("20260813091522", "")
+
+      assert module.__hologram_migration__().ops == []
+    end
+
+    test "keeps a regex option" do
+      module =
+        compile_migration("20260813091522", """
+        change_entity MyApp.Task do
+          add_attribute :code, :string, format: ~r/^[A-Z]+$/i
+        end
+        """)
+
+      assert [%{opts: [format: regex]}] = module.__hologram_migration__().ops
+      assert Regex.source(regex) == "^[A-Z]+$"
+      assert Regex.opts(regex) == [:caseless]
+    end
+
+    test "resolves an alias where the op is written, not where the module ends" do
+      module =
+        compile_migration("20260813091522", """
+        alias MyApp.Short
+
+        create_entity Short
+
+        alias MyApp.Long.Short
+
+        delete_entity Short
+        """)
+
+      assert [first, second] = module.__hologram_migration__().ops
+      assert first.entity == MyApp.Short
+      assert second.entity == MyApp.Long.Short
+    end
+
+    test "returns the flat ops of every kind" do
+      module =
+        compile_migration("20260813091522", """
+        add_role MyApp.Roles.Admin
+        change_role MyApp.Roles.Admin, extends: MyApp.Roles.Member
+        rename_role MyApp.Roles.Admin, MyApp.Roles.Owner
+        delete_role MyApp.Roles.Guest
+        designate_user_entity MyApp.User
+        delete_role_grants()
+        rename_entity MyApp.Old, MyApp.New
+        resolve! :entities, deleted: [MyApp.Gone], added: [MyApp.Came]
+        """)
+
+      assert module.__hologram_migration__().ops == [
+               %{op: :add_role, role: MyApp.Roles.Admin, opts: [], line: 4},
+               %{
+                 op: :change_role,
+                 role: MyApp.Roles.Admin,
+                 changes: [extends: MyApp.Roles.Member],
+                 line: 5
+               },
+               %{op: :rename_role, from: MyApp.Roles.Admin, to: MyApp.Roles.Owner, line: 6},
+               %{op: :delete_role, role: MyApp.Roles.Guest, line: 7},
+               %{op: :designate_user_entity, entity: MyApp.User, line: 8},
+               %{op: :delete_role_grants, line: 9},
+               %{op: :rename_entity, from: MyApp.Old, to: MyApp.New, line: 10},
+               %{
+                 op: :resolve!,
+                 kind: :entities,
+                 payload: [deleted: [MyApp.Gone], added: [MyApp.Came]],
+                 line: 11
+               }
+             ]
+    end
+
+    test "returns a resolve! op inside an entity block" do
+      module =
+        compile_migration("20260813091522", """
+        change_entity MyApp.Task do
+          resolve! :fill, attributes: [:title]
+        end
+        """)
+
+      assert module.__hologram_migration__().ops == [
+               %{
+                 op: :resolve!,
+                 entity: MyApp.Task,
+                 kind: :fill,
+                 payload: [attributes: [:title]],
+                 line: 5
+               }
+             ]
+    end
+
+    test "evaluates op arguments that call the module's functions and read its attributes" do
+      module =
+        compile_migration("20260813091522", """
+        @status_default :draft
+
+        change_entity MyApp.Task do
+          add_attribute :status, :atom, default: @status_default
+          add_attribute :code, :string, default: code_default()
+        end
+
+        defp code_default, do: "A1"
+        """)
+
+      assert [%{opts: [default: :draft]}, %{opts: [default: "A1"]}] =
+               module.__hologram_migration__().ops
+    end
+
+    test "returns no op written inside a function of the module" do
+      module =
+        compile_migration("20260813091522", """
+        create_entity MyApp.Task
+
+        def in_function, do: delete_entity(MyApp.Archive)
+        """)
+
+      assert module.__hologram_migration__().ops == [
+               %{op: :create_entity, entity: MyApp.Task, line: 4}
+             ]
+
+      assert module.in_function() == %{op: :delete_entity, entity: MyApp.Archive, line: 6}
+    end
+
+    test "raises no unused alias warning for an alias used only in ops" do
+      output =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          compile_migration("20260813091522", """
+          alias MyApp.Task
+
+          create_entity Task
+          """)
+        end)
+
+      refute output =~ "unused alias"
+    end
+
+    test "names the entity types of its ops as runtime references, not compile-time ones" do
+      previous_tracers = Code.get_compiler_option(:tracers)
+      Code.put_compiler_option(:tracers, [AliasReferenceTracer | previous_tracers])
+
+      try do
+        compile_migration("20260813091522", "create_entity Hologram.MigrationTest.Traced")
+      after
+        Code.put_compiler_option(:tracers, previous_tracers)
+      end
+
+      assert_received {:alias_reference, Hologram.MigrationTest.Traced,
+                       {:__hologram_migration__, 0}}
+
+      refute_received {:alias_reference, Hologram.MigrationTest.Traced, nil}
+    end
+  end
+
+  describe "__using__/1" do
+    test "rejects a migration module outside the app/migrations directory" do
+      code = """
+      defmodule MyApp.Migrations.V20260813091522 do
+        use Hologram.Migration
+      end
+      """
+
+      expected_msg =
+        "lib/my_app/20260813091522.ex uses Hologram.Migration - " <>
+          "migration files live in the app/migrations/ directory"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.compile_string(code, "lib/my_app/20260813091522.ex")
+      end
+    end
+
+    test "rejects a migration file whose name is not a version" do
+      code = """
+      defmodule MyApp.Migrations.V20260813091522 do
+        use Hologram.Migration
+      end
+      """
+
+      expected_msg =
+        "invalid migration file name app/migrations/add_tasks.ex - a migration file is named " <>
+          "after its version: 14 timestamp digits with the \".ex\" extension, " <>
+          "e.g. \"20260813091500.ex\""
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.compile_string(code, "app/migrations/add_tasks.ex")
+      end
+    end
+
+    test "rejects a module whose name does not end in the version of its file" do
+      code = """
+      defmodule MyApp.Migrations.V20260813091522 do
+        use Hologram.Migration
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260901120000.ex defines MyApp.Migrations.V20260813091522 - " <>
+          "the module name must end in V20260901120000"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.compile_string(code, "app/migrations/20260901120000.ex")
+      end
+    end
+
+    test "rejects an op in a module that does not use Hologram.Migration" do
+      code = """
+      defmodule MyApp.Migrations.V20260813091522 do
+        use Hologram.Migration
+
+        defmodule Inner do
+          create_entity MyApp.Lost
+        end
+      end
+      """
+
+      expected_msg =
+        "MyApp.Migrations.V20260813091522.Inner holds a migration op but does not use " <>
+          "Hologram.Migration (app/migrations/20260813091522.ex:5)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.compile_string(code, "app/migrations/20260813091522.ex")
+      end
+    end
+
+    test "rejects an unknown member op naming its line" do
+      body = """
+      change_entity MyApp.Task do
+        add_column :title, :string
+      end
+      """
+
+      expected_msg =
+        "unknown migration op add_column/2 at line 5 - see Hologram.Migration for the vocabulary"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "rejects a migration file in a subdirectory of app/migrations" do
+      code = """
+      defmodule MyApp.Migrations.V20260813091522 do
+        use Hologram.Migration
+      end
+      """
+
+      expected_msg =
+        "app/migrations/old/20260813091522.ex uses Hologram.Migration - " <>
+          "migration files live in the app/migrations/ directory"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.compile_string(code, "app/migrations/old/20260813091522.ex")
+      end
+    end
+
+    test "rejects a migration file in a migrations directory outside app" do
+      code = """
+      defmodule MyApp.Migrations.V20260813091522 do
+        use Hologram.Migration
+      end
+      """
+
+      expected_msg =
+        "lib/migrations/20260813091522.ex uses Hologram.Migration - " <>
+          "migration files live in the app/migrations/ directory"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.compile_string(code, "lib/migrations/20260813091522.ex")
+      end
+    end
+
+    test "rejects a migration file with the .exs extension" do
+      code = """
+      defmodule MyApp.Migrations.V20260813091522 do
+        use Hologram.Migration
+      end
+      """
+
+      expected_msg =
+        "invalid migration file name app/migrations/20260813091522.exs - a migration file " <>
+          "is named after its version: 14 timestamp digits with the \".ex\" extension, " <>
+          "e.g. \"20260813091500.ex\""
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.compile_string(code, "app/migrations/20260813091522.exs")
+      end
+    end
+
+    test "rejects a module named by a bare atom" do
+      code = """
+      defmodule :scratch_migration do
+        use Hologram.Migration
+      end
+      """
+
+      expected_msg =
+        "app/migrations/20260813091522.ex defines :scratch_migration - " <>
+          "the module name must end in V20260813091522"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        Code.compile_string(code, "app/migrations/20260813091522.ex")
+      end
+    end
+  end
 
   describe "add_role/2" do
     test "returns the op with the role module, an empty opts list by default, and the call line" do

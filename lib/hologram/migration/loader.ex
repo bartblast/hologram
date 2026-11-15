@@ -61,6 +61,36 @@ defmodule Hologram.Migration.Loader do
   end
 
   @doc """
+  Returns the migrations the given migration modules define, ordered by version.
+
+  Each migration is a map with :version, :path, :ops and :module. Raises naming both files
+  when two modules define the same version - one directory holds every migration of an app,
+  but an umbrella's apps each have their own.
+  """
+  @spec from_modules!(list(module)) :: list(%{atom => any})
+  def from_modules!(modules) do
+    migrations =
+      modules
+      |> Enum.map(&Map.put(&1.__hologram_migration__(), :module, &1))
+      |> Enum.sort_by(& &1.version)
+
+    migrations
+    |> Enum.chunk_every(2, 1, :discard)
+    |> Enum.each(&validate_distinct_versions!/1)
+
+    migrations
+  end
+
+  @doc """
+  Returns the migrations the project's migration modules define, ordered by version (see
+  `from_modules!/1`).
+  """
+  @spec list!() :: list(%{atom => any})
+  def list! do
+    from_modules!(Reflection.list_migrations())
+  end
+
+  @doc """
   Returns the absolute path of the project's migrations directory.
   """
   @spec migrations_dir() :: String.t()
@@ -159,6 +189,16 @@ defmodule Hologram.Migration.Loader do
   defp statements({:__block__, _meta, statements}), do: statements
 
   defp statements(single_statement), do: [single_statement]
+
+  defp validate_distinct_versions!([%{version: version} = first, %{version: version} = second]) do
+    raise Hologram.CompileError,
+      message:
+        "migration version #{version} is defined twice - " <>
+          "#{inspect(first.module)} (#{first.path}) and " <>
+          "#{inspect(second.module)} (#{second.path})"
+  end
+
+  defp validate_distinct_versions!(_pair), do: :ok
 
   defp validate_file_name!(file_name, dir) do
     if not Regex.match?(@file_name_regex, file_name) do

@@ -22,6 +22,52 @@ defmodule Hologram.Migration.LoaderTest do
     dir
   end
 
+  describe "from_modules!/1" do
+    test "returns the migrations of the given modules ordered by version" do
+      later = compile_migration("20260813142237", "delete_entity MyApp.Archive")
+      earlier = compile_migration("20260813091522", "create_entity MyApp.Task")
+
+      assert from_modules!([later, earlier]) == [
+               %{
+                 version: "20260813091522",
+                 path: "app/migrations/20260813091522.ex",
+                 ops: [%{op: :create_entity, entity: MyApp.Task, line: 4}],
+                 module: earlier
+               },
+               %{
+                 version: "20260813142237",
+                 path: "app/migrations/20260813142237.ex",
+                 ops: [%{op: :delete_entity, entity: MyApp.Archive, line: 4}],
+                 module: later
+               }
+             ]
+    end
+
+    test "returns an empty list for no modules" do
+      assert from_modules!([]) == []
+    end
+
+    test "rejects two modules defining the same version" do
+      first = compile_migration("20260813091522", "create_entity MyApp.Task")
+      second = compile_migration("20260813091522", "delete_entity MyApp.Archive")
+
+      expected_msg =
+        "migration version 20260813091522 is defined twice - " <>
+          "#{inspect(first)} (app/migrations/20260813091522.ex) and " <>
+          "#{inspect(second)} (app/migrations/20260813091522.ex)"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        from_modules!([first, second])
+      end
+    end
+  end
+
+  describe "list!/0" do
+    test "returns an empty list for the project, which defines no migration" do
+      assert list!() == []
+    end
+  end
+
   describe "load_dir!/1" do
     test "returns the migrations ordered by version" do
       dir =
