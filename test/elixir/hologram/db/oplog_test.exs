@@ -495,6 +495,18 @@ defmodule Hologram.DB.OplogTest do
       assert rows() == []
     end
 
+    # PostgreSQL binds at most 65,535 parameters per statement, so this many rows can't go in as one.
+    test "appends more effects than one statement can bind, in order" do
+      effects =
+        Enum.map(1..7_300, fn index ->
+          %{op: :patch_entity, entity_type: Module2, entity_id: @entity_id, data: %{b: index}}
+        end)
+
+      assert append(effects) == :ok
+
+      assert Enum.map(rows(), & &1.data["b"]) == Enum.to_list(1..7_300)
+    end
+
     test "records an entity's attributes under the type's declared name" do
       effect = %{
         op: :put_entity,
