@@ -122,9 +122,8 @@ defmodule Hologram.Job.RunLock do
   which is how a connection reaches another database on the same server - advisory locks are per
   database, so the connection must reach the one the jobs are in.
 
-  It returns without waiting on the server and connects right after, the way the listener does
-  (see Hologram.DB.Config.listener_child_spec/1). A call made meanwhile waits for the connect, and
-  a connect that fails ends the process.
+  It returns without waiting on the server and connects right after. A call made meanwhile waits
+  for the connect, and a connect that fails ends the process.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do

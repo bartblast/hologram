@@ -10,7 +10,7 @@ defmodule Hologram.Job.Supervisor do
 
   use Supervisor
 
-  alias Hologram.DB.Config
+  alias Hologram.DB.Listener
   alias Hologram.Job.RunLock
   alias Hologram.Job.Worker
 
@@ -33,7 +33,7 @@ defmodule Hologram.Job.Supervisor do
   @impl Supervisor
   def init(_opts) do
     children = [
-      Config.listener_child_spec(@notifications),
+      {Listener, name: @notifications},
       {RunLock, name: RunLock},
       {Worker, name: Worker, notifications: @notifications, run_lock: RunLock}
     ]

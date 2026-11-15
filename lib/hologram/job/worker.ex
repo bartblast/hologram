@@ -8,6 +8,7 @@ defmodule Hologram.Job.Worker do
   use GenServer
 
   alias Hologram.DB
+  alias Hologram.DB.Listener
   alias Hologram.DB.Oplog
   alias Hologram.Job.RunLock
   alias Hologram.Job.Runner
@@ -23,7 +24,7 @@ defmodule Hologram.Job.Worker do
   @doc """
   Starts the worker.
 
-  `:notifications` names a `Postgrex.Notifications` process to hear writes on. It is optional,
+  `:notifications` names a Hologram.DB.Listener connection to hear writes on. It is optional,
   because the announcements are an optimization over the poll rather than the mechanism: without
   one a job still runs, no sooner than `:poll_interval_ms` after it was created.
 
@@ -130,7 +131,7 @@ defmodule Hologram.Job.Worker do
   # notification only once the transaction that sent it commits, which is what makes "after the
   # batch commits" a property of the mechanism rather than something to check.
   defp listen_for_writes(notifications) do
-    case Postgrex.Notifications.listen(notifications, Oplog.channel()) do
+    case Listener.listen(notifications, Oplog.channel()) do
       {:ok, _ref} -> :ok
       {:eventually, _ref} -> :ok
     end

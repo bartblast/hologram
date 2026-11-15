@@ -19,15 +19,35 @@ defmodule Hologram.DB.ConfigTest do
     end
   end
 
-  describe "listener_child_spec/1" do
-    test "names the connection and has it connect after booting" do
-      assert %{id: :my_listener, start: {Postgrex.Notifications, :start_link, [opts]}} =
-               listener_child_spec(:my_listener)
+  describe "held_connection_opts/1" do
+    test "returns the configured database's options for a connection that waits for it" do
+      opts = held_connection_opts()
 
-      assert opts[:name] == :my_listener
-      assert opts[:auto_reconnect] == false
-      assert opts[:sync_connect] == false
       assert opts[:database] == connection_opts()[:database]
+      assert opts[:auto_reconnect] == true
+      assert opts[:idle_interval] == 5_000
+      assert opts[:reconnect_backoff] == 2_000
+      assert opts[:sync_connect] == false
+    end
+
+    test "applies the given overrides" do
+      opts = held_connection_opts(name: :my_connection, reconnect_backoff: 50, port: 6543)
+
+      assert opts[:name] == :my_connection
+      assert opts[:reconnect_backoff] == 50
+      assert opts[:port] == 6543
+    end
+
+    # A call arriving between two tries arms the idle ping, which crashes on the missing socket if
+    # it fires before the next try.
+    test "raises when the backoff is not below the idle interval" do
+      assert_raise ArgumentError,
+                   "the reconnect backoff of a held connection must be below its idle interval, got 5000 ms and 5000 ms",
+                   fn -> held_connection_opts(reconnect_backoff: 5_000) end
+
+      assert_raise ArgumentError, fn ->
+        held_connection_opts(reconnect_backoff: 100, idle_interval: 100)
+      end
     end
   end
 
