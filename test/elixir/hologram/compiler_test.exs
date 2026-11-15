@@ -180,12 +180,13 @@ defmodule Hologram.CompilerTest do
     entity_types: MapSet.new(),
     model_hash: "my_model_hash",
     policy_hash: nil,
-    role_modules: []
+    role_modules: [],
+    user_entity: nil
   }
 
   # A statement setting the client's data layer constants, as the runtime script takes it rendered
   # (see build_sync_constants_js/1), for the tests of what the script carries besides.
-  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1};/
+  @empty_sync_constants_js ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "", policyHash: null, protocolVersion: 1, userEntity: null};/
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -301,6 +302,19 @@ defmodule Hologram.CompilerTest do
       module_info_plt
       |> PLT.get_all()
       |> Enum.map(fn {module, info} -> {module, Map.put(info, :user_entity?, false)} end)
+
+    PLT.start(items: items)
+  end
+
+  # A copy of the given module info PLT in which the given entity type is the user entity type and
+  # no other is.
+  defp with_user_entity(module_info_plt, user_entity) do
+    items =
+      module_info_plt
+      |> PLT.get_all()
+      |> Enum.map(fn {module, info} ->
+        {module, Map.put(info, :user_entity?, module == user_entity)}
+      end)
 
     PLT.start(items: items)
   end
@@ -2182,6 +2196,39 @@ defmodule Hologram.CompilerTest do
       [sync_constants: sync_constants]
     end
 
+    # The client answers {Hologram, :user} from the rows of this type.
+    test "names the user entity type", %{sync_constants: sync_constants} do
+      assert sync_constants.user_entity == UserEntity
+    end
+
+    test "names no user entity type when the data model designates none", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      sync_constants =
+        derive_sync_constants(Reflection.list_pages(), call_graph, plt_without_user_entity, [])
+
+      assert sync_constants.user_entity == nil
+    end
+
+    # Nobody may read a type declaring no rule, so no row of it reaches a client, and a model that
+    # nothing reaches it from leaves it out - the client is not told to answer from a type it has no
+    # entry for.
+    test "names no user entity type the client model leaves out", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      plt_with_unreached_user_entity = with_user_entity(module_info_plt, Entity10)
+
+      sync_constants =
+        derive_sync_constants([PageModule7], call_graph, plt_with_unreached_user_entity, [])
+
+      refute MapSet.member?(sync_constants.entity_types, Entity10)
+      assert sync_constants.user_entity == nil
+    end
+
     test "collects the types the queries the given pages reach read", %{
       call_graph: call_graph,
       module_info_plt: module_info_plt
@@ -2339,7 +2386,8 @@ defmodule Hologram.CompilerTest do
                entity_types: MapSet.new(),
                model_hash: nil,
                policy_hash: nil,
-               role_modules: []
+               role_modules: [],
+               user_entity: nil
              }
     end
 
@@ -2368,12 +2416,12 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | policy_hash: "my_policy_hash"}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: "my_policy_hash", protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
     end
 
     test "renders the model hash the sync constants carry" do
       assert build_sync_constants_js(@empty_sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
     end
 
     test "renders the derived fields each component registers as queries" do
@@ -2383,7 +2431,15 @@ defmodule Hologram.CompilerTest do
       }
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {"Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84":["ripe","ripe_rows"]}, expandedRoles: {}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+    end
+
+    # Spelled as the model's keys are, which is how a query term names its entity type.
+    test "renders the user entity type the sync constants carry" do
+      sync_constants = %{@empty_sync_constants | user_entity: UserEntity}
+
+      assert build_sync_constants_js(sync_constants) =~
+               ~s/userEntity: "Hologram.Test.Fixtures.Entity.Module14"};/
     end
 
     # A client asked whether a user holds a global role refuses an unknown one by these keys and
@@ -2392,7 +2448,7 @@ defmodule Hologram.CompilerTest do
       sync_constants = %{@empty_sync_constants | role_modules: [RoleModule1, RoleModule2]}
 
       assert build_sync_constants_js(sync_constants) ==
-               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}};/
+               ~s/globalThis.Hologram.sync = {derivedQueries: {}, expandedRoles: {"Hologram.Test.Fixtures.Role.Module1":["Hologram.Test.Fixtures.Role.Module1","Hologram.Test.Fixtures.Role.Module2"],"Hologram.Test.Fixtures.Role.Module2":["Hologram.Test.Fixtures.Role.Module2"]}, model: {}, modelHash: "my_model_hash", policyHash: null, protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
     end
 
     # A client computes a derived field itself, from the definition the build resolved - spelled in
@@ -5048,7 +5104,10 @@ defmodule Hologram.CompilerTest do
           subsystems: [:data_layer]
         )
 
-      assert String.contains?(js, ~s/protocolVersion: #{Frame.protocol_version()}};/)
+      assert String.contains?(
+               js,
+               ~s/protocolVersion: #{Frame.protocol_version()}, userEntity: null};/
+             )
     end
 
     test "injects no application versions when client stacktraces are disabled", %{

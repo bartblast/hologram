@@ -1651,6 +1651,8 @@ defmodule Hologram.Template.Renderer do
   # The row is handed over already carrying the sentinel, so the server-rendered HTML and the
   # client re-render agree on framework-delivered rows. It was carried as stored, before the
   # strip: the wire leaves server-only values out of what the client is told.
+  #
+  # WARNING: must match the client renderer's #putSessionUserContext (renderer.mjs).
   defp put_user_context(page_component_struct) do
     user =
       RoleGrant.user_entity()
@@ -1692,6 +1694,8 @@ defmodule Hologram.Template.Renderer do
   # holds it from the first render. On a build checking permissions on the client it is read with
   # the rows its type's rules read through relationships, so the client's checks on the context
   # user read what the server's did, and it is handed back with only what was asked included.
+  #
+  # WARNING: must match the client's DataLayer.sessionUser (data_layer.mjs).
   defp read_session_user(nil, _user_id), do: nil
 
   defp read_session_user(user_entity, user_id) do

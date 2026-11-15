@@ -166,7 +166,8 @@ defmodule Hologram.Compiler do
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
           policy_hash: String.t() | nil,
-          role_modules: list(module)
+          role_modules: list(module),
+          user_entity: module | nil
         }
 
   @type js_input_fingerprint ::
@@ -2361,6 +2362,12 @@ defmodule Hologram.Compiler do
   `:role_modules` are the project's global role modules: a client asking whether a user holds a
   global role needs every one of them to refuse an unknown one and to expand the one asked about.
 
+  `:user_entity` is the project's user entity type, which a client answers the session user's
+  row from (see `Hologram.Template.Renderer`'s `{Hologram, :user}` context), or nil when the model
+  designates none or the client doesn't hold the type. A user entity type declaring no rule is
+  one nobody may read, so no row of it ever reaches a client, and the model leaves it out unless a
+  page reaches it.
+
   `:model_hash` is the hash of the project's data model, of every entity type and global role the
   module info PLT records, whatever the pages reach. It is nil when the PLT records no entity type:
   the application declares no data model.
@@ -2426,12 +2433,15 @@ defmodule Hologram.Compiler do
       |> put_grant_type(all_entity_types)
       |> rules_entity_types()
 
+    user_entity = Reflection.user_entity(module_info_plt)
+
     %{
       derived_queries: derived_queries(component_modules, component_queries),
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
       policy_hash: policy_hash(all_entity_types),
-      role_modules: role_modules
+      role_modules: role_modules,
+      user_entity: if(MapSet.member?(entity_types, user_entity), do: user_entity)
     }
   end
 
@@ -2440,7 +2450,7 @@ defmodule Hologram.Compiler do
   `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/3`): the
   derived fields whose function builds a query, the global roles with the role modules carrying
   each, the model of the entity types the client holds, the hash of the project's data model, the
-  hash of the rules it was rendered with, and the sync protocol version.
+  hash of the rules it was rendered with, the sync protocol version, and the user entity type.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2478,8 +2488,9 @@ defmodule Hologram.Compiler do
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
       policy_hash = Jason.encode!(sync_constants.policy_hash)
+      user_entity = render_user_entity(sync_constants.user_entity)
 
-      ~s/globalThis.Hologram.sync = {derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}};/
+      ~s/globalThis.Hologram.sync = {derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, userEntity: #{user_entity}};/
     end
   end
 
@@ -5544,6 +5555,15 @@ defmodule Hologram.Compiler do
           js_bindings_registration_call <> erlang_function_defs <> elixir_function_defs,
       import_statements: import_statements
     }
+  end
+
+  # Spelled as the model's keys are, the way a query term names its entity type.
+  defp render_user_entity(nil), do: "null"
+
+  defp render_user_entity(user_entity) do
+    user_entity
+    |> Codec.encode_enum_value()
+    |> Jason.encode!()
   end
 
   defp render_erlang_function_defs(mfas, ir_plt, erlang_js_dir) do

@@ -942,6 +942,115 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("sessionUser()", () => {
+    const USER = "MyApp.User";
+
+    const field = (boxed, name) =>
+      boxed.data[Type.encodeMapKey(Type.atom(name))][1];
+
+    beforeEach(() => {
+      globalThis.Hologram.sync = {
+        model: {
+          [USER]: {
+            attributes: {email: "string", id: "uuid", password_hash: "string"},
+            relationships: {},
+            serverOnly: ["password_hash"],
+          },
+        },
+        userEntity: USER,
+      };
+
+      Model.reset();
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = "u1";
+
+      LocalDatabase.putRow(USER, {
+        email: "ann@example.com",
+        email$sort: "ann@example.com",
+        id: "u1",
+      });
+
+      LocalDatabase.putRow(USER, {
+        email: "bob@example.com",
+        email$sort: "bob@example.com",
+        id: "u2",
+      });
+    });
+
+    afterEach(() => {
+      LocalDatabase.reset();
+      LocalDatabase.actorUserId = null;
+      delete globalThis.Hologram.sync;
+    });
+
+    it("answers the acting user's row", () => {
+      const user = DataLayer.sessionUser();
+
+      assert.deepStrictEqual(field(user, "id"), Type.bitstring("u1"));
+
+      assert.deepStrictEqual(
+        field(user, "email"),
+        Type.bitstring("ann@example.com"),
+      );
+    });
+
+    // What the server hands over for it in the context too.
+    it("answers an attribute the client may not have as the sentinel naming it", () => {
+      assert.deepStrictEqual(
+        field(DataLayer.sessionUser(), "password_hash"),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Entity.ServerOnly")],
+          [Type.atom("attribute"), Type.atom("password_hash")],
+        ]),
+      );
+    });
+
+    it("answers the row as it stands now", () => {
+      LocalDatabase.putRow(USER, {
+        email: "ann@example.org",
+        email$sort: "ann@example.org",
+        id: "u1",
+      });
+
+      assert.deepStrictEqual(
+        field(DataLayer.sessionUser(), "email"),
+        Type.bitstring("ann@example.org"),
+      );
+    });
+
+    it("answers nil when the acting user's row isn't held", () => {
+      LocalDatabase.actorUserId = "u3";
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
+    });
+
+    it("answers nil for an anonymous session", () => {
+      LocalDatabase.actorUserId = null;
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
+    });
+
+    // The server reads no row for a session user id that is not a canonical entity id.
+    it("answers nil for an actor id spelled like a member every object inherits", () => {
+      LocalDatabase.actorUserId = "constructor";
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
+    });
+
+    // A table reads an undefined key as the string "undefined".
+    it("answers nil for an actor id the mount data left out", () => {
+      LocalDatabase.putRow(USER, {
+        email: "eve@example.com",
+        email$sort: "eve@example.com",
+        id: "undefined",
+      });
+
+      LocalDatabase.actorUserId = undefined;
+
+      assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
+    });
+  });
+
   describe("streamOpened()", () => {
     it("wakes the sender", () => {
       const flushing = sinon.stub(Batches, "flush");
