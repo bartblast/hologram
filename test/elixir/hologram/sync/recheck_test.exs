@@ -20,6 +20,7 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module11
   alias Hologram.Test.Fixtures.Policy.Readers.Module12
   alias Hologram.Test.Fixtures.Policy.Readers.Module13
+  alias Hologram.Test.Fixtures.Policy.Readers.Module14, as: ReadersModule14
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
@@ -348,6 +349,22 @@ defmodule Hologram.Sync.RecheckTest do
 
       assert readers_of(readable, shared) == :all
       assert readers_of(readable, authored) == MapSet.new([context.alice])
+    end
+
+    test "names an anonymous reader a delegated rule admits through its part naming nobody",
+         context do
+      open_list = create(Module9, %{open: true})
+      board = create(Module12, %{archived: true})
+      closed_board = create(Module12, %{archived: true})
+      add_relationship(Module12, board.id, :lists, open_list.id)
+
+      delegating = create(ReadersModule14, %{board_id: board.id})
+      closed_delegating = create(ReadersModule14, %{board_id: closed_board.id})
+
+      readable =
+        assert_answers_as_can(ReadersModule14, [delegating, closed_delegating], context.users)
+
+      assert nil in readers_of(readable, delegating)
     end
 
     test "names an anonymous reader when only the folded rules admit one", context do

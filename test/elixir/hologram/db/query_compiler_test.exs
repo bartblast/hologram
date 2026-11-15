@@ -44,6 +44,7 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
   alias Hologram.Test.Fixtures.Policy.Readers.Module1, as: ReadersModule1
   alias Hologram.Test.Fixtures.Policy.Readers.Module10, as: ReadersModule10
+  alias Hologram.Test.Fixtures.Policy.Readers.Module12, as: ReadersModule12
   alias Hologram.Test.Fixtures.Policy.Readers.Module13, as: ReadersModule13
   alias Hologram.Test.Fixtures.Policy.Readers.Module2, as: ReadersModule2
   alias Hologram.Test.Fixtures.Policy.Readers.Module3, as: ReadersModule3
@@ -3726,6 +3727,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                          PolicyModule8,
                          ReadersModule1,
                          ReadersModule10,
+                         ReadersModule12,
                          ReadersModule13,
                          ReadersModule2,
                          ReadersModule3,
@@ -4063,26 +4065,49 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "decides anonymous users by the rules folded for nobody" do
+    # A rule answering the same for everyone admits anonymous users too, and $everyone holds its
+    # answer, so it isn't decided a second time for them.
+    test "decides anonymous users by the rules depending on the user alone, folded for nobody" do
       assert recheck(PolicyModule6, @recheck_mapping, true) == %{
-               params: [:ids, :users, {:value, true}, {:value, true}],
+               params: [:ids, :users, {:value, true}],
                sql:
                  recheck_sql(
                    PolicyModule6,
-                   ~s|("shared" = $4) IS TRUE|,
+                   "FALSE",
                    ~s|("shared" = $3) IS TRUE|,
                    listed_readers_sql(~s|SELECT "author_id"|, ~s|"author_id" = "$c"."$reader"|)
                  )
              }
     end
 
-    test "admits every anonymous user when a rule admits everyone" do
+    test "admits anonymous users through the part of a rule depending on the user naming nobody" do
+      join_table = ~s|"hologram_data"."test_fixtures_policy_readers_module12_lists_$join"|
+
+      assert %{params: params, sql: sql} = recheck(ReadersModule12, @recheck_mapping, true)
+
+      board = readers_table(ReadersModule12)
+
+      assert Enum.at(params, 5) == {:value, true}
+      assert length(params) == 20
+
+      assert String.contains?(
+               sql,
+               ~s|"$e"."$everyone", (((EXISTS (SELECT 1 | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+                 ~s|WHERE "$q1"."id" IN (SELECT "$qj1"."target_id" FROM #{join_table} AS "$qj1" | <>
+                 ~s|WHERE "$qj1"."source_id" = #{board}."id") AND "open" = $6)) OR | <>
+                 ~s|(EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_readers_module9" | <>
+                 ~s|AS "$d1" WHERE "$d1"."id" = #{board}."list_id" AND FALSE)))) IS TRUE AS "$anonymous"|
+             )
+    end
+
+    test "leaves a rule admitting everyone to $everyone, anonymous users included" do
       assert recheck(ReadersModule10, @recheck_mapping, true) == %{
                params: [:ids, :users],
                sql:
                  recheck_sql(
                    ReadersModule10,
-                   "TRUE",
+                   "FALSE",
                    "TRUE",
                    listed_readers_sql(
                      ~s|SELECT "assignee_id"|,

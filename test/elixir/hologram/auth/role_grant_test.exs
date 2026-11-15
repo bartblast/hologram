@@ -120,6 +120,7 @@ defmodule Hologram.Auth.RoleGrantTest do
                     Policy.Readers.Module11,
                     Policy.Readers.Module12,
                     Policy.Readers.Module13,
+                    Policy.Readers.Module14,
                     Policy.Readers.Module2,
                     Policy.Readers.Module3,
                     Policy.Readers.Module4,

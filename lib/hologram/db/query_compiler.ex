@@ -205,7 +205,10 @@ defmodule Hologram.DB.QueryCompiler do
     * `$everyone` - a rule answering the same for every user admits the row (see
       `Hologram.Policy.Readers.classify/2`), so every user may read it, anonymous ones included.
       Such rules are decided once per row.
-    * `$anonymous` - an anonymous user may read the row. FALSE unless the given flag asks for it.
+    * `$anonymous` - a rule depending on the user admits an anonymous one through a part of it
+      naming nobody, as `any(list <- lists, list.lead_id == user_id() or list.open == true)` does
+      for a row with an open list. A rule answering the same for everyone shows in `$everyone`
+      instead. FALSE unless the given flag asks for it.
     * `$readers` - the users of `:users` the rules depending on the user admit, each once, when
       `$everyone` is false, and an empty array otherwise.
 
@@ -234,17 +237,14 @@ defmodule Hologram.DB.QueryCompiler do
     {everyone_sql, params_after_everyone} =
       recheck_flag_sql(entity_type, mapping, %{rules: independent_rules}, initial_params)
 
+    # A rule answering the same for every user admits anonymous ones too, and $everyone already
+    # holds its answer, so only the rules depending on the user are folded for nobody.
     {anonymous_sql, params_after_anonymous} =
       if anonymous? do
-        rules =
-          entity_type
-          |> Policy.build()
-          |> Map.get(:read, [])
-
         recheck_flag_sql(
           entity_type,
           mapping,
-          %{anonymous?: true, rules: rules},
+          %{anonymous?: true, rules: Enum.map(dependent_classes, &elem(&1, 1))},
           params_after_everyone
         )
       else
