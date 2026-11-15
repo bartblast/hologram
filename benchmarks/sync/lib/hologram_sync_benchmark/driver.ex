@@ -7,25 +7,44 @@ defmodule HologramSyncBenchmark.Driver do
   # database, and runs the chosen case. The driver starts only what it needs itself - never
   # Hologram's application, which would make it a second node syncing against the same database.
 
+  alias HologramSyncBenchmark.Client
   alias HologramSyncBenchmark.Clients
   alias HologramSyncBenchmark.DB
   alias HologramSyncBenchmark.Entities.Card
   alias HologramSyncBenchmark.Peer
   alias HologramSyncBenchmark.Seed
+  alias HologramSyncBenchmark.Step
+  alias HologramSyncBenchmark.Sweep
+  alias HologramSyncBenchmark.Writer
 
   @board_page "HologramSyncBenchmark.BoardPage"
 
-  @cases ~w(boot seed smoke)
+  @board_sweep [1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000]
 
-  @connect_concurrency 50
+  @cases ~w(boot seed smoke board)
 
-  @default_cards 2_000
+  # The options and their defaults: the board's size, the client counts a sweep steps through,
+  # the steady writes' rate per second and length in seconds, the slowest p99 delivery in
+  # milliseconds a step passes with, and how long in seconds a client may take to fill.
+  @defaults [
+    cards: 2_000,
+    duration: 30,
+    fill_timeout: 300,
+    p99_limit: 1_000,
+    rate: 2
+  ]
 
   @default_smoke_clients 10
 
-  @fill_timeout_ms 300_000
-
-  @switches [cards: :integer, case: :string, clients: :integer]
+  @switches [
+    cards: :integer,
+    case: :string,
+    clients: :string,
+    duration: :integer,
+    fill_timeout: :integer,
+    p99_limit: :integer,
+    rate: :integer
+  ]
 
   @doc """
   Runs the benchmark with the given command line arguments and returns :ok.
@@ -50,7 +69,10 @@ defmodule HologramSyncBenchmark.Driver do
   defp parse_options!(argv) do
     case OptionParser.parse(argv, strict: @switches) do
       {opts, [], []} ->
-        validate_options!(opts)
+        @defaults
+        |> Keyword.merge(opts)
+        |> Keyword.update(:clients, nil, &parse_counts!/1)
+        |> validate_options!()
 
       {_opts, args, invalid} ->
         raise ArgumentError, "unknown arguments: #{inspect(args ++ invalid)}"
@@ -66,7 +88,39 @@ defmodule HologramSyncBenchmark.Driver do
       raise ArgumentError, "--#{key} must be at least 1"
     end
 
+    # Each timed write in a step goes to a row of its own: rounds merge, and a patch carries the
+    # row's current value, so two writes to one row in one round would lose the first marker.
+    writes = Step.writes(opts[:rate], opts[:duration])
+
+    if writes > opts[:cards] do
+      raise ArgumentError,
+            "a step makes #{writes} writes, more than the #{opts[:cards]} cards they go to"
+    end
+
+    if writes >= Sweep.markers_per_step() do
+      raise ArgumentError, "a step makes #{writes} writes, more than it has markers for"
+    end
+
     opts
+  end
+
+  defp parse_count!(text) do
+    text
+    |> String.trim()
+    |> String.to_integer()
+  end
+
+  defp parse_counts!(text) do
+    counts =
+      text
+      |> String.split(",", trim: true)
+      |> Enum.map(&parse_count!/1)
+
+    if counts == [] or Enum.any?(counts, &(&1 < 1)) do
+      raise ArgumentError, "--clients takes client counts of at least 1, like 1,10,100"
+    end
+
+    Sweep.sort_counts(counts)
   end
 
   # Boots a server node, renders a page on it and stops it - the check that the app, its database,
@@ -79,7 +133,7 @@ defmodule HologramSyncBenchmark.Driver do
   # that a case can start from a known state, and that the counters move.
   defp run_case("seed", opts) do
     conn = DB.connect!()
-    count = Keyword.get(opts, :cards, @default_cards)
+    count = opts[:cards]
 
     seeding = seed_board!(conn, count)
 
@@ -91,22 +145,91 @@ defmodule HologramSyncBenchmark.Driver do
   # card - the check that clients connect, sync and report.
   defp run_case("smoke", opts) do
     conn = DB.connect!()
-    count = Keyword.get(opts, :clients, @default_smoke_clients)
+    count = hd(opts[:clients] || [@default_smoke_clients])
 
-    :ok = Clients.check_limits!(count, @connect_concurrency)
-    _seeding = seed_board!(conn, Keyword.get(opts, :cards, @default_cards))
+    :ok = Clients.check_limits!(count, Step.connect_concurrency())
+    _seeding = seed_board!(conn, opts[:cards])
 
     Peer.with_peer(fn peer ->
       clients = start_clients(peer, count, "/board", @board_page)
 
-      [] = Clients.prepare_all(clients, @connect_concurrency)
-      failures = Clients.connect_all(clients, @connect_concurrency)
-      reports = Clients.await_fills(clients, @fill_timeout_ms)
+      [] = Clients.prepare_all(clients, Step.connect_concurrency())
+      failures = Clients.connect_all(clients, Step.connect_concurrency())
+      reports = Clients.await_fills(clients, opts[:fill_timeout] * 1_000)
 
       Clients.close_all(clients)
 
       print_fills(reports, failures)
     end)
+  end
+
+  # A shared board: every client sees every card, and every write reaches every client.
+  defp run_case("board", opts) do
+    conn = DB.connect!()
+    counts = opts[:clients] || @board_sweep
+
+    :ok =
+      counts
+      |> Enum.max()
+      |> Clients.check_limits!(Step.connect_concurrency())
+
+    _seeding = seed_board!(conn, opts[:cards])
+
+    results =
+      Sweep.run(
+        conn,
+        counts,
+        fn peer, count, first_marker ->
+          Step.run(peer, board_spec(conn, count, first_marker, opts))
+        end,
+        &passed?(&1, opts)
+      )
+
+    IO.puts("Clients per node on the board: #{Sweep.figure(results)}")
+  end
+
+  defp board_spec(conn, count, first_marker, opts) do
+    every_client = Enum.to_list(0..(count - 1))
+
+    %{
+      client_opts: fn peer ->
+        peer
+        |> client_opts("/board", @board_page)
+        |> List.duplicate(count)
+      end,
+      conn: conn,
+      duration_ms: opts[:duration] * 1_000,
+      expected: fn _number -> every_client end,
+      fill_timeout_ms: opts[:fill_timeout] * 1_000,
+      first_marker: first_marker,
+      rate: opts[:rate],
+      rows: &Peer.rpc(&1, Writer, :ids, [Card]),
+      write: fn peer, ids, offset, marker ->
+        Peer.rpc(peer, Writer, :update, [Card, elem(ids, offset), :title, Client.marker(marker)])
+      end
+    }
+  end
+
+  # The greeting names the server's model hash and protocol version, read from the server node,
+  # since the driver never boots Hologram.
+  defp client_opts(peer, cookie_path, page) do
+    [
+      base_url: Peer.base_url(peer),
+      cookie_path: cookie_path,
+      model_hash: Peer.rpc(peer, Hologram.Entity.Model, :hash, []),
+      page: page,
+      protocol_version: Peer.rpc(peer, Hologram.Sync.Frame, :protocol_version, [])
+    ]
+  end
+
+  # Every client filled in time, every write reached every client it should have, each single
+  # write within the wait, and the steady writes' p99 stayed within the limit.
+  defp passed?(result, opts) do
+    %{fill: fill, isolated: isolated, steady: steady} = result
+
+    fill.failed == 0 and fill.unfinished == 0 and fill.connect_failures == 0 and
+      Enum.all?(fill.ms, &(&1 <= opts[:fill_timeout] * 1_000)) and isolated.cut_short == 0 and
+      steady.missing == 0 and steady.p99_ms != nil and steady.p99_ms <= opts[:p99_limit]
   end
 
   defp print_fills(reports, failures) do
@@ -135,6 +258,8 @@ defmodule HologramSyncBenchmark.Driver do
 
     {table, seeding} =
       Peer.with_peer(fn peer ->
+        :ok = DB.disable_autovacuum!(conn)
+
         before = DB.settled_stats(conn)
         :ok = Peer.rpc(peer, Seed, :cards, [count])
 
@@ -158,18 +283,9 @@ defmodule HologramSyncBenchmark.Driver do
     seeding
   end
 
-  # The greeting names the server's model hash and protocol version, read from the server node,
-  # since the driver never boots Hologram.
   defp start_clients(peer, count, cookie_path, page) do
-    opts = [
-      base_url: Peer.base_url(peer),
-      cookie_path: cookie_path,
-      model_hash: Peer.rpc(peer, Hologram.Entity.Model, :hash, []),
-      page: page,
-      protocol_version: Peer.rpc(peer, Hologram.Sync.Frame, :protocol_version, [])
-    ]
-
-    opts
+    peer
+    |> client_opts(cookie_path, page)
     |> List.duplicate(count)
     |> Clients.start_all()
   end

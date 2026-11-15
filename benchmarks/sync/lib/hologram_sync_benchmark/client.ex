@@ -30,20 +30,40 @@ defmodule HologramSyncBenchmark.Client do
   # holding these characters travels with its quotes escaped.
   @synced_all_pattern ~s("scope":"all")
 
-  @patterns [@synced_all_pattern | Map.keys(@failure_patterns)]
+  # A timed write sets a column to a marker, the prefix and a number of a fixed width (see
+  # marker/1), and a client records when it first saw each one. Seeded values never start with
+  # the prefix.
+  @marker_prefix "wmk"
+
+  @marker_digits 7
+
+  @patterns [@marker_prefix, @synced_all_pattern | Map.keys(@failure_patterns)]
 
   # What of the previous chunk is kept, so a pattern split across two reads is still found: one
-  # byte short of the longest pattern. A shorter pattern can lie wholly inside it, so a match
-  # ending there was already taken with the previous chunk and is skipped.
-  @carry_bytes (@patterns
-                |> Enum.map(&byte_size/1)
-                |> Enum.max()) - 1
+  # byte short of the longest thing matched, a marker counted whole. A shorter one can lie wholly
+  # inside it, so a match ending there was already taken with the previous chunk and is skipped.
+  @carry_bytes Enum.max([
+                 byte_size(@marker_prefix) + @marker_digits | Enum.map(@patterns, &byte_size/1)
+               ]) - 1
+
+  # How long a stream has to have lasted for the browser to start its reconnect delay over.
+  @reconnect_reset_ms 5_000
+
+  # The browser's own reconnect delay (assets/js/sse.mjs): 250 ms doubling up to 5 s, with 25%
+  # jitter either way.
+  @reconnect_base_ms 250
+
+  @reconnect_max_ms 5_000
+
+  @reconnect_jitter 0.25
 
   @type report :: %{
           bytes: non_neg_integer,
           connect_retries: non_neg_integer,
           connected_at: integer | nil,
           failure: term | nil,
+          markers: %{non_neg_integer => integer},
+          restarts: non_neg_integer,
           synced_all_at: integer | nil
         }
 
@@ -69,6 +89,29 @@ defmodule HologramSyncBenchmark.Client do
   end
 
   @doc """
+  Returns whether the client has seen the marker with the given number, cheaper to ask than a
+  whole report while a step waits on a write.
+  """
+  @spec has_marker?(pid, non_neg_integer) :: boolean
+  def has_marker?(client, number) do
+    GenServer.call(client, {:has_marker?, number}, :infinity)
+  end
+
+  @doc """
+  Returns the marker a timed write with the given number sets, which a client records when it
+  first sees.
+  """
+  @spec marker(non_neg_integer) :: String.t()
+  def marker(number) do
+    digits =
+      number
+      |> Integer.to_string()
+      |> String.pad_leading(@marker_digits, "0")
+
+    @marker_prefix <> digits
+  end
+
+  @doc """
   Fetches the client's session cookie, returning :ok or `{:error, reason}`.
 
   Untimed: the request renders a page on the server, which isn't sync, and a browser coming back
@@ -82,14 +125,26 @@ defmodule HologramSyncBenchmark.Client do
   @doc """
   Returns what the client has recorded so far. Times are `:os.system_time(:microsecond)`, the
   clock the server node reads too.
+
+  `:connected_at` is the first connect and `:synced_all_at` the `synced` frame for the whole pot,
+  so their difference is the fill as the user waits for it, restarts included. `:markers` maps
+  each timed write's number to when it first arrived.
   """
   @spec report(pid) :: report
   def report(client) do
-    GenServer.call(client, :report)
+    # A client opening its stream again is busy in that call for as long as the server takes to
+    # answer, so a report can wait.
+    GenServer.call(client, :report, :infinity)
   end
 
   @doc """
   Starts a client that hasn't connected yet.
+
+  A stream that ends before the whole pot arrived is opened again after the browser's delay, the
+  way a browser starts a fill over, and counted in `:restarts`: the server cutting a fill short
+  (#1635) is a cost a user pays, not a failure of the run. A stream that ends after the fill
+  fails the client, since a browser would come back with a cursor and catch up, which this
+  client can't.
 
   Options: `:base_url`, `:cookie_path` (the page whose render hands out the session cookie, and
   signs the client in when it's a sign-in path), and the greeting: `:page`, and the server's
@@ -121,8 +176,12 @@ defmodule HologramSyncBenchmark.Client do
       greeting:
         Enum.map([:model_hash, :page, :protocol_version], &{&1, Keyword.fetch!(opts, &1)}),
       host: uri.host,
+      markers: %{},
       port: uri.port,
+      reconnect_attempt: 0,
       request_ref: nil,
+      restarts: 0,
+      stream_opened_at: nil,
       synced_all_at: nil
     }
 
@@ -155,13 +214,35 @@ defmodule HologramSyncBenchmark.Client do
     {:reply, {:error, :connected_before}, state}
   end
 
+  def handle_call({:has_marker?, number}, _from, state) do
+    {:reply, Map.has_key?(state.markers, number), state}
+  end
+
   def handle_call(:report, _from, state) do
-    report = Map.take(state, [:bytes, :connect_retries, :connected_at, :failure, :synced_all_at])
+    report =
+      Map.take(state, [
+        :bytes,
+        :connect_retries,
+        :connected_at,
+        :failure,
+        :markers,
+        :restarts,
+        :synced_all_at
+      ])
 
     {:reply, report, state}
   end
 
   @impl GenServer
+  # Tried again until the driver gives up on the fill, the way a browser keeps trying: what the
+  # server refuses mid-fill is part of the cost a fill has.
+  def handle_info(:reconnect, %{conn: nil} = state) do
+    case open_stream(state, 1) do
+      {:ok, state} -> {:noreply, state}
+      {:error, _reason, state} -> {:noreply, schedule_reconnect(state)}
+    end
+  end
+
   def handle_info(message, %{conn: conn} = state) when conn != nil do
     case Mint.HTTP.stream(conn, message) do
       {:ok, conn, responses} ->
@@ -170,7 +251,7 @@ defmodule HologramSyncBenchmark.Client do
       {:error, conn, reason, responses} ->
         state = handle_responses(%{state | conn: conn}, responses, now())
 
-        {:noreply, fail(state, {:stream_error, reason})}
+        {:noreply, lose_stream(state, {:stream_error, reason})}
 
       :unknown ->
         {:noreply, state}
@@ -190,6 +271,44 @@ defmodule HologramSyncBenchmark.Client do
 
   defp fail(state, _reason), do: state
 
+  # Already lost, by an earlier response of the same read.
+  defp lose_stream(%{conn: nil} = state, _reason), do: state
+
+  defp lose_stream(%{failure: nil, synced_all_at: nil} = state, _reason) do
+    Mint.HTTP.close(state.conn)
+
+    # A stream that lasted starts the delay over, as the browser's does.
+    attempt =
+      if now() - state.stream_opened_at >= @reconnect_reset_ms * 1_000,
+        do: 0,
+        else: state.reconnect_attempt
+
+    schedule_reconnect(%{
+      state
+      | carry: "",
+        conn: nil,
+        reconnect_attempt: attempt,
+        request_ref: nil,
+        restarts: state.restarts + 1
+    })
+  end
+
+  defp lose_stream(state, reason), do: fail(state, reason)
+
+  defp schedule_reconnect(state) do
+    attempt = state.reconnect_attempt + 1
+    Process.send_after(self(), :reconnect, reconnect_delay_ms(attempt))
+
+    %{state | reconnect_attempt: attempt}
+  end
+
+  defp reconnect_delay_ms(attempt) do
+    base = min(@reconnect_base_ms * Integer.pow(2, attempt - 1), @reconnect_max_ms)
+    jitter = base * @reconnect_jitter * (2 * :rand.uniform() - 1)
+
+    round(base + jitter)
+  end
+
   # A chunk is matched with the tail of the one before it, so a pattern split across two TCP reads
   # is still found, in one pass over the chunk for every pattern.
   defp handle_chunk(state, chunk, received_at) do
@@ -206,9 +325,12 @@ defmodule HologramSyncBenchmark.Client do
     state =
       joined
       |> :binary.matches(patterns())
-      |> Enum.reject(fn {start, length} -> start + length <= old_carry_size end)
-      |> Enum.reduce(state, fn {start, length}, acc ->
-        take_match(acc, binary_part(joined, start, length), received_at)
+      |> Enum.map(fn {start, length} -> {start, match_size(joined, start, length)} end)
+      |> Enum.filter(fn {start, size} ->
+        start + size > old_carry_size and start + size <= byte_size(joined)
+      end)
+      |> Enum.reduce(state, fn {start, size}, acc ->
+        take_match(acc, binary_part(joined, start, size), received_at)
       end)
 
     %{state | bytes: state.bytes + byte_size(chunk), carry: carry}
@@ -228,6 +350,23 @@ defmodule HologramSyncBenchmark.Client do
     end
   end
 
+  # A marker is its prefix and the digits after it. One whose digits haven't arrived yet is
+  # dropped here and found whole in the next chunk, since it starts inside the carry.
+  defp match_size(joined, start, length) do
+    if binary_part(joined, start, length) == @marker_prefix do
+      length + @marker_digits
+    else
+      length
+    end
+  end
+
+  defp take_match(state, @marker_prefix <> digits, received_at) do
+    case Integer.parse(digits) do
+      {number, ""} -> %{state | markers: Map.put_new(state.markers, number, received_at)}
+      _not_a_marker -> state
+    end
+  end
+
   defp take_match(%{synced_all_at: nil} = state, @synced_all_pattern, received_at) do
     %{state | synced_all_at: received_at}
   end
@@ -240,10 +379,17 @@ defmodule HologramSyncBenchmark.Client do
 
   defp handle_responses(state, responses, received_at) do
     Enum.reduce(responses, state, fn
-      {:data, ref, chunk}, %{request_ref: ref} = state -> handle_chunk(state, chunk, received_at)
-      {:done, ref}, %{request_ref: ref} = state -> fail(state, :stream_ended)
-      {:error, ref, reason}, %{request_ref: ref} = state -> fail(state, {:stream_error, reason})
-      _other, state -> state
+      {:data, ref, chunk}, %{request_ref: ref} = state ->
+        handle_chunk(state, chunk, received_at)
+
+      {:done, ref}, %{request_ref: ref} = state ->
+        lose_stream(state, :stream_ended)
+
+      {:error, ref, reason}, %{request_ref: ref} = state ->
+        lose_stream(state, {:stream_error, reason})
+
+      _other, state ->
+        state
     end)
   end
 
@@ -311,8 +457,8 @@ defmodule HologramSyncBenchmark.Client do
          {:ok, conn, handshake_id} <- redeem_handshake(conn, cookie_header, instance_id),
          params = state.greeting ++ [handshake_id: handshake_id, instance_id: instance_id],
          {:ok, conn, ref, early_chunks} <- request_stream(conn, cookie_header, params) do
-      state = %{state | conn: conn, request_ref: ref}
       received_at = now()
+      state = %{state | conn: conn, request_ref: ref, stream_opened_at: received_at}
 
       {:ok, Enum.reduce(early_chunks, state, &handle_chunk(&2, &1, received_at))}
     else

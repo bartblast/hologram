@@ -22,6 +22,7 @@ defmodule HologramSyncBenchmark.DB do
 
   @type stats :: %{
           active_ms: float,
+          at_ms: integer,
           tup_fetched: non_neg_integer,
           tup_returned: non_neg_integer,
           xact_commit: non_neg_integer
@@ -48,6 +49,42 @@ defmodule HologramSyncBenchmark.DB do
   end
 
   @doc """
+  Returns how many times autovacuum has vacuumed or analyzed the benchmark's tables so far, for
+  a step to check that it didn't run while being measured.
+  """
+  @spec autovacuum_runs(pid) :: non_neg_integer
+  def autovacuum_runs(conn) do
+    %{rows: [[runs]]} =
+      Postgrex.query!(
+        conn,
+        """
+        SELECT coalesce(sum(autovacuum_count + autoanalyze_count), 0)::bigint
+        FROM pg_stat_user_tables
+        WHERE schemaname = $1 OR (schemaname = $2 AND relname = ANY($3))
+        """,
+        [Mapper.data_schema(), Mapper.system_schema(), @log_tables]
+      )
+
+    runs
+  end
+
+  @doc """
+  Turns autovacuum off for every entity table and Hologram's log, and returns :ok.
+
+  A step's writes cross the log's autoanalyze threshold, and autovacuum's work would land in
+  the counters as the step's, so the database runs none of its own: the driver vacuums and
+  analyzes between steps instead. The setting survives TRUNCATE, so once per case is enough,
+  after a server node has created the tables. A production database pays for autovacuum, which
+  these figures leave out.
+  """
+  @spec disable_autovacuum!(pid) :: :ok
+  def disable_autovacuum!(conn) do
+    conn
+    |> list_tables()
+    |> Enum.each(&Postgrex.query!(conn, "ALTER TABLE #{&1} SET (autovacuum_enabled = false)", []))
+  end
+
+  @doc """
   Empties every entity table and Hologram's log, and returns :ok.
 
   For the start of a case, with no server node running. The tables are read from the catalog,
@@ -56,20 +93,7 @@ defmodule HologramSyncBenchmark.DB do
   """
   @spec reset!(pid) :: :ok
   def reset!(conn) do
-    %{rows: rows} =
-      Postgrex.query!(
-        conn,
-        """
-        SELECT table_schema, table_name
-        FROM information_schema.tables
-        WHERE table_schema = $1 OR (table_schema = $2 AND table_name = ANY($3))
-        """,
-        [Mapper.data_schema(), Mapper.system_schema(), @log_tables]
-      )
-
-    tables = Enum.map(rows, fn [schema, table] -> qualified(schema, table) end)
-
-    truncate!(conn, tables)
+    truncate!(conn, list_tables(conn))
   end
 
   @doc """
@@ -116,6 +140,8 @@ defmodule HologramSyncBenchmark.DB do
   The rows read by scans and by lookups stay apart, since summing them counts a lookup twice:
   an index scan adds to both.
 
+  `:at_ms` is when they were read, so a difference of two reads carries the time between them.
+
   The counters cover the whole database, not one node: this read itself adds a commit and some
   catalog rows, and so do autovacuum's workers. A phase's figure is the difference between two
   reads, with the idle rate subtracted where the phase has one.
@@ -135,6 +161,7 @@ defmodule HologramSyncBenchmark.DB do
 
     %{
       active_ms: active_ms,
+      at_ms: System.monotonic_time(:millisecond),
       tup_fetched: tup_fetched,
       tup_returned: tup_returned,
       xact_commit: xact_commit
@@ -161,6 +188,21 @@ defmodule HologramSyncBenchmark.DB do
     Postgrex.query!(conn, "VACUUM ANALYZE", [], timeout: :infinity)
 
     :ok
+  end
+
+  defp list_tables(conn) do
+    %{rows: rows} =
+      Postgrex.query!(
+        conn,
+        """
+        SELECT table_schema, table_name
+        FROM information_schema.tables
+        WHERE table_schema = $1 OR (table_schema = $2 AND table_name = ANY($3))
+        """,
+        [Mapper.data_schema(), Mapper.system_schema(), @log_tables]
+      )
+
+    Enum.map(rows, fn [schema, table] -> qualified(schema, table) end)
   end
 
   defp log_tables do

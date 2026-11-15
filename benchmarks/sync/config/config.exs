@@ -19,8 +19,8 @@ config :hologram_sync_benchmark, HologramSyncBenchmarkWeb.Endpoint,
   url: [host: "localhost"]
 
 # Named outright: the default name follows the env, and the server node runs as :test while the
-# driver runs as :dev.
-config :hologram, :database, database: "hologram_sync_benchmark", pool_size: 20
+# driver runs as :dev. The pool keeps Hologram's default size, 10, as an app that doesn't set one.
+config :hologram, :database, database: "hologram_sync_benchmark"
 
 config :logger, level: :warning
 

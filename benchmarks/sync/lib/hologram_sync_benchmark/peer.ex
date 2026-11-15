@@ -84,6 +84,12 @@ defmodule HologramSyncBenchmark.Peer do
   end
 
   @doc """
+  Returns where the server node logs, written over by each new one.
+  """
+  @spec log_path :: String.t()
+  def log_path, do: Path.expand(@log_path)
+
+  @doc """
   Calls the given function on the given peer and returns its result, raising when the call
   fails there.
   """
@@ -129,7 +135,7 @@ defmodule HologramSyncBenchmark.Peer do
         env: [{~c"HOLOGRAM_ENV", ~c"test"}, {~c"HOLOGRAM_START", ~c"1"}]
       })
 
-    peer = %{log_path: Path.expand(@log_path), node: node, pid: pid, port: port}
+    peer = %{log_path: log_path(), node: node, pid: pid, port: port}
 
     # Stopped here when the boot fails, since the caller never gets the peer to stop. Caught
     # rather than rescued: a call that exits on the peer comes back as an exit.
@@ -210,7 +216,18 @@ defmodule HologramSyncBenchmark.Peer do
     |> Path.dirname()
     |> File.mkdir_p!()
 
-    config = %{config: %{file: String.to_charlist(peer.log_path), modes: [:write]}}
+    # The overload limits are raised and the burst limit is off, so a burst of stream kills is
+    # written down rather than dropped: the step counts them from this file.
+    config = %{
+      config: %{
+        burst_limit_enable: false,
+        drop_mode_qlen: 100_000,
+        file: String.to_charlist(peer.log_path),
+        flush_qlen: 200_000,
+        modes: [:write],
+        sync_mode_qlen: 50_000
+      }
+    }
 
     :ok = rpc(peer, :logger, :add_handler, [@log_handler, :logger_std_h, config])
   end
@@ -233,6 +250,10 @@ defmodule HologramSyncBenchmark.Peer do
     # Removed once booted rather than before: the Logger application sets the console handler up
     # as it starts.
     :ok = rpc(peer, :logger, :remove_handler, [:default])
+
+    _holder = Node.spawn(peer.node, HologramSyncBenchmark.Measure, :hold_scheduler_wall_time, [])
+
+    :ok
   end
 
   defp await_node_down(node, 0), do: raise("#{inspect(node)} did not stop")

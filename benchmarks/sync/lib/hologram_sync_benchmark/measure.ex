@@ -1,0 +1,150 @@
+defmodule HologramSyncBenchmark.Measure do
+  @moduledoc false
+
+  # What a step reads off the server node and turns into figures: CPU from scheduler samples,
+  # memory after a collection, delivery times from the clients' reports.
+
+  alias HologramSyncBenchmark.Peer
+
+  @heap_kill_line "maximum heap size reached"
+
+  @type cpu_sample :: {integer, term}
+
+  @doc """
+  Returns the CPU time the server node's schedulers were busy between the two samples, in
+  milliseconds.
+
+  Normal and dirty CPU schedulers count, each by its own utilization over the time between the
+  samples. Dirty IO schedulers wait on IO rather than compute, so they're left out.
+
+  A scheduler counts as busy while its thread runs work, including time the OS has the thread
+  descheduled for another process, so on a machine whose cores the clients and Postgres share,
+  this overstates the CPU the node used.
+  """
+  @spec cpu_ms(cpu_sample, cpu_sample) :: float
+  def cpu_ms({_earlier_at, earlier} = earlier_sample, {_later_at, later} = later_sample) do
+    elapsed_ms = elapsed_ms(earlier_sample, later_sample)
+
+    busy =
+      for {type, _id, utilization, _percent} <- :scheduler.utilization(earlier, later),
+          type in [:normal, :cpu],
+          reduce: 0.0 do
+        sum -> sum + utilization
+      end
+
+    busy * elapsed_ms
+  end
+
+  @doc """
+  Returns a sample of the server node's schedulers, for `cpu_ms/2`, with when it was taken.
+  """
+  @spec cpu_sample(Peer.t()) :: cpu_sample
+  def cpu_sample(peer) do
+    Peer.rpc(peer, __MODULE__, :sample_on_node, [])
+  end
+
+  @doc """
+  Returns the milliseconds between the two samples, by the server node's clock.
+  """
+  @spec elapsed_ms(cpu_sample, cpu_sample) :: float
+  def elapsed_ms({earlier_at, _earlier}, {later_at, _later}), do: (later_at - earlier_at) / 1_000
+
+  @doc """
+  Returns a sample of this node's schedulers with when it was taken, raising when scheduler wall
+  time is off, since every sample would then read as idle. Runs on the server node.
+
+  Taken and timed in one place, so the time between two samples is the node's own, with no
+  call's round trip in it.
+  """
+  @spec sample_on_node :: cpu_sample
+  def sample_on_node do
+    if :erlang.statistics(:scheduler_wall_time) == :undefined do
+      raise "scheduler wall time is off on the server node"
+    end
+
+    {System.monotonic_time(:microsecond), :scheduler.sample_all()}
+  end
+
+  @doc """
+  Counts the processes the given log says were killed for their heap size.
+  """
+  @spec heap_kills(String.t()) :: non_neg_integer
+  def heap_kills(log_path) do
+    log_path
+    |> File.stream!()
+    |> Enum.count(&String.contains?(&1, @heap_kill_line))
+  end
+
+  @doc """
+  Returns the delivery times of the given writes, in milliseconds, and how many deliveries never
+  came.
+
+  `writes` maps a write's number to when it committed, and `expected` names, for a write's
+  number, the indexes of the reports that should have it. Times are from the commit to the first
+  arrival of the write's marker.
+  """
+  @spec latencies(%{non_neg_integer => integer}, [map], (non_neg_integer -> [non_neg_integer])) ::
+          {[float], non_neg_integer}
+  def latencies(writes, reports, expected) do
+    reports = List.to_tuple(reports)
+
+    for {number, committed_at} <- writes,
+        index <- expected.(number),
+        reduce: {[], 0} do
+      {times, missing} ->
+        case elem(reports, index).markers do
+          %{^number => received_at} -> {[(received_at - committed_at) / 1_000 | times], missing}
+          _absent -> {times, missing + 1}
+        end
+    end
+  end
+
+  @doc """
+  Returns the server node's total memory in bytes, every process garbage collected first so the
+  figure is what it holds rather than what it hasn't freed yet.
+  """
+  @spec memory(Peer.t()) :: non_neg_integer
+  def memory(peer) do
+    Peer.rpc(peer, __MODULE__, :settled_memory, [])
+  end
+
+  @doc """
+  Returns the value at the given percentile of the given numbers, nearest rank, or nil for none.
+  """
+  @spec percentile([number], number) :: number | nil
+  def percentile([], _percent), do: nil
+
+  def percentile(values, percent) do
+    sorted = Enum.sort(values)
+    rank = max(ceil(percent / 100 * length(sorted)), 1)
+
+    Enum.at(sorted, rank - 1)
+  end
+
+  @doc """
+  Collects garbage in every process and returns the node's total memory in bytes. Runs on the
+  server node.
+  """
+  @spec settled_memory :: non_neg_integer
+  def settled_memory do
+    Enum.each(Process.list(), &:erlang.garbage_collect/1)
+
+    :erlang.memory(:total)
+  end
+
+  @doc """
+  Turns on scheduler wall time and holds it on for as long as the calling process lives, which
+  never returns. Runs on the server node, in a process of its own.
+
+  The flag counts per process that turned it on and goes off when the last of them exits, so
+  turning it on from a call would leave it on only for that call.
+  """
+  @spec hold_scheduler_wall_time :: no_return
+  def hold_scheduler_wall_time do
+    :erlang.system_flag(:scheduler_wall_time, true)
+
+    receive do
+      :never -> hold_scheduler_wall_time()
+    end
+  end
+end
