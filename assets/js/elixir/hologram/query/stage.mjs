@@ -358,6 +358,20 @@ function filterableNames(entityType) {
   ].sort();
 }
 
+// Whether data-form predicates hold the actor leaf anywhere - as a value, an operand, a membership
+// element, inside a disjunction or a quantifier's condition. No attribute value is a one-element
+// tuple, so the leaf can't be anything else.
+function holdsActorLeaf(value) {
+  if (isActorLeaf(value)) {
+    return true;
+  }
+
+  return (
+    (Type.isList(value) || Type.isTuple(value)) &&
+    value.data.some(holdsActorLeaf)
+  );
+}
+
 // A derived field holding a value is included with nothing under it, as null. Any other name is
 // included as its related type's whole term, what the nested spec names included under it - a
 // derived field holding rows takes nested includes only, since its definition states its rows.
@@ -432,7 +446,7 @@ function inspectName(name) {
     : Interpreter.inspect(name);
 }
 
-// The {:actor} leaf user_id() lowers to - bare, or as the operand of an equality operator.
+// The {:actor} leaf user_id() lowers to in a policy condition.
 function isActorLeaf(value) {
   return (
     Type.isTuple(value) &&
@@ -721,12 +735,6 @@ function operatorTriples(name, tuple, entityType, scope) {
     ];
   }
 
-  if (EQUALITY_OPERATORS.includes(operator) && isActorLeaf(operand)) {
-    validateActorAttribute(name, entityType);
-
-    return [[nameValue(name), operator, {actor: true}]];
-  }
-
   if (EQUALITY_OPERATORS.includes(operator)) {
     validateScalarOperand(name, operator, operand);
 
@@ -777,8 +785,8 @@ function placeholderLeaf(placeholder) {
 }
 
 // Every shape a predicate value can take, dispatched in the order the Elixir clauses are written
-// in - the shapes that are structures (a range, a placeholder, the actor) before the general tuple, and
-// the general tuple before the plain value a bare term falls through to.
+// in - the shapes that are structures (a range, a placeholder) before the general tuple, and the
+// general tuple before the plain value a bare term falls through to.
 function predicateTriples(name, value, entityType, scope) {
   if (isStruct(value, "Range")) {
     return rangeTriples(name, value, entityType);
@@ -786,12 +794,6 @@ function predicateTriples(name, value, entityType, scope) {
 
   if (isStruct(value, "Hologram.Query.Placeholder")) {
     return [[nameValue(name), "==", placeholderLeaf(value)]];
-  }
-
-  if (isActorLeaf(value)) {
-    validateActorAttribute(name, entityType);
-
-    return [[nameValue(name), "==", {actor: true}]];
   }
 
   if (isAttributeOperand(value)) {
@@ -1092,8 +1094,6 @@ function toTerm(query) {
   };
 }
 
-// The actor leaf carries the acting user's entity id, so it compares only against names holding
-// one - any other type would build a comparison that never matches.
 // A second claim is refused where it is written: a struct carrying two authorities would have to
 // pick one at the write, silently.
 function putClaim(entity, claim, stage) {
@@ -1252,16 +1252,6 @@ function putPairs(values, stage) {
   }
 
   return entries;
-}
-
-function validateActorAttribute(name, entityType) {
-  const type = nameType(entityType, name);
-
-  if (type !== "uuid") {
-    Interpreter.raiseMisuseError(
-      `user_id() requires a uuid attribute - attribute ${inspectName(name)} in ${entityType} has type :${type}`,
-    );
-  }
 }
 
 function validateAttributeName(name, entityType, usage) {
@@ -1919,6 +1909,15 @@ const Elixir_Hologram_Query_Stage = {
     if (!isPredicateList(predicates)) {
       Interpreter.raiseMisuseError(
         `filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: ${Interpreter.inspect(predicates)}`,
+      );
+    }
+
+    // A filter means the same rows whoever asks, and the read policy is what narrows them to each
+    // user, so the actor leaf is refused wherever it sits, before anything judges what it is
+    // compared with.
+    if (holdsActorLeaf(predicates)) {
+      Interpreter.raiseMisuseError(
+        `a filter can't name the acting user - only a policy condition can, got: ${Interpreter.inspect(predicates)} - to filter by a user's id, pin a variable holding it: ^user_id`,
       );
     }
 

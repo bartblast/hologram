@@ -1358,10 +1358,74 @@ defmodule Hologram.Query.ExpressionTest do
                    fn -> lower_predicates("[a == 1, b == 2]") end
     end
 
+    # A pinned call is the surrounding code's own function, whatever its name, so the data form
+    # gets the hint for the expression it means.
+    test "passes over a pinned user_id() call in a keyword value" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:7: a keyword predicate is an equality, got: [owner_id: {:==, ^user_id()}] - write it as an expression: owner_id == ^user_id()",
+                   fn -> lower_predicates("[owner_id: {:==, ^user_id()}]") end
+    end
+
+    test "raises on user_id() as a bound of a range" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
+                   fn -> lower_predicates("owner_id in 1..user_id()") end
+    end
+
     test "raises on user_id() as a comparison operand" do
       assert_error Hologram.CompileError,
-                   "lib/my_app/queries.ex:12: a comparison operand is a literal, an attribute, a path or a pinned expression, got: user_id() - a value from the surrounding code is pinned: ^user_id()",
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
                    fn -> lower_predicates("owner_id == user_id()") end
+    end
+
+    test "raises on user_id() as a keyword value" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
+                   fn -> lower_predicates("[owner_id: user_id()]") end
+    end
+
+    test "raises on user_id() as a membership element" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
+                   fn -> lower_predicates("owner_id in [user_id()]") end
+    end
+
+    test "raises on user_id() as a membership operand" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
+                   fn -> lower_predicates("owner_id in user_id()") end
+    end
+
+    test "raises on user_id() as a search term" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
+                   fn -> lower_predicates("contains(name, user_id())") end
+    end
+
+    test "raises on user_id() as an element of a membership list in a keyword value" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
+                   fn -> lower_predicates("[owner_id: [user_id()]]") end
+    end
+
+    test "raises on user_id() as an operator tuple's operand in a keyword value" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
+                   fn -> lower_predicates("[owner_id: {:==, user_id()}]") end
+    end
+
+    test "raises on user_id() in a quantifier's condition" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
+                   fn ->
+                     lower_predicates("any(member <- members, member.user_id == user_id())")
+                   end
+    end
+
+    test "raises on user_id() in an alternative" do
+      assert_error Hologram.CompileError,
+                   "lib/my_app/queries.ex:12: a filter can't name the acting user - only a policy condition can, got: user_id() - to filter by a user's id, pin a variable holding it: ^user_id",
+                   fn -> lower_predicates("a == 1 or owner_id == user_id()") end
     end
   end
 end

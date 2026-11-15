@@ -77,7 +77,8 @@ defmodule Hologram.Entity.DerivedExpression do
   call into Elixir's or Erlang's own modules, an imported one included, a function of
   Hologram.Query that is no stage a derived body calls, a query builder of another module where a
   value goes, a query starting from an entity type, a condition anywhere but the body and `if`, a
-  comparison of something that is no field, and a name no argument binds, located at the head.
+  comparison of something that is no field, `user_id()` in a query, and a name no argument binds,
+  located at the head.
   """
   @spec function(Macro.t(), Macro.t(), Macro.Env.t()) :: {list(atom), Macro.t(), boolean}
   def function(name, {:fn, meta, [{:->, arrow_meta, [args, body]}]}, env) do
@@ -633,6 +634,17 @@ defmodule Hologram.Entity.DerivedExpression do
   end
 
   defp query_position({:^, meta, [expr]}, state), do: {:^, meta, [pinned!(expr, state)]}
+
+  # The filter's own refusal of user_id() would tell the developer to pin a user's id, which a
+  # derived query can't do either - its value is the same whoever reads it, the reason the stage
+  # gives a pinned actor in a derived query too.
+  defp query_position({:user_id, _meta, []} = ast, state) do
+    compile_error!(
+      "#{state.field} names user_id() - a derived field's query can't name the acting user, only a policy condition can, since a derived value is the same whoever reads it",
+      ast,
+      state
+    )
+  end
 
   defp query_position({:__aliases__, _meta, _segments} = ast, state) do
     Macro.expand(ast, state.env)
