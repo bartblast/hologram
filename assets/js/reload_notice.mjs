@@ -96,7 +96,20 @@ export default class ReloadNotice {
       padding: "6px 12px",
     });
 
-    reload.addEventListener("click", () => Hologram.reloadBrowserLocation());
+    // Once what the person wrote is in the store, which a reload would otherwise cut short. Disabled
+    // across the wait, which can be long enough to click again, and only across it: a reload the
+    // page's own beforeunload prompt talked the person out of leaves the button to click again.
+    reload.addEventListener("click", async () => {
+      reload.disabled = true;
+
+      try {
+        await Hologram.dataLayer?.saved();
+      } finally {
+        reload.disabled = false;
+      }
+
+      Hologram.reloadBrowserLocation();
+    });
 
     const dismiss = $.#buildButton("×", {
       background: "transparent",

@@ -100,14 +100,68 @@ describe("ReloadNotice", () => {
       assert.isNotNull(notice());
     });
 
-    it("reloads the page when the person asks for it", () => {
-      const reloading = sinon.stub(Hologram, "reloadBrowserLocation");
+    describe("when the person asks for a reload", () => {
+      let record, reloading;
 
-      ReloadNotice.update(true);
+      beforeEach(() => {
+        reloading = sinon.stub(Hologram, "reloadBrowserLocation");
 
-      buttons()[0].click();
+        Hologram.dataLayer = {
+          saved: () =>
+            new Promise((resolve) => {
+              record = resolve;
+            }),
+        };
+      });
 
-      sinon.assert.calledOnce(reloading);
+      afterEach(() => {
+        Hologram.dataLayer = null;
+      });
+
+      // A reload would otherwise cut short a write still on its way into the store.
+      it("reloads the page once what the person wrote is saved", async () => {
+        ReloadNotice.update(true);
+
+        buttons()[0].click();
+
+        await clock.tickAsync(0);
+
+        sinon.assert.notCalled(reloading);
+
+        record();
+
+        await clock.tickAsync(0);
+
+        sinon.assert.calledOnce(reloading);
+      });
+
+      // The wait can be long enough to click again.
+      it("takes one click while it waits", async () => {
+        ReloadNotice.update(true);
+
+        buttons()[0].click();
+        buttons()[0].click();
+
+        assert.isTrue(buttons()[0].disabled);
+
+        record();
+
+        await clock.tickAsync(0);
+
+        sinon.assert.calledOnce(reloading);
+      });
+
+      // A reload the page's own beforeunload prompt talked the person out of.
+      it("can be clicked again once the wait is over", async () => {
+        ReloadNotice.update(true);
+
+        buttons()[0].click();
+        record();
+
+        await clock.tickAsync(0);
+
+        assert.isFalse(buttons()[0].disabled);
+      });
     });
 
     // The framework never reloads a page on its own.

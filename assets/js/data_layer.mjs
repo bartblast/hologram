@@ -20,6 +20,10 @@ import SyncStream from "./sync_stream.mjs";
 import Tabs from "./tabs.mjs";
 import Type from "./type.mjs";
 
+// How long a page about to be loaded afresh waits for this tab's writes to reach the store. A write
+// takes milliseconds; this is the bound for one that never answers.
+const SAVE_WAIT_MS = 3000;
+
 // The client half of the data layer behind one class: each public static is a place where the
 // runtime hands control to the data layer. The data layer's own modules - the batches, the deltas,
 // the durable store, the local database, the model, the query kernel, the replica, the tabs and
@@ -531,6 +535,26 @@ export default class DataLayer {
   // runs.
   static openBatch(target) {
     Batches.open(target);
+  }
+
+  // Settles once what this tab's actions wrote is in the store, for a page about to be loaded afresh
+  // (see Batches.recorded) - or after SAVE_WAIT_MS, whichever comes first. A store write that never
+  // answers would otherwise leave a click on a link doing nothing at all.
+  static saved() {
+    let timer;
+
+    return Promise.race([
+      Batches.recorded(),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, SAVE_WAIT_MS);
+      }),
+    ]).finally(() => clearTimeout(timer));
+  }
+
+  // Whether the server stopped serving this tab, which a navigation answers by loading the page
+  // afresh: in-app, the next page would run the same code the server can no longer serve.
+  static stopped() {
+    return SyncStream.stopReason !== null;
   }
 
   // Called by every render that finished: a tab the server stopped serving says so to the person

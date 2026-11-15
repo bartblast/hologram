@@ -416,14 +416,19 @@ export default class Hologram {
 
   // Made public to make tests easier
   static executeLoadPrefetchedPageAction(action, eventTargetNode) {
+    const toParam = Hologram.#getToParam(action);
+    const pagePath = Hologram.#buildPagePath(toParam);
+
+    if ($.#isStopped()) {
+      $.#loadAfresh($.#beginNavigation(), pagePath);
+      return;
+    }
+
     // A click that no pointer press came before - Enter on a focused link, a screen reader,
     // element.click() - finds nothing prefetched, and one whose press came long ago finds a stale
     // page, so the click fetches the page itself then. Its fetch is still on its way below, so the
     // click confirms the navigation and the fetch finishes it.
     Hologram.executePrefetchPageAction(action, eventTargetNode);
-
-    const toParam = Hologram.#getToParam(action);
-    const pagePath = Hologram.#buildPagePath(toParam);
 
     const mapKey = Hologram.#buildPrefetchedPagesMapKey(
       eventTargetNode,
@@ -450,6 +455,11 @@ export default class Hologram {
 
   // Made public to make tests easier
   static executePrefetchPageAction(action, eventTargetNode) {
+    // The page will be loaded afresh rather than from what a prefetch would bring.
+    if ($.#isStopped()) {
+      return;
+    }
+
     Hologram.#ensureDomNodeHasHologramId(eventTargetNode);
 
     const toParam = Hologram.#getToParam(action);
@@ -499,7 +509,14 @@ export default class Hologram {
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
 
-      if ($.navigationCount === mapValue.navigation) {
+      if ($.navigationCount !== mapValue.navigation) {
+        return;
+      }
+
+      // Asked for before the server stopped serving the tab, and answered after.
+      if ($.#isStopped()) {
+        $.#loadAfresh(mapValue.navigation, mapValue.pagePath);
+      } else {
         Hologram.navigateBrowserTo(mapValue.pagePath);
       }
     } else {
@@ -751,6 +768,16 @@ export default class Hologram {
     historyEntryId = null,
   ) {
     const navigation = $.#beginNavigation();
+
+    // Asked for before the server stopped serving the tab, and answered after (see #loadAfresh).
+    // Ahead of the identity's check below, which loads afresh too, but without waiting for the
+    // store.
+    if ($.#isStopped()) {
+      return $.#loadAfresh(
+        navigation,
+        historyEntryId === null ? pagePath : null,
+      );
+    }
 
     // A page described for an identity that has since changed, a prefetch kept across a logout or
     // a response read before one, is loaded afresh instead, so that the page shown is the one the
@@ -1824,6 +1851,12 @@ export default class Hologram {
       }
     }
 
+    // The entry's page is loaded afresh, as any page is in a tab the server stopped (see
+    // #loadAfresh). The browser shows the entry's URL already.
+    if ($.#isStopped()) {
+      return $.#loadAfresh(navigation, null);
+    }
+
     // The same boundary as #showNewPage, on the history's side of it. It cannot wait for the
     // restore below, which a popstate carrying no snapshot skips.
     $.#disarmLeftPage();
@@ -2306,7 +2339,14 @@ export default class Hologram {
         // Reloaded rather than replaced with the path: the address bar shows the entry's URL
         // already, and a replace to it is a jump within the document when it has a fragment.
         () => {
-          if (!isSuperseded()) {
+          if (isSuperseded()) {
+            return;
+          }
+
+          // Asked for before the server stopped serving the tab, and answered after.
+          if ($.#isStopped()) {
+            $.#loadAfresh(navigation, null);
+          } else {
             Hologram.reloadBrowserLocation();
           }
         },
@@ -2443,12 +2483,54 @@ export default class Hologram {
     const navigation = $.#beginNavigation();
     const isTakenOver = () => $.navigationCount !== navigation;
 
+    if ($.#isStopped()) {
+      return $.#loadAfresh(navigation, pagePath);
+    }
+
     return Client.fetchPage(
       toParam,
       (payload) =>
         isTakenOver() ? null : Hologram.loadNewPage(pagePath, payload),
-      () => (isTakenOver() ? null : Hologram.navigateBrowserTo(pagePath)),
+      () => {
+        if (isTakenOver()) {
+          return;
+        }
+
+        // Asked for before the server stopped serving the tab, and answered after.
+        if ($.#isStopped()) {
+          $.#loadAfresh(navigation, pagePath);
+        } else {
+          Hologram.navigateBrowserTo(pagePath);
+        }
+      },
     );
+  }
+
+  // Whether the server stopped serving this tab after a deploy (see DataLayer.stopped).
+  static #isStopped() {
+    return Hologram.dataLayer?.stopped() === true;
+  }
+
+  // How a tab the server stopped serving after a deploy goes to another page: by loading it afresh,
+  // which brings the code the server serves now, rather than running the next page on the code it
+  // can no longer serve. The person is leaving this page anyway, so nothing they were doing is
+  // lost - once what they wrote is in the store, which is waited for first. A navigation begun
+  // meanwhile takes over.
+  //
+  // Given no path, the entry the browser is on is reloaded: it shows that entry's URL already, and
+  // a replace to it would only jump within the document when the URL has a fragment.
+  static async #loadAfresh(navigation, pagePath) {
+    await Hologram.dataLayer.saved();
+
+    if ($.navigationCount !== navigation) {
+      return;
+    }
+
+    if (pagePath === null) {
+      Hologram.reloadBrowserLocation();
+    } else {
+      Hologram.navigateBrowserTo(pagePath);
+    }
   }
 
   // Mounts the page once the scripts it requires are loaded (see MountGate): at once when they
@@ -2540,8 +2622,21 @@ export default class Hologram {
               hopCount + 1,
               historyEntryId,
             ),
-      () =>
-        isTakenOver() ? null : $.#handToBrowser(payload.to, historyEntryId),
+      () => {
+        if (isTakenOver()) {
+          return;
+        }
+
+        // Asked for before the server stopped serving the tab, and answered after.
+        if ($.#isStopped()) {
+          $.#loadAfresh(
+            navigation,
+            historyEntryId === null ? payload.to : null,
+          );
+        } else {
+          $.#handToBrowser(payload.to, historyEntryId);
+        }
+      },
     );
   }
 

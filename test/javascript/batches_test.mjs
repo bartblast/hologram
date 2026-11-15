@@ -1681,6 +1681,81 @@ describe("Batches", () => {
     });
   });
 
+  describe("recorded()", () => {
+    it("settles once every sealed batch is written down", async () => {
+      Batches.open("todos");
+      wrote("t1");
+      const batch = Batches.close();
+
+      let record;
+
+      batch.recorded = new Promise((resolve) => {
+        record = resolve;
+      });
+
+      let settled = false;
+
+      const waiting = Batches.recorded().then(() => {
+        settled = true;
+      });
+
+      await waitForEventLoop();
+
+      assert.isFalse(settled);
+
+      record();
+      await waiting;
+
+      assert.isTrue(settled);
+    });
+
+    // The page is live through the wait, so an action can seal another batch meanwhile.
+    it("waits for a batch sealed while it waits", async () => {
+      Batches.open("todos");
+      wrote("t1");
+      Batches.close();
+
+      let record;
+
+      const waiting = Batches.recorded();
+
+      Batches.open("todos");
+      wrote("t2");
+
+      Batches.close().recorded = new Promise((resolve) => {
+        record = resolve;
+      });
+
+      let settled = false;
+
+      waiting.then(() => {
+        settled = true;
+      });
+
+      await waitForEventLoop();
+
+      assert.isFalse(settled);
+
+      record();
+      await waiting;
+
+      assert.isTrue(settled);
+    });
+
+    // A write that failed has said so already, and a page load waiting on it goes ahead.
+    it("settles when a write failed", async () => {
+      Batches.open("todos");
+      wrote("t1");
+      Batches.close().recorded = Promise.reject(new Error("store gone"));
+
+      await Batches.recorded();
+    });
+
+    it("settles at once with nothing sealed", async () => {
+      await Batches.recorded();
+    });
+  });
+
   describe("disown()", () => {
     const STAMP = 1_798_246_400_125_952;
 

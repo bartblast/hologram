@@ -181,6 +181,31 @@ export default class Batches {
     return Batches.#running;
   }
 
+  // Settles once every batch this tab has sealed is written down - for a page about to be loaded
+  // afresh, which would otherwise leave behind a batch whose write had not finished. Asked again
+  // after each wait, since the page is live through it and an action can seal another. Never
+  // rejects: a write that failed has said so already, and the load goes ahead either way.
+  //
+  // What an action suspended across an await has written is not waited for: its batch is sealed
+  // only when the action comes back, which is app code, and may never be.
+  static async recorded() {
+    const waited = new Set();
+
+    while (true) {
+      const sealed = Batches.pending.filter((batch) => !waited.has(batch));
+
+      if (sealed.length === 0) {
+        return;
+      }
+
+      for (const batch of sealed) {
+        waited.add(batch);
+      }
+
+      await Promise.allSettled(sealed.map((batch) => batch.recorded));
+    }
+  }
+
   // Every batch this tab is holding, let go: out of the queue, so this tab does not send it, and
   // out of the overlay, so nothing is shown that this tab can no longer learn the fate of.
   //

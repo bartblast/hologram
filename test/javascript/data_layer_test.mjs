@@ -967,6 +967,53 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("saved()", () => {
+    it("waits for what this tab sealed to be written down", async () => {
+      const recording = sinon.stub(Batches, "recorded").resolves([]);
+
+      await DataLayer.saved();
+
+      sinon.assert.calledOnce(recording);
+    });
+
+    // A store write that never answers would otherwise leave a link doing nothing.
+    it("stops waiting after three seconds", async () => {
+      const clock = sinon.useFakeTimers();
+
+      sinon.stub(Batches, "recorded").returns(new Promise(() => {}));
+
+      let settled = false;
+
+      DataLayer.saved().then(() => {
+        settled = true;
+      });
+
+      await clock.tickAsync(2999);
+
+      assert.isFalse(settled);
+
+      await clock.tickAsync(1);
+
+      assert.isTrue(settled);
+    });
+  });
+
+  describe("stopped()", () => {
+    afterEach(() => {
+      SyncStream.stopReason = null;
+    });
+
+    it("is true once the server stopped serving the tab", () => {
+      SyncStream.stopReason = "protocol_version";
+
+      assert.isTrue(DataLayer.stopped());
+    });
+
+    it("is false while the server serves it", () => {
+      assert.isFalse(DataLayer.stopped());
+    });
+  });
+
   describe("streamOpened()", () => {
     it("wakes the sender", () => {
       const flushing = sinon.stub(Batches, "flush");
