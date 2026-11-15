@@ -56,7 +56,7 @@ defmodule Hologram.Sync.Search do
       Enum.flat_map(effects, fn effect ->
         triggers
         |> Map.get(effect.type, [])
-        |> Enum.flat_map(fn {entity_type, edge} -> entries(effect, entity_type, edge) end)
+        |> Enum.flat_map(&entries(effect, &1))
       end)
 
     %{rows: walk_entries(entries, DB.mapping()), whole_types: %{}}
@@ -64,11 +64,41 @@ defmodule Hologram.Sync.Search do
 
   # An entry is a walk to run: ids at the end of a chain prefix, to be followed back to the rows of
   # the type the prefix starts from.
-  defp entries(effect, entity_type, {:relationship_attributes, chain, _target_type, names}) do
+  #
+  # A row reached through an inverse of a to-one is in the set of whichever row its reference names,
+  # so the step back from it reads that reference. As the table now stands it names the set the row
+  # is in, which the walk reads - and what the effect recorded names the sets it was in: the row a
+  # patch moved it away from, and the row a deleted one held, which the table no longer has. Those
+  # enter the walk past that step, at the rows the reference names.
+  defp entries(effect, {entity_type, {kind, chain, _target_type, names}, recorded_reference})
+       when kind in [:relationship_attributes, :set_attributes] do
     if touches?(effect, names) do
-      [{entity_type, chain, [effect.entity_id]}]
+      [
+        {entity_type, chain, [effect.entity_id]}
+        | recorded_entries(effect, entity_type, recorded_reference)
+      ]
     else
       []
+    end
+  end
+
+  defp field_value(nil, _field), do: nil
+
+  defp field_value(values, field), do: Map.get(values, field)
+
+  # What following a relationship from the given type reads, by where the fact lives: the row's own
+  # reference column, the type's own join table, the other type's reference column (an inverse of a
+  # to-one, a single inverse or a set), or the other type's join table (an inverse of a to-many).
+  defp link_kind(owner_type, link) do
+    case Entity.inverse_relationship(owner_type, link) do
+      %{reference?: true, forward: forward, target: target_type} ->
+        {:inverse_to_one, target_type, forward}
+
+      %{reference?: false, forward: forward, target: target_type} ->
+        {:inverse_to_many, target_type, forward}
+
+      nil ->
+        if is_list(Entity.relationship_target(owner_type, link)), do: :to_many, else: :to_one
     end
   end
 
@@ -85,6 +115,26 @@ defmodule Hologram.Sync.Search do
 
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
+  end
+
+  # The ids the effect recorded in the reference the walk's last step reads - see entries/2.
+  defp recorded_entries(_effect, _entity_type, nil), do: []
+
+  defp recorded_entries(effect, entity_type, {prefix, field}) do
+    [{entity_type, prefix, [field_value(effect.data, field), field_value(effect.old, field)]}]
+  end
+
+  # The reference a walk along the edge reads at its last step, when that step is an inverse of a
+  # to-one: the chain before the link, and the field the other type holds the reference in. Resolved
+  # once per edge rather than once per effect.
+  defp recorded_reference(entity_type, {kind, chain, _target_type, _names})
+       when kind in [:relationship_attributes, :set_attributes] do
+    {prefix, [link]} = Enum.split(chain, -1)
+
+    case link_kind(Entity.path_target(entity_type, prefix), link) do
+      {:inverse_to_one, _target_type, forward} -> {prefix, "#{forward}_id"}
+      _other_kind -> nil
+    end
   end
 
   defp reference_column(mapping, entity_type, link) do
@@ -113,9 +163,13 @@ defmodule Hologram.Sync.Search do
     end
   end
 
+  defp step_statement(mapping, owner_type, link) do
+    step_statement(mapping, owner_type, link, link_kind(owner_type, link))
+  end
+
   # A stored to-one: the rows whose reference column holds one of the ids.
   # sobelow_skip ["SQL.Query"]
-  defp step_statement(mapping, owner_type, link) do
+  defp step_statement(mapping, owner_type, link, :to_one) do
     %{table: table} = Map.fetch!(mapping, owner_type)
 
     column =
@@ -124,6 +178,19 @@ defmodule Hologram.Sync.Search do
       |> Mapper.quote_identifier()
 
     ~s|SELECT "id" FROM #{qualified_table(table)} WHERE #{column} = ANY($1::uuid[])|
+  end
+
+  # An inverse of a to-one: the rows the ids' reference columns name.
+  # sobelow_skip ["SQL.Query"]
+  defp step_statement(mapping, _owner_type, _link, {:inverse_to_one, target_type, forward}) do
+    %{table: table} = Map.fetch!(mapping, target_type)
+
+    column =
+      mapping
+      |> reference_column(target_type, forward)
+      |> Mapper.quote_identifier()
+
+    ~s|SELECT #{column} FROM #{qualified_table(table)} WHERE "id" = ANY($1::uuid[])|
   end
 
   # A put says what a row became and a delete what it was, every column of it, so they touch every
@@ -142,7 +209,9 @@ defmodule Hologram.Sync.Search do
   # happens to know for something else - either way it moved nothing this build can follow.
   defp touches?(%{op: op}, _names) when op not in @known_ops, do: false
 
-  defp trigger_type({:relationship_attributes, _chain, target_type, _names}), do: target_type
+  defp trigger_type({kind, _chain, target_type, _names})
+       when kind in [:relationship_attributes, :set_attributes],
+       do: target_type
 
   defp trigger_type(_edge), do: nil
 
@@ -155,8 +224,11 @@ defmodule Hologram.Sync.Search do
     end)
     |> Enum.flat_map(fn {entity_type, edge} ->
       case trigger_type(edge) do
-        nil -> []
-        trigger_type -> [{trigger_type, {entity_type, edge}}]
+        nil ->
+          []
+
+        trigger_type ->
+          [{trigger_type, {entity_type, edge, recorded_reference(entity_type, edge)}}]
       end
     end)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))

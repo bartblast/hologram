@@ -4,9 +4,15 @@ defmodule Hologram.Sync.SearchTest do
   import Hologram.Sync.Search
 
   alias Hologram.DB
+  alias Hologram.DB.Oplog
   alias Hologram.Policy.Edges
+  alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
+  alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
+  alias Hologram.Test.Fixtures.Policy.Module18, as: PolicyModule18
+  alias Hologram.Test.Fixtures.Policy.Module20, as: PolicyModule20
+  alias Hologram.Test.Fixtures.Policy.Module25, as: PolicyModule25
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
 
   @unknown_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
@@ -18,6 +24,15 @@ defmodule Hologram.Sync.SearchTest do
       {:attributes, [:parent_id]},
       {:relationship_attributes, [:parent], PolicyModule5, [:parent_id]},
       {:relationship_attributes, [:parent, :parent], PolicyModule1, [:public]}
+    ]
+  }
+
+  # Module17's read rule reads any(member <- members, member.user_id == user_id()): the set of
+  # Module18 rows whose project reference names it.
+  @members_edges %{
+    {PolicyModule17, :read} => [
+      {:attributes, [:public]},
+      {:set_attributes, [:members], PolicyModule18, [:project_id, :user_id]}
     ]
   }
 
@@ -204,6 +219,195 @@ defmodule Hologram.Sync.SearchTest do
       effects = [effect(:patch_entity, PolicyModule1, top.id, %{"priority" => 3})]
 
       assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
+    end
+
+    # The row is created outside the set, so only what the put recorded names the project.
+    test "lists the row whose set a new row joins" do
+      project = create!(PolicyModule17)
+      member = create!(PolicyModule18)
+
+      data = %{"project_id" => project.id, "seat" => nil, "user_id" => nil}
+      effects = [effect(:put_entity, PolicyModule18, member.id, data)]
+
+      assert candidates(effects, @members_edges).rows == %{PolicyModule17 => ids([project])}
+    end
+
+    test "lists the row whose set holds a row patched on a column the edge names" do
+      project = create!(PolicyModule17)
+      user = create!(Module14, email: "a@b.c")
+      member = create!(PolicyModule18, project_id: project.id)
+
+      effects = [effect(:patch_entity, PolicyModule18, member.id, %{"user_id" => user.id})]
+
+      assert candidates(effects, @members_edges).rows == %{PolicyModule17 => ids([project])}
+    end
+
+    test "lists nothing for a row of a set patched on a column the edge doesn't name" do
+      project = create!(PolicyModule17)
+      member = create!(PolicyModule18, project_id: project.id)
+
+      effects = [effect(:patch_entity, PolicyModule18, member.id, %{"seat" => "full"})]
+
+      assert candidates(effects, @members_edges) == %{rows: %{}, whole_types: %{}}
+    end
+
+    test "lists the rows of both sets a moved row left and joined" do
+      left = create!(PolicyModule17)
+      joined = create!(PolicyModule17)
+      member = create!(PolicyModule18, project_id: joined.id)
+
+      effects = [
+        effect(
+          :patch_entity,
+          PolicyModule18,
+          member.id,
+          %{"project_id" => joined.id},
+          %{"project_id" => left.id}
+        )
+      ]
+
+      assert candidates(effects, @members_edges).rows == %{
+               PolicyModule17 => ids([left, joined])
+             }
+    end
+
+    test "lists the row whose set a row left by unsetting its reference" do
+      left = create!(PolicyModule17)
+      member = create!(PolicyModule18)
+
+      effects = [
+        effect(:patch_entity, PolicyModule18, member.id, %{"project_id" => nil}, %{
+          "project_id" => left.id
+        })
+      ]
+
+      assert candidates(effects, @members_edges).rows == %{PolicyModule17 => ids([left])}
+    end
+
+    test "lists the row whose set a deleted row was in, from what the delete recorded" do
+      project = create!(PolicyModule17)
+      member = create!(PolicyModule18, project_id: project.id)
+
+      DB.delete!(member)
+
+      data = %{"project_id" => project.id, "seat" => nil, "user_id" => nil}
+      effects = [effect(:del_entity, PolicyModule18, member.id, data)]
+
+      assert candidates(effects, @members_edges).rows == %{PolicyModule17 => ids([project])}
+    end
+
+    # The effect names another row than the table does, so only reading the table lists the row the
+    # profile now names.
+    test "lists the row a single inverse of a to-one reads" do
+      earlier = create!(PolicyModule17)
+      project = create!(PolicyModule17)
+      profile = create!(PolicyModule25, project_id: project.id)
+
+      edges = %{
+        {PolicyModule17, :read} => [{:set_attributes, [:profile], PolicyModule25, [:project_id]}]
+      }
+
+      effects = [
+        effect(:patch_entity, PolicyModule25, profile.id, %{"project_id" => earlier.id}, %{
+          "project_id" => nil
+        })
+      ]
+
+      assert candidates(effects, edges).rows == %{PolicyModule17 => ids([earlier, project])}
+    end
+
+    test "lists the rows a path leads back to from the rows of a set" do
+      left = create!(PolicyModule17)
+      joined = create!(PolicyModule17)
+      other = create!(PolicyModule17)
+      member = create!(PolicyModule18, project_id: joined.id)
+
+      tasks = [
+        create!(PolicyModule20, project_id: left.id),
+        create!(PolicyModule20, project_id: joined.id)
+      ]
+
+      create!(PolicyModule20, project_id: other.id)
+
+      edges = %{
+        {PolicyModule20, :read} => [
+          {:attributes, [:project_id]},
+          {:set_attributes, [:project, :members], PolicyModule18, [:project_id, :user_id]}
+        ]
+      }
+
+      effects = [
+        effect(
+          :patch_entity,
+          PolicyModule18,
+          member.id,
+          %{"project_id" => joined.id},
+          %{"project_id" => left.id}
+        )
+      ]
+
+      assert candidates(effects, edges).rows == %{PolicyModule20 => ids(tasks)}
+    end
+
+    test "lists the rows a to-one followed from the rows of a set leads back to" do
+      user = create!(Module14, email: "a@b.c")
+      other_user = create!(Module14, email: "d@e.f")
+      projects = [create!(PolicyModule17), create!(PolicyModule17)]
+      other_project = create!(PolicyModule17)
+
+      Enum.each(projects, &create!(PolicyModule18, project_id: &1.id, user_id: user.id))
+      create!(PolicyModule18, project_id: other_project.id, user_id: other_user.id)
+
+      edges = %{
+        {PolicyModule17, :read} => [{:set_attributes, [:members, :user], Module14, [:email]}]
+      }
+
+      effects = [effect(:patch_entity, Module14, user.id, %{"email" => "g@h.i"})]
+
+      assert candidates(effects, edges).rows == %{PolicyModule17 => ids(projects)}
+    end
+
+    test "follows the effects the log recorded for a move and a delete" do
+      left = create!(PolicyModule17)
+      joined = create!(PolicyModule17)
+      held = create!(PolicyModule17)
+      moved = create!(PolicyModule18, project_id: left.id)
+      deleted = create!(PolicyModule18, project_id: held.id)
+
+      DB.update!(PolicyModule18, moved.id, project_id: joined.id)
+      DB.delete!(deleted)
+
+      effects =
+        PolicyModule18
+        |> Oplog.read_type_after(0, 0, %{})
+        |> Enum.filter(&(&1.op in [:patch_entity, :del_entity]))
+
+      assert candidates(effects, @members_edges).rows == %{
+               PolicyModule17 => ids([left, joined, held])
+             }
+    end
+
+    test "follows the set edges the policies derive" do
+      left = create!(PolicyModule17)
+      joined = create!(PolicyModule17)
+      member = create!(PolicyModule18, project_id: joined.id)
+
+      edges = Edges.derive([PolicyModule17, PolicyModule18])
+
+      effects = [
+        effect(
+          :patch_entity,
+          PolicyModule18,
+          member.id,
+          %{"project_id" => joined.id},
+          %{"project_id" => left.id}
+        )
+      ]
+
+      assert candidates(effects, edges) == %{
+               rows: %{PolicyModule17 => ids([left, joined])},
+               whole_types: %{}
+             }
     end
   end
 end
