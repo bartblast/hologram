@@ -50,6 +50,39 @@ defmodule Hologram.Realtime.SSE.ReadSyncStartTest do
   # Starting a sync reads the data model after the handshake found it released, and a live reload
   # can hold it in between - the client then waits for the compile like one arriving under the
   # hold, rather than the stream raising.
+  # The session reads the gap again for itself, and that read has to answer at the same doors the
+  # start read did, under the same rules and types.
+  describe "sync_session_opts/5" do
+    defp gap_reader(cursor) do
+      start = %{edges: nil, cursor: cursor, gap_end: nil, rules: nil, types_hash: @types_hash}
+      connection = %{applied_seq: nil, fill_place: {200, 0}, replica_id: nil}
+
+      sync_session_opts(nil, MyApp.Page, @policy_hash, start, connection)[:read_gap]
+    end
+
+    test "hands the session a gap reader that reads past a place filled under the same rules and types" do
+      {tx, seq} = seed(200)
+
+      assert gap_reader(Cursor.encode(tx, seq, @policy_hash, @types_hash)).() == {:ok, [], nil}
+    end
+
+    test "hands the session a gap reader that refuses a place filled with other types" do
+      {tx, seq} = seed(200)
+
+      cursor = Cursor.encode(tx, seq, @policy_hash, Cursor.types_hash([]))
+
+      assert gap_reader(cursor).() == {:full_resync, :synced_types}
+    end
+
+    test "hands the session a gap reader that refuses a place judged under other rules" do
+      {tx, seq} = seed(200)
+
+      cursor = Cursor.encode(tx, seq, "fedcba9876543210fedcba9876543210", @types_hash)
+
+      assert gap_reader(cursor).() == {:full_resync, :policy_hash}
+    end
+  end
+
   describe "read_sync_start/5" do
     test "waits for the compile when a hold began before the rules a stale client is handed" do
       on_exit(&Model.release/0)

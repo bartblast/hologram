@@ -466,6 +466,41 @@ defmodule Hologram.Realtime.SSETest do
     end
   end
 
+  describe "sync_session_opts/5" do
+    @policy_hash "0123456789abcdef0123456789abcdef"
+    @types_hash "00112233445566778899aabbccddeeff"
+
+    defp sync_start(cursor) do
+      %{edges: nil, cursor: cursor, gap_end: nil, rules: nil, types_hash: @types_hash}
+    end
+
+    defp connection do
+      %{applied_seq: 3, fill_place: {200, 0}, replica_id: nil}
+    end
+
+    # What the places the session hands over are stamped with, beside the rules.
+    test "hands the session the types hash the start read decided" do
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
+
+      assert opts[:types_hash] == @types_hash
+      assert opts[:policy_hash] == @policy_hash
+    end
+
+    test "hands no gap reader to a client arriving with nothing" do
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
+
+      assert opts[:read_gap] == nil
+    end
+
+    test "hands the session what was read beside the connection's identity" do
+      opts = sync_session_opts(nil, MyApp.Page, @policy_hash, sync_start(nil), connection())
+
+      assert opts[:applied_seq] == 3
+      assert opts[:fill_place] == {200, 0}
+      assert opts[:replica_id] == nil
+    end
+  end
+
   describe "encode_reload_envelope/2" do
     test "wraps the JSON list of page module names in a reload SSE event envelope" do
       assert encode_reload_envelope(42, [Module2, Module3]) ==

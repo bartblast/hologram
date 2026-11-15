@@ -579,6 +579,36 @@ defmodule Hologram.Realtime.SSE do
     StaleModelError -> :held
   end
 
+  # The options a sync session is started with, for the given user and page, under the rules of the
+  # given policy hash, from what the start read decided (see `read_sync_start/5`) and what was read
+  # beside the connection's identity: its replica, how far that replica's batches are applied, and
+  # where the log stood. Public so tests can check what the session is handed without standing up
+  # a stream.
+  @doc false
+  @spec sync_session_opts(term | nil, term, String.t(), map, map) :: keyword
+  def sync_session_opts(user_id, page, policy_hash, start, connection) do
+    # Handed over as a reader rather than read here, because the session decides WHEN the gap is
+    # read - which runs it in the session's process, query and memory alike. Closing over the
+    # cursor alone keeps the rest of `start` out of the session's heap.
+    cursor = start.cursor
+    types_hash = start.types_hash
+    read_gap = cursor && fn -> Catchup.gap(cursor, user_id, policy_hash, types_hash) end
+
+    [
+      actor_user_id: user_id,
+      applied_seq: connection.applied_seq,
+      client: self(),
+      edges: start.edges,
+      fill_place: connection.fill_place,
+      gap_end: start.gap_end,
+      page: page,
+      policy_hash: policy_hash,
+      read_gap: read_gap,
+      replica_id: connection.replica_id,
+      types_hash: types_hash
+    ]
+  end
+
   # Public so tests can check what a greeting's identity is worth without standing up a stream.
   @doc false
   @spec verified_replica_id(map, Plug.Conn.t(), term | nil) :: String.t() | nil
@@ -1074,27 +1104,16 @@ defmodule Hologram.Realtime.SSE do
     # Read here, beside the identity it is read for.
     applied_seq = replica_id && Record.highest_confirmed_seq(replica_id)
 
-    # Handed over as a reader rather than read here, because the session decides WHEN the gap is
-    # read - which runs it in the session's process, query and memory alike. Closing over the
-    # cursor alone keeps the rest of `start` out of the session's heap.
-    cursor = start.cursor
-    types_hash = start.types_hash
-    read_gap = cursor && fn -> Catchup.gap(cursor, user_id, policy_hash, types_hash) end
+    connection = %{
+      applied_seq: applied_seq,
+      fill_place: {Oplog.current_xmin(), 0},
+      replica_id: replica_id
+    }
 
     {:ok, session} =
-      SyncSession.start_link(
-        actor_user_id: user_id,
-        applied_seq: applied_seq,
-        client: self(),
-        edges: start.edges,
-        fill_place: {Oplog.current_xmin(), 0},
-        gap_end: start.gap_end,
-        page: page,
-        policy_hash: policy_hash,
-        read_gap: read_gap,
-        replica_id: replica_id,
-        types_hash: types_hash
-      )
+      user_id
+      |> sync_session_opts(page, policy_hash, start, connection)
+      |> SyncSession.start_link()
 
     {conn, session}
   end
