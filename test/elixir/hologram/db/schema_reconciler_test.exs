@@ -404,6 +404,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                ["inserted_at", "timestamp with time zone", true],
                ["model_hash", "text", true],
                ["mutation_ref", "jsonb", false],
+               ["old", "jsonb", false],
                ["op", "text", true],
                ["revisions", "jsonb", false],
                ["seq", "bigint", true],
