@@ -156,13 +156,15 @@ defmodule Hologram.DB.EntityOperations do
 
     transaction_result =
       Connection.transaction(fn ->
-        delete_outgoing_edges(join_tables, encoded_id)
+        edge_effects = delete_outgoing_edges(entity_type, id, join_tables, encoded_id)
 
-        # The edges the delete took with it are not recorded one by one: a row that is gone
-        # takes whatever hung off it, and a reader learning the entity is gone knows that.
+        # Every edge the delete takes with it is recorded, ahead of the row. A reader learning the
+        # entity is gone knows its own edges went with it, but the targets don't: each one's
+        # inverse of the relationship lost a row, and what a read rule reads through that set may
+        # have moved. Once the delete commits, nothing else says which rows those were.
         case delete_entity_row(entity_type, table, encoded_id) do
           nil -> :ok
-          entity -> Oplog.append([delete_effect(entity)])
+          entity -> Oplog.append(Enum.concat(edge_effects, [delete_effect(entity)]))
         end
 
         :ok
@@ -618,14 +620,19 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # The effects of the removed edges, each join table's ordered by target.
   # sobelow_skip ["SQL.Query"]
-  defp delete_outgoing_edges(join_tables, encoded_id) do
-    Enum.each(join_tables, fn join_table ->
-      statement = ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1|
+  defp delete_outgoing_edges(entity_type, id, join_tables, encoded_id) do
+    Enum.flat_map(join_tables, fn join_table ->
+      statement =
+        ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1 RETURNING "target_id"|
 
       case Connection.query(statement, [encoded_id]) do
-        {:ok, _result} -> :ok
-        {:error, error} -> raise error
+        {:ok, %Postgrex.Result{rows: rows}} ->
+          removed_edge_effects(entity_type, id, join_table.relationship, rows)
+
+        {:error, error} ->
+          raise error
       end
     end)
   end
@@ -1037,6 +1044,21 @@ defmodule Hologram.DB.EntityOperations do
       end)
 
     "\"$revisions\" = \"$revisions\" || jsonb_build_object(#{entries})"
+  end
+
+  defp removed_edge_effects(entity_type, id, relationship_name, rows) do
+    rows
+    |> Enum.map(fn [target_id] -> Codec.decode(target_id, :uuid) end)
+    |> Enum.sort()
+    |> Enum.map(fn target_id ->
+      %{
+        op: :del_relationship,
+        entity_type: entity_type,
+        entity_id: id,
+        relationship: relationship_name,
+        target_id: target_id
+      }
+    end)
   end
 
   defp revisions_from_row(revisions, columns) do
