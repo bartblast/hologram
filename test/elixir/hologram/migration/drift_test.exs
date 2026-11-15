@@ -272,7 +272,7 @@ defmodule Hologram.Migration.DriftTest do
           ~s{ALTER TABLE "hologram_data"."#{old_table}" RENAME CONSTRAINT "#{join_table}_$pk" TO "#{old_table}_$pk"},
           ~s{ALTER TABLE "hologram_data"."#{old_table}" RENAME CONSTRAINT "#{join_table}_source_id_$fk" TO "#{old_table}_source_id_$fk"},
           ~s{ALTER TABLE "hologram_data"."#{old_table}" RENAME CONSTRAINT "#{join_table}_target_id_$fk" TO "#{old_table}_target_id_$fk"},
-          ~s{ALTER INDEX "hologram_data"."#{join_table}_target_id_$idx" RENAME TO "#{old_table}_target_id_$idx"},
+          ~s{ALTER INDEX "hologram_data"."#{join_table}_target_id_source_id_$idx" RENAME TO "#{old_table}_target_id_source_id_$idx"},
           ~s{ALTER TABLE "hologram_data"."my_app_task" RENAME CONSTRAINT "my_app_task_$pk" TO "my_app_task_old_$pk"}
         ]
 

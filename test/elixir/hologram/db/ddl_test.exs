@@ -496,14 +496,14 @@ defmodule Hologram.DB.DDLTest do
       op = %{
         op: :create_index,
         table: "task_tags_$join",
-        index: "task_tags_$join_target_id_$idx",
+        index: "task_tags_$join_target_id_source_id_$idx",
         columns: ["target_id", "source_id"],
         nulls_distinct: true,
         unique: false
       }
 
       assert statements(op) == [
-               ~s(CREATE INDEX "task_tags_$join_target_id_$idx" ) <>
+               ~s(CREATE INDEX "task_tags_$join_target_id_source_id_$idx" ) <>
                  ~s{ON "hologram_data"."task_tags_$join" ("target_id", "source_id")}
              ]
     end

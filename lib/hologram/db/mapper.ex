@@ -671,7 +671,7 @@ defmodule Hologram.DB.Mapper do
         relationship: name,
         source_table: table_name(entity_type),
         target_table: table_name(target),
-        reverse_index: fit_identifier(join_segments, ["target_id"], "$idx"),
+        reverse_index: fit_identifier(join_segments, ["target_id", "source_id"], "$idx"),
         pk_constraint: fit_identifier(join_segments, [], "$pk"),
         source_fk_constraint: fit_identifier(join_segments, ["source_id"], "$fk"),
         target_fk_constraint: fit_identifier(join_segments, ["target_id"], "$fk")

@@ -398,7 +398,7 @@ defmodule Hologram.DB.IntrospectionTest do
 
     test "introspects the fixture join table reverse index" do
       assert schema().tables["test_fixtures_entity_module3_a_$join"].indexes == %{
-               "test_fixtures_entity_module3_a_$join_target_id_$idx" => %{
+               "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx" => %{
                  columns: ["target_id", "source_id"],
                  nulls_distinct: true,
                  unique: false

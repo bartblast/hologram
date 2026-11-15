@@ -1025,7 +1025,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       reconcile(reconcile_context([Module1, Module2, Module3]))
       insert_module3_link()
 
-      new_name = "test_fixtures_entity_module3_renamed_$join"
+      new_name = "test_fixtures_entity_module3_z_$join"
 
       context =
         [Module1, Module2, Module3]
@@ -1035,7 +1035,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
             %{
               join_table
               | name: new_name,
-                reverse_index: "#{new_name}_target_id_$idx",
+                reverse_index: "#{new_name}_target_id_source_id_$idx",
                 pk_constraint: "#{new_name}_$pk",
                 source_fk_constraint: "#{new_name}_source_id_$fk",
                 target_fk_constraint: "#{new_name}_target_id_$fk"
@@ -1075,7 +1075,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                {:constraint, new_name, "#{new_name}_$pk"},
                {:constraint, new_name, "#{new_name}_source_id_$fk"},
                {:constraint, new_name, "#{new_name}_target_id_$fk"},
-               {:index, new_name, "#{new_name}_target_id_$idx"},
+               {:index, new_name, "#{new_name}_target_id_source_id_$idx"},
                {:table, "", new_name}
              ]
     end
@@ -1107,7 +1107,7 @@ defmodule Hologram.DB.SchemaReconcilerTest do
                {:constraint, @module3_join_table, "#{@module3_join_table}_$pk"},
                {:constraint, @module3_join_table, "#{@module3_join_table}_source_id_$fk"},
                {:constraint, @module3_join_table, "#{@module3_join_table}_target_id_$fk"},
-               {:index, @module3_join_table, "#{@module3_join_table}_target_id_$idx"},
+               {:index, @module3_join_table, "#{@module3_join_table}_target_id_source_id_$idx"},
                {:table, "", @module3_join_table}
              ]
     end

@@ -787,7 +787,7 @@ defmodule Hologram.DB.MapperTest do
       expected_msg =
         normalize_newlines("""
         colliding derived names - rename the declarations so that every derived name is unique:
-          * index "target_id_4b8e857b_$idx" is derived from relationship :#{r} in Pppppppppppppp.XxYyZz, relationship :xx_yy_zz_#{r} in Pppppppppppppp, relationship :yy_zz_#{r} in PpppppppppppppXx, relationship :zz_#{r} in PpppppppppppppXx.Yy
+          * index "target_id_d1fd575c_$idx" is derived from relationship :#{r} in Pppppppppppppp.XxYyZz, relationship :xx_yy_zz_#{r} in Pppppppppppppp, relationship :yy_zz_#{r} in PpppppppppppppXx, relationship :zz_#{r} in PpppppppppppppXx.Yy
           * join table "xx_yy_zz_#{r}_7523ea5b_$join" is derived from relationship :#{r} in Pppppppppppppp.XxYyZz, relationship :xx_yy_zz_#{r} in Pppppppppppppp
           * join table "yy_zz_#{r}_7523ea5b_$join" is derived from relationship :yy_zz_#{r} in PpppppppppppppXx, relationship :zz_#{r} in PpppppppppppppXx.Yy\
         """)
@@ -1113,7 +1113,7 @@ defmodule Hologram.DB.MapperTest do
                  relationship: :a,
                  source_table: "test_fixtures_entity_module3",
                  target_table: "test_fixtures_entity_module2",
-                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_$idx",
+                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx",
                  pk_constraint: "test_fixtures_entity_module3_a_$join_$pk",
                  source_fk_constraint: "test_fixtures_entity_module3_a_$join_source_id_$fk",
                  target_fk_constraint: "test_fixtures_entity_module3_a_$join_target_id_$fk"
@@ -1144,7 +1144,7 @@ defmodule Hologram.DB.MapperTest do
       assert join_table.name == "recurring_invoice_adjustments_f97af6f0_$join"
 
       assert join_table.reverse_index ==
-               "recurring_invoice_adjustments_$join_target_id_19c97fba_$idx"
+               "recurring_invoice_adjustments_$join_target_id_e06e7e1d_$idx"
 
       assert join_table.pk_constraint == "recurring_invoice_adjustments_$join_23c0665c_$pk"
 

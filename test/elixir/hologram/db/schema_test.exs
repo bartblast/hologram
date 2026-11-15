@@ -728,7 +728,7 @@ defmodule Hologram.DB.SchemaTest do
           }
         },
         indexes: %{
-          "#{name}_target_id_$idx" => %{
+          "#{name}_target_id_source_id_$idx" => %{
             columns: ["target_id", "source_id"],
             nulls_distinct: true,
             unique: false
@@ -758,8 +758,8 @@ defmodule Hologram.DB.SchemaTest do
                %{
                  op: :rename_index,
                  table: "task_labels_$join",
-                 from: "task_tags_$join_target_id_$idx",
-                 to: "task_labels_$join_target_id_$idx"
+                 from: "task_tags_$join_target_id_source_id_$idx",
+                 to: "task_labels_$join_target_id_source_id_$idx"
                },
                %{
                  op: :rename_constraint,
@@ -1464,7 +1464,7 @@ defmodule Hologram.DB.SchemaTest do
                  }
                },
                indexes: %{
-                 "test_fixtures_entity_module3_a_$join_target_id_$idx" => %{
+                 "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx" => %{
                    columns: ["target_id", "source_id"],
                    nulls_distinct: true,
                    unique: false
