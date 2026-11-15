@@ -55,6 +55,7 @@ defmodule Hologram.Migration do
   rows would have been left without a value.
   """
 
+  alias Hologram.Migration.CallCheck
   alias Hologram.Migration.Loader
 
   # A migration module's file name is its version - 14 UTC timestamp digits, nothing else.
@@ -134,6 +135,10 @@ defmodule Hologram.Migration do
           resolve!: 2
         ]
 
+      # The call check reads the module's debug info - kept for migration modules even where
+      # the project compiles without it, as a test run does.
+      @compile {:debug_info, true}
+
       @before_compile Hologram.Migration
       @after_compile Hologram.Migration
     end
@@ -159,9 +164,12 @@ defmodule Hologram.Migration do
 
   # Runs once the module is compiled and callable, so a migration whose ops cannot be
   # evaluated, or that breaks a rule of the format, fails the build rather than the boot.
+  # The calls are checked first: evaluating the ops runs the code they call.
   @doc false
   @spec __after_compile__(Macro.Env.t(), binary) :: :ok
-  def __after_compile__(env, _bytecode) do
+  def __after_compile__(env, bytecode) do
+    CallCheck.validate!(env, bytecode)
+
     migration = env.module.__hologram_migration__()
 
     Loader.verify_rename_order!(migration.ops, migration.path)
