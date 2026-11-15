@@ -278,9 +278,10 @@ defmodule Hologram.DB do
   Returns the name of the join table behind the given to-many relationship of the given entity
   type, unquoted, for SQL written by hand.
 
-  The name is `<source table>_<relationship>_$join`, cut to a prefix and a hash past PostgreSQL's
-  63-byte limit, and the table has the columns `source_id` and `target_id`. The `$` means it has to
-  be quoted in SQL. The name follows the model: renaming the entity type or the relationship moves
+  The name is `<source table>_<relationship>_$join`. Past PostgreSQL's 63-byte limit the source
+  table's name is dropped, its outer parts first, and a short hash goes between the relationship
+  and `$join`. The table has the columns `source_id` and `target_id`. The `$` means it has to be
+  quoted in SQL. The name follows the model: renaming the entity type or the relationship moves
   it, so code that asks for it keeps working where a name written out would break.
 
   Raises Hologram.MisuseError when the first argument is not an entity type module, or when the

@@ -54,11 +54,9 @@ defmodule Hologram.Query.Interpreter do
   position among the declared ones. An included derived field holds its value, or its rows - a
   list, or one row or nil - each row embedding what its definition and the include ask for.
 
-  `:actor_user_id` in the options is who is asking, for the predicates that name the acting user.
-  An anonymous one matches nothing, the way an actor-referencing statement matches nothing when
-  there is no actor to compare against. `:bindings` gives the values of the term's placeholders, every
-  one of which the term names, and none of which may be nil - neither as a value nor as an element
-  of a list - which is what the database refuses one for.
+  `:bindings` in the options gives the values of the term's placeholders, every one of which the
+  term names, and none of which may be nil - neither as a value nor as an element of a list - which
+  is what the database refuses one for.
 
   Raises Hologram.MisuseError on a missing or nil binding.
   """
@@ -365,9 +363,6 @@ defmodule Hologram.Query.Interpreter do
     Enum.all?(filter, &matches_clause?(row, &1, scope))
   end
 
-  # A visitor has no acting user, and each predicate naming one answers false on its own - so a
-  # disjunction needs no case for it: the alternative asking about nobody fails, and the others
-  # still answer.
   defp matches_clause?(row, {:or, alternatives}, scope) do
     Enum.any?(alternatives, &matches?(row, &1, scope))
   end
@@ -414,13 +409,12 @@ defmodule Hologram.Query.Interpreter do
   defp matches_predicate?(row, {name, operator, operand}, scope) do
     ranks_for_key = Map.get(scope.ranks, name)
 
-    case resolve(operand, scope.opts, ranks_for_key) do
-      # The acting user is nobody, so a predicate asking about them is asking about nobody -
-      # which no row answers, the way an actor-referencing statement is elided for a visitor
-      # rather than run against a null.
-      :no_actor -> false
-      value -> satisfies?(operator, read(row, name, scope), value, ranks_for_key)
-    end
+    satisfies?(
+      operator,
+      read(row, name, scope),
+      resolve(operand, scope.opts, ranks_for_key),
+      ranks_for_key
+    )
   end
 
   # The rows a to-many's pairs name, of the given type. A pair naming a row the database does not
@@ -477,10 +471,6 @@ defmodule Hologram.Query.Interpreter do
     else
       Map.fetch!(row, name)
     end
-  end
-
-  defp resolve({:actor}, opts, _ranks_for_key) do
-    Keyword.get(opts, :actor_user_id) || :no_actor
   end
 
   defp resolve({:placeholder, name}, opts, ranks_for_key) do

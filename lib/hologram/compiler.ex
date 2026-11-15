@@ -5183,8 +5183,8 @@ defmodule Hologram.Compiler do
     ~s/[#{name_js},#{operator_js},#{render_policy_value(types, name, value)}]/
   end
 
-  # The acting user's own id, named rather than carried: the client binds it at evaluation the
-  # way the kernel binds an actor leaf in a query.
+  # The acting user's own id, named rather than carried: the client binds it when it evaluates the
+  # rule.
   defp render_policy_value(_types, _name, {:actor}) do
     render_json_object([{"actor", "true"}])
   end

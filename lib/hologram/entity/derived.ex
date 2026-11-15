@@ -51,11 +51,19 @@ defmodule Hologram.Entity.Derived do
   Returns the definition of whether the given predicates, in the filter data form, hold for a row of
   the given owning entity type - checked as a filter of that type is.
 
-  Raises Hologram.MisuseError when the predicates name what the type does not declare or compare
-  what does not compare.
+  Raises Hologram.MisuseError when the predicates name the acting user, name what the type does not
+  declare or compare what does not compare.
   """
   @spec condition(module, Query.predicates()) :: definition
-  def condition(owner, predicates), do: {:condition, Stage.predicate_triples!(owner, predicates)}
+  def condition(owner, predicates) do
+    Stage.refuse_actor!(
+      predicates,
+      "a derived field's condition",
+      "a derived value is the same whoever reads it"
+    )
+
+    {:condition, Stage.predicate_triples!(owner, predicates)}
+  end
 
   @doc """
   Returns whether the given name is a derived field of the given entity type.

@@ -18,6 +18,7 @@ import Elixir_Hologram_Auth, {
 import Batches from "../../../../assets/js/batches.mjs";
 import Clock from "../../../../assets/js/clock.mjs";
 import Elixir_Hologram_DB from "../../../../assets/js/elixir/hologram/db.mjs";
+import Interpreter from "../../../../assets/js/interpreter.mjs";
 import LocalDatabase from "../../../../assets/js/local_database.mjs";
 import Model from "../../../../assets/js/model.mjs";
 import Type from "../../../../assets/js/type.mjs";
@@ -2504,6 +2505,20 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // The server works the verdicts of a session whose user id names no user entity out for a
+    // visitor, so they answer a visitor's question.
+    it("grants on the verdict of a session whose user id Hologram doesn't generate", () => {
+      LocalDatabase.actorUserId = "user_id_1";
+      putFolder({[KEY]: true});
+
+      assert.deepStrictEqual(
+        folderReads([noPublic], Type.bitstring("user_id_1")),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(folderReads([noPublic]), Type.boolean(true));
+    });
+
     it("grants nothing on the session user's verdict asked about a visitor", () => {
       LocalDatabase.actorUserId = ALICE;
       putFolder({[KEY]: true});
@@ -2930,6 +2945,75 @@ describe("Elixir_Hologram_Auth", () => {
           Type.atom("transfer"),
           Type.struct(USER, [[Type.atom("id"), Type.bitstring(ALICE)]]),
         ),
+        Type.boolean(false),
+      );
+    });
+  });
+
+  // A session's user id may be any string, integer or atom, and one that names no user entity is
+  // anonymous to the rules - as somebody holding nothing, an inequality on the acting user would
+  // grant it every row it doesn't own. The server answers the same ids the same way, in describe
+  // "can?/3" of test/elixir/hologram/auth_test.exs. Always update both together.
+  describe("a user id in a spelling Hologram doesn't generate", () => {
+    const policy = {
+      read: [
+        rule({predicates: [["author_id", "!=", {actor: true}]]}),
+        rule({predicates: [["public", "==", true]]}),
+      ],
+    };
+
+    for (const userId of [
+      Type.bitstring("018F4571-A1B2-7C3D-8E4F-000000000001"),
+      Type.bitstring("018f4571a1b27c3d8e4f000000000001"),
+      Type.bitstring("018f4571-a1b2-7c3d-8e4f-000000000001\n"),
+      Type.bitstring("user_id_1"),
+      Type.integer(7),
+      Type.boolean(false),
+      Type.atom("admin"),
+    ]) {
+      it(`answers ${Interpreter.inspect(userId)} as an anonymous session`, () => {
+        defineModel(policy);
+
+        assert.deepStrictEqual(
+          can(Type.bitstring(ALICE), Type.atom("read"), document()),
+          Type.boolean(true),
+        );
+
+        assert.deepStrictEqual(
+          can(userId, Type.atom("read"), document()),
+          Type.boolean(false),
+        );
+
+        assert.deepStrictEqual(
+          can(userId, Type.atom("read"), document({public: true})),
+          Type.boolean(true),
+        );
+      });
+    }
+
+    it("answers a user struct whose id is in such a spelling as an anonymous session", () => {
+      defineModel(policy);
+
+      const user = Type.struct(USER, [
+        [
+          Type.atom("id"),
+          Type.bitstring("018F4571-A1B2-7C3D-8E4F-000000000001"),
+        ],
+      ]);
+
+      assert.deepStrictEqual(
+        can(user, Type.atom("read"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers a user struct with no id as an anonymous session", () => {
+      defineModel(policy);
+
+      const visitor = Type.struct(USER, [[Type.atom("id"), Type.nil()]]);
+
+      assert.deepStrictEqual(
+        can(visitor, Type.atom("read"), document()),
         Type.boolean(false),
       );
     });
@@ -3841,6 +3925,28 @@ describe("grant_role/3", () => {
       () => grant(Type.bitstring("nope"), Type.atom("viewer"), document()),
       "Hologram.MisuseError",
       'invalid user id "nope" - entity ids are canonical lowercase 8-4-4-4-12 UUID strings',
+    );
+  });
+
+  // The validator's pattern takes the newline the uuid encoder refuses, and the server refuses it
+  // with the same sentence.
+  it("raises on a user id followed by a newline", () => {
+    const userId = Type.bitstring(`${GATED_BOB}\n`);
+
+    assertBoxedError(
+      () => grant(userId, Type.atom("viewer"), document()),
+      "Hologram.MisuseError",
+      `invalid user id ${Interpreter.inspect(userId)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
+    );
+  });
+
+  // The server refuses the same map with the same sentence, in describe "grant_role/2" of
+  // test/elixir/hologram/auth_test.exs.
+  it("raises on a map with no id as the user it is", () => {
+    assertBoxedError(
+      () => grant(Type.map([]), Type.atom("viewer"), document()),
+      "Hologram.MisuseError",
+      "invalid user id %{} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings",
     );
   });
 
