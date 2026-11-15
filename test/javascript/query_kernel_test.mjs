@@ -18,8 +18,9 @@ import derivedModel from "./support/fixtures/derived_model.mjs";
 defineRuntimeGlobals();
 
 // Mirrors the predicate cases of test/elixir/hologram/query/interpreter_test.exs, case for case
-// and in the same order - that suite proves the reference answers what the database answers, and
-// this one proves the client answers what the reference does. The rows here hold what the wire
+// and in the same order, but for its placeholder bindings, since nothing in the browser binds one.
+// That suite proves the reference answers what the database answers, and this one proves the
+// client answers what the reference does. The rows here hold what the wire
 // spells rather than what Postgres returns: dates and datetimes as canonical strings.
 describe("QueryKernel", () => {
   const matches = QueryKernel.matches;
@@ -30,9 +31,9 @@ describe("QueryKernel", () => {
     cleo: {count: 3, id: "r3", priority: null, username: "cleo"},
   };
 
-  const matching = (filter, context) =>
+  const matching = (filter) =>
     Object.values(rows)
-      .filter((row) => matches(row, filter, context))
+      .filter((row) => matches(row, filter))
       .map((row) => row.username);
 
   describe("matches() - equality and membership", () => {
@@ -250,75 +251,22 @@ describe("QueryKernel", () => {
     });
   });
 
+  // Nothing in the browser binds a placeholder, so the kernel holds no value for one - refused in
+  // the words the reference refuses a missing binding in.
   describe("matches() - placeholders", () => {
-    it("matches against the value bound to a placeholder", () => {
-      const filter = [["priority", "==", {placeholder: "priority"}]];
-      const context = {bindings: {priority: 3}};
-
-      assert.deepEqual(matching(filter, context), ["bob"]);
-    });
-
-    it("matches against a placeholder inside an alternative", () => {
-      const filter = [
-        {
-          or: [
-            [["priority", "==", {placeholder: "priority"}]],
-            [["count", "==", 2]],
-          ],
-        },
-      ];
-
-      const context = {bindings: {priority: 1}};
-
-      assert.deepEqual(matching(filter, context), ["ada", "bob"]);
-    });
-
-    it("matches against a list bound to a placeholder", () => {
-      const filter = [["priority", "in", {placeholder: "priorities"}]];
-      const context = {bindings: {priorities: [1, 3]}};
-
-      assert.deepEqual(matching(filter, context), ["ada", "bob"]);
-    });
-
-    it("matches against a placeholder among the values of a list", () => {
-      const filter = [["priority", "in", [{placeholder: "priority"}, 1]]];
-      const context = {bindings: {priority: 3}};
-
-      assert.deepEqual(matching(filter, context), ["ada", "bob"]);
-    });
-
-    // The reference raises on each of these, and in these words - this side is the one whose
-    // answer reaches a screen, so answering where the server refuses is the divergence that
-    // shows. A LITERAL nil in a term is a value like any other and never comes through here.
-    it("refuses a placeholder the bindings do not name", () => {
-      const filter = [["priority", "==", {placeholder: "priority"}]];
-
+    it("refuses a placeholder", () => {
       assertBoxedError(
-        () => matching(filter, {}),
+        () => matching([["priority", "==", {placeholder: "priority"}]]),
         "Hologram.MisuseError",
         "missing value for placeholder :priority",
       );
     });
 
-    it("refuses a nil value bound to a placeholder", () => {
-      const filter = [["priority", "==", {placeholder: "priority"}]];
-      const context = {bindings: {priority: null}};
-
+    it("refuses a placeholder among the values of a list", () => {
       assertBoxedError(
-        () => matching(filter, context),
+        () => matching([["priority", "in", [{placeholder: "priority"}, 1]]]),
         "Hologram.MisuseError",
-        "nil value for placeholder :priority - use an explicit nil predicate instead",
-      );
-    });
-
-    it("refuses a nil element in a list bound to a placeholder", () => {
-      const filter = [["priority", "in", {placeholder: "priorities"}]];
-      const context = {bindings: {priorities: [null, 3]}};
-
-      assertBoxedError(
-        () => matching(filter, context),
-        "Hologram.MisuseError",
-        "nil element in the list for placeholder :priorities - use an explicit nil predicate instead",
+        "missing value for placeholder :priority",
       );
     });
   });
@@ -385,6 +333,23 @@ describe("QueryKernel", () => {
         LocalDatabase.putRow(TASK, {id: "t1", position: 3, title: "bob"});
         LocalDatabase.putRow(TASK, {id: "t2", position: 2, title: "ada"});
         LocalDatabase.putRow(TASK, {id: "t3", position: 1, title: "cleo"});
+      });
+
+      it("refuses a placeholder", () => {
+        const filter = [
+          {
+            or: [
+              [["position", "==", 9]],
+              [["title", "==", {placeholder: "t"}]],
+            ],
+          },
+        ];
+
+        assertBoxedError(
+          () => QueryKernel.run(term({filter})),
+          "Hologram.MisuseError",
+          "missing value for placeholder :t",
+        );
       });
 
       it("orders by an attribute", () => {
@@ -1416,8 +1381,8 @@ describe("QueryKernel", () => {
         .map((node) => node.row.nickname)
         .sort();
 
-    const scores = (filter, context = {}) =>
-      QueryKernel.run(term(PLAYER, {filter}), context)
+    const scores = (filter) =>
+      QueryKernel.run(term(PLAYER, {filter}))
         .map((node) => node.row.score)
         .sort((left, right) => left - right);
 
@@ -1517,17 +1482,6 @@ describe("QueryKernel", () => {
       ]);
     });
 
-    it("refuses a placeholder binding a label a derived enum does not declare", () => {
-      assertBoxedError(
-        () =>
-          scores([["tier", "==", {placeholder: "tier"}]], {
-            bindings: {tier: "platinum"},
-          }),
-        "Hologram.MisuseError",
-        "invalid value :platinum for placeholder :tier - expected one of [:gold, :silver, :bronze]",
-      );
-    });
-
     it("computes a derived field another definition reads", () => {
       assert.deepEqual(scores([["gold", "==", true]]), [12]);
     });
@@ -1561,12 +1515,6 @@ describe("QueryKernel", () => {
       ]);
 
       assert.deepEqual(nicknames([["badge", "not_in", ["top", null]]]), []);
-    });
-
-    it("binds a placeholder on a derived enum", () => {
-      const filter = [["tier", "in", [{placeholder: "tier"}, "gold"]]];
-
-      assert.deepEqual(scores(filter, {bindings: {tier: "silver"}}), [7, 12]);
     });
 
     it("compares a derived value with an attribute of the row", () => {
@@ -2287,14 +2235,14 @@ describe("QueryKernel", () => {
       dan: {count: 2, id: "a4", priority: 1, rating: 2.0, username: "dan"},
     };
 
-    const namesMatching = (filter, context) =>
+    const namesMatching = (filter) =>
       Object.values(accounts)
-        .filter((row) => matches(row, filter, context))
+        .filter((row) => matches(row, filter))
         .map((row) => row.username);
 
     const idsMatching = (rows, filter, entityType = null) =>
       rows
-        .filter((row) => matches(row, filter, {}, entityType))
+        .filter((row) => matches(row, filter, entityType))
         .map((row) => row.id);
 
     beforeEach(() => {
@@ -2478,17 +2426,6 @@ describe("QueryKernel", () => {
 
       assert.deepEqual(namesMatching(filter), ["ada", "cleo"]);
     });
-
-    it("binds a placeholder beside an attribute comparison", () => {
-      const filter = [
-        ["count", ">=", {attribute: "priority"}],
-        ["username", "==", {placeholder: "name"}],
-      ];
-
-      assert.deepEqual(namesMatching(filter, {bindings: {name: "dan"}}), [
-        "dan",
-      ]);
-    });
   });
 
   // Mirrors the interpreter's "run/3 - comparing enums" describe case for case. The rows hold
@@ -2504,9 +2441,9 @@ describe("QueryKernel", () => {
       d: {id: "t4", priority: null, title: "d"},
     };
 
-    const titlesMatching = (filter, context) =>
+    const titlesMatching = (filter) =>
       Object.values(tickets)
-        .filter((row) => matches(row, filter, context, TICKET))
+        .filter((row) => matches(row, filter, TICKET))
         .map((row) => row.title);
 
     beforeEach(() => {
@@ -2551,25 +2488,6 @@ describe("QueryKernel", () => {
         "b",
         "c",
       ]);
-    });
-
-    it("compares a declared value bound to a placeholder", () => {
-      const filter = [["priority", ">=", {placeholder: "min"}]];
-
-      assert.deepEqual(titlesMatching(filter, {bindings: {min: "medium"}}), [
-        "a",
-        "b",
-      ]);
-    });
-
-    it("refuses a placeholder bound to a value the enum does not declare, as the reference does", () => {
-      const filter = [["priority", ">=", {placeholder: "min"}]];
-
-      assertBoxedError(
-        () => titlesMatching(filter, {bindings: {min: "urgent"}}),
-        "Hologram.MisuseError",
-        "invalid value :urgent for placeholder :min - expected one of [:low, :medium, :high]",
-      );
     });
   });
 
@@ -2644,16 +2562,16 @@ describe("QueryKernel", () => {
 
     const titles = ["José", "JOSEPH", "jo_x", "50% off", "Straße"];
 
-    const titlesMatching = (filter, extraTitles = [], context = {}) =>
+    const titlesMatching = (filter, extraTitles = []) =>
       [...titles, ...extraTitles]
         .map((title, index) => ({id: `t${index}`, title}))
-        .filter((row) => matches(row, filter, context))
+        .filter((row) => matches(row, filter))
         .map((row) => row.title)
         .sort();
 
     const matchingIds = (entityType, filter) =>
       Object.values(LocalDatabase.getTable(entityType))
-        .filter((row) => matches(row, filter, {}, entityType))
+        .filter((row) => matches(row, filter, entityType))
         .map((row) => row.id)
         .sort();
 
@@ -2791,20 +2709,6 @@ describe("QueryKernel", () => {
       );
     });
 
-    it("matches a term bound to a placeholder, escaped like a written one", () => {
-      const filter = [["title", "starts_with", {placeholder: "query"}]];
-
-      assert.deepStrictEqual(
-        titlesMatching(filter, [], {bindings: {query: "jose"}}),
-        ["JOSEPH", "José"],
-      );
-
-      assert.deepStrictEqual(
-        titlesMatching(filter, [], {bindings: {query: "jo_"}}),
-        ["jo_x"],
-      );
-    });
-
     it("matches a search for another attribute's value", () => {
       LocalDatabase.putRow(CHANNEL, {id: "c1", name: "general"});
 
@@ -2871,9 +2775,9 @@ describe("QueryKernel", () => {
     const SHELF = "MyApp.Shelf";
     const TOPIC = "MyApp.Topic";
 
-    const matchingIds = (entityType, filter, context = {}) =>
+    const matchingIds = (entityType, filter) =>
       Object.values(LocalDatabase.getTable(entityType))
-        .filter((row) => matches(row, filter, context, entityType))
+        .filter((row) => matches(row, filter, entityType))
         .map((row) => row.id)
         .sort();
 
@@ -3265,21 +3169,6 @@ describe("QueryKernel", () => {
       assert.deepEqual(matchingIds(CHANNEL, filter), ["general", "quiet"]);
     });
 
-    it("binds a placeholder inside a quantifier's condition", () => {
-      const filter = [
-        quantifier(
-          "any",
-          ["messages"],
-          [["position", ">", {placeholder: "min"}]],
-        ),
-      ];
-
-      assert.deepEqual(matchingIds(CHANNEL, filter, {bindings: {min: 1}}), [
-        "general",
-        "random",
-      ]);
-    });
-
     // Mirrors the interpreter's "run/3 - quantifiers through sets" describe: general's hi carries
     // urgent and later, random's bye carries later, and quiet has no message for a source to go
     // through.
@@ -3327,21 +3216,6 @@ describe("QueryKernel", () => {
 
       assert.deepEqual(matchingIds(CHANNEL, topicFilter), ["general"]);
       assert.deepEqual(matchingIds(MESSAGE, orphanFilter), []);
-    });
-
-    it("binds a placeholder inside a condition through a set", () => {
-      const filter = [
-        quantifier(
-          "any",
-          ["messages", "labels"],
-          [["name", "==", {placeholder: "name"}]],
-        ),
-      ];
-
-      assert.deepEqual(
-        matchingIds(CHANNEL, filter, {bindings: {name: "later"}}),
-        ["general", "random"],
-      );
     });
 
     it("matches a label through the messages it shares with another label", () => {
@@ -3511,10 +3385,8 @@ describe("QueryKernel", () => {
       {channel_id: "gone", created_on: "2026-02-01", id: "m4"},
     ];
 
-    const idsMatching = (filter, context = {}, rows = messages) =>
-      rows
-        .filter((row) => matches(row, filter, context, MESSAGE))
-        .map((row) => row.id);
+    const idsMatching = (filter, rows = messages) =>
+      rows.filter((row) => matches(row, filter, MESSAGE)).map((row) => row.id);
 
     beforeEach(() => {
       globalThis.Hologram.sync = {
@@ -3644,18 +3516,6 @@ describe("QueryKernel", () => {
       );
     });
 
-    it("binds a placeholder on a path", () => {
-      const context = {bindings: {kind: "dm"}};
-
-      assert.deepStrictEqual(
-        idsMatching(
-          [[["channel", "kind"], "==", {placeholder: "kind"}]],
-          context,
-        ),
-        ["m2"],
-      );
-    });
-
     it("matches a path inside an alternative", () => {
       const filter = [
         {
@@ -3675,22 +3535,22 @@ describe("QueryKernel", () => {
       const held = messages.filter((row) => row.id !== "m4");
 
       assert.deepStrictEqual(
-        idsMatching([[["channel", "archived"], "!=", false]], {}, held),
+        idsMatching([[["channel", "archived"], "!=", false]], held),
         ["m2", "m3"],
       );
 
       assert.deepStrictEqual(
-        idsMatching([[["channel", "archived"], "==", null]], {}, held),
+        idsMatching([[["channel", "archived"], "==", null]], held),
         ["m3"],
       );
 
       assert.deepStrictEqual(
-        idsMatching([[["channel", "archived"], "not_in", [false]]], {}, held),
+        idsMatching([[["channel", "archived"], "not_in", [false]]], held),
         ["m2", "m3"],
       );
 
       assert.deepStrictEqual(
-        idsMatching([[["channel", "rank"], ">", 0]], {}, held),
+        idsMatching([[["channel", "rank"], ">", 0]], held),
         ["m1", "m2"],
       );
     });
@@ -3701,12 +3561,12 @@ describe("QueryKernel", () => {
       const unheld = messages.filter((row) => row.id === "m4");
 
       assert.deepStrictEqual(
-        idsMatching([[["channel", "archived"], "==", null]], {}, unheld),
+        idsMatching([[["channel", "archived"], "==", null]], unheld),
         ["m4"],
       );
 
       assert.deepStrictEqual(
-        idsMatching([[["channel", "archived"], "==", false]], {}, unheld),
+        idsMatching([[["channel", "archived"], "==", false]], unheld),
         [],
       );
     });

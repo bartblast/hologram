@@ -93,8 +93,9 @@ function basedOn(held, changes) {
   );
 }
 
-// Placeholders exist only in compiler-registered queries, which the renderer runs with values
-// bound. One reaching a directly executed read has no value and never will.
+// Placeholders exist only in the queries the compiler registers on the server, which the browser
+// builds from real values instead. One reaching a directly executed read has no value and never
+// will.
 function assertNoPlaceholders(term) {
   const [name] = placeholderNames(term);
 
