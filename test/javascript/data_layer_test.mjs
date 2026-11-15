@@ -14,7 +14,6 @@ import ManuallyPortedElixirHologramEntity from "../../assets/js/elixir/hologram/
 import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
-import QueryKernel from "../../assets/js/query_kernel.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
