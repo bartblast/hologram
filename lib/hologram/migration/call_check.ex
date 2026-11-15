@@ -6,9 +6,18 @@ defmodule Hologram.Migration.CallCheck do
   # Erlang/OTP standard libraries. A call to one of the app's modules, a dependency's or
   # Hologram's would change whenever they do.
   #
-  # Known blind spots: macros of other modules leave no trace once expanded, code that
-  # runs in the module body at compile time is baked into the bytecode as values, and a
-  # call whose module is known only at runtime (apply/3, mod.fun()) names no module here.
+  # Code that ran while the module compiled - a call in the module body, another module's
+  # macro - left only its results in the bytecode, so it is checked through the modules the
+  # compiler recorded the migration using at compile time. The record can't tell a module
+  # called from one only named, so reading an attribute holding MyApp.Task in the body - as
+  # an op that reads it does - is refused too; a module named in an op itself, or held in an
+  # attribute only a function reads, is not used at compile time. The record covers the
+  # whole file, so a second module in a migration file is checked along with it.
+  #
+  # Known blind spots: a call whose module is known only at runtime (apply/3, mod.fun())
+  # names no module here; a module-body call to Hologram.Migration cannot be told apart from
+  # the use that requires it; and a standard-library call that reads the environment
+  # (Application.get_env/2, System.get_env/1) passes, though its value can differ per build.
 
   # Elixir's applications a release ships - the others (Mix, ExUnit, IEx) are absent from
   # one, so a call to them fails at runtime anyway.
@@ -17,8 +26,9 @@ defmodule Hologram.Migration.CallCheck do
   @doc """
   Validates that the compiled migration module given by its env and bytecode references
   no module outside the standard libraries - no remote call, function capture or struct
-  literal names one, and the module requires none but `Hologram.Migration`, which its `use`
-  requires. Returns :ok, or raises Hologram.CompileError naming each reference with its line.
+  literal names one, and the module neither requires one nor used one while it compiled,
+  `Hologram.Migration` aside, which its `use` requires. Returns :ok, or raises
+  Hologram.CompileError naming each reference, with its line where it has one.
 
   Reads the module's debug info, which `use Hologram.Migration` keeps for every migration
   module.
@@ -32,12 +42,17 @@ defmodule Hologram.Migration.CallCheck do
       |> definitions!(env.module, file)
       |> collect_references()
 
-    require_references =
+    # A module the code names already has a line to show, which says more.
+    code_modules = MapSet.new(code_references, fn {module, _line} -> module end)
+
+    compile_time_references =
       env.requires
-      |> List.delete(Hologram.Migration)
+      |> Enum.concat(compile_time_modules(env))
+      |> Enum.uniq()
+      |> Enum.reject(&(&1 == Hologram.Migration or MapSet.member?(code_modules, &1)))
       |> Enum.map(&{&1, nil})
 
-    references = Enum.uniq(code_references ++ require_references)
+    references = Enum.uniq(code_references ++ compile_time_references)
     refused_modules = refused_modules(references, env.module)
 
     refused =
@@ -68,6 +83,23 @@ defmodule Hologram.Migration.CallCheck do
     references
   end
 
+  # The modules the compiler recorded the migration using while it compiled - for a call or
+  # a macro - and those whose exports it depends on, like a struct's. Kernel.LexicalTracker is
+  # Elixir's internal record of them, alive until the file is compiled; a test pins its shape,
+  # so an Elixir release that changes it fails Hologram's own suite rather than turning the
+  # check off quietly.
+  defp compile_time_modules(env) do
+    with tracker when is_pid(tracker) <- env.lexical_tracker,
+         true <- Process.alive?(tracker),
+         true <- function_exported?(Kernel.LexicalTracker, :references, 1),
+         references when is_tuple(references) and tuple_size(references) >= 2 <-
+           Kernel.LexicalTracker.references(tracker) do
+      elem(references, 0) ++ elem(references, 1)
+    else
+      _unavailable -> []
+    end
+  end
+
   defp definitions!(bytecode, module, file) do
     with {:ok, {_module, [debug_info: {:debug_info_v1, backend, data}]}} <-
            :beam_lib.chunks(bytecode, [:debug_info]),
@@ -95,19 +127,26 @@ defmodule Hologram.Migration.CallCheck do
     lines =
       Enum.map_join(refused, "\n", fn {module, line} ->
         location = if line, do: "#{file}:#{line}", else: file
-        verb = if line, do: "uses", else: "requires"
+        moment = if line, do: "", else: " at compile time"
 
         suffix =
           if refused_modules[module] == :missing,
             do: ", which is not compiled yet or cannot be found",
             else: ""
 
-        "  #{location} - #{verb} #{inspect(module)}#{suffix}"
+        "  #{location} - uses #{inspect(module)}#{moment}#{suffix}"
       end)
+
+    hint =
+      if Enum.any?(refused, fn {_module, line} -> is_nil(line) end),
+        do:
+          "\nAn op reading an attribute that holds a module uses the module at compile " <>
+            "time - if that is the case here, write the module in the op itself.",
+        else: ""
 
     "a migration may use only its own functions and the Elixir and Erlang/OTP standard " <>
       "libraries - what it does to rows must never change after it is applied, and the " <>
-      "app's, its dependencies' and Hologram's modules change with them:\n" <> lines
+      "app's, its dependencies' and Hologram's modules change with them:\n" <> lines <> hint
   end
 
   # Each module is judged once, however often the migration names it: the refused ones map

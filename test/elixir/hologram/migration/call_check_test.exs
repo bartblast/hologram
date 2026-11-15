@@ -6,6 +6,10 @@ defmodule Hologram.Migration.CallCheckTest do
                   "applied, and the app's, its dependencies' and Hologram's modules change " <>
                   "with them:\n"
 
+  @compile_time_hint "\nAn op reading an attribute that holds a module uses the module at " <>
+                       "compile time - if that is the case here, write the module in the op " <>
+                       "itself."
+
   describe "validate!/2" do
     test "passes a migration using Elixir's and Erlang's standard libraries and its own functions" do
       body = """
@@ -122,11 +126,162 @@ defmodule Hologram.Migration.CallCheckTest do
 
       expected_msg =
         @refusal_head <>
-          "  app/migrations/20260813091522.ex - requires Hologram.Commons.StringUtils"
+          "  app/migrations/20260813091522.ex - uses Hologram.Commons.StringUtils at compile time" <>
+          @compile_time_hint
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         compile_migration("20260813091522", body)
       end
+    end
+
+    test "refuses an attribute naming an entity type, read by an op" do
+      body = """
+      @entity MyApp.Task
+
+      create_entity @entity
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex - uses MyApp.Task at compile time, " <>
+          "which is not compiled yet or cannot be found" <> @compile_time_hint
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses an attribute naming a module inside a value, read by an op" do
+      body = """
+      @defaults %{owner: MyApp.User}
+
+      change_entity MyApp.Task do
+        add_attribute :owner, :string, default: inspect(@defaults.owner)
+      end
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex - uses MyApp.User at compile time, " <>
+          "which is not compiled yet or cannot be found" <> @compile_time_hint
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "passes an entity type named in an op" do
+      body = """
+      create_entity MyApp.Task
+      """
+
+      assert [%{op: :create_entity, entity: MyApp.Task}] =
+               compile_migration("20260813091522", body).__hologram_migration__().ops
+    end
+
+    test "passes an entity type named through an alias in an op" do
+      body = """
+      alias MyApp.Task
+
+      create_entity Task
+      """
+
+      assert [%{op: :create_entity, entity: MyApp.Task}] =
+               compile_migration("20260813091522", body).__hologram_migration__().ops
+    end
+
+    test "passes an attribute naming a module, read only by a function" do
+      body = """
+      @entity MyApp.Task
+
+      def entity, do: @entity
+      """
+
+      assert compile_migration("20260813091522", body).entity() == MyApp.Task
+    end
+
+    test "passes the standard libraries used in the module body, read by an op" do
+      body = """
+      import String, only: [upcase: 1]
+
+      @pattern ~r/^[a-z]+$/
+      @since %Date{year: 2026, month: 8, day: 13}
+      @host URI.parse("https://example.com").host
+
+      change_entity MyApp.Task do
+        add_attribute :code, :string, default: upcase(@host)
+        add_attribute :since, :date, default: @since
+        add_attribute :slug, :string, format: @pattern
+      end
+      """
+
+      assert [%{opts: [default: "EXAMPLE.COM"]}, %{opts: [default: ~D[2026-08-13]]}, _slug] =
+               compile_migration("20260813091522", body).__hologram_migration__().ops
+    end
+
+    test "refuses a struct outside the standard libraries built in the module body" do
+      body = """
+      @server %Hologram.Server{}
+
+      change_entity MyApp.Task do
+        add_attribute :code, :string, default: inspect(@server)
+      end
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex - uses Hologram.Server at compile time" <>
+          @compile_time_hint
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses a call outside the standard libraries made in the module body" do
+      body = """
+      @default Hologram.Commons.StringUtils.prepend("a", "b")
+
+      change_entity MyApp.Task do
+        add_attribute :code, :string, default: @default
+      end
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex - uses Hologram.Commons.StringUtils at compile time" <>
+          @compile_time_hint
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    # The compile-time check reads Kernel.LexicalTracker, Elixir's internal record of the
+    # modules a module used while compiling. Should a release change it, this fails rather
+    # than the check going quiet.
+    test "sees the modules a migration used at compile time through Elixir's lexical tracker" do
+      defmodule LexicalTrackerProbe do
+        @moduledoc false
+
+        # Runs in the compiling process, which Code.compile_string/1 makes this test's.
+        @spec __after_compile__(Macro.Env.t(), binary) :: any
+        def __after_compile__(env, _bytecode) do
+          send(self(), {:references, Kernel.LexicalTracker.references(env.lexical_tracker)})
+        end
+      end
+
+      Code.compile_string("""
+      defmodule #{inspect(random_module())} do
+        @after_compile #{inspect(LexicalTrackerProbe)}
+        @value Hologram.Commons.StringUtils.prepend("a", "b")
+        def value, do: @value
+      end
+      """)
+
+      assert_received {:references, references}
+      assert is_tuple(references) and tuple_size(references) >= 2
+      assert Hologram.Commons.StringUtils in elem(references, 0)
     end
 
     test "refuses a call to another migration" do

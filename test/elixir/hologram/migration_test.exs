@@ -245,6 +245,27 @@ defmodule Hologram.MigrationTest do
                module.__hologram_migration__().ops
     end
 
+    test "warns about an attribute an op reads before it is set" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :first, :string, default: @later
+      end
+
+      @later "b"
+      """
+
+      output =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          module = compile_migration("20260813091522", body)
+
+          send(self(), {:ops, module.__hologram_migration__().ops})
+        end)
+
+      assert output =~ "undefined module attribute @later"
+      assert output =~ "app/migrations/20260813091522.ex:5"
+      assert_received {:ops, [%{opts: [default: nil]}]}
+    end
+
     test "reads an attribute written with parentheses where the op is written" do
       body = """
       @default "a"
