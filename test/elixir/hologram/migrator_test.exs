@@ -851,6 +851,13 @@ defmodule Hologram.MigratorTest do
                ~s(index "task_old_$idx" on table "task" is named outside the derived scheme - the model derives "task_new_$idx")
     end
 
+    test "describes a renamed enum type" do
+      op = %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"}
+
+      assert describe_difference(op) ==
+               ~s(enum type "task_old_$enum" is named outside the derived scheme - the model derives "task_status_$enum")
+    end
+
     test "describes a renamed table" do
       op = %{op: :rename_table, from: "task_tags_$join", to: "task_labels_$join"}
 

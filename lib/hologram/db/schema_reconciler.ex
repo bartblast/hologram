@@ -50,7 +50,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   # The ops the schema diff's pairing pass emits - a recognised rename, applied ahead of the
   # rest of the run.
-  @rename_ops [:rename_index, :rename_table]
+  @rename_ops [:rename_enum_type, :rename_index, :rename_table]
 
   @doc """
   Fills every derived companion column the given ops add - a sort key or a search key - from the
@@ -220,8 +220,8 @@ defmodule Hologram.DB.SchemaReconciler do
 
   Create and add ops register the objects they produce (a created table registers
   itself, its columns, and its primary key constraint) - drop ops deregister them (a
-  dropped table takes everything parented to it) - a constraint rename updates the
-  registered name, and so does an index rename - a table rename renames the table's row and
+  dropped table takes everything parented to it) - a constraint, index or enum type
+  rename updates the registered name, and a table rename renames the table's row and
   re-parents every row under it. Ops that change an object without changing its identity
   (column alterations, enum value changes, rebuilds) leave the registry untouched.
   Registration is idempotent - stale rows from out-of-contract edits never fail it.
@@ -392,9 +392,13 @@ defmodule Hologram.DB.SchemaReconciler do
     end
   end
 
-  # Renaming an object the registry doesn't know would adopt it under a derived name - an index
-  # or a join-shaped table made by hand with a definition the model happens to share - so it
+  # Renaming an object the registry doesn't know would adopt it under a derived name - an index,
+  # a join-shaped table or an enum type made by hand that the model happens to match - so it
   # raises as its drop would.
+  defp check_alien!(%{op: :rename_enum_type} = op, registry) do
+    check_alien!(%{op: :drop_enum_type, enum_type: op.from}, registry)
+  end
+
   defp check_alien!(%{op: :rename_index} = op, registry) do
     check_alien!(%{op: :drop_index, index: op.from}, registry)
   end
@@ -638,6 +642,18 @@ defmodule Hologram.DB.SchemaReconciler do
     {:ok, _result} = Connection.query(statement, [op.to, op.table, op.from])
 
     :ok
+  end
+
+  # A stale row under the new name goes first, so registration stays idempotent.
+  defp record_op(%{op: :rename_enum_type} = op) do
+    statement = """
+    DELETE FROM "#{Mapper.system_schema()}"."schema_object"
+    WHERE "kind" = 'enum_type' AND "parent" = '' AND "name" IN ($1, $2)
+    """
+
+    {:ok, _result} = Connection.query(statement, [op.from, op.to])
+
+    register(:enum_type, "", op.to)
   end
 
   defp record_op(%{op: :rename_enum_value}), do: :ok

@@ -956,6 +956,136 @@ defmodule Hologram.DB.SchemaTest do
       assert op_kinds == [:drop_table, :create_table]
     end
 
+    defp status_term(enum_type, values) do
+      status_column = %{type: enum_type, collation: nil, null: false}
+      table = %{@task_table | columns: Map.put(@task_table.columns, "status", status_column)}
+
+      %{tables: %{"task" => table}, enum_types: %{enum_type => values}}
+    end
+
+    test "emits a lone rename_enum_type for a type renamed under the column using it" do
+      actual = status_term("task_old_$enum", ["todo", "done"])
+      target = status_term("task_status_$enum", ["todo", "done"])
+
+      assert diff(actual, target) == [
+               %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"}
+             ]
+    end
+
+    test "adds a value to a renamed enum type under its new name" do
+      actual = status_term("task_old_$enum", ["todo"])
+      target = status_term("task_status_$enum", ["todo", "done"])
+
+      assert diff(actual, target) == [
+               %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"},
+               %{
+                 op: :add_enum_value,
+                 enum_type: "task_status_$enum",
+                 value: "done",
+                 position: nil
+               }
+             ]
+    end
+
+    test "rebuilds a renamed enum type losing a value under its new name" do
+      actual = status_term("task_old_$enum", ["todo", "done"])
+      target = status_term("task_status_$enum", ["todo"])
+
+      assert diff(actual, target) == [
+               %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"},
+               %{
+                 op: :rebuild_enum_type,
+                 enum_type: "task_status_$enum",
+                 values: ["todo"],
+                 columns: [{"task", "status"}]
+               }
+             ]
+    end
+
+    test "pairs no enum type a second column ties to another type" do
+      phase_column = fn enum_type -> %{type: enum_type, collation: nil, null: false} end
+
+      actual =
+        put_in(
+          status_term("task_old_$enum", ["todo"]).tables["task"].columns["phase"],
+          phase_column.("task_old_$enum")
+        )
+
+      target =
+        "task_status_$enum"
+        |> status_term(["todo"])
+        |> put_in([:tables, "task", :columns, "phase"], phase_column.("task_phase_$enum"))
+        |> put_in([:enum_types, "task_phase_$enum"], ["todo"])
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_enum_type in op_kinds
+    end
+
+    test "pairs no enum type another of its columns leaves for text" do
+      text_column = %{type: "text", collation: "C", null: false}
+
+      actual =
+        put_in(
+          status_term("task_old_$enum", ["todo"]).tables["task"].columns["phase"],
+          %{type: "task_old_$enum", collation: nil, null: false}
+        )
+
+      target =
+        put_in(
+          status_term("task_status_$enum", ["todo"]).tables["task"].columns["phase"],
+          text_column
+        )
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_enum_type in op_kinds
+    end
+
+    test "renames one enum type for every column that moves with it" do
+      enum_column = fn enum_type -> %{type: enum_type, collation: nil, null: false} end
+
+      actual =
+        put_in(
+          status_term("task_old_$enum", ["todo", "done"]).tables["task"].columns["phase"],
+          enum_column.("task_old_$enum")
+        )
+
+      target =
+        put_in(
+          status_term("task_status_$enum", ["todo"]).tables["task"].columns["phase"],
+          enum_column.("task_status_$enum")
+        )
+
+      assert diff(actual, target) == [
+               %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"},
+               %{
+                 op: :rebuild_enum_type,
+                 enum_type: "task_status_$enum",
+                 values: ["todo"],
+                 columns: [{"task", "phase"}, {"task", "status"}]
+               }
+             ]
+    end
+
+    test "keeps enum types a drop plus a create with renames: false" do
+      actual = status_term("task_old_$enum", ["todo"])
+      target = status_term("task_status_$enum", ["todo"])
+
+      op_kinds =
+        actual
+        |> diff(target, renames: false)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_enum_type, :create_enum_type, :alter_column]
+    end
+
     test "emits a lone rename_index for an index whose name changed and definition didn't" do
       actual = task_term(%{"task_old_$idx" => @project_id_index})
       target = task_term(%{"task_new_$idx" => @project_id_index})

@@ -11,6 +11,7 @@ defmodule Hologram.DB.Schema do
   # a given type emits either, never both.
   @phases %{
     rename_table: 0,
+    rename_enum_type: 0,
     rename_index: 0,
     drop_foreign_key: 1,
     drop_index: 2,
@@ -66,20 +67,24 @@ defmodule Hologram.DB.Schema do
   pairs with one only in the target when both are join-shaped over the same two tables
   and no other unpaired join table on either side has those ends - it emits :rename_table
   (with :from and :to), and its constraints and reverse index then diff as a shared
-  table's. An entity table never pairs. An index on a table both sides share pairs with
-  one of the target's when both are unmatched by name, their definitions are equal, no
-  other unmatched index on either side of that table has the same definition, and no
-  actual index or primary key holds the target name - it emits :rename_index (with
-  :table, :from and :to). The rest of the diff runs against the actual term as the
-  renames leave it. renames: false skips the pass: a migration states its renames in
-  model ops, so its renderer pairs nothing by definition.
+  table's. An entity table never pairs. An enum type only in the actual term pairs with
+  one only in the target through a column both sides share that has the one type in the
+  actual term and the other in the target, one to one - it emits :rename_enum_type (with
+  :from and :to), and its values then diff under the new name. An index on a table both
+  sides share pairs with one of the target's when both are unmatched by name, their
+  definitions are equal, no other unmatched index on either side of that table has the
+  same definition, and no actual index or primary key holds the target name - it emits
+  :rename_index (with :table, :from and :to). The rest of the diff runs against the
+  actual term as the renames leave it. renames: false skips the pass: a migration states
+  its renames in model ops, so its renderer pairs nothing by definition.
 
-  The op list is ordered by apply phase - the renames first (tables, then indexes), then
-  destructive kinds in reverse dependency order, constructive kinds after in dependency
-  order (drop_foreign_key, drop_index, drop_column, drop_table, drop_enum_type,
-  create_enum_type, enum value changes, create_table, add_column, alter_column,
-  rename_constraint, add_foreign_key, create_index) - and alphabetically by table and name
-  within each phase, so the same terms always produce the same op sequence.
+  The op list is ordered by apply phase - the renames first (tables, then enum types,
+  then indexes), then destructive kinds in reverse dependency order, constructive kinds
+  after in dependency order (drop_foreign_key, drop_index, drop_column, drop_table,
+  drop_enum_type, create_enum_type, enum value changes, create_table, add_column,
+  alter_column, rename_constraint, add_foreign_key, create_index) - and alphabetically
+  by table and name within each phase, so the same terms always produce the same op
+  sequence.
   """
   @spec diff(%{atom => any}, %{atom => any}, keyword) :: list(%{atom => any})
   def diff(actual, target, opts \\ []) do
@@ -490,6 +495,55 @@ defmodule Hologram.DB.Schema do
     |> Enum.sort()
   end
 
+  # An enum type pairs through the columns that use it: an actual type only in the actual
+  # term and a target type only in the target pair when every column both sides share by
+  # table and name that has the actual type in the actual term has the target type in the
+  # target, and no such column ties the target type to another actual one. A column on the
+  # old type going anywhere else - text, another type - would leave the renamed type in use
+  # by a column the rest of the diff then changes, which no rebuild of the type expects.
+  defp pair_enum_type_renames(actual, target) do
+    shared_column_types =
+      for {table, actual_definition} <- actual.tables,
+          %{columns: target_columns} <- [target.tables[table]],
+          {column, %{type: from}} <- actual_definition.columns,
+          %{type: to} <- [target_columns[column]],
+          Map.has_key?(actual.enum_types, from) and not Map.has_key?(target.enum_types, from),
+          uniq: true,
+          do: {from, to}
+
+    targets_by_from = Enum.group_by(shared_column_types, &elem(&1, 0), &elem(&1, 1))
+    froms_by_to = Enum.group_by(shared_column_types, &elem(&1, 1), &elem(&1, 0))
+
+    ops =
+      shared_column_types
+      |> Enum.filter(fn {from, to} ->
+        Map.has_key?(target.enum_types, to) and not Map.has_key?(actual.enum_types, to) and
+          targets_by_from[from] == [to] and froms_by_to[to] == [from]
+      end)
+      |> Enum.sort()
+      |> Enum.map(fn {from, to} -> %{op: :rename_enum_type, from: from, to: to} end)
+
+    renamed_types = Map.new(ops, &{&1.from, &1.to})
+
+    enum_types =
+      Map.new(actual.enum_types, fn {name, values} ->
+        {Map.get(renamed_types, name, name), values}
+      end)
+
+    tables =
+      Map.new(actual.tables, fn {table, definition} ->
+        columns =
+          Map.new(definition.columns, fn {column, column_definition} ->
+            type = Map.get(renamed_types, column_definition.type, column_definition.type)
+            {column, %{column_definition | type: type}}
+          end)
+
+        {table, %{definition | columns: columns}}
+      end)
+
+    {ops, %{actual | enum_types: enum_types, tables: tables}}
+  end
+
   # The renames run before every drop, so a rename can't take a name an actual index or primary
   # key still holds, nor one an earlier rename of this pass took - PostgreSQL would refuse it.
   # Only those two kinds are checked: a derived index name always carries its $idx or $uidx
@@ -561,13 +615,16 @@ defmodule Hologram.DB.Schema do
     {ops, %{actual | tables: tables}}
   end
 
-  # The table renames go first, so the index pairing and the constraint passes see a renamed
-  # join table as one both sides share, and rename its reverse index and constraints with it.
+  # The table renames go first, so the enum type and index pairing and the constraint passes
+  # see a renamed join table as one both sides share, and rename its reverse index and
+  # constraints with it. An enum type renamed through its column then diffs its values under
+  # the new name, as adds or a rebuild.
   defp pair_renames(actual, target) do
     {table_ops, tables_renamed} = pair_join_table_renames(actual, target)
-    {index_ops, renamed} = pair_index_renames(tables_renamed, target)
+    {enum_type_ops, enum_types_renamed} = pair_enum_type_renames(tables_renamed, target)
+    {index_ops, renamed} = pair_index_renames(enum_types_renamed, target)
 
-    {table_ops ++ index_ops, renamed}
+    {table_ops ++ enum_type_ops ++ index_ops, renamed}
   end
 
   defp pk_rename_ops(_table, nil, _target_pk), do: []

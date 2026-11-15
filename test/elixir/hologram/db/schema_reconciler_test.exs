@@ -198,6 +198,32 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       """)
   end
 
+  defp insert_module4_row(c_value) do
+    insert_statement = """
+    INSERT INTO "hologram_data"."test_fixtures_entity_module4"
+      ("id", "a", "b", "c", "d", "created_at", "updated_at", "$revisions")
+    VALUES ('00000000-0000-0000-0000-000000000001', '2026-01-01', '2026-01-01 00:00:00+00',
+            '#{c_value}', 1.5, '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+    """
+
+    {:ok, _result} = Connection.query(insert_statement)
+  end
+
+  # An enum type standing under another name, as an older naming rule left it, and registered
+  # under that name.
+  defp rename_enum_type_by_hand(from, to) do
+    {:ok, _result} =
+      Connection.query(
+        ~s(ALTER TYPE "hologram_data".#{Mapper.quote_identifier(from)} RENAME TO #{Mapper.quote_identifier(to)})
+      )
+
+    {:ok, _result} =
+      Connection.query(
+        ~s(UPDATE "hologram_system"."schema_object" SET "name" = $2 WHERE "kind" = 'enum_type' AND "name" = $1),
+        [from, to]
+      )
+  end
+
   defp reconcile_context(entity_types) do
     mapping =
       entity_types
@@ -1240,6 +1266,126 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
       end
+    end
+
+    test "renames an enum type standing under an old name, keeping its column's values" do
+      context = reconcile_context([Module4])
+      reconcile(context)
+      insert_module4_row("y")
+
+      enum_type = "test_fixtures_entity_module4_c_$enum"
+      old_name = "test_fixtures_entity_module4_old_$enum"
+      rename_enum_type_by_hand(enum_type, old_name)
+
+      assert reconcile(context).ops == [
+               %{op: :rename_enum_type, from: old_name, to: enum_type}
+             ]
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      {:ok, %{rows: rows}} =
+        Connection.query(~s(SELECT "c"::text FROM "hologram_data"."test_fixtures_entity_module4"))
+
+      assert rows == [["y"]]
+
+      assert {:enum_type, "", enum_type} in registry()
+      refute {:enum_type, "", old_name} in registry()
+    end
+
+    test "refuses a renamed enum type losing a value rows still hold" do
+      reconcile(reconcile_context([Module4]))
+      insert_module4_row("y")
+
+      rename_enum_type_by_hand(
+        "test_fixtures_entity_module4_c_$enum",
+        "test_fixtures_entity_module4_old_$enum"
+      )
+
+      context =
+        [Module4]
+        |> reconcile_context()
+        |> update_mapping_column(Module4, "c", &%{&1 | enum_values: ["x"]})
+
+      expected_msg =
+        ~s(found 1 row in "test_fixtures_entity_module4"."c" ) <>
+          "holding removed enum value 'y' - update the rows or re-add the value"
+
+      assert_error RuntimeError, expected_msg, fn -> reconcile(context) end
+
+      old_name = "test_fixtures_entity_module4_old_$enum"
+
+      assert Map.has_key?(Introspection.schema().enum_types, old_name)
+      assert {:enum_type, "", old_name} in registry()
+    end
+
+    test "renames an enum type under an old name and adds a value to it" do
+      reconcile(reconcile_context([Module4]))
+      insert_module4_row("y")
+
+      enum_type = "test_fixtures_entity_module4_c_$enum"
+      rename_enum_type_by_hand(enum_type, "test_fixtures_entity_module4_old_$enum")
+
+      context =
+        [Module4]
+        |> reconcile_context()
+        |> update_mapping_column(Module4, "c", &%{&1 | enum_values: ["x", "y", "z"]})
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema().enum_types[enum_type] == ["x", "y", "z"]
+
+      {:ok, %{rows: rows}} =
+        Connection.query(~s(SELECT "c"::text FROM "hologram_data"."test_fixtures_entity_module4"))
+
+      assert rows == [["y"]]
+    end
+
+    test "renames an enum type under an old name and rebuilds it without a value no row holds" do
+      reconcile(reconcile_context([Module4]))
+      insert_module4_row("x")
+
+      enum_type = "test_fixtures_entity_module4_c_$enum"
+      rename_enum_type_by_hand(enum_type, "test_fixtures_entity_module4_old_$enum")
+
+      context =
+        [Module4]
+        |> reconcile_context()
+        |> update_mapping_column(Module4, "c", &%{&1 | enum_values: ["x"]})
+
+      ExUnit.CaptureLog.capture_log(fn -> reconcile(context) end)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+      assert Introspection.schema().enum_types[enum_type] == ["x"]
+
+      {:ok, %{rows: rows}} =
+        Connection.query(~s(SELECT "c"::text FROM "hologram_data"."test_fixtures_entity_module4"))
+
+      assert rows == [["x"]]
+    end
+
+    test "raises for an unregistered enum type the model's column matches" do
+      context = reconcile_context([Module4])
+      reconcile(context)
+
+      enum_type = "test_fixtures_entity_module4_c_$enum"
+
+      {:ok, _result} =
+        Connection.query(
+          ~s(ALTER TYPE "hologram_data".#{Mapper.quote_identifier(enum_type)} RENAME TO "hand_made_status")
+        )
+
+      {:ok, _result} =
+        Connection.query(
+          ~s(DELETE FROM "hologram_system"."schema_object" WHERE "kind" = 'enum_type' AND "name" = $1),
+          [enum_type]
+        )
+
+      expected_msg =
+        ~s(unknown enum type "hand_made_status" in the hologram_data schema - ) <>
+          "this schema is model-managed - move the object to another schema or remove it"
+
+      assert_error RuntimeError, expected_msg, fn -> reconcile(context) end
     end
 
     test "raises when removing an enum value that rows still hold" do
