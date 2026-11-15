@@ -10,7 +10,7 @@ How many connected clients one node can keep in sync, how long a committed write
 4. `deploy` and `deploy_tenants`: a deploy that changes the read rules, on the board's or the tenants' data, so every returning client is sent everything again, all at once.
 5. `lock`: whether the lock Postgres takes when a transaction that called `pg_notify` commits caps how many writes per second get through.
 
-Each takes options for its sizes, limits and client counts, like `--clients 1,10,100`, `--cards`, `--docs` or `--refill-limit`, listed with their defaults at the top of `lib/hologram_sync_benchmark/driver.ex`.
+Each takes options for its sizes, limits and client counts, like `--clients 1,10,100`, `--cards`, `--docs`, `--refill-limit` or `--lock-duration`, listed with their defaults at the top of `lib/hologram_sync_benchmark/driver.ex`. For `lock`, `--clients` gives how many writers write at once. `lock` measures the lock for the whole Postgres server, so run it with nothing else writing to that server.
 
 `boot` only starts and stops the server node, `seed` seeds the board, and `smoke` also connects a few clients to it, to check the setup.
 

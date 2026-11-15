@@ -10,6 +10,7 @@ defmodule HologramSyncBenchmark.Driver do
   alias HologramSyncBenchmark.Cases.Access
   alias HologramSyncBenchmark.Cases.Board
   alias HologramSyncBenchmark.Cases.Deploy
+  alias HologramSyncBenchmark.Cases.Lock
   alias HologramSyncBenchmark.Cases.Tenants
   alias HologramSyncBenchmark.Clients
   alias HologramSyncBenchmark.DB
@@ -22,20 +23,22 @@ defmodule HologramSyncBenchmark.Driver do
 
   @board_page "HologramSyncBenchmark.BoardPage"
 
-  @cases ~w(boot seed smoke board board_roles tenants access deploy deploy_tenants)
+  @cases ~w(boot seed smoke board board_roles tenants access deploy deploy_tenants lock)
 
   # The options and their defaults: the board's size; the tenants, members per tenant and tasks
   # per tenant of the tenants case; the access case's docs and the seconds a change of access may
   # take to reach every client; the client counts a sweep steps through; the steady writes' rate
   # per second and length in seconds; the slowest p99 delivery in milliseconds a step passes
-  # with; how long in seconds a client may take to fill; and how long in seconds the deploy
-  # cases' clients may take to all hold their pots again.
+  # with; how long in seconds a client may take to fill; how long in seconds the deploy cases'
+  # clients may take to all hold their pots again; and how long in seconds the lock case runs
+  # each number of writers.
   @defaults [
     access_limit: 10,
     cards: 2_000,
     docs: 5_000,
     duration: 30,
     fill_timeout: 300,
+    lock_duration: 10,
     members: 5,
     p99_limit: 1_000,
     rate: 2,
@@ -54,6 +57,7 @@ defmodule HologramSyncBenchmark.Driver do
     clients: :string,
     duration: :integer,
     fill_timeout: :integer,
+    lock_duration: :integer,
     members: :integer,
     p99_limit: :integer,
     rate: :integer,
@@ -183,6 +187,9 @@ defmodule HologramSyncBenchmark.Driver do
   defp run_case("deploy", opts), do: run_sweep(opts, Deploy.sweep_case(opts, :board))
 
   defp run_case("deploy_tenants", opts), do: run_sweep(opts, Deploy.sweep_case(opts, :tenants))
+
+  # Writers rather than clients: --clients gives how many write at once.
+  defp run_case("lock", opts), do: Lock.run(DB.connect!(), opts)
 
   # A case with clients and writes: seeds what it needs, sweeps the client counts, and writes the
   # figures into the README.

@@ -50,13 +50,19 @@ defmodule HologramSyncBenchmark.Report do
   Writes the given case's section into the README and returns :ok.
 
   `run_line` is `run_line/1` read when the run started, `options` the lines describing what the
-  run was given, and `figure` the case's clients-per-node figure. `tables` are `{heading,
-  columns, rows}`, each row a list of cells.
+  run was given, and `figure` the case's clients-per-node figure, or whatever the case concludes
+  under `:figure_label`. `tables` are `{heading, columns, rows}`, each row a list of cells.
   """
-  @spec write_case!(String.t(), String.t(), String.t(), [String.t()], String.t(), [
-          {String.t(), [String.t()], [[term]]}
-        ]) :: :ok
-  def write_case!(name, title, run_line, options, figure, tables) do
+  @spec write_case!(
+          String.t(),
+          String.t(),
+          String.t(),
+          [String.t()],
+          String.t(),
+          [{String.t(), [String.t()], [[term]]}],
+          keyword
+        ) :: :ok
+  def write_case!(name, title, run_line, options, figure, tables, opts \\ []) do
     :ok = check_readme!()
 
     section = """
@@ -67,7 +73,7 @@ defmodule HologramSyncBenchmark.Report do
 
     #{Enum.map_join(options, "\n", &("- " <> &1))}
 
-    Clients per node: **#{figure}**
+    #{Keyword.get(opts, :figure_label, "Clients per node")}: **#{figure}**
 
     #{Enum.map_join(tables, "\n", &table/1)}<!-- /case:#{name} -->
     """
