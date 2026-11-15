@@ -4262,10 +4262,11 @@ describe("Hologram", () => {
       // the document when the URL has a fragment.
       it("reloads the entry the browser went to when it was meant for one", async () => {
         const reloading = sinon.stub(Hologram, "reloadBrowserLocation");
+        const entryPath = window.location.pathname + window.location.search;
 
         try {
           const loading = Hologram.loadNewPage(
-            "/entry",
+            entryPath,
             payloadFor("stopped-2"),
             0,
             "history-entry-stopped",
@@ -4276,6 +4277,59 @@ describe("Hologram", () => {
 
           sinon.assert.calledOnce(reloading);
           sinon.assert.notCalled(replaceLocationStub);
+          assert.deepStrictEqual(assignedUrls, []);
+        } finally {
+          reloading.restore();
+        }
+      });
+
+      // The path of an entry asked for again carries its fragment, and a replace to it would only
+      // jump within the document.
+      it("reloads the entry the browser went to when its URL has a fragment", async () => {
+        const reloading = sinon.stub(Hologram, "reloadBrowserLocation");
+        const entryPath = window.location.pathname + window.location.search;
+
+        try {
+          const loading = Hologram.loadNewPage(
+            `${entryPath}#section`,
+            payloadFor("stopped-7"),
+            0,
+            "history-entry-stopped",
+          );
+
+          record();
+          await loading;
+
+          sinon.assert.calledOnce(reloading);
+          sinon.assert.notCalled(replaceLocationStub);
+        } finally {
+          reloading.restore();
+        }
+      });
+
+      // The entry's page redirected, and the hop's answer arrived once the tab was stopped. Asking
+      // for the entry's URL again could redirect elsewhere, so the browser goes where the server
+      // sent it, in place of the entry.
+      it("puts the page a redirect led to in place of the entry the browser went to", async () => {
+        const reloading = sinon.stub(Hologram, "reloadBrowserLocation");
+
+        try {
+          const loading = Hologram.loadNewPage(
+            "/redirected-to",
+            payloadFor("stopped-6"),
+            1,
+            "history-entry-stopped",
+          );
+
+          record();
+          await loading;
+
+          sinon.assert.calledOnceWithExactly(
+            replaceLocationStub,
+            "/redirected-to",
+          );
+
+          sinon.assert.notCalled(reloading);
           assert.deepStrictEqual(assignedUrls, []);
         } finally {
           reloading.restore();

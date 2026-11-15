@@ -773,10 +773,7 @@ export default class Hologram {
     // Ahead of the identity's check below, which loads afresh too, but without waiting for the
     // store.
     if ($.#isStopped()) {
-      return $.#loadAfresh(
-        navigation,
-        historyEntryId === null ? pagePath : null,
-      );
+      return $.#loadAfresh(navigation, pagePath, historyEntryId !== null);
     }
 
     // A page described for an identity that has since changed, a prefetch kept across a logout or
@@ -834,7 +831,7 @@ export default class Hologram {
       // The server can have stopped serving the tab while the snapshot was saved or the frame was
       // awaited, and the page then loads afresh like any other (see #loadAfresh).
       if ($.#isStopped()) {
-        $.#loadAfresh(navigation, historyEntryId === null ? pagePath : null);
+        $.#loadAfresh(navigation, pagePath, historyEntryId !== null);
         return;
       }
 
@@ -2524,6 +2521,18 @@ export default class Hologram {
     );
   }
 
+  // Whether the URL is the one the address bar shows, fragments aside.
+  static #isAddressBarUrl(url) {
+    const target = new URL(url, window.location.href);
+    const shown = window.location;
+
+    return (
+      target.origin === shown.origin &&
+      target.pathname === shown.pathname &&
+      target.search === shown.search
+    );
+  }
+
   // Whether the server stopped serving this tab after a deploy (see DataLayer.stopped).
   static #isStopped() {
     return Hologram.dataLayer?.stopped() === true;
@@ -2535,17 +2544,22 @@ export default class Hologram {
   // lost - once what they wrote is in the store, which is waited for first. A navigation begun
   // meanwhile takes over.
   //
-  // Given no path, the entry the browser is on is reloaded: it shows that entry's URL already, and
-  // a replace to it would only jump within the document when the URL has a fragment.
-  static async #loadAfresh(navigation, pagePath) {
+  // A page meant for the history entry the browser is on goes into that entry rather than a new
+  // one. Given no path, or the URL the address bar shows, fragments aside, the entry is reloaded: a
+  // replace to a URL differing from it only in the fragment would only jump within the document.
+  // Any other path - where a redirect was leading - replaces the entry, so the browser lands where
+  // the server sent it rather than asking for the redirect again.
+  static async #loadAfresh(navigation, pagePath, isInEntry = false) {
     await Hologram.dataLayer.saved();
 
     if ($.navigationCount !== navigation) {
       return;
     }
 
-    if (pagePath === null) {
+    if (pagePath === null || (isInEntry && $.#isAddressBarUrl(pagePath))) {
       Hologram.reloadBrowserLocation();
+    } else if (isInEntry) {
+      Hologram.replaceBrowserLocation(pagePath);
     } else {
       Hologram.navigateBrowserTo(pagePath);
     }
@@ -2647,10 +2661,7 @@ export default class Hologram {
 
         // Asked for before the server stopped serving the tab, and answered after.
         if ($.#isStopped()) {
-          $.#loadAfresh(
-            navigation,
-            historyEntryId === null ? payload.to : null,
-          );
+          $.#loadAfresh(navigation, payload.to, historyEntryId !== null);
         } else {
           $.#handToBrowser(payload.to, historyEntryId);
         }
