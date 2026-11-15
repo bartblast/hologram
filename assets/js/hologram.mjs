@@ -1036,6 +1036,11 @@ export default class Hologram {
 
     console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
 
+    // Over the page rather than in it: what the data layer puts in front of the person is its own
+    // element, which the patch above leaves alone. Reached only when the render finished, like the
+    // queue below.
+    Hologram.dataLayer?.rendered();
+
     // Run after the reconcile above rather than straight after the patch: a waiting action
     // renders, and a render collects the page's <window>/<document> bindings into
     // Renderer.listenerBindings. Running one earlier would leave this render reconciling the

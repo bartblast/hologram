@@ -14,6 +14,7 @@ import ManuallyPortedElixirHologramJob from "./elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "./elixir/hologram/query/stage.mjs";
 import Model from "./model.mjs";
 import QueryKernel from "./query_kernel.mjs";
+import ReloadNotice from "./reload_notice.mjs";
 import Replica from "./replica.mjs";
 import SyncStream from "./sync_stream.mjs";
 import Tabs from "./tabs.mjs";
@@ -530,6 +531,12 @@ export default class DataLayer {
   // runs.
   static openBatch(target) {
     Batches.open(target);
+  }
+
+  // Called by every render that finished: a tab the server stopped serving says so to the person
+  // (see ReloadNotice).
+  static rendered() {
+    ReloadNotice.update(SyncStream.stopReason !== null);
   }
 
   // Takes up what a previous page load left - the place to resume the stream from, the number to

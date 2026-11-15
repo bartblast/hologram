@@ -15,6 +15,7 @@ import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
 import QueryKernel from "../../assets/js/query_kernel.mjs";
+import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
@@ -864,6 +865,30 @@ describe("DataLayer", () => {
       DataLayer.openBatch("my_component");
 
       sinon.assert.calledOnceWithExactly(opening, "my_component");
+    });
+  });
+
+  describe("rendered()", () => {
+    afterEach(() => {
+      SyncStream.stopReason = null;
+    });
+
+    it("puts the notice up in a tab the server stopped", () => {
+      const updating = sinon.stub(ReloadNotice, "update");
+
+      SyncStream.stopReason = "model_hash";
+
+      DataLayer.rendered();
+
+      sinon.assert.calledOnceWithExactly(updating, true);
+    });
+
+    it("leaves the notice down in a tab the server serves", () => {
+      const updating = sinon.stub(ReloadNotice, "update");
+
+      DataLayer.rendered();
+
+      sinon.assert.calledOnceWithExactly(updating, false);
     });
   });
 

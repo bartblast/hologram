@@ -6958,6 +6958,35 @@ describe("Hologram", () => {
       assert.isFalse(SyncStream.rowsChangedSinceRender);
     });
 
+    // What a tab the server stopped shows the person is put up after the patch.
+    it("tells the data layer it finished, after the patch", () => {
+      const patching = sinon.stub();
+
+      stubRender(patching);
+      setDataLayer();
+
+      const rendered = sinon.stub(Hologram.dataLayer, "rendered");
+
+      Hologram.render();
+
+      sinon.assert.calledOnce(rendered);
+      sinon.assert.callOrder(patching, rendered);
+    });
+
+    it("tells the data layer nothing when the render raised", () => {
+      stubRender(() => {
+        throw new Error("template raised");
+      });
+
+      setDataLayer();
+
+      const rendered = sinon.stub(Hologram.dataLayer, "rendered");
+
+      assert.throws(() => Hologram.render(), "template raised");
+
+      sinon.assert.notCalled(rendered);
+    });
+
     describe("Phoenix's live reload iframe", () => {
       const stubFirstRender = () => {
         sinon.stub(Renderer, "renderPage").returns({
