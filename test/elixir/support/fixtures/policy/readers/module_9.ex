@@ -13,6 +13,8 @@ defmodule Hologram.Test.Fixtures.Policy.Readers.Module9 do
   relationship :deputy, Module14, optional: true
   relationship :lead, Module14, optional: true
 
+  derived :open_cards, [Module10], fn cards -> filter(cards, done == false) end
+
   allow :read
   allow :update, when: lead_id == user_id()
 end

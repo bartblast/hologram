@@ -93,6 +93,32 @@ defmodule Hologram.Sync.RecheckTest do
       assert map_size(readable) == 2
     end
 
+    test "lists a reader the row reaches twice once", context do
+      project = create(Module1)
+      project_id = project.id
+
+      create(Module2, %{project_id: project.id, user_id: context.alice})
+      create(Module2, %{project_id: project.id, user_id: context.alice})
+
+      %{Module1 => %{^project_id => {_row, readers}}} =
+        run(%{Module1 => [project.id]}, context.users)
+
+      assert readers == MapSet.new([context.alice])
+    end
+
+    test "leaves out a reader found from the row who isn't among the given users", context do
+      project = create(Module1)
+      project_id = project.id
+
+      create(Module2, %{project_id: project.id, user_id: context.alice})
+      create(Module2, %{project_id: project.id, user_id: context.bob})
+
+      %{Module1 => %{^project_id => {_row, readers}}} =
+        run(%{Module1 => [project.id]}, [context.bob, nil])
+
+      assert readers == MapSet.new([context.bob])
+    end
+
     test "decides a row's own membership by the user it names", context do
       project = create(Module1)
       membership = create(Module2, %{project_id: project.id, user_id: context.alice})
@@ -151,8 +177,17 @@ defmodule Hologram.Sync.RecheckTest do
 
       create(Module9, %{board_id: owned_closed.id, open: true})
 
-      boards = [owned_closed, open_board, archived_open, listed]
+      sponsored = create(Module8, %{archived: true, sponsor_id: context.bob})
+      watched = create(Module8, %{archived: true})
+      watched_list = create(Module9, %{board_id: watched.id})
+      create(Module10, %{list_id: watched_list.id, watcher_id: context.carol})
+      create(Module10, %{done: true, list_id: watched_list.id, watcher_id: context.alice})
+
+      boards = [owned_closed, open_board, archived_open, listed, sponsored, watched]
       readable = assert_answers_as_can(Module8, boards, context.users)
+
+      assert readers_of(readable, sponsored) == MapSet.new([context.bob])
+      assert readers_of(readable, watched) == MapSet.new([context.carol])
 
       assert readers_of(readable, open_board) == :all
 

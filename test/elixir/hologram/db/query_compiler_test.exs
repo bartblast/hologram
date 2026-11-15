@@ -45,6 +45,7 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module10, as: ReadersModule10
   alias Hologram.Test.Fixtures.Policy.Readers.Module2, as: ReadersModule2
   alias Hologram.Test.Fixtures.Policy.Readers.Module3, as: ReadersModule3
+  alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
   alias Hologram.Test.Fixtures.Policy.Readers.Module8, as: ReadersModule8
   alias Hologram.Test.Fixtures.Policy.Readers.Module9, as: ReadersModule9
   alias Hologram.Test.Fixtures.Role
@@ -3721,6 +3722,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                          ReadersModule10,
                          ReadersModule2,
                          ReadersModule3,
+                         ReadersModule5,
                          ReadersModule8,
                          ReadersModule9,
                          RoleGrant
@@ -3753,6 +3755,17 @@ defmodule Hologram.DB.QueryCompilerTest do
         ~s|WHERE #{condition_sql}) END|
     end
 
+    defp listed_readers_sql(candidates_sql, condition_sql) do
+      ~s|CASE WHEN "$e"."$everyone" THEN '{}'::uuid[] | <>
+        ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" | <>
+        ~s|FROM (#{candidates_sql}) AS "$c"("$reader") | <>
+        ~s|WHERE ("$c"."$reader" IN | <>
+        ~s|(SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user"))) IS TRUE | <>
+        ~s|AND #{condition_sql}) END|
+    end
+
+    defp readers_table(entity_type), do: ~s|"#{Mapper.table_name(entity_type)}"|
+
     test "decides a type whose rule admits everyone once per row" do
       assert recheck(PolicyModule3, @recheck_mapping, false) == %{
                params: [:ids],
@@ -3767,7 +3780,7 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "tests every user for a type whose rules all depend on the user" do
+    test "finds the readers a rule compares the acting user to from the row" do
       assert recheck(ReadersModule2, @recheck_mapping, false) == %{
                params: [:ids, :users],
                sql:
@@ -3775,9 +3788,118 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ReadersModule2,
                    "FALSE",
                    "FALSE",
-                   tested_readers_sql(~s|"user_id" = "$c"."$reader"|)
+                   listed_readers_sql(~s|SELECT "user_id"|, ~s|"user_id" = "$c"."$reader"|)
                  )
              }
+    end
+
+    test "tests every user for a type with a rule that can't list its readers" do
+      assert recheck(ReadersModule5, @recheck_mapping, false) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule5,
+                   "FALSE",
+                   "FALSE",
+                   tested_readers_sql(~s|("owner_id" != "$c"."$reader" OR "owner_id" IS NULL)|)
+                 )
+             }
+    end
+
+    test "tests every user for a type with a grant rule" do
+      assert %{sql: sql} = recheck(PolicyModule1, @recheck_mapping, false)
+
+      assert String.contains?(
+               sql,
+               ~s|FROM (SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user")) AS "$c"("$reader") WHERE ((EXISTS|
+             )
+    end
+
+    test "finds the readers of an any over a path from the set the path reaches" do
+      assert %{sql: sql} = recheck(ReadersModule3, @recheck_mapping, false)
+
+      assert String.contains?(
+               sql,
+               ~s|FROM (SELECT "$cq1"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module2" AS "$q1" | <>
+                 ~s|CROSS JOIN LATERAL (SELECT "user_id") AS "$cq1"("$reader") | <>
+                 ~s|WHERE "$q1"."project_id" = (SELECT "$p1"."id" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module1" AS "$p1" | <>
+                 ~s|WHERE "$p1"."id" = #{readers_table(ReadersModule3)}."project_id")) | <>
+                 ~s|AS "$c"("$reader")|
+             )
+    end
+
+    test "finds the readers of nested, flattened and outer-row quantifiers and of disjunctions" do
+      board = readers_table(ReadersModule8)
+
+      assert %{params: params, sql: sql} = recheck(ReadersModule8, @recheck_mapping, false)
+
+      nested_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "$cq2"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module10" AS "$q2" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "assignee_id") AS "$cq2"("$reader") | <>
+          ~s|WHERE "$q2"."list_id" = "$q1"."id") AS "$cq1"("$reader") | <>
+          ~s|WHERE "$q1"."board_id" = #{board}."id")|
+
+      alternatives_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL ((SELECT "lead_id") UNION (SELECT "deputy_id")) | <>
+          ~s|AS "$cq1"("$reader") WHERE "$q1"."board_id" = #{board}."id")|
+
+      flattened_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module10" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "reviewer_id") AS "$cq1"("$reader") | <>
+          ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_readers_module9" | <>
+          ~s|AS "$s1_1" WHERE "$s1_1"."board_id" = #{board}."id" AND "$q1"."list_id" = "$s1_1"."id"))|
+
+      outer_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL (SELECT #{board}."owner_id") AS "$cq1"("$reader") | <>
+          ~s|WHERE "$q1"."board_id" = #{board}."id")|
+
+      owner_sql = ~s|(SELECT "owner_id")|
+
+      path_sql =
+        ~s|(SELECT (SELECT "$p1"."id" FROM "hologram_data"."test_fixtures_entity_module14" | <>
+          ~s|AS "$p1" WHERE "$p1"."id" = #{board}."sponsor_id"))|
+
+      derived_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "$cq2"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module10" AS "$q2" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "watcher_id") AS "$cq2"("$reader") | <>
+          ~s|WHERE "$q2"."id" IN (SELECT "$s2"."id" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module10" AS "$s2" | <>
+          ~s|WHERE "$s2"."list_id" = "$q1"."id" AND "done" = $9)) AS "$cq1"("$reader") | <>
+          ~s|WHERE "$q1"."board_id" = #{board}."id")|
+
+      candidates_sql =
+        Enum.join(
+          [
+            nested_sql,
+            alternatives_sql,
+            flattened_sql,
+            outer_sql,
+            owner_sql,
+            path_sql,
+            derived_sql
+          ],
+          " UNION "
+        )
+
+      assert Enum.at(params, 8) == {:value, false}
+
+      assert String.contains?(
+               sql,
+               ~s|FROM (#{candidates_sql}) AS "$c"("$reader") WHERE ("$c"."$reader" IN|
+             )
     end
 
     test "splits a type's rules into those deciding for everyone and those depending on the user" do
@@ -3788,7 +3910,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                    PolicyModule6,
                    "FALSE",
                    ~s|("shared" = $3) IS TRUE|,
-                   tested_readers_sql(~s|"author_id" = "$c"."$reader"|)
+                   listed_readers_sql(~s|SELECT "author_id"|, ~s|"author_id" = "$c"."$reader"|)
                  )
              }
     end
@@ -3801,7 +3923,10 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ReadersModule10,
                    "FALSE",
                    "TRUE",
-                   tested_readers_sql(~s|"assignee_id" = "$c"."$reader"|)
+                   listed_readers_sql(
+                     ~s|SELECT "assignee_id"|,
+                     ~s|"assignee_id" = "$c"."$reader"|
+                   )
                  )
              }
     end
@@ -3821,7 +3946,7 @@ defmodule Hologram.DB.QueryCompilerTest do
                    PolicyModule6,
                    ~s|("shared" = $4) IS TRUE|,
                    ~s|("shared" = $3) IS TRUE|,
-                   tested_readers_sql(~s|"author_id" = "$c"."$reader"|)
+                   listed_readers_sql(~s|SELECT "author_id"|, ~s|"author_id" = "$c"."$reader"|)
                  )
              }
     end
@@ -3834,7 +3959,10 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ReadersModule10,
                    "TRUE",
                    "TRUE",
-                   tested_readers_sql(~s|"assignee_id" = "$c"."$reader"|)
+                   listed_readers_sql(
+                     ~s|SELECT "assignee_id"|,
+                     ~s|"assignee_id" = "$c"."$reader"|
+                   )
                  )
              }
     end
@@ -3847,7 +3975,11 @@ defmodule Hologram.DB.QueryCompilerTest do
                    ReadersModule1,
                    "FALSE",
                    "FALSE",
-                   tested_readers_sql(
+                   listed_readers_sql(
+                     ~s|SELECT "$cq1"."$reader" | <>
+                       ~s|FROM "hologram_data"."test_fixtures_policy_readers_module2" AS "$q1" | <>
+                       ~s|CROSS JOIN LATERAL (SELECT "user_id") AS "$cq1"("$reader") | <>
+                       ~s|WHERE "$q1"."project_id" = "test_fixtures_policy_readers_module1"."id"|,
                      ~s|EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_readers_module2" | <>
                        ~s|AS "$q1" WHERE "$q1"."project_id" = "test_fixtures_policy_readers_module1"."id" | <>
                        ~s|AND "user_id" = "$c"."$reader")|

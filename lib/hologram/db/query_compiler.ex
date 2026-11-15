@@ -213,8 +213,11 @@ defmodule Hologram.DB.QueryCompiler do
 
   A row none of them admits is left out, and so is an id with no row.
 
-  Every user is tested on every row for the rules depending on the user, each user read as the
-  acting user from a row of its own.
+  The rules depending on the user test each user as the acting user, read off a row of its own.
+  When each of them bounds its users by a condition it requires (see `t:Hologram.Policy.Readers.anchor/0`),
+  the users tested on a row are found from the row - the values an equality on the acting user
+  compares, over every row of the sets an `any` reaches - and only those of `:users` among them are
+  tested. Otherwise every user of `:users` is tested on every row.
   """
   @spec recheck(module, %{module => %{atom => any}}, boolean) :: %{atom => any}
   def recheck(entity_type, mapping, anonymous?) do
@@ -223,9 +226,9 @@ defmodule Hologram.DB.QueryCompiler do
 
     classes = Readers.classify(entity_type)
     independent_rules = for {:independent, rule} <- classes, do: rule
-    dependent_rules = for class <- classes, elem(class, 0) != :independent, do: elem(class, 1)
+    dependent_classes = Enum.reject(classes, &match?({:independent, _rule}, &1))
 
-    initial_params = if dependent_rules == [], do: [:ids], else: [:users, :ids]
+    initial_params = if dependent_classes == [], do: [:ids], else: [:users, :ids]
 
     {everyone_sql, params_after_everyone} =
       recheck_flag_sql(entity_type, mapping, %{rules: independent_rules}, initial_params)
@@ -248,7 +251,7 @@ defmodule Hologram.DB.QueryCompiler do
       end
 
     {readers_sql, all_reversed_params} =
-      recheck_readers_sql(entity_type, mapping, dependent_rules, params_after_anonymous)
+      recheck_readers_sql(entity_type, mapping, dependent_classes, params_after_anonymous)
 
     # OFFSET 0 keeps Postgres from folding the subqueries into the statement around them, which
     # would copy each flag and the readers into every place that reads them, and decide them again
@@ -1264,40 +1267,111 @@ defmodule Hologram.DB.QueryCompiler do
     {"'{}'::uuid[]", reversed_params}
   end
 
-  defp recheck_readers_sql(entity_type, mapping, rules, reversed_params) do
+  defp recheck_readers_sql(entity_type, mapping, classes, reversed_params) do
+    rules = Enum.map(classes, &elem(&1, 1))
     policy = %{actor_sql: ~s|"$c"."$reader"|, rules: rules}
 
-    {condition_sql, new_params} =
+    {condition_sql, params_after_condition} =
       recheck_condition_sql(entity_type, mapping, policy, reversed_params)
 
-    candidates_sql = ~s|SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user")|
+    users_sql = ~s|SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user")|
+
+    {candidates_sql, filter_sql, new_params} =
+      if Enum.all?(classes, &row_listed?/1) do
+        scope =
+          entity_type
+          |> policy_context(mapping, policy)
+          |> rule_scope()
+
+        # Split rules can share an anchor, which renders the same on the same scope.
+        {branches, params_after_candidates} =
+          classes
+          |> Enum.map(fn {:listed, _rule, anchor} -> anchor end)
+          |> Enum.uniq()
+          |> Enum.map_reduce(params_after_condition, &reader_candidates_sql(&1, scope, &2))
+
+        # Wrapped, the membership stays a subplan Postgres hashes once per statement. Bare, it is
+        # pulled up into a join, which with one candidate per row scans every user for each row, and
+        # an array membership is hashed only while the plan sees the array as a constant.
+        {union_sql(branches), ~s|("$c"."$reader" IN (#{users_sql})) IS TRUE AND |,
+         params_after_candidates}
+      else
+        {users_sql, "", params_after_condition}
+      end
 
     readers_sql =
       ~s|CASE WHEN "$e"."$everyone" THEN '{}'::uuid[] | <>
         ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" | <>
-        ~s|FROM (#{candidates_sql}) AS "$c"("$reader") WHERE #{condition_sql}) END|
+        ~s|FROM (#{candidates_sql}) AS "$c"("$reader") WHERE #{filter_sql}#{condition_sql}) END|
 
     {readers_sql, new_params}
   end
+
+  # The users a rule can hold for, found from the row its scope is about - a superset, since the
+  # statement tests each of them against the rules after. An equality on the acting user names the
+  # value it compares, an any the users its condition names over every row of its set, read raw as a
+  # rule reads it, and a disjunction those of every alternative.
+  defp reader_candidates_sql({:actor_equal, name}, scope, reversed_params) do
+    {subject_sql, _column, new_params} = subject_sql(scope, name, reversed_params)
+
+    {"SELECT #{subject_sql}", new_params}
+  end
+
+  defp reader_candidates_sql({:any, source, anchor}, scope, reversed_params) do
+    depth = scope.quantifier_depth + 1
+    quoted_alias = Mapper.quote_identifier("$q#{depth}")
+    quoted_join = Mapper.quote_identifier("$qj#{depth}")
+    quoted_candidates = Mapper.quote_identifier("$cq#{depth}")
+
+    {target_type, membership_sql, params_after_owner} =
+      quantified_set(scope, source, quoted_alias, quoted_join, reversed_params)
+
+    inner_scope =
+      target_type
+      |> condition_scope(
+        scope.mapping,
+        quoted_alias,
+        scope.policy,
+        scope.path_depth,
+        scope.delegation_depth
+      )
+      |> Map.merge(%{
+        outer: [scope | scope.outer],
+        quantifier_depth: depth,
+        source_depth: scope.source_depth
+      })
+
+    {inner_sql, new_params} = reader_candidates_sql(anchor, inner_scope, params_after_owner)
+
+    target_table = Map.fetch!(scope.mapping, target_type).table
+
+    candidates_sql =
+      ~s|SELECT #{quoted_candidates}."$reader" | <>
+        ~s|FROM #{qualified_table(target_table)} AS #{quoted_alias} | <>
+        ~s|CROSS JOIN LATERAL (#{inner_sql}) AS #{quoted_candidates}("$reader") | <>
+        ~s|WHERE #{membership_sql}|
+
+    {candidates_sql, new_params}
+  end
+
+  defp reader_candidates_sql({:or, anchors}, scope, reversed_params) do
+    {branches, new_params} =
+      Enum.map_reduce(anchors, reversed_params, &reader_candidates_sql(&1, scope, &2))
+
+    {union_sql(branches), new_params}
+  end
+
+  # Whether the users a dependent rule can hold for are found from the row - grant and delegation
+  # anchors are not yet.
+  defp row_listed?({:listed, _rule, anchor}), do: elem(anchor, 0) in [:actor_equal, :any, :or]
+
+  defp row_listed?(_class), do: false
 
   # A rule's own condition is about the row the policy is evaluated for, and reads the rows its paths
   # reach as stored, the way its delegation does - a hop applying a read policy inside a rule could
   # reach that rule again.
   defp rule_condition(rule, context, reversed_params) do
-    scope =
-      context.entity_type
-      |> condition_scope(
-        context.mapping,
-        context.row_prefix,
-        nil,
-        context.path_depth,
-        context.delegation_depth
-      )
-      |> Map.merge(%{
-        actor_sql: context.actor_sql,
-        quantifier_depth: context.quantifier_depth,
-        source_depth: context.source_depth
-      })
+    scope = rule_scope(context)
 
     {predicate_conditions, params_after_predicates} =
       conditions(rule.predicates, scope, reversed_params)
@@ -1314,6 +1388,24 @@ defmodule Hologram.DB.QueryCompiler do
       [] -> {:unconditional, new_params}
       conditions -> {Enum.join(conditions, " AND "), new_params}
     end
+  end
+
+  # The scope a rule's own condition is rendered on: the row the policy is evaluated for, its hops
+  # read raw.
+  defp rule_scope(context) do
+    context.entity_type
+    |> condition_scope(
+      context.mapping,
+      context.row_prefix,
+      nil,
+      context.path_depth,
+      context.delegation_depth
+    )
+    |> Map.merge(%{
+      actor_sql: context.actor_sql,
+      quantifier_depth: context.quantifier_depth,
+      source_depth: context.source_depth
+    })
   end
 
   # Holding any of a rule's grant references satisfies it, so the references render as one
@@ -2304,6 +2396,11 @@ defmodule Hologram.DB.QueryCompiler do
   defp value_column(type, values) do
     %{null: true, source: :derived, sql_type: scalar_sql_type(type), type: type, values: values}
   end
+
+  # Several SELECTs as one set of rows, each kept once.
+  defp union_sql([branch_sql]), do: branch_sql
+
+  defp union_sql(branch_sqls), do: Enum.map_join(branch_sqls, " UNION ", &"(#{&1})")
 
   # What a comparison's value renders as: the acting user as the scope reads it, or a bound slot.
   defp value_slot({:actor}, scope, column, reversed_params) do

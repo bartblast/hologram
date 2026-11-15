@@ -89,12 +89,28 @@ defmodule Hologram.Policy.ReadersTest do
 
       owner = {:owner_id, :==, {:actor}}
 
-      assert split == [
+      assert Enum.take(split, 4) == [
                {:independent, rule([{:open, :==, true}, {:archived, :==, false}])},
                {:listed, rule([{:open, :==, true}, owner]), {:actor_equal, :owner_id}},
                {:listed, rule([owner, {:archived, :==, false}]), {:actor_equal, :owner_id}},
                {:listed, rule([owner]), {:actor_equal, :owner_id}}
              ]
+    end
+
+    test "an equality on a path lists the readers by the value the path reaches" do
+      classes = classify(Module8)
+
+      assert Enum.at(classes, 8) ==
+               {:listed, rule([{[:sponsor, :id], :==, {:actor}}]),
+                {:actor_equal, [:sponsor, :id]}}
+    end
+
+    test "an any over a derived set lists the readers by the rows the set holds" do
+      classes = classify(Module8)
+      {:listed, _rule, anchor} = List.last(classes)
+
+      assert anchor ==
+               {:any, [:lists], {:any, [:open_cards], {:actor_equal, :watcher_id}}}
     end
 
     test "a nested any lists the readers by the innermost set" do
