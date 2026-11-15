@@ -72,7 +72,8 @@ defmodule Hologram.Query do
   # or a quantifier's any:, none: or all: entry.
   @type predicates :: list({name | Placeholder.t(), any})
 
-  # The operand is a literal, a placeholder, the acting user ({:actor}) or an attribute_operand.
+  # The operand is a literal, a placeholder, the acting user ({:actor}) - in a policy condition only
+  # - or an attribute_operand.
   @type predicate :: {name | placeholder, operator, any}
 
   # Holds when any, none or all of the rows of a related set match its clauses, which are about one
@@ -338,17 +339,18 @@ defmodule Hologram.Query do
   membership element, a range bound) is most likely a forgotten pin, and the error says so.
   Raises Hologram.MisuseError when the query is neither an entity type module nor a query term, when
   pinned predicates are not a list of name and value pairs - a name being an attribute or a path -
-  when a predicate names a relationship or an unknown attribute - on the right side of a
-  comparison, which is how a forgotten pin on a variable reads - when a path goes through a
-  to-many relationship, an attribute or an unknown relationship, or ends at a name the related type
-  does not declare, when a quantifier's relationships do not lead through relationships to a
-  to-many relationship, an inverse set or a derived set, when `{:outer, levels, name}` reaches
-  past the queried row, when a disjunction holds fewer than two predicate lists or one of them is
-  empty or not such a list, when a comparison names an attribute with itself or
-  two attributes that do not compare, when a search names an attribute that isn't a string or its
-  term isn't a string, or when a value is invalid for its attribute or its operator
-  - a pinned keyword value holding a list, a tuple or a range is refused as an equality operand,
-  since membership and comparisons are written as expressions.
+  when pinned predicates name the acting user, which only a policy condition can (outside a derived
+  field, the acting user's id is pinned: `^user_id()`), when a predicate names a relationship or an
+  unknown attribute - on the right side of a comparison, which is how a forgotten pin on a variable
+  reads - when a path goes through a to-many relationship, an attribute or an unknown relationship,
+  or ends at a name the related type does not declare, when a quantifier's relationships do not lead
+  through relationships to a to-many relationship, an inverse set or a derived set, when
+  `{:outer, levels, name}` reaches past the queried row, when a disjunction holds fewer than two
+  predicate lists or one of them is empty or not such a list, when a comparison names an attribute
+  with itself or two attributes that do not compare, when a search names an attribute that isn't a
+  string or its term isn't a string, or when a value is invalid for its attribute or its operator -
+  a pinned keyword value holding a list, a tuple or a range is refused as an equality operand, since
+  membership and comparisons are written as expressions.
   """
   defmacro filter(query, predicates) do
     lowered = Expression.predicates(predicates, __CALLER__)
