@@ -56,6 +56,7 @@ defmodule Hologram.AuthContentionTest do
   alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.MisuseError
   alias Hologram.Mutation
   alias Hologram.Runtime.Serializer
   alias Hologram.Server
@@ -431,24 +432,6 @@ defmodule Hologram.AuthContentionTest do
       "stamp" => stamp_above(row),
       "type" => inspect(row.__struct__)
     }
-  end
-
-  # Scoped to this database and excluding the observer, because pg_stat_activity is the whole
-  # server: the rest of the suite runs against another database at the same moment.
-  defp wait_for_blocked_sessions(scratch_opts, count) do
-    {:ok, observer} = Postgrex.start_link(scratch_opts)
-
-    statement = """
-    SELECT count(*) FROM pg_catalog.pg_stat_activity
-    WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'
-      AND "pid" <> pg_backend_pid()
-    """
-
-    wait_until(fn ->
-      %Postgrex.Result{rows: [[blocked]]} = Postgrex.query!(observer, statement, [])
-
-      blocked == count
-    end)
   end
 
   # Waits until the sessions of this database blocked on a lock wait on the given kinds of lock, as
@@ -1185,6 +1168,33 @@ defmodule Hologram.AuthContentionTest do
       end)
 
     assert Task.await(updating, 5_000) == :ok
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+  end
+
+  # A row inserted with the id while the update waited on the set would be the row the update then
+  # changed, with nothing read of what its reference held - so a row that isn't there is refused
+  # before any set is entered.
+  test "an update moving a row that isn't there into a set doesn't wait for a write resting on that set",
+       %{scratch: scratch, scratch_opts: scratch_opts} do
+    space = create_space(scratch)
+    nonexistent_id = Entity.generate_id()
+
+    holder = start_holder(scratch_opts, fn -> SetLock.hold!(Module26, space.id) end, self())
+    assert_receive :holding, 5_000
+
+    updating =
+      start_entering_write(scratch_opts, fn ->
+        try do
+          DB.update(Module27, nonexistent_id, space_id: space.id)
+        rescue
+          error in MisuseError -> error.message
+        end
+      end)
+
+    assert Task.await(updating, 5_000) ==
+             "cannot update Hologram.Test.Fixtures.Policy.Module27 - no entity with id #{inspect(nonexistent_id)}"
 
     send(holder.pid, :release)
     assert {:ok, :ok} = Task.await(holder)

@@ -41,8 +41,8 @@ defmodule Hologram.DB.SchemaReconciler do
   # never gains a later table or column on its own - the symptom is not subtle, and it has
   # been seen: a database claimed before the oplog existed makes every dispatcher poll
   # crash with `relation "hologram_system.oplog" does not exist`, and one claimed before this
-  # branch lacks the oplog's revisions column, the mutation table, or that table's envelope
-  # column. Harmless only because no
+  # branch lacks the oplog's revisions or old column, the mutation table, or that table's
+  # envelope column. Harmless only because no
   # such database exists outside this branch's local dev and test databases and CI's, which
   # are virgin per run - and until that upgrade exists a stale one is dropped and recreated
   # rather than carried forward.
@@ -627,6 +627,11 @@ defmodule Hologram.DB.SchemaReconciler do
   # Hence the tx column, defaulted to the writing transaction's own id, and the index the
   # windowed read walks.
   #
+  # The oplog's old column holds what the to-one references an update changed held before it,
+  # which is what points sync at the rows a move took a row away from. It is NULL for an update
+  # that changed no reference and for every other effect: a put has no before, a delete keeps the
+  # whole row in data, and an edge names both ends.
+  #
   # The second oplog index is BRIN rather than btree, and pruning is what reads it. The
   # table is append-only, so inserted_at runs with the physical order of the pages, which
   # is the one case BRIN is built for: kilobytes of index instead of gigabytes, and no
@@ -671,6 +676,7 @@ defmodule Hologram.DB.SchemaReconciler do
         "model_hash" text NOT NULL,
         "mutation_ref" jsonb,
         "revisions" jsonb,
+        "old" jsonb,
         "actor_id" uuid,
         "inserted_at" timestamptz NOT NULL DEFAULT now()
       )

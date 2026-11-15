@@ -41,6 +41,7 @@ defmodule Hologram.DB.QueryCacheTest do
       derived_queries: MapSet.new([{Module40, :entities}, {Module41, :entities}]),
       entries: entries,
       permission_checking?: false,
+      synced_types: [],
       windows: expected_windows(entries)
     }
   end
@@ -156,6 +157,14 @@ defmodule Hologram.DB.QueryCacheTest do
 
       refute permission_checking?()
     end
+  end
+
+  test "synced_types/0" do
+    dump_query_cache(QueryCacheStub, [Module40], false, [Entity2, Module33])
+
+    init(nil)
+
+    assert synced_types() == [Entity2, Module33]
   end
 
   describe "window/1" do
