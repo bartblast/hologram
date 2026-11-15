@@ -157,6 +157,51 @@ defmodule Hologram.DB.ConnectionTest do
     end
   end
 
+  describe "snapshot/1" do
+    defp setting(name) do
+      {:ok, %Postgrex.Result{rows: [[value]]}} = query("SHOW #{name}")
+
+      value
+    end
+
+    test "runs the function in a read-only repeatable read transaction" do
+      assert snapshot(fn ->
+               {setting("transaction_isolation"), setting("transaction_read_only")}
+             end) ==
+               {:ok, {"repeatable read", "on"}}
+    end
+
+    test "reads every statement from the snapshot its first one took" do
+      {:ok, %Postgrex.Result{rows: [[id]]}} = query(@insert_returning_id_sql)
+
+      {:ok, counts} =
+        snapshot(fn ->
+          before = count_by_id(id)
+
+          # On a connection of its own, so the delete commits outside the snapshot.
+          fn -> delete_by_id(id) end
+          |> Task.async()
+          |> Task.await()
+
+          {before, count_by_id(id)}
+        end)
+
+      assert counts == {1, 1}
+      assert count_by_id(id) == 0
+    end
+
+    # The isolation of a transaction can be set only before its first statement, and an enclosing
+    # transaction may have run any number of them, so the snapshot reads at the enclosing one's.
+    test "runs the function as a savepoint inside an enclosing transaction" do
+      result =
+        transaction(fn ->
+          snapshot(fn -> setting("transaction_isolation") end)
+        end)
+
+      assert result == {:ok, {:ok, "read committed"}}
+    end
+  end
+
   describe "transaction/2" do
     test "commits on success and returns the function result" do
       {:ok, inserted_id} =
