@@ -31,6 +31,14 @@ defmodule Hologram.Migration do
   module's own functions and read its attributes, an attribute read giving the value it holds
   at the op's line.
 
+  A migration's code may call only its own functions and the standard library's modules
+  that work on values - Kernel, String, Enum, Map, Date and their like - so what it does
+  never changes with the app. The build refuses a call to any other module, a call to a
+  module chosen at runtime, like `apply/3` or `mod.fun()`, and a module outside the standard
+  libraries that the module body uses while it compiles. The code may also hold no other
+  module than the entity types and roles its ops name: a standard function given a module,
+  like a sorter for `Enum.sort/2`, calls it.
+
   One op declares nothing an entity type declares of itself: `designate_user_entity`
   records which entity type is the app's user, the designation `use Hologram.Entity,
   user: true` makes in the model. It rides the history like any other fact, so a replay
