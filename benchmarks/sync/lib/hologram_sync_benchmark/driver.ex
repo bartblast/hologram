@@ -7,6 +7,7 @@ defmodule HologramSyncBenchmark.Driver do
   # database, and runs the chosen case. The driver starts only what it needs itself - never
   # Hologram's application, which would make it a second node syncing against the same database.
 
+  alias HologramSyncBenchmark.Cases.Access
   alias HologramSyncBenchmark.Cases.Board
   alias HologramSyncBenchmark.Cases.Tenants
   alias HologramSyncBenchmark.Clients
@@ -20,14 +21,17 @@ defmodule HologramSyncBenchmark.Driver do
 
   @board_page "HologramSyncBenchmark.BoardPage"
 
-  @cases ~w(boot seed smoke board board_roles tenants)
+  @cases ~w(boot seed smoke board board_roles tenants access)
 
   # The options and their defaults: the board's size; the tenants, members per tenant and tasks
-  # per tenant of the tenants case; the client counts a sweep steps through; the steady writes'
-  # rate per second and length in seconds; the slowest p99 delivery in milliseconds a step passes
+  # per tenant of the tenants case; the access case's docs and the seconds a change of access may
+  # take to reach every client; the client counts a sweep steps through; the steady writes' rate
+  # per second and length in seconds; the slowest p99 delivery in milliseconds a step passes
   # with; and how long in seconds a client may take to fill.
   @defaults [
+    access_limit: 10,
     cards: 2_000,
+    docs: 5_000,
     duration: 30,
     fill_timeout: 300,
     members: 5,
@@ -40,7 +44,9 @@ defmodule HologramSyncBenchmark.Driver do
   @default_smoke_clients 10
 
   @switches [
+    access_limit: :integer,
     cards: :integer,
+    docs: :integer,
     case: :string,
     clients: :string,
     duration: :integer,
@@ -168,6 +174,8 @@ defmodule HologramSyncBenchmark.Driver do
 
   defp run_case("tenants", opts), do: run_sweep(opts, Tenants.sweep_case(opts))
 
+  defp run_case("access", opts), do: run_sweep(opts, Access.sweep_case(opts))
+
   # A case with clients and writes: seeds what it needs, sweeps the client counts, and writes the
   # figures into the README.
   defp run_sweep(opts, sweep_case) do
@@ -186,14 +194,22 @@ defmodule HologramSyncBenchmark.Driver do
 
     context = sweep_case.seed.(conn, Enum.max(counts))
 
+    # A case with writes at a rate gives a spec for HologramSyncBenchmark.Step; one measuring
+    # something else gives its own step, pass rule, step line and tables.
+    step =
+      Map.get_lazy(sweep_case, :step, fn ->
+        fn conn, peer, count, first_marker, context ->
+          Step.run(peer, sweep_case.spec.(conn, count, first_marker, context))
+        end
+      end)
+
     results =
       Sweep.run(
         conn,
         counts,
-        fn peer, count, first_marker ->
-          Step.run(peer, sweep_case.spec.(conn, count, first_marker, context))
-        end,
-        &passed?(&1, opts)
+        &step.(conn, &1, &2, &3, context),
+        Map.get(sweep_case, :passed?, &passed?(&1, opts)),
+        Map.get(sweep_case, :summary, &Sweep.summary/1)
       )
 
     figure = Sweep.figure(results)
@@ -203,12 +219,8 @@ defmodule HologramSyncBenchmark.Driver do
       sweep_case.options ++
         [
           "#{sweep_case.clients}, steps of #{Enum.join(counts, ", ")} " <>
-            if(counts == [1], do: "client", else: "clients"),
-          "steady writes at #{opts[:rate]} per second for #{opts[:duration]} s",
-          "a step passes when every client fills within #{opts[:fill_timeout]} s and every " <>
-            "write reaches every client it should and no other, with the steady writes' p99 within " <>
-            "#{opts[:p99_limit]} ms"
-        ]
+            if(counts == [1], do: "client", else: "clients")
+        ] ++ Map.get(sweep_case, :step_options, write_options(opts))
 
     :ok =
       Report.write_case!(
@@ -217,8 +229,17 @@ defmodule HologramSyncBenchmark.Driver do
         run_line,
         options,
         figure,
-        step_tables(results)
+        Map.get(sweep_case, :tables, &step_tables/1).(results)
       )
+  end
+
+  defp write_options(opts) do
+    [
+      "steady writes at #{opts[:rate]} per second for #{opts[:duration]} s",
+      "a step passes when every client fills within #{opts[:fill_timeout]} s and every " <>
+        "write reaches every client it should and no other, with the steady writes' p99 within " <>
+        "#{opts[:p99_limit]} ms"
+    ]
   end
 
   defp step_tables(results) do

@@ -38,15 +38,17 @@ defmodule HologramSyncBenchmark.Sweep do
   ran during it.
 
   `step` runs one step on a server node for a client count, numbering its markers from the
-  given first one, and `passed?` judges its result.
+  given first one, and `passed?` judges its result. `summary` turns a result into the line the
+  step prints, for a case whose steps measure other things than writes.
   """
   @spec run(
           pid,
           [pos_integer],
           (Peer.t(), pos_integer, non_neg_integer -> map),
-          (map -> boolean)
+          (map -> boolean),
+          (map -> String.t())
         ) :: [map]
-  def run(conn, counts, step, passed?) do
+  def run(conn, counts, step, passed?, summary) do
     if length(counts) > @max_steps do
       raise ArgumentError, "a sweep takes at most #{@max_steps} steps"
     end
@@ -71,7 +73,7 @@ defmodule HologramSyncBenchmark.Sweep do
       result = Map.put(result, :passed, passed?.(result))
 
       result
-      |> summary()
+      |> summary.()
       |> IO.puts()
 
       if result.passed, do: {:cont, [result | results]}, else: {:halt, [result | results]}
@@ -109,7 +111,11 @@ defmodule HologramSyncBenchmark.Sweep do
     |> Enum.sort()
   end
 
-  defp summary(result) do
+  @doc """
+  Returns the line a step with steady writes prints.
+  """
+  @spec summary(map) :: String.t()
+  def summary(result) do
     %{fill: fill, isolated: isolated, steady: steady} = result
 
     [

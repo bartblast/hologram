@@ -2,7 +2,7 @@ defmodule HologramSyncBenchmark.Measure do
   @moduledoc false
 
   # What a step reads off the server node and turns into figures: CPU from scheduler samples,
-  # memory after a collection, delivery times from the clients' reports.
+  # memory, delivery times from the clients' reports.
 
   alias HologramSyncBenchmark.Peer
 
@@ -143,12 +143,54 @@ defmodule HologramSyncBenchmark.Measure do
   end
 
   @doc """
-  Returns the server node's total memory in bytes, every process garbage collected first so the
-  figure is what it holds rather than what it hasn't freed yet.
+  Returns the server node's total memory in bytes.
+
+  Collected first only when asked, before clients connect, for a baseline that holds no garbage.
+  Never after: collecting every process, the streams' included, would change what happens next,
+  since a stream's process is killed past a heap size (#1635), and no real server collects
+  its streams on cue.
   """
-  @spec memory(Peer.t()) :: non_neg_integer
-  def memory(peer) do
-    Peer.rpc(peer, __MODULE__, :settled_memory, [])
+  @spec memory(Peer.t(), keyword) :: non_neg_integer
+  def memory(peer, opts \\ []) do
+    if Keyword.get(opts, :collect, false) do
+      Peer.rpc(peer, __MODULE__, :settled_memory, [])
+    else
+      Peer.rpc(peer, :erlang, :memory, [:total])
+    end
+  end
+
+  @doc """
+  Starts polling the server node's total memory every 20 ms and returns the poller, for
+  `stop_memory_peak/1` to read from. The first reading is taken at once, before the call
+  returns, as the baseline the peak is measured against. Linked to the caller.
+  """
+  @spec start_memory_peak(Peer.t()) :: pid
+  def start_memory_peak(peer) do
+    owner = self()
+    start = memory(peer)
+
+    spawn_link(fn -> poll_memory(peer, owner, start, start) end)
+  end
+
+  @doc """
+  Stops the given poller and returns how far above its first reading the server node's total
+  memory rose at its highest, in bytes.
+  """
+  @spec stop_memory_peak(pid) :: non_neg_integer
+  def stop_memory_peak(poller) do
+    send(poller, {:stop, self()})
+
+    receive do
+      {:memory_peak, ^poller, peak} -> peak
+    end
+  end
+
+  defp poll_memory(peer, owner, start, peak) do
+    receive do
+      {:stop, ^owner} -> send(owner, {:memory_peak, self(), peak - start})
+    after
+      20 -> poll_memory(peer, owner, start, max(peak, memory(peer)))
+    end
   end
 
   @doc """

@@ -94,6 +94,13 @@ defmodule HologramSyncBenchmark.Step do
   def connect_concurrency, do: @connect_concurrency
 
   @doc """
+  Returns the fewest clients a step reports memory per client for: below it, the clients' share
+  is smaller than what a node frees and allocates on its own between two reads.
+  """
+  @spec memory_min_clients :: pos_integer
+  def memory_min_clients, do: @memory_min_clients
+
+  @doc """
   Returns how many writes a step makes at the given rate per second for the given seconds, each to
   a row of its own.
   """
@@ -102,7 +109,11 @@ defmodule HologramSyncBenchmark.Step do
     @warmup_writes + @isolated_writes + rate * duration_s
   end
 
-  defp adjust(delta, idle) do
+  @doc """
+  Returns the given database counters' difference with the idle rate taken off over its length.
+  """
+  @spec adjust(map, map) :: map
+  def adjust(delta, idle) do
     Map.new(delta, fn
       {:at_ms, value} -> {:at_ms, value}
       {key, value} -> {key, value - Map.fetch!(idle, key) / idle.at_ms * delta.at_ms}
@@ -136,7 +147,13 @@ defmodule HologramSyncBenchmark.Step do
 
   defp collect(clients), do: Enum.map(clients, &Client.report/1)
 
-  defp fill(peer, clients, spec) do
+  @doc """
+  Connects the given clients and waits for their fills, returning what that cost: CPU, the
+  database counters unadjusted, the fill times and what went wrong. For a case with steps of its
+  own as well; `spec` needs `:conn` and `:fill_timeout_ms`.
+  """
+  @spec fill(Peer.t(), [pid], map) :: map
+  def fill(peer, clients, spec) do
     stats_before = DB.settled_stats(spec.conn)
     cpu_before = Measure.cpu_sample(peer)
 
@@ -166,10 +183,16 @@ defmodule HologramSyncBenchmark.Step do
     result
   end
 
-  # Read last, once every write's work is over and the pool's connections are warm: read earlier,
-  # a fresh node's backends still pay their first use during it, and the rate taken off the
-  # other phases would be too high.
-  defp idle(peer, spec, stats_before) do
+  @doc """
+  Measures 10 idle seconds and returns the server's CPU rate and the database counters over
+  them, for taking off other phases. `spec` needs `:conn`.
+
+  Read last, once every write's work is over and the pool's connections are warm: read earlier,
+  a fresh node's backends still pay their first use during it, and the rate taken off the other
+  phases would be too high.
+  """
+  @spec idle(Peer.t(), map, DB.stats()) :: map
+  def idle(peer, spec, stats_before) do
     cpu_before = Measure.cpu_sample(peer)
     Process.sleep(@idle_ms)
     cpu_after = Measure.cpu_sample(peer)
@@ -258,7 +281,7 @@ defmodule HologramSyncBenchmark.Step do
   defp measure(peer, clients, spec) do
     [] = Clients.prepare_all(clients, @connect_concurrency)
 
-    memory_before = Measure.memory(peer)
+    memory_before = Measure.memory(peer, collect: true)
     fill = fill(peer, clients, spec)
     memory_after = Measure.memory(peer)
 

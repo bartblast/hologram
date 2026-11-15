@@ -215,8 +215,12 @@ defmodule HologramSyncBenchmark.Report do
     ]
   end
 
-  # Autovacuum running mid-step puts its work into the step's database figures.
-  defp passed_cell(result) do
+  @doc """
+  Returns the "Step passed" cell for the given result, saying when autovacuum ran during the
+  step, which puts its work into the step's database figures.
+  """
+  @spec passed_cell(map) :: String.t()
+  def passed_cell(result) do
     passed = if result.passed, do: "yes", else: "no"
 
     if result.autovacuum_ran, do: passed <> ", autovacuum ran", else: passed

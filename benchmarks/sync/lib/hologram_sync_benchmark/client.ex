@@ -12,6 +12,8 @@ defmodule HologramSyncBenchmark.Client do
 
   use GenServer
 
+  alias Hologram.Test.SyncClient
+
   # The TCP connect and each read of an answer wait at most this long, so a server that stops
   # answering ends the attempt and the calls below can wait without a timeout of their own.
   @io_timeout_ms 30_000
@@ -61,6 +63,8 @@ defmodule HologramSyncBenchmark.Client do
           bytes: non_neg_integer,
           connect_retries: non_neg_integer,
           connected_at: integer | nil,
+          counted: %{put: non_neg_integer, unsync: non_neg_integer},
+          counted_at: %{put: integer | nil, unsync: integer | nil},
           failure: term | nil,
           markers: %{non_neg_integer => integer},
           restarts: non_neg_integer,
@@ -140,6 +144,10 @@ defmodule HologramSyncBenchmark.Client do
   @doc """
   Starts a client that hasn't connected yet.
 
+  `:count_type` names an entity type, as `inspect/1` spells its module, whose `put_entity` and
+  `unsync_entity` deltas the client counts, decoding every `sync_deltas` frame for it. Costly, so
+  only for a case that needs to know when every row of a big change has arrived.
+
   A stream that ends before the whole pot arrived is opened again after the browser's delay, the
   way a browser starts a fill over, and counted in `:restarts`: the server cutting a fill short
   (#1635) is a cost a user pays, not a failure of the run. A stream that ends after the fill
@@ -172,7 +180,11 @@ defmodule HologramSyncBenchmark.Client do
       connected_at: nil,
       cookie: nil,
       cookie_path: Keyword.fetch!(opts, :cookie_path),
+      count_type: Keyword.get(opts, :count_type),
+      counted: %{put: 0, unsync: 0},
+      counted_at: %{put: nil, unsync: nil},
       failure: nil,
+      frames: "",
       greeting:
         Enum.map([:model_hash, :page, :protocol_version], &{&1, Keyword.fetch!(opts, &1)}),
       host: uri.host,
@@ -224,6 +236,8 @@ defmodule HologramSyncBenchmark.Client do
         :bytes,
         :connect_retries,
         :connected_at,
+        :counted,
+        :counted_at,
         :failure,
         :markers,
         :restarts,
@@ -287,6 +301,7 @@ defmodule HologramSyncBenchmark.Client do
       state
       | carry: "",
         conn: nil,
+        frames: "",
         reconnect_attempt: attempt,
         request_ref: nil,
         restarts: state.restarts + 1
@@ -333,7 +348,47 @@ defmodule HologramSyncBenchmark.Client do
         take_match(acc, binary_part(joined, start, size), received_at)
       end)
 
-    %{state | bytes: state.bytes + byte_size(chunk), carry: carry}
+    state
+    |> count_deltas(chunk, received_at)
+    |> Map.merge(%{bytes: state.bytes + byte_size(chunk), carry: carry})
+  end
+
+  defp count_deltas(%{count_type: nil} = state, _chunk, _received_at), do: state
+
+  # Frames are split on the blank line that ends each, the partial last one kept for the next
+  # chunk, which is what Hologram.Test.SyncClient.parse_frames/1 does.
+  defp count_deltas(state, chunk, received_at) do
+    {frames, rest} = SyncClient.parse_frames(state.frames <> chunk)
+
+    frames
+    |> Enum.filter(&(&1["event"] == "sync_deltas"))
+    |> Enum.reduce(%{state | frames: rest}, &count_frame(&2, &1, received_at))
+  end
+
+  defp count_frame(state, frame, received_at) do
+    deltas = Jason.decode!(frame["data"])["deltas"]
+
+    Enum.reduce([put: "put_entity", unsync: "unsync_entity"], state, fn {kind, op}, acc ->
+      case count_of_type(deltas[op], acc.count_type) do
+        0 ->
+          acc
+
+        count ->
+          %{
+            acc
+            | counted: Map.update!(acc.counted, kind, &(&1 + count)),
+              counted_at: Map.put(acc.counted_at, kind, received_at)
+          }
+      end
+    end)
+  end
+
+  defp count_of_type(nil, _type), do: 0
+
+  defp count_of_type(grouped, type) do
+    Enum.sum_by(grouped, fn {name, rows} ->
+      if name == type, do: length(rows), else: 0
+    end)
   end
 
   # Compiled once per client process and kept in its dictionary, since a compiled pattern can't

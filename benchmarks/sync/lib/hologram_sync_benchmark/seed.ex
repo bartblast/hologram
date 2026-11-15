@@ -7,7 +7,10 @@ defmodule HologramSyncBenchmark.Seed do
 
   alias Hologram.Auth
   alias Hologram.DB
+  alias HologramSyncBenchmark.Entities.Doc
   alias HologramSyncBenchmark.Entities.Member
+  alias HologramSyncBenchmark.Entities.Project
+  alias HologramSyncBenchmark.Entities.ProjectMember
   alias HologramSyncBenchmark.Entities.RoleBoard
   # Named apart from Elixir's Task, which seeding runs its writes with.
   alias HologramSyncBenchmark.Entities.Task, as: TenantTask
@@ -35,6 +38,30 @@ defmodule HologramSyncBenchmark.Seed do
     |> create_all()
 
     :ok
+  end
+
+  @doc """
+  Creates one project with the given number of members, each a user of its own, and the given
+  number of docs, and returns the users' ids and the project's id. Runs on the server node.
+  """
+  @spec project(pos_integer, pos_integer) :: {[String.t()], String.t()}
+  def project(members, docs) do
+    user_ids = users(members)
+
+    project =
+      [name: "project"]
+      |> Project.new()
+      |> DB.create!()
+
+    user_ids
+    |> Stream.map(&ProjectMember.new(project_id: project.id, user_id: &1))
+    |> create_all()
+
+    0..(docs - 1)
+    |> Stream.map(&Doc.new(position: &1, project_id: project.id, title: "doc #{&1}"))
+    |> create_all()
+
+    {user_ids, project.id}
   end
 
   @doc """
