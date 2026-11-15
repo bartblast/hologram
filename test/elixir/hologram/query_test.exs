@@ -121,7 +121,7 @@ defmodule Hologram.QueryTest do
       actor = {:actor}
 
       expected_msg =
-        "a filter can't name the acting user - only a policy condition can, got: [c_id: {:==, {:actor}}] - to filter by the acting user's id, pin it: ^user_id()"
+        "a filter can't name the acting user - only a policy condition can, got: [c_id: {:==, {:actor}}] - to filter by a user's id, pin a variable holding it: ^user_id"
 
       assert_error Hologram.MisuseError, expected_msg, fn -> filter(Module3, c_id == ^actor) end
     end

@@ -161,7 +161,7 @@ defmodule Hologram.Query.Stage do
       refuse_actor!(
         predicates,
         "a filter",
-        "to filter by the acting user's id, pin it: ^user_id()"
+        "to filter by a user's id, pin a variable holding it: ^user_id"
       )
     else
       refuse_actor!(

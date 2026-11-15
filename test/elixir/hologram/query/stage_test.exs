@@ -30,7 +30,7 @@ defmodule Hologram.Query.StageTest do
 
   defp assert_actor_refused(predicates) do
     expected_msg =
-      "a filter can't name the acting user - only a policy condition can, got: #{inspect(predicates)} - to filter by the acting user's id, pin it: ^user_id()"
+      "a filter can't name the acting user - only a policy condition can, got: #{inspect(predicates)} - to filter by a user's id, pin a variable holding it: ^user_id"
 
     assert_error MisuseError, expected_msg, fn -> filter(Module3, predicates) end
   end
