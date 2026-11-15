@@ -550,4 +550,17 @@ defmodule HologramFeatureTests.MutationsTest do
       |> click(button("Put author"))
     end
   end
+
+  # The browser holds a query as a plain object and prints it as its JSON - its type and bound are
+  # matched, not the whole shape, which may still change.
+  feature "prints the query a by-id read was handed in the browser", %{session: session} do
+    expected_msg =
+      ~r/^\{"cardinality":"set","entity":"HologramFeatureTests\.Entities\.Note",.*"take":10.*\} is not an entity type module - a by-id read takes the entity type, a query term is read with read\/1$/
+
+    assert_client_error session, Hologram.MisuseError, expected_msg, fn ->
+      session
+      |> visit(MutationsPage)
+      |> click(button("Read query by id"))
+    end
+  end
 end
