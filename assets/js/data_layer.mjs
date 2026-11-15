@@ -66,9 +66,9 @@ export default class DataLayer {
     // stops a follower opening a sync session it would have to drop a moment later.
     //
     // Named for the database and for the user this page mounts under. Per database because tabs on
-    // different models cannot share a store, and per user because the leader can only send what
-    // the session it holds is allowed to send - a tab still mounted under somebody else must not
-    // be sending, or reading, for this one.
+    // different models or sync protocols cannot share a store, and per user because the leader can
+    // only send what the session it holds is allowed to send - a tab still mounted under somebody
+    // else must not be sending, or reading, for this one.
     //
     // Nothing to join where there is no store: the tabs of such a browser share nothing, so each
     // is a replica of its own, exactly as every tab was before any of this.
