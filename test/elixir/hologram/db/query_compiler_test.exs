@@ -784,12 +784,40 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: nil, via: {:delete, [:parent]}}]
 
-      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
+      assert %{params: [], sql: sql} = compile(term, mapping, %{rules: rules})
 
-      assert String.contains?(
-               sql,
-               ~s|"test_fixtures_policy_module1"."parent_id" AND FALSE)|
-             )
+      assert String.contains?(sql, ~s| WHERE FALSE ORDER BY|)
+    end
+
+    test "numbers the slots of the rules after a dropped one from where it started" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
+      term = Stage.normalize(PolicyModule1)
+
+      rules = [
+        %{predicates: [{:priority, :>=, 3}], to: nil, via: nil},
+        %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: {:delete, [:parent]}},
+        %{predicates: [{:public, :==, true}], to: [{:own, [:viewer]}], via: nil}
+      ]
+
+      assert %{params: [{:value, 3}, {:value, true}, :actor | _grant_slots], sql: sql} =
+               compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s|WHERE (("priority" >= $1) OR ("public" = $2 AND |)
+      assert String.contains?(sql, ~s|"$rg"."user_id" = $3 |)
+    end
+
+    test "drops a rule whose delegation never holds from the group, with its slots" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
+      term = Stage.normalize(PolicyModule1)
+
+      rules = [
+        %{predicates: [{:priority, :==, 1}], to: nil, via: {:delete, [:parent]}},
+        %{predicates: [{:public, :==, true}], to: nil, via: nil}
+      ]
+
+      assert %{params: [{:value, true}], sql: sql} = compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE "public" = $1 ORDER BY|)
     end
 
     test "composes a delegation alongside the rule's own predicates" do
@@ -1756,7 +1784,7 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert %{params: [], sql: sql} = compile(term, mapping, %{rules: rules})
 
-      assert String.contains?(sql, ~s|"test_fixtures_policy_module5"."parent_id" AND FALSE)|)
+      assert String.contains?(sql, ~s| WHERE FALSE ORDER BY|)
     end
   end
 
@@ -4092,12 +4120,11 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(
                sql,
-               ~s|"$e"."$everyone", (((EXISTS (SELECT 1 | <>
+               ~s|"$e"."$everyone", (EXISTS (SELECT 1 | <>
                  ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
                  ~s|WHERE "$q1"."id" IN (SELECT "$qj1"."target_id" FROM #{join_table} AS "$qj1" | <>
-                 ~s|WHERE "$qj1"."source_id" = #{board}."id") AND "open" = $6)) OR | <>
-                 ~s|(EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_readers_module9" | <>
-                 ~s|AS "$d1" WHERE "$d1"."id" = #{board}."list_id" AND FALSE)))) IS TRUE AS "$anonymous"|
+                 ~s|WHERE "$qj1"."source_id" = #{board}."id") AND "open" = $6)) IS TRUE | <>
+                 ~s|AS "$anonymous"|
              )
     end
 

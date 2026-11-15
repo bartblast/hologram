@@ -12,6 +12,9 @@ defmodule Hologram.DB.QueryCompiler do
   alias Hologram.Query
   alias Hologram.Query.Stage
 
+  # What a policy that grants nothing renders as - a rule requiring it never holds.
+  @never_sql "FALSE"
+
   @quantifiers [:all, :any, :none]
 
   # Each search operator as the shape of the pattern it matches and how it matches the bytes.
@@ -70,7 +73,8 @@ defmodule Hologram.DB.QueryCompiler do
   rule. Rules hold the same clauses the authored filter does, a disjunction among them nesting
   one level deeper, and an unconditional rule (no conditions) satisfies the group on its own,
   which drops the group from the statement. An empty rule list denies everything (`FALSE`) -
-  default deny. The actor leaf binds ONE reserved slot allocated after the authored and include
+  default deny. A rule whose delegation never holds, asking the related row an operation its type
+  grants nobody, leaves the group, and a group with no rule left denies everything too. The actor leaf binds ONE reserved slot allocated after the authored and include
   params and reused by every actor reference in the policy, so the caller binds the session's
   user once. A policy giving `:actor_sql` renders that SQL expression in its place instead, at
   every nesting level, and binds no slot for it - a statement deciding for many users at once
@@ -1054,7 +1058,7 @@ defmodule Hologram.DB.QueryCompiler do
   end
 
   defp applicable_policy_conditions([], _context, reversed_params),
-    do: {["FALSE"], reversed_params}
+    do: {[@never_sql], reversed_params}
 
   defp applicable_policy_conditions(rules, context, reversed_params) do
     {rendered_rules, new_params} =
@@ -1062,12 +1066,17 @@ defmodule Hologram.DB.QueryCompiler do
         rule_condition(rule, context, acc_params)
       end)
 
-    if Enum.any?(rendered_rules, &(&1 == :unconditional)) do
+    cond do
       # Dropping the group drops its placeholders, so the slots its rules bound go with it -
       # a placeholder the statement doesn't carry fails the bind.
-      {[], reversed_params}
-    else
-      {[group_condition(rendered_rules)], new_params}
+      Enum.any?(rendered_rules, &(&1 == :unconditional)) ->
+        {[], reversed_params}
+
+      Enum.all?(rendered_rules, &(&1 == :never)) ->
+        {[@never_sql], reversed_params}
+
+      true ->
+        {[group_condition(Enum.reject(rendered_rules, &(&1 == :never)))], new_params}
     end
   end
 
@@ -1226,18 +1235,24 @@ defmodule Hologram.DB.QueryCompiler do
         source_depth: context.source_depth
       })
 
-    {target_conditions, new_params} =
-      policy_conditions(target_policy, target_context, params_after_chain)
+    case policy_conditions(target_policy, target_context, params_after_chain) do
+      # The related row grants nothing - no rule, or none left once folded for nobody - so the
+      # delegation never holds, whatever row the chain leads to. Its chain goes with it, and with
+      # the chain any slot the chain bound.
+      {[@never_sql], _new_params} ->
+        {[@never_sql], reversed_params}
 
-    join_sql = ~s|#{quoted_alias}."id" = #{target_id_sql}|
+      {target_conditions, new_params} ->
+        join_sql = ~s|#{quoted_alias}."id" = #{target_id_sql}|
 
-    inner_sql = Enum.join([join_sql | target_conditions], " AND ")
+        inner_sql = Enum.join([join_sql | target_conditions], " AND ")
 
-    condition =
-      ~s|EXISTS (SELECT 1 FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} | <>
-        ~s|WHERE #{inner_sql})|
+        condition =
+          ~s|EXISTS (SELECT 1 FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} | <>
+            ~s|WHERE #{inner_sql})|
 
-    {[condition], new_params}
+        {[condition], new_params}
+    end
   end
 
   # A policy's condition on the recheck's row as one boolean - TRUE for an unconditional rule and
@@ -1462,9 +1477,12 @@ defmodule Hologram.DB.QueryCompiler do
 
     rule_conditions = predicate_conditions ++ reference_conditions ++ delegation_conditions
 
-    case rule_conditions do
-      [] -> {:unconditional, new_params}
-      conditions -> {Enum.join(conditions, " AND "), new_params}
+    # A rule requiring what never holds grants nothing, so it leaves the group, and the slots it
+    # bound go with it - the rules after it number theirs from where it started.
+    cond do
+      @never_sql in rule_conditions -> {:never, reversed_params}
+      rule_conditions == [] -> {:unconditional, new_params}
+      true -> {Enum.join(rule_conditions, " AND "), new_params}
     end
   end
 
