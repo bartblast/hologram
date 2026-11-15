@@ -38,6 +38,26 @@ defmodule Hologram.DB do
 
   @pool_name Hologram.DB.Pool
 
+  # Run on each pool connection as it connects (see apply_session_settings/1). A node that vanishes
+  # leaves its sessions open on the server until the operating system there notices, and a session
+  # caught claiming a job holds that job's row locked meanwhile, so no other node can claim it. The
+  # keepalives bound that to about a minute when the server has nothing unacknowledged on the link,
+  # rather than about two hours, and the user timeout when it has, rather than about 15 minutes -
+  # the same figures as the run lock connection's (see Hologram.Job.RunLock). A server whose
+  # platform has no user timeout keeps it at 0, and logs that it is not supported on each connect.
+  #
+  # Set once the connection is up rather than sent as startup parameters, which PgBouncer refuses
+  # unless told to ignore them. They bound only a direct connection: behind a
+  # pooler or a proxy the server's peer is the pooler, and its own keepalives toward the node are
+  # what bound how long the session lives.
+  @session_settings_statement """
+  SELECT
+    set_config('tcp_keepalives_idle', '30', false),
+    set_config('tcp_keepalives_interval', '10', false),
+    set_config('tcp_keepalives_count', '3', false),
+    set_config('tcp_user_timeout', '60000', false)
+  """
+
   # What a server starting up or shutting down answers with - one that is away for a moment rather
   # than one the settings are wrong for. Not a connection limit: a role's or a database's limit
   # answers the same way as the server's, and would hold the boot for good.
@@ -627,6 +647,32 @@ defmodule Hologram.DB do
   def mapping_key, do: @mapping_key
 
   @doc """
+  Applies the session settings every pool connection runs with to the given connection, and
+  returns :ok - the pool's after_connect.
+
+  Best effort: they bound how long the server keeps the session of a node that vanished, which
+  nothing needs for being correct, so a server refusing them - one compatible with PostgreSQL that
+  lacks a setting - is warned about and the connection used as it is. Raising would leave the pool
+  without a connection it could use, for good.
+  """
+  @spec apply_session_settings(DBConnection.conn()) :: :ok
+  def apply_session_settings(connection) do
+    case Postgrex.query(connection, @session_settings_statement, []) do
+      {:ok, _result} ->
+        :ok
+
+      # The connection is gone, which the pool logs, and its replacement runs this again.
+      {:error, %DBConnection.ConnectionError{}} ->
+        :ok
+
+      {:error, error} ->
+        Logger.warning(
+          "the database refused the session's keepalive settings, a session of a node that vanished may stay open on the server for hours: #{Exception.message(error)}"
+        )
+    end
+  end
+
+  @doc """
   Returns :ok once the database answers through the current connection, trying again while it
   cannot be reached yet, with a warning for each try that failed.
 
@@ -795,7 +841,9 @@ defmodule Hologram.DB do
   Starts the database: derives and caches the mapping, then starts the connection pool -
   in dev, schema reconciliation runs as a one-shot boot step right after the pool is up,
   and outside dev and test the migration applier runs there instead.
-  The given opts override the resolved connection options. The database is a VM-wide
+  The given opts override the resolved connection options - the test helper's ownership pool
+  among them, and :after_connect, which replaces the session settings rather than adding to them
+  (see apply_session_settings/1). The database is a VM-wide
   singleton - starting while an instance is already running yields :ignore instead of
   failing the caller's supervision tree.
   """
@@ -822,6 +870,7 @@ defmodule Hologram.DB do
     postgrex_opts =
       Keyword.merge(
         [
+          after_connect: {__MODULE__, :apply_session_settings, []},
           database: resolved_opts[:database],
           hostname: resolved_opts[:host],
           name: @pool_name,

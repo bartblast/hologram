@@ -61,7 +61,9 @@ defmodule Hologram.Job.RunLock do
   # default: the keepalives when the server has nothing unacknowledged (hours otherwise), the user
   # timeout when it does - an answer sent as the link went silent - which the keepalives never probe
   # (about 15 minutes otherwise). A server whose platform has no user timeout keeps it at 0, and
-  # logs that it is not supported on each connect.
+  # logs that it is not supported on each connect. They bound only a direct connection: behind a
+  # pooler or a proxy the server's peer is the pooler, whose own keepalives toward the node bound
+  # how long the session and its locks live.
   #
   # A pid or a local name rather than any GenServer.server(): a call left unanswered kills the
   # connection, which needs it to be a process here.

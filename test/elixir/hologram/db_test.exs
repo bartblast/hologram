@@ -149,6 +149,34 @@ defmodule Hologram.DBTest do
       assert mapping() == Mapper.derive!([Module1], [])
     end
 
+    # A vanished node's sessions would otherwise stay open on the server for hours, holding the row
+    # locks of whatever job they were claiming.
+    test "sets the keepalives and the user timeout of each pool connection" do
+      statement =
+        "SELECT current_setting('tcp_keepalives_idle'), current_setting('tcp_keepalives_interval'), current_setting('tcp_keepalives_count'), current_setting('tcp_user_timeout')"
+
+      assert {:ok, %Postgrex.Result{rows: [["30", "10", "3", user_timeout]]}} =
+               Connection.query(statement)
+
+      # A platform without the user timeout keeps it at 0.
+      assert user_timeout in ["0", "60000"]
+    end
+
+    test "applies the session settings as each pool connection connects" do
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Postgrex.Protocol, opts}]}}]}} = init([])
+
+      assert opts[:after_connect] == {Hologram.DB, :apply_session_settings, []}
+    end
+
+    test "leaves the given after_connect in place" do
+      after_connect = {IO, :inspect, []}
+
+      {:ok, {_flags, [%{start: {_pool, :start_link, [{Postgrex.Protocol, opts}]}}]}} =
+        init(after_connect: after_connect)
+
+      assert opts[:after_connect] == after_connect
+    end
+
     test "starts only the connection pool in test" do
       {:ok, {_flags, children}} = init([])
 
@@ -245,6 +273,20 @@ defmodule Hologram.DBTest do
       assert context.env == "test"
       assert context.hologram_version == Mix.Project.config()[:version]
       assert %DateTime{} = context.timestamp
+    end
+  end
+
+  describe "apply_session_settings/1" do
+    # A server that lacks a setting would otherwise leave the pool without a connection it could
+    # use - each one raising on connect, then trying again.
+    test "warns rather than raising when the server refuses the settings" do
+      connection = start_supervised!({Postgrex, Config.connection_opts(pool_size: 1)})
+      Postgrex.query!(connection, "BEGIN", [])
+      {:error, _error} = Postgrex.query(connection, "SELECT 1 / 0", [])
+
+      log = capture_log(fn -> assert apply_session_settings(connection) == :ok end)
+
+      assert log =~ "the database refused the session's keepalive settings"
     end
   end
 
