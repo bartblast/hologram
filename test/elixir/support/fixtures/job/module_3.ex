@@ -7,6 +7,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
   use Hologram.Job
 
   alias Hologram.Auth
+  alias Hologram.DB.EntityOperations
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Job.Module1
 
@@ -14,6 +15,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
     values: [
       :create_next,
       :create_row,
+      :delete_self,
       :error,
       :exit,
       :garbage,
@@ -38,6 +40,13 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
     %{c: "by job"}
     |> Entity2.new()
     |> Hologram.DB.create!()
+
+    :ok
+  end
+
+  # Takes its own row away, so recording the outcome has no row to write to and raises.
+  def run(%{outcome: :delete_self} = job) do
+    :ok = EntityOperations.delete(__MODULE__, job.id)
 
     :ok
   end

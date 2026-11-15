@@ -5,6 +5,10 @@ defmodule Hologram.Job.Runner do
   # happened. In three transactions rather than one, because run/1 reaches outside the database and
   # must not hold a connection while it does, and because the claim has to be visible to every
   # other node before the work starts - which is what stops two nodes running one job.
+  #
+  # For the whole run the worker holds the job's run lock (see Hologram.Job.RunLock), taken inside
+  # the claim's transaction and given up once the outcome is recorded - so a running row whose lock
+  # nobody holds is one whose run was cut short.
 
   import Hologram.Query, only: [filter: 2, sort: 2]
 
@@ -12,35 +16,39 @@ defmodule Hologram.Job.Runner do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.Job.RunLock
+
+  # Set while the claim's transaction holds a run lock it has not committed yet, so a claim that
+  # raises after taking the lock knows to give it back.
+  @uncommitted_lock_key {__MODULE__, :uncommitted_lock}
 
   @doc """
-  Claims the job of the given type with the given id for this worker: reads its row locked, and
-  moves it from queued to running in one transaction.
+  Claims the job of the given type with the given id for this worker: reads its row locked, takes
+  its run lock on the given RunLock connection, and moves it from queued to running in one
+  transaction.
 
   Returns `{:claimed, job}` with the row as this worker claimed it, or `:taken` when the row is not
-  queued any more - another worker claimed it first, it has already run, or it is gone.
+  queued any more - another worker claimed it first, it has already run, or it is gone - or when
+  another session holds its run lock.
+
+  The lock is taken before the claim commits, so whoever reads the row as running finds it held.
+  A claim that raises or exits after taking it gives it back.
 
   The claim is the framework's own write, made without an acting user: a job type grants no
   operation for it, and whose job it is has already been decided by whoever enqueued it.
   """
-  @spec claim(module, String.t()) :: {:claimed, struct} | :taken
-  def claim(job_type, id) do
-    {:ok, result} =
-      Connection.transaction(fn ->
-        # Locked, so a second worker asking at the same moment waits here until this transaction
-        # ends, then reads the row as it was committed - running - and answers that it is taken.
-        case EntityOperations.get(job_type, id, lock: :update) do
-          %{status: :queued} = job ->
-            :ok = EntityOperations.update(job_type, id, %{status: :running})
+  @spec claim(module, String.t(), GenServer.server()) :: {:claimed, struct} | :taken
+  def claim(job_type, id, run_lock) do
+    {:ok, result} = Connection.transaction(fn -> claim_row(job_type, id, run_lock) end)
 
-            {:claimed, %{job | status: :running}}
-
-          _not_queued ->
-            :taken
-        end
-      end)
+    Process.delete(@uncommitted_lock_key)
 
     result
+  catch
+    kind, reason ->
+      if Process.delete(@uncommitted_lock_key), do: RunLock.release(run_lock, id)
+
+      :erlang.raise(kind, reason, __STACKTRACE__)
   end
 
   @doc """
@@ -63,11 +71,13 @@ defmodule Hologram.Job.Runner do
 
   A job created while the pass runs is left for the next one: what it reads is the queue as it
   stood when it asked.
+
+  The run locks are taken on the given RunLock connection.
   """
-  @spec pass(list(module)) :: non_neg_integer
-  def pass(job_types) do
+  @spec pass(list(module), GenServer.server()) :: non_neg_integer
+  def pass(job_types, run_lock) do
     Enum.reduce(job_types, 0, fn job_type, count ->
-      count + ran_count(job_type)
+      count + ran_count(job_type, run_lock)
     end)
   end
 
@@ -76,19 +86,27 @@ defmodule Hologram.Job.Runner do
   created it, and records what happened on its row.
 
   Returns `:done` or `:failed` for a job this worker ran, or `:taken` when another worker had it.
+
+  The job's run lock is held on the given RunLock connection from the claim until the outcome is
+  recorded, and given up then even when recording it raises - until the outcome commits, the row
+  must look like a run in progress.
   """
-  @spec process(module, String.t()) :: :done | :failed | :taken
-  def process(job_type, id) do
-    case claim(job_type, id) do
+  @spec process(module, String.t(), GenServer.server()) :: :done | :failed | :taken
+  def process(job_type, id, run_lock) do
+    case claim(job_type, id, run_lock) do
       :taken ->
         :taken
 
       {:claimed, job} ->
-        outcome = invoke(job)
+        try do
+          outcome = invoke(job)
 
-        record_outcome(job_type, id, outcome)
+          record_outcome(job_type, id, outcome)
 
-        outcome_status(outcome)
+          outcome_status(outcome)
+        after
+          RunLock.release(run_lock, id)
+        end
     end
   end
 
@@ -102,6 +120,27 @@ defmodule Hologram.Job.Runner do
     error -> {:failed, Exception.format(:error, error, __STACKTRACE__)}
   catch
     kind, reason -> {:failed, Exception.format(kind, reason, __STACKTRACE__)}
+  end
+
+  # Locked, so a second worker asking at the same moment waits here until this transaction ends,
+  # then reads the row as it was committed - running - and answers that it is taken without
+  # touching the run lock.
+  #
+  # A queued row whose run lock another session holds is left queued and tried again by a later
+  # pass. The lock of a queued job is otherwise free, so only two things get here: a key shared by
+  # two jobs, where the job runs once the one it shares the key with has finished, and a claim on
+  # another node that failed after taking the lock and has not given it back yet.
+  defp claim_row(job_type, id, run_lock) do
+    with %{status: :queued} = job <- EntityOperations.get(job_type, id, lock: :update),
+         true <- RunLock.acquire(run_lock, id) do
+      Process.put(@uncommitted_lock_key, true)
+
+      :ok = EntityOperations.update(job_type, id, %{status: :running})
+
+      {:claimed, %{job | status: :running}}
+    else
+      _not_queued_or_locked -> :taken
+    end
   end
 
   defp classify(:ok), do: :done
@@ -118,20 +157,20 @@ defmodule Hologram.Job.Runner do
 
   defp outcome_status({:failed, _text}), do: :failed
 
-  # The framework's own write, like the claim: a job type grants nobody an update, and the outcome
-  # is not the creating user's to authorize. Reached only after invoke/1 has put the actor back, so
-  # nothing of the run is still in scope.
   # Read raw, because a worker has no acting user - which is also why the queue is read through the
   # ordinary verb rather than a statement of its own: with nobody acting there is nothing to filter,
   # and the rows come back as the structs run/1 is handed.
-  defp ran_count(job_type) do
+  defp ran_count(job_type, run_lock) do
     job_type
     |> filter(status: :queued)
     |> sort(created_at)
     |> DB.read()
-    |> Enum.count(&(process(job_type, &1.id) != :taken))
+    |> Enum.count(&(process(job_type, &1.id, run_lock) != :taken))
   end
 
+  # The framework's own write, like the claim: a job type grants nobody an update, and the outcome
+  # is not the creating user's to authorize. Reached only after invoke/1 has put the actor back, so
+  # nothing of the run is still in scope.
   defp record_outcome(job_type, id, :done) do
     :ok = EntityOperations.update(job_type, id, %{status: :done})
   end

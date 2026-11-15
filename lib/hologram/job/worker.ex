@@ -9,6 +9,7 @@ defmodule Hologram.Job.Worker do
 
   alias Hologram.DB
   alias Hologram.DB.Oplog
+  alias Hologram.Job.RunLock
   alias Hologram.Job.Runner
   alias Hologram.Reflection
 
@@ -26,10 +27,15 @@ defmodule Hologram.Job.Worker do
   because the announcements are an optimization over the poll rather than the mechanism: without
   one a job still runs, no sooner than `:poll_interval_ms` after it was created.
 
+  `:run_lock` names the Hologram.Job.RunLock connection the worker holds its run locks on. Every
+  lock it holds is given up as it starts: a worker restarted on its own finds its predecessor's
+  still held on a session that is still up, and the row of the run that crashed would look live
+  for good.
+
   `:pass` is what one sweep of the given job types does, and answers how many jobs it ran. It
-  defaults to `Hologram.Job.Runner.pass/1`, which is the only thing that passes it in production -
-  the seam is what lets this process be exercised without a database, the way the dispatcher takes
-  the handler it routes through.
+  defaults to `Hologram.Job.Runner.pass/2` on the `:run_lock` connection, so `:run_lock` is
+  required when `:pass` is not given. Only tests give `:pass`: the seam is what lets this process be
+  exercised without a database, the way the dispatcher takes the handler it routes through.
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
@@ -50,10 +56,14 @@ defmodule Hologram.Job.Worker do
 
   @impl GenServer
   def init(opts) do
+    run_lock = Keyword.get(opts, :run_lock)
+
     state = %{
       notifications: Keyword.get(opts, :notifications),
-      pass: Keyword.get(opts, :pass, &Runner.pass/1),
-      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms())
+      pass:
+        Keyword.get_lazy(opts, :pass, fn -> default_pass(Keyword.fetch!(opts, :run_lock)) end),
+      poll_interval_ms: Keyword.get(opts, :poll_interval_ms, default_poll_interval_ms()),
+      run_lock: run_lock
     }
 
     {:ok, state, {:continue, :start_listening}}
@@ -61,6 +71,8 @@ defmodule Hologram.Job.Worker do
 
   @impl GenServer
   def handle_continue(:start_listening, state) do
+    if state.run_lock, do: RunLock.release_all(state.run_lock)
+
     if state.notifications, do: listen_for_writes(state.notifications)
 
     schedule_poll(state.poll_interval_ms)
@@ -82,6 +94,8 @@ defmodule Hologram.Job.Worker do
 
     {:noreply, wake_up(state)}
   end
+
+  defp default_pass(run_lock), do: &Runner.pass(&1, run_lock)
 
   defp default_poll_interval_ms do
     :hologram

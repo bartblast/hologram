@@ -42,6 +42,34 @@ defmodule Hologram.Job.RunLockTest do
       assert acquire(session, Entity.generate_id())
     end
 
+    # The claim takes the lock while holding the job's row, which every other node's claim of that
+    # row waits on - a server that does not answer must not hold them there for good.
+    test "exits when the server does not answer within 5 seconds" do
+      session = start_session()
+      %Postgrex.Result{rows: [[backend_pid]]} = query!(session, "SELECT pg_backend_pid()")
+
+      # Keeps the connection busy past the bound, the way a link gone silent mid-call would, and is
+      # cancelled once the bound has passed.
+      busy =
+        Task.async(fn ->
+          SimpleConnection.call(session, {:query, "SELECT pg_sleep(60)"}, :infinity)
+        end)
+
+      observer = start_session()
+
+      wait_until(fn ->
+        match?(
+          %Postgrex.Result{rows: [["PgSleep"]]},
+          query!(observer, "SELECT wait_event FROM pg_stat_activity WHERE pid = #{backend_pid}")
+        )
+      end)
+
+      assert {:timeout, _call} = catch_exit(acquire(session, Entity.generate_id()))
+
+      query!(observer, "SELECT pg_cancel_backend(#{backend_pid})")
+      assert %Postgrex.Error{postgres: %{code: :query_canceled}} = Task.await(busy)
+    end
+
     test "stacks a lock one session takes twice, so it takes two releases to free" do
       id = Entity.generate_id()
       holder = start_session()

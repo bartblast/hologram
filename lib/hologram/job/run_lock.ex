@@ -26,6 +26,16 @@ defmodule Hologram.Job.RunLock do
   # job would miss each other's locks, and each would fail the jobs the other is running.
   @key_prefix "hologram_job_run:"
 
+  # How long taking a lock may wait on the server. The claim takes it while holding the job's row,
+  # so every other node claiming that row waits too - and gives up at the driver's 15 s query
+  # timeout, failing its pass on every try. Bounded well under that: when the lock connection's
+  # link goes silent, the call exits and the claim rolls back, which frees the row for the other
+  # nodes as long as the pool still reaches the server. The worker crashes, and the one that
+  # replaces it gives up whatever the server granted after all - once the lock connection answers,
+  # or breaks and takes the lock with it, and until then this node runs nothing. Nothing between
+  # the claim and the worker may catch the exit, or that lock would stay held under a queued row.
+  @acquire_timeout_ms :timer.seconds(5)
+
   # Set once the connection is up rather than sent as startup parameters, which a session-mode
   # PgBouncer refuses unless told to ignore them.
   #
@@ -45,13 +55,16 @@ defmodule Hologram.Job.RunLock do
   Takes the run lock of the job with the given id on the given connection, unless another session
   holds it. Returns whether it was taken.
 
-  Never waits: a lock another session holds is a run in progress, and nothing should wait on a
-  run. Locks taken twice by one session stack, so each lock taken needs exactly one release.
+  Never waits on another session: a lock another session holds is a run in progress, and nothing
+  should wait on a run. Locks taken twice by one session stack, so each lock taken needs exactly
+  one release.
+
+  Exits when the server has not answered within 5 seconds, with the lock possibly taken.
   """
   @spec acquire(GenServer.server(), String.t()) :: boolean
   def acquire(connection, id) do
     [%Postgrex.Result{rows: [[taken]]}] =
-      query!(connection, "SELECT pg_try_advisory_lock(#{key(id)})")
+      query!(connection, "SELECT pg_try_advisory_lock(#{key(id)})", @acquire_timeout_ms)
 
     taken == "t"
   end
@@ -152,12 +165,14 @@ defmodule Hologram.Job.RunLock do
   @impl SimpleConnection
   def notify(_channel, _payload, _state), do: :ok
 
-  # Waits as long as the server takes: the server answers or the connection breaks, which stops the
-  # connection process and exits the caller. A link that goes silent mid-call is not pinged, so it
-  # breaks only when the operating system gives up retransmitting. No running row waits on a worker
-  # stuck there: every lock call comes before a claim commits or after an outcome does.
-  defp query!(connection, statement) do
-    case SimpleConnection.call(connection, {:query, statement}, :infinity) do
+  # Waits as long as the server takes unless given a timeout: the server answers or the connection
+  # breaks, which stops the connection process and exits the caller. A link that goes silent
+  # mid-call is not pinged, so it breaks only when the operating system gives up retransmitting.
+  # Only taking a lock is bounded (see @acquire_timeout_ms): a release comes after the claim's or
+  # the outcome's transaction has ended, or before a worker runs anything, so no row waits on a
+  # worker stuck there.
+  defp query!(connection, statement, timeout \\ :infinity) do
+    case SimpleConnection.call(connection, {:query, statement}, timeout) do
       %Postgrex.Error{} = error -> raise error
       results -> results
     end

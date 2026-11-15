@@ -24,6 +24,7 @@ defmodule Hologram.Job.RunnerContentionTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Job
+  alias Hologram.Job.RunLock
   alias Hologram.Test.Fixtures.Job.Module1
 
   defp on_own_session(scratch_opts, fun) do
@@ -53,8 +54,12 @@ defmodule Hologram.Job.RunnerContentionTest do
     end)
   end
 
+  # Each worker with a lock connection of its own, as on two nodes, on the scratch database: advisory
+  # locks are per database.
   defp start_worker(scratch_opts, id) do
-    Task.async(fn -> on_own_session(scratch_opts, fn -> process(Module1, id) end) end)
+    run_lock = start_supervised!(Supervisor.child_spec({RunLock, scratch_opts}, id: make_ref()))
+
+    Task.async(fn -> on_own_session(scratch_opts, fn -> process(Module1, id, run_lock) end) end)
   end
 
   # A worker parked on the row and a worker that has not got there yet look the same to a task that
