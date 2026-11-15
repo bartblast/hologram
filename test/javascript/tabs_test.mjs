@@ -368,13 +368,27 @@ describe("Tabs", () => {
       Tabs.postState();
 
       assert.deepStrictEqual(posting.firstCall.args[0], {
+        completeness: {all: false, types: ["MyApp.Task"]},
         cursor: "place-1",
         kind: "state",
         replica: {id: "r-group", token: "statement-group"},
         rules: null,
         stopReason: "model_hash",
-        synced: {all: false, types: ["MyApp.Task"]},
+        synced: [],
       });
+    });
+
+    // Builds of one model and one protocol share a group, and a tab of an earlier build iterates
+    // the scopes it is told - so they travel as the list it reads, whose "all" both builds share.
+    it("tells a tab of an earlier build the whole pot as the list of scopes it reads", () => {
+      const posting = sinon.stub(Tabs, "post");
+
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
+      LocalDatabase.markAllSynced();
+
+      Tabs.postState();
+
+      assert.deepStrictEqual(posting.firstCall.args[0].synced, ["all"]);
     });
 
     // A tab whose bundle was current when its stream connected is handed no rules, and a tab
@@ -565,7 +579,8 @@ describe("Tabs", () => {
         cursor: "place-1",
         kind: "state",
         replica: {id: "r-group", token: "statement-group"},
-        synced: {all: true, types: ["MyApp.Task"]},
+        completeness: {all: true, types: ["MyApp.Task"]},
+        synced: ["all"],
       });
 
       assert.equal(Replica.id, "r-group");
@@ -583,7 +598,8 @@ describe("Tabs", () => {
         cursor: null,
         kind: "state",
         replica: {id: null, token: null},
-        synced: {all: false, types: ["MyApp.Task"]},
+        completeness: {all: false, types: ["MyApp.Task"]},
+        synced: [],
       });
 
       sinon.assert.notCalled(LocalDatabase.markAllSynced);
@@ -597,7 +613,8 @@ describe("Tabs", () => {
         cursor: "place-1",
         kind: "state",
         replica: {id: null, token: null},
-        synced: {all: false, types: []},
+        completeness: {all: false, types: []},
+        synced: [],
       });
 
       assert.equal(SyncStream.syncCursor, "place-2");
@@ -619,7 +636,8 @@ describe("Tabs", () => {
         kind: "state",
         replica: {id: null, token: null},
         rules,
-        synced: {all: false, types: []},
+        completeness: {all: false, types: []},
+        synced: [],
       });
 
       sinon.assert.calledOnceWithExactly(
@@ -641,7 +659,8 @@ describe("Tabs", () => {
           protocol_version: 1,
           rules: {},
         },
-        synced: {all: false, types: []},
+        completeness: {all: false, types: []},
+        synced: [],
       });
 
       sinon.assert.notCalled(SyncStream.receiveFrame);
@@ -655,7 +674,8 @@ describe("Tabs", () => {
         kind: "state",
         replica: {id: null, token: null},
         stopReason: "protocol_version",
-        synced: {all: false, types: []},
+        completeness: {all: false, types: []},
+        synced: [],
       });
 
       sinon.assert.calledOnceWithExactly(
@@ -671,7 +691,8 @@ describe("Tabs", () => {
         kind: "state",
         replica: {id: null, token: null},
         stopReason: null,
-        synced: {all: false, types: []},
+        completeness: {all: false, types: []},
+        synced: [],
       });
 
       sinon.assert.notCalled(SyncStream.receiveFrame);
@@ -682,7 +703,8 @@ describe("Tabs", () => {
         cursor: null,
         kind: "state",
         replica: {id: null, token: null},
-        synced: {all: false, types: []},
+        completeness: {all: false, types: []},
+        synced: [],
       });
 
       sinon.assert.notCalled(SyncStream.receiveFrame);
@@ -938,7 +960,8 @@ describe("Tabs", () => {
         cursor: null,
         kind: "state",
         replica: {id: null, token: null},
-        synced: {all: true, types: []},
+        completeness: {all: true, types: []},
+        synced: ["all"],
       };
 
       const seen = [];

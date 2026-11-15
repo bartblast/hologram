@@ -308,14 +308,23 @@ export default class Tabs {
   // place the stream has reached, what the server has declared complete, the rules the stream
   // syncs under, for a tab whose bundle answers by others, and why the server stopped serving the
   // group, if it did.
+  //
+  // What is complete travels twice: as `completeness`, the types and the whole pot, and as
+  // `synced`, the list of scopes a tab of an earlier build iterates. Builds of one model and one
+  // protocol share a group, so a tab of an earlier build can be listening, and it throws on
+  // anything that is not a list - before marking anything, and before replaying what it held. The
+  // list says "all" once the whole pot is complete, which is the one scope both builds share.
   static postState() {
+    const completeness = LocalDatabase.syncedState();
+
     Tabs.post({
+      completeness,
       cursor: SyncStream.syncCursor,
       kind: "state",
       replica: Replica.current(),
       rules: SyncStream.rulesForGroup(),
       stopReason: SyncStream.stopReason,
-      synced: LocalDatabase.syncedState(),
+      synced: completeness.all ? ["all"] : [],
     });
   }
 
@@ -391,11 +400,12 @@ export default class Tabs {
     }
 
     // A type's completeness is a claim about the rows this browser holds, the same in every tab
-    // and on every page. A tab of an earlier build tells it as a list of scopes, whose "all" says
-    // the same and whose "page" names no type.
-    const synced = Array.isArray(message.synced)
-      ? {all: message.synced.includes("all"), types: []}
-      : message.synced;
+    // and on every page. A tab of an earlier build tells it only as a list of scopes, whose "all"
+    // says the same and whose "page" names no type.
+    const synced = message.completeness ?? {
+      all: message.synced.includes("all"),
+      types: [],
+    };
 
     LocalDatabase.markTypesSynced(synced.types);
 
