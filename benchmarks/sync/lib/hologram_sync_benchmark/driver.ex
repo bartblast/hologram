@@ -30,8 +30,9 @@ defmodule HologramSyncBenchmark.Driver do
   # take to reach every client; the client counts a sweep steps through; the steady writes' rate
   # per second and length in seconds; the slowest p99 delivery in milliseconds a step passes
   # with; how long in seconds a client may take to fill; how long in seconds the deploy cases'
-  # clients may take to all hold their pots again; and how long in seconds the lock case runs
-  # each number of writers.
+  # clients may take to all hold their pots again; how long in seconds the lock case runs each
+  # number of writers; and the server node's memory in GB past which a step is stopped, fixed
+  # rather than a share of the machine's, so a figure means the same on any machine.
   @defaults [
     access_limit: 10,
     cards: 2_000,
@@ -40,6 +41,7 @@ defmodule HologramSyncBenchmark.Driver do
     fill_timeout: 300,
     lock_duration: 10,
     members: 5,
+    memory_limit: 4,
     p99_limit: 1_000,
     rate: 2,
     refill_limit: 60,
@@ -59,6 +61,7 @@ defmodule HologramSyncBenchmark.Driver do
     fill_timeout: :integer,
     lock_duration: :integer,
     members: :integer,
+    memory_limit: :integer,
     p99_limit: :integer,
     rate: :integer,
     refill_limit: :integer,
@@ -219,23 +222,28 @@ defmodule HologramSyncBenchmark.Driver do
         end
       end)
 
-    results =
+    memory_limit = opts[:memory_limit] * 1_073_741_824
+
+    {results, stopped} =
       Sweep.run(
         conn,
         counts,
         &step.(conn, &1, &2, &3, context),
         Map.get(sweep_case, :passed?, &passed?(&1, opts)),
-        Map.get(sweep_case, :summary, &Sweep.summary/1)
+        Map.get(sweep_case, :summary, &Sweep.summary/1),
+        memory_limit
       )
 
-    figure = Sweep.figure(results)
+    figure = Sweep.figure(results, stopped, opts[:memory_limit])
     IO.puts("Clients per node, #{sweep_case.title}: #{figure}")
 
     options =
       sweep_case.options ++
         [
           "#{sweep_case.clients}, steps of #{Enum.join(counts, ", ")} " <>
-            if(counts == [1], do: "client", else: "clients")
+            if(counts == [1], do: "client", else: "clients"),
+          "a step stops, and the sweep with it, when the server node's memory passes " <>
+            "#{opts[:memory_limit]} GB"
         ] ++ Map.get(sweep_case, :step_options, write_options(opts))
 
     :ok =

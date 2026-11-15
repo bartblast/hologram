@@ -25,7 +25,9 @@ defmodule HologramSyncBenchmark.Cases.Deploy do
   alias HologramSyncBenchmark.Report
   alias HologramSyncBenchmark.Step
 
-  @counts [10, 100, 1_000, 5_000]
+  # 200 and 500 between, since a refill measured about 14 MB per client, so the memory limit lands
+  # around a few hundred.
+  @counts [10, 100, 200, 500, 1_000, 5_000]
 
   # Any hash other than the server's, as a bundle built before the deploy has.
   @stale_policy_hash "rules-before-the-deploy"

@@ -143,6 +143,114 @@ defmodule HologramSyncBenchmark.Measure do
   end
 
   @doc """
+  Starts guarding the server node's memory and returns the guard, for `stop_memory_guard/1`.
+
+  A guard on the server node polls its total memory every 20 ms at high priority, so a burst of
+  thousands of busy processes can't starve it. Past the given number of bytes it tells a watcher
+  on this node, waits for the watcher's ack, then halts the node, so the notice is in before the
+  node is gone. The watcher keeps the reading for `stop_memory_guard/1` to hand back.
+  """
+  @spec start_memory_guard(Peer.t(), pos_integer) :: pid
+  def start_memory_guard(peer, limit) do
+    caller = self()
+
+    spawn(fn ->
+      # A caller gone without stopping it leaves nobody to answer, so the watcher goes too.
+      Process.monitor(caller)
+
+      guard = Node.spawn(peer.node, __MODULE__, :guard_memory, [self(), limit])
+      watch_memory(guard, Process.monitor(guard), nil)
+    end)
+  end
+
+  @doc """
+  Stops the given guard and returns the memory reading it stopped the server node at, nil when it
+  didn't, or `:node_gone` when the node went down without the guard saying it stopped it.
+
+  Waits for the guard to answer, so a node it halted just before is reported rather than missed.
+  """
+  @spec stop_memory_guard(pid) :: non_neg_integer | nil | :node_gone
+  def stop_memory_guard(watcher) do
+    ref = Process.monitor(watcher)
+    send(watcher, {:stop, self()})
+
+    receive do
+      {:memory_guard, ^watcher, memory} ->
+        Process.demonitor(ref, [:flush])
+        memory
+
+      {:DOWN, ^ref, :process, ^watcher, reason} ->
+        raise "the memory guard's watcher went down: #{inspect(reason)}"
+    end
+  end
+
+  @doc false
+  # The guard, on the server node. Public only so the node can be told to run it.
+  @spec guard_memory(pid, pos_integer) :: term
+  def guard_memory(watcher, limit) do
+    Process.flag(:priority, :high)
+
+    poll_guard(watcher, limit)
+  end
+
+  defp poll_guard(watcher, limit) do
+    receive do
+      {:stop, ^watcher} -> send(watcher, {:guard_stopped, self()})
+    after
+      20 ->
+        total = :erlang.memory(:total)
+
+        if total > limit do
+          send(watcher, {:memory_limit, self(), total})
+
+          # Halted on the ack, or after a moment without one, since a node past the limit
+          # mustn't keep growing because the driver is slow to answer.
+          receive do
+            {:ack, ^watcher} -> :ok
+          after
+            2_000 -> :ok
+          end
+
+          :erlang.halt()
+        else
+          poll_guard(watcher, limit)
+        end
+    end
+  end
+
+  defp watch_memory(guard, ref, stopped_at) do
+    receive do
+      {:memory_limit, ^guard, total} ->
+        send(guard, {:ack, self()})
+        watch_memory(guard, ref, total)
+
+      {:stop, caller} ->
+        send(caller, {:memory_guard, self(), stopped_at || await_guard(guard, ref)})
+
+      {:DOWN, _caller_ref, :process, _caller, _reason} when stopped_at == nil ->
+        send(guard, {:stop, self()})
+    end
+  end
+
+  # The guard answers a stop, or a notice of the limit crossed in the meantime arrives first, or
+  # the node is gone.
+  defp await_guard(guard, ref) do
+    send(guard, {:stop, self()})
+
+    receive do
+      {:guard_stopped, ^guard} ->
+        nil
+
+      {:memory_limit, ^guard, total} ->
+        send(guard, {:ack, self()})
+        total
+
+      {:DOWN, ^ref, :process, ^guard, _reason} ->
+        :node_gone
+    end
+  end
+
+  @doc """
   Returns the server node's total memory in bytes.
 
   Collected first only when asked, before clients connect, for a baseline that holds no garbage.

@@ -4,8 +4,9 @@ defmodule HologramSyncBenchmark.Sweep do
   # credo:disable-for-this-file Credo.Check.Refactor.IoPuts
 
   # A case's steps, from the smallest client count up, each on a fresh server node over a freshly
-  # vacuumed database with an empty log, stopping at the first step that fails. A failing step
-  # still reports everything it measured.
+  # vacuumed database with an empty log, stopping at the first step that fails or whose node
+  # passes the memory limit. A failing step still reports everything it measured; a stopped one
+  # has only the reading it stopped at.
 
   alias HologramSyncBenchmark.DB
   alias HologramSyncBenchmark.Measure
@@ -40,64 +41,146 @@ defmodule HologramSyncBenchmark.Sweep do
   `step` runs one step on a server node for a client count, numbering its markers from the
   given first one, and `passed?` judges its result. `summary` turns a result into the line the
   step prints, for a case whose steps measure other things than writes.
+
+  A step whose server node passes `memory_limit` bytes is stopped there, by halting the node, so
+  the run can't exhaust the machine. It has no figures, so it's returned apart, as the step that
+  stopped the sweep with the reading that stopped it, or nil when none did.
   """
   @spec run(
           pid,
           [pos_integer],
           (Peer.t(), pos_integer, non_neg_integer -> map),
           (map -> boolean),
-          (map -> String.t())
-        ) :: [map]
-  def run(conn, counts, step, passed?, summary) do
+          (map -> String.t()),
+          pos_integer
+        ) :: {[map], %{clients: pos_integer, memory: non_neg_integer} | nil}
+  def run(conn, counts, step, passed?, summary, memory_limit) do
     if length(counts) > @max_steps do
       raise ArgumentError, "a sweep takes at most #{@max_steps} steps"
     end
 
-    counts
-    |> Enum.with_index()
-    |> Enum.reduce_while([], fn {count, index}, results ->
-      :ok = DB.truncate_log!(conn)
-      :ok = DB.vacuum_analyze!(conn)
-      autovacuum_before = DB.autovacuum_runs(conn)
+    {results, stopped} =
+      counts
+      |> Enum.with_index()
+      |> Enum.reduce_while({[], nil}, fn {count, index}, {results, nil} ->
+        conn
+        |> run_step(count, index, step, passed?, memory_limit)
+        |> take_step(count, results, summary)
+      end)
 
-      IO.puts("Step: #{count} clients")
-      result = Peer.with_peer(&step.(&1, count, index * @markers_per_step))
+    {Enum.reverse(results), stopped}
+  end
 
-      result =
-        Map.merge(result, %{
-          autovacuum_ran: DB.autovacuum_runs(conn) != autovacuum_before,
-          heap_kills: Measure.heap_kills(Peer.log_path()),
-          session_cuts: Measure.session_cuts(Peer.log_path())
-        })
+  defp gigabytes(bytes), do: Float.round(bytes / 1_073_741_824, 1)
 
-      result = Map.put(result, :passed, passed?.(result))
+  defp take_step({:stopped, memory}, count, results, _summary) do
+    IO.puts("  STOPPED at the memory limit, the server node held #{gigabytes(memory)} GB")
 
-      result
-      |> summary.()
-      |> IO.puts()
+    {:halt, {results, %{clients: count, memory: memory}}}
+  end
 
-      if result.passed, do: {:cont, [result | results]}, else: {:halt, [result | results]}
-    end)
-    |> Enum.reverse()
+  defp take_step({:ok, result}, _count, results, summary) do
+    result
+    |> summary.()
+    |> IO.puts()
+
+    next = if result.passed, do: :cont, else: :halt
+
+    {next, {[result | results], nil}}
+  end
+
+  # A guard on the server node halts it past the memory limit, and is asked once the step is
+  # over whether it did: a node halted while the step only waited, with no call to fail, still
+  # makes the step a stopped one, and a step that failed for another reason keeps its error.
+  defp run_step(conn, count, index, step, passed?, memory_limit) do
+    :ok = DB.truncate_log!(conn)
+    :ok = DB.vacuum_analyze!(conn)
+    autovacuum_before = DB.autovacuum_runs(conn)
+
+    IO.puts("Step: #{count} clients")
+
+    case Peer.with_peer(&guarded_step(&1, step, count, index, memory_limit)) do
+      {:stopped, memory} ->
+        {:stopped, memory}
+
+      {:ok, result} ->
+        result =
+          Map.merge(result, %{
+            autovacuum_ran: DB.autovacuum_runs(conn) != autovacuum_before,
+            heap_kills: Measure.heap_kills(Peer.log_path()),
+            session_cuts: Measure.session_cuts(Peer.log_path())
+          })
+
+        {:ok, Map.put(result, :passed, passed?.(result))}
+    end
+  end
+
+  defp guarded_step(peer, step, count, index, memory_limit) do
+    guard = Measure.start_memory_guard(peer, memory_limit)
+
+    outcome =
+      try do
+        {:ok, step.(peer, count, index * @markers_per_step)}
+      catch
+        kind, reason -> {:error, kind, reason, __STACKTRACE__}
+      end
+
+    # A node gone for another reason, with nothing in the step to fail on it, leaves a step whose
+    # figures can't be trusted, so that says so rather than passing as a result.
+    case {Measure.stop_memory_guard(guard), outcome} do
+      {nil, {:ok, result}} ->
+        {:ok, result}
+
+      {answer, {:error, kind, reason, stacktrace}} when answer in [nil, :node_gone] ->
+        :erlang.raise(kind, reason, stacktrace)
+
+      {:node_gone, {:ok, _result}} ->
+        raise "the server node went down during the step"
+
+      {memory, _outcome} ->
+        {:stopped, memory}
+    end
   end
 
   @doc """
   Returns the case's clients-per-node figure from the given step results: the largest client
-  count that passed, "at least" it when every step passed, "below" the first one when none did,
-  with the fills the server cut short in the step it names beside it.
+  count that passed, "at least" it when every step passed and none stopped, "below" the first one
+  when none passed. Beside it, the fills the server cut short in the step it names, and the step
+  stopped at the memory limit, given in GB, with the reading it stopped at.
   """
-  @spec figure([map]) :: String.t()
-  def figure(results) do
-    {text, named} =
-      case {Enum.filter(results, & &1.passed), List.last(results)} do
-        {[], first_failed} -> {"below #{first_failed.clients}", first_failed}
-        {passed, %{passed: true}} -> {"at least #{List.last(passed).clients}", List.last(passed)}
-        {passed, _failed} -> {"#{List.last(passed).clients}", List.last(passed)}
-      end
+  @spec figure([map], map | nil, pos_integer) :: String.t()
+  def figure(results, stopped, memory_limit_gb) do
+    {text, named} = figure_text(results, stopped)
 
-    restarts = named.fill.restarts
+    notes =
+      named
+      |> figure_notes(stopped, memory_limit_gb)
+      |> Enum.filter(& &1)
 
-    if restarts > 0, do: "#{text} (#{restarts} fills restarted, #1635)", else: text
+    if notes == [], do: text, else: "#{text} (#{Enum.join(notes, "; ")})"
+  end
+
+  defp figure_notes(named, stopped, memory_limit_gb) do
+    [
+      named && named.fill.restarts > 0 && "#{named.fill.restarts} fills restarted, #1635",
+      stopped &&
+        "#{stopped.clients} stopped at the #{memory_limit_gb} GB memory limit, the server node " <>
+          "holding #{gigabytes(stopped.memory)} GB"
+    ]
+  end
+
+  # The figure and the step it names: the largest count that passed, "at least" it when no step
+  # failed or stopped, "below" the first count when none passed.
+  defp figure_text(results, stopped) do
+    passed = Enum.filter(results, & &1.passed)
+    last = List.last(results)
+
+    cond do
+      passed == [] and last == nil -> {"below #{stopped.clients}", nil}
+      passed == [] -> {"below #{last.clients}", last}
+      last.passed and stopped == nil -> {"at least #{last.clients}", last}
+      true -> {"#{List.last(passed).clients}", List.last(passed)}
+    end
   end
 
   @doc """
