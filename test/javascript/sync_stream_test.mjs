@@ -79,7 +79,6 @@ describe("SyncStream", () => {
 
     globalThis.window = originalWindow;
 
-    GlobalRegistry.set("connectPageModule", null);
     GlobalRegistry.set("syncStaleReason", null);
     SyncStream.renderScheduled = false;
     SyncStream.rowsChangedSinceRender = false;
@@ -352,6 +351,74 @@ describe("SyncStream", () => {
       };
 
       assert.notProperty(SyncStream.buildGreeting(pageModule), "cursor");
+    });
+
+    // The group's other tabs hold the same rows out of the same store, and the fill that follows
+    // is the whole of what this browser may see - so they go back to awaiting it too, or the new
+    // fill's markers would sweep nothing there.
+    it("tells the group it starts over when it names no place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      const posting = sinon.stub(Tabs, "post");
+      sinon.stub(Durability, "clear");
+
+      SyncStream.buildGreeting(pageModule);
+
+      sinon.assert.calledOnceWithExactly(posting, {
+        event: "sync_resync",
+        frame: {reason: "no place to resume from"},
+        kind: "frame",
+      });
+    });
+
+    // A row the cut fill stored and the new one no longer sends would otherwise be read back on
+    // the next page load as one the stream vouched for.
+    it("drops the stored rows when it names no place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      const clearing = sinon.stub(Durability, "clear");
+
+      SyncStream.buildGreeting(pageModule);
+
+      sinon.assert.calledOnce(clearing);
+    });
+
+    it("keeps the stored rows when it names a place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      const clearing = sinon.stub(Durability, "clear");
+
+      SyncStream.syncCursor = "Nzc4LjA";
+      SyncStream.buildGreeting(pageModule);
+
+      sinon.assert.notCalled(clearing);
+    });
+
+    it("tells the group nothing when it names a place", () => {
+      globalThis.Hologram.sync = {
+        modelHash: "a3f9c2",
+        policyHash: "0123456789abcdef",
+        protocolVersion: 1,
+      };
+
+      const posting = sinon.stub(Tabs, "post");
+
+      SyncStream.syncCursor = "Nzc4LjA";
+      SyncStream.buildGreeting(pageModule);
+
+      sinon.assert.notCalled(posting);
     });
 
     // The pair the browser is presenting, unchanged - what earns this client frames that say how
@@ -1143,10 +1210,8 @@ describe("SyncStream", () => {
         protocol_version: 1,
       });
 
-    it("hands each frame to the group, naming the page the stream was greeted with", () => {
+    it("hands each frame to the group", () => {
       const posting = sinon.stub(Tabs, "post");
-
-      GlobalRegistry.set("connectPageModule", "MyApp.TodosPage");
 
       eventSource.listeners.sync_deltas({data: frame()});
 
@@ -1156,7 +1221,6 @@ describe("SyncStream", () => {
         event: "sync_deltas",
         frame: JSON.parse(frame()),
         kind: "frame",
-        page: "MyApp.TodosPage",
       });
     });
 

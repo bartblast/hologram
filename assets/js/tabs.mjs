@@ -2,9 +2,6 @@
 
 import Batches from "./batches.mjs";
 import Durability from "./durability.mjs";
-import GlobalRegistry from "./global_registry.mjs";
-import Hologram from "./hologram.mjs";
-import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import Logger from "./logger.mjs";
 import Replica from "./replica.mjs";
@@ -206,18 +203,11 @@ export default class Tabs {
 
         return;
 
-      // What the tab holding the stream was told, applied here to this tab's own memory. Nothing
-      // is stored: the tab that received it wrote it down already, and one store written by two
-      // tabs is two tabs racing over one place.
-      //
-      // A "page" scope is the exception, because it is not the same claim for everyone: it says
-      // the page the STREAM was greeted with can be answered from what the client holds, which is
-      // this tab's business only if it is on that page.
+      // What the tab holding the stream was told, applied here to this tab's own memory, whichever
+      // page this tab is on: what a frame says is about the rows this browser holds. Nothing is
+      // stored: the tab that received it wrote it down already, and one store written by two tabs
+      // is two tabs racing over one place.
       case "frame":
-        if (Tabs.#foreignPageScope(message)) {
-          return;
-        }
-
         SyncStream.receiveFrame(message.event, message.frame);
 
         return;
@@ -321,26 +311,10 @@ export default class Tabs {
     Tabs.post({
       cursor: SyncStream.syncCursor,
       kind: "state",
-      page: GlobalRegistry.get("connectPageModule"),
       replica: Replica.current(),
       rules: SyncStream.rulesForGroup(),
       synced: LocalDatabase.syncedState(),
     });
-  }
-
-  // Whether a completeness marker is about a page this tab is not on. The scope travels with the
-  // page the STREAM was greeted with, which is the leader's page rather than everyone's.
-  static #foreignPageScope(message) {
-    if (message.event !== "synced" || message.frame.scope !== "page") {
-      return false;
-    }
-
-    const pageModule = Hologram.pageModule();
-
-    return (
-      pageModule === null ||
-      Interpreter.moduleExName(pageModule) !== message.page
-    );
   }
 
   // What a tab does the moment the group becomes its to lead, which is the moment the tab that was

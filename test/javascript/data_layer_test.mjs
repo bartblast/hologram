@@ -6,7 +6,6 @@ import Batches from "../../assets/js/batches.mjs";
 import DataLayer from "../../assets/js/data_layer.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
 import Durability from "../../assets/js/durability.mjs";
-import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import LocalDatabase from "../../assets/js/local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "../../assets/js/elixir/hologram/auth.mjs";
 import ManuallyPortedElixirHologramDB from "../../assets/js/elixir/hologram/db.mjs";
@@ -44,7 +43,6 @@ describe("DataLayer", () => {
       Model.reset();
       LocalDatabase.reset();
       LocalDatabase.actorUserId = null;
-      GlobalRegistry.set("connectPageModule", null);
 
       LocalDatabase.putRow(TASK, {
         done: false,
@@ -336,9 +334,8 @@ describe("DataLayer", () => {
 
     // A tab that took over the stream greets with the page it is on, which may not be the page the
     // completeness it holds was told for (#1582). A type's marker is the same claim on every page,
-    // so the count waits for the types it reads, not for the page the stream greeted with.
-    it("keeps carrying on the page a stream was greeted with while a type the count reads is not complete", () => {
-      GlobalRegistry.set("connectPageModule", "MyApp.TakenOverPage");
+    // so the count waits for the types it reads, whatever page the stream was greeted with.
+    it("keeps carrying on a page reached by a tab that took over while a type the count reads is not complete", () => {
       countReading("MyApp.TakenOverPage", ["MyApp.Project"]);
       LocalDatabase.syncCounts = {"MyApp.TakenOverPage/count/false": 42};
       LocalDatabase.markTypesSynced([TASK]);
