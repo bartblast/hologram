@@ -18,6 +18,7 @@ defmodule Hologram.DB.WriterTest do
 
   alias Hologram.AccessDeniedError
   alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -67,6 +68,14 @@ defmodule Hologram.DB.WriterTest do
       ])
 
     Enum.map(rows, fn [role] -> role end)
+  end
+
+  defp last_old_references do
+    statement = ~s|SELECT "old" FROM "hologram_system"."oplog" ORDER BY "seq" DESC LIMIT 1|
+
+    {:ok, %Postgrex.Result{rows: [[old]]}} = Connection.query(statement)
+
+    old
   end
 
   describe "create/1" do
@@ -576,6 +585,22 @@ defmodule Hologram.DB.WriterTest do
       assert DB.read(Module1, entity.id).parent_id == parent.id
     end
 
+    test "records the value a moved reference field held before the update" do
+      first_parent = DB.create!(Module2.new())
+      second_parent = DB.create!(Module2.new())
+
+      entity =
+        %{parent_id: first_parent.id}
+        |> Module1.new()
+        |> DB.create!()
+
+      assert entity
+             |> put_attribute(:parent_id, second_parent.id)
+             |> update() == :ok
+
+      assert last_old_references() == %{"parent_id" => first_parent.id}
+    end
+
     test "stores the stamp the struct carries on the columns it sets" do
       entity =
         %{priority: 1}
@@ -690,6 +715,15 @@ defmodule Hologram.DB.WriterTest do
   end
 
   describe "update/3" do
+    test "raises for a role grant without an acting user" do
+      expected_msg =
+        "cannot update Hologram.Auth.RoleGrant - a role grant is never changed in place, revoke the role and grant the new one instead"
+
+      assert_error MisuseError, expected_msg, fn ->
+        update(RoleGrant, Entity.generate_id(), %{role: :editor})
+      end
+    end
+
     test "writes raw without an acting user" do
       entity =
         %{priority: 5}
