@@ -3,7 +3,6 @@
 import Batches from "./batches.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
-import GlobalRegistry from "./global_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
@@ -27,6 +26,13 @@ export default class SyncStream {
   // are the ones the server enforces, or it was handed those (see rulesForGroup). Until then they
   // are only what the bundle was built with, which a deploy since can have left behind.
   static served = false;
+
+  // Why the server stopped serving this tab, or null while it is served. Kept for the life of the
+  // page: what the server compared was the bundle, and a bundle cannot change without a reload.
+  // Most often the reason is the server's own, taken as given rather than checked against a list,
+  // since a server is always newer than the tab reading it. A refused write can tell the tab the
+  // same thing, and a tab joining the group is told by the tab that heard it.
+  static stopReason = null;
 
   // Whether a frame or a batch changed rows since the last render, which computed the derived
   // fields from the rows it saw (see DataLayer.rowsChangedSinceRender).
@@ -248,20 +254,26 @@ export default class SyncStream {
         return written;
       }
 
-      // A notice rather than an order, and saying so is the whole of what the client does with
-      // it. Restarting the page would throw away what the person was doing to fix a mismatch
-      // they did not cause - and it is not where this is going: the server learns to serve a
-      // client built against an older model through lens chains, so a bundle behind the server
-      // becomes a thing to adapt to rather than to correct. Until then such a client keeps the
-      // stream it has, and its database stops filling - no session was started for it, so no
-      // completeness marker arrives and everything that waits on one keeps waiting.
+      // A notice rather than an order. Restarting the page would throw away what the person was
+      // doing, so the person is asked instead: the render this schedules shows them a notice with a
+      // way to reload, and their next navigation loads the page afresh. Until then the tab keeps
+      // what it holds and goes on reading it - no session was started for it, so nothing more
+      // arrives, and no completeness marker either.
+      //
+      // Stopped once, rendered once: a second notice is about the same bundle. Except that the
+      // model outranks any other reason. The server checks the protocol first, so a deploy
+      // changing both stops the tab over the protocol - and it is the model that the write
+      // endpoint refuses by, which a refused write then says (see holdsWrites).
       case "sync_reload":
         Logger.debug(`Hologram: bundle behind the server (${frame.reason})`);
 
-        // TODO: nothing reads this yet - an app surfaces it as its own "a new version is
-        // available" notice, and a feature helper asserts it the way `sseConnected?` is
-        // asserted.
-        GlobalRegistry.set("syncStaleReason", frame.reason);
+        if ($.stopReason === null) {
+          $.stopReason = frame.reason;
+
+          $.scheduleRender();
+        } else if (frame.reason === "model_hash") {
+          $.stopReason = frame.reason;
+        }
 
         return null;
 
@@ -411,6 +423,13 @@ export default class SyncStream {
   // posted in between reaches it neither way.
   static tell(event, frame) {
     Tabs.post({event, frame, kind: "frame"});
+  }
+
+  // Whether this tab has to hold its writes: the server would refuse them. That is a stop over the
+  // model rather than the protocol, because the write endpoint compares only the model - under a
+  // protocol stop, writes still land.
+  static holdsWrites() {
+    return $.stopReason === "model_hash";
   }
 }
 

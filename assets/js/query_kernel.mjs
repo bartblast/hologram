@@ -14,9 +14,8 @@ import StringOrder from "./string_order.mjs";
 // A filter is a list of clauses that all hold. A clause is a triple array - [name, operator,
 // operand] - a disjunction, {or: alternatives}, holding when one of its alternatives does, each
 // alternative a clause list of its own, or a quantifier, {quantifier, source, filter}, holding when
-// any, none or all of the rows of a related set match its filter. An operand is a value, the acting
-// user ({actor: true}), a placeholder ({placeholder: name}) or another attribute
-// ({attribute: name}).
+// any, none or all of the rows of a related set match its filter. An operand is a value, a
+// placeholder ({placeholder: name}) or another attribute ({attribute: name}).
 // A name - in a triple or an attribute operand - is an attribute, or a path: an array of the to-one
 // relationships followed from the row and the attribute of the row they lead to, read out of the
 // related type's table and missing when a reference is empty or names a row not held. Inside a
@@ -38,7 +37,8 @@ import StringOrder from "./string_order.mjs";
 // among the declared ones. An integer a float field reads needs no widening here, since a number is
 // one type whole or not.
 //
-// Hologram.Query.Interpreter is the reference it is pinned to, case for case, and that one is
+// Hologram.Query.Interpreter is the reference it is pinned to, case for case - but for the
+// reference's placeholder bindings, since nothing in the browser binds one - and that one is
 // pinned to the database executor in turn. What is written twice is this small frozen surface,
 // and neither writing is trusted on its own.
 //
@@ -51,14 +51,10 @@ import StringOrder from "./string_order.mjs";
 // boundary reads: entity structs are built from these, once per row, when a result leaves for
 // a template.
 export default class QueryKernel {
-  // Standing for the acting user when there is none. A predicate asking about nobody is
-  // answered by nobody, the way an actor-referencing statement is left out of a visitor's.
-  static #NO_ACTOR = Symbol("no actor");
-
   // Runs the term over the database and returns what it evaluates to: nodes for a set, one node
   // or null for a single-result query, a number for a counting one.
-  static run(term, givenContext = {}) {
-    const context = QueryKernel.#withMemo(givenContext);
+  static run(term) {
+    const context = QueryKernel.#newContext();
     const ranks = QueryKernel.#ranksFor(term.entity, term.filter);
 
     const matched = Object.values(LocalDatabase.getTable(term.entity)).filter(
@@ -90,18 +86,9 @@ export default class QueryKernel {
   // the way a quantifier's source reads them - for a reader answering a quantifier over
   // relationships outside a run, like a permission check.
   static chainRows(row, entityType, chain) {
-    const context = QueryKernel.#withMemo({});
+    const context = QueryKernel.#newContext();
 
     return QueryKernel.#chainRows(row, entityType, chain, context);
-  }
-
-  // The value of the derived field of the given name on the row, computed from its definition the
-  // way a run reads it - for a reader holding a row outside a run, like a permission check. A
-  // definition reads no placeholder and no acting user, so it is computed with no context.
-  static derivedValue(row, entityType, name) {
-    const context = QueryKernel.#withMemo({});
-
-    return QueryKernel.#derivedValue(row, entityType, name, context);
   }
 
   // The entity type is what an enum predicate is answered by: its declared value list decides
@@ -110,8 +97,11 @@ export default class QueryKernel {
   // be followed at all, since what its relationships lead to is a fact about the type. Nor is a
   // derived field computed, since whether a name is one is a fact about the type too: it reads as
   // the row holds it, which is nothing.
-  static matches(row, filter, givenContext = {}, entityType = null) {
-    const context = QueryKernel.#withMemo(givenContext);
+  //
+  // No browser code calls it: it is how the tests reach filter evaluation one row at a time, apart
+  // from the table, the order and the bounds a run adds.
+  static matches(row, filter, entityType = null) {
+    const context = QueryKernel.#newContext();
 
     if (
       (entityType === null || entityType === undefined) &&
@@ -571,13 +561,6 @@ export default class QueryKernel {
     );
   }
 
-  // A label beginning with an uppercase letter names a module, which Elixir inspects without a
-  // leading colon - the same rule the model reads row values by, so a refusal here is spelled
-  // the way the reference spells it.
-  static #inspectEnumValue(label) {
-    return label[0] >= "A" && label[0] <= "Z" ? label : `:${label}`;
-  }
-
   static #isOuter(name) {
     return (
       name !== null &&
@@ -616,9 +599,7 @@ export default class QueryKernel {
     return QueryKernel.#setRows(row, entityType, name, context);
   }
 
-  // A visitor has no acting user, and each triple naming one answers false on its own - so a
-  // disjunction needs no case for it: the alternative asking about nobody fails, and the others
-  // still answer. The rows above are those a quantifier's filter can name, nearest first.
+  // The rows above are those a quantifier's filter can name, nearest first.
   static #matches(row, filter, context, ranks, entityType, outer = []) {
     return filter.every((clause) => {
       if (Array.isArray(clause)) {
@@ -715,7 +696,7 @@ export default class QueryKernel {
 
     const value = QueryKernel.#isAttribute(operand)
       ? QueryKernel.#read(row, operand.attribute, entityType, outer, context)
-      : QueryKernel.#resolve(operand, context, ranksForKey);
+      : QueryKernel.#resolve(operand);
 
     const end = QueryKernel.#endOf(row, name, entityType, outer);
     const sortName = Model.sortKeyField(end.name);
@@ -727,15 +708,13 @@ export default class QueryKernel {
         ? [end.row[sortName], end.row[end.name] ?? null]
         : null;
 
-    return value === QueryKernel.#NO_ACTOR
-      ? false
-      : QueryKernel.#satisfies(
-          operator,
-          QueryKernel.#endValue(end, context),
-          value,
-          ranksForKey,
-          pair,
-        );
+    return QueryKernel.#satisfies(
+      operator,
+      QueryKernel.#endValue(end, context),
+      value,
+      ranksForKey,
+      pair,
+    );
   }
 
   // The key a name's ranks are kept under - a path's names joined, which no attribute name can
@@ -780,6 +759,12 @@ export default class QueryKernel {
 
       return "or" in clause ? clause.or.flatMap(QueryKernel.#levelNames) : [];
     });
+  }
+
+  // The context a run reads with, holding what it computes of derived fields - one per run, so
+  // nothing computed is read by a later one.
+  static #newContext() {
+    return {derivedMemo: new WeakMap()};
   }
 
   static #node(row, term, context) {
@@ -884,57 +869,21 @@ export default class QueryKernel {
     return derived ? derived.entity : Model.pathTarget(entityType, [name]);
   }
 
-  static #resolve(operand, context, ranksForKey) {
+  // Nothing in the browser binds a placeholder: a registered query is built here from the
+  // component's own values, and a read takes concrete ones - so one reaching here has no value,
+  // refused in the words the reference refuses a missing binding in.
+  static #resolve(operand) {
     if (Array.isArray(operand)) {
-      return operand.map((element) =>
-        QueryKernel.#resolve(element, context, ranksForKey),
-      );
+      return operand.map((element) => QueryKernel.#resolve(element));
     }
 
     if (operand === null || typeof operand !== "object") {
       return operand;
     }
 
-    if (operand.actor) {
-      return context.actorUserId ?? QueryKernel.#NO_ACTOR;
-    }
-
-    const value = QueryKernel.#resolvePlaceholder(operand.placeholder, context);
-
-    return QueryKernel.#validateDeclaredValue(
-      value,
-      operand.placeholder,
-      ranksForKey,
+    Interpreter.raiseMisuseError(
+      `missing value for placeholder :${operand.placeholder}`,
     );
-  }
-
-  // Refused in the three cases the reference refuses, and in its words: identity with it covers
-  // what each REFUSES, not only what each answers, and this is the executor whose answer reaches
-  // a screen. A predicate about the rows that have no value is written as one, in the query,
-  // where the operator can be chosen to suit - a LITERAL nil in a term is a value like any other
-  // and never comes through here.
-  static #resolvePlaceholder(name, context) {
-    const bindings = context.bindings ?? {};
-
-    if (!(name in bindings)) {
-      Interpreter.raiseMisuseError(`missing value for placeholder :${name}`);
-    }
-
-    const value = bindings[name];
-
-    if (value === null || value === undefined) {
-      Interpreter.raiseMisuseError(
-        `nil value for placeholder :${name} - use an explicit nil predicate instead`,
-      );
-    }
-
-    if (Array.isArray(value) && value.some((element) => element == null)) {
-      Interpreter.raiseMisuseError(
-        `nil element in the list for placeholder :${name} - use an explicit nil predicate instead`,
-      );
-    }
-
-    return value;
   }
 
   // The rows of a set - a relationship's, or the ones a derived field holding them holds.
@@ -1018,7 +967,7 @@ export default class QueryKernel {
     }
 
     // Only an attribute operand can be missing here - a literal null ordering operand is refused
-    // when the query is built, and a placeholder never binds one.
+    // when the query is built.
     if (value === null || operand === null) {
       return false;
     }
@@ -1080,29 +1029,5 @@ export default class QueryKernel {
     const keyResult = QueryKernel.#compare(pair[0], SortKey.compute(operand));
 
     return keyResult === 0 ? QueryKernel.#compare(pair[1], operand) : keyResult;
-  }
-
-  // A binding on an enum attribute is one of the values that attribute declares, refused in the
-  // words the reference refuses it in - the Elixir executors validate every binding against the
-  // attribute before they evaluate anything. A list bound as a whole is left alone, as it is
-  // there.
-  static #validateDeclaredValue(value, name, ranksForKey) {
-    if (!ranksForKey || Array.isArray(value) || ranksForKey.has(value)) {
-      return value;
-    }
-
-    const declared = Array.from(ranksForKey.keys())
-      .map((label) => QueryKernel.#inspectEnumValue(label))
-      .join(", ");
-
-    Interpreter.raiseMisuseError(
-      `invalid value ${QueryKernel.#inspectEnumValue(value)} for placeholder :${name} - expected one of [${declared}]`,
-    );
-  }
-
-  // The context a run reads with, holding what it computes of derived fields - one per run, so
-  // nothing computed is read by a later one.
-  static #withMemo(context) {
-    return {...context, derivedMemo: new WeakMap()};
   }
 }

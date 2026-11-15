@@ -1008,5 +1008,17 @@ defmodule Hologram.Template.RendererDerivedTest do
 
       assert String.contains?(html, "current user = none")
     end
+
+    # The validator's pattern takes the newline the uuid encoder refuses.
+    test "exposes nil for a session user's id followed by a newline" do
+      user =
+        %{email: "newline@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      html = render_page_html(Module131, %Server{user_id: user.id <> "\n"})
+
+      assert String.contains?(html, "current user = none")
+    end
   end
 end

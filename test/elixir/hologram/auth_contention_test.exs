@@ -434,24 +434,6 @@ defmodule Hologram.AuthContentionTest do
     }
   end
 
-  # Scoped to this database and excluding the observer, because pg_stat_activity is the whole
-  # server: the rest of the suite runs against another database at the same moment.
-  defp wait_for_blocked_sessions(scratch_opts, count) do
-    {:ok, observer} = Postgrex.start_link(scratch_opts)
-
-    statement = """
-    SELECT count(*) FROM pg_catalog.pg_stat_activity
-    WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'
-      AND "pid" <> pg_backend_pid()
-    """
-
-    wait_until(fn ->
-      %Postgrex.Result{rows: [[blocked]]} = Postgrex.query!(observer, statement, [])
-
-      blocked == count
-    end)
-  end
-
   # Waits until the sessions of this database blocked on a lock wait on the given kinds of lock, as
   # pg_stat_activity names them - "advisory" for a set's, "transactionid" for a row another
   # transaction holds.

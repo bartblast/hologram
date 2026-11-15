@@ -26,6 +26,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
@@ -936,6 +937,72 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert count_edges(source_entity, target_entity) == 0
     end
 
+    # The targets' inverses of the relationship lost a row, which nothing else says once the delete
+    # commits.
+    test "records each edge it takes with the row, ahead of the deletion" do
+      {:ok, required_target} = create(Module1.new())
+
+      {:ok, source_entity} =
+        %{c_id: required_target.id}
+        |> Module3.new()
+        |> create()
+
+      # Added in descending id order, so the order the edges come back in is not already sorted.
+      target_ids =
+        1..2
+        |> Enum.map(fn _index ->
+          {:ok, target_entity} =
+            %{c: "some text"}
+            |> Module2.new()
+            |> create()
+
+          target_entity.id
+        end)
+        |> Enum.sort(:desc)
+
+      Enum.each(target_ids, &(:ok = add_relationship(Module3, source_entity.id, :a, &1)))
+
+      effects_before = oplog_effects()
+
+      assert delete(Module3, source_entity.id) == :ok
+
+      recorded = Enum.drop(oplog_effects(), length(effects_before))
+
+      edge_effects =
+        target_ids
+        |> Enum.sort()
+        |> Enum.map(fn target_id ->
+          %{
+            data: %{"relationship" => "a", "target_id" => target_id},
+            entity_id: source_entity.id,
+            old: nil,
+            op: "del_relationship",
+            revisions: nil,
+            type: "Hologram.Test.Fixtures.Entity.Module3"
+          }
+        end)
+
+      assert [_edge_effect_1, _edge_effect_2, deletion] = recorded
+      assert Enum.take(recorded, 2) == edge_effects
+      assert deletion.op == "del_entity"
+      assert deletion.entity_id == source_entity.id
+    end
+
+    test "records only the deletion for a row with no edges" do
+      {:ok, required_target} = create(Module1.new())
+
+      {:ok, source_entity} =
+        %{c_id: required_target.id}
+        |> Module3.new()
+        |> create()
+
+      effects_before = oplog_effects()
+
+      assert delete(Module3, source_entity.id) == :ok
+
+      assert [%{op: "del_entity"}] = Enum.drop(oplog_effects(), length(effects_before))
+    end
+
     # A delete says what the row WAS, so the row stays readable in the log after it is gone.
     test "records the deletion, with the row it removed" do
       {:ok, created_entity} = create(Module1.new())
@@ -976,6 +1043,36 @@ defmodule Hologram.DB.EntityOperationsTest do
       assert {:error, %{referenced_by: _entity_type}} = delete(Module1, target_entity.id)
 
       assert oplog_effects() == effects_before
+    end
+
+    # A regression guard: the edges go first, inside the same transaction, so the refusal has to take
+    # them and their effects back too.
+    test "records nothing and keeps its edges when the delete of a row with edges is restricted" do
+      {:ok, required_target} = create(Module1.new())
+
+      {:ok, source_entity} =
+        %{c_id: required_target.id}
+        |> Module3.new()
+        |> create()
+
+      {:ok, target_entity} =
+        %{c: "some text"}
+        |> Module2.new()
+        |> create()
+
+      :ok = add_relationship(Module3, source_entity.id, :a, target_entity.id)
+
+      {:ok, _referencing_entity} =
+        %{a_id: source_entity.id}
+        |> Module5.new()
+        |> create()
+
+      effects_before = oplog_effects()
+
+      assert {:error, %{referenced_by: Module5}} = delete(Module3, source_entity.id)
+
+      assert oplog_effects() == effects_before
+      assert count_edges(source_entity, target_entity) == 1
     end
 
     test "restricts when another entity references the entity" do
@@ -1125,6 +1222,13 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "get/3" do
+    test "locks the row for no key update with lock: :no_key_update" do
+      {:ok, created_entity} = create(Module1.new())
+
+      assert get(Module1, created_entity.id, lock: :no_key_update) == created_entity
+      assert "RowShareLock" in relation_lock_modes(Module1)
+    end
+
     test "locks the row for share with lock: :share" do
       {:ok, created_entity} = create(Module1.new())
 

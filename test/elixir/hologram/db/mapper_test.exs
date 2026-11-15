@@ -412,7 +412,7 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive!/2" do
-    test "derives the role grant unique index comparing nulls as values" do
+    test "derives the role grant indexes - unique over the grant, comparing nulls as values, and by entity" do
       mapping =
         derive!(
           [
@@ -428,6 +428,11 @@ defmodule Hologram.DB.MapperTest do
                  columns: ["user_id", "entity_type", "entity_id", "role"],
                  nulls_distinct: false,
                  unique: true
+               },
+               "hologram_role_grant_entity_$idx" => %{
+                 columns: ["entity_id", "entity_type", "role"],
+                 nulls_distinct: true,
+                 unique: false
                }
              }
     end

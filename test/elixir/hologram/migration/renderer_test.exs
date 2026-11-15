@@ -1050,6 +1050,7 @@ defmodule Hologram.Migration.RendererTest do
                :add_foreign_key,
                :create_index,
                :create_index,
+               :create_index,
                :create_index
              ]
 

@@ -28,6 +28,13 @@ defmodule Hologram.Query.StageTest do
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Policy
 
+  defp assert_actor_refused(predicates) do
+    expected_msg =
+      "a filter can't name the acting user - only a policy condition can, got: #{inspect(predicates)} - to filter by a user's id, pin a variable holding it: ^user_id"
+
+    assert_error MisuseError, expected_msg, fn -> filter(Module3, predicates) end
+  end
+
   defp base_term(entity_type) do
     %Query{entity: entity_type}
   end
@@ -637,18 +644,6 @@ defmodule Hologram.Query.StageTest do
       query = filter(Module5, [{[:a, :b, :c], "x"}])
 
       assert query.filter == [{[:a, :b, :c], :==, "x"}]
-    end
-
-    test "builds an actor triple under an equality operator" do
-      query = filter(Module3, c_id: {:!=, {:actor}})
-
-      assert query.filter == [{:c_id, :!=, {:actor}}]
-    end
-
-    test "builds an actor triple for a path to a uuid attribute" do
-      query = filter(Module3, [{[:b, :id], {:actor}}])
-
-      assert query.filter == [{[:b, :id], :==, {:actor}}]
     end
 
     test "builds an attribute equality triple from a bare attribute operand" do
@@ -1366,6 +1361,58 @@ defmodule Hologram.Query.StageTest do
 
       assert_error MisuseError, expected_msg, fn ->
         filter(Module2, [:a])
+      end
+    end
+  end
+
+  # The acting user is a value only a policy condition names, so a filter refuses the actor leaf
+  # user_id() lowers to wherever it sits - pinned in, since a written user_id() never lowers in a
+  # filter.
+  describe "filter/2 - the acting user" do
+    test "raises on the actor as a value" do
+      assert_actor_refused(c_id: {:actor})
+    end
+
+    test "raises on the actor under an equality operator" do
+      assert_actor_refused(c_id: {:==, {:actor}})
+      assert_actor_refused(c_id: {:!=, {:actor}})
+    end
+
+    test "raises on the actor compared with a path" do
+      assert_actor_refused([{[:b, :id], {:actor}}])
+    end
+
+    test "raises on the actor in an alternative" do
+      assert_actor_refused(or: [[c_id: {:actor}], [b_id: nil]])
+    end
+
+    test "raises on the actor in a quantifier's condition" do
+      assert_actor_refused(any: {[:a], [id: {:actor}]})
+    end
+
+    # The refusal comes before the check of what the actor is compared with.
+    test "raises on the actor compared with an attribute that isn't a uuid" do
+      assert_actor_refused([{[:b, :c], {:actor}}])
+    end
+
+    test "raises on the actor in a membership list" do
+      assert_actor_refused(c_id: {:in, [{:actor}]})
+    end
+
+    test "raises on the actor under a placeholder name" do
+      assert_actor_refused([{%Placeholder{name: :name}, {:actor}}])
+    end
+
+    # A derived field's query can't pin the acting user's id, so the fix a filter's refusal gives
+    # would be refused too.
+    test "raises on the actor in a derived field's query" do
+      expected_msg =
+        "a derived field's query can't name the acting user - only a policy condition can, got: [position: {:actor}] - a derived value is the same whoever reads it"
+
+      assert_error MisuseError, expected_msg, fn ->
+        Module28
+        |> sourced([:channel, :messages])
+        |> filter(position: {:actor})
       end
     end
   end
@@ -3251,6 +3298,27 @@ defmodule Hologram.Query.StageTest do
                {[:channel, :messages], :created_at},
                {[], :last_read_at}
              ]
+    end
+  end
+
+  # Guards rather than bug tests: a policy condition builds its clauses here, and names the acting
+  # user with the actor leaf a filter refuses.
+  describe "predicate_triples!/2" do
+    test "builds an actor triple" do
+      assert predicate_triples!(Module3, c_id: {:!=, {:actor}}) == [{:c_id, :!=, {:actor}}]
+    end
+
+    test "builds an actor triple for a path to a uuid attribute" do
+      assert predicate_triples!(Module3, [{[:b, :id], {:actor}}]) == [{[:b, :id], :==, {:actor}}]
+    end
+
+    test "raises on the actor compared with an attribute that isn't a uuid" do
+      expected_msg =
+        "user_id() requires a uuid attribute - attribute b.c in Hologram.Test.Fixtures.Entity.Module3 has type :string"
+
+      assert_error MisuseError, expected_msg, fn ->
+        predicate_triples!(Module3, [{[:b, :c], {:actor}}])
+      end
     end
   end
 

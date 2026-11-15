@@ -124,7 +124,23 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_policy_module6",
                "test_fixtures_policy_module7",
                "test_fixtures_policy_module8",
-               "test_fixtures_policy_module9"
+               "test_fixtures_policy_module9",
+               "test_fixtures_policy_readers_module1",
+               "test_fixtures_policy_readers_module10",
+               "test_fixtures_policy_readers_module11",
+               "test_fixtures_policy_readers_module12",
+               "test_fixtures_policy_readers_module12_lists_$join",
+               "test_fixtures_policy_readers_module13",
+               "test_fixtures_policy_readers_module13_lists_$join",
+               "test_fixtures_policy_readers_module14",
+               "test_fixtures_policy_readers_module2",
+               "test_fixtures_policy_readers_module3",
+               "test_fixtures_policy_readers_module4",
+               "test_fixtures_policy_readers_module5",
+               "test_fixtures_policy_readers_module6",
+               "test_fixtures_policy_readers_module7",
+               "test_fixtures_policy_readers_module8",
+               "test_fixtures_policy_readers_module9"
              ]
     end
 
@@ -309,6 +325,15 @@ defmodule Hologram.DB.IntrospectionTest do
              }
     end
 
+    test "introspects the role grant index by entity" do
+      assert schema().tables["hologram_role_grant"].indexes["hologram_role_grant_entity_$idx"] ==
+               %{
+                 columns: ["entity_id", "entity_type", "role"],
+                 nulls_distinct: true,
+                 unique: false
+               }
+    end
+
     test "introspects a unique attribute's index as unique" do
       indexes = schema().tables["test_fixtures_entity_module19"].indexes
 
@@ -427,7 +452,21 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Policy.Module6",
                  "Hologram.Test.Fixtures.Policy.Module7",
                  "Hologram.Test.Fixtures.Policy.Module8",
-                 "Hologram.Test.Fixtures.Policy.Module9"
+                 "Hologram.Test.Fixtures.Policy.Module9",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module1",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module10",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module11",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module12",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module13",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module14",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module2",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module3",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module4",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module5",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module6",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module7",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module8",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module9"
                ],
                "hologram_role_grant_role_$enum" => [
                  "Hologram.Test.Fixtures.Role.Module1",
@@ -461,6 +500,7 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_job_module3_outcome_$enum" => [
                  "create_next",
                  "create_row",
+                 "delete_self",
                  "error",
                  "exit",
                  "garbage",
@@ -469,6 +509,7 @@ defmodule Hologram.DB.IntrospectionTest do
                  "raise",
                  "record_actor",
                  "record_order",
+                 "swept",
                  "throw"
                ],
                "test_fixtures_job_module3_status_$enum" => [
