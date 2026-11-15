@@ -644,7 +644,7 @@ defmodule Hologram.Realtime.SSETest do
   describe "process_message/4 on {:sync_synced, scope, cursor}" do
     test "pushes a synced SSE event" do
       conn = prepared_test_conn()
-      send(self(), {:sync_synced, :page, nil})
+      send(self(), {:sync_synced, :all, nil})
 
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
@@ -658,6 +658,15 @@ defmodule Hologram.Realtime.SSETest do
       {:cont, updated_conn} = process_message(conn, nil, nil)
 
       assert updated_conn.resp_body =~ ~s["scope":"all"]
+    end
+
+    test "carries the entity types a marker names" do
+      conn = prepared_test_conn()
+      send(self(), {:sync_synced, {:types, [EntityModule2]}, nil})
+
+      {:cont, updated_conn} = process_message(conn, nil, nil)
+
+      assert updated_conn.resp_body =~ ~s("types":["Hologram.Test.Fixtures.Entity.Module2"])
     end
 
     # The one frame a client filled and then left alone ever receives, so the place has to be on

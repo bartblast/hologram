@@ -455,10 +455,30 @@ defmodule Hologram.Sync.FrameTest do
 
   describe "encode_synced_envelope/3" do
     test "wraps the completeness marker in a synced SSE event envelope" do
-      payload = %{cursor: nil, protocol_version: 1, scope: :page}
+      payload = %{
+        cursor: nil,
+        protocol_version: 1,
+        scope: :types,
+        types: ["Hologram.Test.Fixtures.Entity.Module2"]
+      }
+
       encoded = Jason.encode!(payload)
 
-      assert encode_synced_envelope(42, :page, nil) ==
+      assert encode_synced_envelope(42, {:types, [Module2]}, nil) ==
+               "event: synced\nid: 42\ndata: #{encoded}\n\n"
+    end
+
+    test "names every entity type it says is complete, the way a frame names a row's type" do
+      payload = %{
+        cursor: nil,
+        protocol_version: 1,
+        scope: :types,
+        types: ["Hologram.Test.Fixtures.Entity.Module2", "Hologram.Test.Fixtures.Entity.Module3"]
+      }
+
+      encoded = Jason.encode!(payload)
+
+      assert encode_synced_envelope(42, {:types, [Module2, Module3]}, nil) ==
                "event: synced\nid: 42\ndata: #{encoded}\n\n"
     end
 
