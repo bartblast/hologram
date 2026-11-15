@@ -286,7 +286,7 @@ describe("DataLayer", () => {
 
     it("counts locally once the whole pot is complete", () => {
       LocalDatabase.syncCounts = {"MyApp.Complete/count/false": 42};
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markAllSynced();
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.Complete",
@@ -298,15 +298,19 @@ describe("DataLayer", () => {
       assert.deepStrictEqual(result, Type.integer(1));
     });
 
-    // The page scope covers the page this client connected on, and nothing else - a component on
-    // any other page is only promised its rows at "all".
-    it("counts locally at the page marker on the page it connected with", () => {
-      GlobalRegistry.set("connectPageModule", "MyApp.ConnectPage");
-      LocalDatabase.syncCounts = {"MyApp.ConnectPage/count/false": 42};
-      LocalDatabase.markSynced("page");
+    const countReading = (module, types) => {
+      globalThis.Hologram.sync.countTypes = {[module]: {count: types}};
+    };
+
+    // Whichever page the component is on, and whether or not the stream connected on it: a type's
+    // marker is a claim about the rows the client holds.
+    it("counts locally once every type the count reads is complete", () => {
+      countReading("MyApp.NavigatedTo", [TASK, "MyApp.Project"]);
+      LocalDatabase.syncCounts = {"MyApp.NavigatedTo/count/false": 42};
+      LocalDatabase.markTypesSynced([TASK, "MyApp.Project"]);
 
       const result = DataLayer.answerDerivedQuery(
-        "MyApp.ConnectPage",
+        "MyApp.NavigatedTo",
         Type.atom("count"),
         [Type.boolean(false)],
         notDoneCount(),
@@ -315,13 +319,47 @@ describe("DataLayer", () => {
       assert.deepStrictEqual(result, Type.integer(1));
     });
 
-    it("keeps carrying at the page marker for a page reached since", () => {
-      GlobalRegistry.set("connectPageModule", "MyApp.SomeOtherPage");
+    it("keeps carrying while a type the count reads is not complete", () => {
+      countReading("MyApp.NavigatedTo", [TASK, "MyApp.Project"]);
       LocalDatabase.syncCounts = {"MyApp.NavigatedTo/count/false": 42};
-      LocalDatabase.markSynced("page");
+      LocalDatabase.markTypesSynced([TASK]);
 
       const result = DataLayer.answerDerivedQuery(
         "MyApp.NavigatedTo",
+        Type.atom("count"),
+        [Type.boolean(false)],
+        notDoneCount(),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    // A tab that took over the stream greets with the page it is on, which may not be the page the
+    // completeness it holds was told for (#1582). A type's marker is the same claim on every page,
+    // so the count waits for the types it reads, not for the page the stream greeted with.
+    it("keeps carrying on the page a stream was greeted with while a type the count reads is not complete", () => {
+      GlobalRegistry.set("connectPageModule", "MyApp.TakenOverPage");
+      countReading("MyApp.TakenOverPage", ["MyApp.Project"]);
+      LocalDatabase.syncCounts = {"MyApp.TakenOverPage/count/false": 42};
+      LocalDatabase.markTypesSynced([TASK]);
+
+      const result = DataLayer.answerDerivedQuery(
+        "MyApp.TakenOverPage",
+        Type.atom("count"),
+        [Type.boolean(false)],
+        notDoneCount(),
+      );
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    // A field the build listed no types for can only count on the whole pot.
+    it("keeps carrying until everything is complete for a count with no types listed", () => {
+      LocalDatabase.syncCounts = {"MyApp.Unlisted/count/false": 42};
+      LocalDatabase.markTypesSynced([TASK]);
+
+      const result = DataLayer.answerDerivedQuery(
+        "MyApp.Unlisted",
         Type.atom("count"),
         [Type.boolean(false)],
         notDoneCount(),

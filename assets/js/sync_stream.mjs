@@ -317,9 +317,15 @@ export default class SyncStream {
           $.syncCursor = frame.cursor;
         }
 
-        LocalDatabase.markSynced(frame.scope);
+        // A scope this client does not know names nothing it holds - a node of an older build
+        // speaks of the page it connected on, which is not a claim about any type.
+        if (frame.scope === "types") {
+          LocalDatabase.markTypesSynced(frame.types);
+        } else if (frame.scope === "all") {
+          LocalDatabase.markAllSynced();
+        }
 
-        // What a query answers can change the moment a scope is complete - a count that was
+        // What a query answers can change the moment a type is complete - a count that was
         // reading the server's number starts counting rows - so the marker is a reason to
         // render like any frame is.
         $.scheduleRender();

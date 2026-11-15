@@ -4,7 +4,6 @@ import Batches from "./batches.mjs";
 import Bitstring from "./bitstring.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
-import GlobalRegistry from "./global_registry.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
@@ -551,7 +550,7 @@ export default class DataLayer {
     // - and whatever arrived while it was starting up is applied now, in the order it arrived.
     Tabs.ready();
 
-    // And what the store could not tell it is asked for: the completeness scopes, which nothing
+    // And what the store could not tell it is asked for: what is complete, which nothing
     // writes down, and the place and the identity as they stand in the tab that has them.
     Tabs.post({kind: "joined"});
 
@@ -579,9 +578,11 @@ export default class DataLayer {
   //
   // A count has no rows behind it, so carrying rows cannot answer one: until the fill is complete
   // for the rows it counts, counting locally would count a pot that is still filling and report a
-  // number climbing towards the truth. The marker says when that stops - the page's own scope for
-  // the page this client connected on, whose rows the server declares complete first, and the
-  // whole pot's for any page reached since, whose rows are only promised at "all".
+  // number climbing towards the truth. The markers say when that stops - one per entity type, once
+  // the client holds every row of it it may see, and the whole pot's. A count reads the types the
+  // build worked out for its field (`countTypes`), and counts for itself once every one of them is
+  // marked, on whichever page and in whichever tab. A field the build listed no types for waits for
+  // the whole pot.
   //
   // The key names the component, the prop or derived field, and the arguments its function was
   // called with - which is what tells two instances of one component apart - spelled the way the
@@ -593,10 +594,7 @@ export default class DataLayer {
       return null;
     }
 
-    const scope =
-      module === GlobalRegistry.get("connectPageModule") ? "page" : "all";
-
-    if (LocalDatabase.isSynced(scope)) {
+    if ($.#countsLocally(module, name)) {
       return null;
     }
 
@@ -605,6 +603,19 @@ export default class DataLayer {
       .join(",")}`;
 
     return LocalDatabase.syncCounts[key] ?? null;
+  }
+
+  static #countsLocally(module, name) {
+    if (LocalDatabase.isAllSynced()) {
+      return true;
+    }
+
+    const types = globalThis.Hologram.sync?.countTypes?.[module]?.[name.value];
+
+    return (
+      types !== undefined &&
+      types.every((type) => LocalDatabase.isTypeSynced(type))
+    );
   }
 
   // Code point order, which is the order Elixir sorts UTF-8 binaries in - where JavaScript's own

@@ -222,8 +222,8 @@ export default class Tabs {
 
         return;
 
-      // A tab that has finished starting up, asking for what the store could not tell it: the
-      // scopes, which nothing writes down, and the place and the identity as they stand now.
+      // A tab that has finished starting up, asking for what the store could not tell it: what is
+      // complete, which nothing writes down, and the place and the identity as they stand now.
       // Answered by the tab that has them.
       case "joined":
         if (Tabs.leader) {
@@ -290,8 +290,8 @@ export default class Tabs {
   //
   // A FRAME is the server's word about rows the page and the store have not put in yet.
   //
-  // The group's STATE carries the completeness scopes, and marking the pot complete is what SWEEPS
-  // the rows a page carried but the stream never vouched for. Swept before the mount it sweeps an
+  // The group's STATE carries what is complete, and marking a type or the pot complete is what
+  // SWEEPS the rows a page carried but the stream never vouched for. Swept before the mount it sweeps an
   // empty set, and the page's own carried rows - filed a moment later - are never looked at again,
   // so a row the server would no longer send sits there for the life of the tab. (Reachable
   // whenever a tab is between joining and mounting while another posts state: two tabs opened
@@ -315,7 +315,7 @@ export default class Tabs {
   }
 
   // What this tab knows that a tab joining cannot read out of the store: the identity in use, the
-  // place the stream has reached, the scopes the server has declared complete, and the rules the
+  // place the stream has reached, what the server has declared complete, and the rules the
   // stream syncs under, for a tab whose bundle answers by others.
   static postState() {
     Tabs.post({
@@ -324,7 +324,7 @@ export default class Tabs {
       page: GlobalRegistry.get("connectPageModule"),
       replica: Replica.current(),
       rules: SyncStream.rulesForGroup(),
-      synced: LocalDatabase.syncedScopes(),
+      synced: LocalDatabase.syncedState(),
     });
   }
 
@@ -410,16 +410,17 @@ export default class Tabs {
       SyncStream.receiveFrame("sync_rules", message.rules);
     }
 
-    for (const scope of message.synced) {
-      if (
-        !Tabs.#foreignPageScope({
-          event: "synced",
-          frame: {scope},
-          page: message.page,
-        })
-      ) {
-        LocalDatabase.markSynced(scope);
-      }
+    // A type's completeness is a claim about the rows this browser holds, the same in every tab
+    // and on every page. A tab of an earlier build tells it as a list of scopes, whose "all" says
+    // the same and whose "page" names no type.
+    const synced = Array.isArray(message.synced)
+      ? {all: message.synced.includes("all"), types: []}
+      : message.synced;
+
+    LocalDatabase.markTypesSynced(synced.types);
+
+    if (synced.all) {
+      LocalDatabase.markAllSynced();
     }
   }
 

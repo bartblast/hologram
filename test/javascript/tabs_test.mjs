@@ -357,13 +357,13 @@ describe("Tabs", () => {
       SyncStream.syncCursor = null;
     });
 
-    // The three things a joining tab cannot read out of the store: the scopes, which nothing writes
-    // down, and the place and the identity as they stand now.
+    // The three things a joining tab cannot read out of the store: what is complete, which nothing
+    // writes down, and the place and the identity as they stand now.
     it("says what this tab knows that the store cannot tell", () => {
       const posting = sinon.stub(Tabs, "post");
 
       GlobalRegistry.set("connectPageModule", "MyApp.TodosPage");
-      LocalDatabase.markSynced("page");
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
       Replica.offer({id: "r-group", token: "statement-group"});
 
       SyncStream.syncCursor = "place-1";
@@ -376,7 +376,7 @@ describe("Tabs", () => {
         page: "MyApp.TodosPage",
         replica: {id: "r-group", token: "statement-group"},
         rules: null,
-        synced: ["page"],
+        synced: {all: false, types: ["MyApp.Task"]},
       });
     });
 
@@ -438,7 +438,8 @@ describe("Tabs", () => {
 
     beforeEach(() => {
       sinon.stub(SyncStream, "receiveFrame");
-      sinon.stub(LocalDatabase, "markSynced");
+      sinon.stub(LocalDatabase, "markAllSynced");
+      sinon.stub(LocalDatabase, "markTypesSynced");
 
       mountPage(PAGE);
     });
@@ -581,22 +582,35 @@ describe("Tabs", () => {
       assert.isFalse(posting.called);
     });
 
-    it("takes the identity, the place and the scopes from the group's state", () => {
+    it("takes the identity, the place and what is complete from the group's state", () => {
       Tabs.receive({
         cursor: "place-1",
         kind: "state",
         page: PAGE,
         replica: {id: "r-group", token: "statement-group"},
-        synced: ["all", "page"],
+        synced: {all: true, types: ["MyApp.Task"]},
       });
 
       assert.equal(Replica.id, "r-group");
       assert.equal(SyncStream.syncCursor, "place-1");
 
-      assert.deepStrictEqual(
-        LocalDatabase.markSynced.args.map(([scope]) => scope),
-        ["all", "page"],
-      );
+      sinon.assert.calledOnceWithExactly(LocalDatabase.markTypesSynced, [
+        "MyApp.Task",
+      ]);
+
+      sinon.assert.calledOnce(LocalDatabase.markAllSynced);
+    });
+
+    it("leaves everything unmarked while the group's state says only types are complete", () => {
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        synced: {all: false, types: ["MyApp.Task"]},
+      });
+
+      sinon.assert.notCalled(LocalDatabase.markAllSynced);
     });
 
     // Its own reading has already brought it further, or to somewhere else entirely.
@@ -608,7 +622,7 @@ describe("Tabs", () => {
         kind: "state",
         page: PAGE,
         replica: {id: null, token: null},
-        synced: [],
+        synced: {all: false, types: []},
       });
 
       assert.equal(SyncStream.syncCursor, "place-2");
@@ -631,7 +645,7 @@ describe("Tabs", () => {
         page: PAGE,
         replica: {id: null, token: null},
         rules,
-        synced: [],
+        synced: {all: false, types: []},
       });
 
       sinon.assert.calledOnceWithExactly(
@@ -654,22 +668,53 @@ describe("Tabs", () => {
           protocol_version: 1,
           rules: {},
         },
-        synced: [],
+        synced: {all: false, types: []},
       });
 
       sinon.assert.notCalled(SyncStream.receiveFrame);
     });
 
-    it("takes no scope for a page this tab is not on", () => {
+    it("takes the whole pot from the state of a tab of an earlier build", () => {
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        synced: ["all", "page"],
+      });
+
+      sinon.assert.calledOnceWithExactly(LocalDatabase.markTypesSynced, []);
+      sinon.assert.calledOnce(LocalDatabase.markAllSynced);
+    });
+
+    // The page scope an earlier build spoke of names no type, and says nothing about the whole pot.
+    it("takes nothing from the state of a tab of an earlier build holding only the page scope", () => {
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        synced: ["page"],
+      });
+
+      sinon.assert.calledOnceWithExactly(LocalDatabase.markTypesSynced, []);
+      sinon.assert.notCalled(LocalDatabase.markAllSynced);
+    });
+
+    // A type's completeness is a claim about the rows this browser holds, which every tab shares,
+    // whichever page the tab telling it is on.
+    it("takes the complete types whatever page the group's state names", () => {
       Tabs.receive({
         cursor: null,
         kind: "state",
         page: "MyApp.SettingsPage",
         replica: {id: null, token: null},
-        synced: ["page"],
+        synced: {all: false, types: ["MyApp.Task"]},
       });
 
-      assert.isFalse(LocalDatabase.markSynced.called);
+      sinon.assert.calledOnceWithExactly(LocalDatabase.markTypesSynced, [
+        "MyApp.Task",
+      ]);
     });
   });
 
@@ -898,7 +943,7 @@ describe("Tabs", () => {
         kind: "state",
         page: null,
         replica: {id: null, token: null},
-        synced: ["all"],
+        synced: {all: true, types: []},
       };
 
       const seen = [];

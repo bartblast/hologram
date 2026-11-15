@@ -440,7 +440,7 @@ describe("SyncStream", () => {
     it("marks the scope a synced marker names and takes its place", () => {
       SyncStream.receiveFrame("synced", {cursor: "Nzc4LjA", scope: "all"});
 
-      assert.isTrue(LocalDatabase.isSynced("all"));
+      assert.isTrue(LocalDatabase.isAllSynced());
       assert.equal(SyncStream.syncCursor, "Nzc4LjA");
       assert.equal(animationFrames.length, 1);
     });
@@ -511,7 +511,7 @@ describe("SyncStream", () => {
         data: JSON.stringify({
           cursor: null,
           protocol_version: 1,
-          scope: "page",
+          scope: "all",
         }),
       });
 
@@ -524,7 +524,7 @@ describe("SyncStream", () => {
         data: JSON.stringify({
           cursor: null,
           protocol_version: 1,
-          scope: "page",
+          scope: "all",
         }),
       };
 
@@ -545,7 +545,7 @@ describe("SyncStream", () => {
         data: JSON.stringify({
           cursor: null,
           protocol_version: 1,
-          scope: "page",
+          scope: "all",
         }),
       });
 
@@ -857,7 +857,7 @@ describe("SyncStream", () => {
       };
 
       LocalDatabase.putRow(TASK, {id: "t1", title: "held before the resync"});
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markAllSynced();
     });
 
     afterEach(() => {
@@ -939,7 +939,7 @@ describe("SyncStream", () => {
     it("drops the completeness it had, since the refill has not finished", () => {
       eventSource.listeners.sync_resync({data: envelope()});
 
-      assert.isFalse(LocalDatabase.isSynced("all"));
+      assert.isFalse(LocalDatabase.isAllSynced());
     });
 
     // The place described the rows, so it goes with them - a client cut off before the refill
@@ -1050,17 +1050,42 @@ describe("SyncStream", () => {
   });
 
   describe("synced event", () => {
-    const envelope = (scope, cursor = null) =>
-      JSON.stringify({cursor: cursor, protocol_version: 1, scope: scope});
+    const envelope = (scope, cursor = null, types = undefined) =>
+      JSON.stringify({
+        cursor: cursor,
+        protocol_version: 1,
+        scope: scope,
+        types,
+      });
 
-    it("records the scope the client may now answer for itself", () => {
-      eventSource.listeners.synced({data: envelope("page")});
+    it("records the types the client may now answer for itself", () => {
+      eventSource.listeners.synced({
+        data: envelope("types", null, ["MyApp.Task"]),
+      });
 
-      assert.isTrue(LocalDatabase.isSynced("page"));
-      assert.isFalse(LocalDatabase.isSynced("all"));
+      assert.isTrue(LocalDatabase.isTypeSynced("MyApp.Task"));
+      assert.isFalse(LocalDatabase.isTypeSynced("MyApp.Project"));
+      assert.isFalse(LocalDatabase.isAllSynced());
     });
 
-    // What a query answers can change the moment a scope is complete - a count that was reading
+    it("records that the client may answer everything for itself", () => {
+      eventSource.listeners.synced({data: envelope("all")});
+
+      assert.isTrue(LocalDatabase.isAllSynced());
+    });
+
+    // A node of an older build speaks of the page the stream connected on, which is no claim about
+    // any type.
+    it("records nothing for a scope it does not know", () => {
+      eventSource.listeners.synced({data: envelope("page")});
+
+      assert.deepStrictEqual(LocalDatabase.syncedState(), {
+        all: false,
+        types: [],
+      });
+    });
+
+    // What a query answers can change the moment a type is complete - a count that was reading
     // the server's number starts counting rows.
     it("schedules a repaint", () => {
       eventSource.listeners.synced({data: envelope("all")});
@@ -1085,8 +1110,8 @@ describe("SyncStream", () => {
       assert.deepStrictEqual(persisting.firstCall.args, [[], "Nzc4LjA"]);
     });
 
-    // The page scope is narrower than the claim a place makes, so its marker names none - and a
-    // server built before this frame carried one names nothing at all.
+    // A first arrival's types markers are narrower than the claim a place makes, so they name
+    // none - and a server built before this frame carried one names nothing at all.
     it("leaves the place alone for a marker naming none", () => {
       const persisting = sinon.stub(Durability, "persistFrame");
 
@@ -1098,7 +1123,9 @@ describe("SyncStream", () => {
         }),
       });
 
-      eventSource.listeners.synced({data: envelope("page")});
+      eventSource.listeners.synced({
+        data: envelope("types", null, ["MyApp.Task"]),
+      });
 
       assert.equal(SyncStream.syncCursor, "Nzc4LjA");
       assert.isTrue(persisting.calledOnce);
