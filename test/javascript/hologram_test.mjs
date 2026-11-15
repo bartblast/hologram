@@ -7455,6 +7455,113 @@ describe("Hologram", () => {
     });
   });
 
+  describe("restoreDocumentSnapshot()", () => {
+    const pageModule = Type.atom(
+      "Elixir.Hologram.Test.Fixtures.RestoredIntoDocument",
+    );
+
+    const pageSnapshot = {
+      chunkDigests: [],
+      componentRegistryEntries: Type.map(),
+      identityPeriod: null,
+      instanceId: "restored-instance",
+      pageModule: pageModule,
+      pageParams: Type.map(),
+      scrollPosition: [0, 0],
+      subscriptionReceipts: [],
+    };
+
+    const syncRows = {
+      put_entity: {"App.User": [{id: "user-1", email: "user@example.com"}]},
+    };
+
+    // A read of a block holding none of them sets them to undefined.
+    const bootFieldNames = [
+      "assetManifest",
+      "csrfToken",
+      "identityTag",
+      "initialChunkDigests",
+      "initialPageDigest",
+      "instanceId",
+      "replicaId",
+      "replicaToken",
+    ];
+
+    let ingestMountDataSpy, instanceId, originalBootFields;
+
+    beforeEach(() => {
+      instanceId = App.instanceId;
+      IdentityTracker.init("tag-1");
+
+      originalBootFields = Object.fromEntries(
+        bootFieldNames.map((name) => [name, globalThis.Hologram[name]]),
+      );
+
+      const block = document.createElement("script");
+      block.type = "application/json";
+      block.id = "hologram-boot-data";
+
+      block.textContent = JSON.stringify({
+        actorUserId: "user-1",
+        syncCounts: {"App.Page/total/": 3},
+        syncRows: syncRows,
+      });
+
+      document.body.appendChild(block);
+      Hologram.readBootData();
+
+      ingestMountDataSpy = sinon.spy();
+      Hologram.dataLayer = {ingestMountData: ingestMountDataSpy};
+    });
+
+    afterEach(() => {
+      Hologram.dataLayer = null;
+
+      document
+        .querySelectorAll("#hologram-boot-data")
+        .forEach((block) => block.remove());
+
+      // With no block left, a read holds no boot data, so none leaks into a later test.
+      Hologram.readBootData();
+
+      for (const name of bootFieldNames) {
+        globalThis.Hologram[name] = originalBootFields[name];
+      }
+
+      clearIdentityTracker();
+      ComponentRegistry.clear();
+      LiveReload.pageBundleDigests.delete(pageModule.value);
+      App.instanceId = instanceId;
+      Hologram.domEpoch = 0;
+      Hologram.registryEpoch = 0;
+    });
+
+    it("restores the snapshot's state", () => {
+      Hologram.restoreDocumentSnapshot(pageSnapshot);
+
+      assert.strictEqual(App.instanceId, "restored-instance");
+      assert.strictEqual(Hologram.registryEpoch, 1);
+    });
+
+    // The mount after a restore reads no mount data, and a new document's database holds neither
+    // who the document was rendered for nor the rows its render read.
+    it("hands the data layer the document's own actor and rows", () => {
+      Hologram.restoreDocumentSnapshot(pageSnapshot);
+
+      sinon.assert.calledOnceWithExactly(ingestMountDataSpy, {
+        actorUserId: "user-1",
+        syncCounts: {"App.Page/total/": 3},
+        syncRows: syncRows,
+      });
+    });
+
+    it("restores a page whose build has no data layer", () => {
+      Hologram.dataLayer = null;
+
+      assert.doesNotThrow(() => Hologram.restoreDocumentSnapshot(pageSnapshot));
+    });
+  });
+
   // jsdom has no OPFS, so the tables go through session storage.
   describe("restoreEts()", () => {
     const tables = {my_table: Type.atom("my_value")};
