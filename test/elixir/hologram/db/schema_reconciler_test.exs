@@ -137,6 +137,67 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end
   end
 
+  @module3_join_table "test_fixtures_entity_module3_a_$join"
+
+  # A join table standing under another name, as an older naming rule left it - registered
+  # under that name too unless the test wants it unknown. Its constraints and index keep the
+  # names the model derives.
+  defp rename_join_table_by_hand(to, registered?) do
+    {:ok, _result} =
+      Connection.query(
+        ~s(ALTER TABLE "hologram_data".#{Mapper.quote_identifier(@module3_join_table)} RENAME TO #{Mapper.quote_identifier(to)})
+      )
+
+    if registered? do
+      {:ok, _result} =
+        Connection.query(
+          ~s(UPDATE "hologram_system"."schema_object" SET "name" = $1 WHERE "kind" = 'table' AND "name" = $2),
+          [to, @module3_join_table]
+        )
+
+      {:ok, _result} =
+        Connection.query(
+          ~s(UPDATE "hologram_system"."schema_object" SET "parent" = $1 WHERE "parent" = $2),
+          [to, @module3_join_table]
+        )
+    else
+      {:ok, _result} =
+        Connection.query(
+          ~s(DELETE FROM "hologram_system"."schema_object" WHERE "name" = $1 OR "parent" = $1),
+          [@module3_join_table]
+        )
+    end
+  end
+
+  # One Module3 row linked to one Module2 row through the join table.
+  defp insert_module3_link do
+    module1_id = "00000000-0000-0000-0000-0000000000a1"
+    module3_id = "00000000-0000-0000-0000-0000000000a3"
+
+    {:ok, _result} =
+      Connection.query("""
+      INSERT INTO "hologram_data"."test_fixtures_entity_module1"
+        ("id", "created_at", "updated_at", "$revisions")
+      VALUES ('#{module1_id}', now(), now(), '{}')
+      """)
+
+    insert_module2_row("NULL", "'x'")
+
+    {:ok, _result} =
+      Connection.query("""
+      INSERT INTO "hologram_data"."test_fixtures_entity_module3"
+        ("id", "c_id", "created_at", "updated_at", "$revisions")
+      VALUES ('#{module3_id}', '#{module1_id}', now(), now(), '{}')
+      """)
+
+    {:ok, _result} =
+      Connection.query("""
+      INSERT INTO "hologram_data".#{Mapper.quote_identifier(@module3_join_table)}
+        ("source_id", "target_id")
+      VALUES ('#{module3_id}', '00000000-0000-0000-0000-000000000001')
+      """)
+  end
+
   defp reconcile_context(entity_types) do
     mapping =
       entity_types
@@ -895,6 +956,146 @@ defmodule Hologram.DB.SchemaReconcilerTest do
 
       assert log =~
                ~s(Hologram: schema reconciliation dropped enum type "test_fixtures_entity_module4_c_$enum")
+    end
+
+    test "renames a join table standing under an old name, keeping its links" do
+      context = reconcile_context([Module1, Module2, Module3])
+      reconcile(context)
+      insert_module3_link()
+
+      old_name = "test_fixtures_entity_module3_old_$join"
+      rename_join_table_by_hand(old_name, true)
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert reconcile(context).ops == [
+                   %{op: :rename_table, from: old_name, to: @module3_join_table}
+                 ]
+        end)
+
+      assert log =~
+               ~s(Hologram: schema reconciliation renamed join table "#{old_name}" to "#{@module3_join_table}", ) <>
+                 "keeping its links. If relationship :a of Hologram.Test.Fixtures.Entity.Module3 " <>
+                 "is a new relationship, not a rename, delete its links or reset the database"
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      {:ok, %{rows: rows}} =
+        Connection.query(
+          ~s|SELECT count(*) FROM "hologram_data".#{Mapper.quote_identifier(@module3_join_table)}|
+        )
+
+      assert rows == [[1]]
+
+      registry = registry()
+
+      assert {:table, "", @module3_join_table} in registry
+      assert {:column, @module3_join_table, "source_id"} in registry
+      refute Enum.any?(registry, fn {_kind, parent, name} -> old_name in [parent, name] end)
+    end
+
+    test "renames a join table with its constraints and reverse index, registry included" do
+      reconcile(reconcile_context([Module1, Module2, Module3]))
+      insert_module3_link()
+
+      new_name = "test_fixtures_entity_module3_renamed_$join"
+
+      context =
+        [Module1, Module2, Module3]
+        |> reconcile_context()
+        |> update_in([:mapping, Module3, :join_tables], fn [join_table] ->
+          [
+            %{
+              join_table
+              | name: new_name,
+                reverse_index: "#{new_name}_target_id_$idx",
+                pk_constraint: "#{new_name}_$pk",
+                source_fk_constraint: "#{new_name}_source_id_$fk",
+                target_fk_constraint: "#{new_name}_target_id_$fk"
+            }
+          ]
+        end)
+
+      ExUnit.CaptureLog.capture_log(fn ->
+        op_kinds = Enum.map(reconcile(context).ops, & &1.op)
+
+        assert op_kinds == [
+                 :rename_table,
+                 :rename_index,
+                 :rename_constraint,
+                 :rename_constraint,
+                 :rename_constraint
+               ]
+      end)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      {:ok, %{rows: rows}} =
+        Connection.query(
+          ~s|SELECT count(*) FROM "hologram_data".#{Mapper.quote_identifier(new_name)}|
+        )
+
+      assert rows == [[1]]
+
+      registry_rows =
+        registry()
+        |> Enum.filter(fn {_kind, parent, name} -> new_name in [parent, name] end)
+        |> Enum.sort()
+
+      assert registry_rows == [
+               {:column, new_name, "source_id"},
+               {:column, new_name, "target_id"},
+               {:constraint, new_name, "#{new_name}_$pk"},
+               {:constraint, new_name, "#{new_name}_source_id_$fk"},
+               {:constraint, new_name, "#{new_name}_target_id_$fk"},
+               {:index, new_name, "#{new_name}_target_id_$idx"},
+               {:table, "", new_name}
+             ]
+    end
+
+    test "renames a join table whatever stale registry rows stood under its new name" do
+      context = reconcile_context([Module1, Module2, Module3])
+      reconcile(context)
+
+      old_name = "test_fixtures_entity_module3_old_$join"
+      rename_join_table_by_hand(old_name, true)
+
+      insert_statement = """
+      INSERT INTO "hologram_system"."schema_object" ("kind", "parent", "name")
+      VALUES ('table', '', $1), ('column', $1, 'source_id')
+      """
+
+      {:ok, _result} = Connection.query(insert_statement, [@module3_join_table])
+
+      ExUnit.CaptureLog.capture_log(fn -> reconcile(context) end)
+
+      registry_rows =
+        Enum.filter(registry(), fn {_kind, parent, name} ->
+          @module3_join_table in [parent, name] or old_name in [parent, name]
+        end)
+
+      assert Enum.sort(registry_rows) == [
+               {:column, @module3_join_table, "source_id"},
+               {:column, @module3_join_table, "target_id"},
+               {:constraint, @module3_join_table, "#{@module3_join_table}_$pk"},
+               {:constraint, @module3_join_table, "#{@module3_join_table}_source_id_$fk"},
+               {:constraint, @module3_join_table, "#{@module3_join_table}_target_id_$fk"},
+               {:index, @module3_join_table, "#{@module3_join_table}_target_id_$idx"},
+               {:table, "", @module3_join_table}
+             ]
+    end
+
+    test "raises for an unregistered join-shaped table the model's ends match" do
+      context = reconcile_context([Module1, Module2, Module3])
+      reconcile(context)
+
+      rename_join_table_by_hand("hand_made_links", false)
+
+      expected_msg =
+        ~s(unknown table "hand_made_links" in the hologram_data schema - ) <>
+          "this schema is model-managed - move the object to another schema or remove it"
+
+      assert_error RuntimeError, expected_msg, fn -> reconcile(context) end
     end
 
     test "raises for a hand-created table in hologram_data" do

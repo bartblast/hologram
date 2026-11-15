@@ -10,6 +10,7 @@ defmodule Hologram.DB.Schema do
   # constructive ops after in dependency order. Enum value adds and rebuilds share one phase -
   # a given type emits either, never both.
   @phases %{
+    rename_table: 0,
     rename_index: 0,
     drop_foreign_key: 1,
     drop_index: 2,
@@ -61,17 +62,21 @@ defmodule Hologram.DB.Schema do
   detect value renames - they surface as rebuilds.
 
   With renames: true, the default, a pairing pass runs first and recognises an object
-  whose name changed while its definition didn't. An index on a table both sides share
-  pairs with one of the target's when both are unmatched by name, their definitions are
-  equal, no other unmatched index on either side of that table has the same definition, and
-  no actual index or primary key holds the target name. Each pair emits
-  :rename_index (with :table, :from and :to), and the rest of the diff runs against the
-  actual term as the renames leave it. renames: false skips the pass: a migration states
-  its renames in model ops, so its renderer pairs nothing by definition.
+  whose name changed while its definition didn't. A join table only in the actual term
+  pairs with one only in the target when both are join-shaped over the same two tables
+  and no other unpaired join table on either side has those ends - it emits :rename_table
+  (with :from and :to), and its constraints and reverse index then diff as a shared
+  table's. An entity table never pairs. An index on a table both sides share pairs with
+  one of the target's when both are unmatched by name, their definitions are equal, no
+  other unmatched index on either side of that table has the same definition, and no
+  actual index or primary key holds the target name - it emits :rename_index (with
+  :table, :from and :to). The rest of the diff runs against the actual term as the
+  renames leave it. renames: false skips the pass: a migration states its renames in
+  model ops, so its renderer pairs nothing by definition.
 
-  The op list is ordered by apply phase - the renames first, then destructive kinds in
-  reverse dependency order, constructive kinds after in dependency order
-  (drop_foreign_key, drop_index, drop_column, drop_table, drop_enum_type,
+  The op list is ordered by apply phase - the renames first (tables, then indexes), then
+  destructive kinds in reverse dependency order, constructive kinds after in dependency
+  order (drop_foreign_key, drop_index, drop_column, drop_table, drop_enum_type,
   create_enum_type, enum value changes, create_table, add_column, alter_column,
   rename_constraint, add_foreign_key, create_index) - and alphabetically by table and name
   within each phase, so the same terms always produce the same op sequence.
@@ -528,8 +533,41 @@ defmodule Hologram.DB.Schema do
     {ops, %{actual | tables: tables}}
   end
 
+  # A join table pairs by its two ends: an actual table and a target table, each only on its
+  # side, both join-shaped and over the same two tables, with no other unpaired join table over
+  # those ends on either side - two relationships between the same two tables give no way to
+  # tell which became which. Entity tables never pair: nothing in a table's definition tells it
+  # apart from another one with the same columns.
+  defp pair_join_table_renames(actual, target) do
+    actual_by_ends = unpaired_join_tables_by_ends(actual.tables, target.tables)
+    target_by_ends = unpaired_join_tables_by_ends(target.tables, actual.tables)
+
+    ops =
+      actual_by_ends
+      |> Enum.flat_map(fn {ends, actual_names} ->
+        case {actual_names, Map.get(target_by_ends, ends)} do
+          {[from], [to]} -> [%{op: :rename_table, from: from, to: to}]
+          _unpaired -> []
+        end
+      end)
+      |> Enum.sort_by(& &1.from)
+
+    tables =
+      Enum.reduce(ops, actual.tables, fn op, tables ->
+        {definition, tables} = Map.pop!(tables, op.from)
+        Map.put(tables, op.to, definition)
+      end)
+
+    {ops, %{actual | tables: tables}}
+  end
+
+  # The table renames go first, so the index pairing and the constraint passes see a renamed
+  # join table as one both sides share, and rename its reverse index and constraints with it.
   defp pair_renames(actual, target) do
-    pair_index_renames(actual, target)
+    {table_ops, tables_renamed} = pair_join_table_renames(actual, target)
+    {index_ops, renamed} = pair_index_renames(tables_renamed, target)
+
+    {table_ops ++ index_ops, renamed}
   end
 
   defp pk_rename_ops(_table, nil, _target_pk), do: []
@@ -564,6 +602,37 @@ defmodule Hologram.DB.Schema do
   defp subsequence?([head | tail], [head | list_tail]), do: subsequence?(tail, list_tail)
 
   defp subsequence?(values, [_head | list_tail]), do: subsequence?(values, list_tail)
+
+  # The ends of a join-shaped table, matched whole - one a hand edit left without its primary
+  # key, a foreign key or one of its two columns has none, and never pairs.
+  defp join_table_ends(%{
+         columns: columns,
+         primary_key: %{columns: ["source_id", "target_id"]},
+         foreign_keys: %{
+           "source_id" => %{references: source_table},
+           "target_id" => %{references: target_table}
+         }
+       })
+       when map_size(columns) == 2 and is_map_key(columns, "source_id") and
+              is_map_key(columns, "target_id") do
+    [{source_table, target_table}]
+  end
+
+  defp join_table_ends(_definition), do: []
+
+  # The join-shaped tables the other side doesn't hold by name, grouped by their ends, with the
+  # names sorted.
+  defp unpaired_join_tables_by_ends(tables, other_tables) do
+    tables
+    |> Enum.reject(fn {name, _definition} -> Map.has_key?(other_tables, name) end)
+    |> Enum.flat_map(fn {name, definition} ->
+      definition
+      |> join_table_ends()
+      |> Enum.map(&{&1, name})
+    end)
+    |> Enum.group_by(fn {ends, _name} -> ends end, fn {_ends, name} -> name end)
+    |> Map.new(fn {ends, names} -> {ends, Enum.sort(names)} end)
+  end
 
   # Name to definition, for the indexes the other side lacks under the same name and definition,
   # grouped by definition with the names sorted.

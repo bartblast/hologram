@@ -50,7 +50,7 @@ defmodule Hologram.DB.SchemaReconciler do
 
   # The ops the schema diff's pairing pass emits - a recognised rename, applied ahead of the
   # rest of the run.
-  @rename_ops [:rename_index]
+  @rename_ops [:rename_index, :rename_table]
 
   @doc """
   Fills every derived companion column the given ops add - a sort key or a search key - from the
@@ -146,9 +146,9 @@ defmodule Hologram.DB.SchemaReconciler do
   validation (transformations the existing rows cannot follow fail with the ways out
   before any DDL runs), render and apply the DDL, update the managed-object registry from
   the op stream, and refresh the marker (last_reconciled_at, hologram_version). After the
-  transaction commits, each destructive action is logged as one concise line. The context
-  carries :mapping plus the guard facts (:otp_app, :env) and the marker diagnostics
-  (:hologram_version, :timestamp).
+  transaction commits, each destructive action and each join table rename is logged as
+  one concise line. The context carries :mapping plus the guard facts (:otp_app, :env)
+  and the marker diagnostics (:hologram_version, :timestamp).
   """
   @spec reconcile(%{atom => any}) :: %{atom => any}
   def reconcile(context) do
@@ -192,7 +192,7 @@ defmodule Hologram.DB.SchemaReconciler do
         %{status: status, ops: renames ++ changes}
       end)
 
-    log_destructive_ops(result.ops)
+    log_notable_ops(result.ops, context.mapping)
 
     result
   end
@@ -221,9 +221,9 @@ defmodule Hologram.DB.SchemaReconciler do
   Create and add ops register the objects they produce (a created table registers
   itself, its columns, and its primary key constraint) - drop ops deregister them (a
   dropped table takes everything parented to it) - a constraint rename updates the
-  registered name, and so does an index rename. Ops that change an object without changing
-  its identity (column alterations, enum value changes, rebuilds) leave the registry
-  untouched.
+  registered name, and so does an index rename - a table rename renames the table's row and
+  re-parents every row under it. Ops that change an object without changing its identity
+  (column alterations, enum value changes, rebuilds) leave the registry untouched.
   Registration is idempotent - stale rows from out-of-contract edits never fail it.
   """
   @spec update_registry(list(%{atom => any})) :: :ok
@@ -393,9 +393,14 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   # Renaming an object the registry doesn't know would adopt it under a derived name - an index
-  # made by hand with a definition the model happens to share - so it raises as its drop would.
+  # or a join-shaped table made by hand with a definition the model happens to share - so it
+  # raises as its drop would.
   defp check_alien!(%{op: :rename_index} = op, registry) do
     check_alien!(%{op: :drop_index, index: op.from}, registry)
+  end
+
+  defp check_alien!(%{op: :rename_table} = op, registry) do
+    check_alien!(%{op: :drop_table, table: op.from}, registry)
   end
 
   defp check_alien!(_op, _registry), do: :ok
@@ -487,28 +492,46 @@ defmodule Hologram.DB.SchemaReconciler do
     Enum.map(rows, fn [name] -> name end)
   end
 
-  defp log_destructive_op(%{op: :drop_column} = op) do
+  defp log_notable_op(%{op: :drop_column} = op, _mapping) do
     Logger.warning(
       ~s(Hologram: schema reconciliation dropped column "#{op.column}" on table "#{op.table}")
     )
   end
 
-  defp log_destructive_op(%{op: :drop_enum_type} = op) do
+  defp log_notable_op(%{op: :drop_enum_type} = op, _mapping) do
     Logger.warning(~s(Hologram: schema reconciliation dropped enum type "#{op.enum_type}"))
   end
 
-  defp log_destructive_op(%{op: :drop_table} = op) do
+  defp log_notable_op(%{op: :drop_table} = op, _mapping) do
     Logger.warning(~s(Hologram: schema reconciliation dropped table "#{op.table}"))
   end
 
-  defp log_destructive_op(%{op: :rebuild_enum_type} = op) do
+  defp log_notable_op(%{op: :rebuild_enum_type} = op, _mapping) do
     Logger.warning(~s(Hologram: schema reconciliation rebuilt enum type "#{op.enum_type}"))
   end
 
-  defp log_destructive_op(_op), do: :ok
+  # A join table rename is a guess - the pairing can't tell a renamed relationship from one
+  # deleted and another added between the same two tables - so it is logged like the drops,
+  # naming the relationship that now holds the links.
+  defp log_notable_op(%{op: :rename_table} = op, mapping) do
+    {entity_type, relationship} =
+      Enum.find_value(mapping, fn {entity_type, entity_mapping} ->
+        Enum.find_value(entity_mapping.join_tables, fn join_table ->
+          join_table.name == op.to && {entity_type, join_table.relationship}
+        end)
+      end)
 
-  defp log_destructive_ops(ops) do
-    Enum.each(ops, &log_destructive_op/1)
+    Logger.warning(
+      ~s(Hologram: schema reconciliation renamed join table "#{op.from}" to "#{op.to}", ) <>
+        "keeping its links. If relationship #{inspect(relationship)} of #{inspect(entity_type)} " <>
+        "is a new relationship, not a rename, delete its links or reset the database"
+    )
+  end
+
+  defp log_notable_op(_op, _mapping), do: :ok
+
+  defp log_notable_ops(ops, mapping) do
+    Enum.each(ops, &log_notable_op(&1, mapping))
   end
 
   defp marker_from_context(context) do
@@ -632,6 +655,36 @@ defmodule Hologram.DB.SchemaReconciler do
     {:ok, _result} = Connection.query(statement, [op.from, op.to])
 
     register(:index, op.table, op.to)
+  end
+
+  # The table's own row, and the parent of every row under it - its columns, constraints and
+  # indexes move with it. Stale rows under the new name go first, so registration stays
+  # idempotent.
+  defp record_op(%{op: :rename_table} = op) do
+    system_schema = Mapper.system_schema()
+
+    stale_statement = """
+    DELETE FROM "#{system_schema}"."schema_object"
+    WHERE ("kind" = 'table' AND "parent" = '' AND "name" = $1) OR "parent" = $1
+    """
+
+    table_statement = """
+    UPDATE "#{system_schema}"."schema_object"
+    SET "name" = $1
+    WHERE "kind" = 'table' AND "parent" = '' AND "name" = $2
+    """
+
+    children_statement = """
+    UPDATE "#{system_schema}"."schema_object"
+    SET "parent" = $1
+    WHERE "parent" = $2
+    """
+
+    {:ok, _result} = Connection.query(stale_statement, [op.to])
+    {:ok, _result} = Connection.query(table_statement, [op.to, op.from])
+    {:ok, _result} = Connection.query(children_statement, [op.to, op.from])
+
+    :ok
   end
 
   defp register(kind, parent, name) do

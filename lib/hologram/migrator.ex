@@ -200,6 +200,10 @@ defmodule Hologram.Migrator do
       ~s(the model derives "#{op.to}")
   end
 
+  def describe_difference(%{op: :rename_table} = op) do
+    ~s(table "#{op.from}" is named outside the derived scheme - the model derives "#{op.to}")
+  end
+
   @doc """
   Ensures the connected database is managed by migrations, claiming it when virgin -
   runs in the caller's transaction.
