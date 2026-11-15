@@ -147,6 +147,52 @@ defmodule Hologram.Sync.FillTest do
     end
   end
 
+  describe "read_named/4" do
+    test "answers the rows with the given ids the user may read" do
+      named = policy_entity(true)
+      hidden = policy_entity(false)
+      policy_entity(true)
+
+      {rows, nil} =
+        read_named(%{PolicyModule1 => [named.id, hidden.id]}, nil, nil, [PolicyModule1])
+
+      assert sorted_ids(rows) == [named.id]
+    end
+
+    test "reads the rows of every given type" do
+      entity = policy_entity(true)
+      tag = label("tag")
+
+      {rows, nil} =
+        read_named(
+          %{Module29 => [tag.id], PolicyModule1 => [entity.id]},
+          nil,
+          nil,
+          [Module29, PolicyModule1]
+        )
+
+      assert sorted_ids(rows) == Enum.sort([entity.id, tag.id])
+    end
+
+    test "reads a row with its sets" do
+      child = policy_entity(true)
+      container = DB.create!(PolicyModule3.new())
+
+      add_relationship(PolicyModule3, container.id, :children, child.id)
+
+      {[row], nil} =
+        read_named(%{PolicyModule3 => [container.id]}, nil, nil, [PolicyModule1, PolicyModule3])
+
+      assert sorted_ids(row.children) == [child.id]
+    end
+
+    test "answers the highest sequence number the replica has had confirmed" do
+      confirmed(@replica_id, 3)
+
+      assert read_named(%{}, nil, @replica_id, [Module2]) == {[], 3}
+    end
+  end
+
   describe "term/2" do
     test "includes every to-many relationship whose target is synced" do
       assert term(Module28, [Module26, Module28, Module29]) ==

@@ -84,7 +84,8 @@ defmodule Hologram.Sync.Catchup do
 
   @doc """
   Returns what to tell a returning client about the rows the given gap touched, given the `pot` it
-  may see now - the rows of every window it holds, keyed by id, already checked against who it is.
+  may see now - the rows of every window it holds, and the ones no window carries read again
+  through the read rules, keyed by id, already checked against who it is.
 
   A row the gap touched and the pot still holds is handed over WHOLE and as it now stands, not as
   the log said it was: the log names which rows to go and look at, and looking is what supplies

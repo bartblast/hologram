@@ -65,6 +65,54 @@ defmodule Hologram.Sync.Fill do
   end
 
   @doc """
+  Returns the rows with the given ids, keyed by entity type, that the given user may read, as the
+  fill sends them (see `term/2`) - what a returning client is told of the rows it missed changes to
+  and no window carries - with the highest sequence number at which the given replica has had a
+  batch confirmed, all read in one snapshot (see `read_named_now/4`). A row the user may no longer
+  read, or that is gone, is left out.
+  """
+  @spec read_named(
+          %{module => list(String.t())},
+          String.t() | nil,
+          String.t() | nil,
+          list(module)
+        ) ::
+          {list(struct), non_neg_integer | nil}
+  def read_named(ids_by_type, actor_user_id, replica_id, synced_types) do
+    {:ok, read} =
+      Connection.snapshot(fn ->
+        read_named_now(ids_by_type, actor_user_id, replica_id, synced_types)
+      end)
+
+    read
+  end
+
+  @doc """
+  Reads what `read_named/4` reads in whatever transaction the caller is in, which agrees with
+  itself only when that transaction reads every statement from one snapshot - what `read_named/4`
+  opens.
+  """
+  @spec read_named_now(
+          %{module => list(String.t())},
+          String.t() | nil,
+          String.t() | nil,
+          list(module)
+        ) :: {list(struct), non_neg_integer | nil}
+  def read_named_now(ids_by_type, actor_user_id, replica_id, synced_types) do
+    applied_seq = replica_id && Record.highest_confirmed_seq(replica_id)
+
+    rows =
+      Enum.flat_map(ids_by_type, fn {entity_type, ids} ->
+        entity_type
+        |> term(synced_types)
+        |> Stage.filter(id: ids)
+        |> QueryRunner.run_policied(DB.mapping(), actor_user_id)
+      end)
+
+    {rows, applied_seq}
+  end
+
+  @doc """
   Returns the query term the fill reads the given entity type with: every row of it, with every
   to-many relationship and every inverse of a to-many whose target is one of the given synced
   types included.

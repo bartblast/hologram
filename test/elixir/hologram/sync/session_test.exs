@@ -176,6 +176,7 @@ defmodule Hologram.Sync.SessionTest do
       |> Keyword.put_new(:page, @page)
       |> Keyword.put_new(:policy_hash, @policy_hash)
       |> Keyword.put_new(:read_fill, &read_fill_in_sandbox/4)
+      |> Keyword.put_new(:read_named, &read_named_in_sandbox/4)
 
     session = start_supervised!(Supervisor.child_spec({Session, opts}, id: make_ref()))
 
@@ -193,17 +194,24 @@ defmodule Hologram.Sync.SessionTest do
     end
   end
 
-  # The fill reads in a snapshot of its own, which the test's connection cannot open: it is inside
-  # the test's transaction, and a savepoint of the session's would share names with the test's own.
-  # So the session reads in the test's transaction, which is the one snapshot every read here sees.
+  # The fill and a catch-up's reading again read in a snapshot of their own, which the test's
+  # connection cannot open: it is inside the test's transaction, and a savepoint of the session's
+  # would share names with the test's own. So the session reads in the test's transaction, which is
+  # the one snapshot every read here sees.
   #
   # And it traps exits from here on, so the end of a test stops it between two messages rather than
-  # in the middle of a fill: a process killed while it reads takes the test's connection down with
+  # in the middle of a read: a process killed while it reads takes the test's connection down with
   # it, and the next test's with that.
   defp read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types) do
     Process.flag(:trap_exit, true)
 
     Fill.read_now(entity_type, actor_user_id, replica_id, synced_types)
+  end
+
+  defp read_named_in_sandbox(ids_by_type, actor_user_id, replica_id, synced_types) do
+    Process.flag(:trap_exit, true)
+
+    Fill.read_named_now(ids_by_type, actor_user_id, replica_id, synced_types)
   end
 
   defp resume_opts(opts) do
@@ -374,6 +382,185 @@ defmodule Hologram.Sync.SessionTest do
 
       refute_receive {:sync_deltas, _cursor, _more, _applied_seq}, 100
       refute Enum.any?(deltas, &(&1.id == untouched.id))
+    end
+
+    # The fill sent the row though no window carries it, so no window's round can say what it is
+    # now - it is read as it stands, through the read rules.
+    test "tells a returning client about a row no window carries as it stands" do
+      row =
+        %{public: true, priority: 5}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [%{gap_effect(row.id) | type: PolicyModule1}])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert [%{data: %{priority: 5}, id: id, op: :put_entity}] = deltas
+      assert id == row.id
+    end
+
+    test "tells a returning client to drop a row no window carries that is gone" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      DB.delete(PolicyModule1, row.id)
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [%{gap_effect(row.id) | type: PolicyModule1}])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               %{id: row.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # The row read again carries the replica's batches confirmed by the time it was read, which the
+    # gap's effects can say nothing of.
+    test "names the number read with a row no window carries" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      Connection.transaction(fn ->
+        Record.claim!(@replica_id, 5, nil, "h")
+        Record.complete!(@replica_id, 5, %{"dropped" => %{}, "status" => "confirmed"})
+      end)
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(
+        applied_seq: 3,
+        gap: [%{gap_effect(row.id) | type: PolicyModule1}],
+        replica_id: @replica_id
+      )
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], 5}
+      assert id == row.id
+    end
+
+    test "tells a returning client to drop a row no window carries that it may no longer read" do
+      row = DB.create!(PolicyModule1.new())
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [%{gap_effect(row.id) | type: PolicyModule1}])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               %{id: row.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # The label gained a message through an edge of the message's, and the label's own set of
+    # messages is the client's to file - so the label is read with its set, though no window
+    # carries either row.
+    test "hands over the target of an edge no window carries, with its set" do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        synced_types: [Module2, Module28, Module29],
+        windows: %{@board_window => Stage.normalize(Module2)}
+      })
+
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      message =
+        %{body: "hi", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      EntityOperations.add_relationship(Module28, message.id, :labels, label.id)
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      edge =
+        message.id
+        |> gap_effect()
+        |> Map.merge(%{
+          data: %{"relationship" => "labels", "target_id" => label.id},
+          op: :add_relationship,
+          type: Module28
+        })
+
+      start_session!(gap: [edge])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert [%{data: %{messages: [message_id]}, op: :put_entity}] =
+               Enum.filter(deltas, &(&1.id == label.id))
+
+      assert message_id == message.id
+      assert [%{op: :put_entity}] = Enum.filter(deltas, &(&1.id == message.id))
+    end
+
+    # A child's container files the set, the child no set of its own, so only the container is read.
+    test "reads again only the target of an edge that files the edge's set" do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        synced_types: [Module2, PolicyModule1, PolicyParent],
+        windows: %{@board_window => Stage.normalize(Module2)}
+      })
+
+      container = DB.create!(PolicyParent.new())
+      child = DB.create!(PolicyModule1.new())
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      edge =
+        container.id
+        |> gap_effect()
+        |> Map.merge(%{
+          data: %{"relationship" => "children", "target_id" => child.id},
+          op: :add_relationship,
+          type: PolicyParent
+        })
+
+      test_pid = self()
+
+      read_named = fn ids_by_type, actor_user_id, replica_id, synced_types ->
+        send(test_pid, {:read_named, ids_by_type})
+
+        read_named_in_sandbox(ids_by_type, actor_user_id, replica_id, synced_types)
+      end
+
+      start_session!(gap: [edge], read_named: read_named)
+
+      assert_receive {:read_named, ids_by_type}
+      assert ids_by_type == %{PolicyParent => [container.id]}
+    end
+
+    test "reads nothing again when every row the gap names is a window's" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      test_pid = self()
+
+      read_named = fn ids_by_type, actor_user_id, replica_id, synced_types ->
+        send(test_pid, {:read_named, ids_by_type})
+
+        read_named_in_sandbox(ids_by_type, actor_user_id, replica_id, synced_types)
+      end
+
+      start_session!(gap: [gap_effect(moved.id)], read_named: read_named)
+
+      assert_receive {:sync_synced, :all, _cursor}
+      refute_received {:read_named, _ids_by_type}
     end
 
     # A client away long enough to need a replay may have had batches of its own applied while it
@@ -550,7 +737,8 @@ defmodule Hologram.Sync.SessionTest do
          gap_end: gap_end,
          page: @page,
          policy_hash: @policy_hash,
-         read_gap: read_gap_from(cursor)}
+         read_gap: read_gap_from(cursor),
+         read_named: &read_named_in_sandbox/4}
       )
 
       assert_receive {:sync_deltas, frame_cursor, deltas, _applied_seq}
@@ -1375,12 +1563,100 @@ defmodule Hologram.Sync.SessionTest do
       assert deltas_for(caught_up_deltas(), child) == []
     end
 
-    test "takes away once a row that left every window and that the gap names" do
+    defp start_with_departed_label!(label) do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        synced_types: [Module2, Module28, Module29, PolicyModule1],
+        windows: %{
+          @board_window => Stage.normalize(Module2),
+          @other_window => other_window_term()
+        }
+      })
+
+      message =
+        %{body: "hi", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      edge =
+        message.id
+        |> gap_effect()
+        |> Map.merge(%{
+          data: %{"relationship" => "labels", "target_id" => label.id},
+          op: :add_relationship,
+          type: Module28
+        })
+
+      session = start_session!(gap: [edge])
+
+      ResultStore.put(@board_window, 1, [%{message | labels: [label]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [message])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+    end
+
+    # The label left every window and is named only as the target of an edge whose set it files.
+    # It is read again and found, so it is handed over - not taken away first and handed back.
+    test "hands over once a departed target of a named edge the client may read" do
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      start_with_departed_label!(label)
+
+      assert [%{op: :put_entity}] = deltas_for(caught_up_deltas(), label)
+    end
+
+    test "takes away a departed target of a named edge that is gone" do
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      # Gone before the catch-up reads it, though the windows' rounds still carried it.
+      DB.delete(Module29, label.id)
+      start_with_departed_label!(label)
+
+      assert deltas_for(caught_up_deltas(), label) == [
+               %{id: label.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Entity.Module29"}
+             ]
+    end
+
+    # The row left every window, but the client may still read it, and since the fill it holds
+    # every row it may read - so it is handed over as it stands, once, rather than taken away.
+    test "hands over once a row that left every window, that the gap names and the client may read" do
       child =
         %{public: true}
         |> PolicyModule1.new()
         |> DB.create!()
 
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [%{gap_effect(child.id) | type: PolicyModule1}])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [parent])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert [%{op: :put_entity}] = deltas_for(caught_up_deltas(), child)
+    end
+
+    test "takes away once a row that left every window, that the gap names and the client may not read" do
+      child = DB.create!(PolicyModule1.new())
       parent = DB.create!(PolicyParent.new())
 
       windows(%{@page => [@board_window, @other_window]})

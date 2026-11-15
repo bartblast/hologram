@@ -7,8 +7,9 @@ defmodule Hologram.Sync.Session do
   # What it keeps is membership, never rows: the rows live once per node in the result store,
   # and a hundred sessions reading one window read that one copy. The exceptions are a returning
   # client's catch-up, which keeps the hidden rows that left a window and the rows that entered one
-  # until it is over, bounded by what moved meanwhile, and a first arrival's fill, which holds one
-  # entity type's rows at a time while it sends them.
+  # until it is over, bounded by what moved meanwhile, and the rows the gap names that no window
+  # carries, bounded by the gap - and a first arrival's fill, which holds one entity type's rows at
+  # a time while it sends them.
   #
   # A client arriving with nothing is filled by entity type: every row of every type sync sends
   # that its user may read, read through the type's read rules (see `Hologram.Sync.Fill`), the
@@ -98,6 +99,10 @@ defmodule Hologram.Sync.Session do
   `Hologram.Sync.Fill.read/4` answers, which it defaults to. Handed over as a reader for the same
   reason `:read_gap` is: the read runs in this process, and what it runs in is the caller's to say.
 
+  `:read_named` reads, for a returning client, the rows the gap names that no window carries,
+  answering what `Hologram.Sync.Fill.read_named/4` answers, which it defaults to - a reader for the
+  same reason.
+
   `:gap_end` is the place of the last effect the read that decided this client resumes found, or
   nil when it found none. A catch-up frame names no place past it: the session's own read can
   name effects whose rounds have not reached it yet, and a frame dating those would let a client
@@ -147,6 +152,7 @@ defmodule Hologram.Sync.Session do
       places: %{},
       policy_hash: Keyword.fetch!(opts, :policy_hash),
       read_fill: Keyword.get(opts, :read_fill, &Fill.read/4),
+      read_named: Keyword.get(opts, :read_named, &Fill.read_named/4),
       read_gap: read_gap,
       replica_id: Keyword.get(opts, :replica_id),
       resuming: read_gap != nil,
@@ -464,6 +470,7 @@ defmodule Hologram.Sync.Session do
     unjudged = %{
       gap: gap,
       grants_then: grants_then,
+      reread_ids: MapSet.new(),
       shift: %{appeared: %{}, vanished: %{}},
       touched: %{},
       verdict_rows: %{},
@@ -563,7 +570,14 @@ defmodule Hologram.Sync.Session do
   # account of them. Everything it holds that the gap never touched is still true, and is left
   # alone - which is the whole saving over sending it the lot.
   defp tell_gap(state, unsettled) do
-    judged = settle(unsettled)
+    {judged, reread_seq} =
+      unsettled
+      |> settle()
+      |> reread_unseen(state)
+
+    # The rows read again carry what this replica's batches had done by the time they were read,
+    # which can be past what the gap's own effects say.
+    state = %{state | applied_seq: higher_seq(state.applied_seq, reread_seq)}
 
     # The watermark is raised by every one of this replica's effects in the gap before any frame
     # goes out, wherever the deciding read ended. Every row goes out as it stands, so an early frame
@@ -619,6 +633,7 @@ defmodule Hologram.Sync.Session do
       judged.gap
       |> MapSet.new(& &1.entity_id)
       |> MapSet.union(vanished_ids)
+      |> MapSet.union(judged.reread_ids)
 
     {visible, hidden} =
       state.departed
@@ -1077,6 +1092,73 @@ defmodule Hologram.Sync.Session do
 
     %{judged | touched: merge_later(judged.touched, rows)}
   end
+
+  # What the gap names that no window's last round carries - a row only the fill sent, or one that
+  # left every window while its user may still read it - read as it stands through the read rules,
+  # since no window has anything to say about it, with how far this replica's batches are in it.
+  # A row a window carries is judged by the windows alone, hidden or not. A named row it finds
+  # nothing of is gone or hidden, and the replay takes it away.
+  #
+  # Read after the windows are settled, so the sets a row read here embeds are not scrubbed against
+  # what the windows let the client see: they were read through the read rules, which is what the
+  # client holds since its fill - bar the rows the known gap leaves it with, until live sync goes by
+  # read access.
+  #
+  # Bounded by the gap: an id per effect, and a target per edge whose target files the set.
+  defp reread_unseen(judged, state) do
+    synced_types = QueryCache.synced_types()
+    synced = MapSet.new(synced_types)
+
+    ids_by_type =
+      judged.gap
+      |> Enum.flat_map(&gap_rows/1)
+      |> Enum.uniq()
+      |> Enum.reject(fn {id, type} ->
+        Map.has_key?(judged.visibility, id) or not MapSet.member?(synced, type)
+      end)
+      |> Enum.group_by(fn {_id, type} -> type end, fn {id, _type} -> id end)
+
+    if ids_by_type == %{} do
+      {judged, nil}
+    else
+      {rows, read_seq} =
+        state.read_named.(ids_by_type, state.actor_user_id, state.replica_id, synced_types)
+
+      # The rows found, which the replay hands over - a row asked for and not found is still one
+      # `tell_moved/2` may have to take away.
+      reread_ids = MapSet.new(rows, & &1.id)
+      touched = Map.merge(judged.touched, Map.new(rows, &{&1.id, &1}))
+
+      {%{judged | reread_ids: reread_ids, touched: touched}, read_seq}
+    end
+  end
+
+  # The rows an effect names, each with its type: an edge names its target too, when the target's
+  # type files the set the edge moved - the one a replay hands the target over for.
+  defp gap_rows(%{data: %{"relationship" => name, "target_id" => target_id}, op: op} = effect)
+       when op in [:add_relationship, :del_relationship] do
+    [{effect.entity_id, effect.type} | edge_target(effect.type, name, target_id)]
+  end
+
+  defp gap_rows(effect), do: [{effect.entity_id, effect.type}]
+
+  # Edges are written under the to-many names a type declares, so the target is of the type that
+  # to-many points at.
+  defp edge_target(entity_type, name, target_id) when is_atom(entity_type) do
+    relationship =
+      Enum.find(entity_type.__relationships__(), fn {relationship_name, _type, _opts} ->
+        Atom.to_string(relationship_name) == name
+      end)
+
+    with {_name, [target], _opts} <- relationship,
+         [_inverse | _more] <- Entity.inverses_of_to_many(target, entity_type, name) do
+      [{target_id, target}]
+    else
+      _nothing_files_it -> []
+    end
+  end
+
+  defp edge_target(_unknown_type, _name, _target_id), do: []
 
   defp gap_ids(%{data: %{"target_id" => target_id}, entity_id: entity_id, op: op})
        when op in [:add_relationship, :del_relationship] do
