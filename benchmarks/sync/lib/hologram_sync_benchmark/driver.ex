@@ -9,6 +9,7 @@ defmodule HologramSyncBenchmark.Driver do
 
   alias HologramSyncBenchmark.Cases.Access
   alias HologramSyncBenchmark.Cases.Board
+  alias HologramSyncBenchmark.Cases.Deploy
   alias HologramSyncBenchmark.Cases.Tenants
   alias HologramSyncBenchmark.Clients
   alias HologramSyncBenchmark.DB
@@ -21,13 +22,14 @@ defmodule HologramSyncBenchmark.Driver do
 
   @board_page "HologramSyncBenchmark.BoardPage"
 
-  @cases ~w(boot seed smoke board board_roles tenants access)
+  @cases ~w(boot seed smoke board board_roles tenants access deploy deploy_tenants)
 
   # The options and their defaults: the board's size; the tenants, members per tenant and tasks
   # per tenant of the tenants case; the access case's docs and the seconds a change of access may
   # take to reach every client; the client counts a sweep steps through; the steady writes' rate
   # per second and length in seconds; the slowest p99 delivery in milliseconds a step passes
-  # with; and how long in seconds a client may take to fill.
+  # with; how long in seconds a client may take to fill; and how long in seconds the deploy
+  # cases' clients may take to all hold their pots again.
   @defaults [
     access_limit: 10,
     cards: 2_000,
@@ -37,6 +39,7 @@ defmodule HologramSyncBenchmark.Driver do
     members: 5,
     p99_limit: 1_000,
     rate: 2,
+    refill_limit: 60,
     tasks: 100,
     tenants: 20
   ]
@@ -54,6 +57,7 @@ defmodule HologramSyncBenchmark.Driver do
     members: :integer,
     p99_limit: :integer,
     rate: :integer,
+    refill_limit: :integer,
     tasks: :integer,
     tenants: :integer
   ]
@@ -156,9 +160,9 @@ defmodule HologramSyncBenchmark.Driver do
     _seeded = Seeding.board!(conn, Card, opts[:cards])
 
     Peer.with_peer(fn peer ->
-      clients = start_clients(peer, count, "/board", @board_page)
+      clients = start_clients(peer, count, "/session", @board_page)
 
-      [] = Clients.prepare_all(clients, Step.connect_concurrency())
+      Clients.prepare_all!(clients, Step.connect_concurrency())
       failures = Clients.connect_all(clients, Step.connect_concurrency())
       reports = Clients.await_fills(clients, opts[:fill_timeout] * 1_000)
 
@@ -176,6 +180,10 @@ defmodule HologramSyncBenchmark.Driver do
 
   defp run_case("access", opts), do: run_sweep(opts, Access.sweep_case(opts))
 
+  defp run_case("deploy", opts), do: run_sweep(opts, Deploy.sweep_case(opts, :board))
+
+  defp run_case("deploy_tenants", opts), do: run_sweep(opts, Deploy.sweep_case(opts, :tenants))
+
   # A case with clients and writes: seeds what it needs, sweeps the client counts, and writes the
   # figures into the README.
   defp run_sweep(opts, sweep_case) do
@@ -184,10 +192,11 @@ defmodule HologramSyncBenchmark.Driver do
 
     :ok = sweep_case.check!.(counts)
 
-    :ok =
-      counts
-      |> Enum.max()
-      |> Clients.check_limits!(Step.connect_concurrency())
+    # A case connecting its clients all at once overflows the listen backlog sooner.
+    burst_of = Map.get(sweep_case, :burst, fn _counts -> Step.connect_concurrency() end)
+    burst = burst_of.(counts)
+    most = Enum.max(counts)
+    :ok = Clients.check_limits!(most, burst)
 
     :ok = Report.check_readme!()
     run_line = Report.run_line(conn)

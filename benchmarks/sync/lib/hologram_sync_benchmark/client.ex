@@ -32,6 +32,9 @@ defmodule HologramSyncBenchmark.Client do
   # holding these characters travels with its quotes escaped.
   @synced_all_pattern ~s("scope":"all")
 
+  # The frame handing a client the rules the server enforces, sent when the greeting named others.
+  @rules_pattern "event: sync_rules\n"
+
   # A timed write sets a column to a marker, the prefix and a number of a fixed width (see
   # marker/1), and a client records when it first saw each one. Seeded values never start with
   # the prefix.
@@ -39,7 +42,7 @@ defmodule HologramSyncBenchmark.Client do
 
   @marker_digits 7
 
-  @patterns [@marker_prefix, @synced_all_pattern | Map.keys(@failure_patterns)]
+  @patterns [@marker_prefix, @rules_pattern, @synced_all_pattern | Map.keys(@failure_patterns)]
 
   # What of the previous chunk is kept, so a pattern split across two reads is still found: one
   # byte short of the longest thing matched, a marker counted whole. A shorter one can lie wholly
@@ -68,6 +71,7 @@ defmodule HologramSyncBenchmark.Client do
           failure: term | nil,
           markers: %{non_neg_integer => integer},
           restarts: non_neg_integer,
+          rules_at: integer | nil,
           synced_all_at: integer | nil
         }
 
@@ -144,6 +148,9 @@ defmodule HologramSyncBenchmark.Client do
   @doc """
   Starts a client that hasn't connected yet.
 
+  `:policy_hash` is the hash of the rules the client's bundle was built with, absent for one
+  holding the current ones.
+
   `:count_type` names an entity type, as `inspect/1` spells its module, whose `put_entity` and
   `unsync_entity` deltas the client counts, decoding every `sync_deltas` frame for it. Costly, so
   only for a case that needs to know when every row of a big change has arrived.
@@ -185,14 +192,14 @@ defmodule HologramSyncBenchmark.Client do
       counted_at: %{put: nil, unsync: nil},
       failure: nil,
       frames: "",
-      greeting:
-        Enum.map([:model_hash, :page, :protocol_version], &{&1, Keyword.fetch!(opts, &1)}),
+      greeting: greeting(opts),
       host: uri.host,
       markers: %{},
       port: uri.port,
       reconnect_attempt: 0,
       request_ref: nil,
       restarts: 0,
+      rules_at: nil,
       stream_opened_at: nil,
       synced_all_at: nil
     }
@@ -241,6 +248,7 @@ defmodule HologramSyncBenchmark.Client do
         :failure,
         :markers,
         :restarts,
+        :rules_at,
         :synced_all_at
       ])
 
@@ -422,6 +430,10 @@ defmodule HologramSyncBenchmark.Client do
     end
   end
 
+  defp take_match(state, @rules_pattern, received_at) do
+    %{state | rules_at: state.rules_at || received_at}
+  end
+
   defp take_match(%{synced_all_at: nil} = state, @synced_all_pattern, received_at) do
     %{state | synced_all_at: received_at}
   end
@@ -474,6 +486,17 @@ defmodule HologramSyncBenchmark.Client do
       {:error, conn, reason} ->
         Mint.HTTP.close(conn)
         {:error, reason}
+    end
+  end
+
+  # A `:policy_hash` travels only when given: a client naming none is served as one holding the
+  # current rules, and one naming others is sent the server's.
+  defp greeting(opts) do
+    base = Enum.map([:model_hash, :page, :protocol_version], &{&1, Keyword.fetch!(opts, &1)})
+
+    case Keyword.get(opts, :policy_hash) do
+      nil -> base
+      policy_hash -> [{:policy_hash, policy_hash} | base]
     end
   end
 

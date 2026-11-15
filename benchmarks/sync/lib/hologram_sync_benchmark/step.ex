@@ -150,14 +150,16 @@ defmodule HologramSyncBenchmark.Step do
   @doc """
   Connects the given clients and waits for their fills, returning what that cost: CPU, the
   database counters unadjusted, the fill times and what went wrong. For a case with steps of its
-  own as well; `spec` needs `:conn` and `:fill_timeout_ms`.
+  own as well; `spec` needs `:conn` and `:fill_timeout_ms`, and may set how many clients connect
+  at once as `:connect_concurrency`.
   """
   @spec fill(Peer.t(), [pid], map) :: map
   def fill(peer, clients, spec) do
     stats_before = DB.settled_stats(spec.conn)
     cpu_before = Measure.cpu_sample(peer)
 
-    connect_failures = Clients.connect_all(clients, @connect_concurrency)
+    concurrency = Map.get(spec, :connect_concurrency, @connect_concurrency)
+    connect_failures = Clients.connect_all(clients, concurrency)
     reports = Clients.await_fills(clients, spec.fill_timeout_ms)
 
     cpu_after = Measure.cpu_sample(peer)
@@ -279,7 +281,7 @@ defmodule HologramSyncBenchmark.Step do
   end
 
   defp measure(peer, clients, spec) do
-    [] = Clients.prepare_all(clients, @connect_concurrency)
+    Clients.prepare_all!(clients, @connect_concurrency)
 
     memory_before = Measure.memory(peer, collect: true)
     fill = fill(peer, clients, spec)

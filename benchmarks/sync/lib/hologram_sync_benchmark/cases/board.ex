@@ -86,7 +86,7 @@ defmodule HologramSyncBenchmark.Cases.Board do
       clients: "anonymous clients",
       name: "board",
       page: "HologramSyncBenchmark.BoardPage",
-      prepare: fn _peer, count -> {[], List.duplicate("/board", count)} end,
+      prepare: fn _peer, count -> {[], List.duplicate("/session", count)} end,
       rule: "a bare `allow :read`",
       title: "Shared board"
     }

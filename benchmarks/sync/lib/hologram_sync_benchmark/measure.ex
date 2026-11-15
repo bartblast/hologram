@@ -162,14 +162,17 @@ defmodule HologramSyncBenchmark.Measure do
   @doc """
   Starts polling the server node's total memory every 20 ms and returns the poller, for
   `stop_memory_peak/1` to read from. The first reading is taken at once, before the call
-  returns, as the baseline the peak is measured against. Linked to the caller.
+  returns, as the baseline the peak is measured against.
+
+  The poller runs on the server node itself, so its readings keep their pace when the node is
+  saturated, which a poller calling in from the driver wouldn't. Not linked, so a server node
+  that dies mid-step doesn't take the caller with it; the poller dies with the node.
   """
   @spec start_memory_peak(Peer.t()) :: pid
   def start_memory_peak(peer) do
-    owner = self()
     start = memory(peer)
 
-    spawn_link(fn -> poll_memory(peer, owner, start, start) end)
+    Node.spawn(peer.node, __MODULE__, :poll_memory, [self(), start, start])
   end
 
   @doc """
@@ -182,14 +185,21 @@ defmodule HologramSyncBenchmark.Measure do
 
     receive do
       {:memory_peak, ^poller, peak} -> peak
+    after
+      10_000 -> raise "the memory poller on the server node didn't answer"
     end
   end
 
-  defp poll_memory(peer, owner, start, peak) do
+  @doc false
+  # The poller's loop, on the server node. Public only so the node can be told to run it.
+  @spec poll_memory(pid, non_neg_integer, non_neg_integer) :: :ok
+  def poll_memory(owner, start, peak) do
     receive do
-      {:stop, ^owner} -> send(owner, {:memory_peak, self(), peak - start})
+      {:stop, ^owner} ->
+        send(owner, {:memory_peak, self(), peak - start})
+        :ok
     after
-      20 -> poll_memory(peer, owner, start, max(peak, memory(peer)))
+      20 -> poll_memory(owner, start, max(peak, :erlang.memory(:total)))
     end
   end
 

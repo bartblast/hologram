@@ -70,12 +70,20 @@ defmodule HologramSyncBenchmark.Clients do
   end
 
   @doc """
-  Fetches the given clients' session cookies, at most `concurrency` at a time, and returns the
-  failures as `{client, reason}` pairs.
+  Fetches the given clients' session cookies, at most `concurrency` at a time, and returns :ok,
+  raising when any couldn't get one: preparing is the harness's part, untimed, so a failure there
+  says the run can't measure anything rather than that the server is slow to sync.
   """
-  @spec prepare_all([pid], pos_integer) :: [{pid, term}]
-  def prepare_all(clients, concurrency) do
-    run_all(clients, concurrency, &Client.prepare/1)
+  @spec prepare_all!([pid], pos_integer) :: :ok
+  def prepare_all!(clients, concurrency) do
+    case run_all(clients, concurrency, &Client.prepare/1) do
+      [] ->
+        :ok
+
+      [{_client, reason} | _more] = failures ->
+        raise "#{length(failures)} of #{length(clients)} clients couldn't get a session " <>
+                "cookie, the first because of #{inspect(reason)}"
+    end
   end
 
   @doc """

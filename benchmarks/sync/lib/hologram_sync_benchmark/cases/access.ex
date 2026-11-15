@@ -185,7 +185,7 @@ defmodule HologramSyncBenchmark.Cases.Access do
       |> Clients.start_all()
 
     try do
-      [] = Clients.prepare_all(clients, Step.connect_concurrency())
+      Clients.prepare_all!(clients, Step.connect_concurrency())
 
       memory_before = Measure.memory(peer, collect: true)
       fill = Step.fill(peer, clients, %{conn: conn, fill_timeout_ms: opts[:fill_timeout] * 1_000})
