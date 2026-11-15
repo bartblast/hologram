@@ -101,43 +101,41 @@ defmodule Hologram.Migration do
   def locals_without_parens, do: @locals_without_parens
 
   defmacro __using__(_opts) do
-    imports =
-      quote do
-        import Hologram.Migration,
-          only: [
-            add_role: 1,
-            add_role: 2,
-            change_entity: 2,
-            change_role: 2,
-            create_entity: 1,
-            create_entity: 2,
-            delete_entity: 1,
-            delete_role: 1,
-            delete_role_grants: 0,
-            designate_user_entity: 1,
-            rename_entity: 2,
-            rename_role: 2,
-            resolve!: 1,
-            resolve!: 2
-          ]
-      end
+    if __CALLER__.module == nil do
+      raise Hologram.CompileError,
+        message:
+          "use Hologram.Migration goes in a migration module - " <>
+            "#{Path.relative_to_cwd(__CALLER__.file)}:#{__CALLER__.line}"
+    end
 
-    if __CALLER__.module do
-      validate_location!(__CALLER__)
+    validate_location!(__CALLER__)
 
-      # Registered here, at expansion time, rather than in the quote below: the whole module
-      # body expands before any of it runs, so the op macros store their ops before a
-      # registration in the quote would run.
-      Module.register_attribute(__CALLER__.module, @ops_attribute, accumulate: true)
+    # Registered here, at expansion time, rather than in the quote below: the whole module
+    # body expands before any of it runs, so the op macros store their ops before a
+    # registration in the quote would run.
+    Module.register_attribute(__CALLER__.module, @ops_attribute, accumulate: true)
 
-      quote do
-        unquote(imports)
+    quote do
+      import Hologram.Migration,
+        only: [
+          add_role: 1,
+          add_role: 2,
+          change_entity: 2,
+          change_role: 2,
+          create_entity: 1,
+          create_entity: 2,
+          delete_entity: 1,
+          delete_role: 1,
+          delete_role_grants: 0,
+          designate_user_entity: 1,
+          rename_entity: 2,
+          rename_role: 2,
+          resolve!: 1,
+          resolve!: 2
+        ]
 
-        @before_compile Hologram.Migration
-        @after_compile Hologram.Migration
-      end
-    else
-      imports
+      @before_compile Hologram.Migration
+      @after_compile Hologram.Migration
     end
   end
 
@@ -170,11 +168,12 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op recording that the given global role module came into existence.
+  Records that the given global role module came into existence.
 
   Entity roles are declared inside entity blocks - this flat form takes a role module.
   """
   defmacro add_role(role, opts \\ []) do
+    validate_placement!(__CALLER__)
     validate_global_role_args!([role], :add_role, __CALLER__)
     line = __CALLER__.line
 
@@ -187,13 +186,15 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the list of member ops from the given do-block, each op recording a change
-  scoped to the given existing entity type.
+  Records the member ops of the given do-block, each op recording a change scoped to
+  the given existing entity type.
 
   Member ops are legal only inside entity blocks - the block injects its entity type
   into each of them.
   """
   defmacro change_entity(entity_type, do: block) do
+    validate_placement!(__CALLER__)
+
     block
     |> block_statements()
     |> Enum.map(&member_op(&1, entity_type, __CALLER__))
@@ -201,12 +202,12 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op recording that the given global role module's options changed, the
-  changes as deltas.
+  Records that the given global role module's options changed, the changes as deltas.
 
   Entity roles change inside entity blocks - this flat form takes a role module.
   """
   defmacro change_role(role, changes) do
+    validate_placement!(__CALLER__)
     validate_global_role_args!([role], :change_role, __CALLER__)
     line = __CALLER__.line
 
@@ -219,9 +220,11 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op recording that the given entity type came into existence.
+  Records that the given entity type came into existence.
   """
   defmacro create_entity(entity_type) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
     op =
@@ -233,10 +236,12 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op recording that the given entity type came into existence, followed by
-  the member ops from the given do-block, each scoped to it.
+  Records that the given entity type came into existence, followed by the member ops of
+  the given do-block, each scoped to it.
   """
   defmacro create_entity(entity_type, do: block) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
     create_op =
@@ -253,10 +258,11 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op recording that the given entity type was deleted, its table dropped
-  with its data.
+  Records that the given entity type was deleted, its table dropped with its data.
   """
   defmacro delete_entity(entity_type) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
     op =
@@ -268,10 +274,10 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op recording that the given global role module was deleted, its grants
-  dying with it.
+  Records that the given global role module was deleted, its grants dying with it.
   """
   defmacro delete_role(role) do
+    validate_placement!(__CALLER__)
     validate_global_role_args!([role], :delete_role, __CALLER__)
     line = __CALLER__.line
 
@@ -284,13 +290,15 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op deleting every grant in the role grant store.
+  Records the op deleting every grant in the role grant store.
 
   Required in a migration whose user entity designation moves to another entity type or
   is removed: grants reference the designated type's rows, so they cannot follow the
   designation. The deletion runs in the same transaction as the change it accompanies.
   """
   defmacro delete_role_grants do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
     op =
@@ -302,11 +310,13 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op recording that the given entity type became the designated user entity
-  type - the one the role grant store references and the policy layer resolves the acting
-  user against. `nil` records that the designation was removed.
+  Records that the given entity type became the designated user entity type - the one
+  the role grant store references and the policy layer resolves the acting user against.
+  `nil` records that the designation was removed.
   """
   defmacro designate_user_entity(entity_type) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
     op =
@@ -318,10 +328,12 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op recording that the first given entity type was renamed to the second,
-  its table and every derived physical name following, existing data preserved.
+  Records that the first given entity type was renamed to the second, its table and every
+  derived physical name following, existing data preserved.
   """
   defmacro rename_entity(old, new) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
     op =
@@ -333,10 +345,11 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the op recording that the first given global role module was renamed to the
-  second, existing grants following the label.
+  Records that the first given global role module was renamed to the second, existing
+  grants following the label.
   """
   defmacro rename_role(old, new) do
+    validate_placement!(__CALLER__)
     validate_global_role_args!([old, new], :rename_role, __CALLER__)
     line = __CALLER__.line
 
@@ -349,7 +362,7 @@ defmodule Hologram.Migration do
   end
 
   @doc """
-  Returns the placeholder op demanding human resolution of the given kind of detected
+  Records the placeholder op demanding human resolution of the given kind of detected
   change, with the detected facts as its payload.
 
   A migration file containing a resolve! op is a draft - verification, the check task,
@@ -357,6 +370,8 @@ defmodule Hologram.Migration do
   what happened.
   """
   defmacro resolve!(kind, payload \\ []) do
+    validate_placement!(__CALLER__)
+
     line = __CALLER__.line
 
     op =
@@ -679,26 +694,11 @@ defmodule Hologram.Migration do
     caller.module != nil and caller.function == nil
   end
 
-  # In a migration module's body an op is stored rather than returned - the module's
-  # __hologram_migration__/0 returns the stored ops. Anywhere else the op's map is returned.
-  # A module body that did not use Hologram.Migration has nowhere to store the op - a module
-  # nested in a migration, or one that only imports the vocabulary - so it is refused rather
-  # than dropped.
+  # An op is stored in the migration module's body, and the module's __hologram_migration__/0
+  # returns the stored ops (see validate_placement!/1).
   defp register(quoted, caller) do
-    cond do
-      not module_body?(caller) ->
-        quoted
-
-      Module.has_attribute?(caller.module, @ops_attribute) ->
-        Module.put_attribute(caller.module, @ops_attribute, expand_aliases(quoted, caller))
-        nil
-
-      true ->
-        raise Hologram.CompileError,
-          message:
-            "#{inspect(caller.module)} holds a migration op but does not use " <>
-              "Hologram.Migration (#{Path.relative_to_cwd(caller.file)}:#{caller.line})"
-    end
+    Module.put_attribute(caller.module, @ops_attribute, expand_aliases(quoted, caller))
+    nil
   end
 
   defp statement_line(meta, caller) do
@@ -773,6 +773,19 @@ defmodule Hologram.Migration do
         message:
           "#{file} defines #{inspect(caller.module)} - the module name must end in " <>
             expected_segment
+    end
+  end
+
+  # Checked before anything else an op macro does, so an op in the wrong place is told so
+  # first, whatever else is wrong with it. Anywhere but a migration module's body - a function,
+  # a module nested in a migration or one that only imports the vocabulary, a script - the op
+  # has nowhere to go, so it is refused rather than dropped.
+  defp validate_placement!(caller) do
+    if not (module_body?(caller) and Module.has_attribute?(caller.module, @ops_attribute)) do
+      raise Hologram.CompileError,
+        message:
+          "migration ops go in the body of a module that uses Hologram.Migration - " <>
+            "#{Path.relative_to_cwd(caller.file)}:#{caller.line}"
     end
   end
 end
