@@ -19,7 +19,7 @@ defmodule Hologram.Migration.ShadowVerifierTest do
     %{op: :add_attribute, entity: MyApp.Task, name: :title, type: :string, opts: [], line: 4}
   ]
 
-  @migrations [%{version: "20260813091522", path: "20260813091522.exs", ops: @ops}]
+  @migrations [%{version: "20260813091522", path: "app/migrations/20260813091522.ex", ops: @ops}]
 
   defp mismatch_message do
     normalize_newlines("""
@@ -86,7 +86,10 @@ defmodule Hologram.Migration.ShadowVerifierTest do
         %{op: :designate_user_entity, entity: MyApp.User, line: 4}
       ]
 
-      migrations = [%{version: "20260813091522", path: "20260813091522.exs", ops: ops}]
+      migrations = [
+        %{version: "20260813091522", path: "app/migrations/20260813091522.ex", ops: ops}
+      ]
+
       model = Model.fold(Model.empty(), ops)
 
       assert verify!(migrations, model) == :ok

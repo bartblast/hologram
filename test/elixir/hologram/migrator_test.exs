@@ -56,7 +56,7 @@ defmodule Hologram.MigratorTest do
   end
 
   defp migration(version, ops) do
-    %{version: version, path: "#{version}.exs", ops: ops}
+    %{version: version, path: "app/migrations/#{version}.ex", ops: ops}
   end
 
   defp table_columns(table) do
@@ -917,21 +917,23 @@ defmodule Hologram.MigratorTest do
   describe "pending/2" do
     test "returns the migrations the database has not applied, in their order" do
       migrations = [
-        %{version: "20260813091522", path: "a.exs", ops: []},
-        %{version: "20260813142237", path: "b.exs", ops: []},
-        %{version: "20260814080000", path: "c.exs", ops: []}
+        %{version: "20260813091522", path: "app/migrations/20260813091522.ex", ops: []},
+        %{version: "20260813142237", path: "app/migrations/20260813142237.ex", ops: []},
+        %{version: "20260814080000", path: "app/migrations/20260814080000.ex", ops: []}
       ]
 
       applied = MapSet.new(["20260813091522"])
 
       assert pending(migrations, applied) == [
-               %{version: "20260813142237", path: "b.exs", ops: []},
-               %{version: "20260814080000", path: "c.exs", ops: []}
+               %{version: "20260813142237", path: "app/migrations/20260813142237.ex", ops: []},
+               %{version: "20260814080000", path: "app/migrations/20260814080000.ex", ops: []}
              ]
     end
 
     test "returns an empty list when every migration is applied" do
-      migrations = [%{version: "20260813091522", path: "a.exs", ops: []}]
+      migrations = [
+        %{version: "20260813091522", path: "app/migrations/20260813091522.ex", ops: []}
+      ]
 
       assert pending(migrations, MapSet.new(["20260813091522"])) == []
     end
