@@ -585,6 +585,7 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_job_module3_outcome_$enum" => [
                  "create_next",
                  "create_row",
+                 "delete_self",
                  "error",
                  "exit",
                  "garbage",
@@ -593,6 +594,7 @@ defmodule Hologram.DB.IntrospectionTest do
                  "raise",
                  "record_actor",
                  "record_order",
+                 "swept",
                  "throw"
                ],
                "test_fixtures_job_module3_status_$enum" => [

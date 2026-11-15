@@ -1,15 +1,17 @@
 defmodule Hologram.Job.Supervisor do
   @moduledoc false
 
-  # The worker and the connection it hears writes on.
+  # The worker, the connection it hears writes on and the one it holds its run locks on.
   #
-  # rest_for_one, so a connection that ends takes the worker with it and the worker listens again
-  # as it comes back. A worker left standing would keep waiting on a connection that is gone, which
-  # nothing reports: it would fall back to its poll and simply be slower for good.
+  # rest_for_one, so either connection ending takes the worker with it. A worker left standing
+  # would keep waiting on a listener that is gone, which nothing reports: it would fall back to its
+  # poll and simply be slower for good. And one whose lock connection ended would carry on with a
+  # run whose lock went with the session - a run every other node takes to be abandoned.
 
   use Supervisor
 
   alias Hologram.DB.Config
+  alias Hologram.Job.RunLock
   alias Hologram.Job.Worker
 
   @notifications Hologram.Job.Notifications
@@ -32,7 +34,8 @@ defmodule Hologram.Job.Supervisor do
   def init(_opts) do
     children = [
       Config.listener_child_spec(@notifications),
-      {Worker, name: Worker, notifications: @notifications}
+      {RunLock, name: RunLock},
+      {Worker, name: Worker, notifications: @notifications, run_lock: RunLock}
     ]
 
     Supervisor.init(children, strategy: :rest_for_one)

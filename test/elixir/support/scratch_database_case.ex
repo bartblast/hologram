@@ -33,6 +33,7 @@ defmodule Hologram.Test.ScratchDatabaseCase do
   alias Hologram.DB.Config
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
+  alias Hologram.Test.Helpers
 
   using do
     quote do
@@ -64,6 +65,37 @@ defmodule Hologram.Test.ScratchDatabaseCase do
     scratch = start_supervised!({Postgrex, scratch_opts})
 
     [scratch: scratch, scratch_opts: scratch_opts]
+  end
+
+  @doc """
+  Returns :ok once exactly the given number of sessions of the database the given
+  connection options reach are waiting on a lock, failing the test when that does not
+  happen in time.
+
+  A session parked on a lock and one that has not got there yet look the same to a task
+  that has not returned, so the wait is asserted where it is visible: PostgreSQL itself.
+  It counts the sessions rather than naming a lock, because two waiting on one row do not
+  wait on the same thing - the first waits on the transaction holding the row
+  (`transactionid`), the next on the row itself (`tuple`), which is how PostgreSQL keeps
+  several waiters for one row in order. Scoped to the one database and leaving out the
+  observer, because pg_stat_activity is the whole server's, and the rest of the suite runs
+  against another database meanwhile.
+  """
+  @spec wait_for_blocked_sessions(keyword, non_neg_integer) :: :ok
+  def wait_for_blocked_sessions(scratch_opts, count) do
+    {:ok, observer} = Postgrex.start_link(scratch_opts)
+
+    statement = """
+    SELECT count(*) FROM pg_catalog.pg_stat_activity
+    WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'
+      AND "pid" <> pg_backend_pid()
+    """
+
+    Helpers.wait_until(fn ->
+      %Postgrex.Result{rows: [[blocked]]} = Postgrex.query!(observer, statement, [])
+
+      blocked == count
+    end)
   end
 
   @doc """

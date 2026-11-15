@@ -16,18 +16,19 @@ defmodule HologramFeatureTests.MutationsTest do
   alias HologramFeatureTests.Entities.Note
   alias HologramFeatureTests.Entities.ProjectMember
   alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Jobs.KillWorker
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTests.MutationsPage
 
   # Every table truncates in one statement: the memo, note, project member and role grant tables'
-  # foreign keys to the user table and the job's to the item table make Postgres reject truncating a
+  # foreign keys to the user table and the restock job's to the item table make Postgres reject truncating a
   # referenced table alone.
   setup do
     await_evaluator_drain()
 
     tables =
       Enum.map_join(
-        [Item, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
+        [Item, KillWorker, Memo, Note, ProjectMember, RestockItem, RoleGrant, User],
         ", ",
         fn entity_type ->
           ~s("hologram_data"."#{Mapper.table_name(entity_type)}")
@@ -68,6 +69,17 @@ defmodule HologramFeatureTests.MutationsTest do
       "type" => inspect(RestockItem),
       "id" => Entity.generate_id(),
       "data" => %{"amount" => amount, "item_id" => item_id},
+      "claim" => nil,
+      "stamp" => System.os_time(:millisecond) * 1024
+    }
+  end
+
+  defp create_kill_worker_write(label) do
+    %{
+      "op" => "create",
+      "type" => inspect(KillWorker),
+      "id" => Entity.generate_id(),
+      "data" => %{"label" => label},
       "claim" => nil,
       "stamp" => System.os_time(:millisecond) * 1024
     }
@@ -491,6 +503,22 @@ defmodule HologramFeatureTests.MutationsTest do
     assert [%RestockItem{status: :failed, error: error}] = DB.read(RestockItem)
     assert error =~ "cannot update"
     assert [%Item{stock: 0}] = DB.read(Item)
+  end
+
+  # The job kills the worker running it, so nothing records its outcome. The worker comes back and
+  # gives up the lock its predecessor held, and its next look for jobs fails the row as cut short.
+  feature "fails a job whose worker died mid-run", %{session: session} do
+    session = log_in(session)
+
+    post_batch(session, 1, [create_kill_worker_write("x")])
+
+    assert await_response(session) ==
+             %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}
+
+    assert_text(session, css("#killed_jobs"), "x:failed")
+
+    assert [%KillWorker{status: :failed, error: error}] = DB.read(KillWorker)
+    assert error =~ "the run was cut short before its outcome was recorded"
   end
 
   feature "runs a job created by a command, as the session's user", %{session: session} do
