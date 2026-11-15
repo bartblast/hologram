@@ -1,6 +1,7 @@
 defmodule Hologram.DB.QueryRunner do
   @moduledoc false
 
+  alias Hologram.Auth
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.Mapper
@@ -78,21 +79,23 @@ defmodule Hologram.DB.QueryRunner do
   row's current values.
 
   Takes the row ids as canonical entity ids, and the users as ids, nil for an anonymous one. A user
-  id in any other spelling names no user the framework made, so it is never among a row's readers.
+  id in any other spelling names no user entity, so it reads as an anonymous one, the way
+  `Hologram.Auth.can?/3` answers it.
   Returns a map from the id of every row one of them may read to the row, decoded as `run/3`
   decodes it with no includes, and its readers: `:all` when a rule answering the same for every
   user admits it, and otherwise the set of the given users who may read it, nil among them when an
   anonymous user may. An id is left out when its row is gone or none of the given users may read
   it.
   """
-  @spec recheck(module, %{module => %{atom => any}}, Enumerable.t(), list(String.t() | nil)) ::
+  @spec recheck(module, %{module => %{atom => any}}, Enumerable.t(), list(any)) ::
           %{String.t() => {struct, :all | MapSet.t()}}
   def recheck(entity_type, mapping, ids, user_ids) do
-    compiled = QueryCompiler.recheck(entity_type, mapping, nil in user_ids)
+    canonical_user_ids = Enum.map(user_ids, &Auth.canonical_id/1)
+    compiled = QueryCompiler.recheck(entity_type, mapping, nil in canonical_user_ids)
 
     signed_in_user_ids =
-      user_ids
-      |> Enum.filter(&canonical_id?/1)
+      canonical_user_ids
+      |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
     values =
@@ -208,12 +211,6 @@ defmodule Hologram.DB.QueryRunner do
     |> Enum.reduce(acc_with_filters, fn sub_term, inner_acc ->
       collect_param_definitions(sub_term, inner_acc)
     end)
-  end
-
-  # The validator's pattern also takes a canonical id followed by a newline, which no id the
-  # framework makes ends with and which the uuid encoder refuses.
-  defp canonical_id?(id) do
-    is_binary(id) and byte_size(id) == 36 and Validator.attribute_value_valid?(id, :uuid)
   end
 
   defp decode_embed(nil, _sub_term, _mapping), do: nil

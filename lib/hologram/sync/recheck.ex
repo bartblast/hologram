@@ -9,6 +9,7 @@ defmodule Hologram.Sync.Recheck do
   #
   # The values are read fresh here, never taken from the changes, so a row goes out as it is now.
 
+  alias Hologram.Auth
   alias Hologram.DB
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
@@ -22,13 +23,13 @@ defmodule Hologram.Sync.Recheck do
   an anonymous user may.
 
   Takes the ids to check per entity type, as canonical entity ids, and the users as ids, nil for an
-  anonymous one - a user id in any other spelling is never among a row's readers. An id is left out
+  anonymous one - a user id in any other spelling reads as an anonymous one. An id is left out
   when its row is gone or none of the given users may read it, so a caller holding it reads that as
   "may read: no". A type with no ids, and a call with no users, run nothing and are left out of the
   result. Each type is its own statement, so two types see the same commits only inside one
   transaction.
   """
-  @spec run(%{module => Enumerable.t()}, list(String.t() | nil)) ::
+  @spec run(%{module => Enumerable.t()}, list(any)) ::
           %{module => %{Entity.id() => {struct, readers}}}
   def run(_rows_to_check, []), do: %{}
 
@@ -41,10 +42,11 @@ defmodule Hologram.Sync.Recheck do
   end
 
   @doc """
-  Returns whether the given readers include the given user - nil for an anonymous one.
+  Returns whether the given readers include the given user - nil for an anonymous one, and for a
+  user id in any spelling but the one Hologram generates, which names no user entity.
   """
-  @spec reads?(readers, String.t() | nil) :: boolean
+  @spec reads?(readers, any) :: boolean
   def reads?(:all, _user_id), do: true
 
-  def reads?(readers, user_id), do: MapSet.member?(readers, user_id)
+  def reads?(readers, user_id), do: MapSet.member?(readers, Auth.canonical_id(user_id))
 end

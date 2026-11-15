@@ -413,15 +413,32 @@ defmodule Hologram.Sync.RecheckTest do
              }
     end
 
-    test "reads nothing for a user id in another spelling, answering the rest", context do
+    # A session's user id may be any string, integer or atom, and one naming no user entity is
+    # anonymous to the rules, as Auth.can?/3 answers it.
+    test "reads a user id in another spelling as an anonymous user, answering the rest",
+         context do
       owned = create(Module5)
-      owned_id = owned.id
+      shared = create(PolicyModule6, %{shared: true})
+      authored = create(PolicyModule6, %{author_id: context.alice})
+
       shouted = String.upcase(context.alice)
+      user_ids = [shouted, "not-a-uuid", context.alice <> "\n", 7, context.bob]
 
-      %{Module5 => %{^owned_id => {_row, readers}}} =
-        run(%{Module5 => [owned_id]}, [shouted, "not-a-uuid", context.alice <> "\n", context.bob])
+      readable =
+        run(%{Module5 => [owned.id], PolicyModule6 => [shared.id, authored.id]}, user_ids)
 
-      assert readers == MapSet.new([context.bob])
+      {_row, owned_readers} = readable[Module5][owned.id]
+      {_row, shared_readers} = readable[PolicyModule6][shared.id]
+
+      assert owned_readers == MapSet.new([context.bob])
+      assert shared_readers == :all
+      refute Map.has_key?(readable[PolicyModule6], authored.id)
+
+      for user_id <- user_ids do
+        assert reads?(owned_readers, user_id) == Auth.can?(user_id, :read, owned)
+        assert reads?(shared_readers, user_id) == Auth.can?(user_id, :read, shared)
+        refute Auth.can?(user_id, :read, authored)
+      end
     end
 
     test "lists a user given twice once", context do
@@ -437,17 +454,32 @@ defmodule Hologram.Sync.RecheckTest do
   end
 
   describe "reads?/2" do
+    @alice_id "018f4571-a1b2-7c3d-8e4f-000000000001"
+    @bob_id "018f4571-a1b2-7c3d-8e4f-000000000002"
+
     test "every user reads a row everyone may read" do
-      assert reads?(:all, "a")
+      assert reads?(:all, @alice_id)
       assert reads?(:all, nil)
     end
 
     test "a user reads a row when the readers name them" do
-      readers = MapSet.new(["a", nil])
+      readers = MapSet.new([@alice_id])
 
-      assert reads?(readers, "a")
+      assert reads?(readers, @alice_id)
+      refute reads?(readers, @bob_id)
+      refute reads?(readers, nil)
+    end
+
+    test "an anonymous user reads a row when the readers name one" do
+      readers = MapSet.new([nil])
+
       assert reads?(readers, nil)
-      refute reads?(readers, "b")
+      refute reads?(readers, @alice_id)
+    end
+
+    test "a user id in a spelling Hologram doesn't generate reads as an anonymous user" do
+      assert reads?(MapSet.new([nil]), String.upcase(@alice_id))
+      refute reads?(MapSet.new([@alice_id]), String.upcase(@alice_id))
     end
   end
 end
