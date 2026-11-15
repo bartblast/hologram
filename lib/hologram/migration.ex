@@ -745,6 +745,9 @@ defmodule Hologram.Migration do
     {node, snapshots}
   end
 
+  # The atom is built at compile time from an attribute name the migration's source spells and a
+  # per-module counter - bounded by the source, never by anything a request carries.
+  # sobelow_skip ["DOS.BinToAtom"]
   defp snapshot_attribute_reads(
          {:@, meta, [{name, _name_meta, context}]} = read,
          module,
