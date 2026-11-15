@@ -97,6 +97,45 @@ defmodule Hologram.Migration.Loader do
   end
 
   @doc """
+  Validates that none of the given migrations is a draft, in a build of the given
+  environment.
+
+  A draft compiles in dev and test, so the generator, which compiles the app before it
+  reads the history, can still read it and ask for its answers. Any other build is headed
+  for a deployment, and an unanswered question must not reach one. Returns :ok, or raises
+  Hologram.CompileError naming each resolve! op's file and line.
+  """
+  @spec validate_resolved!(list(%{atom => any}), atom) :: :ok
+  def validate_resolved!(migrations, env) do
+    unresolved = unresolved_entries(migrations)
+
+    if unresolved != [] and env not in [:dev, :test] do
+      raise Hologram.CompileError,
+        message:
+          "the migration draft is not resolved yet, and a #{env} build refuses it:\n" <>
+            unresolved_lines(unresolved) <>
+            "\nWrite the ops that express what happened, delete the resolve! lines, " <>
+            "then finalize with mix holo.gen.migration."
+    end
+
+    :ok
+  end
+
+  @doc """
+  Validates that none of the project's migrations is a draft, in a build of the given
+  environment (see `validate_resolved!/2`).
+
+  Reads the compiled migration modules, so it covers a beam the build reuses from another
+  environment, whose compile never refused it: under `build_per_environment: false` one
+  build directory serves every environment. Lists the modules only in a build that refuses
+  drafts.
+  """
+  @spec validate_project_resolved!(atom) :: :ok
+  def validate_project_resolved!(env) when env in [:dev, :test], do: :ok
+
+  def validate_project_resolved!(env), do: validate_resolved!(list!(), env)
+
+  @doc """
   Returns the resolve! ops of the given op list - the unresolved questions that make a
   migration file a draft.
   """

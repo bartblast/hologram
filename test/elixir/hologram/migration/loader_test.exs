@@ -136,6 +136,56 @@ defmodule Hologram.Migration.LoaderTest do
     end
   end
 
+  describe "validate_resolved!/2" do
+    setup do
+      [
+        migrations: [
+          %{
+            version: "20260813091522",
+            path: "app/migrations/20260813091522.ex",
+            ops: [%{op: :create_entity, entity: MyApp.Task, line: 4}]
+          },
+          %{
+            version: "20260813142237",
+            path: "app/migrations/20260813142237.ex",
+            ops: [%{op: :resolve!, kind: :entities, payload: [], line: 4}]
+          }
+        ]
+      ]
+    end
+
+    test "refuses a draft in a prod build", %{migrations: migrations} do
+      expected_msg =
+        normalize_newlines("""
+        the migration draft is not resolved yet, and a prod build refuses it:
+          app/migrations/20260813142237.ex:4 - :entities
+        Write the ops that express what happened, delete the resolve! lines, then finalize with mix holo.gen.migration.\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_resolved!(migrations, :prod)
+      end
+    end
+
+    test "refuses a draft in any build but dev and test", %{migrations: migrations} do
+      assert_raise Hologram.CompileError, ~r/a staging build refuses it/, fn ->
+        validate_resolved!(migrations, :staging)
+      end
+    end
+
+    test "accepts a draft in a dev build", %{migrations: migrations} do
+      assert validate_resolved!(migrations, :dev) == :ok
+    end
+
+    test "accepts a draft in a test build", %{migrations: migrations} do
+      assert validate_resolved!(migrations, :test) == :ok
+    end
+
+    test "accepts resolved migrations in a prod build", %{migrations: [resolved | _drafts]} do
+      assert validate_resolved!([resolved], :prod) == :ok
+    end
+  end
+
   describe "validate_migrations_compiled!/2" do
     setup do
       app_dir =

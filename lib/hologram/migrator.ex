@@ -90,8 +90,8 @@ defmodule Hologram.Migrator do
   Pure - it needs no database access, so it runs before anything is touched: a deploy
   whose model changes never became migrations refuses here, whether generation was
   skipped or CI was. A history still holding unanswered resolve! ops refuses first, naming
-  each one's file and line - the build refuses drafts, but a beam compiled in dev and reused
-  by a prod build never reran that check.
+  each one's file and line - the build refuses drafts too, but an app can be built without
+  the Hologram compiler.
   """
   @spec check_covered!(list(%{atom => any}), %{atom => any}) :: :ok
   def check_covered!(migrations, current_model) do

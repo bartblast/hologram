@@ -187,7 +187,7 @@ defmodule Hologram.Migration do
     migration = env.module.__hologram_migration__()
 
     Loader.verify_rename_order!(migration.ops, migration.path)
-    validate_resolved!(migration)
+    Loader.validate_resolved!([migration], build_env())
   end
 
   @doc """
@@ -878,24 +878,6 @@ defmodule Hologram.Migration do
           "migration ops go in the body of a module that uses Hologram.Migration - " <>
             "#{Path.relative_to_cwd(caller.file)}:#{caller.line}"
     end
-  end
-
-  # A draft compiles in dev and test, so the generator, which compiles the app before it
-  # reads the history, can still read it and ask for its answers. Any other build is headed
-  # for a deployment, and an unanswered question must not reach one.
-  defp validate_resolved!(migration) do
-    unresolved = Loader.unresolved_entries([migration])
-
-    if unresolved != [] and build_env() not in [:dev, :test] do
-      raise Hologram.CompileError,
-        message:
-          "the migration draft is not resolved yet, and a #{build_env()} build refuses it:\n" <>
-            Loader.unresolved_lines(unresolved) <>
-            "\nWrite the ops that express what happened, delete the resolve! lines, " <>
-            "then finalize with mix holo.gen.migration."
-    end
-
-    :ok
   end
 
   # An op is recorded however the module body runs around it, but its attribute snapshots are

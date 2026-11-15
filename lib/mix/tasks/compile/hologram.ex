@@ -142,9 +142,12 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run(opts) do
     opts = Keyword.merge(build_default_opts(), opts)
 
-    # Every build, a release's included - the elixirc_paths are the current environment's.
+    # Every build, a release's included - the elixirc_paths are the current environment's. A migration
+    # beam the build reuses from another environment never had its draft refused by its compile.
     if not language_server_build?(opts) do
       Loader.validate_migrations_compiled!(opts[:app_dir])
+      # credo:disable-for-next-line Credo.Check.Warning.MixEnv
+      Loader.validate_project_resolved!(Mix.env())
     end
 
     result =
