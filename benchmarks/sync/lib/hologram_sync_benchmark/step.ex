@@ -154,6 +154,7 @@ defmodule HologramSyncBenchmark.Step do
     result = %{
       connect_failures: length(connect_failures),
       cpu_ms: Measure.cpu_ms(cpu_before, cpu_after),
+      cpu_elapsed_ms: Measure.elapsed_ms(cpu_before, cpu_after),
       db: DB.stats_delta(stats_after, stats_before),
       failed: Enum.count(reports, &(&1.failure != nil)),
       filled: length(fill_ms),
@@ -278,7 +279,11 @@ defmodule HologramSyncBenchmark.Step do
 
     %{
       clients: length(clients),
-      fill: %{fill | db: adjust(fill.db, idle.db)},
+      fill: %{
+        fill
+        | cpu_ms: fill.cpu_ms - idle.cpu_ms_per_ms * fill.cpu_elapsed_ms,
+          db: adjust(fill.db, idle.db)
+      },
       idle: idle,
       isolated: finish_isolated(isolated, idle),
       memory_per_client: memory_per_client,

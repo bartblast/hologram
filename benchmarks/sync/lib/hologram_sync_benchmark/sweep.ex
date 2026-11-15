@@ -10,6 +10,7 @@ defmodule HologramSyncBenchmark.Sweep do
   alias HologramSyncBenchmark.DB
   alias HologramSyncBenchmark.Measure
   alias HologramSyncBenchmark.Peer
+  alias HologramSyncBenchmark.Report
 
   # Marker numbers each step may use, and how many steps fit before the numbers outgrow a marker's
   # seven digits.
@@ -99,30 +100,24 @@ defmodule HologramSyncBenchmark.Sweep do
     |> Enum.sort()
   end
 
-  defp format_number(nil), do: "-"
-
-  defp format_number(value) when is_float(value), do: :erlang.float_to_binary(value, decimals: 1)
-
-  defp format_number(value), do: to_string(value)
-
   defp summary(result) do
     %{fill: fill, isolated: isolated, steady: steady} = result
 
     [
       "  #{if result.passed, do: "passed", else: "FAILED"}",
-      "fill p50 #{format_number(Measure.percentile(fill.ms, 50))} ms",
-      "p99 #{format_number(Measure.percentile(fill.ms, 99))} ms",
+      "fill p50 #{Report.cell(Measure.percentile(fill.ms, 50))} ms",
+      "p99 #{Report.cell(Measure.percentile(fill.ms, 99))} ms",
       "#{fill.filled}/#{result.clients} filled, #{fill.restarts} restarts, " <>
         "#{result.heap_kills} heap kills" <>
         if(result.heap_kills != fill.restarts, do: " (MISMATCH)", else: ""),
-      "single write #{format_number(isolated.last_delivery_ms)} ms to the last client",
-      "steady p99 #{format_number(steady.p99_ms)} ms, #{steady.missing} missing",
-      "#{format_number(steady.cpu_ms_per_write)} CPU ms per write",
-      "per write #{format_number(steady.db.xact_commit)} commits, " <>
-        "#{format_number(steady.db.tup_returned)} rows scanned, " <>
-        "#{format_number(steady.db.tup_fetched)} fetched, " <>
-        "#{format_number(steady.db.active_ms)} DB ms",
-      "#{format_number(result.memory_per_client && result.memory_per_client / 1_024)} KB per client"
+      "single write #{Report.cell(isolated.last_delivery_ms)} ms to the last client",
+      "steady p99 #{Report.cell(steady.p99_ms)} ms, #{steady.missing} missing",
+      "#{Report.cell(steady.cpu_ms_per_write)} CPU ms per write",
+      "per write #{Report.cell(steady.db.xact_commit)} commits, " <>
+        "#{Report.cell(steady.db.tup_returned)} rows scanned, " <>
+        "#{Report.cell(steady.db.tup_fetched)} fetched, " <>
+        "#{Report.cell(steady.db.active_ms)} DB ms",
+      "#{Report.cell(result.memory_per_client && result.memory_per_client / 1_024)} KB per client"
     ]
     |> Enum.join(", ")
     |> Kernel.<>(if result.autovacuum_ran, do: ", AUTOVACUUM RAN", else: "")

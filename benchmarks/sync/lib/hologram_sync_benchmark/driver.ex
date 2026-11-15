@@ -12,6 +12,7 @@ defmodule HologramSyncBenchmark.Driver do
   alias HologramSyncBenchmark.DB
   alias HologramSyncBenchmark.Entities.Card
   alias HologramSyncBenchmark.Peer
+  alias HologramSyncBenchmark.Report
   alias HologramSyncBenchmark.Seed
   alias HologramSyncBenchmark.Step
   alias HologramSyncBenchmark.Sweep
@@ -173,6 +174,9 @@ defmodule HologramSyncBenchmark.Driver do
       |> Enum.max()
       |> Clients.check_limits!(Step.connect_concurrency())
 
+    :ok = Report.check_readme!()
+    run_line = Report.run_line(conn)
+
     _seeding = seed_board!(conn, opts[:cards])
 
     results =
@@ -185,7 +189,36 @@ defmodule HologramSyncBenchmark.Driver do
         &passed?(&1, opts)
       )
 
-    IO.puts("Clients per node on the board: #{Sweep.figure(results)}")
+    figure = Sweep.figure(results)
+    IO.puts("Clients per node on the board: #{figure}")
+
+    options = [
+      "#{opts[:cards]} cards every client may read, so every write reaches every client",
+      "anonymous clients, steps of #{Enum.join(counts, ", ")} " <>
+        if(counts == [1], do: "client", else: "clients"),
+      "steady writes at #{opts[:rate]} per second for #{opts[:duration]} s",
+      "a step passes when every client fills within #{opts[:fill_timeout]} s and every write " <>
+        "reaches every client, with the steady writes' p99 within #{opts[:p99_limit]} ms"
+    ]
+
+    :ok =
+      Report.write_case!(
+        "board",
+        "Shared board",
+        run_line,
+        options,
+        figure,
+        step_tables(results)
+      )
+  end
+
+  defp step_tables(results) do
+    [
+      {"Fill", Report.fill_columns(), Enum.map(results, &Report.fill_row/1)},
+      {"Single writes, median of 5", Report.isolated_columns(),
+       Enum.map(results, &Report.isolated_row/1)},
+      {"Steady writes", Report.steady_columns(), Enum.map(results, &Report.steady_row/1)}
+    ]
   end
 
   defp board_spec(conn, count, first_marker, opts) do

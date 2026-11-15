@@ -10,7 +10,7 @@ How many connected clients one node can keep in sync, how long a committed write
 4. `deploy`: a deploy that changes the read rules, so every returning client is sent everything again, all at once.
 5. `lock`: whether the lock Postgres takes when a transaction that called `pg_notify` commits caps how many writes per second get through.
 
-`boot` only starts and stops the server node, to check the setup.
+`boot` only starts and stops the server node, `seed` seeds the board, and `smoke` also connects a few clients to it, to check the setup.
 
 ## How it runs
 
@@ -33,6 +33,16 @@ HOLOGRAM_START=1 mix run --no-start bench.exs --case boot
 4. Every client holds a socket in the driver and one in the server, so raise the open file limit for big client counts, for example `ulimit -n 65536`.
 5. macOS caps a listen backlog at `kern.ipc.somaxconn`, 128 by default, which the `deploy` case's burst of connects overflows. Raise it with `sudo sysctl -w kern.ipc.somaxconn=4096`.
 6. The first compile in a fresh checkout runs `npm install` in the repo's `assets` folder, which can rewrite `assets/package-lock.json`. Undo that change.
+
+## Reading the results
+
+1. Each case's section names the commit, the machine and the database it ran on. Figures from different machines don't compare.
+2. A step connects its clients, times their downloads, then makes 20 unmeasured warm-up writes, 5 single writes, each waited on until every client has it, and steady writes at a fixed rate. Last, it reads 10 idle seconds, and the idle rate of server CPU and database work is taken off every other phase, since heartbeats and the server's polls run whatever the writes do.
+3. Clients per node is the largest step that passed. It depends on the write rate, so the single writes' figures, which don't, sit beside it.
+4. "Fills restarted" counts downloads the server cut short and the client started over, as a browser does. Today these are the SSE heap cap killing streams (#1635). "Heap kills" counts the kills in the server's log over the whole step, so the two agree unless a stream was killed after its download.
+5. Server CPU is the busy time of the server node's schedulers. The clients and Postgres share the machine's cores, and a scheduler counts as busy while the OS has it waiting for one, so the figure overstates under load. On a shared board, CPU per write per client is judging the rows for each client and encoding their frames together.
+6. Database figures come from Postgres's own counters for the whole database. Those count the server's polls too, which is why the idle rate comes off them. They leave out autovacuum, which the benchmark turns off for its tables and replaces with a `VACUUM ANALYZE` between steps. A step where autovacuum ran anyway says so. Per write, they're reliable over the steady writes. Rows fetched stays noisy at this size. For a download, only rows scanned is shown: a download is short against the waits around it, so its other counters drown in the idle rate.
+7. Run it on a quiet machine. At 1 client the p99 is the slowest delivery of the step, 60 at the default rate and length, so one stall from other work fails the step.
 
 ## Results
 
