@@ -146,23 +146,46 @@ defmodule HologramSyncBenchmark.Sweep do
   Returns the case's clients-per-node figure from the given step results: the largest client
   count that passed, "at least" it when every step passed and none stopped, "below" the first one
   when none passed. Beside it, the fills the server cut short in the step it names, and the step
-  stopped at the memory limit, given in GB, with the reading it stopped at.
+  stopped at the memory limit, given in GB, with the reading it stopped at, and why the step that
+  ended the sweep failed, which `why` gives for a result.
   """
-  @spec figure([map], map | nil, pos_integer) :: String.t()
-  def figure(results, stopped, memory_limit_gb) do
+  @spec figure([map], map | nil, pos_integer, (map -> String.t())) :: String.t()
+  def figure(results, stopped, memory_limit_gb, why) do
     {text, named} = figure_text(results, stopped)
+    last = List.last(results)
+
+    failed =
+      if last && not last.passed,
+        do:
+          "#{last.clients} #{if last.clients == 1, do: "client", else: "clients"} failed: #{why.(last)}"
 
     notes =
       named
       |> figure_notes(stopped, memory_limit_gb)
+      |> Kernel.++([failed])
       |> Enum.filter(& &1)
 
     if notes == [], do: text, else: "#{text} (#{Enum.join(notes, "; ")})"
   end
 
+  @doc """
+  Returns what went wrong with the given fill, as parts of a step's failure note.
+  """
+  @spec fill_reasons(map, pos_integer) :: [String.t() | false]
+  def fill_reasons(fill, fill_timeout_s) do
+    [
+      fill.failed > 0 && "#{fill.failed} failed",
+      fill.unfinished > 0 && "#{fill.unfinished} never filled",
+      fill.connect_failures > 0 && "#{fill.connect_failures} couldn't connect",
+      Enum.any?(fill.ms, &(&1 > fill_timeout_s * 1_000)) && "fills over #{fill_timeout_s} s"
+    ]
+  end
+
   defp figure_notes(named, stopped, memory_limit_gb) do
     [
-      named && named.fill.restarts > 0 && "#{named.fill.restarts} fills restarted, #1635",
+      named && named.fill.restarts > 0 &&
+        "#{named.fill.restarts} #{if named.fill.restarts == 1, do: "fill", else: "fills"} " <>
+          "restarted, #1635",
       stopped &&
         "#{stopped.clients} stopped at the #{memory_limit_gb} GB memory limit, the server node " <>
           "holding #{gigabytes(stopped.memory)} GB"

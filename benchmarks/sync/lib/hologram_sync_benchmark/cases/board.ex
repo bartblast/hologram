@@ -26,6 +26,9 @@ defmodule HologramSyncBenchmark.Cases.Board do
     |> Map.merge(%{
       check!: &check!(opts, &1),
       counts: Sweep.default_counts(),
+      data:
+        "#{opts[:cards]} cards read with #{variant(variant).rule}, which lets every " <>
+          "client read every card",
       options: [
         "#{opts[:cards]} cards read with #{variant(variant).rule}, which lets every client " <>
           "read every card, so every write reaches every client"

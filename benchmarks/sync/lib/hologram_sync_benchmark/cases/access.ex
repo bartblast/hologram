@@ -18,6 +18,7 @@ defmodule HologramSyncBenchmark.Cases.Access do
   alias HologramSyncBenchmark.Seed
   alias HologramSyncBenchmark.Seeding
   alias HologramSyncBenchmark.Step
+  alias HologramSyncBenchmark.Sweep
   alias HologramSyncBenchmark.Writer
 
   @counts [1, 2, 5, 10, 20, 50, 100]
@@ -55,6 +56,7 @@ defmodule HologramSyncBenchmark.Cases.Access do
       step: &step(&1, &2, &3, &4, &5, opts),
       step_options: [],
       summary: &summary/1,
+      why: &why_failed(&1, opts),
       tables: &tables/1,
       title: "One write changing access to many rows"
     }
@@ -161,6 +163,31 @@ defmodule HologramSyncBenchmark.Cases.Access do
 
     filled? and hide.done? and show.done? and hide.ms <= limit_ms and show.ms <= limit_ms
   end
+
+  defp why_failed(result, opts) do
+    %{fill: fill, hide: hide, show: show} = result
+    limit_ms = opts[:access_limit] * 1_000
+
+    # A change is only made after the one before it reached everyone, so one not made isn't a
+    # reason of its own.
+    filled? = fill.failed == 0 and fill.unfinished == 0 and fill.connect_failures == 0
+
+    [
+      Sweep.fill_reasons(fill, opts[:fill_timeout]),
+      filled? && change_reason("archive", hide, limit_ms),
+      hide.done? && change_reason("unarchive", show, limit_ms)
+    ]
+    |> List.flatten()
+    |> Enum.filter(& &1)
+    |> Enum.join(", ")
+  end
+
+  defp change_reason(name, %{done?: false}, _limit_ms), do: "the #{name} never reached everyone"
+
+  defp change_reason(name, %{ms: ms}, limit_ms) when ms > limit_ms,
+    do: "the #{name} took #{round(ms)} ms"
+
+  defp change_reason(_name, _change, _limit_ms), do: nil
 
   defp seed(conn, max_count, opts) do
     {_seeding, {table, user_ids, project_id}} =

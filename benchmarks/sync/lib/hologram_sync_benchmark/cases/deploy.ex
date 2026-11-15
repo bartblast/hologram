@@ -54,9 +54,27 @@ defmodule HologramSyncBenchmark.Cases.Deploy do
           "#{opts[:refill_limit]} s of the first connect"
       ],
       summary: &summary/1,
+      why: &why_failed(&1, opts),
       tables: &tables/1,
       title: "Reconnect after a rules deploy, #{source.title}"
     }
+  end
+
+  defp why_failed(result, opts) do
+    %{fill: fill} = result
+
+    [
+      fill.failed > 0 && "#{fill.failed} failed",
+      fill.unfinished > 0 && "#{fill.unfinished} never refilled",
+      fill.connect_failures > 0 && "#{fill.connect_failures} couldn't connect",
+      result.rules_sent < result.clients &&
+        "#{result.clients - result.rules_sent} were never sent the rules",
+      result.last_refill_ms && result.last_refill_ms > opts[:refill_limit] * 1_000 &&
+        "the last refill took #{round(result.last_refill_ms)} ms"
+    ]
+    |> List.flatten()
+    |> Enum.filter(& &1)
+    |> Enum.join(", ")
   end
 
   defp passed?(result, opts) do
@@ -78,7 +96,7 @@ defmodule HologramSyncBenchmark.Cases.Deploy do
       check!: fn _counts -> :ok end,
       clients: board.clients,
       counts: @counts,
-      options: board.options,
+      options: [board.data],
       page: "HologramSyncBenchmark.BoardPage",
       seed: board.seed,
       title: "shared board"
@@ -100,7 +118,7 @@ defmodule HologramSyncBenchmark.Cases.Deploy do
       end,
       clients: tenants.clients,
       counts: Enum.filter(@counts, &(&1 <= users)),
-      options: tenants.options,
+      options: [tenants.data],
       page: "HologramSyncBenchmark.TasksPage",
       seed: tenants.seed,
       title: "multi-tenant app"

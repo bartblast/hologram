@@ -31,6 +31,10 @@ defmodule HologramSyncBenchmark.Cases.Tenants do
       clients: "signed-in clients, one per user, filling whole tenants in order",
       counts: Enum.filter(Sweep.default_counts(), &(&1 <= users)),
       name: "tenants",
+      data:
+        "#{opts[:tenants]} tenants of #{opts[:members]} members with #{opts[:tasks]} tasks " <>
+          "each, #{opts[:tenants] * opts[:tasks]} tasks in all, read with " <>
+          "`allow :read, when: any(member <- tenant.members, member.user_id == user_id())`",
       options: [
         "#{opts[:tenants]} tenants of #{opts[:members]} members with #{opts[:tasks]} tasks " <>
           "each, #{opts[:tenants] * opts[:tasks]} tasks in all, read with " <>

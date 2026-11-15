@@ -8,6 +8,8 @@ defmodule HologramSyncBenchmark.Report do
 
   alias HologramSyncBenchmark.Measure
 
+  @case_order ~w(board board_roles tenants access deploy deploy_tenants lock)
+
   @readme_path "README.md"
 
   @results_end "<!-- /results -->"
@@ -107,9 +109,10 @@ defmodule HologramSyncBenchmark.Report do
   @doc """
   Returns the given step's fill figures as a table row.
 
-  Of the database's counters only the rows scanned: a fill is short against the settle around
-  it, so the commits and time the idle rate takes off swamp the fill's own, and those come out as
-  noise, negative ones included.
+  None of the database's counters: a fill is short against the settle around it, so the idle
+  rate taken off swamps what the fill did, rows scanned included, and the figures come out as
+  noise, negative ones too. A refill of many clients at once is big enough to show (see the
+  deploy case).
   """
   @spec fill_row(map) :: [term]
   def fill_row(result) do
@@ -123,7 +126,6 @@ defmodule HologramSyncBenchmark.Report do
       fill.restarts,
       result.heap_kills,
       fill.cpu_ms,
-      fill.db.tup_returned,
       result.memory_per_client && result.memory_per_client / 1_024
     ]
   end
@@ -141,7 +143,6 @@ defmodule HologramSyncBenchmark.Report do
       "Fills restarted",
       "Heap kills",
       "Server CPU ms",
-      "DB rows scanned",
       "KB per client"
     ]
   end
@@ -174,23 +175,28 @@ defmodule HologramSyncBenchmark.Report do
   def steady_row(result) do
     %{steady: steady} = result
 
+    # Per-write figures over writes some sessions stopped working on partway cover less work than
+    # the writes caused, so they read as cheaper writes than these were, and are left out.
+    complete? = steady.missing == 0 and steady.streams_lost == 0 and result.session_cuts == 0
+    per_write = fn value -> if complete?, do: value end
+
     [
       result.clients,
       steady.rate,
+      "#{steady.deliveries}/#{steady.deliveries + steady.missing}",
       steady.p50_ms,
       steady.p95_ms,
       steady.p99_ms,
       steady.max_ms,
-      steady.missing,
       steady.leaked,
       steady.streams_lost,
       result.session_cuts,
-      steady.cpu_ms_per_write,
-      steady.cpu_ms_per_write / result.clients,
-      steady.db.xact_commit,
-      steady.db.tup_returned,
-      steady.db.tup_fetched,
-      steady.db.active_ms,
+      per_write.(steady.cpu_ms_per_write),
+      per_write.(steady.cpu_ms_per_write / result.clients),
+      per_write.(steady.db.xact_commit),
+      per_write.(steady.db.tup_returned),
+      per_write.(steady.db.tup_fetched),
+      per_write.(steady.db.active_ms),
       passed_cell(result)
     ]
   end
@@ -203,11 +209,11 @@ defmodule HologramSyncBenchmark.Report do
     [
       "Clients",
       "Writes/s",
+      "Delivered",
       "p50 ms",
       "p95 ms",
       "p99 ms",
       "Max ms",
-      "Missing",
       "Leaked",
       "Streams lost",
       "Sessions cut",
@@ -232,9 +238,10 @@ defmodule HologramSyncBenchmark.Report do
     if result.autovacuum_ran, do: passed <> ", autovacuum ran", else: passed
   end
 
-  # Standard output only, so a warning on standard error can't pass for the answer.
+  # Standard output only, so a warning on standard error can't pass for the answer, and in the C
+  # locale, so a number prints with a decimal point whatever the machine's language.
   defp command(command, args) do
-    case System.cmd(command, args, stderr_to_stdout: false) do
+    case System.cmd(command, args, env: [{"LC_ALL", "C"}], stderr_to_stdout: false) do
       {output, 0} -> String.trim(output)
       _failed -> nil
     end
@@ -290,7 +297,29 @@ defmodule HologramSyncBenchmark.Report do
         _unknown -> "unknown memory"
       end
 
-    "#{cpu || "unknown CPU"}, #{cores} cores, #{memory}, #{os || "unknown OS"}"
+    "#{cpu || "unknown CPU"}, #{cores} cores, #{memory}, #{os || "unknown OS"}, " <>
+      "load average #{load_average() || "unknown"} when the run started"
+  end
+
+  # The 1-minute load average, so figures taken while other work kept the machine busy say so.
+  defp load_average do
+    text =
+      case :os.type() do
+        {:unix, :darwin} -> command("sysctl", ["-n", "vm.loadavg"])
+        _other -> read_file("/proc/loadavg")
+      end
+
+    case text && Regex.run(~r/\d+(?:\.\d+)?/, text) do
+      [one_minute] -> one_minute
+      _unknown -> nil
+    end
+  end
+
+  defp read_file(path) do
+    case File.read(path) do
+      {:ok, text} -> text
+      {:error, _reason} -> nil
+    end
   end
 
   defp macos_machine do
@@ -334,8 +363,35 @@ defmodule HologramSyncBenchmark.Report do
     # The placeholder an empty README holds goes once a case has figures.
     replaced
     |> String.replace("\nNone yet.\n", "\n")
+    |> order_sections()
     |> String.trim()
     |> then(&("\n" <> &1 <> "\n"))
+  end
+
+  # In the order the README lists the cases, whatever order they ran in. A section of a case not
+  # in the list goes last.
+  #
+  # Anything else between the markers, like a note written by hand or a section without its end,
+  # is kept after the sections rather than dropped.
+  defp order_sections(results) do
+    pattern = ~r/<!-- case:([a-z0-9_-]+) -->.*?<!-- \/case:\1 -->/s
+    sections = Regex.scan(pattern, results)
+
+    rest =
+      pattern
+      |> Regex.replace(results, "")
+      |> String.trim()
+
+    ordered =
+      sections
+      |> Enum.sort_by(fn [_section, name] ->
+        Enum.find_index(@case_order, &(&1 == name)) || length(@case_order)
+      end)
+      |> Enum.map(fn [section, _name] -> section end)
+
+    joined = Enum.join(ordered, "\n\n")
+
+    if rest == "", do: joined, else: joined <> "\n\n" <> rest
   end
 
   defp table({heading, columns, rows}) do

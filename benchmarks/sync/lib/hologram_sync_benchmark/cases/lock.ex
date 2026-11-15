@@ -66,7 +66,7 @@ defmodule HologramSyncBenchmark.Cases.Lock do
       hologram = hologram_writes(conn, counts, duration_ms)
 
       rows = Enum.zip_with([counts, plain, notify, hologram], &row/1)
-      verdict = verdict(counts, notify, hologram)
+      verdict = verdict(notify, hologram)
 
       IO.puts(verdict)
 
@@ -270,7 +270,8 @@ defmodule HologramSyncBenchmark.Cases.Lock do
 
   defp options(opts, counts) do
     [
-      "writers at once: #{Enum.join(counts, ", ")}, #{opts[:lock_duration]} s each",
+      "#{format_counts(counts)} #{if counts == [1], do: "writer", else: "writers"} at once, " <>
+        "for #{opts[:lock_duration]} s each",
       "plain and notify writers run on connections of the driver's own, into a scratch table, " <>
         "notify with one connection listening; Hologram's run on the server node, with a pool " <>
         "as big as its writers plus 5 and no client connected",
@@ -281,6 +282,13 @@ defmodule HologramSyncBenchmark.Cases.Lock do
       "a notifying commit costs more than a plain one even with one writer, where nothing " <>
         "queues, so only the growth past the 1-writer row can be the lock"
     ]
+  end
+
+  defp format_counts([count]), do: "#{count}"
+
+  defp format_counts(counts) do
+    {most, [last]} = Enum.split(counts, -1)
+    "#{Enum.join(most, ", ")} and #{last}"
   end
 
   defp percent(nil), do: nil
@@ -369,39 +377,44 @@ defmodule HologramSyncBenchmark.Cases.Lock do
     end
   end
 
-  # Judged at the most writers. The lock caps a kind of writer when it's held nearly all the time,
-  # since it can pass only a few percent more; the growth from the count before is shown beside.
-  defp verdict(counts, notify, hologram) do
-    top = Enum.max(counts)
-    smaller = Enum.filter(counts, &(&1 < top))
-    before = Enum.max(smaller, fn -> nil end)
+  # The lock caps a kind of writer when some writer count held it nearly all the time, since it can
+  # then pass only a few percent more. The ceiling is the highest rate over held share among those
+  # counts: at full hold, how many of these commits the lock lets through.
+  defp verdict(notify, hologram) do
     kinds = [{"notifying commits", notify}, {"Hologram's writes", hologram}]
 
-    Enum.map_join(kinds, " ", fn {name, results} -> verdict_line(name, results, top, before) end)
+    Enum.map_join(kinds, " ", fn {name, results} -> verdict_line(name, results) end)
   end
 
-  defp verdict_line(name, results, top, before) do
-    by_writers = Map.new(results, &{&1.writers, &1})
-    at_top = Map.fetch!(by_writers, top)
-    rate = round(at_top.per_second)
+  defp verdict_line(name, results) do
+    peak = Enum.max_by(results, & &1.per_second)
+    saturated = Enum.filter(results, &(&1.lock.held >= @busy_share))
 
-    growth =
-      if before,
-        do:
-          " That's #{Float.round(at_top.per_second / max(by_writers[before].per_second, 1), 2)} " <>
-            "times the rate at #{before} writers.",
-        else: ""
+    peak_text =
+      "#{String.capitalize(name)} peak at #{round(peak.per_second)} per second, with " <>
+        "#{peak.writers} writers and the lock held #{percent(peak.lock.held)} of the time."
 
-    judged =
-      if at_top.lock.held >= @busy_share do
-        ceiling = round(at_top.per_second / at_top.lock.held)
-        " The lock caps them: #{rate} of the about #{ceiling} of them per second it lets through."
-      else
-        " The lock doesn't cap them yet, and was held too little to tell how many it would let through."
-      end
+    case saturated do
+      [] ->
+        held = Enum.max_by(results, & &1.lock.held).lock.held
 
-    "With #{top} writers, #{name} reach #{rate} per second, with the lock held " <>
-      "#{percent(at_top.lock.held)} of the time." <> growth <> judged
+        peak_text <>
+          " The lock was held at most #{percent(held)} of the time, so it doesn't cap them."
+
+      saturated ->
+        # Never below the peak: a rate measured is one the lock let through.
+        ceiling =
+          saturated
+          |> Enum.map(&(&1.per_second / &1.lock.held))
+          |> Enum.max()
+          |> max(peak.per_second)
+
+        writers = Enum.map(saturated, & &1.writers)
+
+        peak_text <>
+          " With #{format_counts(writers)} writers the lock was held nearly all the time, so " <>
+          "it caps them, at about #{round(ceiling)} per second."
+    end
   end
 
   defp write_cards_until(ids, writer, count, deadline, writes) do

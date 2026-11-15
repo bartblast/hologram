@@ -234,7 +234,8 @@ defmodule HologramSyncBenchmark.Driver do
         memory_limit
       )
 
-    figure = Sweep.figure(results, stopped, opts[:memory_limit])
+    why = Map.get(sweep_case, :why, &why_failed(&1, opts))
+    figure = Sweep.figure(results, stopped, opts[:memory_limit], why)
     IO.puts("Clients per node, #{sweep_case.title}: #{figure}")
 
     options =
@@ -281,6 +282,29 @@ defmodule HologramSyncBenchmark.Driver do
     filled?(result.fill, opts) and result.isolated.cut_short == 0 and
       delivered?(result.steady, opts)
   end
+
+  # What failed a step with writes, for the figure's note.
+  defp why_failed(result, opts) do
+    %{fill: fill, isolated: isolated, steady: steady} = result
+
+    [
+      Sweep.fill_reasons(fill, opts[:fill_timeout]),
+      isolated.cut_short > 0 && "#{isolated.cut_short} single writes never reached everyone",
+      steady.missing > 0 && count_of(steady.missing, "delivery", "deliveries") <> " missing",
+      steady.leaked > 0 && "#{steady.leaked} deliveries leaked",
+      steady.streams_lost > 0 && count_of(steady.streams_lost, "stream", "streams") <> " lost",
+      result.session_cuts > 0 && count_of(result.session_cuts, "session", "sessions") <> " cut",
+      (steady.p99_ms != nil and steady.p99_ms > opts[:p99_limit]) &&
+        "steady p99 #{round(steady.p99_ms)} ms"
+    ]
+    |> List.flatten()
+    |> Enum.filter(& &1)
+    |> Enum.join(", ")
+  end
+
+  defp count_of(1, one, _many), do: "1 #{one}"
+
+  defp count_of(count, _one, many), do: "#{count} #{many}"
 
   defp delivered?(steady, opts) do
     steady.missing == 0 and steady.leaked == 0 and steady.streams_lost == 0 and
