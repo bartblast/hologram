@@ -8,6 +8,9 @@ defmodule HologramSyncBenchmark.Measure do
 
   @heap_kill_line "maximum heap size reached"
 
+  # How a sync session cut for falling behind its windows' rounds ends, in the server's log.
+  @session_cut_line "(stop) :behind_the_ring"
+
   @type cpu_sample :: {integer, term}
 
   @doc """
@@ -73,6 +76,19 @@ defmodule HologramSyncBenchmark.Measure do
     log_path
     |> File.stream!()
     |> Enum.count(&String.contains?(&1, @heap_kill_line))
+  end
+
+  @doc """
+  Counts the sync sessions the given log says were cut for falling behind their windows' rounds.
+
+  Counted from the log rather than from the clients, since the stream outlives its session: the
+  client is never told and only stops getting changes.
+  """
+  @spec session_cuts(String.t()) :: non_neg_integer
+  def session_cuts(log_path) do
+    log_path
+    |> File.stream!()
+    |> Enum.count(&String.contains?(&1, @session_cut_line))
   end
 
   @doc """

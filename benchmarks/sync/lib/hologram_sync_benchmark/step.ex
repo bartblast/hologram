@@ -248,7 +248,7 @@ defmodule HologramSyncBenchmark.Step do
     cpu_ms = raw.cpu_ms - idle.cpu_ms_per_ms * raw.elapsed_ms
 
     raw
-    |> Map.drop([:cpu_ms, :elapsed_ms])
+    |> Map.drop([:cpu_ms, :elapsed_ms, :failed_clients])
     |> Map.merge(%{
       cpu_ms_per_write: cpu_ms / raw.writes,
       db: per_write(adjust(raw.db, idle.db), raw.writes)
@@ -287,7 +287,14 @@ defmodule HologramSyncBenchmark.Step do
       idle: idle,
       isolated: finish_isolated(isolated, idle),
       memory_per_client: memory_per_client,
-      steady: finish_steady(steady, idle)
+      # Streams that ended after their fill, like one the server killed. The client doesn't come
+      # back for those, so their writes count as missing, and the per-write figures cover sessions
+      # that stopped working partway. A session the server cuts leaves its stream open, so those
+      # are counted from the server's log instead (see HologramSyncBenchmark.Sweep).
+      steady:
+        steady
+        |> finish_steady(idle)
+        |> Map.put(:streams_lost, steady.failed_clients - fill.failed)
     }
   end
 
@@ -323,9 +330,11 @@ defmodule HologramSyncBenchmark.Step do
     cpu_after = Measure.cpu_sample(peer)
     stats_after = DB.settled_stats(spec.conn)
 
-    {times, missing} = Measure.latencies(writes, collect(clients), spec.expected)
+    reports = collect(clients)
+    {times, missing} = Measure.latencies(writes, reports, spec.expected)
 
     raw = %{
+      failed_clients: Enum.count(reports, &(&1.failure != nil)),
       cpu_ms: Measure.cpu_ms(cpu_before, cpu_after),
       db: DB.stats_delta(stats_after, stats_before),
       deliveries: length(times),

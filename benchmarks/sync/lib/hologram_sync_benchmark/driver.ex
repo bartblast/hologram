@@ -11,6 +11,7 @@ defmodule HologramSyncBenchmark.Driver do
   alias HologramSyncBenchmark.Clients
   alias HologramSyncBenchmark.DB
   alias HologramSyncBenchmark.Entities.Card
+  alias HologramSyncBenchmark.Entities.RoleCard
   alias HologramSyncBenchmark.Peer
   alias HologramSyncBenchmark.Report
   alias HologramSyncBenchmark.Seed
@@ -20,9 +21,11 @@ defmodule HologramSyncBenchmark.Driver do
 
   @board_page "HologramSyncBenchmark.BoardPage"
 
+  @role_board_page "HologramSyncBenchmark.RoleBoardPage"
+
   @board_sweep [1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000]
 
-  @cases ~w(boot seed smoke board)
+  @cases ~w(boot seed smoke board board_roles)
 
   # The options and their defaults: the board's size, the client counts a sweep steps through,
   # the steady writes' rate per second and length in seconds, the slowest p99 delivery in
@@ -136,7 +139,7 @@ defmodule HologramSyncBenchmark.Driver do
     conn = DB.connect!()
     count = opts[:cards]
 
-    seeding = seed_board!(conn, count)
+    {seeding, _extra} = seed!(conn, Card, count)
 
     IO.puts("Seeded #{count} cards")
     IO.puts("Seeding cost #{inspect(seeding)}")
@@ -149,7 +152,7 @@ defmodule HologramSyncBenchmark.Driver do
     count = hd(opts[:clients] || [@default_smoke_clients])
 
     :ok = Clients.check_limits!(count, Step.connect_concurrency())
-    _seeding = seed_board!(conn, opts[:cards])
+    _seeded = seed!(conn, Card, opts[:cards])
 
     Peer.with_peer(fn peer ->
       clients = start_clients(peer, count, "/board", @board_page)
@@ -166,6 +169,43 @@ defmodule HologramSyncBenchmark.Driver do
 
   # A shared board: every client sees every card, and every write reaches every client.
   defp run_case("board", opts) do
+    run_board(opts, %{
+      card_type: Card,
+      clients: "anonymous clients",
+      name: "board",
+      page: @board_page,
+      prepare: fn _peer, count -> {[], List.duplicate("/board", count)} end,
+      rule: "a bare `allow :read`",
+      title: "Shared board"
+    })
+  end
+
+  # A board whose cards are read through a role: each client signs in as a user of its own who
+  # holds the viewer role on the one board the cards belong to. Every client still reads every
+  # card, but every rule check reads the card's board and asks for the user's grants on it.
+  defp run_case("board_roles", opts) do
+    run_board(opts, %{
+      card_type: RoleCard,
+      clients: "signed-in clients, each user holding the viewer role on the board",
+      name: "board_roles",
+      page: @role_board_page,
+      prepare: fn peer, count ->
+        user_ids = Peer.rpc(peer, Seed, :users, [count])
+        board_id = Peer.rpc(peer, Seed, :role_board, [user_ids])
+
+        {[board_id: board_id], Enum.map(user_ids, &"/sign_in/#{&1}")}
+      end,
+      rule:
+        "`allow :read, via: {:read, board}` on cards and `allow :read, to: :viewer` on the board",
+      title: "Shared board read by role"
+    })
+  end
+
+  # A board case: seeds the cards and whatever its clients need, sweeps the client counts, and
+  # writes the figures into the README. `prepare` seeds what the cards and the clients need for
+  # the given number of clients, on the server node, and returns the values every card gets and
+  # the path each client gets its session cookie from.
+  defp run_board(opts, board) do
     conn = DB.connect!()
     counts = opts[:clients] || @board_sweep
 
@@ -177,24 +217,27 @@ defmodule HologramSyncBenchmark.Driver do
     :ok = Report.check_readme!()
     run_line = Report.run_line(conn)
 
-    _seeding = seed_board!(conn, opts[:cards])
+    {_seeding, cookie_paths} =
+      seed!(conn, board.card_type, opts[:cards], &board.prepare.(&1, Enum.max(counts)))
 
     results =
       Sweep.run(
         conn,
         counts,
         fn peer, count, first_marker ->
-          Step.run(peer, board_spec(conn, count, first_marker, opts))
+          spec = board_spec(conn, count, first_marker, opts, board, cookie_paths)
+          Step.run(peer, spec)
         end,
         &passed?(&1, opts)
       )
 
     figure = Sweep.figure(results)
-    IO.puts("Clients per node on the board: #{figure}")
+    IO.puts("Clients per node, #{board.title}: #{figure}")
 
     options = [
-      "#{opts[:cards]} cards every client may read, so every write reaches every client",
-      "anonymous clients, steps of #{Enum.join(counts, ", ")} " <>
+      "#{opts[:cards]} cards read with #{board.rule}, which lets every client read every card, " <>
+        "so every write reaches every client",
+      "#{board.clients}, steps of #{Enum.join(counts, ", ")} " <>
         if(counts == [1], do: "client", else: "clients"),
       "steady writes at #{opts[:rate]} per second for #{opts[:duration]} s",
       "a step passes when every client fills within #{opts[:fill_timeout]} s and every write " <>
@@ -203,8 +246,8 @@ defmodule HologramSyncBenchmark.Driver do
 
     :ok =
       Report.write_case!(
-        "board",
-        "Shared board",
+        board.name,
+        board.title,
         run_line,
         options,
         figure,
@@ -221,14 +264,16 @@ defmodule HologramSyncBenchmark.Driver do
     ]
   end
 
-  defp board_spec(conn, count, first_marker, opts) do
+  defp board_spec(conn, count, first_marker, opts, board, cookie_paths) do
     every_client = Enum.to_list(0..(count - 1))
 
     %{
       client_opts: fn peer ->
-        peer
-        |> client_opts("/board", @board_page)
-        |> List.duplicate(count)
+        base = client_opts(peer, nil, board.page)
+
+        cookie_paths
+        |> Enum.take(count)
+        |> Enum.map(&Keyword.put(base, :cookie_path, &1))
       end,
       conn: conn,
       duration_ms: opts[:duration] * 1_000,
@@ -236,9 +281,10 @@ defmodule HologramSyncBenchmark.Driver do
       fill_timeout_ms: opts[:fill_timeout] * 1_000,
       first_marker: first_marker,
       rate: opts[:rate],
-      rows: &Peer.rpc(&1, Writer, :ids, [Card]),
+      rows: &Peer.rpc(&1, Writer, :ids, [board.card_type]),
       write: fn peer, ids, offset, marker ->
-        Peer.rpc(peer, Writer, :update, [Card, elem(ids, offset), :title, Client.marker(marker)])
+        args = [board.card_type, elem(ids, offset), :title, Client.marker(marker)]
+        Peer.rpc(peer, Writer, :update, args)
       end
     }
   end
@@ -262,7 +308,8 @@ defmodule HologramSyncBenchmark.Driver do
 
     fill.failed == 0 and fill.unfinished == 0 and fill.connect_failures == 0 and
       Enum.all?(fill.ms, &(&1 <= opts[:fill_timeout] * 1_000)) and isolated.cut_short == 0 and
-      steady.missing == 0 and steady.p99_ms != nil and steady.p99_ms <= opts[:p99_limit]
+      steady.missing == 0 and steady.streams_lost == 0 and steady.p99_ms != nil and
+      steady.p99_ms <= opts[:p99_limit]
   end
 
   defp print_fills(reports, failures) do
@@ -283,25 +330,28 @@ defmodule HologramSyncBenchmark.Driver do
     IO.puts("#{length(failures)} clients failed to connect")
   end
 
-  # Empties the database and seeds the given number of cards, returning what seeding cost it. Read
+  # Empties the database, runs the given function on the server node for whatever the cards and
+  # the clients need, and seeds the given number of cards of the given type with the values it
+  # returned, returning what seeding cost the database and what else the function returned. Read
   # inside the server node's life, after its boot, so the figure leaves out its connects and the
   # schema check. It still holds the idle node's dispatcher polls over the settle.
-  defp seed_board!(conn, count) do
+  defp seed!(conn, card_type, count, prepare \\ fn _peer -> {[], nil} end) do
     :ok = DB.reset!(conn)
 
-    {table, seeding} =
+    {table, seeding, extra} =
       Peer.with_peer(fn peer ->
         :ok = DB.disable_autovacuum!(conn)
 
         before = DB.settled_stats(conn)
-        :ok = Peer.rpc(peer, Seed, :cards, [count])
+        {card_values, extra} = prepare.(peer)
+        :ok = Peer.rpc(peer, Seed, :cards, [card_type, count, card_values])
 
         seeding =
           conn
           |> DB.settled_stats()
           |> DB.stats_delta(before)
 
-        {Peer.rpc(peer, Hologram.DB, :table_name, [Card]), seeding}
+        {Peer.rpc(peer, Hologram.DB, :table_name, [card_type]), seeding, extra}
       end)
 
     :ok = DB.truncate_log!(conn)
@@ -313,7 +363,7 @@ defmodule HologramSyncBenchmark.Driver do
       raise "seeding stored #{stored} cards, not #{count}"
     end
 
-    seeding
+    {seeding, extra}
   end
 
   defp start_clients(peer, count, cookie_path, page) do

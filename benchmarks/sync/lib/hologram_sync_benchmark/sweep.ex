@@ -56,7 +56,8 @@ defmodule HologramSyncBenchmark.Sweep do
       result =
         Map.merge(result, %{
           autovacuum_ran: DB.autovacuum_runs(conn) != autovacuum_before,
-          heap_kills: Measure.heap_kills(Peer.log_path())
+          heap_kills: Measure.heap_kills(Peer.log_path()),
+          session_cuts: Measure.session_cuts(Peer.log_path())
         })
 
       result = Map.put(result, :passed, passed?.(result))
@@ -111,7 +112,8 @@ defmodule HologramSyncBenchmark.Sweep do
         "#{result.heap_kills} heap kills" <>
         if(result.heap_kills != fill.restarts, do: " (MISMATCH)", else: ""),
       "single write #{Report.cell(isolated.last_delivery_ms)} ms to the last client",
-      "steady p99 #{Report.cell(steady.p99_ms)} ms, #{steady.missing} missing",
+      "steady p99 #{Report.cell(steady.p99_ms)} ms, #{steady.missing} missing, " <>
+        "#{steady.streams_lost} streams lost, #{result.session_cuts} sessions cut",
       "#{Report.cell(steady.cpu_ms_per_write)} CPU ms per write",
       "per write #{Report.cell(steady.db.xact_commit)} commits, " <>
         "#{Report.cell(steady.db.tup_returned)} rows scanned, " <>
