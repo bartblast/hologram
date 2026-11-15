@@ -57,6 +57,32 @@ defmodule Hologram.MigrationTest do
     end
   end
 
+  describe "__before_compile__/1" do
+    test "refuses an op that reads an attribute in module-body code that never runs" do
+      body = """
+      @default "a"
+
+      if false do
+        change_entity MyApp.Task do
+          add_attribute :first, :string, default: @default
+        end
+      end
+      """
+
+      expected_msg =
+        "a migration op reads an attribute in module-body code that never runs, so the op " <>
+          "would record nil for it - ops are recorded wherever they are written, so write " <>
+          "them outside if, case and the like:\n" <>
+          "  app/migrations/20260813091522.ex:8 - reads @default"
+
+      ExUnit.CaptureIO.capture_io(:stderr, fn ->
+        assert_error Hologram.CompileError, expected_msg, fn ->
+          compile_migration("20260813091522", body)
+        end
+      end)
+    end
+  end
+
   describe "__hologram_migration__/0" do
     test "returns the version, the path and the ops of the module body, in file order" do
       module =
@@ -197,6 +223,47 @@ defmodule Hologram.MigrationTest do
 
       assert [%{opts: [default: :draft]}, %{opts: [default: "A1"]}] =
                module.__hologram_migration__().ops
+    end
+
+    test "reads an attribute where the op is written, not where the module ends" do
+      module =
+        compile_migration("20260813091522", """
+        @default "a"
+
+        change_entity MyApp.Task do
+          add_attribute :first, :string, default: @default
+        end
+
+        @default "b"
+
+        change_entity MyApp.Task do
+          add_attribute :second, :string, default: @default
+        end
+        """)
+
+      assert [%{opts: [default: "a"]}, %{opts: [default: "b"]}] =
+               module.__hologram_migration__().ops
+    end
+
+    test "reads an attribute written with parentheses where the op is written" do
+      body = """
+      @default "a"
+
+      change_entity MyApp.Task do
+        add_attribute :first, :string, default: @default()
+      end
+
+      @default "b"
+      """
+
+      # The parentheses notation is deprecated, and Elixir warns about it.
+      ExUnit.CaptureIO.capture_io(:stderr, fn ->
+        module = compile_migration("20260813091522", body)
+
+        send(self(), {:ops, module.__hologram_migration__().ops})
+      end)
+
+      assert_received {:ops, [%{opts: [default: "a"]}]}
     end
 
     test "raises no unused alias warning for an alias used only in ops" do

@@ -28,7 +28,8 @@ defmodule Hologram.Migration do
   Ops are declarations, recorded where they are written: aliases in an op resolve at that
   line, and an op inside an `if`, a comprehension or other module-body code is recorded
   regardless of it, and cannot read the module body's variables. Op arguments may call the
-  module's own functions and read its attributes.
+  module's own functions and read its attributes, an attribute read giving the value it holds
+  at the op's line.
 
   One op declares nothing an entity type declares of itself: `designate_user_entity`
   records which entity type is the app's user, the designation `use Hologram.Entity,
@@ -62,6 +63,8 @@ defmodule Hologram.Migration do
   @file_name_regex ~r/^\d{14}\.ex$/
 
   @ops_attribute :__hologram_migration_ops__
+
+  @snapshots_attribute :__hologram_migration_snapshots__
 
   @locals_without_parens [
     add_attribute: 2,
@@ -115,6 +118,7 @@ defmodule Hologram.Migration do
     # body expands before any of it runs, so the op macros store their ops before a
     # registration in the quote would run.
     Module.register_attribute(__CALLER__.module, @ops_attribute, accumulate: true)
+    Module.register_attribute(__CALLER__.module, @snapshots_attribute, accumulate: true)
 
     quote do
       import Hologram.Migration,
@@ -146,6 +150,8 @@ defmodule Hologram.Migration do
 
   @doc false
   defmacro __before_compile__(env) do
+    validate_snapshots_taken!(env)
+
     ops =
       env.module
       |> Module.get_attribute(@ops_attribute)
@@ -716,11 +722,64 @@ defmodule Hologram.Migration do
   end
 
   # An op is stored in the migration module's body, and the module's __hologram_migration__/0
-  # returns the stored ops (see validate_placement!/1).
+  # returns the stored ops (see validate_placement!/1). What the op leaves in the body are the
+  # snapshots of the attributes it reads (see snapshot_attribute_reads/3).
   defp register(quoted, caller) do
+    {quoted, snapshots} = snapshot_attribute_reads(quoted, caller.module, [])
+
     Module.put_attribute(caller.module, @ops_attribute, expand_aliases(quoted, caller))
-    nil
+
+    case Enum.reverse(snapshots) do
+      [] -> nil
+      assignments -> {:__block__, [], assignments}
+    end
   end
+
+  # An attribute an op reads is read where the op is written: the op's code is placed in a
+  # function defined at the end of the module, where @name would read the value the body
+  # assigned last. Each read becomes a read of a snapshot attribute of its own, set at the
+  # op's line by an assignment the op leaves in the body. Snapshots are numbered per module,
+  # so a recompile names them alike, and carry the attribute's name, which an error about
+  # the value then shows. A quote is left alone - its @name is code, not a read.
+  defp snapshot_attribute_reads({:quote, _meta, _args} = node, _module, snapshots) do
+    {node, snapshots}
+  end
+
+  defp snapshot_attribute_reads(
+         {:@, meta, [{name, _name_meta, context}]} = read,
+         module,
+         snapshots
+       )
+       when is_atom(name) and (is_atom(context) or context == []) do
+    taken = Module.get_attribute(module, @snapshots_attribute)
+
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    snapshot = :"__hologram_migration_#{name}_#{length(taken)}__"
+
+    Module.put_attribute(module, @snapshots_attribute, {snapshot, name, meta[:line]})
+
+    assignment = {:@, meta, [{snapshot, meta, [read]}]}
+
+    {{:@, meta, [{snapshot, meta, nil}]}, [assignment | snapshots]}
+  end
+
+  defp snapshot_attribute_reads({form, meta, args}, module, snapshots) do
+    {[form, args], all_snapshots} = snapshot_attribute_reads([form, args], module, snapshots)
+
+    {{form, meta, args}, all_snapshots}
+  end
+
+  defp snapshot_attribute_reads({left, right}, module, snapshots) do
+    {[left, right], all_snapshots} = snapshot_attribute_reads([left, right], module, snapshots)
+
+    {{left, right}, all_snapshots}
+  end
+
+  defp snapshot_attribute_reads(list, module, snapshots) when is_list(list) do
+    Enum.map_reduce(list, snapshots, &snapshot_attribute_reads(&1, module, &2))
+  end
+
+  defp snapshot_attribute_reads(other, _module, snapshots), do: {other, snapshots}
 
   defp statement_line(meta, caller) do
     Keyword.get(meta, :line, caller.line)
@@ -826,5 +885,33 @@ defmodule Hologram.Migration do
     end
 
     :ok
+  end
+
+  # An op is recorded however the module body runs around it, but its attribute snapshots are
+  # taken only where the body runs: one left unset means the op sits in a branch that never
+  # runs, and its value would silently be nil.
+  defp validate_snapshots_taken!(env) do
+    set_attributes = Module.attributes_in(env.module)
+
+    untaken =
+      env.module
+      |> Module.get_attribute(@snapshots_attribute)
+      |> Enum.reject(fn {snapshot, _name, _line} -> snapshot in set_attributes end)
+      |> Enum.reverse()
+
+    if untaken != [] do
+      file = Path.relative_to_cwd(env.file)
+
+      lines =
+        Enum.map_join(untaken, "\n", fn {_snapshot, name, line} ->
+          "  #{file}:#{line} - reads @#{name}"
+        end)
+
+      raise Hologram.CompileError,
+        message:
+          "a migration op reads an attribute in module-body code that never runs, so the " <>
+            "op would record nil for it - ops are recorded wherever they are written, so " <>
+            "write them outside if, case and the like:\n" <> lines
+    end
   end
 end
