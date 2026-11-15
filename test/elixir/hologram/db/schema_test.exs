@@ -1244,6 +1244,42 @@ defmodule Hologram.DB.SchemaTest do
              ]
     end
 
+    test "converges the role grant store's index under its old name by a rename and a create" do
+      target =
+        [Hologram.Test.Fixtures.Entity.Module14]
+        |> Mapper.derive!([])
+        |> from_mapping()
+
+      store = target.tables["hologram_role_grant"]
+      unique_name = "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx"
+      entity_name = "hologram_role_grant_entity_type_entity_id_role_$idx"
+
+      old_indexes =
+        store.indexes
+        |> Map.delete(entity_name)
+        |> Map.delete(unique_name)
+        |> Map.put("hologram_role_grant_$uidx", store.indexes[unique_name])
+
+      actual = put_in(target.tables["hologram_role_grant"].indexes, old_indexes)
+
+      assert diff(actual, target) == [
+               %{
+                 op: :rename_index,
+                 table: "hologram_role_grant",
+                 from: "hologram_role_grant_$uidx",
+                 to: unique_name
+               },
+               %{
+                 op: :create_index,
+                 table: "hologram_role_grant",
+                 index: entity_name,
+                 columns: ["entity_type", "entity_id", "role"],
+                 nulls_distinct: true,
+                 unique: false
+               }
+             ]
+    end
+
     test "keeps the name-keyed result with renames: false" do
       actual = task_term(%{"task_old_$idx" => @project_id_index})
       target = task_term(%{"task_new_$idx" => @project_id_index})

@@ -512,14 +512,14 @@ defmodule Hologram.DB.DDLTest do
       op = %{
         op: :create_index,
         table: "hologram_role_grant",
-        index: "hologram_role_grant_$uidx",
+        index: "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx",
         columns: ["user_id", "entity_type", "entity_id", "role"],
         nulls_distinct: false,
         unique: true
       }
 
       assert statements(op) == [
-               ~s(CREATE UNIQUE INDEX "hologram_role_grant_$uidx" ) <>
+               ~s(CREATE UNIQUE INDEX "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx" ) <>
                  ~s{ON "hologram_data"."hologram_role_grant" } <>
                  ~s{("user_id", "entity_type", "entity_id", "role") NULLS NOT DISTINCT}
              ]

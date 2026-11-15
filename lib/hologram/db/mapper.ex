@@ -85,7 +85,7 @@ defmodule Hologram.DB.Mapper do
   by columns/1), :indexes (index name to %{columns:, nulls_distinct:, unique:} - a
   `<table>_<attribute>_$uidx` entry per `unique: true` attribute, a `<table>_<column>_$uidx`
   entry per `unique: true` to-one over its reference column, plus the role grant store's
-  framework-owned one), and :join_tables (as returned by join_tables/1).
+  two framework-owned ones), and :join_tables (as returned by join_tables/1).
   """
   @spec derive!(list(module), list(module)) :: %{module => %{atom => any}}
   def derive!(entity_types, role_modules) do
@@ -556,16 +556,31 @@ defmodule Hologram.DB.Mapper do
     end
   end
 
-  # The role grant store carries the one index no declaration derives: unique over the grant
-  # fact, with nulls compared as values - entity_type and entity_id nils encode the
-  # type-wide and global grant shapes, so identical rows with nils must still collide. The
-  # columns are the store's own identity list, which its id derivation reads too - one list, so
-  # the two cannot disagree on what a grant is.
+  # The role grant store carries the two indexes no declaration derives, named like any other
+  # index over several columns.
+  #
+  # The unique one is over the grant fact, with nulls compared as values - entity_type and
+  # entity_id nils encode the type-wide and global grant shapes, so identical rows with nils must
+  # still collide. Its columns are the store's own identity list, which its id derivation reads
+  # too - one list, so the two cannot disagree on what a grant is. It leads with user_id, so it
+  # serves the reads that start from a user.
+  #
+  # The second serves the reads that carry no user_id: who holds a role on a given entity. Today
+  # that is an app's members list, a read by entity_type and entity_id that would otherwise scan
+  # the store. The sync recheck (#1596) and backwards search (#1595) will read it the same way,
+  # walking the store's read rules from the entity's side. Nulls stay distinct, as on every
+  # non-unique index - introspection reads the flag as such, and any other value would be drift
+  # on every boot.
   defp framework_index_entries(Hologram.Auth.RoleGrant) do
+    segments = table_segments(RoleGrant)
+    entity_columns = ["entity_type", "entity_id", "role"]
+
     [
-      {"hologram_role_grant_$uidx",
+      {fit_identifier(segments, RoleGrant.identity_columns(), "$uidx"),
        %{columns: RoleGrant.identity_columns(), nulls_distinct: false, unique: true},
-       "the role grant store"}
+       "the role grant store"},
+      {fit_identifier(segments, entity_columns, "$idx"),
+       %{columns: entity_columns, nulls_distinct: true, unique: false}, "the role grant store"}
     ]
   end
 

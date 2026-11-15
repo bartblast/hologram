@@ -412,7 +412,7 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive!/2" do
-    test "derives the role grant unique index comparing nulls as values" do
+    test "derives the role grant store's unique index comparing nulls as values, and its entity index" do
       mapping =
         derive!(
           [
@@ -424,10 +424,15 @@ defmodule Hologram.DB.MapperTest do
         )
 
       assert mapping[Hologram.Auth.RoleGrant].indexes == %{
-               "hologram_role_grant_$uidx" => %{
+               "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx" => %{
                  columns: ["user_id", "entity_type", "entity_id", "role"],
                  nulls_distinct: false,
                  unique: true
+               },
+               "hologram_role_grant_entity_type_entity_id_role_$idx" => %{
+                 columns: ["entity_type", "entity_id", "role"],
+                 nulls_distinct: true,
+                 unique: false
                }
              }
     end
@@ -688,13 +693,13 @@ defmodule Hologram.DB.MapperTest do
       defmodule Elixir.HologramRole do
         use Hologram.Entity
 
-        attribute :grant, :integer, unique: true
+        attribute :grant_user_id_entity_type_entity_id_role, :integer, unique: true
       end
 
       expected_msg =
         normalize_newlines("""
         colliding derived names - rename the declarations so that every derived name is unique:
-          * index "hologram_role_grant_$uidx" is derived from attribute :grant in HologramRole, the role grant store\
+          * index "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx" is derived from attribute :grant_user_id_entity_type_entity_id_role in HologramRole, the role grant store\
         """)
 
       assert_error Hologram.CompileError, expected_msg, fn ->
