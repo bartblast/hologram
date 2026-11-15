@@ -16,8 +16,9 @@ defmodule Hologram.Job.RunLock do
   # trying, and the worker waits for it in await_connected/1 before anything else. It does not
   # reconnect a session it had, because a session that ended took its locks with it, and a worker
   # carrying on would be running a job that looks abandoned to every other node. Losing the session
-  # ends this process, and the worker is restarted beside it. It pings the server while idle, which
-  # is how a link that went dead is noticed rather than waited on.
+  # ends this process, and the worker is restarted beside it. It pings the server while idle, and a
+  # caller ends it when the server leaves a call unanswered, which is how a link that went dead is
+  # noticed rather than waited on.
 
   @behaviour Postgrex.SimpleConnection
 
@@ -28,29 +29,48 @@ defmodule Hologram.Job.RunLock do
   # job would miss each other's locks, and each would fail the jobs the other is running.
   @key_prefix "hologram_job_run:"
 
-  # How long taking a lock may wait on the server. The claim takes it while holding the job's row,
-  # so every other node claiming that row waits too - and gives up at the driver's 15 s query
-  # timeout, failing its pass on every try. Bounded well under that: when the lock connection's
-  # link goes silent, the call exits and the claim rolls back, which frees the row for the other
-  # nodes as long as the pool still reaches the server. The worker crashes, and the one that
-  # replaces it gives up whatever the server granted after all - once the lock connection answers,
-  # or breaks and takes the lock with it, and until then this node runs nothing. Nothing between
-  # the claim and the worker may catch the exit, or that lock would stay held under a queued row.
-  @acquire_timeout_ms :timer.seconds(5)
+  # How long a call may wait on the server before the connection is ended. A call left waiting on a
+  # link gone silent would otherwise wait until the operating system gives up retransmitting -
+  # about 15 minutes on Linux - with the worker stuck behind it and this node running nothing. A
+  # silent link isn't pinged while a call is in flight, and TCP keepalives only probe a connection
+  # with nothing in flight, so the bound is what notices it.
+  #
+  # Ending the connection rather than only giving up the call, because the session's state is
+  # unknown once its answer is missing: a lock may have been taken or given up after all. Killed, the
+  # connection takes the worker with it, a new one replaces both, and the server frees the old
+  # session's locks once it finds the peer gone - within about a minute (see @session_settings).
+  #
+  # The bound assumes calls are made one at a time, as one worker running one job makes them. A
+  # caller's time starts when it calls, not when its statement reaches the server, so calls queued
+  # behind each other share it - and one that times out ends the session every run on this node
+  # holds its lock on.
+  #
+  # Taking a lock is the call this bound matters most for. The claim takes it while holding the
+  # job's row, so every other node claiming that row waits too - and gives up at the driver's 15 s
+  # query timeout, failing its pass on every try. Bounded well under that, the claim rolls back on
+  # the exit, which frees the row for the other nodes as long as the pool still reaches the server.
+  @call_timeout_ms :timer.seconds(5)
 
   # Set once the connection is up rather than sent as startup parameters, which a session-mode
   # PgBouncer refuses unless told to ignore them.
   #
   # The ping already keeps the session from idling out, and the idle timeout is turned off in case
   # a server sets one lower than the ping - a session ended by it would free the lock of a run
-  # still going. The keepalives bound how long the server keeps the session of a host that
-  # vanished, and so its locks, to about a minute rather than the operating system's default of
-  # hours.
+  # still going. The keepalives and the user timeout bound how long the server keeps the session of
+  # a host that vanished, and so its locks, to about a minute rather than the operating system's
+  # default: the keepalives when the server has nothing unacknowledged (hours otherwise), the user
+  # timeout when it does - an answer sent as the link went silent - which the keepalives never probe
+  # (about 15 minutes otherwise). A server whose platform has no user timeout keeps it at 0, and
+  # logs that it is not supported on each connect.
+  #
+  # A pid or a local name rather than any GenServer.server(): a call left unanswered kills the
+  # connection, which needs it to be a process here.
   @session_settings """
   SET idle_session_timeout = 0;
   SET tcp_keepalives_idle = 30;
   SET tcp_keepalives_interval = 10;
-  SET tcp_keepalives_count = 3
+  SET tcp_keepalives_count = 3;
+  SET tcp_user_timeout = 60000
   """
 
   @doc """
@@ -61,14 +81,14 @@ defmodule Hologram.Job.RunLock do
   should wait on a run. Locks taken twice by one session stack, so each lock taken needs exactly
   one release.
 
-  Exits when the server has not answered within 5 seconds, with the lock possibly taken. Raises
-  when the connection has no session yet (see await_connected/1), like release/2 and
-  release_all/1.
+  Exits when the server has not answered within 5 seconds, with the lock possibly taken, and ends
+  the connection, like release/2 and release_all/1. Raises when the connection has no session yet
+  (see await_connected/1), like them too.
   """
-  @spec acquire(GenServer.server(), String.t()) :: boolean
+  @spec acquire(pid | atom, String.t()) :: boolean
   def acquire(connection, id) do
     [%Postgrex.Result{rows: [[taken]]}] =
-      query!(connection, "SELECT pg_try_advisory_lock(#{key(id)})", @acquire_timeout_ms)
+      query!(connection, "SELECT pg_try_advisory_lock(#{key(id)})")
 
     taken == "t"
   end
@@ -81,7 +101,7 @@ defmodule Hologram.Job.RunLock do
   the worker makes this one first. Exits if the connection ends first - when the server refuses
   the session settings, or the session is lost before they are applied.
   """
-  @spec await_connected(GenServer.server()) :: :ok
+  @spec await_connected(pid | atom) :: :ok
   def await_connected(connection) do
     SimpleConnection.call(connection, :await_connected, :infinity)
   end
@@ -113,9 +133,10 @@ defmodule Hologram.Job.RunLock do
   Gives up the run lock of the job with the given id on the given connection, and returns :ok.
 
   A lock the session does not hold is left as it is - PostgreSQL answers with a warning, which is
-  ignored. Raises when the connection has no session yet (see await_connected/1).
+  ignored. Raises when the connection has no session yet (see await_connected/1), and exits and
+  ends the connection when the server has not answered within 5 seconds.
   """
-  @spec release(GenServer.server(), String.t()) :: :ok
+  @spec release(pid | atom, String.t()) :: :ok
   def release(connection, id) do
     query!(connection, "SELECT pg_advisory_unlock(#{key(id)})")
 
@@ -125,9 +146,10 @@ defmodule Hologram.Job.RunLock do
   @doc """
   Gives up every run lock the given connection holds, and returns :ok.
 
-  Raises when the connection has no session yet (see await_connected/1).
+  Raises when the connection has no session yet (see await_connected/1), and exits and ends the
+  connection when the server has not answered within 5 seconds.
   """
-  @spec release_all(GenServer.server()) :: :ok
+  @spec release_all(pid | atom) :: :ok
   def release_all(connection) do
     query!(connection, "SELECT pg_advisory_unlock_all()")
 
@@ -218,14 +240,22 @@ defmodule Hologram.Job.RunLock do
   def notify(_channel, _payload, _state), do: :ok
 
   # Raises at once when the connection has no session yet (see await_connected/1). Otherwise waits
-  # as long as the server takes unless given a timeout: the server answers or the connection
-  # breaks, which stops the connection process and exits the caller. A link that goes silent
-  # mid-call is not pinged, so it breaks only when the operating system gives up retransmitting.
-  # Only taking a lock is bounded (see @acquire_timeout_ms): a release comes after the claim's or
-  # the outcome's transaction has ended, or before a worker runs anything, so no row waits on a
-  # worker stuck there.
-  defp query!(connection, statement, timeout \\ :infinity) do
-    case SimpleConnection.call(connection, {:query, statement}, timeout) do
+  # for the server's answer up to @call_timeout_ms, and on the timeout kills the connection before
+  # exiting the caller. A connection that breaks meanwhile stops, which exits the caller too.
+  #
+  # The name is resolved once, before the call, so the connection killed is the one that left it
+  # unanswered rather than a replacement registered since.
+  defp query!(connection, statement) do
+    server = GenServer.whereis(connection) || connection
+
+    try do
+      SimpleConnection.call(server, {:query, statement}, @call_timeout_ms)
+    catch
+      :exit, {:timeout, _call} = reason ->
+        if is_pid(server), do: Process.exit(server, :kill)
+
+        exit(reason)
+    else
       %Postgrex.Error{} = error -> raise error
       results -> results
     end

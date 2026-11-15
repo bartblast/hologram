@@ -36,6 +36,18 @@ defmodule Hologram.Job.RunLockTest do
     state
   end
 
+  # A session whose link has gone silent: nothing is forwarded either way and nothing is closed.
+  defp start_silenced_session do
+    port = TCPProxy.closed_port()
+    proxy = start_proxy(port)
+    session = start_session(port: port)
+
+    await_connected(session)
+    TCPProxy.freeze(proxy)
+
+    session
+  end
+
   defp query!(session, statement) do
     [result] = SimpleConnection.call(session, {:query, statement}, :infinity)
 
@@ -63,30 +75,12 @@ defmodule Hologram.Job.RunLockTest do
 
     # The claim takes the lock while holding the job's row, which every other node's claim of that
     # row waits on - a server that does not answer must not hold them there for good.
-    test "exits when the server does not answer within 5 seconds" do
-      session = start_session()
-      %Postgrex.Result{rows: [[backend_pid]]} = query!(session, "SELECT pg_backend_pid()")
-
-      # Keeps the connection busy past the bound, the way a link gone silent mid-call would, and is
-      # cancelled once the bound has passed.
-      busy =
-        Task.async(fn ->
-          SimpleConnection.call(session, {:query, "SELECT pg_sleep(60)"}, :infinity)
-        end)
-
-      observer = start_session()
-
-      wait_until(fn ->
-        match?(
-          %Postgrex.Result{rows: [["PgSleep"]]},
-          query!(observer, "SELECT wait_event FROM pg_stat_activity WHERE pid = #{backend_pid}")
-        )
-      end)
+    test "exits and ends the connection when the server does not answer within 5 seconds" do
+      session = start_silenced_session()
+      monitor_ref = Process.monitor(session)
 
       assert {:timeout, _call} = catch_exit(acquire(session, Entity.generate_id()))
-
-      query!(observer, "SELECT pg_cancel_backend(#{backend_pid})")
-      assert %Postgrex.Error{postgres: %{code: :query_canceled}} = Task.await(busy)
+      assert_receive {:DOWN, ^monitor_ref, :process, ^session, :killed}, 1_000
     end
 
     test "stacks a lock one session takes twice, so it takes two releases to free" do
@@ -187,6 +181,14 @@ defmodule Hologram.Job.RunLockTest do
   end
 
   describe "release/2" do
+    test "exits and ends the connection when the server does not answer within 5 seconds" do
+      session = start_silenced_session()
+      monitor_ref = Process.monitor(session)
+
+      assert {:timeout, _call} = catch_exit(release(session, Entity.generate_id()))
+      assert_receive {:DOWN, ^monitor_ref, :process, ^session, :killed}, 1_000
+    end
+
     test "frees the lock of the job for other sessions" do
       id = Entity.generate_id()
       holder = start_session()
@@ -223,6 +225,16 @@ defmodule Hologram.Job.RunLockTest do
   end
 
   describe "release_all/1" do
+    # A release left waiting on a link gone silent would hold the worker for as long as the
+    # operating system keeps retransmitting, with this node running nothing.
+    test "exits and ends the connection when the server does not answer within 5 seconds" do
+      session = start_silenced_session()
+      monitor_ref = Process.monitor(session)
+
+      assert {:timeout, _call} = catch_exit(release_all(session))
+      assert_receive {:DOWN, ^monitor_ref, :process, ^session, :killed}, 1_000
+    end
+
     test "frees every lock the session holds" do
       first_id = Entity.generate_id()
       second_id = Entity.generate_id()
@@ -354,6 +366,14 @@ defmodule Hologram.Job.RunLockTest do
         "SELECT current_setting('tcp_keepalives_idle'), current_setting('tcp_keepalives_interval'), current_setting('tcp_keepalives_count')"
 
       assert %Postgrex.Result{rows: [["30", "10", "3"]]} = query!(start_session(), statement)
+    end
+
+    # A platform without the user timeout keeps it at 0.
+    test "sets the session's user timeout where the server's platform has one" do
+      assert %Postgrex.Result{rows: [[timeout]]} =
+               query!(start_session(), "SHOW tcp_user_timeout")
+
+      assert timeout in ["0", "60000"]
     end
 
     test "registers the connection under the given name" do

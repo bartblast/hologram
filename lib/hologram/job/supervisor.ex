@@ -13,7 +13,9 @@ defmodule Hologram.Job.Supervisor do
   # connection as it starts, so nothing crashes meanwhile. A drop ends each process that sees it
   # once, and each counts as a restart: both connections, and the worker too when it was inside a
   # transaction on the pool - three at most, within the limit of 3 in 5 seconds, and the worker
-  # that replaces them waits rather than crashing again. A worker whose lock connection is up but
+  # that replaces them waits rather than crashing again. A lock call the server leaves unanswered
+  # for 5 seconds kills the lock connection, which counts once: the worker goes with it. A worker
+  # whose lock connection is up but
   # whose pool is not yet crashes on each pass, once per poll and checkout, about 9 seconds.
 
   use Supervisor
