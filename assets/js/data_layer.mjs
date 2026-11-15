@@ -39,9 +39,7 @@ export default class DataLayer {
       return Type.integer(carried);
     }
 
-    const result = QueryKernel.run(term, {
-      actorUserId: LocalDatabase.actorUserId,
-    });
+    const result = QueryKernel.run(term);
 
     return Model.boxResult(term, result);
   }

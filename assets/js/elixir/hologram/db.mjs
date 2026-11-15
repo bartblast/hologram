@@ -704,9 +704,7 @@ const Elixir_Hologram_DB = {
 
     assertNoPlaceholders(term);
 
-    const result = QueryKernel.run(term, {
-      actorUserId: LocalDatabase.actorUserId,
-    });
+    const result = QueryKernel.run(term);
 
     return Model.boxResult(term, result);
   },

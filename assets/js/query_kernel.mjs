@@ -14,9 +14,8 @@ import StringOrder from "./string_order.mjs";
 // A filter is a list of clauses that all hold. A clause is a triple array - [name, operator,
 // operand] - a disjunction, {or: alternatives}, holding when one of its alternatives does, each
 // alternative a clause list of its own, or a quantifier, {quantifier, source, filter}, holding when
-// any, none or all of the rows of a related set match its filter. An operand is a value, the acting
-// user ({actor: true}), a placeholder ({placeholder: name}) or another attribute
-// ({attribute: name}).
+// any, none or all of the rows of a related set match its filter. An operand is a value, a
+// placeholder ({placeholder: name}) or another attribute ({attribute: name}).
 // A name - in a triple or an attribute operand - is an attribute, or a path: an array of the to-one
 // relationships followed from the row and the attribute of the row they lead to, read out of the
 // related type's table and missing when a reference is empty or names a row not held. Inside a
@@ -51,10 +50,6 @@ import StringOrder from "./string_order.mjs";
 // boundary reads: entity structs are built from these, once per row, when a result leaves for
 // a template.
 export default class QueryKernel {
-  // Standing for the acting user when there is none. A predicate asking about nobody is
-  // answered by nobody, the way an actor-referencing statement is left out of a visitor's.
-  static #NO_ACTOR = Symbol("no actor");
-
   // Runs the term over the database and returns what it evaluates to: nodes for a set, one node
   // or null for a single-result query, a number for a counting one.
   static run(term, givenContext = {}) {
@@ -96,8 +91,8 @@ export default class QueryKernel {
   }
 
   // The value of the derived field of the given name on the row, computed from its definition the
-  // way a run reads it - for a reader holding a row outside a run, like a permission check. A
-  // definition reads no placeholder and no acting user, so it is computed with no context.
+  // way a run reads it - for a reader holding a row outside a run. A definition reads no
+  // placeholder, so it is computed with no context.
   static derivedValue(row, entityType, name) {
     const context = QueryKernel.#withMemo({});
 
@@ -616,9 +611,7 @@ export default class QueryKernel {
     return QueryKernel.#setRows(row, entityType, name, context);
   }
 
-  // A visitor has no acting user, and each triple naming one answers false on its own - so a
-  // disjunction needs no case for it: the alternative asking about nobody fails, and the others
-  // still answer. The rows above are those a quantifier's filter can name, nearest first.
+  // The rows above are those a quantifier's filter can name, nearest first.
   static #matches(row, filter, context, ranks, entityType, outer = []) {
     return filter.every((clause) => {
       if (Array.isArray(clause)) {
@@ -727,15 +720,13 @@ export default class QueryKernel {
         ? [end.row[sortName], end.row[end.name] ?? null]
         : null;
 
-    return value === QueryKernel.#NO_ACTOR
-      ? false
-      : QueryKernel.#satisfies(
-          operator,
-          QueryKernel.#endValue(end, context),
-          value,
-          ranksForKey,
-          pair,
-        );
+    return QueryKernel.#satisfies(
+      operator,
+      QueryKernel.#endValue(end, context),
+      value,
+      ranksForKey,
+      pair,
+    );
   }
 
   // The key a name's ranks are kept under - a path's names joined, which no attribute name can
@@ -893,10 +884,6 @@ export default class QueryKernel {
 
     if (operand === null || typeof operand !== "object") {
       return operand;
-    }
-
-    if (operand.actor) {
-      return context.actorUserId ?? QueryKernel.#NO_ACTOR;
     }
 
     const value = QueryKernel.#resolvePlaceholder(operand.placeholder, context);

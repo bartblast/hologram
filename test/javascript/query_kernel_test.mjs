@@ -3741,68 +3741,6 @@ describe("QueryKernel", () => {
     });
   });
 
-  describe("matches() - the acting user", () => {
-    it("matches against who is asking", () => {
-      const filter = [["id", "==", {actor: true}]];
-
-      assert.deepEqual(matching(filter, {actorUserId: "r2"}), ["bob"]);
-    });
-
-    it("matches everything but who is asking", () => {
-      const filter = [["id", "!=", {actor: true}]];
-
-      assert.deepEqual(matching(filter, {actorUserId: "r2"}), ["ada", "cleo"]);
-    });
-
-    it("matches an alternative naming who is asking", () => {
-      const filter = [
-        {or: [[["id", "==", {actor: true}]], [["username", "==", "bob"]]]},
-      ];
-
-      assert.deepEqual(matching(filter, {actorUserId: "r1"}), ["ada", "bob"]);
-    });
-
-    // The alternative asking about the visitor answers nothing, and the other one still answers.
-    it("passes a visitor to the alternative that names nobody", () => {
-      const filter = [
-        {or: [[["id", "==", {actor: true}]], [["username", "==", "bob"]]]},
-      ];
-
-      assert.deepEqual(matching(filter, {actorUserId: null}), ["bob"]);
-    });
-
-    it("matches nothing for a visitor when every alternative names them", () => {
-      const filter = [
-        {or: [[["id", "==", {actor: true}]], [["id", "!=", {actor: true}]]]},
-      ];
-
-      assert.deepEqual(matching(filter, {actorUserId: null}), []);
-    });
-
-    // There is nobody to compare against, so nothing answers - the same silence the database
-    // gives a statement asking about an actor that is not there, and an unset attribute is no
-    // more a match for nobody than a set one is.
-    it("matches nothing for a visitor", () => {
-      const filter = [["id", "==", {actor: true}]];
-
-      assert.deepEqual(matching(filter, {actorUserId: null}), []);
-    });
-
-    // The negated form is where that silence has to be deliberate: nobody is UNEQUAL to every
-    // row, so a predicate left to compare against nothing would answer with everything.
-    it("matches nothing for a visitor, whichever way the predicate points", () => {
-      const filter = [["id", "!=", {actor: true}]];
-
-      assert.deepEqual(matching(filter, {actorUserId: null}), []);
-    });
-
-    it("matches nothing for a visitor a row could otherwise answer for", () => {
-      const filter = [["priority", "==", {actor: true}]];
-
-      assert.deepEqual(matching(filter, {}), []);
-    });
-  });
-
   // Mirrors the flat and disjunction cases of "triples/1" in
   // test/elixir/hologram/query/stage_test.exs. A quantifier's names stay as their own level writes
   // them here, where the server resolves them against the queried row.

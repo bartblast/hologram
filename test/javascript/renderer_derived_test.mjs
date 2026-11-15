@@ -242,7 +242,6 @@ describe("Renderer derived fields", () => {
     ComponentRegistry.clear();
     Model.reset();
     LocalDatabase.reset();
-    LocalDatabase.actorUserId = null;
     GlobalRegistry.set("connectPageModule", null);
     SyncStream.rowsChangedSinceRender = false;
 

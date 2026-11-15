@@ -4397,8 +4397,8 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/"grant_role:owner":[#{owner_rule}],/)
     end
 
-    # The acting user is named rather than carried: the client binds its own id at evaluation,
-    # the way the query kernel binds an actor leaf.
+    # The acting user is named rather than carried: the client binds its own id when it evaluates
+    # the rule.
     test "names the acting user in a rule that references them", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas
