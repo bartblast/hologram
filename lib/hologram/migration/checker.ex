@@ -6,7 +6,7 @@ defmodule Hologram.Migration.Checker do
   alias Hologram.Migrator
 
   @doc """
-  Validates the given directory's migration history against the given model: no draft
+  Validates the given migration history against the given model: no draft
   still holds resolve! ops, the history folds to the model, and its replay produces
   the model's schema on a scratch database.
 
@@ -14,10 +14,8 @@ defmodule Hologram.Migration.Checker do
   ops with their locations, the uncovered model changes, or the schema differences
   the replay leaves.
   """
-  @spec check!(String.t(), %{atom => any}) :: :ok
-  def check!(dir, current_model) do
-    migrations = Loader.load_dir!(dir)
-
+  @spec check!(list(%{atom => any}), %{atom => any}) :: :ok
+  def check!(migrations, current_model) do
     check_resolved!(migrations)
     Migrator.check_covered!(migrations, current_model)
     ShadowVerifier.verify!(migrations, current_model)

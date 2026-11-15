@@ -49,7 +49,7 @@ defmodule Hologram.Migration.Loader do
         file_names
         |> Enum.sort()
         |> Enum.filter(&migration_file?/1)
-        |> Enum.map(&load_file!(&1, dir))
+        |> Enum.map(&load_file!(Path.join(dir, &1)))
 
       {:error, :enoent} ->
         []
@@ -88,6 +88,28 @@ defmodule Hologram.Migration.Loader do
   @spec list!() :: list(%{atom => any})
   def list! do
     from_modules!(Reflection.list_migrations())
+  end
+
+  @doc """
+  Returns the migration of the given file: a map with :version (the file name without the
+  extension), :path, and :ops. Raises unless the file name is a 14-digit timestamp with the
+  `.exs` extension, or when the file does not load (see `load_string!/2`) or references an
+  entity type by a name it renames away (see `verify_rename_order!/2`).
+  """
+  @spec load_file!(String.t()) :: %{atom => any}
+  def load_file!(path) do
+    file_name = Path.basename(path)
+
+    validate_file_name!(file_name, Path.dirname(path))
+
+    ops =
+      path
+      |> File.read!()
+      |> load_string!(path)
+
+    verify_rename_order!(ops, path)
+
+    %{version: Path.rootname(file_name), path: path, ops: ops}
   end
 
   @doc """
@@ -151,21 +173,6 @@ defmodule Hologram.Migration.Loader do
     end)
 
     :ok
-  end
-
-  defp load_file!(file_name, dir) do
-    validate_file_name!(file_name, dir)
-
-    path = Path.join(dir, file_name)
-
-    ops =
-      path
-      |> File.read!()
-      |> load_string!(path)
-
-    verify_rename_order!(ops, path)
-
-    %{version: Path.rootname(file_name), path: path, ops: ops}
   end
 
   defp migration_file?(file_name) do

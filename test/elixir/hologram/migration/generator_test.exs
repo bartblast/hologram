@@ -42,13 +42,13 @@ defmodule Hologram.Migration.GeneratorTest do
     dir
   end
 
-  describe "generate/3" do
+  describe "generate/4" do
     @tag :database
     test "writes the migration taking the history to the model" do
       dir = migrations_dir!("writes_migration")
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
-      assert {:ok, path, 0} = generate(dir, current, @timestamp)
+      assert {:ok, path, 0} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
       assert path == Path.join(dir, "20260813091522.exs")
 
       expected =
@@ -75,7 +75,7 @@ defmodule Hologram.Migration.GeneratorTest do
       dir = migrations_dir!("draft_count", [{"20260813091522.exs", contents}])
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
-      assert {:ok, path, 1} = generate(dir, current, @timestamp)
+      assert {:ok, path, 1} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
 
       assert path
              |> File.read!()
@@ -95,7 +95,7 @@ defmodule Hologram.Migration.GeneratorTest do
       dir = migrations_dir!("nothing_to_do", [{"20260813091522.exs", contents}])
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
-      assert generate(dir, current, @timestamp) == :nothing_to_do
+      assert generate(Loader.load_dir!(dir), current, @timestamp, dir) == :nothing_to_do
       assert File.ls!(dir) == ["20260813091522.exs"]
     end
 
@@ -108,7 +108,7 @@ defmodule Hologram.Migration.GeneratorTest do
           MyApp.Task => %{attributes: [{:title, :string, [format: {:regex, "^a", [:caseless]}]}]}
         })
 
-      assert {:ok, path, 0} = generate(dir, current, @timestamp)
+      assert {:ok, path, 0} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
 
       expected =
         normalize_newlines("""
@@ -129,7 +129,7 @@ defmodule Hologram.Migration.GeneratorTest do
       current =
         model(%{MyApp.Task => %{attributes: [{:title, :string, [format: {:regex, "^a", []}]}]}})
 
-      assert {:ok, _path, 0} = generate(dir, current, @timestamp)
+      assert {:ok, _path, 0} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
 
       replayed =
         dir
@@ -144,7 +144,7 @@ defmodule Hologram.Migration.GeneratorTest do
       dir = migrations_dir!("bumps_version", [{"20260813091522.exs", "use Hologram.Migration\n"}])
       current = model(%{MyApp.Task => %{}})
 
-      assert {:ok, path, 0} = generate(dir, current, @timestamp)
+      assert {:ok, path, 0} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
       assert path == Path.join(dir, "20260813091523.exs")
     end
 
@@ -160,7 +160,9 @@ defmodule Hologram.Migration.GeneratorTest do
       dir = migrations_dir!("unresolved", [{"20260813091522.exs", contents}])
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
-      assert {:error, {:unresolved, [{path, op}]}} = generate(dir, current, @timestamp)
+      assert {:error, {:unresolved, [{path, op}]}} =
+               generate(Loader.load_dir!(dir), current, @timestamp, dir)
+
       assert path == Path.join(dir, "20260813091522.exs")
       assert op.kind == :attributes
       assert op.line == 4
@@ -206,7 +208,7 @@ defmodule Hologram.Migration.GeneratorTest do
           "the migration that picks the survivors"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        generate(dir, current, @timestamp)
+        generate(Loader.load_dir!(dir), current, @timestamp, dir)
       end
     end
 
@@ -230,11 +232,33 @@ defmodule Hologram.Migration.GeneratorTest do
           MyApp.Task => %{relationships: [{:tags, MyApp.Tag, []}]}
         })
 
-      assert_raise Hologram.CompileError, fn -> generate(dir, current, @timestamp) end
+      assert_raise Hologram.CompileError, fn ->
+        generate(Loader.load_dir!(dir), current, @timestamp, dir)
+      end
 
       # The rejected file would otherwise become the next run's history, which replays the
       # ops that failed and reports the same error with nothing naming the cause.
       assert File.ls!(dir) == ["20260813091522.exs"]
+    end
+
+    @tag :database
+    test "verifies the written migration at its place in version order" do
+      create_contents = """
+      use Hologram.Migration
+
+      create_entity MyApp.Task
+      """
+
+      dir = migrations_dir!("version_order", [{"20270101000000.exs", create_contents}])
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, [optional: true]}]}})
+
+      # The written file sorts before the existing one, so its change to MyApp.Task replays
+      # before MyApp.Task exists.
+      assert_raise Hologram.CompileError, ~r/no such entity MyApp\.Task/, fn ->
+        generate(Loader.load_dir!(dir), current, @timestamp, dir)
+      end
+
+      assert File.ls!(dir) == ["20270101000000.exs"]
     end
   end
 

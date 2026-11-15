@@ -34,8 +34,11 @@ defmodule Mix.Tasks.Holo.Gen.Migration do
   def run(_args) do
     model = Model.from_modules(Reflection.list_entities(), Reflection.list_roles())
 
-    Loader.migrations_dir()
-    |> Generator.generate(model, DateTime.utc_now())
+    dir = Loader.migrations_dir()
+
+    dir
+    |> Loader.load_dir!()
+    |> Generator.generate(model, DateTime.utc_now(), dir)
     |> report()
   rescue
     # Exception.message/1 rather than the :message field - Postgrex.Error keeps its detail

@@ -8,6 +8,7 @@ defmodule Hologram.Migration.CheckerTest do
 
   import Hologram.Migration.Checker
 
+  alias Hologram.Migration.Loader
   alias Hologram.Reflection
 
   @tmp_dir Path.join([Reflection.tmp_dir(), "tests", "migration", "checker"])
@@ -52,7 +53,7 @@ defmodule Hologram.Migration.CheckerTest do
       dir = migrations_dir!("passes", [{"20260813091522.exs", contents}])
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
-      assert check!(dir, current) == :ok
+      assert check!(Loader.load_dir!(dir), current) == :ok
     end
 
     test "refuses a draft still holding resolve! ops" do
@@ -75,7 +76,7 @@ defmodule Hologram.Migration.CheckerTest do
         Write the ops that express what happened, delete the resolve! lines, then finalize with mix holo.gen.migration.\
         """)
 
-      assert_error RuntimeError, expected_msg, fn -> check!(dir, current) end
+      assert_error RuntimeError, expected_msg, fn -> check!(Loader.load_dir!(dir), current) end
     end
 
     test "refuses a history not covering the model" do
@@ -94,7 +95,7 @@ defmodule Hologram.Migration.CheckerTest do
         "migration history does not produce this model - " <>
           "1 model change has no migration (MyApp.Task) - run mix holo.gen.migration"
 
-      assert_error RuntimeError, expected_msg, fn -> check!(dir, current) end
+      assert_error RuntimeError, expected_msg, fn -> check!(Loader.load_dir!(dir), current) end
     end
 
     @tag :database
@@ -135,7 +136,9 @@ defmodule Hologram.Migration.CheckerTest do
           "delete the relationship and add it with the new cardinality, or write " <>
           "the migration that picks the survivors"
 
-      assert_error Hologram.CompileError, expected_msg, fn -> check!(dir, current) end
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        check!(Loader.load_dir!(dir), current)
+      end
     end
   end
 end

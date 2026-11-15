@@ -168,6 +168,34 @@ defmodule Hologram.Migration.LoaderTest do
     end
   end
 
+  describe "load_file!/1" do
+    test "returns the migration of the file" do
+      dir =
+        write_migrations!("load_file", [
+          {"20260813091522.exs", "use Hologram.Migration\n\ncreate_entity MyApp.Task\n"}
+        ])
+
+      path = Path.join(dir, "20260813091522.exs")
+
+      assert load_file!(path) == %{
+               version: "20260813091522",
+               path: path,
+               ops: [%{op: :create_entity, entity: MyApp.Task, line: 3}]
+             }
+    end
+
+    test "rejects a file whose name is not a version" do
+      dir =
+        write_migrations!("load_file_misnamed", [{"add_tasks.exs", "use Hologram.Migration\n"}])
+
+      path = Path.join(dir, "add_tasks.exs")
+
+      assert_raise Hologram.CompileError, ~r/invalid migration file name/, fn ->
+        load_file!(path)
+      end
+    end
+  end
+
   describe "load_string!/2" do
     test "returns the ops of a file holding flat statements" do
       contents = """

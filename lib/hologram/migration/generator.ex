@@ -20,10 +20,10 @@ defmodule Hologram.Migration.Generator do
   @flat_entity_ops [:delete_entity, :designate_user_entity, :rename_entity]
 
   @doc """
-  Writes the migration file taking the given directory's history to the given model,
-  and returns what happened: :nothing_to_do when the history already produces the model,
-  {:ok, path, question_count} when a file was written, or {:error, {:unresolved, entries}}
-  when a draft is still waiting for its answers.
+  Writes the migration file taking the given migration history to the given model into the
+  given directory, and returns what happened: :nothing_to_do when the history already
+  produces the model, {:ok, path, question_count} when a file was written, or
+  {:error, {:unresolved, entries}} when a draft is still waiting for its answers.
 
   An unresolved draft blocks generation - its questions are answered while the change is
   fresh, never stacked behind newer diffs that might change their meaning. The file is
@@ -34,11 +34,9 @@ defmodule Hologram.Migration.Generator do
   scratch database and must produce the model's schema, raising otherwise. A draft
   still holding questions is not verified: its marker ops carry no physical form yet.
   """
-  @spec generate(String.t(), %{atom => any}, DateTime.t()) ::
+  @spec generate(list(%{atom => any}), %{atom => any}, DateTime.t(), String.t()) ::
           :nothing_to_do | {:ok, String.t(), non_neg_integer} | {:error, {:unresolved, list}}
-  def generate(dir, current_model, timestamp) do
-    migrations = Loader.load_dir!(dir)
-
+  def generate(migrations, current_model, timestamp, dir) do
     unresolved =
       Enum.flat_map(migrations, fn migration ->
         Enum.map(Loader.unresolved(migration.ops), &{migration.path, &1})
@@ -47,7 +45,7 @@ defmodule Hologram.Migration.Generator do
     if unresolved == [] do
       dir
       |> generate_file(migrations, current_model, timestamp)
-      |> verify_finalized(dir, current_model)
+      |> verify_finalized(migrations, current_model)
     else
       {:error, {:unresolved, unresolved}}
     end
@@ -521,18 +519,21 @@ defmodule Hologram.Migration.Generator do
 
   defp subject(%{kind: :roles}), do: "the roles"
 
-  defp verify_finalized(:nothing_to_do, dir, current_model) do
-    migrations = Loader.load_dir!(dir)
+  defp verify_finalized(:nothing_to_do, migrations, current_model) do
     ShadowVerifier.verify!(migrations, current_model)
 
     :nothing_to_do
   end
 
-  defp verify_finalized({:ok, path, 0} = outcome, dir, current_model) do
+  defp verify_finalized({:ok, path, 0} = outcome, migrations, current_model) do
     try do
-      migrations = Loader.load_dir!(dir)
+      migration = Loader.load_file!(path)
 
-      ShadowVerifier.verify!(migrations, current_model)
+      # Replayed at its place in version order, as every later load replays it - a file
+      # already holding a later version sorts after it.
+      history = Enum.sort_by([migration | migrations], & &1.version)
+
+      ShadowVerifier.verify!(history, current_model)
     rescue
       error ->
         # A file that cannot be read back, or cannot build the model, is not history - left
@@ -547,5 +548,5 @@ defmodule Hologram.Migration.Generator do
     outcome
   end
 
-  defp verify_finalized(outcome, _dir, _current_model), do: outcome
+  defp verify_finalized(outcome, _migrations, _current_model), do: outcome
 end

@@ -27,7 +27,9 @@ defmodule Mix.Tasks.Holo.Check.Migration do
   def run(_args) do
     model = Model.from_modules(Reflection.list_entities(), Reflection.list_roles())
 
-    Checker.check!(Loader.migrations_dir(), model)
+    Loader.migrations_dir()
+    |> Loader.load_dir!()
+    |> Checker.check!(model)
 
     print("migrations check passed")
   rescue
