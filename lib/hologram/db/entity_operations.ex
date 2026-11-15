@@ -209,6 +209,10 @@ defmodule Hologram.DB.EntityOperations do
   # can change the row between the evaluation and the write. With lock: :share it is read FOR
   # SHARE: other readers may share it, and a change to it waits for the transaction - what a
   # write's evaluation needs of a row it only reads.
+  #
+  # With lock: :no_key_update it is read FOR NO KEY UPDATE, the lock an update of columns other than
+  # the key takes anyway: held like :update's, except that a row being inserted with a reference to
+  # this one does not wait for it, nor this read for that insert.
   @doc false
   @spec get(module, String.t(), keyword) :: struct | nil
   # sobelow_skip ["SQL.Query"]
@@ -808,6 +812,8 @@ defmodule Hologram.DB.EntityOperations do
   # One clause per mode and none for anything else, so a misspelled mode fails to match rather
   # than reading the row without a lock.
   defp lock_clause(nil), do: ""
+
+  defp lock_clause(:no_key_update), do: " FOR NO KEY UPDATE"
 
   defp lock_clause(:share), do: " FOR SHARE"
 

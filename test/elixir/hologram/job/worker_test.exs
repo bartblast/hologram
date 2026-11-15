@@ -74,6 +74,13 @@ defmodule Hologram.Job.WorkerTest do
     end
   end
 
+  describe "init/1" do
+    # The default pass runs jobs, and a job run without a lock connection would look abandoned.
+    test "requires a run lock connection when given no pass" do
+      assert_raise KeyError, ~r/:run_lock/, fn -> init([]) end
+    end
+  end
+
   describe "handle :wake" do
     test "passes over every job type the model holds, in module order" do
       worker = start_worker!(pass: counting_pass(self(), []))
