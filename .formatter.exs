@@ -16,6 +16,7 @@ exported_locals_without_parens = [
   relationship: 3,
   role: 1,
   role: 2,
+  unique: 1,
 
   # Hologram.JS
   js_import: 1,

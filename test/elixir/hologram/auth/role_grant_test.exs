@@ -178,6 +178,10 @@ defmodule Hologram.Auth.RoleGrantTest do
     assert RoleGrant.__roles__() == []
   end
 
+  test "__uniques__/0" do
+    assert RoleGrant.__uniques__() == []
+  end
+
   describe "__struct__/0" do
     test "defines the fields a generated entity struct would derive" do
       entity = %RoleGrant{}

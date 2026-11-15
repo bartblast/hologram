@@ -498,6 +498,37 @@ defmodule Hologram.Entity.Validator do
   end
 
   @doc """
+  Validates the keys the given module declares with unique. Run once the module body is evaluated,
+  since a key may name fields declared below it.
+
+  Returns :ok, or raises Hologram.CompileError located at the first declaration that is not a list
+  of two or more distinct attribute and to-one relationship names, or that repeats the fields of
+  an earlier one in any order.
+  """
+  @spec validate_uniques!(module) :: :ok
+  def validate_uniques!(module) do
+    declarations =
+      module
+      |> Module.get_attribute(:__uniques__)
+      |> Enum.reverse()
+
+    declarations
+    |> Enum.with_index()
+    |> Enum.each(fn {{fields, location}, index} ->
+      earlier =
+        declarations
+        |> Enum.take(index)
+        |> Enum.map(fn {earlier_fields, _location} -> earlier_fields end)
+
+      validate_unique_shape!(module, fields, location)
+      Enum.each(fields, &validate_unique_field!(module, fields, &1, location))
+      validate_unique_repeat!(module, fields, earlier, location)
+    end)
+
+    :ok
+  end
+
+  @doc """
   Validates the options given to the use Hologram.Entity directive at compile time.
 
   Returns :ok, or raises Hologram.CompileError on the first violated rule (module name, options shape, option keys, user option).
@@ -871,6 +902,14 @@ defmodule Hologram.Entity.Validator do
 
   defp length_satisfied?(count, :max_length, bound), do: count <= bound
 
+  @spec raise_invalid_unique!(module, any, String.t(), {String.t(), pos_integer}) :: no_return
+  defp raise_invalid_unique!(module, fields, reason, {file, line}) do
+    raise Hologram.CompileError,
+      file: file,
+      line: line,
+      message: "invalid unique #{inspect(fields)} in #{inspect(module)} - #{reason}"
+  end
+
   defp raise_sort_misplaced!(module, name) do
     raise Hologram.CompileError,
       message:
@@ -984,6 +1023,70 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp unique_bytes_errors(_name, _value, _type, _opts), do: []
+
+  # What the given name is in the module, as far as a key cares.
+  defp unique_field_kind(module, field) do
+    names = fn attribute ->
+      module
+      |> Module.get_attribute(attribute)
+      |> Enum.map(&elem(&1, 0))
+    end
+
+    stored =
+      module
+      |> Module.get_attribute(:__relationships__)
+      |> Enum.find(&(elem(&1, 0) == field))
+
+    cond do
+      unique_framework_field?(module, field) -> :system
+      field in names.(:__attributes__) -> :column
+      match?({_name, [_target], _opts}, stored) -> :to_many
+      stored != nil -> :column
+      field in names.(:__inverse_relationships__) -> :inverse
+      field in names.(:__derived__) -> :derived
+      referenced = unique_referenced_relationship(module, field) -> {:reference, referenced}
+      true -> :unknown
+    end
+  end
+
+  defp unique_field_refusal(_module, _field, :column), do: nil
+
+  defp unique_field_refusal(_module, field, :to_many),
+    do: "#{inspect(field)} is a to-many relationship, which holds no reference a row could repeat"
+
+  defp unique_field_refusal(_module, field, :inverse),
+    do: "#{inspect(field)} is an inverse relationship, which stores nothing of its own"
+
+  defp unique_field_refusal(_module, field, :system),
+    do: "#{inspect(field)} is managed by the framework"
+
+  defp unique_field_refusal(_module, field, :derived),
+    do: "#{inspect(field)} is a derived field, which has no column"
+
+  defp unique_field_refusal(_module, field, {:reference, referenced}) do
+    "#{inspect(field)} is the reference field of relationship #{inspect(referenced)} - name the relationship, #{inspect(referenced)}"
+  end
+
+  defp unique_field_refusal(module, field, :unknown),
+    do: "#{inspect(field)} is not an attribute or a to-one relationship of #{inspect(module)}"
+
+  # The system attributes, and a job's actor, failure record and status - declared like any
+  # attribute, and set by the framework alone: construction refuses them by name, so no write of
+  # the app's could ever choose the value a key over one would compare.
+  defp unique_framework_field?(module, field) do
+    field in @reserved_names or
+      (Module.defines?(module, {:__is_hologram_job__, 0}) and
+         field in Hologram.Job.framework_attribute_names())
+  end
+
+  # The stored to-one whose reference field the given name spells, nil when there is none.
+  defp unique_referenced_relationship(module, field) do
+    module
+    |> Module.get_attribute(:__relationships__)
+    |> Enum.find_value(fn {name, type, _opts} ->
+      if not is_list(type) and Atom.to_string(field) == "#{name}_id", do: name
+    end)
+  end
 
   defp unknown_forward_violation(description, forward, target) do
     inverse_names = Enum.map(target.__inverse_relationships__(), &elem(&1, 0))
@@ -1778,6 +1881,16 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  # What a key may name is a column of the row: a declared attribute or the reference a stored
+  # to-one holds. Everything else a name can be is refused in its own words, a reference field
+  # among them - a key names the relationship the way it was declared.
+  defp validate_unique_field!(module, fields, field, location) do
+    case unique_field_refusal(module, field, unique_field_kind(module, field)) do
+      nil -> :ok
+      reason -> raise_invalid_unique!(module, fields, reason, location)
+    end
+  end
+
   defp validate_unique_opt!(module, kind, name, opts) do
     case Keyword.fetch(opts, :unique) do
       {:ok, value} when not is_boolean(value) ->
@@ -1819,6 +1932,47 @@ defmodule Hologram.Entity.Validator do
   end
 
   defp validate_unique_relationship!(_module, _name, _target, _opts), do: :ok
+
+  # Two keys over the same fields are one constraint whatever order names them, so the second
+  # would only cost every write a second index.
+  defp validate_unique_repeat!(module, fields, earlier, location) do
+    repeated = Enum.find(earlier, &(Enum.sort(&1) == Enum.sort(fields)))
+
+    if repeated do
+      raise_invalid_unique!(
+        module,
+        fields,
+        "unique #{inspect(repeated)} already covers these fields",
+        location
+      )
+    end
+
+    :ok
+  end
+
+  defp validate_unique_shape!(module, fields, location) do
+    reason =
+      cond do
+        not is_list(fields) or List.improper?(fields) or not Enum.all?(fields, &is_atom/1) ->
+          "a key is a list of attribute and to-one relationship names"
+
+        fields != Enum.uniq(fields) ->
+          "#{inspect(first_repeated_target(fields))} is named more than once"
+
+        match?([_field], fields) ->
+          "a single field is unique through its own option, unique: true on the attribute or the relationship"
+
+        fields == [] ->
+          "a key names two or more fields"
+
+        true ->
+          nil
+      end
+
+    if reason, do: raise_invalid_unique!(module, fields, reason, location)
+
+    :ok
+  end
 
   defp validate_use_opt_keys!(module, opts) do
     Enum.each(opts, fn {key, _value} ->

@@ -3200,6 +3200,354 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "validate_uniques!/1" do
+    test "accepts keys over attributes and to-one relationships, declared above their fields" do
+      defmodule InlineEntityFixture175 do
+        use Hologram.Entity
+
+        unique [:workspace, :slug]
+        unique [:workspace, :position]
+
+        attribute :position, :integer
+        attribute :slug, :string
+
+        relationship :workspace, Hologram.Test.Fixtures.Entity.Module1, optional: true
+      end
+
+      assert InlineEntityFixture175.__uniques__() == [
+               [:workspace, :position],
+               [:workspace, :slug]
+             ]
+    end
+
+    test "accepts a key naming a server-only attribute" do
+      defmodule InlineEntityFixture188 do
+        use Hologram.Entity
+
+        attribute :external_id, :string, server_only: true
+        attribute :source, :string
+
+        unique [:source, :external_id]
+      end
+
+      assert InlineEntityFixture188.__uniques__() == [[:source, :external_id]]
+    end
+
+    test "rejects an improper list" do
+      line = __ENV__.line + 12
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug | :title] in Hologram.Entity.ValidatorTest.InlineEntityFixture189 - a key is a list of attribute and to-one relationship names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture189 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+          attribute :title, :string
+
+          unique [:slug | :title]
+        end
+      end
+    end
+
+    test "rejects a key naming a job's status, which the framework sets" do
+      line = __ENV__.line + 14
+
+      expected_msg =
+        "#{location(line)}invalid unique [:kind, :status] in Hologram.Entity.ValidatorTest.InlineEntityFixture190 - :status is managed by the framework"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture190 do
+          use Hologram.Job
+
+          attribute :kind, :string
+
+          @impl Hologram.Job
+          def run(_job), do: :ok
+
+          unique [:kind, :status]
+        end
+      end
+    end
+
+    test "rejects a key naming a job's actor_id, which the framework sets" do
+      line = __ENV__.line + 14
+
+      expected_msg =
+        "#{location(line)}invalid unique [:kind, :actor_id] in Hologram.Entity.ValidatorTest.InlineEntityFixture192 - :actor_id is managed by the framework"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture192 do
+          use Hologram.Job
+
+          attribute :kind, :string
+
+          @impl Hologram.Job
+          def run(_job), do: :ok
+
+          unique [:kind, :actor_id]
+        end
+      end
+    end
+
+    test "rejects a key naming a job's error, which the framework sets" do
+      line = __ENV__.line + 14
+
+      expected_msg =
+        "#{location(line)}invalid unique [:kind, :error] in Hologram.Entity.ValidatorTest.InlineEntityFixture193 - :error is managed by the framework"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture193 do
+          use Hologram.Job
+
+          attribute :kind, :string
+
+          @impl Hologram.Job
+          def run(_job), do: :ok
+
+          unique [:kind, :error]
+        end
+      end
+    end
+
+    test "rejects a key repeating an earlier one" do
+      line = __ENV__.line + 14
+
+      expected_msg =
+        "#{location(line)}invalid unique [:workspace, :slug] in Hologram.Entity.ValidatorTest.InlineEntityFixture191 - unique [:workspace, :slug] already covers these fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture191 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          relationship :workspace, Hologram.Test.Fixtures.Entity.Module1
+
+          unique [:workspace, :slug]
+          unique [:workspace, :slug]
+        end
+      end
+    end
+
+    test "rejects a key that is not a list" do
+      line = __ENV__.line + 11
+
+      expected_msg =
+        "#{location(line)}invalid unique :slug in Hologram.Entity.ValidatorTest.InlineEntityFixture176 - a key is a list of attribute and to-one relationship names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture176 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          unique :slug
+        end
+      end
+    end
+
+    test "rejects a key holding a name that is not an atom" do
+      line = __ENV__.line + 11
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug, \"title\"] in Hologram.Entity.ValidatorTest.InlineEntityFixture177 - a key is a list of attribute and to-one relationship names"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture177 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          unique [:slug, "title"]
+        end
+      end
+    end
+
+    test "rejects a key naming a field twice" do
+      line = __ENV__.line + 12
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug, :title, :slug] in Hologram.Entity.ValidatorTest.InlineEntityFixture178 - :slug is named more than once"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture178 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+          attribute :title, :string
+
+          unique [:slug, :title, :slug]
+        end
+      end
+    end
+
+    test "rejects a key of one field" do
+      line = __ENV__.line + 11
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug] in Hologram.Entity.ValidatorTest.InlineEntityFixture179 - a single field is unique through its own option, unique: true on the attribute or the relationship"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture179 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          unique [:slug]
+        end
+      end
+    end
+
+    test "rejects an empty key" do
+      line = __ENV__.line + 11
+
+      expected_msg =
+        "#{location(line)}invalid unique [] in Hologram.Entity.ValidatorTest.InlineEntityFixture180 - a key names two or more fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture180 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          unique []
+        end
+      end
+    end
+
+    test "rejects a key naming no field of the entity type" do
+      line = __ENV__.line + 11
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug, :title] in Hologram.Entity.ValidatorTest.InlineEntityFixture181 - :title is not an attribute or a to-one relationship of Hologram.Entity.ValidatorTest.InlineEntityFixture181"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture181 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          unique [:slug, :title]
+        end
+      end
+    end
+
+    test "rejects a key naming a system attribute" do
+      line = __ENV__.line + 11
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug, :created_at] in Hologram.Entity.ValidatorTest.InlineEntityFixture182 - :created_at is managed by the framework"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture182 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          unique [:slug, :created_at]
+        end
+      end
+    end
+
+    test "rejects a key naming a derived field" do
+      line = __ENV__.line + 13
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug, :shout] in Hologram.Entity.ValidatorTest.InlineEntityFixture183 - :shout is a derived field, which has no column"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture183 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          derived :shout, :string, fn slug -> slug end
+
+          unique [:slug, :shout]
+        end
+      end
+    end
+
+    test "rejects a key naming a to-many relationship" do
+      line = __ENV__.line + 13
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug, :members] in Hologram.Entity.ValidatorTest.InlineEntityFixture184 - :members is a to-many relationship, which holds no reference a row could repeat"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture184 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          relationship :members, [Hologram.Test.Fixtures.Entity.Module1]
+
+          unique [:slug, :members]
+        end
+      end
+    end
+
+    test "rejects a key naming an inverse relationship" do
+      line = __ENV__.line + 13
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug, :topic] in Hologram.Entity.ValidatorTest.InlineEntityFixture185 - :topic is an inverse relationship, which stores nothing of its own"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture185 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          relationship :topic, Hologram.Test.Fixtures.Entity.Module27, inverse: channel
+
+          unique [:slug, :topic]
+        end
+      end
+    end
+
+    test "rejects a key naming a reference field" do
+      line = __ENV__.line + 13
+
+      expected_msg =
+        "#{location(line)}invalid unique [:workspace_id, :slug] in Hologram.Entity.ValidatorTest.InlineEntityFixture186 - :workspace_id is the reference field of relationship :workspace - name the relationship, :workspace"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture186 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          relationship :workspace, Hologram.Test.Fixtures.Entity.Module1
+
+          unique [:workspace_id, :slug]
+        end
+      end
+    end
+
+    test "rejects a key repeating the fields of an earlier one in another order" do
+      line = __ENV__.line + 14
+
+      expected_msg =
+        "#{location(line)}invalid unique [:slug, :workspace] in Hologram.Entity.ValidatorTest.InlineEntityFixture187 - unique [:workspace, :slug] already covers these fields"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture187 do
+          use Hologram.Entity
+
+          attribute :slug, :string
+
+          relationship :workspace, Hologram.Test.Fixtures.Entity.Module1
+
+          unique [:workspace, :slug]
+          unique [:slug, :workspace]
+        end
+      end
+    end
+  end
+
   describe "validate_use_opts!/2" do
     test "rejects an entity type module name whose table name would hold __" do
       expected_msg =
