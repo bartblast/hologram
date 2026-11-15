@@ -354,11 +354,12 @@ describe("Tabs", () => {
       LocalDatabase.reset();
       Replica.reset();
 
+      SyncStream.stopReason = null;
       SyncStream.syncCursor = null;
     });
 
-    // The three things a joining tab cannot read out of the store: the scopes, which nothing writes
-    // down, and the place and the identity as they stand now.
+    // What a joining tab cannot read out of the store: the scopes, which nothing writes down, the
+    // place and the identity as they stand now, and whether the server stopped serving this tab.
     it("says what this tab knows that the store cannot tell", () => {
       const posting = sinon.stub(Tabs, "post");
 
@@ -366,6 +367,7 @@ describe("Tabs", () => {
       LocalDatabase.markSynced("page");
       Replica.offer({id: "r-group", token: "statement-group"});
 
+      SyncStream.stopReason = "model_hash";
       SyncStream.syncCursor = "place-1";
 
       Tabs.postState();
@@ -376,6 +378,7 @@ describe("Tabs", () => {
         page: "MyApp.TodosPage",
         replica: {id: "r-group", token: "statement-group"},
         rules: null,
+        stopReason: "model_hash",
         synced: ["page"],
       });
     });
@@ -492,6 +495,19 @@ describe("Tabs", () => {
       });
 
       assert.isTrue(SyncStream.receiveFrame.calledOnce);
+    });
+
+    // A follower greets with nothing and is told nothing, so this is how it learns.
+    it("takes a stop another tab was told about", () => {
+      const frame = {protocol_version: 1, reason: "model_hash"};
+
+      Tabs.receive({event: "sync_reload", frame, kind: "frame", page: PAGE});
+
+      sinon.assert.calledOnceWithExactly(
+        SyncStream.receiveFrame,
+        "sync_reload",
+        frame,
+      );
     });
 
     it("takes up a batch another tab has filed", () => {
@@ -654,6 +670,50 @@ describe("Tabs", () => {
           protocol_version: 1,
           rules: {},
         },
+        synced: [],
+      });
+
+      sinon.assert.notCalled(SyncStream.receiveFrame);
+    });
+
+    // For a tab joining a group whose stream was stopped before it arrived: the frame that said so
+    // went out before it was listening.
+    it("takes the stop the group's state names", () => {
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        stopReason: "protocol_version",
+        synced: [],
+      });
+
+      sinon.assert.calledOnceWithExactly(
+        SyncStream.receiveFrame,
+        "sync_reload",
+        {reason: "protocol_version"},
+      );
+    });
+
+    it("takes no stop from a group's state naming none", () => {
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
+        stopReason: null,
+        synced: [],
+      });
+
+      sinon.assert.notCalled(SyncStream.receiveFrame);
+    });
+
+    it("takes no stop from a group's state without the key", () => {
+      Tabs.receive({
+        cursor: null,
+        kind: "state",
+        page: PAGE,
+        replica: {id: null, token: null},
         synced: [],
       });
 

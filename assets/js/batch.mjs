@@ -56,7 +56,7 @@ export default class Batch {
   target = null;
 
   // Which write a refusal named, by its index in `writes` - null for a refusal of the whole
-  // batch, which is what a stale build or a clock too far ahead gets.
+  // batch, which is what a forged client gets.
   write = null;
 
   writes = [];
