@@ -179,6 +179,11 @@ defmodule Hologram.Migrator do
     ~s(constraint "#{op.constraint}" on table "#{op.table}" is not derived from the model)
   end
 
+  def describe_difference(%{op: :drop_index, non_plain: reasons} = op) do
+    ~s(index "#{op.index}" is not derived from the model ) <>
+      "(it has #{Enum.map_join(reasons, ", ", &describe_non_plain_reason/1)})"
+  end
+
   def describe_difference(%{op: :drop_index} = op) do
     ~s(index "#{op.index}" is not derived from the model)
   end
@@ -501,6 +506,22 @@ defmodule Hologram.Migrator do
 
     execute_statements(DDL.statements(concurrent_op))
   end
+
+  defp describe_non_plain_reason(:collation), do: "a collation other than its column's"
+
+  defp describe_non_plain_reason(:constraint), do: "an owning constraint"
+
+  defp describe_non_plain_reason(:expression), do: "an expression"
+
+  defp describe_non_plain_reason(:include), do: "INCLUDE columns"
+
+  defp describe_non_plain_reason(:method), do: "an access method other than btree"
+
+  defp describe_non_plain_reason(:operator_class), do: "a non-default operator class"
+
+  defp describe_non_plain_reason(:predicate), do: "a predicate"
+
+  defp describe_non_plain_reason(:sort_order), do: "a non-default sort order"
 
   # Everything the term carries, so the count can never come out empty while the terms
   # differ. The designation names no module of its own - it is a fact about one - so it

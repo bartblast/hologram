@@ -851,6 +851,13 @@ defmodule Hologram.MigratorTest do
                ~s(index "task_old_$idx" on table "task" is named outside the derived scheme - the model derives "task_new_$idx")
     end
 
+    test "describes an index nothing derives with the ways it isn't plain" do
+      op = %{op: :drop_index, index: "task_project_id_$idx", non_plain: [:include, :predicate]}
+
+      assert describe_difference(op) ==
+               ~s|index "task_project_id_$idx" is not derived from the model (it has INCLUDE columns, a predicate)|
+    end
+
     test "describes a renamed enum type" do
       op = %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"}
 

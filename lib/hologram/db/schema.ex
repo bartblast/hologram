@@ -45,9 +45,10 @@ defmodule Hologram.DB.Schema do
   emit :drop_foreign_key, a structural change (referenced table or delete action) emits
   drop plus add, and a constraint-name-only mismatch emits :rename_constraint - the
   same op a primary key constraint name mismatch emits. Indexes are identified by name:
-  target-only emit :create_index, actual-only emit :drop_index, and a definition change
-  emits drop plus create. New tables emit adds for their foreign keys and indexes
-  (:create_table carries neither) - dropped tables emit their :drop_foreign_key ops, and
+  target-only emit :create_index, actual-only emit :drop_index (carrying :non_plain when
+  introspection marked the index), and a definition change emits drop plus create. New
+  tables emit adds for their foreign keys and indexes (:create_table carries neither) -
+  dropped tables emit their :drop_foreign_key ops, and
   nothing else (their columns and indexes die with them, and block nothing meanwhile,
   but a foreign key outlives its table long enough to refuse the drop of the table it
   references, which another drop in the same diff may be). Raises ArgumentError when
@@ -439,7 +440,10 @@ defmodule Hologram.DB.Schema do
     |> Enum.reject(fn {name, actual_index} ->
       target_definition.indexes[name] == actual_index
     end)
-    |> Enum.map(fn {name, _index} -> %{op: :drop_index, index: name} end)
+    |> Enum.map(fn
+      {name, %{non_plain: reasons}} -> %{op: :drop_index, index: name, non_plain: reasons}
+      {name, _index} -> %{op: :drop_index, index: name}
+    end)
   end
 
   defp join_table(join_table) do

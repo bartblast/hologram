@@ -1211,6 +1211,39 @@ defmodule Hologram.DB.SchemaTest do
              ]
     end
 
+    test "pairs no index introspection marked as not plain" do
+      partial_index = Map.put(@project_id_index, :non_plain, [:predicate])
+
+      actual = task_term(%{"task_old_$idx" => partial_index})
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :create_index]
+    end
+
+    test "drops and recreates a marked index under the target's name, carrying its reasons" do
+      partial_index = Map.put(@project_id_index, :non_plain, [:predicate])
+
+      actual = task_term(%{"task_project_id_$idx" => partial_index})
+      target = task_term(%{"task_project_id_$idx" => @project_id_index})
+
+      assert diff(actual, target) == [
+               %{op: :drop_index, index: "task_project_id_$idx", non_plain: [:predicate]},
+               %{
+                 op: :create_index,
+                 table: "task",
+                 index: "task_project_id_$idx",
+                 columns: ["project_id"],
+                 nulls_distinct: true,
+                 unique: false
+               }
+             ]
+    end
+
     test "keeps the name-keyed result with renames: false" do
       actual = task_term(%{"task_old_$idx" => @project_id_index})
       target = task_term(%{"task_new_$idx" => @project_id_index})

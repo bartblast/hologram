@@ -122,6 +122,33 @@ defmodule Hologram.Migration.DriftTest do
     end
   end
 
+  describe "run/3 with an index nothing derives" do
+    test "refuses a hand-made partial index standing under the derived name", %{
+      chain: chain,
+      model: model,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        {:ok, _result} = Connection.query(~s{DROP INDEX "hologram_data"."#{@index}"})
+
+        {:ok, _result} =
+          Connection.query(
+            ~s{CREATE INDEX "#{@index}" ON "hologram_data"."my_app_task" ("author_id") WHERE "author_id" IS NOT NULL}
+          )
+
+        expected_msg =
+          normalize_newlines("""
+          schema drift detected - the database does not match the model:
+            * index "#{@index}" is not derived from the model (it has a predicate)
+            * index "#{@index}" declared by the model is missing
+          hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
+          """)
+
+        assert_error RuntimeError, expected_msg, fn -> run(chain, model, @context) end
+      end)
+    end
+  end
+
   describe "check_drift!/1" do
     test "describes an index standing under another name as a rename", %{
       mapping: mapping,
