@@ -7,7 +7,11 @@ defmodule HologramSyncBenchmark.Seed do
 
   alias Hologram.Auth
   alias Hologram.DB
+  alias HologramSyncBenchmark.Entities.Member
   alias HologramSyncBenchmark.Entities.RoleBoard
+  # Named apart from Elixir's Task, which seeding runs its writes with.
+  alias HologramSyncBenchmark.Entities.Task, as: TenantTask
+  alias HologramSyncBenchmark.Entities.Tenant
   alias HologramSyncBenchmark.Entities.User
 
   # Rows per transaction. Each create inside a transaction opens two savepoints, one in the
@@ -52,6 +56,45 @@ defmodule HologramSyncBenchmark.Seed do
     |> Stream.run()
 
     board.id
+  end
+
+  @doc """
+  Creates the given number of tenants, each with the given number of members, each a user of
+  its own, and the given number of tasks, and returns the users' ids in tenant order: the first
+  tenant's members first. Runs on the server node.
+
+  Tasks are positioned 0 up across tenants, the first tenant's first, so a tenant's tasks sit
+  next to each other.
+  """
+  @spec tenants(pos_integer, pos_integer, pos_integer) :: [String.t()]
+  def tenants(tenant_count, members, tasks) do
+    user_ids = users(tenant_count * members)
+
+    tenant_ids =
+      0..(tenant_count - 1)
+      |> Stream.map(&Tenant.new(name: "tenant #{&1}"))
+      |> create_all()
+      |> Enum.map(& &1.id)
+      |> List.to_tuple()
+
+    user_ids
+    |> Stream.with_index()
+    |> Stream.map(fn {user_id, index} ->
+      Member.new(tenant_id: elem(tenant_ids, div(index, members)), user_id: user_id)
+    end)
+    |> create_all()
+
+    0..(tenant_count * tasks - 1)
+    |> Stream.map(fn position ->
+      TenantTask.new(
+        position: position,
+        tenant_id: elem(tenant_ids, div(position, tasks)),
+        title: "task #{position}"
+      )
+    end)
+    |> create_all()
+
+    user_ids
   end
 
   @doc """

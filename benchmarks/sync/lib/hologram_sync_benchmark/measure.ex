@@ -92,6 +92,27 @@ defmodule HologramSyncBenchmark.Measure do
   end
 
   @doc """
+  Returns how many of the given writes reached a client they shouldn't have, counted per client.
+
+  `expected` names, for a write's number, the indexes of the reports that should have it. A
+  marker anywhere else is a row a user wasn't allowed to read reaching that user's client.
+  """
+  @spec leaks(%{non_neg_integer => integer}, [map], (non_neg_integer -> [non_neg_integer])) ::
+          non_neg_integer
+  def leaks(writes, reports, expected) do
+    indexed = Enum.with_index(reports)
+
+    for {number, _committed_at} <- writes,
+        allowed = allowed_indexes(expected, number),
+        {report, index} <- indexed,
+        not MapSet.member?(allowed, index),
+        Map.has_key?(report.markers, number),
+        reduce: 0 do
+      count -> count + 1
+    end
+  end
+
+  @doc """
   Returns the delivery times of the given writes, in milliseconds, and how many deliveries never
   came.
 
@@ -113,6 +134,12 @@ defmodule HologramSyncBenchmark.Measure do
           _absent -> {times, missing + 1}
         end
     end
+  end
+
+  defp allowed_indexes(expected, number) do
+    number
+    |> expected.()
+    |> MapSet.new()
   end
 
   @doc """

@@ -334,6 +334,7 @@ defmodule HologramSyncBenchmark.Step do
     {times, missing} = Measure.latencies(writes, reports, spec.expected)
 
     raw = %{
+      leaked: Measure.leaks(writes, reports, spec.expected),
       failed_clients: Enum.count(reports, &(&1.failure != nil)),
       cpu_ms: Measure.cpu_ms(cpu_before, cpu_after),
       db: DB.stats_delta(stats_after, stats_before),

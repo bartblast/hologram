@@ -18,6 +18,14 @@ defmodule HologramSyncBenchmark.Sweep do
 
   @max_steps 99
 
+  @default_counts [1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000, 2_000, 5_000]
+
+  @doc """
+  Returns the client counts a sweep steps through when none are given.
+  """
+  @spec default_counts :: [pos_integer]
+  def default_counts, do: @default_counts
+
   @doc """
   Returns how many marker numbers a step may use, the most writes a step can make.
   """
@@ -113,6 +121,7 @@ defmodule HologramSyncBenchmark.Sweep do
         if(result.heap_kills != fill.restarts, do: " (MISMATCH)", else: ""),
       "single write #{Report.cell(isolated.last_delivery_ms)} ms to the last client",
       "steady p99 #{Report.cell(steady.p99_ms)} ms, #{steady.missing} missing, " <>
+        "#{steady.leaked} leaked, " <>
         "#{steady.streams_lost} streams lost, #{result.session_cuts} sessions cut",
       "#{Report.cell(steady.cpu_ms_per_write)} CPU ms per write",
       "per write #{Report.cell(steady.db.xact_commit)} commits, " <>

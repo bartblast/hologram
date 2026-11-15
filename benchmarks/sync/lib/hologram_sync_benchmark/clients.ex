@@ -5,6 +5,7 @@ defmodule HologramSyncBenchmark.Clients do
   # time, then watched until each holds its whole pot.
 
   alias HologramSyncBenchmark.Client
+  alias HologramSyncBenchmark.Peer
 
   # Descriptors the driver keeps for itself: the database connections, the peer's distribution
   # socket, the beams it loads.
@@ -34,6 +35,21 @@ defmodule HologramSyncBenchmark.Clients do
     end
 
     maybe_warn_backlog(burst)
+  end
+
+  @doc """
+  Returns the options every client of a step greeting with the given page shares, with the
+  server's model hash and protocol version read from the server node, since the driver never
+  boots Hologram. Each client adds its own `:cookie_path`.
+  """
+  @spec base_opts(Peer.t(), String.t()) :: keyword
+  def base_opts(peer, page) do
+    [
+      base_url: Peer.base_url(peer),
+      model_hash: Peer.rpc(peer, Hologram.Entity.Model, :hash, []),
+      page: page,
+      protocol_version: Peer.rpc(peer, Hologram.Sync.Frame, :protocol_version, [])
+    ]
   end
 
   @doc """
