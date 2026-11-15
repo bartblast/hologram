@@ -635,7 +635,8 @@ defmodule Hologram.DB.SchemaTest do
           }
         })
         |> Map.put(:indexes, %{
-          "task_old_$idx" => %{columns: ["legacy"], nulls_distinct: true, unique: false}
+          "task_old_$idx" => %{columns: ["legacy"], nulls_distinct: true, unique: false},
+          "task_renamed_from_$idx" => %{columns: ["id"], nulls_distinct: true, unique: false}
         })
 
       target_task_table =
@@ -653,7 +654,8 @@ defmodule Hologram.DB.SchemaTest do
           }
         })
         |> Map.put(:indexes, %{
-          "task_new_$idx" => %{columns: ["done"], nulls_distinct: true, unique: false}
+          "task_new_$idx" => %{columns: ["done"], nulls_distinct: true, unique: false},
+          "task_renamed_to_$idx" => %{columns: ["id"], nulls_distinct: true, unique: false}
         })
 
       actual = %{
@@ -678,6 +680,7 @@ defmodule Hologram.DB.SchemaTest do
         |> Enum.map(& &1.op)
 
       assert op_kinds == [
+               :rename_index,
                :drop_foreign_key,
                :drop_index,
                :drop_column,
@@ -691,6 +694,160 @@ defmodule Hologram.DB.SchemaTest do
                :rename_constraint,
                :add_foreign_key,
                :create_index
+             ]
+    end
+  end
+
+  describe "diff/2 - renames" do
+    @project_id_index %{columns: ["project_id"], nulls_distinct: true, unique: false}
+
+    defp with_indexes(table_definition, indexes) do
+      %{table_definition | indexes: indexes}
+    end
+
+    defp task_term(indexes, tables \\ %{}) do
+      %{tables: Map.put(tables, "task", with_indexes(@task_table, indexes)), enum_types: %{}}
+    end
+
+    test "emits a lone rename_index for an index whose name changed and definition didn't" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      assert diff(actual, target) == [
+               %{op: :rename_index, table: "task", from: "task_old_$idx", to: "task_new_$idx"}
+             ]
+    end
+
+    test "emits drop plus create for an index whose definition changed with its name" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+      target = task_term(%{"task_new_$idx" => %{@project_id_index | unique: true}})
+
+      assert diff(actual, target) == [
+               %{op: :drop_index, index: "task_old_$idx"},
+               %{
+                 op: :create_index,
+                 table: "task",
+                 index: "task_new_$idx",
+                 columns: ["project_id"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             ]
+    end
+
+    test "pairs nothing when two unmatched indexes share the definition" do
+      actual =
+        task_term(%{"task_a_$idx" => @project_id_index, "task_b_$idx" => @project_id_index})
+
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :drop_index, :create_index]
+    end
+
+    test "pairs nothing when two unmatched target indexes share the definition" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+
+      target =
+        task_term(%{"task_a_$idx" => @project_id_index, "task_b_$idx" => @project_id_index})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :create_index, :create_index]
+    end
+
+    test "pairs only the first of two renames to one name on different tables" do
+      project_table = with_indexes(@project_table, %{"project_old_$idx" => @project_id_index})
+
+      actual = task_term(%{"task_old_$idx" => @project_id_index}, %{"project" => project_table})
+
+      target =
+        task_term(%{"shared_$idx" => @project_id_index}, %{
+          "project" => with_indexes(@project_table, %{"shared_$idx" => @project_id_index})
+        })
+
+      assert [
+               %{op: :rename_index, table: "project", from: "project_old_$idx", to: "shared_$idx"}
+               | other_ops
+             ] = diff(actual, target)
+
+      refute Enum.any?(other_ops, &(&1.op == :rename_index))
+    end
+
+    test "pairs an index on a table with no primary key" do
+      actual =
+        put_in(task_term(%{"task_old_$idx" => @project_id_index}).tables["task"].primary_key, nil)
+
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      assert [%{op: :rename_index, from: "task_old_$idx", to: "task_new_$idx"} | _other_ops] =
+               diff(actual, target)
+    end
+
+    test "pairs nothing when another actual index holds the target name" do
+      other_table = with_indexes(@project_table, %{"task_new_$idx" => @project_id_index})
+
+      actual = task_term(%{"task_old_$idx" => @project_id_index}, %{"project" => other_table})
+      target = task_term(%{"task_new_$idx" => @project_id_index}, %{"project" => @project_table})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :drop_index, :create_index]
+    end
+
+    test "pairs nothing when a primary key holds the target name" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+      target = task_term(%{"task_$pk" => @project_id_index})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :create_index]
+    end
+
+    test "orders the renames before every drop" do
+      legacy_column = %{type: "boolean", collation: nil, null: false}
+
+      actual_table =
+        @task_table
+        |> with_indexes(%{"task_old_$idx" => @project_id_index})
+        |> Map.update!(:columns, &Map.put(&1, "legacy", legacy_column))
+
+      actual = %{tables: %{"task" => actual_table}, enum_types: %{}}
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      assert diff(actual, target) == [
+               %{op: :rename_index, table: "task", from: "task_old_$idx", to: "task_new_$idx"},
+               %{op: :drop_column, table: "task", column: "legacy"}
+             ]
+    end
+
+    test "keeps the name-keyed result with renames: false" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      assert diff(actual, target, renames: false) == [
+               %{op: :drop_index, index: "task_old_$idx"},
+               %{
+                 op: :create_index,
+                 table: "task",
+                 index: "task_new_$idx",
+                 columns: ["project_id"],
+                 nulls_distinct: true,
+                 unique: false
+               }
              ]
     end
   end

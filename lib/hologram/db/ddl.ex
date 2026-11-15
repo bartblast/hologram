@@ -315,10 +315,9 @@ defmodule Hologram.DB.DDL do
 
   The rename ops - :rename_table, :rename_column, :rename_index, :rename_enum_type -
   render their one-statement forms, and :widen_to_many moves the reference values of a
-  relationship that became to-many into its new join table. They come from the migration
-  applier only: a name-keyed diff cannot detect a rename or a cardinality change, so
-  schema reconciliation never emits them, while a migration log carries the confirmed
-  intent.
+  relationship that became to-many into its new join table. A migration carries them as
+  confirmed intent. Schema reconciliation emits only the renames the schema diff
+  recognises by definition, never :rename_column and never :widen_to_many.
 
   :delete_role_grants empties the role grant store, the second op that touches rows
   rather than the schema. It too comes from the applier only, and for a stronger reason:

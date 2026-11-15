@@ -48,6 +48,10 @@ defmodule Hologram.DB.SchemaReconciler do
   # rather than carried forward.
   @system_schema_version 1
 
+  # The ops the schema diff's pairing pass emits - a recognised rename, applied ahead of the
+  # rest of the run.
+  @rename_ops [:rename_index]
+
   @doc """
   Fills every derived companion column the given ops add - a sort key or a search key - from the
   companion's source column, one row at a time in the caller's transaction. The companion of a
@@ -136,14 +140,15 @@ defmodule Hologram.DB.SchemaReconciler do
 
   The whole run is one crash-atomic transaction serialized by an advisory lock: guard
   check (claiming when virgin), introspect the actual schema, project the target from
-  the mapping, diff, alien check (dropping an object the registry does not know fails
-  loudly - hologram_data is model-managed), pre-flight data validation (transformations
-  the existing rows cannot follow fail with the ways out before any DDL runs), render
-  and apply the DDL, update the managed-object registry from the op stream, and refresh
-  the marker (last_reconciled_at, hologram_version). After the transaction commits,
-  each destructive action is logged as one concise line. The context carries :mapping
-  plus the guard facts (:otp_app, :env) and the marker diagnostics (:hologram_version,
-  :timestamp).
+  the mapping, diff, apply and register the renames the diff recognised (after an alien
+  check of their own) and introspect again, alien check (dropping or renaming an object the
+  registry does not know fails loudly - hologram_data is model-managed), pre-flight data
+  validation (transformations the existing rows cannot follow fail with the ways out
+  before any DDL runs), render and apply the DDL, update the managed-object registry from
+  the op stream, and refresh the marker (last_reconciled_at, hologram_version). After the
+  transaction commits, each destructive action is logged as one concise line. The context
+  carries :mapping plus the guard facts (:otp_app, :env) and the marker diagnostics
+  (:hologram_version, :timestamp).
   """
   @spec reconcile(%{atom => any}) :: %{atom => any}
   def reconcile(context) do
@@ -156,22 +161,35 @@ defmodule Hologram.DB.SchemaReconciler do
 
         actual = Introspection.schema()
         target = Schema.from_mapping(context.mapping)
-        ops = Schema.diff(actual, target)
 
-        check_aliens!(ops, registry())
-        Preflight.run!(ops, actual, context.mapping)
+        {renames, changes} =
+          actual
+          |> Schema.diff(target)
+          |> Enum.split_with(&(&1.op in @rename_ops))
 
-        apply_ops(ops, context.mapping)
+        # The renames apply and register first, so the alien check and the preflight below
+        # see the database and the registry as the renames leave them - the changes name
+        # objects by their target names. A preflight refusal still rolls the renames back.
+        check_aliens!(renames, registry())
+        apply_ops(renames, context.mapping)
+        update_registry(renames)
+
+        actual = if renames == [], do: actual, else: Introspection.schema()
+
+        check_aliens!(changes, registry())
+        Preflight.run!(changes, actual, context.mapping)
+
+        apply_ops(changes, context.mapping)
 
         # A companion this run adds is filled AFTER every op has applied, not at its own
         # add: the diff applies add_column before alter_column, so a source column being
         # cast to text in the same run still holds its old type when its companion lands.
-        backfill_companions!(ops, context.mapping)
+        backfill_companions!(changes, context.mapping)
 
-        update_registry(ops)
+        update_registry(changes)
         write_marker(marker_from_context(context))
 
-        %{status: status, ops: ops}
+        %{status: status, ops: renames ++ changes}
       end)
 
     log_destructive_ops(result.ops)
@@ -203,8 +221,9 @@ defmodule Hologram.DB.SchemaReconciler do
   Create and add ops register the objects they produce (a created table registers
   itself, its columns, and its primary key constraint) - drop ops deregister them (a
   dropped table takes everything parented to it) - a constraint rename updates the
-  registered name. Ops that change an object without changing its identity (column
-  alterations, enum value changes, rebuilds) leave the registry untouched.
+  registered name, and so does an index rename. Ops that change an object without changing
+  its identity (column alterations, enum value changes, rebuilds) leave the registry
+  untouched.
   Registration is idempotent - stale rows from out-of-contract edits never fail it.
   """
   @spec update_registry(list(%{atom => any})) :: :ok
@@ -371,6 +390,12 @@ defmodule Hologram.DB.SchemaReconciler do
     if {:table, "", op.table} not in registry do
       raise_alien!(~s(table "#{op.table}"))
     end
+  end
+
+  # Renaming an object the registry doesn't know would adopt it under a derived name - an index
+  # made by hand with a definition the model happens to share - so it raises as its drop would.
+  defp check_alien!(%{op: :rename_index} = op, registry) do
+    check_alien!(%{op: :drop_index, index: op.from}, registry)
   end
 
   defp check_alien!(_op, _registry), do: :ok
@@ -593,6 +618,21 @@ defmodule Hologram.DB.SchemaReconciler do
   end
 
   defp record_op(%{op: :rename_enum_value}), do: :ok
+
+  # By name alone, the way the alien check found it and a drop deregisters it: index names are
+  # unique in the data schema, whatever parent a row states. Every row under either name goes,
+  # stale ones included, and the index registers again under its new name and table - so
+  # registration stays idempotent.
+  defp record_op(%{op: :rename_index} = op) do
+    statement = """
+    DELETE FROM "#{Mapper.system_schema()}"."schema_object"
+    WHERE "kind" = 'index' AND "name" IN ($1, $2)
+    """
+
+    {:ok, _result} = Connection.query(statement, [op.from, op.to])
+
+    register(:index, op.table, op.to)
+  end
 
   defp register(kind, parent, name) do
     statement = """

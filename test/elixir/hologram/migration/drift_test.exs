@@ -121,4 +121,25 @@ defmodule Hologram.Migration.DriftTest do
       end)
     end
   end
+
+  describe "check_drift!/1" do
+    test "describes an index standing under another name as a rename", %{
+      mapping: mapping,
+      scratch: scratch
+    } do
+      route(scratch, fn ->
+        rename = ~s{ALTER INDEX "hologram_data"."#{@index}" RENAME TO "my_app_task_old_$idx"}
+        {:ok, _result} = Connection.query(rename)
+
+        expected_msg =
+          normalize_newlines("""
+          schema drift detected - the database does not match the model:
+            * index "my_app_task_old_$idx" on table "my_app_task" is named outside the derived scheme - the model derives "#{@index}"
+          hologram_data is model-managed - restore what is missing, remove what was added by hand, or express the change as a migration\
+          """)
+
+        assert_error RuntimeError, expected_msg, fn -> check_drift!(mapping) end
+      end)
+    end
+  end
 end

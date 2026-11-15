@@ -112,6 +112,31 @@ defmodule Hologram.DB.SchemaReconcilerTest do
     end)
   end
 
+  # An index standing under another name, as an older naming rule left it - registered under
+  # that name too unless the test wants it unknown.
+  defp rename_index_by_hand(table, from, to, registered?) do
+    {:ok, _result} =
+      Connection.query(
+        ~s(ALTER INDEX "hologram_data".#{Mapper.quote_identifier(from)} RENAME TO #{Mapper.quote_identifier(to)})
+      )
+
+    if registered? do
+      statement = """
+      UPDATE "hologram_system"."schema_object" SET "name" = $3
+      WHERE "kind" = 'index' AND "parent" = $1 AND "name" = $2
+      """
+
+      {:ok, _result} = Connection.query(statement, [table, from, to])
+    else
+      statement = """
+      DELETE FROM "hologram_system"."schema_object"
+      WHERE "kind" = 'index' AND "parent" = $1 AND "name" = $2
+      """
+
+      {:ok, _result} = Connection.query(statement, [table, from])
+    end
+  end
+
   defp reconcile_context(entity_types) do
     mapping =
       entity_types
@@ -534,6 +559,73 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       reconcile(context)
 
       assert Introspection.schema() == Schema.from_mapping(context.mapping)
+    end
+
+    test "renames an index standing under an old name instead of rebuilding it" do
+      context = reconcile_context([Module19])
+      reconcile(context)
+
+      table = "test_fixtures_entity_module19"
+      old_name = "test_fixtures_entity_module19_old_$uidx"
+      new_name = "test_fixtures_entity_module19_slug_$uidx"
+
+      rename_index_by_hand(table, new_name, old_name, true)
+
+      result = reconcile(context)
+
+      assert result.ops == [%{op: :rename_index, table: table, from: old_name, to: new_name}]
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
+
+      assert {:index, table, new_name} in registry()
+      refute {:index, table, old_name} in registry()
+    end
+
+    test "leaves one registry row for a renamed index whatever stale rows stood before" do
+      context = reconcile_context([Module19])
+      reconcile(context)
+
+      table = "test_fixtures_entity_module19"
+      old_name = "test_fixtures_entity_module19_old_$uidx"
+      new_name = "test_fixtures_entity_module19_slug_$uidx"
+
+      rename_index_by_hand(table, new_name, old_name, true)
+
+      insert_statement = """
+      INSERT INTO "hologram_system"."schema_object" ("kind", "parent", "name")
+      VALUES ('index', $1, $2), ('index', 'elsewhere', $3)
+      """
+
+      {:ok, _result} = Connection.query(insert_statement, [table, new_name, old_name])
+
+      reconcile(context)
+
+      index_rows =
+        Enum.filter(registry(), fn {kind, _parent, name} ->
+          kind == :index and name in [old_name, new_name]
+        end)
+
+      assert index_rows == [{:index, table, new_name}]
+    end
+
+    test "raises for an unregistered index the model's definition matches" do
+      context = reconcile_context([Module19])
+      reconcile(context)
+
+      table = "test_fixtures_entity_module19"
+      hand_made_name = "hand_made_slug_index"
+
+      rename_index_by_hand(
+        table,
+        "test_fixtures_entity_module19_slug_$uidx",
+        hand_made_name,
+        false
+      )
+
+      expected_msg =
+        ~s(unknown index "hand_made_slug_index" in the hologram_data schema - ) <>
+          "this schema is model-managed - move the object to another schema or remove it"
+
+      assert_error RuntimeError, expected_msg, fn -> reconcile(context) end
     end
 
     test "converges an attribute that stops being unique" do
