@@ -156,13 +156,15 @@ defmodule Hologram.DB.EntityOperations do
 
     transaction_result =
       Connection.transaction(fn ->
-        delete_outgoing_edges(join_tables, encoded_id)
+        edge_effects = delete_outgoing_edges(entity_type, id, join_tables, encoded_id)
 
-        # The edges the delete took with it are not recorded one by one: a row that is gone
-        # takes whatever hung off it, and a reader learning the entity is gone knows that.
+        # Every edge the delete takes with it is recorded, ahead of the row. A reader learning the
+        # entity is gone knows its own edges went with it, but the targets don't: each one's
+        # inverse of the relationship lost a row, and what a read rule reads through that set may
+        # have moved. Once the delete commits, nothing else says which rows those were.
         case delete_entity_row(entity_type, table, encoded_id) do
           nil -> :ok
-          entity -> Oplog.append([delete_effect(entity)])
+          entity -> Oplog.append(Enum.concat(edge_effects, [delete_effect(entity)]))
         end
 
         :ok
@@ -289,8 +291,19 @@ defmodule Hologram.DB.EntityOperations do
   @doc false
   @spec update(module, String.t(), map | keyword, keyword) ::
           :ok | {:error, %{atom => list(atom | {atom, any})}}
+  def update(entity_type, id, changes, opts \\ [])
+
+  # A grant's id is derived from who holds which role where, so a grant with any of those changed in
+  # place would no longer be the grant its id names. Nor would the log say what it granted before:
+  # the entity a grant names is an attribute rather than a reference, so its old value is not
+  # recorded. Revoking and granting again says the same thing, and leaves both in the log.
+  def update(RoleGrant, _id, _changes, _opts) do
+    raise MisuseError,
+          "cannot update #{inspect(RoleGrant)} - a role grant is never changed in place, revoke the role and grant the new one instead"
+  end
+
   # sobelow_skip ["SQL.Query"]
-  def update(entity_type, id, changes, opts \\ []) do
+  def update(entity_type, id, changes, opts) do
     %{table: table, columns: columns} = Map.fetch!(DB.mapping(), entity_type)
 
     columns_by_field =
@@ -354,6 +367,8 @@ defmodule Hologram.DB.EntityOperations do
 
           revisions_assignment = revisions_assignment(set_columns, stamp_placeholder)
 
+          reference_fields = reference_fields(sorted_changes, columns_by_field)
+
           # A moved column comes back: the value the statement left is the only one the
           # declarations can be judged on, and what the effect records.
           delta_columns = Enum.map(delta_entries, fn {column, _amount} -> column end)
@@ -384,9 +399,9 @@ defmodule Hologram.DB.EntityOperations do
           # The transaction's reason is whatever refused the write, the way create/1's is - a
           # refusal rolls the update back rather than raising.
           Connection.transaction(fn ->
-            enter_sets!(entity_type, id, changes_map)
+            old = prepare_update!(entity_type, id, changes_map, reference_fields)
 
-            run_update!(statement, params, entity_type, id, data, set_columns, delta_columns)
+            run_update!(statement, params, entity_type, id, data, old, set_columns, delta_columns)
           end)
 
         {:error, violations} ->
@@ -605,14 +620,19 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # The effects of the removed edges, each join table's ordered by target.
   # sobelow_skip ["SQL.Query"]
-  defp delete_outgoing_edges(join_tables, encoded_id) do
-    Enum.each(join_tables, fn join_table ->
-      statement = ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1|
+  defp delete_outgoing_edges(entity_type, id, join_tables, encoded_id) do
+    Enum.flat_map(join_tables, fn join_table ->
+      statement =
+        ~s|DELETE FROM #{qualified_table(join_table.name)} WHERE "source_id" = $1 RETURNING "target_id"|
 
       case Connection.query(statement, [encoded_id]) do
-        {:ok, _result} -> :ok
-        {:error, error} -> raise error
+        {:ok, %Postgrex.Result{rows: rows}} ->
+          removed_edge_effects(entity_type, id, join_table.relationship, rows)
+
+        {:error, error} ->
+          raise error
       end
     end)
   end
@@ -661,27 +681,35 @@ defmodule Hologram.DB.EntityOperations do
     |> Codec.encode(column.type)
   end
 
+  # The row as the update is about to change it, read only when something needs it: the locked
+  # sets an update enters, or the references whose values before it the effect records. Read FOR
+  # UPDATE, so nothing can move the row between this read and the update - the value read is the
+  # one the statement replaces, and a set entered for the row is the set the update takes it
+  # into. Read plainly, a move committed in between would leave the update taking the row back into
+  # a set it read the row in, without that set's lock. FOR UPDATE rather than the weaker FOR NO KEY
+  # UPDATE an update of a non-key column takes: an update changing a unique column takes FOR
+  # UPDATE, and upgrading to it from the weaker lock can deadlock against an insert referencing
+  # the row.
+  #
+  # A row that is not there is refused here, as the statement refuses it. Its absence locks
+  # nothing, so a row inserted with that id and committed before the statement runs would be the
+  # row the statement changes - with nothing read of what it held.
+  defp current_row(_entity_type, _id, false = _enters_sets?, []), do: nil
+
+  defp current_row(entity_type, id, _enters_sets?, _reference_fields) do
+    get(entity_type, id, lock: :update) || raise_missing_row!(entity_type, id)
+  end
+
   # An update enters the locked sets its changed references name - see Hologram.DB.SetLock. A
   # reference set to the value the row already holds enters nothing, as its foreign key check takes
-  # nothing, so the row is read to tell the two apart, only when some set would be entered. It is
-  # read FOR UPDATE, the lock the update takes anyway: read plainly, a move committed between the
-  # read and the update would leave the update taking the row back into a set it read the row in,
-  # without that set's lock.
-  defp enter_sets!(entity_type, id, changes) do
-    links = Policy.locked_set_links()
+  # nothing, so the current row (see current_row/4) tells the two apart.
+  defp enter_sets!(links, entity_type, changes, current) do
+    changed =
+      Map.filter(changes, fn {name, value} -> Map.fetch!(current, name) != value end)
 
-    if SetLock.row_owners(links, entity_type, changes) != [] do
-      current = get(entity_type, id, lock: :update) || %{}
-
-      changed =
-        Map.filter(changes, fn {name, value} -> Map.get(current, name, :absent) != value end)
-
-      links
-      |> SetLock.row_owners(entity_type, changed)
-      |> SetLock.enter!(reference_targets(entity_type, changed))
-    end
-
-    :ok
+    links
+    |> SetLock.row_owners(entity_type, changed)
+    |> SetLock.enter!(reference_targets(entity_type, changed))
   end
 
   defp fetch_join_table!(entity_type, relationship_name) do
@@ -836,7 +864,7 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
-  defp run_update!(statement, params, entity_type, id, data, set_columns, delta_columns) do
+  defp run_update!(statement, params, entity_type, id, data, old, set_columns, delta_columns) do
     case Connection.query(statement, params) do
       # The stored map comes back rather than the stamp that was sent: a column already past the
       # stamp keeps its own revision, so what the row now holds is the only true answer.
@@ -859,6 +887,7 @@ defmodule Hologram.DB.EntityOperations do
                 entity_type: entity_type,
                 entity_id: id,
                 data: Map.merge(data, results),
+                old: old,
                 revisions: revisions_from_row(stored_revisions, set_columns)
               }
             ])
@@ -868,8 +897,7 @@ defmodule Hologram.DB.EntityOperations do
         end
 
       {:ok, %Postgrex.Result{num_rows: 0}} ->
-        raise MisuseError,
-              "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
+        raise_missing_row!(entity_type, id)
 
       # The writer explains nothing, the way insert/2 does not - update/3's merge point turns
       # what refused the write into an answer or re-raises it.
@@ -878,8 +906,52 @@ defmodule Hologram.DB.EntityOperations do
     end
   end
 
+  # What each reference the update sets held before it, for those whose value it changes - nil for a
+  # reference that was unset. A reference set to the value it holds moved nothing, so it is left
+  # out, and an update moving no reference records none - nor one whose row was not read, which is
+  # an update needing nothing of it.
+  defp old_references(nil = _current, _changes, _reference_fields), do: nil
+
+  defp old_references(current, changes, reference_fields) do
+    old =
+      reference_fields
+      |> Enum.map(&{&1, Map.fetch!(current, &1)})
+      |> Enum.reject(fn {field, value} -> value == Map.fetch!(changes, field) end)
+      |> Map.new()
+
+    if old == %{}, do: nil, else: old
+  end
+
+  # Everything the update needs of the row before its statement runs, in one read of it: the locked
+  # sets its changed references enter are entered, and what those references held is returned for
+  # the effect to record.
+  defp prepare_update!(entity_type, id, changes, reference_fields) do
+    links = Policy.locked_set_links()
+    enters_sets? = SetLock.row_owners(links, entity_type, changes) != []
+
+    current = current_row(entity_type, id, enters_sets?, reference_fields)
+
+    if enters_sets? do
+      enter_sets!(links, entity_type, changes, current)
+    end
+
+    old_references(current, changes, reference_fields)
+  end
+
   defp qualified_table(table) do
     "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(table)}"
+  end
+
+  defp raise_missing_row!(entity_type, id) do
+    raise MisuseError, "cannot update #{inspect(entity_type)} - no entity with id #{inspect(id)}"
+  end
+
+  # The references the changes set, whose values before the update the effect records - what points
+  # sync at the rows a move took the row away from.
+  defp reference_fields(sorted_changes, columns_by_field) do
+    for {name, _value} <- sorted_changes,
+        match?({:relationship, _name}, columns_by_field[name].source),
+        do: name
   end
 
   defp reference_taken?(table, columns, relationship_name, target_id, id) do
@@ -972,6 +1044,21 @@ defmodule Hologram.DB.EntityOperations do
       end)
 
     "\"$revisions\" = \"$revisions\" || jsonb_build_object(#{entries})"
+  end
+
+  defp removed_edge_effects(entity_type, id, relationship_name, rows) do
+    rows
+    |> Enum.map(fn [target_id] -> Codec.decode(target_id, :uuid) end)
+    |> Enum.sort()
+    |> Enum.map(fn target_id ->
+      %{
+        op: :del_relationship,
+        entity_type: entity_type,
+        entity_id: id,
+        relationship: relationship_name,
+        target_id: target_id
+      }
+    end)
   end
 
   defp revisions_from_row(revisions, columns) do

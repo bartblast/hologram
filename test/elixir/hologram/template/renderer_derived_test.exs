@@ -712,11 +712,20 @@ defmodule Hologram.Template.RendererDerivedTest do
                {"h = #{not_included},#{not_included},#{not_included}", %{}, @server}
     end
 
+    # The rows can tie on created_at, and their ids, random past the millisecond, then decide their
+    # order - so the titles are compared in no particular order.
     test "hands the template a relationship the query included through a path" do
       {html, _component_registry, _server_struct} =
         render_dom({:component, Module170, [], []}, @env, @server)
 
-      assert String.contains?(html, "titles = shown,,")
+      "titles = " <> titles = String.trim(html)
+
+      sorted_titles =
+        titles
+        |> String.split(",")
+        |> Enum.sort()
+
+      assert sorted_titles == ["", "", "shown"]
       assert carried_titles() == ["shown"]
     end
 

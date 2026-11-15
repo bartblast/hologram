@@ -28,8 +28,8 @@ import SyncStream from "./sync_stream.mjs";
 // no timeout, and nothing ever asks whether the leader is still alive: the browser is the one
 // thing that knows, and a granted lock is how it says so.
 //
-// A GROUP is one model's database and one user. Tabs on different bundles cannot share a database
-// - each model version has one of its own - and tabs under different users cannot share a leader,
+// A GROUP is one database and one user. Tabs on different models or sync protocols cannot share a
+// database - each pair has one of its own - and tabs under different users cannot share a leader,
 // because a leader can only send what the session it holds is allowed to send.
 //
 // A tab in no group LEADS ITSELF, which is what keeps every single-tab case exactly what it was
@@ -315,8 +315,9 @@ export default class Tabs {
   }
 
   // What this tab knows that a tab joining cannot read out of the store: the identity in use, the
-  // place the stream has reached, the scopes the server has declared complete, and the rules the
-  // stream syncs under, for a tab whose bundle answers by others.
+  // place the stream has reached, the scopes the server has declared complete, the rules the
+  // stream syncs under, for a tab whose bundle answers by others, and why the server stopped
+  // serving the group, if it did.
   static postState() {
     Tabs.post({
       cursor: SyncStream.syncCursor,
@@ -324,6 +325,7 @@ export default class Tabs {
       page: GlobalRegistry.get("connectPageModule"),
       replica: Replica.current(),
       rules: SyncStream.rulesForGroup(),
+      stopReason: SyncStream.stopReason,
       synced: LocalDatabase.syncedScopes(),
     });
   }
@@ -385,13 +387,10 @@ export default class Tabs {
     Batches.flush();
   }
 
-  // The promise that IS the lock being held. A lock lasts exactly as long as the function granted
-  // it has not finished, so leading is spelled as a promise nothing resolves until this tab lets
-  // go - and the browser releases it for us whatever ends the tab, which is the whole reason the
-  // succession needs nothing said.
   // The group's state, taken by a tab that has just joined or has just been told the leader
   // changed. The identity is taken outright - one browser presents one - and the place only when
-  // this tab holds none, since a place it has is one its own reading has already brought it to.
+  // this tab holds none, since a place it has is one its own reading has already brought it to. A
+  // stop is taken whenever the group names one.
   static #takeState(message) {
     if (message.replica?.id) {
       Replica.adopt(message.replica);
@@ -410,6 +409,13 @@ export default class Tabs {
       SyncStream.receiveFrame("sync_rules", message.rules);
     }
 
+    // For a tab joining a group the server stopped before it was listening. One group is one model
+    // and one protocol (see Durability.databaseName), so what stopped the tab that answered stops
+    // this one.
+    if (message.stopReason) {
+      SyncStream.receiveFrame("sync_reload", {reason: message.stopReason});
+    }
+
     for (const scope of message.synced) {
       if (
         !Tabs.#foreignPageScope({
@@ -423,6 +429,10 @@ export default class Tabs {
     }
   }
 
+  // The promise that IS the lock being held. A lock lasts exactly as long as the function granted
+  // it has not finished, so leading is spelled as a promise nothing resolves until this tab lets
+  // go - and the browser releases it for us whatever ends the tab, which is the whole reason the
+  // succession needs nothing said.
   static #hold() {
     return new Promise((resolve) => {
       Tabs.#release = resolve;
