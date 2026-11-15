@@ -45,20 +45,55 @@ defmodule Hologram.Migration.Loader do
   @spec migrations_dir!() :: String.t()
   def migrations_dir! do
     app_dir = Reflection.otp_app_dir()
-    migrations_dir = Path.join([app_dir, "app", "migrations"])
 
-    compiled? =
-      app_dir
-      |> project_elixirc_paths()
-      |> Enum.map(&Path.expand(&1, app_dir))
-      |> Enum.any?(&(migrations_dir == &1 or String.starts_with?(migrations_dir, &1 <> "/")))
-
-    if not compiled? do
+    if not compiles_migrations_dir?(app_dir, project_elixirc_paths(app_dir)) do
       raise "the project does not compile app/migrations/, where migration modules live - " <>
               "add \"app\" to elixirc_paths in mix.exs"
     end
 
-    migrations_dir
+    migrations_dir(app_dir)
+  end
+
+  @doc """
+  Validates that the project compiles the migration files the given app directory's
+  `app/migrations/` holds - by default, the OTP app's. Returns :ok when it does, or when
+  the directory holds no migration file.
+
+  Run by the Hologram compiler on every build, a release's included: a build whose
+  elixirc_paths leave the directory out, perhaps for one environment only, would ship
+  without its migrations, and the app would then refuse to boot with its model uncovered,
+  naming no cause. Raises Hologram.CompileError naming the directory instead. Requires a
+  Mix project context.
+
+  Only the OTP app's directory is checked - where the generator writes. An umbrella sibling
+  or a dependency holding migrations of its own is checked when its own build runs this.
+  """
+  @spec validate_migrations_compiled!(String.t()) :: :ok
+  def validate_migrations_compiled!(app_dir \\ Reflection.otp_app_dir()) do
+    # Read only when there is something to check: in an umbrella, reading the paths enters
+    # the app's project, and live reload runs this check on every reload.
+    if migration_files?(app_dir) do
+      validate_migrations_compiled!(app_dir, project_elixirc_paths(app_dir))
+    else
+      :ok
+    end
+  end
+
+  @doc """
+  Validates that the given elixirc_paths compile the migration files of the given app
+  directory's `app/migrations/` (see `validate_migrations_compiled!/1`).
+  """
+  @spec validate_migrations_compiled!(String.t(), list(String.t())) :: :ok
+  def validate_migrations_compiled!(app_dir, elixirc_paths) do
+    if migration_files?(app_dir) and not compiles_migrations_dir?(app_dir, elixirc_paths) do
+      raise Hologram.CompileError,
+        message:
+          "app/migrations/ holds migration files, but this build does not compile the " <>
+            "directory, so the app would ship without its migrations - add \"app\" to " <>
+            "elixirc_paths in mix.exs, for every environment"
+    end
+
+    :ok
   end
 
   @doc """
@@ -108,6 +143,26 @@ defmodule Hologram.Migration.Loader do
     end)
 
     :ok
+  end
+
+  # Any compiled directory that is app/migrations or holds it compiles the migrations.
+  defp compiles_migrations_dir?(app_dir, elixirc_paths) do
+    migrations_dir = migrations_dir(app_dir)
+
+    elixirc_paths
+    |> Enum.map(&Path.expand(&1, app_dir))
+    |> Enum.any?(&(migrations_dir == &1 or String.starts_with?(migrations_dir, &1 <> "/")))
+  end
+
+  defp migrations_dir(app_dir), do: Path.join([app_dir, "app", "migrations"])
+
+  defp migration_files?(app_dir) do
+    dir = migrations_dir(app_dir)
+
+    case File.ls(dir) do
+      {:ok, file_names} -> Enum.any?(file_names, &String.ends_with?(&1, ".ex"))
+      {:error, _reason} -> false
+    end
   end
 
   # Mix's own default when a project sets no elixirc_paths. An umbrella's app is read

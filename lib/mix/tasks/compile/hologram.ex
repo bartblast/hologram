@@ -103,6 +103,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Entity.Derived.Validator, as: DerivedValidator
   alias Hologram.Entity.Model
   alias Hologram.Entity.Validator, as: EntityValidator
+  alias Hologram.Migration.Loader
   alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Policy.Validator, as: PolicyValidator
@@ -140,6 +141,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   @impl Mix.Task.Compiler
   def run(opts) do
     opts = Keyword.merge(build_default_opts(), opts)
+
+    # Every build, a release's included - the elixirc_paths are the current environment's.
+    if not language_server_build?(opts) do
+      Loader.validate_migrations_compiled!(opts[:app_dir])
+    end
 
     result =
       cond do
@@ -194,6 +200,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     node_modules_path = Path.join(assets_dir, "node_modules")
 
     [
+      app_dir: Reflection.otp_app_dir(),
       assets_dir: assets_dir,
       build_dir: build_dir,
       build_lib_dir: Path.join(Mix.Project.build_path(), "lib"),

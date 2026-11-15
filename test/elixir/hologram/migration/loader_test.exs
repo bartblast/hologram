@@ -3,6 +3,18 @@ defmodule Hologram.Migration.LoaderTest do
 
   import Hologram.Migration.Loader
 
+  alias Hologram.Reflection
+
+  defp write_migrations_dir_file!(app_dir, file_name) do
+    dir = Path.join([app_dir, "app", "migrations"])
+
+    File.mkdir_p!(dir)
+
+    dir
+    |> Path.join(file_name)
+    |> File.write!("")
+  end
+
   describe "from_modules!/1" do
     test "returns the migrations of the given modules ordered by version" do
       later = compile_migration("20260813142237", "delete_entity MyApp.Archive")
@@ -121,6 +133,75 @@ defmodule Hologram.Migration.LoaderTest do
       assert unresolved_lines(entries) ==
                "  app/migrations/20260813142237.ex:4 - :entities\n" <>
                  "  app/migrations/20260814080000.ex:5 - :fill"
+    end
+  end
+
+  describe "validate_migrations_compiled!/2" do
+    setup do
+      app_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "migration", "loader", random_string()])
+
+      on_exit(fn -> File.rm_rf!(app_dir) end)
+
+      %{app_dir: app_dir}
+    end
+
+    test "refuses migration files the given elixirc_paths leave out", %{app_dir: app_dir} do
+      write_migrations_dir_file!(app_dir, "20260813091522.ex")
+
+      expected_msg =
+        "app/migrations/ holds migration files, but this build does not compile the " <>
+          "directory, so the app would ship without its migrations - add \"app\" to " <>
+          "elixirc_paths in mix.exs, for every environment"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_migrations_compiled!(app_dir, ["lib"])
+      end
+    end
+
+    test "passes migration files compiled through app/", %{app_dir: app_dir} do
+      write_migrations_dir_file!(app_dir, "20260813091522.ex")
+
+      assert validate_migrations_compiled!(app_dir, ["app", "lib"]) == :ok
+    end
+
+    test "passes migration files compiled through app/migrations/ itself", %{app_dir: app_dir} do
+      write_migrations_dir_file!(app_dir, "20260813091522.ex")
+
+      assert validate_migrations_compiled!(app_dir, ["app/migrations/", "lib"]) == :ok
+    end
+
+    test "passes a directory holding no migration file", %{app_dir: app_dir} do
+      write_migrations_dir_file!(app_dir, ".gitkeep")
+
+      assert validate_migrations_compiled!(app_dir, ["lib"]) == :ok
+    end
+
+    test "passes an app without the directory", %{app_dir: app_dir} do
+      assert validate_migrations_compiled!(app_dir, ["lib"]) == :ok
+    end
+  end
+
+  describe "validate_migrations_compiled!/1" do
+    setup do
+      app_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "migration", "loader", random_string()])
+
+      on_exit(fn -> File.rm_rf!(app_dir) end)
+
+      %{app_dir: app_dir}
+    end
+
+    test "refuses migration files the project's elixirc_paths leave out", %{app_dir: app_dir} do
+      write_migrations_dir_file!(app_dir, "20260813091522.ex")
+
+      assert_raise Hologram.CompileError, ~r/app\/migrations\/ holds migration files/, fn ->
+        validate_migrations_compiled!(app_dir)
+      end
+    end
+
+    test "passes the OTP app by default, whose app/migrations/ does not exist" do
+      assert validate_migrations_compiled!() == :ok
     end
   end
 
