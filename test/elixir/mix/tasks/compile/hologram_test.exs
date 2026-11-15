@@ -32,6 +32,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Component.Module54, as: ComponentModule54
   alias Hologram.Test.Fixtures.Component.Module55, as: ComponentModule55
   alias Hologram.Test.Fixtures.Entity.Module1, as: Entity1
+  alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module33, as: Entity33
   alias Hologram.Test.Fixtures.Entity.Module36, as: Entity36
@@ -1136,6 +1137,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
              :derived_queries,
              :entries,
              :permission_checking?,
+             :synced_types,
              :windows
            ]
 
@@ -1154,6 +1156,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     # The fixtures designate a user entity type and hold a page whose template checks permissions.
     assert queries.permission_checking?
+
+    # PageModule18 renders a component querying Entity2, a checking browser holds grant rows, and no
+    # browser code reads Entity10.
+    assert Entity2 in queries.synced_types
+    assert RoleGrant in queries.synced_types
+    refute Entity10 in queries.synced_types
 
     # The two artifacts have to name one window between them: the page windows say which windows a
     # page downloads, and this is where such an id resolves back to the term that fills it.

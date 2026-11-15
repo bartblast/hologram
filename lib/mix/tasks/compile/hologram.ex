@@ -1345,15 +1345,21 @@ defmodule Mix.Tasks.Compile.Hologram do
     # the sync layer, which answer for any component that renders. Built here and loaded at boot,
     # like the page windows - so the two registered-query validations fail the BUILD rather than
     # the first boot, and a release starts without running the extractor at all.
-    {queries_plt, queries_plt_dump_path} =
+    queries =
       component_queries
       |> Map.take(context.component_modules)
       |> Compiler.build_queries(entity_types, permission_checking?)
-      |> Map.put(:derived, derived.definitions)
-      |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
     sync_constants =
       Compiler.build_sync_constants(reach_by_page, component_queries, module_info_plt)
+
+    # The entity types sync sends rows of ride with the registered queries: the sync layer reads
+    # both, and both are loaded at boot.
+    {queries_plt, queries_plt_dump_path} =
+      queries
+      |> Map.put(:derived, derived.definitions)
+      |> Map.put(:synced_types, sync_constants.synced_types)
+      |> Compiler.build_queries_plt(Keyword.put(opts, :supervisor, context.supervisor))
 
     # The runtime bundle sets the client's data layer constants, so what they render to is one of
     # its inputs: the model they render reads what the entity types declare now, so the two are
