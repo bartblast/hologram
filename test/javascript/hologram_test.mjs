@@ -4332,6 +4332,23 @@ describe("Hologram", () => {
         assert.deepStrictEqual(assignedUrls, []);
       });
 
+      // The stop can arrive while the snapshot is saved or the frame is awaited.
+      it("is handed to the browser when the stop arrives before the frame that shows it", async () => {
+        const stopped = sinon.stub().returns(false);
+
+        Hologram.dataLayer = {saved: async () => null, stopped};
+
+        await Hologram.loadNewPage("/target", payloadFor("stopped-5"));
+
+        stopped.returns(true);
+        frames[0]();
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, ["/target"]);
+        assert.isNull(bundleScript("stopped-5"));
+      });
+
       it("is shown as usual in a tab the server serves", async () => {
         Hologram.dataLayer = {stopped: () => false};
 
@@ -5118,9 +5135,13 @@ describe("Hologram", () => {
         };
       });
 
+      // A popstate that read a snapshot advanced the registry's epoch, which leaves a navigation
+      // under way until a mount closes it - and these tests never mount.
       afterEach(() => {
         reloadStub.restore();
         Hologram.dataLayer = null;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
       });
 
       it("loads the entry afresh once what the person wrote is saved", async () => {
@@ -5151,6 +5172,75 @@ describe("Hologram", () => {
         await restoring;
 
         sinon.assert.notCalled(reloadStub);
+      });
+
+      // The stop can arrive while the snapshot is read.
+      it("loads the entry afresh when the stop arrives while the snapshot is read", async () => {
+        const saving = sinon.stub().resolves(null);
+        const stopped = sinon.stub();
+
+        stopped.onFirstCall().returns(false);
+        stopped.returns(true);
+
+        Hologram.dataLayer = {saved: saving, stopped};
+
+        await Hologram.handlePopstateEvent({state: "history-stopped-4"});
+
+        sinon.assert.calledOnce(saving);
+        sinon.assert.calledOnce(reloadStub);
+      });
+
+      // Or while the page's bundle is asked for, before the snapshot is restored.
+      it("loads the entry afresh when the stop arrives before the snapshot is restored", async () => {
+        const saving = sinon.stub().resolves(null);
+        const stopped = sinon.stub().returns(false);
+
+        Hologram.dataLayer = {saved: saving, stopped};
+
+        sessionStorage.setItem(
+          "hologram_page_snapshot_history-stopped-5",
+          Serializer.serialize(
+            {
+              componentRegistryEntries: Type.map(),
+              identityPeriod: IdentityTracker.period,
+              instanceId: "popstate-instance",
+              pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Module7"),
+              pageParams: Type.map(),
+              scrollPosition: [0, 0],
+              subscriptionReceipts: [],
+            },
+            "client",
+          ),
+        );
+
+        const fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            stopped.returns(true);
+
+            return onSuccess("stopped-5-digest");
+          });
+
+        const historyId = Hologram.historyId;
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-stopped-5"});
+        } finally {
+          fetchStub.restore();
+          sessionStorage.clear();
+
+          document.head
+            .querySelectorAll("script[src^='/hologram/']")
+            .forEach((script) => script.remove());
+
+          ScriptRegistry.statuses.clear();
+          MountGate.require([]);
+          MountGate.cancel();
+        }
+
+        sinon.assert.calledOnce(saving);
+        sinon.assert.calledOnce(reloadStub);
+        assert.equal(Hologram.historyId, historyId);
       });
 
       // The browser scrolls to a #fragment of the page on screen, which is not leaving it.

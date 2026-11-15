@@ -831,6 +831,13 @@ export default class Hologram {
         return;
       }
 
+      // The server can have stopped serving the tab while the snapshot was saved or the frame was
+      // awaited, and the page then loads afresh like any other (see #loadAfresh).
+      if ($.#isStopped()) {
+        $.#loadAfresh(navigation, historyEntryId === null ? pagePath : null);
+        return;
+      }
+
       // The entry's id is taken in the frame that shows the page. Until then the page being left
       // is on screen, and a popstate meanwhile saves it under its own entry's id, or takes an
       // entry the browser makes for a jump to a #fragment for it (see handlePopstateEvent).
@@ -1895,6 +1902,12 @@ export default class Hologram {
       $.#popstatesDeciding -= 1;
     }
 
+    // The server can have stopped serving the tab while the snapshot was read (see the check
+    // above).
+    if ($.#isStopped()) {
+      return $.#loadAfresh(navigation, null);
+    }
+
     // The epoch of the navigation this popstate opened. What follows waits, for the snapshot's
     // chunks and for the server, and a later navigation may supersede this one before either
     // answers - neither the answer nor the failure of a superseded wait says anything about the
@@ -1947,6 +1960,11 @@ export default class Hologram {
       // this navigation already.
       if (isSuperseded() || ScriptRegistry.hasFailed(pageBundleDigests)) {
         return;
+      }
+
+      // So can whether the server serves the tab (see the check before the snapshot was read).
+      if ($.#isStopped()) {
+        return $.#loadAfresh(navigation, null);
       }
 
       // The identity can have changed while the chunks loaded: a command's reply that was in
