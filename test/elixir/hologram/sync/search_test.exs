@@ -3,6 +3,8 @@ defmodule Hologram.Sync.SearchTest do
 
   import Hologram.Sync.Search
 
+  alias Hologram.Auth
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.EntityOperations
   alias Hologram.DB.Oplog
@@ -11,13 +13,17 @@ defmodule Hologram.Sync.SearchTest do
   alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module12, as: PolicyModule12
+  alias Hologram.Test.Fixtures.Policy.Module13, as: PolicyModule13
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
   alias Hologram.Test.Fixtures.Policy.Module18, as: PolicyModule18
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
+  alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module20, as: PolicyModule20
   alias Hologram.Test.Fixtures.Policy.Module21, as: PolicyModule21
   alias Hologram.Test.Fixtures.Policy.Module25, as: PolicyModule25
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
+  alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
+  alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
 
   @unknown_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
 
@@ -83,6 +89,17 @@ defmodule Hologram.Sync.SearchTest do
     data = %{"relationship" => Atom.to_string(relationship_name), "target_id" => target.id}
 
     effect(op, source.__struct__, source.id, data)
+  end
+
+  # The effects the given writes record on the grant store, as the log reads them back.
+  defp grant_effects(fun) do
+    before = Oplog.read_type_after(RoleGrant, 0, 0, %{})
+
+    fun.()
+
+    RoleGrant
+    |> Oplog.read_type_after(0, 0, %{})
+    |> Enum.drop(length(before))
   end
 
   defp ids(rows) do
@@ -662,6 +679,246 @@ defmodule Hologram.Sync.SearchTest do
       shelved_effects = [pair_effect(:add_relationship, shelved, :tags, tag)]
 
       assert candidates(shelved_effects, close_edges).rows == %{PolicyModule17 => ids([project])}
+    end
+
+    test "lists the row an own role is granted on" do
+      user = create!(Module14, email: "a@b.c")
+      resource = create!(PolicyModule1)
+      edges = %{{PolicyModule1, :read} => [{:own_grants, [:viewer]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :viewer, resource) end)
+
+      assert candidates(effects, edges) == %{
+               rows: %{PolicyModule1 => ids([resource])},
+               whole_types: %{}
+             }
+    end
+
+    test "names the holder of an own role granted on the whole type" do
+      user = create!(Module14, email: "a@b.c")
+      edges = %{{PolicyModule1, :read} => [{:own_grants, [:viewer]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :viewer, PolicyModule1) end)
+
+      assert candidates(effects, edges) == %{
+               rows: %{},
+               whole_types: %{PolicyModule1 => MapSet.new([user.id])}
+             }
+    end
+
+    test "lists nothing for a role the edge doesn't name" do
+      user = create!(Module14, email: "a@b.c")
+      resource = create!(PolicyModule1)
+      edges = %{{PolicyModule1, :read} => [{:own_grants, [:viewer]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :editor, resource) end)
+
+      assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
+    end
+
+    test "lists the same row for a revoke as for the grant" do
+      user = create!(Module14, email: "a@b.c")
+      resource = create!(PolicyModule1)
+      edges = %{{PolicyModule1, :read} => [{:own_grants, [:viewer]}]}
+
+      Auth.grant_role(user, :viewer, resource)
+
+      effects = grant_effects(fn -> Auth.revoke_role(user, :viewer, resource) end)
+
+      assert [%{op: :del_entity}] = effects
+      assert candidates(effects, edges).rows == %{PolicyModule1 => ids([resource])}
+    end
+
+    test "lists nothing for a role of the name the edge names held on another type" do
+      user = create!(Module14, email: "a@b.c")
+      group = create!(PolicyModule2)
+      edges = %{{PolicyModule1, :read} => [{:own_grants, [:member]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :member, group) end)
+
+      assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
+    end
+
+    test "passes over a grant effect of an op that changes no grant" do
+      edges = %{{PolicyModule1, :read} => [{:own_grants, [:viewer]}]}
+
+      effects = [
+        effect(:patch_entity, RoleGrant, @unknown_id, %{}),
+        effect("merge_entity", RoleGrant, @unknown_id, %{})
+      ]
+
+      assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
+    end
+
+    test "names the holder of another type's role granted on that whole type" do
+      user = create!(Module14, email: "a@b.c")
+      edges = %{{PolicyModule1, :read} => [{:type_grants, PolicyModule2, [:admin]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :admin, PolicyModule2) end)
+
+      assert candidates(effects, edges) == %{
+               rows: %{},
+               whole_types: %{PolicyModule1 => MapSet.new([user.id])}
+             }
+    end
+
+    test "lists nothing for another type's role granted on one of its rows" do
+      user = create!(Module14, email: "a@b.c")
+      group = create!(PolicyModule2)
+      edges = %{{PolicyModule1, :read} => [{:type_grants, PolicyModule2, [:admin]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :admin, group) end)
+
+      assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
+    end
+
+    test "names the holder of a global role" do
+      user = create!(Module14, email: "a@b.c")
+      edges = %{{RoleGrant, :read} => [{:global_grants, [RoleModule1]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, RoleModule1) end)
+
+      assert candidates(effects, edges) == %{
+               rows: %{},
+               whole_types: %{RoleGrant => MapSet.new([user.id])}
+             }
+    end
+
+    # Role.Module2 extends Role.Module1, so the grant store's rule reading Module1 holders reads
+    # Module2's too.
+    test "names the holder of a global role extending one a rule reads" do
+      user = create!(Module14, email: "a@b.c")
+      edges = Edges.derive([RoleGrant])
+
+      effects = grant_effects(fn -> Auth.grant_role(user, RoleModule2) end)
+
+      assert candidates(effects, edges).whole_types == %{RoleGrant => MapSet.new([user.id])}
+    end
+
+    # A delegation to a grant carries the store's named edge without the chain to the grant.
+    test "names the holder of a named role for a type other than the grant store" do
+      user = create!(Module14, email: "a@b.c")
+      group = create!(PolicyModule2)
+      edges = %{{PolicyModule13, :read} => [{:named_grants, PolicyModule2, [:member]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :member, group) end)
+
+      assert candidates(effects, edges) == %{
+               rows: %{},
+               whole_types: %{PolicyModule13 => MapSet.new([user.id])}
+             }
+    end
+
+    test "lists the rows a chain leads back to from the row a related role is granted on" do
+      user = create!(Module14, email: "a@b.c")
+      group = create!(PolicyModule2)
+      other_group = create!(PolicyModule2)
+
+      children = [
+        create!(PolicyModule13, parent_id: group.id),
+        create!(PolicyModule13, parent_id: group.id)
+      ]
+
+      create!(PolicyModule13, parent_id: other_group.id)
+
+      edges = %{
+        {PolicyModule13, :read} => [{:relationship_grants, [:parent], PolicyModule2, [:member]}]
+      }
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :member, group) end)
+
+      assert candidates(effects, edges) == %{
+               rows: %{PolicyModule13 => ids(children)},
+               whole_types: %{}
+             }
+    end
+
+    # Module5 delegates its read to its parent's, so Module1's own viewer role is held on Module5's
+    # parent - and the delegated rule still matches it held on Module1's whole type.
+    test "follows a role a delegation reads, on one row and on the whole type" do
+      user = create!(Module14, email: "a@b.c")
+      resource = create!(PolicyModule1)
+      children = [create!(PolicyModule5, parent_id: resource.id)]
+      other_resource = create!(PolicyModule1)
+      create!(PolicyModule5, parent_id: other_resource.id)
+
+      edges = Edges.derive([PolicyModule5])
+
+      row_effects = grant_effects(fn -> Auth.grant_role(user, :viewer, resource) end)
+
+      assert candidates(row_effects, edges) == %{
+               rows: %{PolicyModule5 => ids(children)},
+               whole_types: %{}
+             }
+
+      type_effects = grant_effects(fn -> Auth.grant_role(user, :viewer, PolicyModule1) end)
+
+      assert candidates(type_effects, edges) == %{
+               rows: %{},
+               whole_types: %{PolicyModule5 => MapSet.new([user.id])}
+             }
+    end
+
+    test "lists the grants naming the row a named role is granted on" do
+      user = create!(Module14, email: "a@b.c")
+      other_user = create!(Module14, email: "d@e.f")
+      group = create!(PolicyModule2)
+      other_group = create!(PolicyModule2)
+
+      Auth.grant_role(other_user, :admin, group)
+      Auth.grant_role(other_user, :member, other_group)
+
+      edges = %{{RoleGrant, :read} => [{:named_grants, PolicyModule2, [:admin, :member]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :member, group) end)
+
+      grant_ids =
+        MapSet.new([
+          RoleGrant.derive_id(other_user.id, PolicyModule2, group.id, :admin),
+          RoleGrant.derive_id(user.id, PolicyModule2, group.id, :member)
+        ])
+
+      assert candidates(effects, edges) == %{rows: %{RoleGrant => grant_ids}, whole_types: %{}}
+    end
+
+    test "lists nothing for a named role granted on the whole type" do
+      user = create!(Module14, email: "a@b.c")
+      other_user = create!(Module14, email: "d@e.f")
+
+      Auth.grant_role(other_user, :admin, create!(PolicyModule2))
+
+      edges = %{{RoleGrant, :read} => [{:named_grants, PolicyModule2, [:admin, :member]}]}
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :member, PolicyModule2) end)
+
+      assert candidates(effects, edges) == %{rows: %{}, whole_types: %{}}
+    end
+
+    test "raises for a grant read without its data" do
+      edges = %{{PolicyModule1, :read} => [{:own_grants, [:viewer]}]}
+      effects = [effect(:put_entity, RoleGrant, @unknown_id, nil)]
+
+      assert_raise FunctionClauseError, fn -> candidates(effects, edges) end
+    end
+
+    test "follows the grant edges the policies derive" do
+      user = create!(Module14, email: "a@b.c")
+      group = create!(PolicyModule2)
+      child = create!(PolicyModule13, parent_id: group.id)
+
+      edges = Edges.derive([PolicyModule1, PolicyModule2, PolicyModule13, RoleGrant])
+
+      effects = grant_effects(fn -> Auth.grant_role(user, :member, group) end)
+      [%{entity_id: grant_id}] = effects
+
+      assert candidates(effects, edges) == %{
+               rows: %{
+                 PolicyModule13 => ids([child]),
+                 PolicyModule2 => ids([group]),
+                 RoleGrant => MapSet.new([grant_id])
+               },
+               whole_types: %{}
+             }
     end
   end
 end

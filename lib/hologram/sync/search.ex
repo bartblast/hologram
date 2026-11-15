@@ -16,6 +16,7 @@ defmodule Hologram.Sync.Search do
   # Each step back is one query on an indexed column, for all the ids that reached it at once, so
   # the cost follows the rows a change reaches rather than the size of the tables.
 
+  alias Hologram.Auth.RoleGrant
   alias Hologram.DB
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
@@ -27,6 +28,8 @@ defmodule Hologram.Sync.Search do
   @pair_ops [:add_relationship, :del_relationship]
 
   @known_ops [:patch_entity | @whole_row_ops ++ @pair_ops]
+
+  @grant_kinds [:global_grants, :named_grants, :own_grants, :relationship_grants, :type_grants]
 
   @doc """
   Returns the rows whose read access the given effects may have moved, per entity type, and the
@@ -52,6 +55,8 @@ defmodule Hologram.Sync.Search do
   def candidates(effects, edges) do
     triggers = triggers(edges)
 
+    mapping = DB.mapping()
+
     entries =
       Enum.flat_map(effects, fn effect ->
         triggers
@@ -59,11 +64,31 @@ defmodule Hologram.Sync.Search do
         |> Enum.flat_map(&entries(effect, &1))
       end)
 
-    %{rows: walk_entries(entries, DB.mapping()), whole_types: %{}}
+    walked_rows =
+      entries
+      |> Enum.filter(&(elem(&1, 0) == :walk))
+      |> walk_entries(mapping)
+
+    rows =
+      entries
+      |> Enum.filter(&(elem(&1, 0) == :named))
+      |> named_rows(mapping)
+      |> Map.merge(walked_rows, fn _entity_type, named, walked -> MapSet.union(named, walked) end)
+
+    %{rows: rows, whole_types: whole_types(entries)}
   end
 
-  # An entry is a walk to run: ids at the end of a chain prefix, to be followed back to the rows of
-  # the type the prefix starts from.
+  # An id the log holds in a payload is stored as the write was given it, so it is put into the form
+  # every id the log decodes has before it can be listed as one.
+  defp canonical_id(id) do
+    id
+    |> Codec.encode(:uuid)
+    |> Codec.decode(:uuid)
+  end
+
+  # An entry is what one effect asks of the search along one edge: a walk to run (ids at the end of
+  # a chain prefix, to be followed back to the rows of the type the prefix starts from), a user for
+  # whom every row of a type may have moved, or the grants naming a row.
   #
   # A row reached through an inverse of a to-one is in the set of whichever row its reference names,
   # so the step back from it reads that reference. As the table now stands it names the set the row
@@ -74,7 +99,7 @@ defmodule Hologram.Sync.Search do
        when kind in [:relationship_attributes, :set_attributes] do
     if touches?(effect, names) do
       [
-        {entity_type, chain, [effect.entity_id]}
+        {:walk, entity_type, chain, [effect.entity_id]}
         | recorded_entries(effect, entity_type, recorded_reference)
       ]
     else
@@ -91,7 +116,7 @@ defmodule Hologram.Sync.Search do
        )
        when op in @pair_ops and is_map(data) do
     if Enum.any?(relationship_names, &(Atom.to_string(&1) == data["relationship"])) do
-      [{entity_type, prefix, [pair_end(effect, side)]}]
+      [{:walk, entity_type, prefix, [pair_end(effect, side)]}]
     else
       []
     end
@@ -101,9 +126,100 @@ defmodule Hologram.Sync.Search do
        when op not in @pair_ops,
        do: []
 
+  # A grant given or taken changes what its holder alone may read, so what it reaches across a
+  # whole type is asked again for that user rather than listed row by row for everyone. It matches
+  # a rule's reference the way the checks match it (`Hologram.Auth`, and the SQL the rules compile
+  # to): an own role on the row or on its whole type, a type role and a global role held without a
+  # row, a role on a related row - or on its whole type, which a delegated own role matches - and
+  # the grant store's named role on the row a grant names.
+  defp entries(%{op: op, data: data}, {entity_type, edge, labels})
+       when elem(edge, 0) in @grant_kinds and op in @whole_row_ops and is_map(data) do
+    grant_entries(entity_type, edge, labels, data)
+  end
+
+  # A grant is never patched (`Hologram.DB.EntityOperations.update/4` refuses it), and an op this
+  # node does not know moved nothing it can follow.
+  defp entries(%{op: op}, {_entity_type, edge, _labels})
+       when elem(edge, 0) in @grant_kinds and op not in @whole_row_ops,
+       do: []
+
+  defp enum_labels(values), do: MapSet.new(values, &Codec.encode_enum_value/1)
+
   defp field_value(nil, _field), do: nil
 
   defp field_value(values, field), do: Map.get(values, field)
+
+  defp grant_entries(entity_type, {:global_grants, _modules}, %{roles: roles}, grant) do
+    if grant["entity_type"] == nil and grant["entity_id"] == nil and grant["role"] in roles do
+      [{:whole_type, entity_type, grant["user_id"]}]
+    else
+      []
+    end
+  end
+
+  # The grant store's own rule reads the role on the row a grant names. A delegation to a grant
+  # carries the edge to its own type unchanged, without the chain to the grant, so there the rows
+  # can't be found - and the grant moved what its holder alone may read, so that holder rereads the
+  # type instead.
+  defp grant_entries(entity_type, {:named_grants, _target_type, _roles}, labels, grant) do
+    cond do
+      not held_on?(grant, labels) or grant["entity_id"] == nil -> []
+      entity_type != RoleGrant -> [{:whole_type, entity_type, grant["user_id"]}]
+      true -> [{:named, entity_type, labels.type, canonical_id(grant["entity_id"])}]
+    end
+  end
+
+  defp grant_entries(entity_type, {:own_grants, _roles}, labels, grant) do
+    cond do
+      not held_on?(grant, labels) -> []
+      grant["entity_id"] == nil -> [{:whole_type, entity_type, grant["user_id"]}]
+      true -> [{:walk, entity_type, [], [canonical_id(grant["entity_id"])]}]
+    end
+  end
+
+  defp grant_entries(
+         entity_type,
+         {:relationship_grants, chain, _target_type, _roles},
+         labels,
+         grant
+       ) do
+    cond do
+      not held_on?(grant, labels) -> []
+      grant["entity_id"] == nil -> [{:whole_type, entity_type, grant["user_id"]}]
+      true -> [{:walk, entity_type, chain, [grant["entity_id"]]}]
+    end
+  end
+
+  defp grant_entries(entity_type, {:type_grants, _target_type, _roles}, labels, grant) do
+    if held_on?(grant, labels) and grant["entity_id"] == nil do
+      [{:whole_type, entity_type, grant["user_id"]}]
+    else
+      []
+    end
+  end
+
+  # What a grant edge matches a grant by, as the log spells it: the label of the type the role is
+  # held on (nil for a global role) and the labels of the roles. Resolved once per edge.
+  defp grant_labels(_entity_type, {:global_grants, role_modules}) do
+    %{roles: enum_labels(role_modules), type: nil}
+  end
+
+  defp grant_labels(entity_type, {:own_grants, role_names}) do
+    %{roles: enum_labels(role_names), type: Codec.encode_enum_value(entity_type)}
+  end
+
+  defp grant_labels(_entity_type, {kind, target_type, role_names})
+       when kind in [:named_grants, :type_grants] do
+    %{roles: enum_labels(role_names), type: Codec.encode_enum_value(target_type)}
+  end
+
+  defp grant_labels(_entity_type, {:relationship_grants, _chain, target_type, role_names}) do
+    %{roles: enum_labels(role_names), type: Codec.encode_enum_value(target_type)}
+  end
+
+  defp held_on?(grant, %{roles: roles, type: type}) do
+    grant["entity_type"] == type and grant["role"] in roles
+  end
 
   defp join_table(mapping, entity_type, relationship_name) do
     mapping
@@ -116,6 +232,9 @@ defmodule Hologram.Sync.Search do
   # What the walk's last step needs from an effect, resolved once per edge.
   defp last_step(entity_type, {:set_edges, chain, _owner_type, _relationship_names}),
     do: pair_side(entity_type, chain)
+
+  defp last_step(entity_type, edge) when elem(edge, 0) in @grant_kinds,
+    do: grant_labels(entity_type, edge)
 
   defp last_step(entity_type, edge), do: recorded_reference(entity_type, edge)
 
@@ -146,15 +265,50 @@ defmodule Hologram.Sync.Search do
     owners
   end
 
+  # The grants naming the rows the named entries name, one lookup per type the rows are of. The
+  # store is read raw: which of these grants a user may see is what the recheck decides.
+  # sobelow_skip ["SQL.Query"]
+  defp named_rows([], _mapping), do: %{}
+
+  defp named_rows(entries, mapping) do
+    %{table: table, columns: columns} = Map.fetch!(mapping, RoleGrant)
+
+    enum_type =
+      columns
+      |> Enum.find(&(&1.name == "entity_type"))
+      |> Map.fetch!(:sql_type)
+
+    qualified_enum_type =
+      "#{Mapper.quote_identifier(Mapper.data_schema())}.#{Mapper.quote_identifier(enum_type)}"
+
+    statement =
+      ~s|SELECT "id" FROM #{qualified_table(table)} | <>
+        ~s|WHERE "entity_type" = $1::#{qualified_enum_type} AND "entity_id" = ANY($2::uuid[])|
+
+    entries
+    |> Enum.group_by(
+      fn {:named, entity_type, type_label, _id} -> {entity_type, type_label} end,
+      &elem(&1, 3)
+    )
+    |> Enum.reduce(%{}, fn {{entity_type, type_label}, entity_ids}, rows ->
+      encoded_ids =
+        entity_ids
+        |> Enum.uniq()
+        |> Enum.map(&Codec.encode(&1, :uuid))
+
+      {:ok, %Postgrex.Result{rows: found}} =
+        Connection.query(statement, [type_label, encoded_ids])
+
+      reached = MapSet.new(found, fn [id] -> Codec.decode(id, :uuid) end)
+
+      Map.update(rows, entity_type, reached, &MapSet.union(&1, reached))
+    end)
+    |> Map.reject(fn {_entity_type, ids} -> MapSet.size(ids) == 0 end)
+  end
+
   defp pair_end(effect, :source), do: effect.entity_id
 
-  # The target id is stored as the write was given it, so it is put into the form every id the log
-  # decodes has before it can be listed as one.
-  defp pair_end(effect, :target) do
-    effect.data["target_id"]
-    |> Codec.encode(:uuid)
-    |> Codec.decode(:uuid)
-  end
+  defp pair_end(effect, :target), do: canonical_id(effect.data["target_id"])
 
   # Which end of a pair of the to-many the edge names is the row holding the set its chain's last
   # link reads: the source for the to-many itself, the target for an inverse of it. Resolved once
@@ -176,7 +330,9 @@ defmodule Hologram.Sync.Search do
   defp recorded_entries(_effect, _entity_type, nil), do: []
 
   defp recorded_entries(effect, entity_type, {prefix, field}) do
-    [{entity_type, prefix, [field_value(effect.data, field), field_value(effect.old, field)]}]
+    ids = [field_value(effect.data, field), field_value(effect.old, field)]
+
+    [{:walk, entity_type, prefix, ids}]
   end
 
   # The reference a walk along the edge reads at its last step, when that step is an inverse of a
@@ -286,6 +442,8 @@ defmodule Hologram.Sync.Search do
 
   defp trigger_type({:set_edges, _chain, owner_type, _relationship_names}), do: owner_type
 
+  defp trigger_type(edge) when elem(edge, 0) in @grant_kinds, do: RoleGrant
+
   defp trigger_type(_edge), do: nil
 
   # The read edges, keyed by the entity type whose effects can start a walk along them.
@@ -319,7 +477,10 @@ defmodule Hologram.Sync.Search do
   # Entries sharing a type and a chain walk once, for all their ids together.
   defp walk_entries(entries, mapping) do
     entries
-    |> Enum.group_by(fn {entity_type, chain, _ids} -> {entity_type, chain} end, &elem(&1, 2))
+    |> Enum.group_by(
+      fn {:walk, entity_type, chain, _ids} -> {entity_type, chain} end,
+      &elem(&1, 3)
+    )
     |> Enum.reduce(%{}, fn {{entity_type, chain}, id_lists}, rows ->
       ids =
         id_lists
@@ -335,5 +496,12 @@ defmodule Hologram.Sync.Search do
         Map.update(rows, entity_type, reached, &MapSet.union(&1, reached))
       end
     end)
+  end
+
+  defp whole_types(entries) do
+    entries
+    |> Enum.filter(&(elem(&1, 0) == :whole_type))
+    |> Enum.group_by(&elem(&1, 1), &elem(&1, 2))
+    |> Map.new(fn {entity_type, user_ids} -> {entity_type, MapSet.new(user_ids)} end)
   end
 end
