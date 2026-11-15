@@ -288,7 +288,7 @@ defmodule Hologram.Migrator do
   end
 
   @doc """
-  Applies the pending migrations of the project's migrations directory to the connected
+  Applies the pending migrations the project's migration modules define to the connected
   database as the current model's history.
 
   Idempotent, so it is safe to run ahead of boot as a release step (`bin/app eval
@@ -297,7 +297,7 @@ defmodule Hologram.Migrator do
   """
   @spec run() :: :ok
   def run do
-    migrations = Loader.load_dir!(Loader.migrations_dir())
+    migrations = Loader.list!()
     current_model = Model.from_modules(Reflection.list_entities(), Reflection.list_roles())
 
     run(migrations, current_model, run_context())

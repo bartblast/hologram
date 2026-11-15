@@ -93,8 +93,9 @@ defmodule Hologram.Migration do
 
   @doc """
   Returns the vocabulary's parens-free calls, as the formatter's locals_without_parens
-  option takes them - the generator formats migration files with it, and the framework
-  exports the same list so a project's mix format leaves those files alone.
+  option takes them - the generator's default formatting uses it, and the framework
+  exports the same list so a project importing Hologram's formatter config writes migration
+  files parens-free too.
   """
   @spec locals_without_parens() :: keyword(pos_integer)
   def locals_without_parens, do: @locals_without_parens

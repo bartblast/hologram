@@ -113,11 +113,31 @@ defmodule Hologram.Migration.Loader do
   end
 
   @doc """
-  Returns the absolute path of the project's migrations directory.
+  Returns the absolute path of the project's migrations directory, `app/migrations/` in the
+  OTP app's directory.
+
+  Raises unless the project compiles `app/migrations/`, through it or a directory holding
+  it, like `app/`: the migration modules there would be left out of the build without a
+  word, the history would read as empty, and the generator would write the whole of it
+  again. Requires a Mix project context.
   """
-  @spec migrations_dir() :: String.t()
-  def migrations_dir do
-    Path.join([Reflection.otp_app_priv_dir(), "hologram", "migrations"])
+  @spec migrations_dir!() :: String.t()
+  def migrations_dir! do
+    app_dir = Reflection.otp_app_dir()
+    migrations_dir = Path.join([app_dir, "app", "migrations"])
+
+    compiled? =
+      app_dir
+      |> project_elixirc_paths()
+      |> Enum.map(&Path.expand(&1, app_dir))
+      |> Enum.any?(&(migrations_dir == &1 or String.starts_with?(migrations_dir, &1 <> "/")))
+
+    if not compiled? do
+      raise "the project does not compile app/migrations/, where migration modules live - " <>
+              "add \"app\" to elixirc_paths in mix.exs"
+    end
+
+    migrations_dir
   end
 
   @doc """
@@ -177,6 +197,23 @@ defmodule Hologram.Migration.Loader do
 
   defp migration_file?(file_name) do
     not String.starts_with?(file_name, ".") and String.ends_with?(file_name, ".exs")
+  end
+
+  # Mix's own default when a project sets no elixirc_paths. An umbrella's app is read
+  # from its own project, the one its config lives in.
+  defp project_elixirc_paths(app_dir) do
+    config =
+      case Mix.Project.apps_paths() do
+        nil ->
+          Mix.Project.config()
+
+        _apps_paths ->
+          Mix.Project.in_project(Reflection.otp_app(), app_dir, fn _module ->
+            Mix.Project.config()
+          end)
+      end
+
+    Keyword.get(config, :elixirc_paths, ["lib"])
   end
 
   defp references_entity?(op, module) do

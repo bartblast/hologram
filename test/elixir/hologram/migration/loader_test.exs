@@ -68,6 +68,16 @@ defmodule Hologram.Migration.LoaderTest do
     end
   end
 
+  describe "migrations_dir!/0" do
+    test "refuses a project that does not compile app/migrations/" do
+      expected_msg =
+        "the project does not compile app/migrations/, where migration modules live - " <>
+          "add \"app\" to elixirc_paths in mix.exs"
+
+      assert_error RuntimeError, expected_msg, fn -> migrations_dir!() end
+    end
+  end
+
   describe "load_dir!/1" do
     test "returns the migrations ordered by version" do
       dir =

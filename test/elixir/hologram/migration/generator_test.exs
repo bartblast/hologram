@@ -14,7 +14,27 @@ defmodule Hologram.Migration.GeneratorTest do
 
   @tmp_dir Path.join([Reflection.tmp_dir(), "tests", "migration", "generator"])
 
+  @module MyApp.Migrations.V20260813091522
+
   @timestamp ~U[2026-08-13 09:15:22Z]
+
+  # Compiles the module the given plan renders to, as the generator compiles a written file,
+  # and returns its ops.
+  defp compile_rendered(plan) do
+    module = written_module(random_module())
+
+    plan
+    |> render(module)
+    |> Code.compile_string("app/migrations/20260813091522.ex")
+
+    module.__hologram_migration__().ops
+  end
+
+  defp history(files) do
+    files
+    |> Enum.map(fn {version, body} -> compile_migration(version, body) end)
+    |> Loader.from_modules!()
+  end
 
   defp model(entities) do
     entries =
@@ -27,55 +47,147 @@ defmodule Hologram.Migration.GeneratorTest do
     %{entities: entries, roles: %{}, user_entity: nil}
   end
 
-  defp migrations_dir!(test_dir, files \\ []) do
-    dir = Path.join(@tmp_dir, test_dir)
+  defp module_text(module, body) do
+    indented_body =
+      body
+      |> normalize_newlines()
+      |> String.trim_trailing()
+      |> String.split("\n")
+      |> Enum.map_join("\n", fn
+        "" -> ""
+        line -> "  " <> line
+      end)
+
+    """
+    defmodule #{inspect(module)} do
+      @moduledoc false
+
+      use Hologram.Migration
+
+    #{indented_body}
+    end
+    """
+  end
+
+  # The directory a test's generated file is written to, and a namespace no other test's
+  # modules use.
+  defp opts!(test_dir) do
+    dir = Path.join([@tmp_dir, test_dir, "app", "migrations"])
 
     File.rm_rf!(dir)
     File.mkdir_p!(dir)
 
-    Enum.each(files, fn {file_name, contents} ->
-      dir
-      |> Path.join(file_name)
-      |> File.write!(contents)
-    end)
+    [dir: dir, namespace: random_module()]
+  end
 
-    dir
+  # The module of the migration written at @timestamp into the given namespace.
+  defp written_module(namespace) do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    Module.concat(namespace, "V20260813091522")
   end
 
   describe "generate/4" do
     @tag :database
     test "writes the migration taking the history to the model" do
-      dir = migrations_dir!("writes_migration")
+      opts = opts!("writes_migration")
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
-      assert {:ok, path, 0} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
-      assert path == Path.join(dir, "20260813091522.exs")
+      assert {:ok, path, 0} = generate([], current, @timestamp, opts)
+      assert path == Path.join(opts[:dir], "20260813091522.ex")
 
-      expected =
-        normalize_newlines("""
-        use Hologram.Migration
-
-        create_entity MyApp.Task do
-          add_attribute :title, :string
-        end
-        """)
-
-      assert File.read!(path) == expected
-    end
-
-    test "returns the question count of a generated draft" do
-      contents = """
-      use Hologram.Migration
-
+      expected = """
       create_entity MyApp.Task do
-        add_attribute :name, :string
+        add_attribute :title, :string
       end
       """
 
-      dir = migrations_dir!("draft_count", [{"20260813091522.exs", contents}])
+      module = written_module(opts[:namespace])
+
+      assert File.read!(path) == module_text(module, expected)
+    end
+
+    @tag :database
+    test "names the module after the namespace of the newest migration in the directory" do
+      opts = opts!("newest_namespace")
+      namespace = random_module()
+      newest_path = Path.join(opts[:dir], "20260813091521.ex")
+
+      File.write!(newest_path, """
+      defmodule #{inspect(namespace)}.V20260813091521 do
+        use Hologram.Migration
+
+        create_entity MyApp.Task
+      end
+      """)
+
+      [{newest, _bytecode}] = Code.compile_file(newest_path)
+      migrations = Loader.from_modules!([newest])
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, [optional: true]}]}})
+
+      assert {:ok, path, 0} = generate(migrations, current, @timestamp, opts)
+      assert File.read!(path) =~ "defmodule #{inspect(written_module(namespace))} do"
+    end
+
+    @tag :database
+    test "takes the given namespace while the directory holds no migration" do
+      opts = opts!("outside_namespace")
+
+      # Compiled as though in another app's app/migrations/ - an umbrella sibling's.
+      migrations = history([{"20260813091521", "create_entity MyApp.Task"}])
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, [optional: true]}]}})
+
+      assert {:ok, path, 0} = generate(migrations, current, @timestamp, opts)
+      assert File.read!(path) =~ "defmodule #{inspect(written_module(opts[:namespace]))} do"
+    end
+
+    @tag :database
+    test "formats the file with the given formatter" do
+      opts =
+        "formatter"
+        |> opts!()
+        |> Keyword.put(:format, &(&1 <> "# formatted\n"))
+
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
-      assert {:ok, path, 1} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
+      assert {:ok, path, 0} = generate([], current, @timestamp, opts)
+
+      assert path
+             |> File.read!()
+             |> String.ends_with?("end\n# formatted\n")
+    end
+
+    test "leaves no file behind when the written migration fails to compile" do
+      refusing_format =
+        &String.replace(&1, "@moduledoc false", "@moduledoc false\nraise \"refused\"")
+
+      opts =
+        "uncompilable"
+        |> opts!()
+        |> Keyword.put(:format, refusing_format)
+
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      assert_raise RuntimeError, "refused", fn -> generate([], current, @timestamp, opts) end
+
+      assert File.ls!(opts[:dir]) == []
+    end
+
+    test "returns the question count of a generated draft" do
+      opts = opts!("draft_count")
+
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Task do
+             add_attribute :name, :string
+           end
+           """}
+        ])
+
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      assert {:ok, path, 1} = generate(migrations, current, @timestamp, opts)
 
       assert path
              |> File.read!()
@@ -84,96 +196,112 @@ defmodule Hologram.Migration.GeneratorTest do
 
     @tag :database
     test "does nothing when the history already produces the model" do
-      contents = """
-      use Hologram.Migration
+      opts = opts!("nothing_to_do")
 
-      create_entity MyApp.Task do
-        add_attribute :title, :string
-      end
-      """
+      migrations =
+        history([
+          {"20260813091521",
+           """
+           create_entity MyApp.Task do
+             add_attribute :title, :string
+           end
+           """}
+        ])
 
-      dir = migrations_dir!("nothing_to_do", [{"20260813091522.exs", contents}])
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
-      assert generate(Loader.load_dir!(dir), current, @timestamp, dir) == :nothing_to_do
-      assert File.ls!(dir) == ["20260813091522.exs"]
+      assert generate(migrations, current, @timestamp, opts) == :nothing_to_do
+      assert File.ls!(opts[:dir]) == []
     end
 
     @tag :database
     test "writes an option's regex with the modifiers it was declared with" do
-      dir = migrations_dir!("regex_option")
+      opts = opts!("regex_option")
 
       current =
         model(%{
           MyApp.Task => %{attributes: [{:title, :string, [format: {:regex, "^a", [:caseless]}]}]}
         })
 
-      assert {:ok, path, 0} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
+      assert {:ok, path, 0} = generate([], current, @timestamp, opts)
 
-      expected =
-        normalize_newlines("""
-        use Hologram.Migration
+      expected = """
+      create_entity MyApp.Task do
+        add_attribute :title, :string, format: ~r/^a/i
+      end
+      """
 
-        create_entity MyApp.Task do
-          add_attribute :title, :string, format: ~r/^a/i
-        end
-        """)
+      module = written_module(opts[:namespace])
 
-      assert File.read!(path) == expected
+      assert File.read!(path) == module_text(module, expected)
     end
 
     @tag :database
     test "the history it writes for a model holding a regex produces that model" do
-      dir = migrations_dir!("regex_round_trip")
+      opts = opts!("regex_round_trip")
 
       current =
         model(%{MyApp.Task => %{attributes: [{:title, :string, [format: {:regex, "^a", []}]}]}})
 
-      assert {:ok, _path, 0} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
+      assert {:ok, _path, 0} = generate([], current, @timestamp, opts)
 
-      replayed =
-        dir
-        |> Loader.load_dir!()
-        |> Enum.reduce(Model.empty(), &Model.fold(&2, &1.ops))
+      module = written_module(opts[:namespace])
+      replayed = Model.fold(Model.empty(), module.__hologram_migration__().ops)
 
       assert replayed == current
     end
 
     @tag :database
-    test "bumps the version while the minted name is taken" do
-      dir = migrations_dir!("bumps_version", [{"20260813091522.exs", "use Hologram.Migration\n"}])
+    test "bumps the version while a migration holds it" do
+      opts = opts!("bumps_version")
+      migrations = history([{"20260813091522", ""}])
       current = model(%{MyApp.Task => %{}})
 
-      assert {:ok, path, 0} = generate(Loader.load_dir!(dir), current, @timestamp, dir)
-      assert path == Path.join(dir, "20260813091523.exs")
+      assert {:ok, path, 0} = generate(migrations, current, @timestamp, opts)
+      assert path == Path.join(opts[:dir], "20260813091523.ex")
+    end
+
+    @tag :database
+    test "bumps the version while a file holds it" do
+      opts = opts!("bumps_version_file")
+
+      opts[:dir]
+      |> Path.join("20260813091522.ex")
+      |> File.write!("")
+
+      current = model(%{MyApp.Task => %{}})
+
+      assert {:ok, path, 0} = generate([], current, @timestamp, opts)
+      assert path == Path.join(opts[:dir], "20260813091523.ex")
     end
 
     test "refuses to generate while a draft holds unanswered questions" do
-      contents = """
-      use Hologram.Migration
+      opts = opts!("unresolved")
 
-      change_entity MyApp.Task do
-        resolve! :attributes, deleted: [:name], added: [:title]
-      end
-      """
+      migrations =
+        history([
+          {"20260813091522",
+           """
+           change_entity MyApp.Task do
+             resolve! :attributes, deleted: [:name], added: [:title]
+           end
+           """}
+        ])
 
-      dir = migrations_dir!("unresolved", [{"20260813091522.exs", contents}])
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
 
       assert {:error, {:unresolved, [{path, op}]}} =
-               generate(Loader.load_dir!(dir), current, @timestamp, dir)
+               generate(migrations, current, @timestamp, opts)
 
-      assert path == Path.join(dir, "20260813091522.exs")
+      assert path == "app/migrations/20260813091522.ex"
       assert op.kind == :attributes
-      assert op.line == 4
-      assert File.ls!(dir) == ["20260813091522.exs"]
+      assert op.line == 5
+      assert File.ls!(opts[:dir]) == []
     end
 
     @tag :database
     test "refuses a resolved history that cannot build the model's schema" do
-      create_contents = """
-      use Hologram.Migration
-
+      create_body = """
       create_entity MyApp.Tag
 
       create_entity MyApp.Task do
@@ -181,19 +309,14 @@ defmodule Hologram.Migration.GeneratorTest do
       end
       """
 
-      narrow_contents = """
-      use Hologram.Migration
-
+      narrow_body = """
       change_entity MyApp.Task do
         change_relationship :tags, type: MyApp.Tag
       end
       """
 
-      dir =
-        migrations_dir!("narrowing", [
-          {"20260813091522.exs", create_contents},
-          {"20260813091523.exs", narrow_contents}
-        ])
+      opts = opts!("narrowing")
+      migrations = history([{"20260813091522", create_body}, {"20260813091523", narrow_body}])
 
       current =
         model(%{
@@ -208,15 +331,13 @@ defmodule Hologram.Migration.GeneratorTest do
           "the migration that picks the survivors"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
-        generate(Loader.load_dir!(dir), current, @timestamp, dir)
+        generate(migrations, current, @timestamp, opts)
       end
     end
 
     @tag :database
-    test "leaves no file behind when the written migration fails verification" do
-      create_contents = """
-      use Hologram.Migration
-
+    test "leaves no file or module behind when the written migration fails verification" do
+      create_body = """
       create_entity MyApp.Tag
 
       create_entity MyApp.Task do
@@ -224,7 +345,8 @@ defmodule Hologram.Migration.GeneratorTest do
       end
       """
 
-      dir = migrations_dir!("unverifiable", [{"20260813091522.exs", create_contents}])
+      opts = opts!("unverifiable")
+      migrations = history([{"20260813091521", create_body}])
 
       current =
         model(%{
@@ -232,37 +354,35 @@ defmodule Hologram.Migration.GeneratorTest do
           MyApp.Task => %{relationships: [{:tags, MyApp.Tag, []}]}
         })
 
+      written_module = written_module(opts[:namespace])
+
       assert_raise Hologram.CompileError, fn ->
-        generate(Loader.load_dir!(dir), current, @timestamp, dir)
+        generate(migrations, current, @timestamp, opts)
       end
 
       # The rejected file would otherwise become the next run's history, which replays the
       # ops that failed and reports the same error with nothing naming the cause.
-      assert File.ls!(dir) == ["20260813091522.exs"]
+      assert File.ls!(opts[:dir]) == []
+      assert :code.is_loaded(written_module) == false
     end
 
     @tag :database
     test "verifies the written migration at its place in version order" do
-      create_contents = """
-      use Hologram.Migration
-
-      create_entity MyApp.Task
-      """
-
-      dir = migrations_dir!("version_order", [{"20270101000000.exs", create_contents}])
+      opts = opts!("version_order")
+      migrations = history([{"20270101000000", "create_entity MyApp.Task"}])
       current = model(%{MyApp.Task => %{attributes: [{:title, :string, [optional: true]}]}})
 
       # The written file sorts before the existing one, so its change to MyApp.Task replays
       # before MyApp.Task exists.
       assert_raise Hologram.CompileError, ~r/no such entity MyApp\.Task/, fn ->
-        generate(Loader.load_dir!(dir), current, @timestamp, dir)
+        generate(migrations, current, @timestamp, opts)
       end
 
-      assert File.ls!(dir) == ["20270101000000.exs"]
+      assert File.ls!(opts[:dir]) == []
     end
   end
 
-  describe "render/1" do
+  describe "render/3" do
     test "renders entity blocks in alphabetical order after the renames" do
       plan = %{
         ops: [
@@ -283,8 +403,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       rename_entity MyApp.Draft, MyApp.Sketch
 
       create_entity MyApp.Comment do
@@ -299,7 +417,7 @@ defmodule Hologram.Migration.GeneratorTest do
       delete_entity MyApp.Archive
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders the user entity designation after the entity blocks" do
@@ -313,8 +431,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       create_entity MyApp.Account do
         add_attribute :email, :string
       end
@@ -322,31 +438,27 @@ defmodule Hologram.Migration.GeneratorTest do
       designate_user_entity MyApp.Account
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders the role grant deletion, the one op carrying parens" do
       plan = %{ops: [%{op: :delete_role_grants}], questions: []}
 
       expected = """
-      use Hologram.Migration
-
       delete_role_grants()
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders a removed user entity designation as nil" do
       plan = %{ops: [%{op: :designate_user_entity, entity: nil}], questions: []}
 
       expected = """
-      use Hologram.Migration
-
       designate_user_entity nil
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders a moved designation question with both ops the answer needs" do
@@ -363,8 +475,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       # RESOLVE: the user entity designation is moving from MyApp.User to MyApp.Account - role grants reference MyApp.User rows, so they cannot follow it.
       # Write both ops, then delete the resolve! line. API:
       #   delete_role_grants()                   - every grant in the store is deleted
@@ -372,7 +482,7 @@ defmodule Hologram.Migration.GeneratorTest do
       resolve! :user_entity, from: MyApp.User, to: MyApp.Account
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders a removed designation question as the store's drop" do
@@ -381,7 +491,7 @@ defmodule Hologram.Migration.GeneratorTest do
         questions: [%{kind: :user_entity, from: MyApp.User, to: nil, withheld_ops: []}]
       }
 
-      rendered = render(plan)
+      rendered = render(plan, @module)
 
       assert rendered =~
                "designate_user_entity nil              - the role grant store is dropped"
@@ -404,8 +514,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       change_entity MyApp.Task do
         # RESOLVE: :title is required, and MyApp.Task already holds rows - they need a value.
         # Write the op with one of these, then delete the resolve! line. API:
@@ -416,7 +524,7 @@ defmodule Hologram.Migration.GeneratorTest do
       end
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders every entity-scoped op kind" do
@@ -474,8 +582,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       change_entity MyApp.Task do
         change_attribute :estimate, default: nil, type: :float
         delete_attribute :legacy
@@ -496,7 +602,7 @@ defmodule Hologram.Migration.GeneratorTest do
       end
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     # A reorder reads as a refactor and is not one - the declared order is what ordering by the
@@ -515,8 +621,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       change_entity MyApp.Task do
         # The declared order of :priority changed - queries ordering by it sort rows differently now.
         # No value changes: every row keeps what it holds, and the column is rebuilt to apply the order.
@@ -524,7 +628,7 @@ defmodule Hologram.Migration.GeneratorTest do
       end
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders global role ops as flat statements" do
@@ -539,8 +643,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       add_role MyApp.Roles.Support, extends: [MyApp.Roles.Admin]
 
       change_role MyApp.Roles.Owner, extends: nil
@@ -550,7 +652,7 @@ defmodule Hologram.Migration.GeneratorTest do
       delete_role MyApp.Roles.Legacy
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders an entity-scoped question inside its block, before the ops" do
@@ -577,8 +679,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       change_entity MyApp.Task do
         # RESOLVE: :desc, :name disappeared from the attributes - :body, :title appeared.
         # Write the ops that express what happened, then delete the resolve! line. API:
@@ -591,7 +691,7 @@ defmodule Hologram.Migration.GeneratorTest do
       end
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders an entity question at the top level" do
@@ -609,8 +709,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       # RESOLVE: MyApp.Draft disappeared from the entity types - MyApp.Sketch appeared.
       # Write the ops that express what happened, then delete the resolve! line. API:
       #   rename_entity MyApp.Old, MyApp.New      - the table is renamed, its rows kept
@@ -620,7 +718,7 @@ defmodule Hologram.Migration.GeneratorTest do
       resolve! :entities, deleted: [MyApp.Draft], added: [MyApp.Sketch]
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "names the attribute in an enum value question" do
@@ -640,8 +738,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       change_entity MyApp.Task do
         # RESOLVE: :done disappeared from the values of :status - :completed appeared.
         # Write the ops that express what happened, then delete the resolve! line. API:
@@ -653,7 +749,7 @@ defmodule Hologram.Migration.GeneratorTest do
       end
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders a question without hints" do
@@ -671,8 +767,6 @@ defmodule Hologram.Migration.GeneratorTest do
       }
 
       expected = """
-      use Hologram.Migration
-
       # RESOLVE: MyApp.Roles.Moderator, MyApp.Roles.Legacy disappeared from the roles - MyApp.Roles.Maintainer appeared.
       # Write the ops that express what happened, then delete the resolve! line. API:
       #   rename_role :old, :new                  - existing grants follow the label
@@ -683,7 +777,7 @@ defmodule Hologram.Migration.GeneratorTest do
         added: [MyApp.Roles.Maintainer]
       """
 
-      assert render(plan) == normalize_newlines(expected)
+      assert render(plan, @module) == module_text(@module, expected)
     end
 
     test "renders text the loader reads back as the given ops" do
@@ -704,10 +798,7 @@ defmodule Hologram.Migration.GeneratorTest do
         %{op: :designate_user_entity, entity: MyApp.Comment}
       ]
 
-      loaded =
-        %{ops: ops, questions: []}
-        |> render()
-        |> Loader.load_string!("20260813091522.exs")
+      loaded = compile_rendered(%{ops: ops, questions: []})
 
       assert Enum.map(loaded, &Map.delete(&1, :line)) == ops
     end
@@ -722,10 +813,7 @@ defmodule Hologram.Migration.GeneratorTest do
         withheld_ops: []
       }
 
-      loaded =
-        %{ops: [], questions: [question]}
-        |> render()
-        |> Loader.load_string!("20260813091522.exs")
+      loaded = compile_rendered(%{ops: [], questions: [question]})
 
       assert Enum.map(loaded, &Map.delete(&1, :line)) == [
                %{
