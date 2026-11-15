@@ -266,6 +266,9 @@ defmodule Hologram.Migration.Generator do
     Enum.map_join(names, ", ", &inspect/1)
   end
 
+  # The file compiled is the one this run just wrote into the app's own migrations directory -
+  # the same code the next mix compile builds.
+  # sobelow_skip ["RCE.Compile"]
   defp load_written!(path, module) do
     Code.compile_file(path)
 
@@ -279,7 +282,9 @@ defmodule Hologram.Migration.Generator do
       reraise error, __STACKTRACE__
   end
 
-  # The module name is new by construction - it holds the version just minted.
+  # The module name is new by construction - it holds the version just minted - and is made
+  # once per generated file, by a developer's task run, never from a request.
+  # sobelow_skip ["DOS.ModuleConcat"]
   defp module_name(migrations, version, opts) do
     migrations
     |> namespace(opts)
@@ -289,7 +294,9 @@ defmodule Hologram.Migration.Generator do
 
   # The history spans every app reaching Hologram - an umbrella sibling's or a dependency's
   # migrations among them - so only the migrations in the target directory say which
-  # namespace this app's migrations use.
+  # namespace this app's migrations use. The namespace is an existing module's, minus its
+  # last segment.
+  # sobelow_skip ["DOS.ModuleConcat"]
   defp namespace(migrations, opts) do
     dir =
       opts
