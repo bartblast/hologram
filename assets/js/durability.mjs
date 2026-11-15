@@ -135,19 +135,27 @@ export default class Durability {
     return Durability.#write([ENTITIES, META], Durability.#wipe);
   }
 
-  // `hologram.<layout>.<model hash>` - a bundle carrying another store layout, or speaking another
-  // model, opens a database of its own.
+  // `hologram.<layout>.<protocol version>.<model hash>` - a bundle carrying another store layout,
+  // speaking another sync protocol or built against another model opens a database of its own.
   //
   // The framework's half comes first and the app's second, broad before narrow: the layout is
-  // Hologram's own and moves when the shape of the store does, the model hash is the app's and
-  // moves on any deploy that touches an entity. That also leaves the stable half as a prefix -
-  // `hologram.<layout>.` names every database of one shape, which is a prefix test rather than a
-  // parse for anything that ever has to gate on a shape it cannot read.
+  // Hologram's own and moves when the shape of the store does, the protocol is Hologram's too and
+  // moves when what the stream sends does, and the model hash is the app's and moves on any deploy
+  // that touches an entity. That also leaves the stable half as a prefix - `hologram.<layout>.`
+  // names every database of one shape, which is a prefix test rather than a parse for anything
+  // that ever has to gate on a shape it cannot read.
+  //
+  // The protocol is in the name for the group rather than for the store. The server stops serving
+  // a tab speaking an older protocol, and a tab loaded after the upgrade would otherwise join that
+  // tab's group and follow a leader that is never served. Two protocols are two groups, so a group
+  // is one model and one protocol, and whatever stops one of its tabs stops all of them.
   //
   // Public because the group of tabs sharing this database is named from it, and so is the lock
   // that elects their leader - one database, one queue, one leader.
   static databaseName() {
-    return `hologram.${LAYOUT}.${globalThis.Hologram.sync.modelHash}`;
+    const sync = globalThis.Hologram.sync;
+
+    return `hologram.${LAYOUT}.${sync.protocolVersion}.${sync.modelHash}`;
   }
 
   // Lets go of the database without touching what it holds. For a tab told that ANOTHER tab of its
