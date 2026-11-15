@@ -117,14 +117,14 @@ defmodule Hologram.DB.Mapper do
 
     mapping =
       Map.new(entities, fn {entity_type, entry} ->
-        table_name = table_name(entity_type)
+        segments = table_segments(entity_type)
 
         {entity_type,
          %{
-           table: table_name,
-           pk_constraint: fit_identifier("#{table_name}_$pk"),
+           table: table_name(entity_type),
+           pk_constraint: fit_identifier(segments, [], "$pk"),
            columns: columns_from_entry(entity_type, entry),
-           indexes: entity_indexes(entity_type, entry, table_name),
+           indexes: entity_indexes(entity_type, entry, segments),
            join_tables: join_tables_from_entry(entity_type, entry)
          }}
       end)
@@ -143,19 +143,38 @@ defmodule Hologram.DB.Mapper do
 
   def derived?(_column), do: false
 
+  # The rule is part of every database Hologram manages. Indexes, join tables and enum types
+  # follow a change to it through renames, but tables and columns don't: the reconciler can't
+  # tell a renamed table or column from a dropped one plus a new one. So once the data layer is
+  # released, the part of the rule that names tables and columns can't change without dev
+  # rebuilding them and a migration-managed boot refusing.
   @doc """
-  Returns the given identifier unchanged when it fits the PostgreSQL identifier limit,
-  or shortened to a readable prefix followed by a short deterministic hash of the full
-  identifier otherwise.
+  Returns the identifier built from the given parts, fitted to the PostgreSQL identifier limit.
+
+  The parts are the owning table's segments (outermost first, the entity's own name last, none
+  for a column name), whole column names in order, and the kind suffix (like "$fk", "id", or
+  nil for a table name). Joined with single underscores, a name that fits is returned as is.
+
+  One over the limit becomes `<kept>_<digest>_<kind>`: the digest is a short deterministic hash
+  of the whole joined name, and the kept part comes from dropping, until it fits, the leading
+  table segments while more than one remains, then the trailing columns while more than one
+  remains, then the last table segment when a column remains, and at last cutting the one piece
+  left at a character boundary. The kind always survives, so a name still says what it is, and
+  what survives longest is the lead column, then the entity's own name.
   """
-  @spec fit_identifier(String.t()) :: String.t()
-  def fit_identifier(identifier) do
+  @spec fit_identifier(list(String.t()), list(String.t()), String.t() | nil) :: String.t()
+  def fit_identifier(table_segments, columns, kind) do
+    identifier = join_identifier(table_segments ++ columns, kind)
+
     if byte_size(identifier) > @max_identifier_bytes do
-      hash = CryptographicUtils.short_digest(identifier, @digest_bytes)
+      digest = CryptographicUtils.short_digest(identifier, @digest_bytes)
+      tail = join_identifier([digest], kind)
+      budget = @max_identifier_bytes - byte_size(tail) - 1
 
-      prefix_bytes = @max_identifier_bytes - 2 * @digest_bytes - 1
-
-      binary_part(identifier, 0, prefix_bytes) <> "_" <> hash
+      case cut_parts(table_segments, columns, budget) do
+        "" -> tail
+        kept -> kept <> "_" <> tail
+      end
     else
       identifier
     end
@@ -216,28 +235,19 @@ defmodule Hologram.DB.Mapper do
 
   The name is the snake_cased module path with the leading segment stripped when it matches
   the primary OTP app's conventional root namespace - modules from other roots (guest apps,
-  libraries) keep their full path. Derived names over the PostgreSQL identifier limit keep
-  a readable prefix followed by a short deterministic hash of the full name.
+  libraries) keep their full path. A name over the PostgreSQL identifier limit keeps the
+  entity's own name, cut when it has to be, followed by a short deterministic hash of the full
+  name (see fit_identifier/3).
 
   Framework-provided entity types are pinned to their full snake_cased path, so their
   tables carry the hologram_ prefix in every project - path derivation would strip it
   inside the framework's own repository, where the root namespace is Hologram.
   """
   @spec table_name(module) :: String.t()
-  def table_name(Hologram.Auth.RoleGrant), do: "hologram_role_grant"
-
   def table_name(entity_type) do
-    segments = Module.split(entity_type)
-
-    root =
-      Reflection.otp_app()
-      |> Atom.to_string()
-      |> Macro.camelize()
-
-    segments
-    |> strip_root(root)
-    |> Enum.map_join("_", &Macro.underscore/1)
-    |> fit_identifier()
+    entity_type
+    |> table_segments()
+    |> fit_identifier([], nil)
   end
 
   @doc """
@@ -317,14 +327,14 @@ defmodule Hologram.DB.Mapper do
   end
 
   defp columns_from_entry(entity_type, entry) do
-    table_name = table_name(entity_type)
+    segments = table_segments(entity_type)
 
     attribute_columns =
       Enum.map(entry.attributes, fn {name, type, opts} ->
         %{
           name: Atom.to_string(name),
           type: type,
-          sql_type: sql_type(type, table_name, name),
+          sql_type: sql_type(type, segments, name),
           collation: collation(type),
           enum_values: enum_values(type, opts),
           default: Keyword.get(opts, :default),
@@ -340,16 +350,18 @@ defmodule Hologram.DB.Mapper do
       entry.relationships
       |> Enum.reject(fn {_name, type, _opts} -> is_list(type) end)
       |> Enum.map(fn {name, target, opts} ->
+        column_name = reference_column_name(name)
+
         # A unique reference is indexed by its unique index instead (see entity_indexes/3).
         index =
           if Keyword.get(opts, :unique) == true do
             nil
           else
-            fit_identifier("#{table_name}_#{name}_id_$idx")
+            fit_identifier(segments, [column_name], "$idx")
           end
 
         %{
-          name: fit_identifier("#{name}_id"),
+          name: column_name,
           type: :uuid,
           sql_type: "uuid",
           collation: nil,
@@ -357,14 +369,14 @@ defmodule Hologram.DB.Mapper do
           default: nil,
           null: Keyword.get(opts, :optional) == true,
           references: table_name(target),
-          fk_constraint: fit_identifier("#{table_name}_#{name}_id_$fk"),
+          fk_constraint: fit_identifier(segments, [column_name], "$fk"),
           index: index,
           source: {:relationship, name}
         }
       end)
 
-    sort_columns = sort_key_columns(table_name, entry.attributes)
-    search_columns = search_key_columns(table_name, entry.attributes)
+    sort_columns = sort_key_columns(segments, entry.attributes)
+    search_columns = search_key_columns(entry.attributes)
 
     columns =
       [id_column() | attribute_columns] ++
@@ -374,6 +386,42 @@ defmodule Hologram.DB.Mapper do
     validate_column_names!(entity_type, columns)
 
     columns
+  end
+
+  # One step at a time, re-measuring after each, so a name only loses what it has to.
+  defp cut_parts(table_segments, columns, budget) do
+    kept = Enum.join(table_segments ++ columns, "_")
+
+    cond do
+      byte_size(kept) <= budget ->
+        kept
+
+      match?([_first, _second | _rest], table_segments) ->
+        cut_parts(tl(table_segments), columns, budget)
+
+      match?([_first, _second | _rest], columns) ->
+        cut_parts(table_segments, Enum.drop(columns, -1), budget)
+
+      table_segments != [] and columns != [] ->
+        cut_parts([], columns, budget)
+
+      true ->
+        cut_piece(kept, budget)
+    end
+  end
+
+  # At a character boundary - PostgreSQL refuses an identifier holding a split character in a
+  # UTF8 database. The underscores the cut leaves at the end go too, so the one the digest is
+  # joined with never doubles.
+  defp cut_piece(piece, budget) do
+    piece
+    |> String.codepoints()
+    |> Enum.reduce_while("", fn codepoint, acc ->
+      if byte_size(acc) + byte_size(codepoint) <= budget,
+        do: {:cont, acc <> codepoint},
+        else: {:halt, acc}
+    end)
+    |> String.trim_trailing("_")
   end
 
   defp describe_column_collision({name, group}) do
@@ -422,13 +470,15 @@ defmodule Hologram.DB.Mapper do
   # do: a prefix is not unique.
   # TODO: a unique index over a hash expression lifts the bound for unbounded strings, once a
   # declaration needs it - it teaches the whole index chain an expression shape.
-  defp entity_indexes(entity_type, entry, table_name) do
+  defp entity_indexes(entity_type, entry, segments) do
     attribute_indexes =
       entry.attributes
       |> Enum.filter(fn {_name, _type, opts} -> Keyword.get(opts, :unique) == true end)
       |> Map.new(fn {name, _type, _opts} ->
-        {fit_identifier("#{table_name}_#{name}_$uidx"),
-         %{columns: [Atom.to_string(name)], nulls_distinct: true, unique: true}}
+        column_name = Atom.to_string(name)
+
+        {fit_identifier(segments, [column_name], "$uidx"),
+         %{columns: [column_name], nulls_distinct: true, unique: true}}
       end)
 
     reference_indexes =
@@ -437,8 +487,10 @@ defmodule Hologram.DB.Mapper do
         not is_list(type) and Keyword.get(opts, :unique) == true
       end)
       |> Map.new(fn {name, _type, _opts} ->
-        {fit_identifier("#{table_name}_#{name}_id_$uidx"),
-         %{columns: [fit_identifier("#{name}_id")], nulls_distinct: true, unique: true}}
+        column_name = reference_column_name(name)
+
+        {fit_identifier(segments, [column_name], "$uidx"),
+         %{columns: [column_name], nulls_distinct: true, unique: true}}
       end)
 
     attribute_indexes
@@ -522,23 +574,34 @@ defmodule Hologram.DB.Mapper do
     }
   end
 
+  defp join_identifier(parts, nil), do: Enum.join(parts, "_")
+
+  defp join_identifier([], kind), do: kind
+
+  defp join_identifier(parts, kind), do: Enum.join(parts, "_") <> "_" <> kind
+
+  # The join table's own objects take `<relationship>_$join` as their last table segment, so
+  # a cut drops the source table's segments before it - and for a name that fits, the joined
+  # string is the join table's name followed by the object's. Only a relationship name too long
+  # to fit beside the object's column loses it, the way any table segment would.
   defp join_tables_from_entry(entity_type, entry) do
-    source_table = table_name(entity_type)
+    source_segments = table_segments(entity_type)
 
     entry.relationships
     |> Enum.filter(fn {_name, type, _opts} -> is_list(type) end)
     |> Enum.map(fn {name, [target], _opts} ->
-      join_table_name = fit_identifier("#{source_table}_#{name}_$join")
+      relationship = Atom.to_string(name)
+      join_segments = Enum.concat(source_segments, ["#{relationship}_$join"])
 
       %{
-        name: join_table_name,
+        name: fit_identifier(source_segments, [relationship], "$join"),
         relationship: name,
-        source_table: source_table,
+        source_table: table_name(entity_type),
         target_table: table_name(target),
-        reverse_index: fit_identifier("#{join_table_name}_target_id_$idx"),
-        pk_constraint: fit_identifier("#{join_table_name}_$pk"),
-        source_fk_constraint: fit_identifier("#{join_table_name}_source_id_$fk"),
-        target_fk_constraint: fit_identifier("#{join_table_name}_target_id_$fk")
+        reverse_index: fit_identifier(join_segments, ["target_id"], "$idx"),
+        pk_constraint: fit_identifier(join_segments, [], "$pk"),
+        source_fk_constraint: fit_identifier(join_segments, ["source_id"], "$fk"),
+        target_fk_constraint: fit_identifier(join_segments, ["target_id"], "$fk")
       }
     end)
   end
@@ -635,15 +698,18 @@ defmodule Hologram.DB.Mapper do
     }
   end
 
-  defp search_key_columns(table_name, attributes) do
+  defp reference_column_name(relationship),
+    do: fit_identifier([], [Atom.to_string(relationship)], "id")
+
+  defp search_key_columns(attributes) do
     attributes
     |> Enum.filter(fn {_name, type, _opts} -> type == :string end)
     |> Enum.sort()
     |> Enum.map(fn {name, _type, _opts} ->
       %{
-        name: fit_identifier("#{name}_$search"),
+        name: fit_identifier([], [Atom.to_string(name)], "$search"),
         type: :string,
-        sql_type: sql_type(:string, table_name, name),
+        sql_type: "text",
         collation: collation(:string),
         enum_values: nil,
         default: nil,
@@ -656,48 +722,66 @@ defmodule Hologram.DB.Mapper do
     end)
   end
 
-  defp sort_key_columns(table_name, attributes) do
+  defp sort_key_columns(segments, attributes) do
     attributes
     |> Enum.filter(fn {_name, type, _opts} -> type == :string end)
     |> Enum.sort()
     |> Enum.map(fn {name, _type, _opts} ->
+      column_name = fit_identifier([], [Atom.to_string(name)], "$sort")
+
       %{
-        name: fit_identifier("#{name}_$sort"),
+        name: column_name,
         type: :string,
-        sql_type: sql_type(:string, table_name, name),
+        sql_type: "text",
         collation: collation(:string),
         enum_values: nil,
         default: nil,
         null: true,
         references: nil,
         fk_constraint: nil,
-        index: fit_identifier("#{table_name}_#{name}_$sort_$idx"),
+        index: fit_identifier(segments, [column_name], "$idx"),
         source: {:sort_key, name}
       }
     end)
   end
 
-  defp sql_type(:boolean, _table_name, _name), do: "boolean"
+  defp sql_type(:boolean, _segments, _name), do: "boolean"
 
-  defp sql_type(:date, _table_name, _name), do: "date"
+  defp sql_type(:date, _segments, _name), do: "date"
 
-  defp sql_type(:datetime, _table_name, _name), do: "timestamptz"
+  defp sql_type(:datetime, _segments, _name), do: "timestamptz"
 
-  defp sql_type(:enum, table_name, name), do: fit_identifier("#{table_name}_#{name}_$enum")
+  defp sql_type(:enum, segments, name),
+    do: fit_identifier(segments, [Atom.to_string(name)], "$enum")
 
-  defp sql_type(:float, _table_name, _name), do: "float8"
+  defp sql_type(:float, _segments, _name), do: "float8"
 
-  defp sql_type(:integer, _table_name, _name), do: "int8"
+  defp sql_type(:integer, _segments, _name), do: "int8"
 
-  defp sql_type(:string, _table_name, _name), do: "text"
+  defp sql_type(:string, _segments, _name), do: "text"
 
-  defp sql_type(:time, _table_name, _name), do: "time"
+  defp sql_type(:time, _segments, _name), do: "time"
 
-  defp sql_type(:uuid, _table_name, _name), do: "uuid"
+  defp sql_type(:uuid, _segments, _name), do: "uuid"
 
   defp strip_root([root | [_head | _tail] = remainder], root), do: remainder
 
   defp strip_root(segments, _root), do: segments
+
+  # Framework-provided entity types are pinned whole, as one segment - see table_name/1.
+  defp table_segments(Hologram.Auth.RoleGrant), do: ["hologram_role_grant"]
+
+  defp table_segments(entity_type) do
+    root =
+      Reflection.otp_app()
+      |> Atom.to_string()
+      |> Macro.camelize()
+
+    entity_type
+    |> Module.split()
+    |> strip_root(root)
+    |> Enum.map(&Macro.underscore/1)
+  end
 
   defp timestamp_columns do
     Enum.map(["created_at", "updated_at"], fn name ->

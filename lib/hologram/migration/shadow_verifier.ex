@@ -49,7 +49,7 @@ defmodule Hologram.Migration.ShadowVerifier do
     # suffix away - so the drop that clears a stale scratch database would name the
     # configured one and take it. Fitting also keeps two long configured names apart, which
     # bare truncation does not.
-    shadow_database = Mapper.fit_identifier(Config.connection_opts()[:database] <> "_shadow")
+    shadow_database = Mapper.fit_identifier([Config.connection_opts()[:database]], [], "shadow")
 
     maintenance_pid = start_connection("postgres")
 

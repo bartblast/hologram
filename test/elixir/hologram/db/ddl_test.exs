@@ -757,7 +757,7 @@ defmodule Hologram.DB.DDLTest do
       assert scoped_at < unscoped_at
     end
 
-    test "shortens the temporary type name over the PostgreSQL identifier limit" do
+    test "shortens the temporary type name over the PostgreSQL identifier limit, keeping its suffix" do
       op = %{
         op: :rebuild_enum_type,
         enum_type: "task_extraordinarily_long_attribute_name_for_the_status_$enum",
@@ -765,7 +765,7 @@ defmodule Hologram.DB.DDLTest do
         columns: []
       }
 
-      fitted_old_type = "task_extraordinarily_long_attribute_name_for_the_statu_e6814778"
+      fitted_old_type = "task_extraordinarily_long_attribute_name_for_the_e6814778_$old"
       [rename_statement, _create_statement, drop_statement] = statements(op)
 
       assert rename_statement =~ ~s(RENAME TO "#{fitted_old_type}")

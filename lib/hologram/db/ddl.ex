@@ -456,7 +456,7 @@ defmodule Hologram.DB.DDL do
   end
 
   def statements(%{op: :rebuild_enum_type} = op) do
-    old_type = Mapper.fit_identifier("#{op.enum_type}_$old")
+    old_type = Mapper.fit_identifier([op.enum_type], [], "$old")
     remap = Map.get(op, :remap, [])
 
     rename_statement =

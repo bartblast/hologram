@@ -335,7 +335,7 @@ defmodule Hologram.DB.MapperTest do
              ]
     end
 
-    test "shortens foreign key constraint names over the PostgreSQL identifier limit" do
+    test "shortens foreign key constraint names over the PostgreSQL identifier limit, keeping the kind" do
       defmodule InlineEntityFixture17 do
         use Hologram.Entity
 
@@ -343,10 +343,10 @@ defmodule Hologram.DB.MapperTest do
       end
 
       assert column(InlineEntityFixture17, "quite_long_relationship_name_id").fk_constraint ==
-               "db_mapper_test_inline_entity_fixture17_quite_long_rela_bbbac617"
+               "quite_long_relationship_name_id_bbbac617_$fk"
     end
 
-    test "shortens foreign key index names over the PostgreSQL identifier limit" do
+    test "shortens foreign key index names over the PostgreSQL identifier limit, keeping the kind" do
       defmodule InlineEntityFixture18 do
         use Hologram.Entity
 
@@ -354,7 +354,7 @@ defmodule Hologram.DB.MapperTest do
       end
 
       assert column(InlineEntityFixture18, "quite_long_relationship_name_id").index ==
-               "db_mapper_test_inline_entity_fixture18_quite_long_rela_f8dbb8ba"
+               "quite_long_relationship_name_id_f8dbb8ba_$idx"
     end
 
     test "rejects declarations deriving the same column name" do
@@ -861,22 +861,87 @@ defmodule Hologram.DB.MapperTest do
     end
   end
 
-  describe "fit_identifier/1" do
-    test "returns identifiers within the PostgreSQL limit unchanged" do
-      assert fit_identifier("task_status_$enum") == "task_status_$enum"
+  describe "fit_identifier/3" do
+    test "joins the parts with single underscores when the name fits" do
+      assert fit_identifier(["task"], ["status"], "$enum") == "task_status_$enum"
     end
 
-    test "returns a 63-byte identifier unchanged" do
-      identifier = String.duplicate("a", 63)
-
-      assert fit_identifier(identifier) == identifier
+    test "leaves out the kind when there is none" do
+      assert fit_identifier(["blog", "post"], [], nil) == "blog_post"
     end
 
-    test "shortens identifiers over the limit to a prefix plus a deterministic hash" do
-      identifier = String.duplicate("a", 60) <> "_$enum"
+    test "returns a 63-byte name unchanged" do
+      column = String.duplicate("a", 50)
 
-      assert fit_identifier(identifier) ==
-               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_e4fa9150"
+      assert fit_identifier(["invoice"], [column], "$idx") == "invoice_#{column}_$idx"
+    end
+
+    test "drops the leading table segments first, keeping the column, a digest and the kind" do
+      assert fit_identifier(
+               ["billing", "subscriptions", "recurring_invoice_line_item"],
+               ["subscription_id"],
+               "$fk"
+             ) == "recurring_invoice_line_item_subscription_id_aa227011_$fk"
+    end
+
+    test "drops a leading table segment only as far as the name needs" do
+      assert fit_identifier(
+               ["billing_department_long", "plans", "invoice_line_item"],
+               ["subscription_id"],
+               "$fk"
+             ) == "plans_invoice_line_item_subscription_id_446e67d8_$fk"
+    end
+
+    test "drops the table's context before any column" do
+      assert fit_identifier(
+               ["billing_and_accounts", "subscriptions"],
+               ["first_column", "second_column"],
+               "$uidx"
+             ) == "subscriptions_first_column_second_column_603c0d2b_$uidx"
+    end
+
+    test "drops trailing columns whole once the table is down to its own name" do
+      columns = ["first_quite_long_column", "second_quite_long_column", "third_column"]
+
+      assert fit_identifier(["post"], columns, "$uidx") ==
+               "post_first_quite_long_column_08083a7a_$uidx"
+    end
+
+    test "drops the entity's own name before the lone column, then cuts the column" do
+      column = String.duplicate("a", 51)
+
+      assert fit_identifier(["invoice"], [column], "$idx") ==
+               String.duplicate("a", 49) <> "_0c8244ba_$idx"
+    end
+
+    test "cuts at a character boundary" do
+      column = String.duplicate("ż", 40)
+
+      assert fit_identifier([], [column], "id") ==
+               String.duplicate("ż", 25) <> "_a25d842e_id"
+    end
+
+    test "trims the underscores a cut leaves at the end" do
+      column = String.duplicate("a", 50) <> "_" <> String.duplicate("b", 20)
+
+      assert fit_identifier([], [column], "id") ==
+               String.duplicate("a", 50) <> "_fd0eaed7_id"
+    end
+
+    test "keeps the digest and the kind alone when nothing is left after the cut" do
+      assert fit_identifier([], [String.duplicate("_", 70)], "id") == "5b6791bf_id"
+    end
+
+    test "gives names that differ only in a dropped part different digests" do
+      segments = ["subscriptions", "recurring_invoice_line_item"]
+
+      billing = fit_identifier(["billing" | segments], ["subscription_id"], "$fk")
+      accounting = fit_identifier(["accounting" | segments], ["subscription_id"], "$fk")
+
+      assert billing != accounting
+
+      assert String.replace(billing, ~r/_[0-9a-f]{8}_/, "_") ==
+               String.replace(accounting, ~r/_[0-9a-f]{8}_/, "_")
     end
   end
 
@@ -909,6 +974,29 @@ defmodule Hologram.DB.MapperTest do
 
       assert [join_table] = join_tables(InlineEntityFixture2)
       assert join_table.source_table == join_table.target_table
+    end
+
+    test "keeps the relationship, $join and the kind in a join table's names over the PostgreSQL identifier limit" do
+      defmodule InlineEntityFixture23 do
+        use Hologram.Entity
+
+        relationship :recurring_invoice_adjustments, [Module1]
+      end
+
+      assert [join_table] = join_tables(InlineEntityFixture23)
+
+      assert join_table.name == "recurring_invoice_adjustments_f97af6f0_$join"
+
+      assert join_table.reverse_index ==
+               "recurring_invoice_adjustments_$join_target_id_19c97fba_$idx"
+
+      assert join_table.pk_constraint == "recurring_invoice_adjustments_$join_23c0665c_$pk"
+
+      assert join_table.source_fk_constraint ==
+               "recurring_invoice_adjustments_$join_source_id_74bcced4_$fk"
+
+      assert join_table.target_fk_constraint ==
+               "recurring_invoice_adjustments_$join_target_id_59be50d0_$fk"
     end
   end
 
@@ -983,12 +1071,11 @@ defmodule Hologram.DB.MapperTest do
       assert table_name(Hologram) == "hologram"
     end
 
-    test "shortens names over the PostgreSQL identifier limit to a prefix plus a deterministic hash" do
+    test "shortens names over the PostgreSQL identifier limit to the entity's own name plus a deterministic hash" do
       entity_type =
         Hologram.SomeDeeplyNested.EntityTypeModule.WithAnExtraordinarilyLong.MultiSegmentName
 
-      assert table_name(entity_type) ==
-               "some_deeply_nested_entity_type_module_with_an_extraord_e6841b3f"
+      assert table_name(entity_type) == "with_an_extraordinarily_long_multi_segment_name_e6841b3f"
     end
   end
 
