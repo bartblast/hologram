@@ -9,6 +9,7 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.DB
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module13, as: PolicyModule13
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
@@ -27,6 +28,7 @@ defmodule Hologram.Sync.RecheckTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module7
   alias Hologram.Test.Fixtures.Policy.Readers.Module8
   alias Hologram.Test.Fixtures.Policy.Readers.Module9
+  alias Hologram.Test.Fixtures.Role
 
   setup do
     alice = create_user("alice@example.com")
@@ -223,6 +225,9 @@ defmodule Hologram.Sync.RecheckTest do
       viewer_owned = create(Module13, %{owner_id: alice})
       outer = create(Module13, %{owner_id: alice})
       deputy = create(Module13)
+      grandparent = create(PolicyModule2)
+      chained_parent = create(PolicyModule1, %{parent_id: grandparent.id})
+      two_hops = create(Module13, %{parent_id: chained_parent.id})
 
       add_relationship(Module13, outer.id, :lists, open_list.id)
       add_relationship(Module13, deputy.id, :lists, deputy_list.id)
@@ -234,6 +239,8 @@ defmodule Hologram.Sync.RecheckTest do
       Auth.grant_role(bob, :viewer, viewer_led)
       Auth.grant_role(alice, :viewer, viewer_owned)
       Auth.grant_role(bob, :viewer, viewer_owned)
+      Auth.grant_role(bob, :admin, grandparent)
+      Auth.grant_role(alice, :member, grandparent)
 
       rows = [
         granted,
@@ -245,7 +252,8 @@ defmodule Hologram.Sync.RecheckTest do
         ungranted_led,
         viewer_owned,
         outer,
-        deputy
+        deputy,
+        two_hops
       ]
 
       readable = assert_answers_as_can(Module13, rows, context.users)
@@ -260,6 +268,7 @@ defmodule Hologram.Sync.RecheckTest do
       assert readers_of(readable, viewer_owned) == MapSet.new([alice])
       assert readers_of(readable, outer) == MapSet.new([alice])
       assert readers_of(readable, deputy) == MapSet.new([bob, carol])
+      assert readers_of(readable, two_hops) == MapSet.new([alice, bob])
     end
 
     test "decides grant and delegation rules of the policy fixtures", context do
@@ -269,6 +278,7 @@ defmodule Hologram.Sync.RecheckTest do
 
       Auth.grant_role(context.bob, :viewer, viewed_child)
       Auth.grant_role(context.alice, :admin, PolicyModule2)
+      Auth.grant_role(context.carol, :viewer, PolicyModule1)
 
       children = [
         public_child,
@@ -280,6 +290,9 @@ defmodule Hologram.Sync.RecheckTest do
 
       assert readers_of(readable, public_child) == :all
 
+      assert readers_of(readable, viewed_child) ==
+               MapSet.new([context.alice, context.bob, context.carol])
+
       delegators = Enum.map(children, &create(PolicyModule5, %{parent_id: &1.id}))
       assert_answers_as_can(PolicyModule5, delegators, context.users)
 
@@ -287,15 +300,36 @@ defmodule Hologram.Sync.RecheckTest do
       assert_answers_as_can(PolicyModule8, delegators_twice, context.users)
     end
 
+    test "finds the holders of a role on a related row", context do
+      parent = create(PolicyModule2)
+      other_parent = create(PolicyModule2)
+
+      Auth.grant_role(context.alice, :member, parent)
+      Auth.grant_role(context.bob, :member, other_parent)
+
+      child = create(PolicyModule13, %{parent_id: parent.id})
+      orphan = create(PolicyModule13)
+
+      readable = assert_answers_as_can(PolicyModule13, [child, orphan], context.users)
+
+      assert readers_of(readable, child) == MapSet.new([context.alice])
+      refute Map.has_key?(readable, orphan.id)
+    end
+
     test "decides the grant store's own rules", context do
       entity = create(PolicyModule2)
 
       Auth.grant_role(context.alice, :member, entity)
       Auth.grant_role(context.bob, :admin, entity)
+      Auth.grant_role(context.carol, Role.Module1)
 
       grants = DB.read(RoleGrant)
+      readable = assert_answers_as_can(RoleGrant, grants, context.users)
 
-      assert_answers_as_can(RoleGrant, grants, context.users)
+      bob_grant = Enum.find(grants, &(&1.user_id == context.bob))
+
+      assert readers_of(readable, bob_grant) ==
+               MapSet.new([context.alice, context.bob, context.carol])
     end
 
     test "decides a rule admitting everyone once for every user", context do

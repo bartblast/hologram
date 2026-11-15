@@ -22,4 +22,6 @@ defmodule Hologram.Test.Fixtures.Policy.Readers.Module13 do
   allow :read, to: :viewer, via: {:update, other_list}
   allow :read, when: any(list <- lists, list.open == true and owner_id == user_id())
   allow :read, when: any(list <- lists, list.lead_id == user_id() or list.deputy_id == user_id())
+  allow :read, via: {:update, parent.parent}
+  allow :read, to: {:member, parent.parent}
 end

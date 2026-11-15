@@ -216,8 +216,9 @@ defmodule Hologram.DB.QueryCompiler do
   The rules depending on the user test each user as the acting user, read off a row of its own.
   When each of them bounds its users by a condition it requires (see `t:Hologram.Policy.Readers.anchor/0`),
   the users tested on a row are found from the row - the values an equality on the acting user
-  compares, over every row of the sets an `any` reaches - and only those of `:users` among them are
-  tested. Otherwise every user of `:users` is tested on every row.
+  compares, over every row of the sets an `any` reaches, the holders of the roles a rule names, and
+  those of the rules a delegation asks, on the row it leads to - and only those of `:users` among
+  them are tested. Otherwise every user of `:users` is tested on every row.
   """
   @spec recheck(module, %{module => %{atom => any}}, boolean) :: %{atom => any}
   def recheck(entity_type, mapping, anonymous?) do
@@ -1277,18 +1278,13 @@ defmodule Hologram.DB.QueryCompiler do
     users_sql = ~s|SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user")|
 
     {candidates_sql, filter_sql, new_params} =
-      if Enum.all?(classes, &row_listed?/1) do
-        scope =
-          entity_type
-          |> policy_context(mapping, policy)
-          |> rule_scope()
+      if Enum.all?(classes, &match?({:listed, _rule, _anchor}, &1)) do
+        context = policy_context(entity_type, mapping, policy)
 
-        # Split rules can share an anchor, which renders the same on the same scope.
         {branches, params_after_candidates} =
           classes
           |> Enum.map(fn {:listed, _rule, anchor} -> anchor end)
-          |> Enum.uniq()
-          |> Enum.map_reduce(params_after_condition, &reader_candidates_sql(&1, scope, &2))
+          |> anchors_candidates_sql(context, params_after_condition)
 
         # Wrapped, the membership stays a subplan Postgres hashes once per statement. Bare, it is
         # pulled up into a join, which with one candidate per row scans every user for each row, and
@@ -1305,6 +1301,25 @@ defmodule Hologram.DB.QueryCompiler do
         ~s|FROM (#{candidates_sql}) AS "$c"("$reader") WHERE #{filter_sql}#{condition_sql}) END|
 
     {readers_sql, new_params}
+  end
+
+  # The candidates of the given rules' anchors on the row the context is about, each anchor once -
+  # split rules can share one, which renders the same on the same row. A grant or a delegation
+  # anchor is the rule's own, rendered on its context, and the others are in its condition,
+  # rendered on the scope that condition is.
+  defp anchors_candidates_sql(anchors, context, reversed_params) do
+    anchors
+    |> Enum.uniq()
+    |> Enum.map_reduce(reversed_params, fn
+      {:grants, _references} = anchor, acc ->
+        reader_candidates_sql(anchor, context, acc)
+
+      {:via, _operation, _chain, _rule_anchors} = anchor, acc ->
+        reader_candidates_sql(anchor, context, acc)
+
+      anchor, acc ->
+        reader_candidates_sql(anchor, rule_scope(context), acc)
+    end)
   end
 
   # The users a rule can hold for, found from the row its scope is about - a superset, since the
@@ -1361,11 +1376,74 @@ defmodule Hologram.DB.QueryCompiler do
     {union_sql(branches), new_params}
   end
 
-  # Whether the users a dependent rule can hold for are found from the row - grant and delegation
-  # anchors are not yet.
-  defp row_listed?({:listed, _rule, anchor}), do: elem(anchor, 0) in [:actor_equal, :any, :or]
+  # The holders of any of a rule's grant references, as grant_exists_condition/3 looks one up.
+  defp reader_candidates_sql({:grants, references}, context, reversed_params) do
+    {branches, new_params} =
+      Enum.map_reduce(references, reversed_params, fn reference, acc_params ->
+        {role_placeholder, params_after_roles} =
+          enum_list_slot(
+            reference_role_names(reference),
+            grant_column(context, "role"),
+            acc_params
+          )
 
-  defp row_listed?(_class), do: false
+        {scope_sql, params_after_scope} =
+          grant_scope_sql(reference, context, params_after_roles)
+
+        branch_sql =
+          ~s|SELECT "$rg"."user_id" FROM #{grant_table(context)} AS "$rg" | <>
+            ~s|WHERE "$rg"."role" = ANY(#{role_placeholder}) AND #{scope_sql}|
+
+        {branch_sql, params_after_scope}
+      end)
+
+    {union_sql(branches), new_params}
+  end
+
+  # The users the delegated rules' anchors name, read on the row the chain leads to, which takes an
+  # alias the way delegation_conditions/3 gives it.
+  defp reader_candidates_sql(
+         {:via, _operation, relationship_names, rule_anchors},
+         context,
+         reversed_params
+       ) do
+    target_type = Entity.path_target(context.entity_type, relationship_names)
+    target_mapping = Map.fetch!(context.mapping, target_type)
+
+    {target_id_sql, params_after_chain} =
+      chain_target_id_sql(context, relationship_names, reversed_params)
+
+    depth = context.delegation_depth + 1
+    quoted_alias = Mapper.quote_identifier("$d#{depth}")
+    quoted_candidates = Mapper.quote_identifier("$cd#{depth}")
+
+    target_context =
+      target_type
+      |> policy_context(
+        context.mapping,
+        Map.take(context, [:actor_sql, :anonymous?]),
+        quoted_alias
+      )
+      |> Map.merge(%{
+        delegation_depth: depth,
+        path_depth: context.path_depth,
+        quantifier_depth: context.quantifier_depth,
+        source_depth: context.source_depth
+      })
+
+    {branches, new_params} =
+      rule_anchors
+      |> Enum.map(&elem(&1, 1))
+      |> anchors_candidates_sql(target_context, params_after_chain)
+
+    candidates_sql =
+      ~s|SELECT #{quoted_candidates}."$reader" | <>
+        ~s|FROM #{qualified_table(target_mapping.table)} AS #{quoted_alias} | <>
+        ~s|CROSS JOIN LATERAL (#{union_sql(branches)}) AS #{quoted_candidates}("$reader") | <>
+        ~s|WHERE #{quoted_alias}."id" = #{target_id_sql}|
+
+    {candidates_sql, new_params}
+  end
 
   # A rule's own condition is about the row the policy is evaluated for, and reads the rows its paths
   # reach as stored, the way its delegation does - a hop applying a read policy inside a rule could

@@ -322,6 +322,15 @@ defmodule Hologram.DB.IntrospectionTest do
              }
     end
 
+    test "introspects the role grant index by entity" do
+      assert schema().tables["hologram_role_grant"].indexes["hologram_role_grant_entity_$idx"] ==
+               %{
+                 columns: ["entity_id", "entity_type", "role"],
+                 nulls_distinct: true,
+                 unique: false
+               }
+    end
+
     test "introspects a unique attribute's index as unique" do
       indexes = schema().tables["test_fixtures_entity_module19"].indexes
 

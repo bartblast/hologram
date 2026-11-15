@@ -34,6 +34,7 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Entity.Module6
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module13, as: PolicyModule13
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
@@ -43,8 +44,10 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
   alias Hologram.Test.Fixtures.Policy.Readers.Module1, as: ReadersModule1
   alias Hologram.Test.Fixtures.Policy.Readers.Module10, as: ReadersModule10
+  alias Hologram.Test.Fixtures.Policy.Readers.Module13, as: ReadersModule13
   alias Hologram.Test.Fixtures.Policy.Readers.Module2, as: ReadersModule2
   alias Hologram.Test.Fixtures.Policy.Readers.Module3, as: ReadersModule3
+  alias Hologram.Test.Fixtures.Policy.Readers.Module4, as: ReadersModule4
   alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
   alias Hologram.Test.Fixtures.Policy.Readers.Module8, as: ReadersModule8
   alias Hologram.Test.Fixtures.Policy.Readers.Module9, as: ReadersModule9
@@ -3714,14 +3717,19 @@ defmodule Hologram.DB.QueryCompilerTest do
                          Module14,
                          Module41,
                          PolicyModule1,
+                         PolicyModule13,
                          PolicyModule19,
                          PolicyModule2,
                          PolicyModule3,
+                         PolicyModule5,
                          PolicyModule6,
+                         PolicyModule8,
                          ReadersModule1,
                          ReadersModule10,
+                         ReadersModule13,
                          ReadersModule2,
                          ReadersModule3,
+                         ReadersModule4,
                          ReadersModule5,
                          ReadersModule8,
                          ReadersModule9,
@@ -3806,13 +3814,130 @@ defmodule Hologram.DB.QueryCompilerTest do
              }
     end
 
-    test "tests every user for a type with a grant rule" do
-      assert %{sql: sql} = recheck(PolicyModule1, @recheck_mapping, false)
+    defp candidates_sql(sql) do
+      [_sql, candidates_sql] =
+        Regex.run(
+          ~r/ARRAY\(SELECT DISTINCT "\$c"."\$reader" FROM \((.*)\) AS "\$c"\("\$reader"\) WHERE \("\$c"/,
+          sql
+        )
 
-      assert String.contains?(
-               sql,
-               ~s|FROM (SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user")) AS "$c"("$reader") WHERE ((EXISTS|
-             )
+      candidates_sql
+    end
+
+    defp grant_candidate_sql(roles_slot, type_slot, scope_sql) do
+      ~s|SELECT "$rg"."user_id" FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+        ~s|WHERE "$rg"."role" = ANY($#{roles_slot}::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+        ~s|AND "$rg"."entity_type" = | <>
+        ~s|$#{type_slot}::"hologram_data"."hologram_role_grant_entity_type_$enum" AND #{scope_sql}|
+    end
+
+    test "finds the holders of a rule's own and type-wide roles" do
+      child = readers_table(PolicyModule1)
+
+      assert %{params: params, sql: sql} = recheck(PolicyModule1, @recheck_mapping, false)
+
+      assert candidates_sql(sql) ==
+               "(" <>
+                 grant_candidate_sql(
+                   8,
+                   9,
+                   ~s|("$rg"."entity_id" = #{child}."id" OR "$rg"."entity_id" IS NULL)|
+                 ) <>
+                 ") UNION (" <> grant_candidate_sql(10, 11, ~s|"$rg"."entity_id" IS NULL|) <> ")"
+
+      assert Enum.slice(params, 7, 4) == [
+               {:value, ["viewer"]},
+               {:value, "Hologram.Test.Fixtures.Policy.Module1"},
+               {:value, ["admin"]},
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"}
+             ]
+    end
+
+    test "finds the holders of a role on a related row" do
+      assert %{sql: sql} = recheck(PolicyModule13, @recheck_mapping, false)
+
+      assert candidates_sql(sql) ==
+               grant_candidate_sql(
+                 5,
+                 6,
+                 ~s|"$rg"."entity_id" = #{readers_table(PolicyModule13)}."parent_id"|
+               )
+    end
+
+    test "finds the holders of roles on the entity a grant names, and of global roles" do
+      grant = readers_table(RoleGrant)
+
+      assert %{sql: sql} = recheck(RoleGrant, @recheck_mapping, false)
+
+      global_sql =
+        ~s|SELECT "$rg"."user_id" FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+          ~s|WHERE "$rg"."role" = ANY($14::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+          ~s|AND "$rg"."entity_type" IS NULL AND "$rg"."entity_id" IS NULL|
+
+      assert candidates_sql(sql) ==
+               ~s|(SELECT "user_id") UNION (| <>
+                 grant_candidate_sql(10, 11, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 ") UNION ((" <>
+                 grant_candidate_sql(12, 13, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 ") UNION (" <> global_sql <> "))"
+    end
+
+    test "finds the readers of a delegation on the row it leads to" do
+      assert %{sql: sql} = recheck(ReadersModule4, @recheck_mapping, false)
+
+      assert candidates_sql(sql) ==
+               ~s|SELECT "$cd1"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module1" AS "$d1" | <>
+                 ~s|CROSS JOIN LATERAL (SELECT "$cq1"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module2" AS "$q1" | <>
+                 ~s|CROSS JOIN LATERAL (SELECT "user_id") AS "$cq1"("$reader") | <>
+                 ~s|WHERE "$q1"."project_id" = "$d1"."id") AS "$cd1"("$reader") | <>
+                 ~s|WHERE "$d1"."id" = #{readers_table(ReadersModule4)}."project_id"|
+    end
+
+    test "follows a path to the row a delegation or a role reference names" do
+      chain_sql =
+        ~s|(SELECT "$p1"."parent_id" FROM "hologram_data"."test_fixtures_policy_module1" AS "$p1" | <>
+          ~s|WHERE "$p1"."id" = #{readers_table(ReadersModule13)}."parent_id")|
+
+      delegation_sql =
+        ~s|SELECT "$cd1"."$reader" FROM "hologram_data"."test_fixtures_policy_module2" AS "$d1" | <>
+          ~s|CROSS JOIN LATERAL (| <>
+          grant_candidate_sql(
+            22,
+            23,
+            ~s|("$rg"."entity_id" = "$d1"."id" OR "$rg"."entity_id" IS NULL)|
+          ) <>
+          ~s|) AS "$cd1"("$reader") WHERE "$d1"."id" = #{chain_sql}|
+
+      reference_sql = grant_candidate_sql(24, 25, ~s|"$rg"."entity_id" = #{chain_sql}|)
+
+      assert %{sql: sql} = recheck(ReadersModule13, @recheck_mapping, false)
+
+      candidates = candidates_sql(sql)
+
+      assert String.ends_with?(candidates, ~s|(#{delegation_sql}) UNION (#{reference_sql})|)
+    end
+
+    test "finds the readers of a delegation to a delegating type two rows away" do
+      assert %{sql: sql} = recheck(PolicyModule8, @recheck_mapping, false)
+
+      grants_sql =
+        "(" <>
+          grant_candidate_sql(
+            8,
+            9,
+            ~s|("$rg"."entity_id" = "$d2"."id" OR "$rg"."entity_id" IS NULL)|
+          ) <> ") UNION (" <> grant_candidate_sql(10, 11, ~s|"$rg"."entity_id" IS NULL|) <> ")"
+
+      assert candidates_sql(sql) ==
+               ~s|SELECT "$cd1"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_module5" AS "$d1" | <>
+                 ~s|CROSS JOIN LATERAL (SELECT "$cd2"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_module1" AS "$d2" | <>
+                 ~s|CROSS JOIN LATERAL (#{grants_sql}) AS "$cd2"("$reader") | <>
+                 ~s|WHERE "$d2"."id" = "$d1"."parent_id") AS "$cd1"("$reader") | <>
+                 ~s|WHERE "$d1"."id" = #{readers_table(PolicyModule8)}."parent_id"|
     end
 
     test "finds the readers of an any over a path from the set the path reaches" do

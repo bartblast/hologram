@@ -33,8 +33,8 @@ defmodule Hologram.Migration.IndexRecoveryTest do
     timestamp: ~U[2026-08-13 09:15:22.000000Z]
   }
 
-  # The one index the model derives beyond the keys and foreign keys, and the only unique
-  # one: the grant fact, with nulls compared as values.
+  # The unique one of the two indexes the grant store carries beyond its keys and foreign keys:
+  # the grant fact, with nulls compared as values.
   @index "hologram_role_grant_$uidx"
 
   @index_op %{
