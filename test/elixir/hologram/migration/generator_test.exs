@@ -58,7 +58,9 @@ defmodule Hologram.Migration.GeneratorTest do
         line -> "  " <> line
       end)
 
-    """
+    # Normalized as a whole: on Windows this file is checked out with CRLF line endings, so
+    # the heredoc's own lines carry them, while the generator writes LF.
+    normalize_newlines("""
     defmodule #{inspect(module)} do
       @moduledoc false
 
@@ -66,7 +68,7 @@ defmodule Hologram.Migration.GeneratorTest do
 
     #{indented_body}
     end
-    """
+    """)
   end
 
   # The directory a test's generated file is written to, and a namespace no other test's
@@ -151,8 +153,11 @@ defmodule Hologram.Migration.GeneratorTest do
 
       assert {:ok, path, 0} = generate([], current, @timestamp, opts)
 
+      # Normalized: the given formatter is the only one, and on Windows the generator's own
+      # source carries CRLF line endings that a real formatter would turn into LF.
       assert path
              |> File.read!()
+             |> normalize_newlines()
              |> String.ends_with?("end\n# formatted\n")
     end
 
