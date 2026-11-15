@@ -67,6 +67,7 @@ defmodule Hologram.Sync.SessionTest do
   @public_project_window "w_public_project"
   @reach_window "w_reach"
   @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+  @types_hash "00112233445566778899aabbccddeeff"
 
   setup do
     setup_query_cache(QueryCacheStub, false)
@@ -175,6 +176,7 @@ defmodule Hologram.Sync.SessionTest do
       |> Keyword.put_new(:client, self())
       |> Keyword.put_new(:page, @page)
       |> Keyword.put_new(:policy_hash, @policy_hash)
+      |> Keyword.put_new(:types_hash, @types_hash)
       |> Keyword.put_new(:read_fill, &read_fill_in_sandbox/4)
       |> Keyword.put_new(:read_named, &read_named_in_sandbox/4)
 
@@ -259,7 +261,7 @@ defmodule Hologram.Sync.SessionTest do
     fn ->
       allow_into_sandbox(self(), test_pid)
 
-      Catchup.gap(cursor, actor_user_id, @policy_hash)
+      Catchup.gap(cursor, actor_user_id, @policy_hash, @types_hash)
     end
   end
 
@@ -624,7 +626,7 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, first_cursor, [%{id: id}], first_applied_seq}
 
       assert {Cursor.decode(first_cursor), id, first_applied_seq} ==
-               {{:ok, 900, 1, @policy_hash}, moved.id, 4}
+               {{:ok, 900, 1, @policy_hash, @types_hash}, moved.id, 4}
     end
 
     # A gap arrives in batches rather than one frame, so the memory a replay costs is bounded by
@@ -649,11 +651,11 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0}, gap: gap)
 
       assert_receive {:sync_deltas, first_cursor, first_deltas, _applied_seq}
-      assert Cursor.decode(first_cursor) == {:ok, 900, 2, @policy_hash}
+      assert Cursor.decode(first_cursor) == {:ok, 900, 2, @policy_hash, @types_hash}
       assert length(first_deltas) == 2
 
       assert_receive {:sync_deltas, second_cursor, second_deltas, _applied_seq}
-      assert Cursor.decode(second_cursor) == {:ok, 900, 4, @policy_hash}
+      assert Cursor.decode(second_cursor) == {:ok, 900, 4, @policy_hash, @types_hash}
       assert length(second_deltas) == 2
     end
 
@@ -722,7 +724,7 @@ defmodule Hologram.Sync.SessionTest do
       moved = create("before leaving")
       untouched = create("untouched while away")
       {tx, seq} = last_place()
-      cursor = Cursor.encode(tx, seq, @policy_hash)
+      cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
 
       DB.update(Module2, moved.id, %{c: "moved while away"})
 
@@ -738,11 +740,15 @@ defmodule Hologram.Sync.SessionTest do
          page: @page,
          policy_hash: @policy_hash,
          read_gap: read_gap_from(cursor),
-         read_named: &read_named_in_sandbox/4}
+         read_named: &read_named_in_sandbox/4,
+         types_hash: @types_hash}
       )
 
       assert_receive {:sync_deltas, frame_cursor, deltas, _applied_seq}
-      assert Cursor.decode(frame_cursor) == {:ok, gap_end_tx, gap_end_seq, @policy_hash}
+
+      assert Cursor.decode(frame_cursor) ==
+               {:ok, gap_end_tx, gap_end_seq, @policy_hash, @types_hash}
+
       assert [%{data: data, id: id, op: :put_entity}] = deltas
       assert id == moved.id
       assert data.c == "moved while away"
@@ -755,7 +761,7 @@ defmodule Hologram.Sync.SessionTest do
     test "cuts the client off when the log says it has to be sent everything again" do
       moved = create("before leaving")
       {tx, seq} = last_place()
-      cursor = Cursor.encode(tx, seq, @policy_hash)
+      cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
 
       DB.update(Module2, moved.id, %{c: "moved while away"})
       DB.update(Module2, moved.id, %{c: "moved again while away"})
@@ -774,7 +780,8 @@ defmodule Hologram.Sync.SessionTest do
             client: test_pid,
             page: @page,
             policy_hash: @policy_hash,
-            read_gap: read_gap
+            read_gap: read_gap,
+            types_hash: @types_hash
           )
 
           Process.sleep(:infinity)
@@ -804,7 +811,7 @@ defmodule Hologram.Sync.SessionTest do
     defp cursor_now do
       {tx, seq} = last_place()
 
-      Cursor.encode(tx, seq, @policy_hash)
+      Cursor.encode(tx, seq, @policy_hash, @types_hash)
     end
 
     defp deltas_for(deltas, row) do
@@ -2371,7 +2378,7 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, shift_cursor, shift_deltas, _applied_seq}
       assert [%{id: id, op: :unsync_entity}] = shift_deltas
       assert id == revoked.id
-      assert Cursor.decode(shift_cursor) == {:ok, 900, 7, @policy_hash}
+      assert Cursor.decode(shift_cursor) == {:ok, 900, 7, @policy_hash, @types_hash}
     end
 
     # The shift is judged per window and merged by id: a window with nothing to say about grants
@@ -2714,7 +2721,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0})
 
       assert_receive {:sync_synced, :all, cursor}
-      assert cursor == Cursor.encode(200, 0, @policy_hash)
+      assert cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
     end
 
     # The claim a place makes is "everything up to here is applied", which a client holding some
@@ -2738,7 +2745,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0}, gap: [])
 
       assert_receive {:sync_synced, :all, cursor}
-      assert cursor == Cursor.encode(200, 0, @policy_hash)
+      assert cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
       refute_received {:sync_synced, {:types, _types}, _cursor}
     end
   end
@@ -3240,7 +3247,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), nil)
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash, @types_hash}
     end
 
     # A returning client kept what it had, so it can date its store from the first frame - there is
@@ -3254,7 +3261,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0}, gap: [gap_effect(moved.id, {900, 7})])
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash, @types_hash}
     end
 
     # The session's own read can reach further than the one that decided the client resumes, and
@@ -3272,7 +3279,7 @@ defmodule Hologram.Sync.SessionTest do
       )
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash, @types_hash}
     end
 
     test "dates no replayed batch when the read that decided the client resumes found nothing" do
@@ -3302,7 +3309,24 @@ defmodule Hologram.Sync.SessionTest do
       )
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7, other_policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, other_policy_hash, @types_hash}
+    end
+
+    test "dates its places with the types it was started with" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      other_types_hash = "ffeeddccbbaa99887766554433221100"
+
+      start_session!(
+        fill_place: {200, 0},
+        gap: [gap_effect(moved.id, {900, 7})],
+        types_hash: other_types_hash
+      )
+
+      assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash, other_types_hash}
     end
 
     # A window the page map reaches but the query cache no longer holds - what a live reload leaves
@@ -3323,7 +3347,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 7})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash, @types_hash}
     end
 
     test "claims the place of the window furthest behind, not the one furthest ahead" do
@@ -3341,7 +3365,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 0})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash, @types_hash}
     end
 
     test "claims the newer place once every window has caught up to it" do
@@ -3358,7 +3382,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 0})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash, @types_hash}
     end
 
     # A round arriving out of order must not walk a window's place backwards: both places it could
@@ -3377,7 +3401,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {500, 0})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash, @types_hash}
     end
   end
 
@@ -3477,7 +3501,12 @@ defmodule Hologram.Sync.SessionTest do
       connection =
         spawn(fn ->
           {:ok, session} =
-            Session.start_link(client: test_pid, page: @page, policy_hash: @policy_hash)
+            Session.start_link(
+              client: test_pid,
+              page: @page,
+              policy_hash: @policy_hash,
+              types_hash: @types_hash
+            )
 
           send(test_pid, {:connected, session})
 

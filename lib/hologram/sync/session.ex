@@ -59,6 +59,11 @@ defmodule Hologram.Sync.Session do
   running session - a live reload does that - and a place stamped with the new rules would vouch
   for rows the old ones decided.
 
+  `:types_hash` is the hash of the entity types sync sends (see
+  `Hologram.Sync.Cursor.types_hash/1`), taken where the session is started and stamped on every
+  place beside the policy hash, for the same reason: a client filled with other types holds none of
+  a type added since.
+
   `:replica_id` is the browser's own copy of the data, when the client presented one this stream
   could vouch for - it is what tells this session's frames which of the effects they carry are
   that browser's own doing. Absent for a client that presented none, and then no frame names a
@@ -84,7 +89,7 @@ defmodule Hologram.Sync.Session do
   everything.
 
   `:read_gap` reads what a returning client missed - absent for one arriving with nothing, in which
-  case every row it may see is sent. It answers what `Hologram.Sync.Catchup.gap/3` answers: the
+  case every row it may see is sent. It answers what `Hologram.Sync.Catchup.gap/4` answers: the
   effects since the client's place and the grants it held there, or why it has to be sent
   everything again, which ends the session with `{:full_resync, reason}` so the client comes back
   through the doors. Given one, the client keeps what it already holds and is told only about the
@@ -157,6 +162,7 @@ defmodule Hologram.Sync.Session do
       replica_id: Keyword.get(opts, :replica_id),
       resuming: read_gap != nil,
       told_verdicts: %{},
+      types_hash: Keyword.fetch!(opts, :types_hash),
       verdicts_checked: nil,
       versions: %{}
     }
@@ -867,7 +873,7 @@ defmodule Hologram.Sync.Session do
       %{seq: seq, tx: tx} = List.last(effects)
       {capped_tx, capped_seq} = min({tx, seq}, state.gap_end)
 
-      Cursor.encode(capped_tx, capped_seq, state.policy_hash)
+      Cursor.encode(capped_tx, capped_seq, state.policy_hash, state.types_hash)
     end
   end
 
@@ -892,7 +898,7 @@ defmodule Hologram.Sync.Session do
 
       case place do
         nil -> nil
-        {tx, seq} -> Cursor.encode(tx, seq, state.policy_hash)
+        {tx, seq} -> Cursor.encode(tx, seq, state.policy_hash, state.types_hash)
       end
     end
   end

@@ -5,6 +5,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Component.Action
   alias Hologram.DB.Oplog
+  alias Hologram.DB.QueryCache
   alias Hologram.LiveReload
   alias Hologram.Mutation.Record
   alias Hologram.Policy
@@ -19,6 +20,7 @@ defmodule Hologram.Realtime.SSE do
   alias Hologram.Runtime.Session
   alias Hologram.StaleModelError
   alias Hologram.Sync.Catchup
+  alias Hologram.Sync.Cursor
   alias Hologram.Sync.Frame
   alias Hologram.Sync.Handshake, as: SyncHandshake
   alias Hologram.Sync.Rules
@@ -543,8 +545,12 @@ defmodule Hologram.Realtime.SSE do
 
     # Named rather than written inline as `resume? && gap(cursor, user_id, policy_hash)`: that
     # answers FALSE when it does not resume, and everything below reads "no gap" from nil alone.
+    # The types this build syncs, which a place names beside the rules: a client filled with others
+    # holds no rows of a type added since.
+    types_hash = Cursor.types_hash(QueryCache.synced_types())
+
     {gap, resync_reason} =
-      if resume?, do: gap(cursor, user_id, policy_hash), else: {nil, nil}
+      if resume?, do: gap(cursor, user_id, policy_hash, types_hash), else: {nil, nil}
 
     # What a rule reads besides its own row, so a row the gap never names can be judged again
     # when the row DECIDING it moved. Only for a returning client - one arriving with nothing
@@ -564,7 +570,8 @@ defmodule Hologram.Realtime.SSE do
       edges: edges,
       gap_end: gap_end(gap),
       resync_reason: resync_reason,
-      rules: rules
+      rules: rules,
+      types_hash: types_hash
     }
 
     if Policy.hash() == policy_hash, do: {:ok, start}, else: :rules_changed
@@ -995,10 +1002,10 @@ defmodule Hologram.Realtime.SSE do
   # either told what it missed, or told to let go of what it holds - and is then filled the same
   # way a first arrival is. Deciding it here rather than in the session puts the answer beside the
   # reload notice it stands next to, both sent before the session's first frame.
-  defp gap(nil, _user_id, _policy_hash), do: {nil, nil}
+  defp gap(nil, _user_id, _policy_hash, _types_hash), do: {nil, nil}
 
-  defp gap(cursor, user_id, policy_hash) do
-    case Catchup.gap(cursor, user_id, policy_hash) do
+  defp gap(cursor, user_id, policy_hash, types_hash) do
+    case Catchup.gap(cursor, user_id, policy_hash, types_hash) do
       {:ok, effects, _grants_then} -> {effects, nil}
       {:full_resync, reason} -> {nil, reason}
     end
@@ -1071,7 +1078,8 @@ defmodule Hologram.Realtime.SSE do
     # read - which runs it in the session's process, query and memory alike. Closing over the
     # cursor alone keeps the rest of `start` out of the session's heap.
     cursor = start.cursor
-    read_gap = cursor && fn -> Catchup.gap(cursor, user_id, policy_hash) end
+    types_hash = start.types_hash
+    read_gap = cursor && fn -> Catchup.gap(cursor, user_id, policy_hash, types_hash) end
 
     {:ok, session} =
       SyncSession.start_link(
@@ -1084,7 +1092,8 @@ defmodule Hologram.Realtime.SSE do
         page: page,
         policy_hash: policy_hash,
         read_gap: read_gap,
-        replica_id: replica_id
+        replica_id: replica_id,
+        types_hash: types_hash
       )
 
     {conn, session}

@@ -1,9 +1,11 @@
 defmodule Hologram.Sync.Cursor do
   @moduledoc false
 
-  # Where a client got to in the oplog, and under which rules, as a string it stores and hands back
-  # without reading. The rules ride along because a deploy can change them without moving a row:
-  # what a client holds at a place is what those rules let it see, not what the current ones do.
+  # Where a client got to in the oplog, under which rules and with which entity types synced, as a
+  # string it stores and hands back without reading. The rules ride along because a deploy can
+  # change them without moving a row: what a client holds at a place is what those rules let it
+  # see, not what the current ones do. The types ride along for the same reason - a deploy that
+  # starts syncing a type moves no row of it, and a client filled before holds none.
   # Opaque by convention, not by secrecy: what a place is made of can change without the protocol
   # changing because the client never interprets one, not because it could not. Nothing here hides
   # the place or depends on its being hidden.
@@ -21,33 +23,39 @@ defmodule Hologram.Sync.Cursor do
 
   # What the log's own columns hold: `tx` is an xid8, `seq` a bigserial. A place beyond either is
   # one no row could carry, so it is unreadable in the only sense that matters.
+  alias Hologram.DB.Codec
+
   @max_seq 9_223_372_036_854_775_807
   @max_tx 18_446_744_073_709_551_615
 
   @doc """
   Returns the cursor naming the given place in the log, under the rules with the given policy hash
-  (see `Hologram.Policy.hash/1`) - the rules the rows a client holds there were judged by. A place
-  is only worth resuming from under the rules that decided what it holds.
+  (see `Hologram.Policy.hash/1`) - the rules the rows a client holds there were judged by - and
+  with the entity types sync sends of the given types hash (see `types_hash/1`). A place is only
+  worth resuming from under the rules that decided what it holds, and with the types it was filled
+  with.
   """
-  @spec encode(non_neg_integer, non_neg_integer, String.t()) :: String.t()
-  def encode(tx, seq, policy_hash) do
-    "#{tx}.#{seq}.#{policy_hash}"
+  @spec encode(non_neg_integer, non_neg_integer, String.t(), String.t()) :: String.t()
+  def encode(tx, seq, policy_hash, types_hash) do
+    "#{tx}.#{seq}.#{policy_hash}.#{types_hash}"
   end
 
   @doc """
-  Returns the place the given cursor names and the policy hash it was judged under, or `:error` for
-  one this build cannot read - which includes a place no row of the log could carry, since the
-  columns it would be compared against have ceilings and an Elixir integer does not, and a cursor
-  naming no rules, as one written before cursors named them does.
+  Returns the place the given cursor names, the policy hash it was judged under and the types hash
+  it was filled with, or `:error` for one this build cannot read - which includes a place no row of
+  the log could carry, since the columns it would be compared against have ceilings and an Elixir
+  integer does not, and a cursor naming no rules or no types, as one written before cursors named
+  them does.
   """
-  @spec decode(term) :: {:ok, non_neg_integer, non_neg_integer, String.t()} | :error
+  @spec decode(term) ::
+          {:ok, non_neg_integer, non_neg_integer, String.t(), String.t()} | :error
   def decode(cursor) when is_binary(cursor) do
-    with [tx, seq, policy_hash] <- String.split(cursor, "."),
+    with [tx, seq, policy_hash, types_hash] <- String.split(cursor, "."),
          {tx, ""} <- Integer.parse(tx),
          {seq, ""} <- Integer.parse(seq),
          true <- in_range?(tx, @max_tx) and in_range?(seq, @max_seq),
-         true <- policy_hash?(policy_hash) do
-      {:ok, tx, seq, policy_hash}
+         true <- hex?(policy_hash) and hex?(types_hash) do
+      {:ok, tx, seq, policy_hash, types_hash}
     else
       _unreadable -> :error
     end
@@ -55,7 +63,24 @@ defmodule Hologram.Sync.Cursor do
 
   def decode(_not_a_cursor), do: :error
 
+  @doc """
+  Returns the hash a cursor names the given entity types by - the types sync sends (see
+  `Hologram.DB.QueryCache.synced_types/0`). Their order moves nothing.
+  """
+  @spec types_hash(list(module)) :: String.t()
+  def types_hash(entity_types) do
+    spelled =
+      entity_types
+      |> Enum.map(&Codec.encode_enum_value/1)
+      |> Enum.sort()
+      |> Enum.join(",")
+
+    :md5
+    |> :crypto.hash(spelled)
+    |> Base.encode16(case: :lower)
+  end
+
   defp in_range?(value, ceiling), do: value >= 0 and value <= ceiling
 
-  defp policy_hash?(policy_hash), do: String.match?(policy_hash, ~r/\A[0-9a-f]+\z/)
+  defp hex?(hash), do: String.match?(hash, ~r/\A[0-9a-f]+\z/)
 end
