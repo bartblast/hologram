@@ -2611,6 +2611,14 @@ defmodule Hologram.AuthTest do
       allow :read
     end
 
+    defmodule VerdictReport do
+      use Hologram.Entity
+
+      attribute :reviewed, :boolean, server_only: true
+
+      allow :read, when: reviewed == true
+    end
+
     defp verdict_key(operation, clause), do: Policy.verdict_key(VerdictBoard, operation, clause)
 
     defp archive_key,
@@ -2642,6 +2650,14 @@ defmodule Hologram.AuthTest do
       for other_spelling <- [String.upcase(user_id), 7, false] do
         assert verdicts(other_spelling, %VerdictBoard{}) == verdicts(nil, %VerdictBoard{})
       end
+    end
+
+    # The row as stored holds the value no client is sent.
+    test "answers a predicate on a server-only attribute over the row's value" do
+      key = Policy.verdict_key(VerdictReport, :read, {:reviewed, :==, true})
+
+      assert verdicts(nil, %VerdictReport{reviewed: true}) == %{key => true}
+      assert verdicts(nil, %VerdictReport{reviewed: false}) == %{key => false}
     end
 
     test "answers nothing for a type with no deciding quantifier" do

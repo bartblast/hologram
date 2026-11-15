@@ -3384,6 +3384,23 @@ defmodule Hologram.CompilerTest do
       allow :read
     end
 
+    defmodule BakedReport do
+      use Hologram.Entity
+
+      attribute :reviewed, :boolean, server_only: true
+      attribute :title, :string
+
+      allow :read, when: reviewed == true or title == "x"
+    end
+
+    defmodule BakedReportNote do
+      use Hologram.Entity
+
+      relationship :report, BakedReport, optional: true
+
+      allow :read, when: report.reviewed == true
+    end
+
     defp archive_key do
       [%{predicates: [clause]}] = Hologram.Policy.build(BakedProject).archive
 
@@ -4723,6 +4740,48 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(
                js,
                ~s/"read":[{"predicates":[{"filter":[["rank","==",1]],"quantifier":"any","reads":["Hologram.CompilerTest.BakedBoard","Hologram.CompilerTest.BakedCard"],"source":["top_cards"],"verdict":"#{key}"}],"to":null,"via":null}]/
+             )
+    end
+
+    # No client holds a server-only value, so a predicate reading one is the key the server's verdict
+    # on it is sent under and the types it reads alone - none for the row's own attribute, which no
+    # write of the client's can move, and the types along a path. A stored attribute beside it in an
+    # alternative stays a triple.
+    test "bakes a predicate on a server-only attribute as its verdict key and the types it reads",
+         %{
+           ir_plt: ir_plt,
+           runtime_mfas: runtime_mfas
+         } do
+      sync_constants = %{
+        @empty_sync_constants
+        | entity_types: MapSet.new([BakedReport, BakedReportNote, RoleGrant])
+      }
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      report_key = Hologram.Policy.verdict_key(BakedReport, :read, {:reviewed, :==, true})
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"or":[[{"reads":[],"verdict":"#{report_key}"}],[["title","==","x"]]]}],"to":null,"via":null}]/
+             )
+
+      note_key =
+        Hologram.Policy.verdict_key(BakedReportNote, :read, {[:report, :reviewed], :==, true})
+
+      assert String.contains?(
+               js,
+               ~s/"read":[{"predicates":[{"reads":["Hologram.CompilerTest.BakedReport","Hologram.CompilerTest.BakedReportNote"],"verdict":"#{note_key}"}],"to":null,"via":null}]/
              )
     end
 
