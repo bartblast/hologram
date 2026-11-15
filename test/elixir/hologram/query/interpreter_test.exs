@@ -79,12 +79,7 @@ defmodule Hologram.Query.InterpreterTest do
     term = Stage.normalize(query)
     bindings = Keyword.get(opts, :bindings, %{})
 
-    expected =
-      if Keyword.has_key?(opts, :actor_user_id) do
-        QueryRunner.run_policied(term, @mapping, opts[:actor_user_id], bindings)
-      else
-        QueryRunner.run(term, @mapping, bindings)
-      end
+    expected = QueryRunner.run(term, @mapping, bindings)
 
     actual = run(term, database(), opts)
 
@@ -1623,62 +1618,6 @@ defmodule Hologram.Query.InterpreterTest do
       assert_error MisuseError, expected_msg, fn ->
         run(term, database(), bindings: %{priorities: [nil, 3]})
       end
-    end
-  end
-
-  # Read policies are the server's business and the interpreter evaluates none of them, so the
-  # type these run against is one anyone may read - what is being compared is the actor
-  # predicate, and a narrowing policy would be the database answering a different question.
-  describe "run/3 - the acting user" do
-    setup do
-      %{first: module_2("first"), second: module_2("second")}
-    end
-
-    test "matches against who is asking", %{second: second} do
-      query = filter(Module2, id == ^{:actor})
-
-      assert titles(agreed(query, actor_user_id: second.id)) == ["second"]
-    end
-
-    test "matches everything but who is asking", %{first: first} do
-      query = filter(Module2, id != ^{:actor})
-
-      assert titles(agreed(query, actor_user_id: first.id)) == ["second"]
-    end
-
-    test "matches an alternative naming who is asking", %{first: first} do
-      query = filter(Module2, id == ^{:actor} or c == "second")
-
-      assert matched_titles(agreed(query, actor_user_id: first.id)) == ["first", "second"]
-    end
-
-    # The alternative asking about the visitor answers nothing, and the other one still answers.
-    test "passes a visitor to the alternative that names nobody" do
-      query = filter(Module2, id == ^{:actor} or c == "second")
-
-      assert titles(agreed(query, actor_user_id: nil)) == ["second"]
-    end
-
-    test "matches nothing for a visitor when every alternative names them" do
-      query = filter(Module2, id == ^{:actor} or id != ^{:actor})
-
-      assert agreed(query, actor_user_id: nil) == []
-    end
-
-    # There is nobody to compare against, so nothing answers - the same silence the database
-    # gives a statement asking about an actor that is not there.
-    test "matches nothing for a visitor" do
-      query = filter(Module2, id == ^{:actor})
-
-      assert agreed(query, actor_user_id: nil) == []
-    end
-
-    # The negated form is where that silence has to be deliberate: nobody is UNEQUAL to every
-    # row, so a predicate left to compare against nothing would answer with everything.
-    test "matches nothing for a visitor, whichever way the predicate points" do
-      query = filter(Module2, id != ^{:actor})
-
-      assert agreed(query, actor_user_id: nil) == []
     end
   end
 

@@ -28,20 +28,31 @@ defmodule Hologram.DB.OplogTest do
   defp rows do
     statement = """
     SELECT "op", "type", "entity_id", "data", "model_hash", "mutation_ref", "actor_id",
-           "revisions"
+           "revisions", "old"
     FROM "hologram_system"."oplog"
     ORDER BY "seq"
     """
 
     {:ok, %Postgrex.Result{rows: rows}} = Connection.query(statement)
 
-    Enum.map(rows, fn [op, type, entity_id, data, model_hash, mutation_ref, actor_id, revisions] ->
+    Enum.map(rows, fn [
+                        op,
+                        type,
+                        entity_id,
+                        data,
+                        model_hash,
+                        mutation_ref,
+                        actor_id,
+                        revisions,
+                        old
+                      ] ->
       %{
         actor_id: Codec.decode(actor_id, :uuid),
         data: data,
         entity_id: Codec.decode(entity_id, :uuid),
         model_hash: model_hash,
         mutation_ref: mutation_ref,
+        old: old,
         op: op,
         revisions: revisions,
         type: type
@@ -49,14 +60,32 @@ defmodule Hologram.DB.OplogTest do
     end)
   end
 
-  defp seed(tx, op, type_label, entity_id, data \\ nil, revisions \\ nil, mutation_ref \\ nil) do
+  defp seed(
+         tx,
+         op,
+         type_label,
+         entity_id,
+         data \\ nil,
+         revisions \\ nil,
+         mutation_ref \\ nil,
+         old \\ nil
+       ) do
     statement = """
     INSERT INTO "hologram_system"."oplog"
-      ("op", "type", "entity_id", "data", "tx", "model_hash", "revisions", "mutation_ref")
-    VALUES ($1, $2, $3, $4, $5, 'seeded', $6, $7)
+      ("op", "type", "entity_id", "data", "tx", "model_hash", "revisions", "mutation_ref", "old")
+    VALUES ($1, $2, $3, $4, $5, 'seeded', $6, $7, $8)
     """
 
-    params = [op, type_label, Codec.encode(entity_id, :uuid), data, tx, revisions, mutation_ref]
+    params = [
+      op,
+      type_label,
+      Codec.encode(entity_id, :uuid),
+      data,
+      tx,
+      revisions,
+      mutation_ref,
+      old
+    ]
 
     {:ok, _result} = Connection.query(statement, params)
 
@@ -152,6 +181,35 @@ defmodule Hologram.DB.OplogTest do
 
       assert [event] = read_after(199, 0, 10)
       assert event.revisions == %{"a" => 5}
+    end
+
+    # An old reference names a row the move took this one away from, so it is an id that moved -
+    # as fixed in size as an edge's target, and kept for the same reason while the payload is not.
+    test "returns the old references the effect was stored with, without the payload" do
+      data = %{"c_id" => @target_id}
+      old = %{"c_id" => @entity_id}
+
+      seed(
+        200,
+        "patch_entity",
+        "Hologram.Test.Fixtures.Entity.Module3",
+        @entity_id,
+        data,
+        nil,
+        nil,
+        old
+      )
+
+      assert [event] = read_after(0, 0, 10)
+      assert event.old == old
+      assert event.data == nil
+    end
+
+    test "returns no old references for an effect stored without them" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert [event] = read_after(0, 0, 10)
+      assert event.old == nil
     end
 
     # The batch an effect belongs to travels with it, where the payload does not: it is a bounded
@@ -265,6 +323,32 @@ defmodule Hologram.DB.OplogTest do
       assert delete.data == %{"c" => "gone"}
     end
 
+    test "returns the old references the effect was stored with" do
+      data = %{"c_id" => @target_id}
+      old = %{"c_id" => @entity_id}
+
+      seed(
+        200,
+        "patch_entity",
+        "Hologram.Test.Fixtures.Entity.Module3",
+        @entity_id,
+        data,
+        nil,
+        nil,
+        old
+      )
+
+      assert [effect] = read_type_after(Module3, 0, 0, %{})
+      assert effect.old == old
+    end
+
+    test "returns no old references for an effect stored without them" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "gone"})
+
+      assert [effect] = read_type_after(Module2, 0, 0, %{})
+      assert effect.old == nil
+    end
+
     test "returns nothing written before the given place" do
       seed(200, "put_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id, %{c: "before"})
 
@@ -302,6 +386,31 @@ defmodule Hologram.DB.OplogTest do
 
       assert [{200, [event]}] = read_window(200, 201)
       assert event.revisions == %{"a" => 5}
+    end
+
+    test "returns the old references the effect was stored with" do
+      old = %{"c_id" => @target_id}
+
+      seed(
+        200,
+        "patch_entity",
+        "Hologram.Test.Fixtures.Entity.Module3",
+        @entity_id,
+        nil,
+        nil,
+        nil,
+        old
+      )
+
+      assert [{200, [event]}] = read_window(200, 201)
+      assert event.old == old
+    end
+
+    test "returns no old references for an effect stored without them" do
+      seed(200, "del_entity", "Hologram.Test.Fixtures.Entity.Module2", @entity_id)
+
+      assert [{200, [event]}] = read_window(200, 201)
+      assert event.old == nil
     end
 
     test "returns the batch the effect was written under" do
@@ -384,6 +493,18 @@ defmodule Hologram.DB.OplogTest do
     test "appends nothing for no effects" do
       assert append([]) == :ok
       assert rows() == []
+    end
+
+    # PostgreSQL binds at most 65,535 parameters per statement, so this many rows can't go in as one.
+    test "appends more effects than one statement can bind, in order" do
+      effects =
+        Enum.map(1..7_300, fn index ->
+          %{op: :patch_entity, entity_type: Module2, entity_id: @entity_id, data: %{b: index}}
+        end)
+
+      assert append(effects) == :ok
+
+      assert Enum.map(rows(), & &1.data["b"]) == Enum.to_list(1..7_300)
     end
 
     test "records an entity's attributes under the type's declared name" do
@@ -529,6 +650,43 @@ defmodule Hologram.DB.OplogTest do
 
       assert [%{revisions: revisions}] = rows()
       assert revisions == nil
+    end
+
+    test "stores the old references a patch carries, an unset one included" do
+      effect = %{
+        op: :patch_entity,
+        entity_type: Module3,
+        entity_id: @entity_id,
+        data: %{b_id: @entity_id, c_id: @target_id},
+        old: %{b_id: nil, c_id: @entity_id}
+      }
+
+      assert append([effect]) == :ok
+
+      assert [%{old: old}] = rows()
+      assert old == %{"b_id" => nil, "c_id" => @entity_id}
+    end
+
+    test "stores no old references for an effect carrying none" do
+      effect = %{op: :patch_entity, entity_type: Module2, entity_id: @entity_id, data: %{c: "x"}}
+
+      assert append([effect]) == :ok
+
+      assert [%{old: nil}] = rows()
+    end
+
+    test "stores no old references for an effect whose old references are nil" do
+      effect = %{
+        op: :patch_entity,
+        entity_type: Module2,
+        entity_id: @entity_id,
+        data: %{c: "x"},
+        old: nil
+      }
+
+      assert append([effect]) == :ok
+
+      assert [%{old: nil}] = rows()
     end
 
     # Half of a pair. Its twin is wire_data_test.exs's "leaves out a server-only attribute whose

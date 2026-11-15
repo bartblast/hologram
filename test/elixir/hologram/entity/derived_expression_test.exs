@@ -346,6 +346,15 @@ defmodule Hologram.Entity.DerivedExpressionTest do
       end
     end
 
+    test "raises on user_id() in a query" do
+      expected_msg =
+        "lib/my_app/channel.ex:12: #{@field} names user_id() - a derived field's query can't name the acting user, only a policy condition can, since a derived value is the same whoever reads it"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        lower("fn messages -> filter(messages, author_id == user_id()) end")
+      end
+    end
+
     test "raises at the head on a name no argument binds" do
       expected_msg =
         "lib/my_app/channel.ex:12: messages is not an argument of the function of #{@field} - add it to the head to read the field"

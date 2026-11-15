@@ -41,6 +41,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Topic
   alias HologramFeatureTests.Entities.Trip
   alias HologramFeatureTests.Entities.User
+  alias HologramFeatureTests.Jobs.KillWorker
   alias HologramFeatureTests.Jobs.RestockItem
   alias HologramFeatureTestsWeb.Endpoint
   alias HologramFeatureTestsWeb.Plugs.SlowPageBundle
@@ -931,6 +932,7 @@ defmodule HologramFeatureTests.Helpers do
         Document,
         Folder,
         Item,
+        KillWorker,
         Label,
         Leg,
         Membership,

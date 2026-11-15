@@ -712,11 +712,20 @@ defmodule Hologram.Template.RendererDerivedTest do
                {"h = #{not_included},#{not_included},#{not_included}", %{}, @server}
     end
 
+    # The rows can tie on created_at, and their ids, random past the millisecond, then decide their
+    # order - so the titles are compared in no particular order.
     test "hands the template a relationship the query included through a path" do
       {html, _component_registry, _server_struct} =
         render_dom({:component, Module170, [], []}, @env, @server)
 
-      assert String.contains?(html, "titles = shown,,")
+      "titles = " <> titles = String.trim(html)
+
+      sorted_titles =
+        titles
+        |> String.split(",")
+        |> Enum.sort()
+
+      assert sorted_titles == ["", "", "shown"]
       assert carried_titles() == ["shown"]
     end
 
@@ -996,6 +1005,18 @@ defmodule Hologram.Template.RendererDerivedTest do
 
     test "exposes nil for a session user id that is not a canonical entity id" do
       html = render_page_html(Module131, %Server{user_id: 7})
+
+      assert String.contains?(html, "current user = none")
+    end
+
+    # The validator's pattern takes the newline the uuid encoder refuses.
+    test "exposes nil for a session user's id followed by a newline" do
+      user =
+        %{email: "newline@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      html = render_page_html(Module131, %Server{user_id: user.id <> "\n"})
 
       assert String.contains?(html, "current user = none")
     end

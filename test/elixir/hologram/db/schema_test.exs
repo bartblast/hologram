@@ -635,7 +635,8 @@ defmodule Hologram.DB.SchemaTest do
           }
         })
         |> Map.put(:indexes, %{
-          "task_old_$idx" => %{columns: ["legacy"], nulls_distinct: true, unique: false}
+          "task_old_$idx" => %{columns: ["legacy"], nulls_distinct: true, unique: false},
+          "task_renamed_from_$idx" => %{columns: ["id"], nulls_distinct: true, unique: false}
         })
 
       target_task_table =
@@ -653,7 +654,8 @@ defmodule Hologram.DB.SchemaTest do
           }
         })
         |> Map.put(:indexes, %{
-          "task_new_$idx" => %{columns: ["done"], nulls_distinct: true, unique: false}
+          "task_new_$idx" => %{columns: ["done"], nulls_distinct: true, unique: false},
+          "task_renamed_to_$idx" => %{columns: ["id"], nulls_distinct: true, unique: false}
         })
 
       actual = %{
@@ -678,6 +680,7 @@ defmodule Hologram.DB.SchemaTest do
         |> Enum.map(& &1.op)
 
       assert op_kinds == [
+               :rename_index,
                :drop_foreign_key,
                :drop_index,
                :drop_column,
@@ -691,6 +694,606 @@ defmodule Hologram.DB.SchemaTest do
                :rename_constraint,
                :add_foreign_key,
                :create_index
+             ]
+    end
+  end
+
+  describe "diff/2 - renames" do
+    @project_id_index %{columns: ["project_id"], nulls_distinct: true, unique: false}
+
+    defp with_indexes(table_definition, indexes) do
+      %{table_definition | indexes: indexes}
+    end
+
+    defp task_term(indexes, tables \\ %{}) do
+      %{tables: Map.put(tables, "task", with_indexes(@task_table, indexes)), enum_types: %{}}
+    end
+
+    defp join_table_term(name, source_table, target_table) do
+      uuid_column = %{type: "uuid", collation: nil, null: false}
+
+      %{
+        columns: %{"source_id" => uuid_column, "target_id" => uuid_column},
+        primary_key: %{columns: ["source_id", "target_id"], constraint: "#{name}_$pk"},
+        foreign_keys: %{
+          "source_id" => %{
+            references: source_table,
+            on_delete: :restrict,
+            constraint: "#{name}_source_id_$fk"
+          },
+          "target_id" => %{
+            references: target_table,
+            on_delete: :restrict,
+            constraint: "#{name}_target_id_$fk"
+          }
+        },
+        indexes: %{
+          "#{name}_target_id_source_id_$idx" => %{
+            columns: ["target_id", "source_id"],
+            nulls_distinct: true,
+            unique: false
+          }
+        }
+      }
+    end
+
+    defp join_term(join_tables) do
+      tables =
+        Map.new(join_tables, fn {name, source_table, target_table} ->
+          {name, join_table_term(name, source_table, target_table)}
+        end)
+
+      %{
+        tables: Map.merge(%{"task" => @task_table, "project" => @project_table}, tables),
+        enum_types: %{}
+      }
+    end
+
+    test "renames a join table with the same ends, along with its constraints and reverse index" do
+      actual = join_term([{"task_tags_$join", "task", "project"}])
+      target = join_term([{"task_labels_$join", "task", "project"}])
+
+      assert diff(actual, target) == [
+               %{op: :rename_table, from: "task_tags_$join", to: "task_labels_$join"},
+               %{
+                 op: :rename_index,
+                 table: "task_labels_$join",
+                 from: "task_tags_$join_target_id_source_id_$idx",
+                 to: "task_labels_$join_target_id_source_id_$idx"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "task_labels_$join",
+                 from: "task_tags_$join_$pk",
+                 to: "task_labels_$join_$pk"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "task_labels_$join",
+                 from: "task_tags_$join_source_id_$fk",
+                 to: "task_labels_$join_source_id_$fk"
+               },
+               %{
+                 op: :rename_constraint,
+                 table: "task_labels_$join",
+                 from: "task_tags_$join_target_id_$fk",
+                 to: "task_labels_$join_target_id_$fk"
+               }
+             ]
+    end
+
+    test "pairs no join table when two on one side share the ends" do
+      actual =
+        join_term([
+          {"task_tags_$join", "task", "project"},
+          {"task_blocked_$join", "task", "project"}
+        ])
+
+      target = join_term([{"task_labels_$join", "task", "project"}])
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_table in op_kinds
+      assert Enum.count(op_kinds, &(&1 == :drop_table)) == 2
+      assert :create_table in op_kinds
+    end
+
+    test "pairs a join table beside another with the same ends that both sides keep" do
+      actual =
+        join_term([
+          {"task_tags_$join", "task", "project"},
+          {"task_kept_$join", "task", "project"}
+        ])
+
+      target =
+        join_term([
+          {"task_labels_$join", "task", "project"},
+          {"task_kept_$join", "task", "project"}
+        ])
+
+      assert [%{op: :rename_table, from: "task_tags_$join", to: "task_labels_$join"} | _ops] =
+               diff(actual, target)
+    end
+
+    test "pairs no join table when two on the target side share the ends" do
+      actual = join_term([{"task_tags_$join", "task", "project"}])
+
+      target =
+        join_term([
+          {"task_labels_$join", "task", "project"},
+          {"task_blocked_$join", "task", "project"}
+        ])
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_table in op_kinds
+      assert Enum.count(op_kinds, &(&1 == :create_table)) == 2
+    end
+
+    test "renames a self-referential join table" do
+      actual = join_term([{"task_parents_$join", "task", "task"}])
+      target = join_term([{"task_children_$join", "task", "task"}])
+
+      assert [%{op: :rename_table, from: "task_parents_$join", to: "task_children_$join"} | _ops] =
+               diff(actual, target)
+    end
+
+    test "pairs no join-shaped table a hand edit left without a foreign key" do
+      actual =
+        update_in(
+          join_term([{"task_tags_$join", "task", "project"}]).tables["task_tags_$join"].foreign_keys,
+          &Map.delete(&1, "target_id")
+        )
+
+      target = join_term([{"task_labels_$join", "task", "project"}])
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_table in op_kinds
+    end
+
+    test "pairs no join-shaped table holding a third column" do
+      extra_column = %{type: "text", collation: "C", null: true}
+
+      actual =
+        update_in(
+          join_term([{"task_tags_$join", "task", "project"}]).tables["task_tags_$join"].columns,
+          &Map.put(&1, "note", extra_column)
+        )
+
+      target = join_term([{"task_labels_$join", "task", "project"}])
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_table in op_kinds
+    end
+
+    test "orders a join table rename before every drop" do
+      actual =
+        join_term([
+          {"task_tags_$join", "task", "project"},
+          {"task_gone_$join", "project", "task"}
+        ])
+
+      target = join_term([{"task_labels_$join", "task", "project"}])
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert [:rename_table, :rename_index, :drop_foreign_key | _later] = op_kinds
+      assert :drop_table in op_kinds
+    end
+
+    test "keeps join tables a drop plus a create with renames: false" do
+      actual = join_term([{"task_tags_$join", "task", "project"}])
+      target = join_term([{"task_labels_$join", "task", "project"}])
+
+      op_kinds =
+        actual
+        |> diff(target, renames: false)
+        |> Enum.map(& &1.op)
+
+      refute :rename_table in op_kinds
+      assert :drop_table in op_kinds
+      assert :create_table in op_kinds
+    end
+
+    test "pairs no join table whose ends differ" do
+      actual = join_term([{"task_tags_$join", "task", "project"}])
+      target = join_term([{"task_labels_$join", "project", "task"}])
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_table in op_kinds
+      assert :drop_table in op_kinds
+      assert :create_table in op_kinds
+    end
+
+    test "pairs no join-shaped table a hand edit left without its primary key" do
+      actual =
+        put_in(
+          join_term([{"task_tags_$join", "task", "project"}]).tables["task_tags_$join"].primary_key,
+          nil
+        )
+
+      target = join_term([{"task_labels_$join", "task", "project"}])
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_table in op_kinds
+      assert :drop_table in op_kinds
+    end
+
+    test "pairs no entity table" do
+      actual = %{tables: %{"task" => @task_table}, enum_types: %{}}
+      target = %{tables: %{"todo" => @task_table}, enum_types: %{}}
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_table, :create_table]
+    end
+
+    defp status_term(enum_type, values) do
+      status_column = %{type: enum_type, collation: nil, null: false}
+      table = %{@task_table | columns: Map.put(@task_table.columns, "status", status_column)}
+
+      %{tables: %{"task" => table}, enum_types: %{enum_type => values}}
+    end
+
+    test "emits a lone rename_enum_type for a type renamed under the column using it" do
+      actual = status_term("task_old_$enum", ["todo", "done"])
+      target = status_term("task_status_$enum", ["todo", "done"])
+
+      assert diff(actual, target) == [
+               %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"}
+             ]
+    end
+
+    test "adds a value to a renamed enum type under its new name" do
+      actual = status_term("task_old_$enum", ["todo"])
+      target = status_term("task_status_$enum", ["todo", "done"])
+
+      assert diff(actual, target) == [
+               %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"},
+               %{
+                 op: :add_enum_value,
+                 enum_type: "task_status_$enum",
+                 value: "done",
+                 position: nil
+               }
+             ]
+    end
+
+    test "rebuilds a renamed enum type losing a value under its new name" do
+      actual = status_term("task_old_$enum", ["todo", "done"])
+      target = status_term("task_status_$enum", ["todo"])
+
+      assert diff(actual, target) == [
+               %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"},
+               %{
+                 op: :rebuild_enum_type,
+                 enum_type: "task_status_$enum",
+                 values: ["todo"],
+                 columns: [{"task", "status"}]
+               }
+             ]
+    end
+
+    test "pairs no enum type a second column ties to another type" do
+      phase_column = fn enum_type -> %{type: enum_type, collation: nil, null: false} end
+
+      actual =
+        put_in(
+          status_term("task_old_$enum", ["todo"]).tables["task"].columns["phase"],
+          phase_column.("task_old_$enum")
+        )
+
+      target =
+        "task_status_$enum"
+        |> status_term(["todo"])
+        |> put_in([:tables, "task", :columns, "phase"], phase_column.("task_phase_$enum"))
+        |> put_in([:enum_types, "task_phase_$enum"], ["todo"])
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_enum_type in op_kinds
+    end
+
+    test "pairs no enum type another of its columns leaves for text" do
+      text_column = %{type: "text", collation: "C", null: false}
+
+      actual =
+        put_in(
+          status_term("task_old_$enum", ["todo"]).tables["task"].columns["phase"],
+          %{type: "task_old_$enum", collation: nil, null: false}
+        )
+
+      target =
+        put_in(
+          status_term("task_status_$enum", ["todo"]).tables["task"].columns["phase"],
+          text_column
+        )
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      refute :rename_enum_type in op_kinds
+    end
+
+    test "renames one enum type for every column that moves with it" do
+      enum_column = fn enum_type -> %{type: enum_type, collation: nil, null: false} end
+
+      actual =
+        put_in(
+          status_term("task_old_$enum", ["todo", "done"]).tables["task"].columns["phase"],
+          enum_column.("task_old_$enum")
+        )
+
+      target =
+        put_in(
+          status_term("task_status_$enum", ["todo"]).tables["task"].columns["phase"],
+          enum_column.("task_status_$enum")
+        )
+
+      assert diff(actual, target) == [
+               %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"},
+               %{
+                 op: :rebuild_enum_type,
+                 enum_type: "task_status_$enum",
+                 values: ["todo"],
+                 columns: [{"task", "phase"}, {"task", "status"}]
+               }
+             ]
+    end
+
+    test "keeps enum types a drop plus a create with renames: false" do
+      actual = status_term("task_old_$enum", ["todo"])
+      target = status_term("task_status_$enum", ["todo"])
+
+      op_kinds =
+        actual
+        |> diff(target, renames: false)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_enum_type, :create_enum_type, :alter_column]
+    end
+
+    test "emits a lone rename_index for an index whose name changed and definition didn't" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      assert diff(actual, target) == [
+               %{op: :rename_index, table: "task", from: "task_old_$idx", to: "task_new_$idx"}
+             ]
+    end
+
+    test "emits drop plus create for an index whose definition changed with its name" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+      target = task_term(%{"task_new_$idx" => %{@project_id_index | unique: true}})
+
+      assert diff(actual, target) == [
+               %{op: :drop_index, index: "task_old_$idx"},
+               %{
+                 op: :create_index,
+                 table: "task",
+                 index: "task_new_$idx",
+                 columns: ["project_id"],
+                 nulls_distinct: true,
+                 unique: true
+               }
+             ]
+    end
+
+    test "pairs nothing when two unmatched indexes share the definition" do
+      actual =
+        task_term(%{"task_a_$idx" => @project_id_index, "task_b_$idx" => @project_id_index})
+
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :drop_index, :create_index]
+    end
+
+    test "pairs nothing when two unmatched target indexes share the definition" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+
+      target =
+        task_term(%{"task_a_$idx" => @project_id_index, "task_b_$idx" => @project_id_index})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :create_index, :create_index]
+    end
+
+    test "pairs only the first of two renames to one name on different tables" do
+      project_table = with_indexes(@project_table, %{"project_old_$idx" => @project_id_index})
+
+      actual = task_term(%{"task_old_$idx" => @project_id_index}, %{"project" => project_table})
+
+      target =
+        task_term(%{"shared_$idx" => @project_id_index}, %{
+          "project" => with_indexes(@project_table, %{"shared_$idx" => @project_id_index})
+        })
+
+      assert [
+               %{op: :rename_index, table: "project", from: "project_old_$idx", to: "shared_$idx"}
+               | other_ops
+             ] = diff(actual, target)
+
+      refute Enum.any?(other_ops, &(&1.op == :rename_index))
+    end
+
+    test "pairs an index on a table with no primary key" do
+      actual =
+        put_in(task_term(%{"task_old_$idx" => @project_id_index}).tables["task"].primary_key, nil)
+
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      assert [%{op: :rename_index, from: "task_old_$idx", to: "task_new_$idx"} | _other_ops] =
+               diff(actual, target)
+    end
+
+    test "pairs nothing when another actual index holds the target name" do
+      other_table = with_indexes(@project_table, %{"task_new_$idx" => @project_id_index})
+
+      actual = task_term(%{"task_old_$idx" => @project_id_index}, %{"project" => other_table})
+      target = task_term(%{"task_new_$idx" => @project_id_index}, %{"project" => @project_table})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :drop_index, :create_index]
+    end
+
+    test "pairs nothing when a primary key holds the target name" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+      target = task_term(%{"task_$pk" => @project_id_index})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :create_index]
+    end
+
+    test "orders the renames before every drop" do
+      legacy_column = %{type: "boolean", collation: nil, null: false}
+
+      actual_table =
+        @task_table
+        |> with_indexes(%{"task_old_$idx" => @project_id_index})
+        |> Map.update!(:columns, &Map.put(&1, "legacy", legacy_column))
+
+      actual = %{tables: %{"task" => actual_table}, enum_types: %{}}
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      assert diff(actual, target) == [
+               %{op: :rename_index, table: "task", from: "task_old_$idx", to: "task_new_$idx"},
+               %{op: :drop_column, table: "task", column: "legacy"}
+             ]
+    end
+
+    test "pairs no index introspection marked as not plain" do
+      partial_index = Map.put(@project_id_index, :non_plain, [:predicate])
+
+      actual = task_term(%{"task_old_$idx" => partial_index})
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      op_kinds =
+        actual
+        |> diff(target)
+        |> Enum.map(& &1.op)
+
+      assert op_kinds == [:drop_index, :create_index]
+    end
+
+    test "drops and recreates a marked index under the target's name, carrying its reasons" do
+      partial_index = Map.put(@project_id_index, :non_plain, [:predicate])
+
+      actual = task_term(%{"task_project_id_$idx" => partial_index})
+      target = task_term(%{"task_project_id_$idx" => @project_id_index})
+
+      assert diff(actual, target) == [
+               %{op: :drop_index, index: "task_project_id_$idx", non_plain: [:predicate]},
+               %{
+                 op: :create_index,
+                 table: "task",
+                 index: "task_project_id_$idx",
+                 columns: ["project_id"],
+                 nulls_distinct: true,
+                 unique: false
+               }
+             ]
+    end
+
+    test "converges the role grant store's index under its old name by a rename and a create" do
+      target =
+        [Hologram.Test.Fixtures.Entity.Module14]
+        |> Mapper.derive!([])
+        |> from_mapping()
+
+      store = target.tables["hologram_role_grant"]
+      unique_name = "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx"
+      entity_name = "hologram_role_grant_entity_type_entity_id_role_$idx"
+
+      old_indexes =
+        store.indexes
+        |> Map.delete(entity_name)
+        |> Map.delete(unique_name)
+        |> Map.put("hologram_role_grant_$uidx", store.indexes[unique_name])
+
+      actual = put_in(target.tables["hologram_role_grant"].indexes, old_indexes)
+
+      assert diff(actual, target) == [
+               %{
+                 op: :rename_index,
+                 table: "hologram_role_grant",
+                 from: "hologram_role_grant_$uidx",
+                 to: unique_name
+               },
+               %{
+                 op: :create_index,
+                 table: "hologram_role_grant",
+                 index: entity_name,
+                 columns: ["entity_type", "entity_id", "role"],
+                 nulls_distinct: true,
+                 unique: false
+               }
+             ]
+    end
+
+    test "keeps the name-keyed result with renames: false" do
+      actual = task_term(%{"task_old_$idx" => @project_id_index})
+      target = task_term(%{"task_new_$idx" => @project_id_index})
+
+      assert diff(actual, target, renames: false) == [
+               %{op: :drop_index, index: "task_old_$idx"},
+               %{
+                 op: :create_index,
+                 table: "task",
+                 index: "task_new_$idx",
+                 columns: ["project_id"],
+                 nulls_distinct: true,
+                 unique: false
+               }
              ]
     end
   end
@@ -861,7 +1464,7 @@ defmodule Hologram.DB.SchemaTest do
                  }
                },
                indexes: %{
-                 "test_fixtures_entity_module3_a_$join_target_id_$idx" => %{
+                 "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx" => %{
                    columns: ["target_id", "source_id"],
                    nulls_distinct: true,
                    unique: false

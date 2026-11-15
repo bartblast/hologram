@@ -496,14 +496,14 @@ defmodule Hologram.DB.DDLTest do
       op = %{
         op: :create_index,
         table: "task_tags_$join",
-        index: "task_tags_$join_target_id_$idx",
+        index: "task_tags_$join_target_id_source_id_$idx",
         columns: ["target_id", "source_id"],
         nulls_distinct: true,
         unique: false
       }
 
       assert statements(op) == [
-               ~s(CREATE INDEX "task_tags_$join_target_id_$idx" ) <>
+               ~s(CREATE INDEX "task_tags_$join_target_id_source_id_$idx" ) <>
                  ~s{ON "hologram_data"."task_tags_$join" ("target_id", "source_id")}
              ]
     end
@@ -512,14 +512,14 @@ defmodule Hologram.DB.DDLTest do
       op = %{
         op: :create_index,
         table: "hologram_role_grant",
-        index: "hologram_role_grant_$uidx",
+        index: "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx",
         columns: ["user_id", "entity_type", "entity_id", "role"],
         nulls_distinct: false,
         unique: true
       }
 
       assert statements(op) == [
-               ~s(CREATE UNIQUE INDEX "hologram_role_grant_$uidx" ) <>
+               ~s(CREATE UNIQUE INDEX "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx" ) <>
                  ~s{ON "hologram_data"."hologram_role_grant" } <>
                  ~s{("user_id", "entity_type", "entity_id", "role") NULLS NOT DISTINCT}
              ]
@@ -757,7 +757,7 @@ defmodule Hologram.DB.DDLTest do
       assert scoped_at < unscoped_at
     end
 
-    test "shortens the temporary type name over the PostgreSQL identifier limit" do
+    test "shortens the temporary type name over the PostgreSQL identifier limit, keeping its suffix" do
       op = %{
         op: :rebuild_enum_type,
         enum_type: "task_extraordinarily_long_attribute_name_for_the_status_$enum",
@@ -765,7 +765,7 @@ defmodule Hologram.DB.DDLTest do
         columns: []
       }
 
-      fitted_old_type = "task_extraordinarily_long_attribute_name_for_the_statu_e6814778"
+      fitted_old_type = "task_extraordinarily_long_attribute_name_for_the_e6814778_$old"
       [rename_statement, _create_statement, drop_statement] = statements(op)
 
       assert rename_statement =~ ~s(RENAME TO "#{fitted_old_type}")

@@ -3,6 +3,7 @@ defmodule Hologram.Job.SupervisorTest do
 
   import Hologram.Job.Supervisor
 
+  alias Hologram.Job.RunLock
   alias Hologram.Job.Worker
 
   defp child_ids do
@@ -12,11 +13,19 @@ defmodule Hologram.Job.SupervisorTest do
   end
 
   describe "init/1" do
-    test "starts the connection writes are heard on, then the worker that hears them" do
-      assert child_ids() == [notifications(), Worker]
+    test "starts the listener, then the run lock connection, then the worker" do
+      assert child_ids() == [notifications(), RunLock, Worker]
     end
 
-    test "starts the worker listening on that connection, under its own name" do
+    test "starts the run lock connection under its own name" do
+      {:ok, {_flags, children}} = init([])
+
+      assert %{start: {RunLock, :start_link, [opts]}} = Enum.find(children, &(&1.id == RunLock))
+
+      assert opts[:name] == RunLock
+    end
+
+    test "starts the worker on both connections, under its own name" do
       {:ok, {_flags, children}} = init([])
 
       assert %{start: {Worker, :start_link, [opts]}} =
@@ -24,11 +33,13 @@ defmodule Hologram.Job.SupervisorTest do
 
       assert opts[:name] == Worker
       assert opts[:notifications] == notifications()
+      assert opts[:run_lock] == RunLock
     end
 
-    # A worker left standing when its connection ends would keep waiting on one that is gone, which
-    # nothing reports - it would fall back to its poll and simply be slower for good.
-    test "restarts the worker with the connection it listens through" do
+    # A worker left standing when its listener ends would keep waiting on one that is gone, which
+    # nothing reports - it would fall back to its poll and simply be slower for good. One left
+    # standing when its lock connection ends would carry on with runs that look abandoned.
+    test "restarts the worker with either connection" do
       assert {:ok, {%{strategy: :rest_for_one}, _children}} = init([])
     end
   end

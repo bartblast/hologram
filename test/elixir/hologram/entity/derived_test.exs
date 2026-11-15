@@ -42,6 +42,16 @@ defmodule Hologram.Entity.DerivedTest do
 
       assert_error MisuseError, expected_msg, fn -> condition(Module34, nothing: 1) end
     end
+
+    # A module attribute holding the actor leaf gets it into a written condition.
+    test "raises on a predicate naming the acting user" do
+      expected_msg =
+        "a derived field's condition can't name the acting user - only a policy condition can, got: [channel_id: {:==, {:actor}}] - a derived value is the same whoever reads it"
+
+      assert_error MisuseError, expected_msg, fn ->
+        condition(Module34, channel_id: {:==, {:actor}})
+      end
+    end
   end
 
   describe "definition/2" do

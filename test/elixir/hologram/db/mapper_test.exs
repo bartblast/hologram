@@ -335,7 +335,7 @@ defmodule Hologram.DB.MapperTest do
              ]
     end
 
-    test "shortens foreign key constraint names over the PostgreSQL identifier limit" do
+    test "shortens foreign key constraint names over the PostgreSQL identifier limit, keeping the kind" do
       defmodule InlineEntityFixture17 do
         use Hologram.Entity
 
@@ -343,10 +343,10 @@ defmodule Hologram.DB.MapperTest do
       end
 
       assert column(InlineEntityFixture17, "quite_long_relationship_name_id").fk_constraint ==
-               "db_mapper_test_inline_entity_fixture17_quite_long_rela_bbbac617"
+               "quite_long_relationship_name_id_bbbac617_$fk"
     end
 
-    test "shortens foreign key index names over the PostgreSQL identifier limit" do
+    test "shortens foreign key index names over the PostgreSQL identifier limit, keeping the kind" do
       defmodule InlineEntityFixture18 do
         use Hologram.Entity
 
@@ -354,7 +354,7 @@ defmodule Hologram.DB.MapperTest do
       end
 
       assert column(InlineEntityFixture18, "quite_long_relationship_name_id").index ==
-               "db_mapper_test_inline_entity_fixture18_quite_long_rela_f8dbb8ba"
+               "quite_long_relationship_name_id_f8dbb8ba_$idx"
     end
 
     test "rejects declarations deriving the same column name" do
@@ -412,7 +412,7 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive!/2" do
-    test "derives the role grant unique index comparing nulls as values" do
+    test "derives the role grant store's unique index comparing nulls as values, and its entity index" do
       mapping =
         derive!(
           [
@@ -424,10 +424,15 @@ defmodule Hologram.DB.MapperTest do
         )
 
       assert mapping[Hologram.Auth.RoleGrant].indexes == %{
-               "hologram_role_grant_$uidx" => %{
+               "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx" => %{
                  columns: ["user_id", "entity_type", "entity_id", "role"],
                  nulls_distinct: false,
                  unique: true
+               },
+               "hologram_role_grant_entity_type_entity_id_role_$idx" => %{
+                 columns: ["entity_type", "entity_id", "role"],
+                 nulls_distinct: true,
+                 unique: false
                }
              }
     end
@@ -612,6 +617,96 @@ defmodule Hologram.DB.MapperTest do
       end
     end
 
+    test "rejects entities deriving the same name for a sort key index" do
+      defmodule InlineEntityFixture24 do
+        use Hologram.Entity
+
+        attribute :b_c, :string
+      end
+
+      defmodule InlineEntityFixture24B do
+        use Hologram.Entity
+
+        attribute :c, :string
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "db_mapper_test_inline_entity_fixture24_b_c_$sort_$idx" is derived from attribute :b_c in Hologram.DB.MapperTest.InlineEntityFixture24, attribute :c in Hologram.DB.MapperTest.InlineEntityFixture24B\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture24, InlineEntityFixture24B], [])
+      end
+    end
+
+    test "rejects entities deriving the same name for a unique attribute index" do
+      defmodule InlineEntityFixture25 do
+        use Hologram.Entity
+
+        attribute :b_c, :integer, unique: true
+      end
+
+      defmodule InlineEntityFixture25B do
+        use Hologram.Entity
+
+        attribute :c, :integer, unique: true
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "db_mapper_test_inline_entity_fixture25_b_c_$uidx" is derived from attribute :b_c in Hologram.DB.MapperTest.InlineEntityFixture25, attribute :c in Hologram.DB.MapperTest.InlineEntityFixture25B\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture25, InlineEntityFixture25B], [])
+      end
+    end
+
+    test "rejects entities deriving the same name for a reference index" do
+      defmodule InlineEntityFixture26 do
+        use Hologram.Entity
+
+        relationship :b_c, Module1
+      end
+
+      defmodule InlineEntityFixture26B do
+        use Hologram.Entity
+
+        relationship :c, Module1
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "db_mapper_test_inline_entity_fixture26_b_c_id_$idx" is derived from relationship :b_c in Hologram.DB.MapperTest.InlineEntityFixture26, relationship :c in Hologram.DB.MapperTest.InlineEntityFixture26B\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture26, InlineEntityFixture26B], [])
+      end
+    end
+
+    test "rejects an entity deriving the role grant store's index name" do
+      defmodule Elixir.HologramRole do
+        use Hologram.Entity
+
+        attribute :grant_user_id_entity_type_entity_id_role, :integer, unique: true
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx" is derived from attribute :grant_user_id_entity_type_entity_id_role in HologramRole, the role grant store\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([Module14, HologramRole], [])
+      end
+    end
+
     test "rejects entities deriving the same enum type name" do
       defmodule InlineEntityFixture15 do
         use Hologram.Entity
@@ -667,6 +762,67 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive_from_model!/1" do
+    # Four join tables in two colliding pairs, and one reverse index name all four derive - which
+    # neither pair's line reports, so it gets a line of its own.
+    test "reports an index two colliding join table pairs share" do
+      r = String.duplicate("r", 37)
+
+      relationships = [
+        {Pppppppppppppp, :xx_yy_zz_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr},
+        {Pppppppppppppp.XxYyZz, :rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr},
+        {PpppppppppppppXx, :yy_zz_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr},
+        {PpppppppppppppXx.Yy, :zz_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr}
+      ]
+
+      model = %{
+        entities:
+          Map.new(relationships, fn {entity_type, relationship} ->
+            {entity_type,
+             %{attributes: [], relationships: [{relationship, [entity_type], []}], roles: []}}
+          end),
+        roles: %{},
+        user_entity: nil
+      }
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "target_id_d1fd575c_$idx" is derived from relationship :#{r} in Pppppppppppppp.XxYyZz, relationship :xx_yy_zz_#{r} in Pppppppppppppp, relationship :yy_zz_#{r} in PpppppppppppppXx, relationship :zz_#{r} in PpppppppppppppXx.Yy
+          * join table "xx_yy_zz_#{r}_7523ea5b_$join" is derived from relationship :#{r} in Pppppppppppppp.XxYyZz, relationship :xx_yy_zz_#{r} in Pppppppppppppp
+          * join table "yy_zz_#{r}_7523ea5b_$join" is derived from relationship :yy_zz_#{r} in PpppppppppppppXx, relationship :zz_#{r} in PpppppppppppppXx.Yy\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> derive_from_model!(model) end
+    end
+
+    # A cut join table name keeps its relationship and a digest, which a module path can spell
+    # out in full - so a join table's primary key and an entity's can meet.
+    test "rejects a join table's primary key cut to an entity's primary key" do
+      relationship = :a_relationship_name_longer_than_thirty_three_bytes_x1
+      entity_type = :"Elixir.ARelationshipNameLongerThanThirtyThreeBytes.9e7c7fc8"
+
+      model = %{
+        entities: %{
+          Nonexistent.Post => %{
+            attributes: [],
+            relationships: [{relationship, [Nonexistent.Post], []}],
+            roles: []
+          },
+          entity_type => %{attributes: [], relationships: [], roles: []}
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "a_relationship_name_longer_than_thirty_three_bytes_9e7c7fc8_$pk" is derived from relationship :a_relationship_name_longer_than_thirty_three_bytes_x1 in Nonexistent.Post, the primary key of :"Elixir.ARelationshipNameLongerThanThirtyThreeBytes.9e7c7fc8"\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> derive_from_model!(model) end
+    end
+
     test "derives the same mapping as derive!/2" do
       entity_types = Reflection.list_entities()
       role_modules = Reflection.list_roles()
@@ -861,22 +1017,87 @@ defmodule Hologram.DB.MapperTest do
     end
   end
 
-  describe "fit_identifier/1" do
-    test "returns identifiers within the PostgreSQL limit unchanged" do
-      assert fit_identifier("task_status_$enum") == "task_status_$enum"
+  describe "fit_identifier/3" do
+    test "joins the parts with single underscores when the name fits" do
+      assert fit_identifier(["task"], ["status"], "$enum") == "task_status_$enum"
     end
 
-    test "returns a 63-byte identifier unchanged" do
-      identifier = String.duplicate("a", 63)
-
-      assert fit_identifier(identifier) == identifier
+    test "leaves out the kind when there is none" do
+      assert fit_identifier(["blog", "post"], [], nil) == "blog_post"
     end
 
-    test "shortens identifiers over the limit to a prefix plus a deterministic hash" do
-      identifier = String.duplicate("a", 60) <> "_$enum"
+    test "returns a 63-byte name unchanged" do
+      column = String.duplicate("a", 50)
 
-      assert fit_identifier(identifier) ==
-               "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_e4fa9150"
+      assert fit_identifier(["invoice"], [column], "$idx") == "invoice_#{column}_$idx"
+    end
+
+    test "drops the leading table segments first, keeping the column, a digest and the kind" do
+      assert fit_identifier(
+               ["billing", "subscriptions", "recurring_invoice_line_item"],
+               ["subscription_id"],
+               "$fk"
+             ) == "recurring_invoice_line_item_subscription_id_aa227011_$fk"
+    end
+
+    test "drops a leading table segment only as far as the name needs" do
+      assert fit_identifier(
+               ["billing_department_long", "plans", "invoice_line_item"],
+               ["subscription_id"],
+               "$fk"
+             ) == "plans_invoice_line_item_subscription_id_446e67d8_$fk"
+    end
+
+    test "drops the table's context before any column" do
+      assert fit_identifier(
+               ["billing_and_accounts", "subscriptions"],
+               ["first_column", "second_column"],
+               "$uidx"
+             ) == "subscriptions_first_column_second_column_603c0d2b_$uidx"
+    end
+
+    test "drops trailing columns whole once the table is down to its own name" do
+      columns = ["first_quite_long_column", "second_quite_long_column", "third_column"]
+
+      assert fit_identifier(["post"], columns, "$uidx") ==
+               "post_first_quite_long_column_08083a7a_$uidx"
+    end
+
+    test "drops the entity's own name before the lone column, then cuts the column" do
+      column = String.duplicate("a", 51)
+
+      assert fit_identifier(["invoice"], [column], "$idx") ==
+               String.duplicate("a", 49) <> "_0c8244ba_$idx"
+    end
+
+    test "cuts at a character boundary" do
+      column = String.duplicate("ż", 40)
+
+      assert fit_identifier([], [column], "id") ==
+               String.duplicate("ż", 25) <> "_a25d842e_id"
+    end
+
+    test "trims the underscores a cut leaves at the end" do
+      column = String.duplicate("a", 50) <> "_" <> String.duplicate("b", 20)
+
+      assert fit_identifier([], [column], "id") ==
+               String.duplicate("a", 50) <> "_fd0eaed7_id"
+    end
+
+    test "keeps the digest and the kind alone when nothing is left after the cut" do
+      assert fit_identifier([], [String.duplicate("_", 70)], "id") == "5b6791bf_id"
+    end
+
+    test "gives names that differ only in a dropped part different digests" do
+      segments = ["subscriptions", "recurring_invoice_line_item"]
+
+      billing = fit_identifier(["billing" | segments], ["subscription_id"], "$fk")
+      accounting = fit_identifier(["accounting" | segments], ["subscription_id"], "$fk")
+
+      assert billing != accounting
+
+      assert String.replace(billing, ~r/_[0-9a-f]{8}_/, "_") ==
+               String.replace(accounting, ~r/_[0-9a-f]{8}_/, "_")
     end
   end
 
@@ -892,7 +1113,7 @@ defmodule Hologram.DB.MapperTest do
                  relationship: :a,
                  source_table: "test_fixtures_entity_module3",
                  target_table: "test_fixtures_entity_module2",
-                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_$idx",
+                 reverse_index: "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx",
                  pk_constraint: "test_fixtures_entity_module3_a_$join_$pk",
                  source_fk_constraint: "test_fixtures_entity_module3_a_$join_source_id_$fk",
                  target_fk_constraint: "test_fixtures_entity_module3_a_$join_target_id_$fk"
@@ -909,6 +1130,29 @@ defmodule Hologram.DB.MapperTest do
 
       assert [join_table] = join_tables(InlineEntityFixture2)
       assert join_table.source_table == join_table.target_table
+    end
+
+    test "keeps the relationship, $join and the kind in a join table's names over the PostgreSQL identifier limit" do
+      defmodule InlineEntityFixture23 do
+        use Hologram.Entity
+
+        relationship :recurring_invoice_adjustments, [Module1]
+      end
+
+      assert [join_table] = join_tables(InlineEntityFixture23)
+
+      assert join_table.name == "recurring_invoice_adjustments_f97af6f0_$join"
+
+      assert join_table.reverse_index ==
+               "recurring_invoice_adjustments_$join_target_id_e06e7e1d_$idx"
+
+      assert join_table.pk_constraint == "recurring_invoice_adjustments_$join_23c0665c_$pk"
+
+      assert join_table.source_fk_constraint ==
+               "recurring_invoice_adjustments_$join_source_id_74bcced4_$fk"
+
+      assert join_table.target_fk_constraint ==
+               "recurring_invoice_adjustments_$join_target_id_59be50d0_$fk"
     end
   end
 
@@ -983,12 +1227,11 @@ defmodule Hologram.DB.MapperTest do
       assert table_name(Hologram) == "hologram"
     end
 
-    test "shortens names over the PostgreSQL identifier limit to a prefix plus a deterministic hash" do
+    test "shortens names over the PostgreSQL identifier limit to the entity's own name plus a deterministic hash" do
       entity_type =
         Hologram.SomeDeeplyNested.EntityTypeModule.WithAnExtraordinarilyLong.MultiSegmentName
 
-      assert table_name(entity_type) ==
-               "some_deeply_nested_entity_type_module_with_an_extraord_e6841b3f"
+      assert table_name(entity_type) == "with_an_extraordinarily_long_multi_segment_name_e6841b3f"
     end
   end
 

@@ -1496,26 +1496,6 @@ describe("Elixir_Hologram_DB", () => {
       assert.deepStrictEqual(read(task), Type.list([]));
     });
 
-    // The one thing the acting user is carried for: a predicate that NAMES them. The client
-    // evaluates no read policies - it holds only rows the server already let it have - so this is
-    // the whole of what actorUserId does here.
-    it("binds a predicate naming the acting user", () => {
-      LocalDatabase.actorUserId = ID_2;
-      LocalDatabase.putRow(TASK, row(ID_1));
-      LocalDatabase.putRow(TASK, row(ID_2, {title: "Mine"}));
-
-      const result = read(
-        filter(task, predicates([["id", Type.tuple([Type.atom("actor")])]])),
-      );
-
-      assert.equal(result.data.length, 1);
-
-      assert.deepStrictEqual(
-        field(result.data[0], "title"),
-        Type.bitstring("Mine"),
-      );
-    });
-
     it("raises for a query term carrying a placeholder", () => {
       const placeholder = Type.struct("Hologram.Query.Placeholder", [
         [Type.atom("name"), Type.atom("wanted")],

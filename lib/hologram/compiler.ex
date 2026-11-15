@@ -164,7 +164,8 @@ defmodule Hologram.Compiler do
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
           policy_hash: String.t() | nil,
-          role_modules: list(module)
+          role_modules: list(module),
+          synced_types: list(module)
         }
 
   @type js_input_fingerprint ::
@@ -932,8 +933,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds the registered queries PLT, whose items are what a running app reads of them - the
-  entries, prop params and windows, and the derived definitions the compile task puts beside them -
-  and returns it with the path to dump it at.
+  entries, prop params and windows, and the derived definitions and synced types the compile task
+  puts beside them - and returns it with the path to dump it at.
   """
   @spec build_queries_plt(%{atom => any}, T.opts()) :: {PLT.t(), T.file_path()}
   def build_queries_plt(queries, opts) do
@@ -2348,6 +2349,19 @@ defmodule Hologram.Compiler do
   nil with the model hash. A client greets with it, and a server running other rules sends it the
   ones it enforces.
 
+  `:synced_types` are the entity types sync sends rows of, sorted by name: the types the queries
+  read and the pages' client code mentions, as for `:entity_types`, and, when the build checks
+  permissions on the client (see `permission_checking?/2`), the types every rule of those types
+  reads through relationships, with the grant type. A browser never decides a read rule - a row
+  reaches it only once the server's read rules admitted it - so the rules count only where the
+  browser answers them. They are followed one step: client code checks only rows of types it
+  queries or mentions, and a rule's chains already follow its delegations. That is at least what
+  the windows download, which follow the rules of a query's own type and its includes only - bar
+  a type the model leaves out, which declares no rule, so no read rule admits its rows. A
+  type only server code names, like an audit log, is left out, rules or not, and never reaches a
+  browser. The server reads the list (see `Hologram.DB.QueryCache.synced_types/0`), the client
+  does not.
+
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_sync_constants_3/README.md
   """
   @spec build_sync_constants(
@@ -2410,7 +2424,9 @@ defmodule Hologram.Compiler do
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
       policy_hash: policy_hash(all_entity_types),
-      role_modules: role_modules
+      role_modules: role_modules,
+      synced_types:
+        synced_types(reached_entity_types, entity_types, reach_by_page, module_info_plt)
     }
   end
 
@@ -4312,6 +4328,32 @@ defmodule Hologram.Compiler do
 
   defp static_prop_value(_value_dom), do: :unknown
 
+  # The entity types sync sends rows of (see build_sync_constants/3): the reached ones, and in a
+  # build checking permissions on the client, the types their rules read rows of through
+  # relationships and the grant type. Kept to the types of the client's model: a row of a type the
+  # model does not name cannot be read back. What that drops is a type declaring no rule, like
+  # one a read rule delegates to, whose rows no one may read anyway.
+  defp synced_types(reached_entity_types, model_entity_types, reach_by_page, module_info_plt) do
+    types =
+      if permission_checking?(reach_by_page, module_info_plt) do
+        reached_entity_types
+        |> Enum.flat_map(fn entity_type ->
+          entity_type
+          |> Policy.related_chains()
+          |> Enum.flat_map(&chain_types(entity_type, &1))
+        end)
+        |> MapSet.new()
+        |> MapSet.union(reached_entity_types)
+        |> MapSet.put(RoleGrant)
+      else
+        reached_entity_types
+      end
+
+    types
+    |> MapSet.intersection(model_entity_types)
+    |> Enum.sort()
+  end
+
   # The types a permission check can ask about: those declaring a rule, and those
   # declaring a role, since a role check validates and expands the role from the type's own
   # declarations - and every type those rules read rows of through relationships. RoleGrant's
@@ -5141,8 +5183,8 @@ defmodule Hologram.Compiler do
     ~s/[#{name_js},#{operator_js},#{render_policy_value(types, name, value)}]/
   end
 
-  # The acting user's own id, named rather than carried: the client binds it at evaluation the
-  # way the kernel binds an actor leaf in a query.
+  # The acting user's own id, named rather than carried: the client binds it when it evaluates the
+  # rule.
   defp render_policy_value(_types, _name, {:actor}) do
     render_json_object([{"actor", "true"}])
   end

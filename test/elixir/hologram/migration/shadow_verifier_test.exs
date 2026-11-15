@@ -57,7 +57,7 @@ defmodule Hologram.Migration.ShadowVerifierTest do
       |> Application.get_env(:database, [])
       |> Config.resolve!(:test)
 
-    database_exists?(Mapper.fit_identifier(database_opts[:database] <> "_shadow"))
+    database_exists?(Mapper.fit_identifier([database_opts[:database]], [], "shadow"))
   end
 
   # Opened outside the pool and outside the sandbox: CREATE and DROP DATABASE cannot run
