@@ -16,6 +16,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.DB
   alias Hologram.DB.Connection
   alias Hologram.DB.EntityOperations
+  alias Hologram.DB.Oplog
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
   alias Hologram.Policy
@@ -3255,6 +3256,60 @@ defmodule Hologram.Sync.SessionTest do
                  type: "Hologram.Test.Fixtures.Entity.Module29"
                }
              ]
+    end
+
+    # Deleting the message takes its edge with it, and what the delete recorded is the only thing that
+    # tells the client the label's own set lost it.
+    test "tells a client holding a row that a deleted row left its inverse" do
+      %{label: label, message: message} = labelled_message()
+      windows(%{@page => [@label_window]})
+      hold_windows([@label_window])
+
+      start_session!([])
+      assert_receive {:sync_deltas, _label_cursor, _label_fill, _applied_seq}
+      assert_receive {:sync_synced, :all, _cursor}
+
+      DB.delete!(message)
+
+      events =
+        Module28
+        |> Oplog.read_type_after(0, 0, %{})
+        |> Enum.filter(&(&1.op in [:del_relationship, :del_entity]))
+
+      Evaluator.round(@label_window, [{200, events}])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert %{
+               data: %{relationship: "messages", target_id: message.id},
+               id: label.id,
+               op: :del_relationship,
+               type: "Hologram.Test.Fixtures.Entity.Module29"
+             } in deltas
+    end
+
+    # The gap holds what the delete recorded, read the way a returning client's gap is.
+    test "replays a gap holding a deleted row's edge by handing over its target without it" do
+      %{label: label, message: message} = labelled_message()
+      windows(%{@page => [@label_window]})
+      hold_windows([@label_window])
+
+      DB.delete!(message)
+
+      # The round after the delete, which a running server makes for every write the window reads.
+      Evaluator.round(@label_window, [])
+      wait_until(fn -> ResultStore.versions(@label_window) != [] end)
+
+      gap =
+        0
+        |> Oplog.read_after(0, 100)
+        |> Enum.filter(&(&1.type == Module28 and &1.op in [:del_relationship, :del_entity]))
+
+      start_session!(gap: gap)
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert [%{data: data, op: :put_entity}] = Enum.filter(deltas, &(&1.id == label.id))
+      assert data.messages == []
     end
 
     test "replays a gap holding an edge by handing over its target" do

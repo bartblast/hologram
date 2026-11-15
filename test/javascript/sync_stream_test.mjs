@@ -80,11 +80,11 @@ describe("SyncStream", () => {
     globalThis.window = originalWindow;
 
     GlobalRegistry.set("connectPageModule", null);
-    GlobalRegistry.set("syncStaleReason", null);
     SyncStream.renderScheduled = false;
     SyncStream.rowsChangedSinceRender = false;
     SyncStream.rules = null;
     SyncStream.served = false;
+    SyncStream.stopReason = null;
     SyncStream.syncCursor = null;
   });
 
@@ -799,19 +799,66 @@ describe("SyncStream", () => {
     const envelope = (reason) =>
       JSON.stringify({protocol_version: 1, reason: reason});
 
-    afterEach(() => {
-      GlobalRegistry.set("syncStaleReason", null);
-    });
-
-    it("records why the bundle is behind the server", () => {
+    it("records why the server stopped serving the tab", () => {
       eventSource.listeners.sync_reload({data: envelope("model_hash")});
 
-      assert.equal(GlobalRegistry.get("syncStaleReason"), "model_hash");
+      assert.equal(SyncStream.stopReason, "model_hash");
     });
 
-    // Restarting the page would throw away what the person was doing to fix a mismatch they did
-    // not cause - and a server serving an older client through lens chains is where this goes,
-    // so a bundle behind the server is a thing to adapt to rather than to correct here.
+    // The tab reading a reason is older than the server that sends it, so a reason it has never
+    // heard of is still a stop.
+    it("takes a reason it does not know as given", () => {
+      eventSource.listeners.sync_reload({data: envelope("lens_missing")});
+
+      assert.equal(SyncStream.stopReason, "lens_missing");
+    });
+
+    // The render is what puts the notice in front of the person.
+    it("schedules a render", () => {
+      eventSource.listeners.sync_reload({data: envelope("model_hash")});
+
+      assert.equal(animationFrames.length, 1);
+    });
+
+    // The server checks the protocol before the model, so a deploy changing both stops the tab over
+    // the protocol, and the model is what a refused write says next.
+    it("lets the model outrank a reason the tab was stopped by before, without a second render", () => {
+      eventSource.listeners.sync_reload({data: envelope("protocol_version")});
+
+      SyncStream.renderScheduled = false;
+
+      eventSource.listeners.sync_reload({data: envelope("model_hash")});
+
+      assert.equal(SyncStream.stopReason, "model_hash");
+      assert.equal(animationFrames.length, 1);
+    });
+
+    // The server only ever stops a tab, and only a reload starts one afresh.
+    it("stays stopped through the frames of a stream served afterwards", () => {
+      sinon.stub(Durability, "persistFrame");
+
+      eventSource.listeners.sync_reload({data: envelope("model_hash")});
+
+      eventSource.listeners.synced({
+        data: JSON.stringify({cursor: null, protocol_version: 1, scope: "all"}),
+      });
+
+      assert.equal(SyncStream.stopReason, "model_hash");
+    });
+
+    it("keeps the model over a reason that comes later, and schedules no second render", () => {
+      eventSource.listeners.sync_reload({data: envelope("model_hash")});
+
+      // As though the scheduled render had run, without running one.
+      SyncStream.renderScheduled = false;
+
+      eventSource.listeners.sync_reload({data: envelope("protocol_version")});
+
+      assert.equal(SyncStream.stopReason, "model_hash");
+      assert.equal(animationFrames.length, 1);
+    });
+
+    // Restarting the page would throw away what the person was doing, so the person chooses when.
     it("leaves the page where it is", () => {
       eventSource.listeners.sync_reload({data: envelope("model_hash")});
 
@@ -832,6 +879,26 @@ describe("SyncStream", () => {
         LocalDatabase.getRow("MyApp.Task", "t1").title,
         "rendered by the server",
       );
+    });
+  });
+
+  describe("holdsWrites()", () => {
+    it("is false while the tab is served", () => {
+      assert.isFalse(SyncStream.holdsWrites());
+    });
+
+    // The write endpoint refuses a batch built against another model.
+    it("is true when the model stopped the tab", () => {
+      SyncStream.stopReason = "model_hash";
+
+      assert.isTrue(SyncStream.holdsWrites());
+    });
+
+    // The write endpoint does not compare protocols, so writes still land.
+    it("is false when the protocol stopped the tab", () => {
+      SyncStream.stopReason = "protocol_version";
+
+      assert.isFalse(SyncStream.holdsWrites());
     });
   });
 
