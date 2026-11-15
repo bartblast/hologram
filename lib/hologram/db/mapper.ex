@@ -562,15 +562,15 @@ defmodule Hologram.DB.Mapper do
   # The unique one is over the grant fact, with nulls compared as values - entity_type and
   # entity_id nils encode the type-wide and global grant shapes, so identical rows with nils must
   # still collide. Its columns are the store's own identity list, which its id derivation reads
-  # too - one list, so the two cannot disagree on what a grant is. It leads with user_id, so it
-  # serves the reads that start from a user.
+  # too - one list, so the two cannot disagree on what a grant is. It leads with user_id, which
+  # serves asking whether one user holds a role.
   #
-  # The second serves the reads that carry no user_id: who holds a role on a given entity. Today
-  # that is an app's members list, a read by entity_type and entity_id that would otherwise scan
-  # the store. The sync recheck (#1596) and backwards search (#1595) will read it the same way,
-  # walking the store's read rules from the entity's side. Nulls stay distinct, as on every
-  # non-unique index - introspection reads the flag as such, and any other value would be drift
-  # on every boot.
+  # The second serves the reads that carry no user_id: who holds a role on a given entity - what
+  # the sync recheck asks of every row a change touches, for every user on a node at once, and an
+  # app's members list. Every such read fixes both entity columns, so their order costs nothing
+  # there; the identity list's order also serves a read by type alone. Nulls stay distinct, as on
+  # every non-unique index - introspection reads the flag as such, and any other value would be
+  # drift on every boot.
   defp framework_index_entries(Hologram.Auth.RoleGrant) do
     segments = table_segments(RoleGrant)
     entity_columns = ["entity_type", "entity_id", "role"]

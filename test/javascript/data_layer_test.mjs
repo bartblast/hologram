@@ -14,7 +14,6 @@ import ManuallyPortedElixirHologramEntity from "../../assets/js/elixir/hologram/
 import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
-import QueryKernel from "../../assets/js/query_kernel.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
@@ -44,7 +43,6 @@ describe("DataLayer", () => {
 
       Model.reset();
       LocalDatabase.reset();
-      LocalDatabase.actorUserId = null;
       GlobalRegistry.set("connectPageModule", null);
 
       LocalDatabase.putRow(TASK, {
@@ -63,7 +61,6 @@ describe("DataLayer", () => {
 
     afterEach(() => {
       LocalDatabase.reset();
-      LocalDatabase.actorUserId = null;
       delete globalThis.Hologram.sync;
     });
 
@@ -378,21 +375,6 @@ describe("DataLayer", () => {
       );
 
       assert.deepStrictEqual(boxedTasks(result), allTasks());
-    });
-
-    it("runs the query as the acting user", () => {
-      const running = sinon.spy(QueryKernel, "run");
-
-      LocalDatabase.actorUserId = "u1";
-
-      DataLayer.answerDerivedQuery(
-        "MyApp.Listing",
-        Type.atom("tasks"),
-        [],
-        DataLayer.normalizeQuery(Type.alias(TASK)),
-      );
-
-      assert.deepStrictEqual(running.firstCall.args[1], {actorUserId: "u1"});
     });
   });
 

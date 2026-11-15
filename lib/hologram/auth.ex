@@ -23,6 +23,7 @@ defmodule Hologram.Auth do
   alias Hologram.Query.Stage
   alias Hologram.Query.Window
   alias Hologram.Reflection
+  alias Hologram.Server
   alias Hologram.Sync.Carry
 
   # The shape refusal can?/3 shares with its client twin (operationKey in
@@ -77,7 +78,10 @@ defmodule Hologram.Auth do
   Returns true when the given user may perform the given operation on the given entity, or false otherwise.
 
   Takes the user entity or a bare user id, and nil for an anonymous session - rules referencing
-  the acting user never match then. A framework operation the entity type declares no rule for is
+  the acting user never match then. A user id in any spelling other than the lowercase uuid
+  Hologram generates names no user entity, so it is answered as an anonymous session too - as
+  somebody holding nothing, an inequality on the acting user would grant it every row it doesn't
+  own. A framework operation the entity type declares no rule for is
   denied; an operation nothing on the entity type declares is refused with Hologram.MisuseError -
   see Hologram.Policy.validate_operation!/2.
 
@@ -85,7 +89,7 @@ defmodule Hologram.Auth do
   the bare `:grant_role` or `:revoke_role` asks whether the user may grant or revoke some role at all.
   A tuple naming several roles raises: can? asks about one role at a time.
   """
-  @spec can?(struct | String.t() | nil, atom | {atom, atom}, struct) :: boolean
+  @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom}, struct) :: boolean
   def can?(user_or_id, operation, entity) do
     evaluate(user_or_id, operation, entity, :stored)
   end
@@ -106,7 +110,12 @@ defmodule Hologram.Auth do
   # write, never between its evaluation and its commit.
   # Outside a transaction the lock ends with the statement, so it holds nothing there.
   @doc false
-  @spec can?(struct | String.t() | nil, atom | {atom, atom}, struct, list(struct) | :held) ::
+  @spec can?(
+          struct | Server.identity_id() | nil,
+          atom | {atom, atom},
+          struct,
+          list(struct) | :held
+        ) ::
           boolean
   def can?(user_or_id, operation, entity, source) do
     evaluate(user_or_id, operation, entity, source)
@@ -271,12 +280,12 @@ defmodule Hologram.Auth do
   Reads the grant store. Inside a render the question is recorded, so the rows answering it travel
   with the page and the browser answers the same from its own rows.
   """
-  @spec has_role?(struct | String.t() | nil, module) :: boolean
+  @spec has_role?(struct | Server.identity_id() | nil, module) :: boolean
   def has_role?(user_or_id, role) do
     validate_global_role!(role)
 
     user_or_id
-    |> actor_user_id()
+    |> acting_user_id()
     |> grant_exists?(:global, Policy.expand_global_role(role), :stored)
   end
 
@@ -299,14 +308,14 @@ defmodule Hologram.Auth do
   Reads the grant store. Inside a render the question is recorded, so the rows answering it travel
   with the page and the browser answers the same from its own rows.
   """
-  @spec has_role?(struct | String.t() | nil, atom, struct | module) :: boolean
+  @spec has_role?(struct | Server.identity_id() | nil, atom, struct | module) :: boolean
   def has_role?(user_or_id, role, entity) do
     {entity_type, scope} = role_scope(entity)
 
     validate_declared_role!(entity_type, role)
 
     user_or_id
-    |> actor_user_id()
+    |> acting_user_id()
     |> grant_exists?(scope, Entity.expand_role(entity_type, role), :stored)
   end
 
@@ -413,12 +422,26 @@ defmodule Hologram.Auth do
     check_revocation!(entity, grant.user_id, grant.role, actor_user_id)
   end
 
+  @doc false
+  # The given id when it is one Hologram generates - the canonical lowercase uuid an entity id is -
+  # and nil otherwise, for any value. A session's user id may be any string, integer or atom (see
+  # Hologram.Server.put_user_id/2), and one that names no user entity is anonymous to the rules,
+  # the way the render's session user is nil for it.
+  # The validator's pattern also takes a canonical id followed by a newline, which the uuid encoder
+  # refuses - hence the size.
+  @spec canonical_id(any) :: Entity.id() | nil
+  def canonical_id(id) do
+    if is_binary(id) and byte_size(id) == 36 and Validator.attribute_value_valid?(id, :uuid),
+      do: id
+  end
+
   @doc """
-  Returns the entity id of the user the running work is authorized as, or nil when the
-  session is anonymous. Framework wrappers set the actor around the work they run, so the
+  Returns the id of the user the running work is authorized as - the session's user id (see
+  `Hologram.Server.put_user_id/2`), an entity id when the app signs its user entity in - or nil
+  when the session is anonymous. Framework wrappers set the actor around the work they run, so the
   value always comes from an authenticated session and never from anything a client sends.
   """
-  @spec user_id() :: String.t() | nil
+  @spec user_id() :: Server.identity_id() | nil
   defdelegate user_id, to: Context, as: :actor_user_id
 
   @doc """
@@ -429,7 +452,7 @@ defmodule Hologram.Auth do
   anonymous session. A clause several keys share - one written for several operations, or a grant
   lifecycle line expanded per role - is answered once.
   """
-  @spec verdicts(String.t() | nil, struct) :: %{String.t() => boolean}
+  @spec verdicts(Server.identity_id() | nil, struct) :: %{String.t() => boolean}
   def verdicts(actor_user_id, %entity_type{} = row) do
     checker = &check_requirement(&1, &2, &3, :stored)
 
@@ -437,11 +460,18 @@ defmodule Hologram.Auth do
     |> Policy.deciding_quantifiers()
     |> Enum.group_by(fn {_key, clause} -> clause end, fn {key, _clause} -> key end)
     |> Enum.flat_map(fn {clause, keys} ->
-      holds? = Evaluator.clause_holds?(clause, row, actor_user_id, checker)
+      holds? = Evaluator.clause_holds?(clause, row, canonical_id(actor_user_id), checker)
 
       Enum.map(keys, &{&1, holds?})
     end)
     |> Map.new()
+  end
+
+  # The acting user as rules read it - nil, an anonymous session, for an id no user entity can have.
+  defp acting_user_id(user_or_id) do
+    user_or_id
+    |> actor_user_id()
+    |> canonical_id()
   end
 
   defp actor_user_id(%{id: id}), do: id
@@ -755,7 +785,7 @@ defmodule Hologram.Auth do
     policy = Policy.build(entity.__struct__)
     checker = &check_requirement(&1, &2, &3, source)
 
-    Evaluator.grants?(policy, operation, entity, actor_user_id(user_or_id), checker)
+    Evaluator.grants?(policy, operation, entity, acting_user_id(user_or_id), checker)
   end
 
   defp grant_answer(rows, :held), do: rows != []
@@ -809,10 +839,9 @@ defmodule Hologram.Auth do
   # No stored grant can name an id the framework never generated, so an id in any other
   # spelling holds nothing - checking access with one is a denial, not an error.
   defp grant_exists?(actor_user_id, scope, role_names, source) do
-    if Validator.attribute_value_valid?(actor_user_id, :uuid) do
-      grant_held?(actor_user_id, scope, role_names, source)
-    else
-      false
+    case canonical_id(actor_user_id) do
+      nil -> false
+      user_id -> grant_held?(user_id, scope, role_names, source)
     end
   end
 
@@ -1142,7 +1171,7 @@ defmodule Hologram.Auth do
   end
 
   defp validate_id!(id, subject) do
-    if not Validator.attribute_value_valid?(id, :uuid) do
+    if canonical_id(id) == nil do
       raise MisuseError,
             "invalid #{subject} id #{inspect(id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
     end

@@ -26,6 +26,11 @@ import Type from "../../type.mjs";
 // about, so the first render answers what the server answered.
 const GRANT_TYPE = "Hologram.Auth.RoleGrant";
 
+// The one spelling Hologram gives entity ids, the server validator's own pattern - without the
+// multiline flag, $ matches only at the very end, so a trailing newline is no match here either.
+const CANONICAL_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 // What a condition holds as when this client cannot tell: a related row it would read is one it
 // does not hold - the server reads the row as stored, so taking it for a missing one could grant
 // what the server refuses (`project.status != :archived` over a project nobody synced). A rule
@@ -717,20 +722,22 @@ function throughDerivedSet(entityType, names) {
   return false;
 }
 
-// The acting user, as a bare id: a check takes the user entity or the id itself, and nobody at
-// all for a visitor.
+// The acting user as rules read it, taken from the user entity or the id itself - the twin of
+// acting_user_id/1 in Hologram.Auth. It is null, a visitor, for nil and for an id in any spelling
+// but the canonical lowercase uuid an entity id is. A session's user id may be any string, integer
+// or atom, and one naming no user entity is anonymous to the rules. Read as somebody holding
+// nothing, it would pass an inequality on the acting user for every row it doesn't own.
 function unboxActorUserId(userOrId) {
-  if (Type.isNil(userOrId)) {
-    return null;
-  }
+  const term = Type.isMap(userOrId)
+    ? (userOrId.data[Type.encodeMapKey(Type.atom("id"))]?.[1] ?? Type.nil())
+    : userOrId;
 
-  if (Type.isMap(userOrId)) {
-    const entry = userOrId.data[Type.encodeMapKey(Type.atom("id"))];
+  return Type.isBitstring(term) ? canonicalId(Model.unbox(term, "uuid")) : null;
+}
 
-    return entry ? Model.unbox(entry[1], "uuid") : null;
-  }
-
-  return Model.unbox(userOrId, "uuid");
+// The given plain value when it is an id Hologram generates, and null otherwise.
+function canonicalId(value) {
+  return typeof value === "string" && CANONICAL_ID.test(value) ? value : null;
 }
 
 // The server's verdict on a quantifier the held rows leave open, as the row's last frame carried
@@ -745,7 +752,9 @@ function unboxActorUserId(userOrId) {
 // the windows over the row, whose frame brings the new one, and a write that moves none sends
 // none, since the verdict held stands. Held rows still refute it in between.
 function verdictHolds(entityType, entity, clause, actorUserId) {
-  if (actorUserId !== (LocalDatabase.actorUserId ?? null)) {
+  // The server works a session's verdicts out for its user as rules read it, a visitor for an id
+  // naming no user entity.
+  if (actorUserId !== canonicalId(LocalDatabase.actorUserId)) {
     return UNKNOWN;
   }
 
@@ -1247,12 +1256,7 @@ function validateDeclaredRole(entityType, role) {
 function validateId(term, subject) {
   const value = Type.isBitstring(term) ? Bitstring.toText(term) : null;
 
-  if (
-    value === null ||
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
-      value,
-    )
-  ) {
+  if (value === null || !CANONICAL_ID.test(value)) {
     Interpreter.raiseMisuseError(
       `invalid ${subject} id ${Interpreter.inspect(term)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings`,
     );
@@ -1261,10 +1265,14 @@ function validateId(term, subject) {
   return value;
 }
 
+// A map with no id is no user, and is refused as itself, the way the server refuses it - in the same
+// words as long as the two inspect it alike.
 function validateUserId(userOrId) {
-  const term = Type.isMap(userOrId)
-    ? (userOrId.data[Type.encodeMapKey(Type.atom("id"))]?.[1] ?? Type.nil())
-    : userOrId;
+  const entry = Type.isMap(userOrId)
+    ? userOrId.data[Type.encodeMapKey(Type.atom("id"))]
+    : null;
+
+  const term = entry ? entry[1] : userOrId;
 
   return validateId(term, "user");
 }
