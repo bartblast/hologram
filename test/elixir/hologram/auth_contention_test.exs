@@ -56,6 +56,7 @@ defmodule Hologram.AuthContentionTest do
   alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Model
+  alias Hologram.MisuseError
   alias Hologram.Mutation
   alias Hologram.Runtime.Serializer
   alias Hologram.Server
@@ -1185,6 +1186,33 @@ defmodule Hologram.AuthContentionTest do
       end)
 
     assert Task.await(updating, 5_000) == :ok
+
+    send(holder.pid, :release)
+    assert {:ok, :ok} = Task.await(holder)
+  end
+
+  # A row inserted with the id while the update waited on the set would be the row the update then
+  # changed, with nothing read of what its reference held - so a row that isn't there is refused
+  # before any set is entered.
+  test "an update moving a row that isn't there into a set doesn't wait for a write resting on that set",
+       %{scratch: scratch, scratch_opts: scratch_opts} do
+    space = create_space(scratch)
+    nonexistent_id = Entity.generate_id()
+
+    holder = start_holder(scratch_opts, fn -> SetLock.hold!(Module26, space.id) end, self())
+    assert_receive :holding, 5_000
+
+    updating =
+      start_entering_write(scratch_opts, fn ->
+        try do
+          DB.update(Module27, nonexistent_id, space_id: space.id)
+        rescue
+          error in MisuseError -> error.message
+        end
+      end)
+
+    assert Task.await(updating, 5_000) ==
+             "cannot update Hologram.Test.Fixtures.Policy.Module27 - no entity with id #{inspect(nonexistent_id)}"
 
     send(holder.pid, :release)
     assert {:ok, :ok} = Task.await(holder)
