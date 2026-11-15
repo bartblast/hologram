@@ -53,11 +53,16 @@ defmodule Hologram.DB.QueryRunner do
     end
   end
 
+  # A session's user id may be any string, integer or atom, and one that isn't an id Hologram
+  # generates names no user entity, so the rules read it as an anonymous session - the way
+  # Hologram.Auth.can?/3 and the recheck do.
   @doc false
-  @spec run_policied(Query.t(), %{module => %{atom => any}}, String.t() | nil, %{atom => any}) ::
+  @spec run_policied(Query.t(), %{module => %{atom => any}}, any, %{atom => any}) ::
           list(struct) | struct | integer | nil
-  def run_policied(term, mapping, actor_user_id, bindings \\ %{}) do
+  def run_policied(term, mapping, session_user_id, bindings \\ %{}) do
     validate_bindings!(term, bindings)
+
+    actor_user_id = Auth.canonical_id(session_user_id)
 
     policy = %{
       anonymous?: is_nil(actor_user_id),
