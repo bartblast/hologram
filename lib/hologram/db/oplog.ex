@@ -7,6 +7,10 @@ defmodule Hologram.DB.Oplog do
   # from reading the rows themselves afresh, never from here. That is what lets the log store a
   # write WHOLE, server-only values included: what may be shown is decided where a row meets the
   # wire, against the model of the moment, rather than by what was stored years earlier.
+  #
+  # What an update's to-one references held before it is read from here too. It is never sent
+  # either: it names the rows a move took the row away from, which are rows to look at again, and
+  # those are read afresh like any other.
 
   alias Hologram.Auth.Context
   alias Hologram.DB.Codec
@@ -25,6 +29,7 @@ defmodule Hologram.DB.Oplog do
     "model_hash",
     "actor_id",
     "revisions",
+    "old",
     "mutation_ref"
   ]
 
@@ -47,11 +52,16 @@ defmodule Hologram.DB.Oplog do
   An effect of a create or an update carries the `:revisions` it set - the stamp per column, keyed
   by field - which is stored beside it. An edge or a delete carries none.
 
+  A `:patch_entity` may carry `:old`, the value each to-one reference it changed held before it,
+  keyed by field - what points a reader at the rows the move took the row away from. An effect
+  without it, which is every other op and an update changing no reference, stores none.
+
   Every value the write set is stored, values of server_only attributes included: the log is kept
   for good, and what an attribute is allowed to show is a fact about the model NOW, which the wire
   applies when a row reaches it. Nothing reads a value from here to send it - the readers below
-  take the KEYS, to know what moved. The acting user is read from the ambient context, so writes
-  made by the framework itself, which have no actor, record none.
+  take the KEYS, to know what moved, and the old references, to know which rows to look at again.
+  The acting user is read from the ambient context, so writes made by the framework itself, which
+  have no actor, record none.
 
   The batch of client writes being applied is read from the ambient context the same way, and an
   effect written outside one records none - a command's write, a seed's, the framework's own. It
@@ -149,16 +159,18 @@ defmodule Hologram.DB.Oplog do
   fetched it could not tell from the count how much memory it had asked for. An edge's payload is
   the exception, since it names a second row that moved - the target, whose inverse of the
   relationship holds the edge too - and it is two short strings whatever the entity, so the size
-  stays fixed. Every other effect comes back with `data` nil.
+  stays fixed. Every other effect comes back with `data` nil. The old references come back too, as
+  the edge's payload does: an id per reference the update changed, a few at most, naming rows that
+  moved as surely as the edge's target does.
 
-  Effects arrive flat rather than grouped, for the same reason.
+  Effects arrive flat rather than grouped, so that the count stays that bound.
   """
   @spec read_after(non_neg_integer, non_neg_integer, pos_integer) :: list(map)
   def read_after(tx, seq, limit) do
     statement = """
     SELECT "seq", "op", "type", "entity_id",
            CASE WHEN "op" IN ('add_relationship', 'del_relationship') THEN "data" END AS "data",
-           "tx", "model_hash", "actor_id", "revisions", "mutation_ref"
+           "tx", "model_hash", "actor_id", "revisions", "old", "mutation_ref"
     FROM "#{Mapper.system_schema()}"."oplog"
     WHERE "tx" > $1 OR ("tx" = $1 AND "seq" > $2)
     ORDER BY "tx", "seq"
@@ -216,7 +228,7 @@ defmodule Hologram.DB.Oplog do
   def read_type_after(entity_type, tx, seq, data_match) do
     statement = """
     SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
-           "mutation_ref"
+           "old", "mutation_ref"
     FROM "#{Mapper.system_schema()}"."oplog"
     WHERE "type" = $1
       AND ("tx" > $2 OR ("tx" = $2 AND "seq" > $3))
@@ -242,15 +254,15 @@ defmodule Hologram.DB.Oplog do
   rows themselves.
 
   An op or entity type this node does not know stays the label it was written with, and data keys
-  stay strings, as do the revisions' keys, because a peer running a newer build can write names
-  this node has never heard of - names that match nothing here, which is exactly what they should
-  do.
+  stay strings, as do the keys of the revisions and the old references, because a peer running a
+  newer build can write names this node has never heard of - names that match nothing here, which
+  is exactly what they should do.
   """
   @spec read_window(non_neg_integer, non_neg_integer) :: list({non_neg_integer, list(map)})
   def read_window(last_xmin, current_xmin) do
     statement = """
     SELECT "seq", "op", "type", "entity_id", "data", "tx", "model_hash", "actor_id", "revisions",
-           "mutation_ref"
+           "old", "mutation_ref"
     FROM "#{Mapper.system_schema()}"."oplog"
     WHERE "tx" >= $1 AND "tx" < $2
     ORDER BY "tx", "seq"
@@ -292,6 +304,13 @@ defmodule Hologram.DB.Oplog do
     ArgumentError -> label
   end
 
+  # Every old reference is an entity id, or nil for a reference that was unset.
+  defp old(%{old: old}) when is_map(old) do
+    Map.new(old, fn {name, value} -> {name, Codec.encode_json(value, :uuid)} end)
+  end
+
+  defp old(_effect), do: nil
+
   # An op this build does not know stays the label it was written with, the same as an entity type
   # it has never compiled. A newer peer writing a seventh op is a thing a rolling deploy produces,
   # and raising here would take the dispatcher down mid-window - it restarts with no cursor and
@@ -302,13 +321,26 @@ defmodule Hologram.DB.Oplog do
     ArgumentError -> label
   end
 
-  defp event([seq, op, type, entity_id, data, tx, model_hash, actor_id, revisions, mutation_ref]) do
+  defp event([
+         seq,
+         op,
+         type,
+         entity_id,
+         data,
+         tx,
+         model_hash,
+         actor_id,
+         revisions,
+         old,
+         mutation_ref
+       ]) do
     %{
       actor_id: Codec.decode(actor_id, :uuid),
       data: data,
       entity_id: Codec.decode(entity_id, :uuid),
       model_hash: model_hash,
       mutation_ref: mutation_ref,
+      old: old,
       op: operation(op),
       revisions: revisions,
       seq: seq,
@@ -341,6 +373,7 @@ defmodule Hologram.DB.Oplog do
       model_hash,
       actor_id,
       Map.get(effect, :revisions),
+      old(effect),
       mutation_ref
     ]
   end
