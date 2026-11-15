@@ -33,10 +33,10 @@ defmodule Hologram.Sync.Search do
   users for whom every row of a type may have.
 
   Effects come as `Hologram.DB.Oplog.read_window/2` reads them, flattened: data and old references
-  keyed by strings, as stored. A put, a patch or a delete without its data - the shape
-  `read_after/3` returns them in - raises when a read edge leads to its type, since a search
-  without the values a write left misses rows. An effect of an entity type or an op this node does
-  not know is passed over, with or without data.
+  keyed by strings, as stored. A put, a patch, a delete or a pair without its data - the shape
+  `read_after/3` returns the first three in - raises when a read edge leads to its type, since a
+  search without the values a write left misses rows. An effect of an entity type or an op this
+  node does not know is passed over, with or without data.
 
   Edges are the policy dependency index (see `Hologram.Policy.Edges.index/0`), passed in rather
   than read here. Only the read rules' edges are followed.
@@ -82,9 +82,42 @@ defmodule Hologram.Sync.Search do
     end
   end
 
+  # A pair of the to-many puts its target into its source's set, and the source into the target's
+  # inverse of it - so the chain's last link says which end of the pair is the row holding the set.
+  # The pair names both ends whether it was added or removed, so neither needs the table.
+  defp entries(
+         %{op: op, data: data} = effect,
+         {entity_type, {:set_edges, _chain, _owner_type, relationship_names}, {prefix, side}}
+       )
+       when op in @pair_ops and is_map(data) do
+    if Enum.any?(relationship_names, &(Atom.to_string(&1) == data["relationship"])) do
+      [{entity_type, prefix, [pair_end(effect, side)]}]
+    else
+      []
+    end
+  end
+
+  defp entries(%{op: op}, {_entity_type, {:set_edges, _chain, _owner_type, _names}, _last_step})
+       when op not in @pair_ops,
+       do: []
+
   defp field_value(nil, _field), do: nil
 
   defp field_value(values, field), do: Map.get(values, field)
+
+  defp join_table(mapping, entity_type, relationship_name) do
+    mapping
+    |> Map.fetch!(entity_type)
+    |> Map.fetch!(:join_tables)
+    |> Enum.find(&(&1.relationship == relationship_name))
+    |> Map.fetch!(:name)
+  end
+
+  # What the walk's last step needs from an effect, resolved once per edge.
+  defp last_step(entity_type, {:set_edges, chain, _owner_type, _relationship_names}),
+    do: pair_side(entity_type, chain)
+
+  defp last_step(entity_type, edge), do: recorded_reference(entity_type, edge)
 
   # What following a relationship from the given type reads, by where the fact lives: the row's own
   # reference column, the type's own join table, the other type's reference column (an inverse of a
@@ -111,6 +144,28 @@ defmodule Hologram.Sync.Search do
       end)
 
     owners
+  end
+
+  defp pair_end(effect, :source), do: effect.entity_id
+
+  # The target id is stored as the write was given it, so it is put into the form every id the log
+  # decodes has before it can be listed as one.
+  defp pair_end(effect, :target) do
+    effect.data["target_id"]
+    |> Codec.encode(:uuid)
+    |> Codec.decode(:uuid)
+  end
+
+  # Which end of a pair of the to-many the edge names is the row holding the set its chain's last
+  # link reads: the source for the to-many itself, the target for an inverse of it. Resolved once
+  # per edge rather than once per effect.
+  defp pair_side(entity_type, chain) do
+    {prefix, [link]} = Enum.split(chain, -1)
+
+    case link_kind(Entity.path_target(entity_type, prefix), link) do
+      :to_many -> {prefix, :source}
+      {:inverse_to_many, _target_type, _forward} -> {prefix, :target}
+    end
   end
 
   defp qualified_table(table) do
@@ -180,6 +235,22 @@ defmodule Hologram.Sync.Search do
     ~s|SELECT "id" FROM #{qualified_table(table)} WHERE #{column} = ANY($1::uuid[])|
   end
 
+  # A stored to-many: the rows holding a pair with one of the ids as its target.
+  # sobelow_skip ["SQL.Query"]
+  defp step_statement(mapping, owner_type, link, :to_many) do
+    table = join_table(mapping, owner_type, link)
+
+    ~s|SELECT "source_id" FROM #{qualified_table(table)} WHERE "target_id" = ANY($1::uuid[])|
+  end
+
+  # An inverse of a to-many: the targets of the pairs the ids hold in the other type's to-many.
+  # sobelow_skip ["SQL.Query"]
+  defp step_statement(mapping, _owner_type, _link, {:inverse_to_many, target_type, forward}) do
+    table = join_table(mapping, target_type, forward)
+
+    ~s|SELECT "target_id" FROM #{qualified_table(table)} WHERE "source_id" = ANY($1::uuid[])|
+  end
+
   # An inverse of a to-one: the rows the ids' reference columns name.
   # sobelow_skip ["SQL.Query"]
   defp step_statement(mapping, _owner_type, _link, {:inverse_to_one, target_type, forward}) do
@@ -213,6 +284,8 @@ defmodule Hologram.Sync.Search do
        when kind in [:relationship_attributes, :set_attributes],
        do: target_type
 
+  defp trigger_type({:set_edges, _chain, owner_type, _relationship_names}), do: owner_type
+
   defp trigger_type(_edge), do: nil
 
   # The read edges, keyed by the entity type whose effects can start a walk along them.
@@ -228,7 +301,7 @@ defmodule Hologram.Sync.Search do
           []
 
         trigger_type ->
-          [{trigger_type, {entity_type, edge, recorded_reference(entity_type, edge)}}]
+          [{trigger_type, {entity_type, edge, last_step(entity_type, edge)}}]
       end
     end)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
