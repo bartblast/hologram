@@ -24,6 +24,7 @@ defmodule Hologram.Job.RunnerContentionTest do
   alias Hologram.DB.Mapper
   alias Hologram.DB.SchemaReconciler
   alias Hologram.Job
+  alias Hologram.Job.RunLock
   alias Hologram.Test.Fixtures.Job.Module1
 
   defp on_own_session(scratch_opts, fun) do
@@ -53,34 +54,12 @@ defmodule Hologram.Job.RunnerContentionTest do
     end)
   end
 
+  # Each worker with a lock connection of its own, as on two nodes, on the scratch database: advisory
+  # locks are per database.
   defp start_worker(scratch_opts, id) do
-    Task.async(fn -> on_own_session(scratch_opts, fn -> process(Module1, id) end) end)
-  end
+    run_lock = start_supervised!(Supervisor.child_spec({RunLock, scratch_opts}, id: make_ref()))
 
-  # A worker parked on the row and a worker that has not got there yet look the same to a task that
-  # has not returned, so the wait is asserted where it is visible: Postgres itself.
-  #
-  # The two do not wait on the SAME thing, which is why this counts locks rather than naming one:
-  # the first to arrive waits on the transaction holding the row (`transactionid`), and the one
-  # queued behind it waits on the row itself (`tuple`), which is how PostgreSQL keeps several
-  # waiters for one row in order.
-  #
-  # Scoped to this database and excluding the observer, because pg_stat_activity is the whole
-  # server: the rest of the suite runs against another database at the same moment.
-  defp wait_for_blocked_workers(scratch_opts, count) do
-    {:ok, observer} = Postgrex.start_link(scratch_opts)
-
-    statement = """
-    SELECT count(*) FROM pg_catalog.pg_stat_activity
-    WHERE "datname" = current_database() AND "wait_event_type" = 'Lock'
-      AND "pid" <> pg_backend_pid()
-    """
-
-    wait_until(fn ->
-      %Postgrex.Result{rows: [[blocked]]} = Postgrex.query!(observer, statement, [])
-
-      blocked == count
-    end)
+    Task.async(fn -> on_own_session(scratch_opts, fn -> process(Module1, id, run_lock) end) end)
   end
 
   test "one of two workers reaching for a job at the same moment runs it", %{
@@ -99,7 +78,7 @@ defmodule Hologram.Job.RunnerContentionTest do
     first = start_worker(scratch_opts, job.id)
     second = start_worker(scratch_opts, job.id)
 
-    wait_for_blocked_workers(scratch_opts, 2)
+    wait_for_blocked_sessions(scratch_opts, 2)
 
     send(holder.pid, :release)
     assert {:ok, :ok} = Task.await(holder)
