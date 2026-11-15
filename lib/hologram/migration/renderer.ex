@@ -423,13 +423,17 @@ defmodule Hologram.Migration.Renderer do
 
   defp render_chunk(chunk, model), do: render_plain_chunk(chunk, model)
 
+  # Every Schema.diff here passes renames: false. A migration says what it renames in its
+  # model ops, and the rename chunks pair those from the mapping - pairing by definition could
+  # turn a relationship deleted and another added in one plain chunk into a rename the file
+  # never stated.
   defp render_plain_chunk(chunk, model) do
     next_model = Model.fold(model, chunk)
 
     physical_ops =
       model
       |> term()
-      |> Schema.diff(term(next_model))
+      |> Schema.diff(term(next_model), renames: false)
       |> attach_backfills(chunk)
       |> prepend_grant_deletes(chunk)
 
@@ -465,7 +469,7 @@ defmodule Hologram.Migration.Renderer do
       _same_cardinality ->
         pre_model
         |> term()
-        |> Schema.diff(term(post_model))
+        |> Schema.diff(term(post_model), renames: false)
     end
   end
 
@@ -502,7 +506,7 @@ defmodule Hologram.Migration.Renderer do
     physical_ops =
       pre_model
       |> term()
-      |> Schema.diff(term(post_model))
+      |> Schema.diff(term(post_model), renames: false)
 
     {drops, creates} = Enum.split_with(physical_ops, &(&1.op in @drop_ops))
     mapping = Mapper.derive_from_model!(pre_model)

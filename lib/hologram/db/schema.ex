@@ -5,24 +5,28 @@ defmodule Hologram.DB.Schema do
   # target foreign key and index then diffs as an add.
   @absent_table %{columns: %{}, primary_key: nil, foreign_keys: %{}, indexes: %{}}
 
-  # Apply phases: destructive ops first in reverse dependency order, constructive ops
-  # after in dependency order. Enum value adds and rebuilds share one phase - a given
-  # type emits either, never both.
+  # Apply phases: the renames the pairing pass finds first, so every later op can name
+  # objects by their target names; then destructive ops in reverse dependency order, and
+  # constructive ops after in dependency order. Enum value adds and rebuilds share one phase -
+  # a given type emits either, never both.
   @phases %{
-    drop_foreign_key: 0,
-    drop_index: 1,
-    drop_column: 2,
-    drop_table: 3,
-    drop_enum_type: 4,
-    create_enum_type: 5,
-    add_enum_value: 6,
-    rebuild_enum_type: 6,
-    create_table: 7,
-    add_column: 8,
-    alter_column: 9,
-    rename_constraint: 10,
-    add_foreign_key: 11,
-    create_index: 12
+    rename_table: 0,
+    rename_enum_type: 0,
+    rename_index: 0,
+    drop_foreign_key: 1,
+    drop_index: 2,
+    drop_column: 3,
+    drop_table: 4,
+    drop_enum_type: 5,
+    create_enum_type: 6,
+    add_enum_value: 7,
+    rebuild_enum_type: 7,
+    create_table: 8,
+    add_column: 9,
+    alter_column: 10,
+    rename_constraint: 11,
+    add_foreign_key: 12,
+    create_index: 13
   }
 
   @doc """
@@ -41,9 +45,10 @@ defmodule Hologram.DB.Schema do
   emit :drop_foreign_key, a structural change (referenced table or delete action) emits
   drop plus add, and a constraint-name-only mismatch emits :rename_constraint - the
   same op a primary key constraint name mismatch emits. Indexes are identified by name:
-  target-only emit :create_index, actual-only emit :drop_index, and a definition change
-  emits drop plus create. New tables emit adds for their foreign keys and indexes
-  (:create_table carries neither) - dropped tables emit their :drop_foreign_key ops, and
+  target-only emit :create_index, actual-only emit :drop_index (carrying :non_plain when
+  introspection marked the index), and a definition change emits drop plus create. New
+  tables emit adds for their foreign keys and indexes (:create_table carries neither) -
+  dropped tables emit their :drop_foreign_key ops, and
   nothing else (their columns and indexes die with them, and block nothing meanwhile,
   but a foreign key outlives its table long enough to refuse the drop of the table it
   references, which another drop in the same diff may be). Raises ArgumentError when
@@ -58,22 +63,44 @@ defmodule Hologram.DB.Schema do
   carrying the new values and the columns using the type. A name-keyed diff cannot
   detect value renames - they surface as rebuilds.
 
-  The op list is ordered by apply phase - destructive kinds first in reverse dependency
-  order, constructive kinds after in dependency order (drop_foreign_key, drop_index,
-  drop_column, drop_table, drop_enum_type, create_enum_type, enum value changes,
-  create_table, add_column, alter_column, rename_constraint, add_foreign_key,
-  create_index) - and alphabetically by table and name within each phase, so the same
-  terms always produce the same op sequence.
+  With renames: true, the default, a pairing pass runs first and recognises an object
+  whose name changed while its definition didn't. A join table only in the actual term
+  pairs with one only in the target when both are join-shaped over the same two tables
+  and no other unpaired join table on either side has those ends - it emits :rename_table
+  (with :from and :to), and its constraints and reverse index then diff as a shared
+  table's. An entity table never pairs. An enum type only in the actual term pairs with
+  one only in the target through a column both sides share that has the one type in the
+  actual term and the other in the target, one to one - it emits :rename_enum_type (with
+  :from and :to), and its values then diff under the new name. An index on a table both
+  sides share pairs with one of the target's when both are unmatched by name, their
+  definitions are equal, no other unmatched index on either side of that table has the
+  same definition, and no actual index or primary key holds the target name - it emits
+  :rename_index (with :table, :from and :to). The rest of the diff runs against the
+  actual term as the renames leave it. renames: false skips the pass: a migration states
+  its renames in model ops, so its renderer pairs nothing by definition.
+
+  The op list is ordered by apply phase - the renames first (tables, then enum types,
+  then indexes), then destructive kinds in reverse dependency order, constructive kinds
+  after in dependency order (drop_foreign_key, drop_index, drop_column, drop_table,
+  drop_enum_type, create_enum_type, enum value changes, create_table, add_column,
+  alter_column, rename_constraint, add_foreign_key, create_index) - and alphabetically
+  by table and name within each phase, so the same terms always produce the same op
+  sequence.
   """
-  @spec diff(%{atom => any}, %{atom => any}) :: list(%{atom => any})
-  def diff(actual, target) do
+  @spec diff(%{atom => any}, %{atom => any}, keyword) :: list(%{atom => any})
+  def diff(actual, target, opts \\ []) do
+    {rename_ops, actual} =
+      if Keyword.get(opts, :renames, true),
+        do: pair_renames(actual, target),
+        else: {[], actual}
+
     ops =
       table_ops(actual.tables, target.tables) ++
         column_ops(actual.tables, target.tables) ++
         constraint_index_ops(actual.tables, target.tables) ++
         enum_ops(actual, target)
 
-    Enum.sort_by(ops, &@phases[&1.op])
+    Enum.sort_by(rename_ops ++ ops, &@phases[&1.op])
   end
 
   @doc """
@@ -413,7 +440,10 @@ defmodule Hologram.DB.Schema do
     |> Enum.reject(fn {name, actual_index} ->
       target_definition.indexes[name] == actual_index
     end)
-    |> Enum.map(fn {name, _index} -> %{op: :drop_index, index: name} end)
+    |> Enum.map(fn
+      {name, %{non_plain: reasons}} -> %{op: :drop_index, index: name, non_plain: reasons}
+      {name, _index} -> %{op: :drop_index, index: name}
+    end)
   end
 
   defp join_table(join_table) do
@@ -453,6 +483,154 @@ defmodule Hologram.DB.Schema do
      }}
   end
 
+  # A definition held by one unmatched index on each side of a table is a rename - two or more
+  # on either side give no way to tell which became which, and those stay a drop plus a create.
+  defp index_rename_candidates(actual_indexes, target_indexes) do
+    actual_by_definition = unmatched_by_definition(actual_indexes, target_indexes)
+    target_by_definition = unmatched_by_definition(target_indexes, actual_indexes)
+
+    actual_by_definition
+    |> Enum.flat_map(fn {definition, actual_names} ->
+      case {actual_names, Map.get(target_by_definition, definition)} do
+        {[from], [to]} -> [{from, to}]
+        _unpaired -> []
+      end
+    end)
+    |> Enum.sort()
+  end
+
+  # An enum type pairs through the columns that use it: an actual type only in the actual
+  # term and a target type only in the target pair when every column both sides share by
+  # table and name that has the actual type in the actual term has the target type in the
+  # target, and no such column ties the target type to another actual one. A column on the
+  # old type going anywhere else - text, another type - would leave the renamed type in use
+  # by a column the rest of the diff then changes, which no rebuild of the type expects.
+  defp pair_enum_type_renames(actual, target) do
+    shared_column_types =
+      for {table, actual_definition} <- actual.tables,
+          %{columns: target_columns} <- [target.tables[table]],
+          {column, %{type: from}} <- actual_definition.columns,
+          %{type: to} <- [target_columns[column]],
+          Map.has_key?(actual.enum_types, from) and not Map.has_key?(target.enum_types, from),
+          uniq: true,
+          do: {from, to}
+
+    targets_by_from = Enum.group_by(shared_column_types, &elem(&1, 0), &elem(&1, 1))
+    froms_by_to = Enum.group_by(shared_column_types, &elem(&1, 1), &elem(&1, 0))
+
+    ops =
+      shared_column_types
+      |> Enum.filter(fn {from, to} ->
+        Map.has_key?(target.enum_types, to) and not Map.has_key?(actual.enum_types, to) and
+          targets_by_from[from] == [to] and froms_by_to[to] == [from]
+      end)
+      |> Enum.sort()
+      |> Enum.map(fn {from, to} -> %{op: :rename_enum_type, from: from, to: to} end)
+
+    renamed_types = Map.new(ops, &{&1.from, &1.to})
+
+    enum_types =
+      Map.new(actual.enum_types, fn {name, values} ->
+        {Map.get(renamed_types, name, name), values}
+      end)
+
+    tables =
+      Map.new(actual.tables, fn {table, definition} ->
+        columns =
+          Map.new(definition.columns, fn {column, column_definition} ->
+            type = Map.get(renamed_types, column_definition.type, column_definition.type)
+            {column, %{column_definition | type: type}}
+          end)
+
+        {table, %{definition | columns: columns}}
+      end)
+
+    {ops, %{actual | enum_types: enum_types, tables: tables}}
+  end
+
+  # The renames run before every drop, so a rename can't take a name an actual index or primary
+  # key still holds, nor one an earlier rename of this pass took - PostgreSQL would refuse it.
+  # Only those two kinds are checked: a derived index name always carries its $idx or $uidx
+  # kind, which no derived table name does, so a table or other relation holding it can only
+  # be a hand-made one, which refuses a create_index of that name just the same.
+  defp pair_index_renames(actual, target) do
+    held_names =
+      actual.tables
+      |> Enum.flat_map(fn {_table, definition} ->
+        pk_names = if definition.primary_key, do: [definition.primary_key.constraint], else: []
+        Map.keys(definition.indexes) ++ pk_names
+      end)
+      |> MapSet.new()
+
+    {reversed_ops, _held_names} =
+      actual.tables
+      |> Map.keys()
+      |> Enum.filter(&Map.has_key?(target.tables, &1))
+      |> Enum.sort()
+      |> Enum.flat_map(fn table ->
+        actual.tables[table].indexes
+        |> index_rename_candidates(target.tables[table].indexes)
+        |> Enum.map(fn {from, to} -> %{op: :rename_index, table: table, from: from, to: to} end)
+      end)
+      |> Enum.reduce({[], held_names}, fn op, {ops, held_names} ->
+        if MapSet.member?(held_names, op.to),
+          do: {ops, held_names},
+          else: {[op | ops], MapSet.put(held_names, op.to)}
+      end)
+
+    ops = Enum.reverse(reversed_ops)
+
+    tables =
+      Enum.reduce(ops, actual.tables, fn op, tables ->
+        update_in(tables, [op.table, :indexes], fn indexes ->
+          {definition, indexes} = Map.pop!(indexes, op.from)
+          Map.put(indexes, op.to, definition)
+        end)
+      end)
+
+    {ops, %{actual | tables: tables}}
+  end
+
+  # A join table pairs by its two ends: an actual table and a target table, each only on its
+  # side, both join-shaped and over the same two tables, with no other unpaired join table over
+  # those ends on either side - two relationships between the same two tables give no way to
+  # tell which became which. Entity tables never pair: nothing in a table's definition tells it
+  # apart from another one with the same columns.
+  defp pair_join_table_renames(actual, target) do
+    actual_by_ends = unpaired_join_tables_by_ends(actual.tables, target.tables)
+    target_by_ends = unpaired_join_tables_by_ends(target.tables, actual.tables)
+
+    ops =
+      actual_by_ends
+      |> Enum.flat_map(fn {ends, actual_names} ->
+        case {actual_names, Map.get(target_by_ends, ends)} do
+          {[from], [to]} -> [%{op: :rename_table, from: from, to: to}]
+          _unpaired -> []
+        end
+      end)
+      |> Enum.sort_by(& &1.from)
+
+    tables =
+      Enum.reduce(ops, actual.tables, fn op, tables ->
+        {definition, tables} = Map.pop!(tables, op.from)
+        Map.put(tables, op.to, definition)
+      end)
+
+    {ops, %{actual | tables: tables}}
+  end
+
+  # The table renames go first, so the enum type and index pairing and the constraint passes
+  # see a renamed join table as one both sides share, and rename its reverse index and
+  # constraints with it. An enum type renamed through its column then diffs its values under
+  # the new name, as adds or a rebuild.
+  defp pair_renames(actual, target) do
+    {table_ops, tables_renamed} = pair_join_table_renames(actual, target)
+    {enum_type_ops, enum_types_renamed} = pair_enum_type_renames(tables_renamed, target)
+    {index_ops, renamed} = pair_index_renames(enum_types_renamed, target)
+
+    {table_ops ++ enum_type_ops ++ index_ops, renamed}
+  end
+
   defp pk_rename_ops(_table, nil, _target_pk), do: []
 
   defp pk_rename_ops(table, actual_pk, target_pk) do
@@ -485,6 +663,46 @@ defmodule Hologram.DB.Schema do
   defp subsequence?([head | tail], [head | list_tail]), do: subsequence?(tail, list_tail)
 
   defp subsequence?(values, [_head | list_tail]), do: subsequence?(values, list_tail)
+
+  # The ends of a join-shaped table, matched whole - one a hand edit left without its primary
+  # key, a foreign key or one of its two columns has none, and never pairs.
+  defp join_table_ends(%{
+         columns: columns,
+         primary_key: %{columns: ["source_id", "target_id"]},
+         foreign_keys: %{
+           "source_id" => %{references: source_table},
+           "target_id" => %{references: target_table}
+         }
+       })
+       when map_size(columns) == 2 and is_map_key(columns, "source_id") and
+              is_map_key(columns, "target_id") do
+    [{source_table, target_table}]
+  end
+
+  defp join_table_ends(_definition), do: []
+
+  # The join-shaped tables the other side doesn't hold by name, grouped by their ends, with the
+  # names sorted.
+  defp unpaired_join_tables_by_ends(tables, other_tables) do
+    tables
+    |> Enum.reject(fn {name, _definition} -> Map.has_key?(other_tables, name) end)
+    |> Enum.flat_map(fn {name, definition} ->
+      definition
+      |> join_table_ends()
+      |> Enum.map(&{&1, name})
+    end)
+    |> Enum.group_by(fn {ends, _name} -> ends end, fn {_ends, name} -> name end)
+    |> Map.new(fn {ends, names} -> {ends, Enum.sort(names)} end)
+  end
+
+  # Name to definition, for the indexes the other side lacks under the same name and definition,
+  # grouped by definition with the names sorted.
+  defp unmatched_by_definition(indexes, other_indexes) do
+    indexes
+    |> Enum.reject(fn {name, definition} -> other_indexes[name] == definition end)
+    |> Enum.group_by(fn {_name, definition} -> definition end, fn {name, _definition} -> name end)
+    |> Map.new(fn {definition, names} -> {definition, Enum.sort(names)} end)
+  end
 
   defp table_ops(actual_tables, target_tables) do
     drops =

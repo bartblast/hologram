@@ -500,10 +500,12 @@ defmodule Hologram.Entity.Validator do
   @doc """
   Validates the options given to the use Hologram.Entity directive at compile time.
 
-  Returns :ok, or raises Hologram.CompileError on the first violated rule (options shape, option keys, user option).
+  Returns :ok, or raises Hologram.CompileError on the first violated rule (module name, options shape, option keys, user option).
   """
   @spec validate_use_opts!(module, T.opts()) :: :ok
   def validate_use_opts!(module, opts) do
+    validate_module_name!(module)
+
     if not Keyword.keyword?(opts) do
       raise Hologram.CompileError,
         message:
@@ -1171,6 +1173,7 @@ defmodule Hologram.Entity.Validator do
           "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - $ is reserved for the physical names the framework derives, so a declared name can't contain it"
     end
 
+    validate_name_underscores!(module, kind, name)
     validate_name_uniqueness!(module, kind, name)
   end
 
@@ -1468,12 +1471,61 @@ defmodule Hologram.Entity.Validator do
     :ok
   end
 
+  # An empty string counts too: as a module segment, which only a quoted atom can spell, it puts
+  # two underscores in a row into the joined table name.
+  defp loose_underscores?(string) do
+    string == "" or String.starts_with?(string, "_") or String.ends_with?(string, "_") or
+      String.contains?(string, "__")
+  end
+
+  # Each segment of the module name becomes a segment of the table name, and the segments are
+  # joined with single underscores, so one that snake-cases to a leading or trailing underscore,
+  # or to two in a row (`Blog_Post` is `blog__post`), would put __ into the table name and every
+  # name derived from it.
+  #
+  # A module that isn't an alias has no segments to check - the mapper can't name it either, which
+  # is a separate matter from this rule.
+  defp validate_module_name!(module) do
+    segment =
+      if Reflection.alias?(module) do
+        module
+        |> Module.split()
+        |> Enum.map(&Macro.underscore/1)
+        |> Enum.find(&loose_underscores?/1)
+      end
+
+    if segment do
+      raise Hologram.CompileError,
+        message:
+          "invalid entity type module name #{inspect(module)} - its segment #{inspect(segment)} in the derived table name can't start or end with _ or hold __, so drop the underscores from the module name"
+    end
+
+    :ok
+  end
+
   defp validate_name_type!(module, kind, name) do
     if not is_atom(name) do
       raise Hologram.CompileError,
         message:
           "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - declaration names must be atoms"
     end
+  end
+
+  # The database names derived from a declaration join it to its neighbours with single
+  # underscores - `<table>_<name>_$uidx`, `<name>_id`, `<name>_$sort` - so a name starting or
+  # ending with one, or holding two in a row, would put __ into them. The rule covers every
+  # attribute and relationship, an inverse included, so it stays one rule a relationship keeps
+  # when it stops being an inverse. A derived field never reaches a database name, so it is free.
+  defp validate_name_underscores!(_module, "derived field", _name), do: :ok
+
+  defp validate_name_underscores!(module, kind, name) do
+    if loose_underscores?(Atom.to_string(name)) do
+      raise Hologram.CompileError,
+        message:
+          "invalid name #{inspect(name)} used for #{kind} in #{inspect(module)} - a declared name can't start or end with _ or hold __, since the database names derived from it would hold __"
+    end
+
+    :ok
   end
 
   defp validate_name_uniqueness!(module, kind, name) do

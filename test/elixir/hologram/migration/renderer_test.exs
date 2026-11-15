@@ -400,8 +400,8 @@ defmodule Hologram.Migration.RendererTest do
                },
                %{
                  op: :rename_index,
-                 from: "my_app_draft_tags_$join_target_id_$idx",
-                 to: "my_app_sketch_tags_$join_target_id_$idx"
+                 from: "my_app_draft_tags_$join_target_id_source_id_$idx",
+                 to: "my_app_sketch_tags_$join_target_id_source_id_$idx"
                },
                %{
                  op: :rename_enum_value,
@@ -658,8 +658,8 @@ defmodule Hologram.Migration.RendererTest do
                },
                %{
                  op: :rename_index,
-                 from: "my_app_task_tags_$join_target_id_$idx",
-                 to: "my_app_task_labels_$join_target_id_$idx"
+                 from: "my_app_task_tags_$join_target_id_source_id_$idx",
+                 to: "my_app_task_labels_$join_target_id_source_id_$idx"
                }
              ]
     end

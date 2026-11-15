@@ -13,6 +13,20 @@ defmodule Hologram.DB.Introspection do
     "r" => :restrict
   }
 
+  # The ways an index can differ from the plain btree over whole columns, with default sort
+  # order, operator classes and collations, that every derived index is - sorted, and in the
+  # order the index query reads their flags.
+  @non_plain_reasons [
+    :collation,
+    :constraint,
+    :expression,
+    :include,
+    :method,
+    :operator_class,
+    :predicate,
+    :sort_order
+  ]
+
   # pg_type names already match the mapper's type vocabulary except boolean.
   @typname_translations %{"bool" => "boolean"}
 
@@ -26,7 +40,12 @@ defmodule Hologram.DB.Introspection do
   (%{columns:, constraint:}, nil when the table has none), :foreign_keys (owning column
   name to %{references:, on_delete:, constraint:}), and :indexes (index name to
   %{columns:, nulls_distinct:, unique:} in index column order, primary-key-backing
-  indexes excluded - they are implied by the constraint). :enum_types maps each enum
+  indexes excluded - they are implied by the constraint). An index that isn't a plain
+  btree over whole columns with default options - a predicate, an expression, INCLUDE
+  columns, another access method, a non-default sort order, operator class or collation,
+  or an owning constraint - also carries :non_plain, the sorted list of those reasons
+  (:collation, :constraint, :expression, :include, :method, :operator_class, :predicate,
+  :sort_order), so its definition equals no derived one. :enum_types maps each enum
   type name to its values in enum sort order - a type declared with no values yet
   maps to an empty list.
 
@@ -129,6 +148,26 @@ defmodule Hologram.DB.Introspection do
     end)
   end
 
+  defp index_entry([_table, index, columns, nulls_distinct, unique | reason_flags]) do
+    non_plain =
+      @non_plain_reasons
+      |> Enum.zip(reason_flags)
+      |> Enum.filter(fn {_reason, flag} -> flag end)
+      |> Enum.map(fn {reason, _flag} -> reason end)
+
+    definition = %{columns: columns, nulls_distinct: nulls_distinct, unique: unique}
+
+    if non_plain == [],
+      do: {index, definition},
+      else: {index, Map.put(definition, :non_plain, non_plain)}
+  end
+
+  # Each reason flag is one way an index differs from the plain btree over whole columns the
+  # mapper derives. The column list alone can't tell: it reads only the key columns indkey
+  # names, so an expression entry is dropped and an INCLUDE column counted as a key. The
+  # order of the flags is @non_plain_reasons'. A foreign key also names the index it is
+  # checked against in conindid - on its own table too, when it references that table - so
+  # only a unique or exclusion constraint counts as owning one.
   defp indexes do
     statement = """
     SELECT c.relname,
@@ -138,9 +177,28 @@ defmodule Hologram.DB.Introspection do
             JOIN pg_catalog.pg_attribute a
               ON a.attrelid = i.indrelid AND a.attnum = k.attnum),
            NOT i.indnullsnotdistinct,
-           i.indisunique
+           i.indisunique,
+           EXISTS (SELECT 1
+                   FROM unnest(i.indcollation::oid[], i.indkey::int2[]) AS k(collation_oid, attnum)
+                   JOIN pg_catalog.pg_attribute a
+                     ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+                   WHERE k.collation_oid <> a.attcollation),
+           EXISTS (SELECT 1
+                   FROM pg_catalog.pg_constraint con
+                   WHERE con.conindid = i.indexrelid AND con.conrelid = i.indrelid
+                     AND con.contype <> 'f'),
+           i.indexprs IS NOT NULL,
+           i.indnkeyatts <> i.indnatts,
+           am.amname <> 'btree',
+           EXISTS (SELECT 1
+                   FROM unnest(i.indclass::oid[]) AS k(opclass_oid)
+                   JOIN pg_catalog.pg_opclass oc ON oc.oid = k.opclass_oid
+                   WHERE NOT oc.opcdefault),
+           i.indpred IS NOT NULL,
+           EXISTS (SELECT 1 FROM unnest(i.indoption::int2[]) AS k(sort_option) WHERE k.sort_option <> 0)
     FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+    JOIN pg_catalog.pg_am am ON am.oid = ic.relam
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = $1 AND NOT i.indisprimary
@@ -150,12 +208,7 @@ defmodule Hologram.DB.Introspection do
 
     rows
     |> Enum.group_by(fn [table | _rest] -> table end)
-    |> Map.new(fn {table, table_rows} ->
-      {table,
-       Map.new(table_rows, fn [_table, index, columns, nulls_distinct, unique] ->
-         {index, %{columns: columns, nulls_distinct: nulls_distinct, unique: unique}}
-       end)}
-    end)
+    |> Map.new(fn {table, table_rows} -> {table, Map.new(table_rows, &index_entry/1)} end)
   end
 
   defp table_names do
