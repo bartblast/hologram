@@ -89,6 +89,41 @@ defmodule Hologram.Migration.LoaderTest do
     end
   end
 
+  describe "unresolved_entries/1" do
+    test "returns the resolve! ops of the migrations with their paths, in history order" do
+      first_op = %{op: :resolve!, kind: :entities, payload: [], line: 4}
+      second_op = %{op: :resolve!, entity: MyApp.Task, kind: :fill, payload: [], line: 5}
+
+      migrations = [
+        %{
+          version: "20260813091522",
+          path: "app/migrations/20260813091522.ex",
+          ops: [%{op: :create_entity, entity: MyApp.Task, line: 4}]
+        },
+        %{version: "20260813142237", path: "app/migrations/20260813142237.ex", ops: [first_op]},
+        %{version: "20260814080000", path: "app/migrations/20260814080000.ex", ops: [second_op]}
+      ]
+
+      assert unresolved_entries(migrations) == [
+               {"app/migrations/20260813142237.ex", first_op},
+               {"app/migrations/20260814080000.ex", second_op}
+             ]
+    end
+  end
+
+  describe "unresolved_lines/1" do
+    test "returns one line per entry with its location and kind" do
+      entries = [
+        {"app/migrations/20260813142237.ex", %{op: :resolve!, kind: :entities, line: 4}},
+        {"app/migrations/20260814080000.ex", %{op: :resolve!, kind: :fill, line: 5}}
+      ]
+
+      assert unresolved_lines(entries) ==
+               "  app/migrations/20260813142237.ex:4 - :entities\n" <>
+                 "  app/migrations/20260814080000.ex:5 - :fill"
+    end
+  end
+
   describe "verify_rename_order!/2" do
     test "passes a file whose rename precedes every reference to the renamed entity" do
       ops = [

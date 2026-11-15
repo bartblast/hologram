@@ -165,6 +165,7 @@ defmodule Hologram.Migration do
     migration = env.module.__hologram_migration__()
 
     Loader.verify_rename_order!(migration.ops, migration.path)
+    validate_resolved!(migration)
   end
 
   @doc """
@@ -387,6 +388,18 @@ defmodule Hologram.Migration do
   defp block_statements({:__block__, _meta, statements}), do: statements
 
   defp block_statements(single_statement), do: [single_statement]
+
+  # The environment the build is for. Mix knows it during compilation; HOLOGRAM_ENV may name
+  # a different one, so it is the fallback only, and an exported HOLOGRAM_ENV=dev cannot let
+  # a MIX_ENV=prod build through.
+  defp build_env do
+    if Code.ensure_loaded?(Mix) and Process.whereis(Mix.State) do
+      # credo:disable-for-next-line Credo.Check.Warning.MixEnv
+      Mix.env()
+    else
+      Hologram.env()
+    end
+  end
 
   # Aliases are expanded where the op is written: the op's code is placed in a function
   # defined at the end of the module, where an alias the module defines later would
@@ -787,5 +800,23 @@ defmodule Hologram.Migration do
           "migration ops go in the body of a module that uses Hologram.Migration - " <>
             "#{Path.relative_to_cwd(caller.file)}:#{caller.line}"
     end
+  end
+
+  # A draft compiles in dev and test, so the generator, which compiles the app before it
+  # reads the history, can still read it and ask for its answers. Any other build is headed
+  # for a deployment, and an unanswered question must not reach one.
+  defp validate_resolved!(migration) do
+    unresolved = Loader.unresolved_entries([migration])
+
+    if unresolved != [] and build_env() not in [:dev, :test] do
+      raise Hologram.CompileError,
+        message:
+          "the migration draft is not resolved yet, and a #{build_env()} build refuses it:\n" <>
+            Loader.unresolved_lines(unresolved) <>
+            "\nWrite the ops that express what happened, delete the resolve! lines, " <>
+            "then finalize with mix holo.gen.migration."
+    end
+
+    :ok
   end
 end

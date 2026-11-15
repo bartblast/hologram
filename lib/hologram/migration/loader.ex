@@ -71,6 +71,26 @@ defmodule Hologram.Migration.Loader do
   end
 
   @doc """
+  Returns the lines listing the given unresolved entries (see `unresolved_entries/1`), one
+  per op with its location and kind, as the refusals of a draft print them.
+  """
+  @spec unresolved_lines(list({String.t(), %{atom => any}})) :: String.t()
+  def unresolved_lines(entries) do
+    Enum.map_join(entries, "\n", fn {path, op} -> "  #{path}:#{op.line} - #{inspect(op.kind)}" end)
+  end
+
+  @doc """
+  Returns the resolve! ops of the given migrations, each with the path of its migration,
+  in history order.
+  """
+  @spec unresolved_entries(list(%{atom => any})) :: list({String.t(), %{atom => any}})
+  def unresolved_entries(migrations) do
+    Enum.flat_map(migrations, fn migration ->
+      Enum.map(unresolved(migration.ops), &{migration.path, &1})
+    end)
+  end
+
+  @doc """
   Validates that no op of the given migration file references an entity type by a name
   the file renames away.
 

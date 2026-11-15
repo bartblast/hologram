@@ -37,20 +37,17 @@ defmodule Hologram.Migration.Generator do
   fresh, never stacked behind newer diffs that might change their meaning. The file is
   named after the given timestamp, bumped by a second while that version is taken.
 
-  The written file is compiled at once, a draft included, so a file the build would refuse
-  never stays behind. A resolve!-free outcome is a finalized history, and finalization is
-  passing shadow verification - the full chain, the fresh migration included, is applied to
-  a scratch database and must produce the model's schema, raising otherwise. A draft still
-  holding questions is not verified: its marker ops carry no physical form yet. A file that
-  fails to compile or to verify is removed and its module unloaded.
+  A resolve!-free file is compiled at once, so one the build would refuse never stays
+  behind, and finalization is passing shadow verification - the full chain, the fresh
+  migration included, is applied to a scratch database and must produce the model's schema,
+  raising otherwise. A file that fails to compile or to verify is removed and its module
+  unloaded. A draft still holding questions is neither compiled nor verified: its marker ops
+  carry no physical form yet, and the developer edits it next.
   """
   @spec generate(list(%{atom => any}), %{atom => any}, DateTime.t(), keyword) ::
           :nothing_to_do | {:ok, String.t(), non_neg_integer} | {:error, {:unresolved, list}}
   def generate(migrations, current_model, timestamp, opts) do
-    unresolved =
-      Enum.flat_map(migrations, fn migration ->
-        Enum.map(Loader.unresolved(migration.ops), &{migration.path, &1})
-      end)
+    unresolved = Loader.unresolved_entries(migrations)
 
     if unresolved == [] do
       migrations
@@ -222,7 +219,13 @@ defmodule Hologram.Migration.Generator do
       File.mkdir_p!(dir)
       File.write!(path, render(plan, module, format))
 
-      {:ok, path, length(plan.questions), load_written!(path, module)}
+      question_count = length(plan.questions)
+
+      # A draft is left uncompiled: it is not verified, and a build outside dev and test
+      # refuses it by design, which would read as the file being broken.
+      migration = if question_count == 0, do: load_written!(path, module)
+
+      {:ok, path, question_count, migration}
     end
   end
 

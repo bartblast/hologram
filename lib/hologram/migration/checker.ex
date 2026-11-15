@@ -1,7 +1,6 @@
 defmodule Hologram.Migration.Checker do
   @moduledoc false
 
-  alias Hologram.Migration.Loader
   alias Hologram.Migration.ShadowVerifier
   alias Hologram.Migrator
 
@@ -16,30 +15,9 @@ defmodule Hologram.Migration.Checker do
   """
   @spec check!(list(%{atom => any}), %{atom => any}) :: :ok
   def check!(migrations, current_model) do
-    check_resolved!(migrations)
+    # The coverage check refuses a draft first, naming each unanswered resolve! op.
     Migrator.check_covered!(migrations, current_model)
     ShadowVerifier.verify!(migrations, current_model)
-
-    :ok
-  end
-
-  defp check_resolved!(migrations) do
-    unresolved =
-      Enum.flat_map(migrations, fn migration ->
-        Enum.map(Loader.unresolved(migration.ops), &{migration.path, &1})
-      end)
-
-    if unresolved != [] do
-      lines =
-        Enum.map_join(unresolved, "\n", fn {path, op} ->
-          "  #{path}:#{op.line} - #{inspect(op.kind)}"
-        end)
-
-      raise "the migration draft is not resolved yet:\n" <>
-              lines <>
-              "\nWrite the ops that express what happened, delete the resolve! lines, " <>
-              "then finalize with mix holo.gen.migration."
-    end
 
     :ok
   end

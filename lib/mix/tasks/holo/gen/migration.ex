@@ -15,7 +15,9 @@ defmodule Mix.Tasks.Holo.Gen.Migration do
   The task's behavior follows the state of the migration history: nothing to do when
   the history already produces the model, a new file when it does not, and a refusal
   while a draft still holds unanswered questions - those are answered by editing the
-  draft, writing the ops that express what happened and deleting the resolve! line.
+  draft, writing the ops that express what happened and deleting the resolve! line. A draft
+  compiles only in dev and test builds - any other build refuses it, so it is answered
+  before the app builds for anything else.
 
   A generated file is never amended: when several small files pile up in one branch,
   delete the unmerged ones and run the task again to get a single consolidated file.
@@ -106,10 +108,7 @@ defmodule Mix.Tasks.Holo.Gen.Migration do
   end
 
   defp report({:error, {:unresolved, entries}}) do
-    lines =
-      Enum.map_join(entries, "\n", fn {path, op} ->
-        "  #{path}:#{op.line} - #{inspect(op.kind)}"
-      end)
+    lines = Loader.unresolved_lines(entries)
 
     Mix.raise(
       "the migration draft is not resolved yet:\n#{lines}\n" <>

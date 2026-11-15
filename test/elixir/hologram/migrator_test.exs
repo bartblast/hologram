@@ -703,6 +703,38 @@ defmodule Hologram.MigratorTest do
       assert check_covered!(migrations, model) == :ok
     end
 
+    test "raises naming each unanswered resolve! op of the history" do
+      migrations = [
+        migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 4}]),
+        migration("20260813142237", [
+          %{
+            op: :resolve!,
+            entity: MyApp.Task,
+            kind: :fill,
+            payload: [attributes: [:title]],
+            line: 5
+          }
+        ])
+      ]
+
+      model = %{
+        entities: %{
+          MyApp.Task => %{attributes: [{:title, :string, []}], relationships: [], roles: []}
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      expected_msg =
+        normalize_newlines("""
+        the migration draft is not resolved yet:
+          app/migrations/20260813142237.ex:5 - :fill
+        Write the ops that express what happened, delete the resolve! lines, then finalize with mix holo.gen.migration.\
+        """)
+
+      assert_error RuntimeError, expected_msg, fn -> check_covered!(migrations, model) end
+    end
+
     test "raises when model changes have no migration" do
       migrations = [
         migration("20260813091522", [%{op: :create_entity, entity: MyApp.Task, line: 3}])

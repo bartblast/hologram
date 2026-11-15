@@ -194,6 +194,19 @@ defmodule Hologram.Migration.GeneratorTest do
              |> String.contains?("resolve! :attributes")
     end
 
+    test "keeps a generated draft in a build that refuses drafts" do
+      env = Mix.env()
+      on_exit(fn -> Mix.env(env) end)
+      Mix.env(:prod)
+
+      opts = opts!("draft_prod_build")
+      migrations = history([{"20260813091521", "create_entity MyApp.Task"}])
+      current = model(%{MyApp.Task => %{attributes: [{:title, :string, []}]}})
+
+      assert {:ok, path, 1} = generate(migrations, current, @timestamp, opts)
+      assert File.ls!(opts[:dir]) == [Path.basename(path)]
+    end
+
     @tag :database
     test "does nothing when the history already produces the model" do
       opts = opts!("nothing_to_do")
