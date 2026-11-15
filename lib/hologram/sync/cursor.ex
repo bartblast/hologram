@@ -23,6 +23,7 @@ defmodule Hologram.Sync.Cursor do
 
   # What the log's own columns hold: `tx` is an xid8, `seq` a bigserial. A place beyond either is
   # one no row could carry, so it is unreadable in the only sense that matters.
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.DB.Codec
 
   @max_seq 9_223_372_036_854_775_807
@@ -65,19 +66,16 @@ defmodule Hologram.Sync.Cursor do
 
   @doc """
   Returns the hash a cursor names the given entity types by - the types sync sends (see
-  `Hologram.DB.QueryCache.synced_types/0`). Their order moves nothing.
+  `Hologram.DB.QueryCache.synced_types/0`) - as the same short digest the policy hash is. Their order
+  moves nothing.
   """
   @spec types_hash(list(module)) :: String.t()
   def types_hash(entity_types) do
-    spelled =
-      entity_types
-      |> Enum.map(&Codec.encode_enum_value/1)
-      |> Enum.sort()
-      |> Enum.join(",")
-
-    :md5
-    |> :crypto.hash(spelled)
-    |> Base.encode16(case: :lower)
+    entity_types
+    |> Enum.map(&Codec.encode_enum_value/1)
+    |> Enum.sort()
+    |> Enum.join(",")
+    |> CryptographicUtils.short_digest(16)
   end
 
   defp in_range?(value, ceiling), do: value >= 0 and value <= ceiling
