@@ -20,6 +20,7 @@ defmodule Hologram.DB.QueryCacheTest do
   alias Hologram.Test.Fixtures.Compiler.QueryExtractor.Module84
   alias Hologram.Test.Fixtures.Component.Module40
   alias Hologram.Test.Fixtures.Component.Module41
+  alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module33
 
@@ -45,14 +46,17 @@ defmodule Hologram.DB.QueryCacheTest do
     }
   end
 
-  # The grants window rides with every build's windows, whether or not a page subscribes to it -
-  # the build decides who asks, this is only where an id resolves back to a term.
+  # The grants window and the user window ride with every build's windows, whether or not a page
+  # subscribes to them - the build decides who asks, this is only where an id resolves back to a
+  # term.
   defp expected_windows(entries) do
     grants_window = Auth.grants_window()
+    user_window = Auth.user_window(UserEntity, false)
 
     entries
     |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
     |> Map.put(Registry.id(grants_window), grants_window)
+    |> Map.put(Registry.id(user_window), user_window)
   end
 
   defp expected_entries do

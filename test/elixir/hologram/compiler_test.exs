@@ -28,6 +28,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Sync.Frame
 
   alias Hologram.Test.Fixtures.Component.Module1, as: ComponentModule1
+  alias Hologram.Test.Fixtures.Component.Module37, as: OtherContextComponent
   alias Hologram.Test.Fixtures.Component.Module39, as: ComponentModule39
   alias Hologram.Test.Fixtures.Component.Module40, as: ComponentModule40
   alias Hologram.Test.Fixtures.Component.Module41, as: ComponentModule41
@@ -50,6 +51,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module10, as: Entity10
   alias Hologram.Test.Fixtures.Entity.Module12, as: Entity12
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
+  alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
   alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
@@ -92,6 +94,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module8, as: TwoHopDelegationPolicyEntity
   alias Hologram.Test.Fixtures.Role.Module1, as: RoleModule1
   alias Hologram.Test.Fixtures.Role.Module2, as: RoleModule2
+  alias Hologram.Test.Fixtures.Template.Renderer.Module131, as: SessionUserPage
+  alias Hologram.Test.Fixtures.Template.Renderer.Module138, as: SessionUserComponent
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
@@ -282,6 +286,12 @@ defmodule Hologram.CompilerTest do
       derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
 
     build_sync_constants(reach_by_page, component_queries, module_info_plt)
+  end
+
+  defp user_window_id(permission_checking?) do
+    UserEntity
+    |> Auth.user_window(permission_checking?)
+    |> Registry.id()
   end
 
   # A copy of the given module info PLT in which no entity type is the user entity type: a data model
@@ -1320,6 +1330,44 @@ defmodule Hologram.CompilerTest do
       assert page_windows[PageModule7] == []
     end
 
+    # The client answers {Hologram, :user} from its database, so a page reading it downloads the
+    # session user's row like any row a query reads.
+    test "gives a page reading the session user from the context the user window", %{
+      page_windows: page_windows
+    } do
+      assert page_windows[SessionUserPage] == [user_window_id(false)]
+    end
+
+    test "leaves the user window out of a page that doesn't read the session user", %{
+      page_windows: page_windows
+    } do
+      refute user_window_id(false) in page_windows[PageModule7]
+    end
+
+    # The registered user window is derived with whether the build checks permissions, so the id a
+    # page names has to be derived the same way.
+    test "derives the user window's id with whether the build checks permissions", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      page_windows =
+        derive_page_windows([SessionUserPage], call_graph, module_info_plt, [SessionUserPage])
+
+      assert user_window_id(true) in page_windows[SessionUserPage]
+    end
+
+    test "leaves the user window out when the data model designates no user entity type", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      page_windows =
+        derive_page_windows([SessionUserPage], call_graph, plt_without_user_entity, [])
+
+      assert page_windows[SessionUserPage] == []
+    end
+
     # The registered windows of a checking build download the rows the rules read, so the ids a page
     # subscribes to name those windows.
     test "derives a checking build's window ids from the windows embedding the rows the rules read",
@@ -1737,6 +1785,42 @@ defmodule Hologram.CompilerTest do
       queries = build_queries(component_queries, entity_types -- [RoleGrant], false)
 
       refute Map.has_key?(queries.windows, Registry.id(Auth.grants_window()))
+    end
+
+    # Like the grants window, whether or not a page subscribes to it.
+    test "registers the user window beside the windows the queries download", %{
+      entity_types: entity_types
+    } do
+      component_queries =
+        extract_component_queries([ComponentModule40], entity_types, PLT.start())
+
+      queries = build_queries(component_queries, entity_types, false)
+
+      user_window = Auth.user_window(UserEntity, false)
+
+      assert queries.windows[Registry.id(user_window)] == user_window
+    end
+
+    test "registers a checking build's user window derived as one", %{entity_types: entity_types} do
+      component_queries =
+        extract_component_queries([ComponentModule40], entity_types, PLT.start())
+
+      queries = build_queries(component_queries, entity_types, true)
+
+      user_window = Auth.user_window(UserEntity, true)
+
+      assert queries.windows[Registry.id(user_window)] == user_window
+    end
+
+    test "registers no user window when the given entity types hold no user entity type", %{
+      entity_types: entity_types
+    } do
+      component_queries =
+        extract_component_queries([ComponentModule40], entity_types, PLT.start())
+
+      queries = build_queries(component_queries, entity_types -- [UserEntity], false)
+
+      refute Map.has_key?(queries.windows, user_window_id(false))
     end
 
     # A client checking permissions answers each rule over what it holds, so the window also
@@ -2815,6 +2899,8 @@ defmodule Hologram.CompilerTest do
         |> PLT.put(Module1, info.(false))
         |> PLT.put(Module2, info.(true))
         |> PLT.put(Module3, info.(true))
+        |> PLT.put(SessionUserComponent, info.(true))
+        |> PLT.put(OtherContextComponent, info.(true))
 
       [module_info_plt: module_info_plt]
     end
@@ -2830,7 +2916,8 @@ defmodule Hologram.CompilerTest do
                Module1 => %{
                  checks_permissions?: false,
                  components: [Module1, Module2, Module3],
-                 modules: MapSet.new([Module1, Module2, Module3, Module4])
+                 modules: MapSet.new([Module1, Module2, Module3, Module4]),
+                 reads_session_user?: false
                }
              }
     end
@@ -2858,6 +2945,28 @@ defmodule Hologram.CompilerTest do
                )
     end
 
+    test "marks the pages reaching a component that reads the session user from the context", %{
+      module_info_plt: module_info_plt
+    } do
+      reading_reach = %{mfas: [{SessionUserComponent, :template, 0}], types: []}
+
+      # A component taking another key from the context reads no session user.
+      other_reach = %{
+        mfas: [{Module2, :fun_3, 0}, {OtherContextComponent, :template, 0}],
+        types: []
+      }
+
+      assert %{
+               Module1 => %{reads_session_user?: true},
+               Module11 => %{reads_session_user?: false}
+             } =
+               build_kept_page_reach(
+                 [{Module1, reading_reach}, {Module11, other_reach}],
+                 [],
+                 module_info_plt
+               )
+    end
+
     test "answers for every page it was given", %{module_info_plt: module_info_plt} do
       reach = %{mfas: [], types: []}
 
@@ -2866,12 +2975,14 @@ defmodule Hologram.CompilerTest do
                  Module1 => %{
                    checks_permissions?: false,
                    components: [Module1],
-                   modules: MapSet.new()
+                   modules: MapSet.new(),
+                   reads_session_user?: false
                  },
                  Module11 => %{
                    checks_permissions?: false,
                    components: [Module11],
-                   modules: MapSet.new()
+                   modules: MapSet.new(),
+                   reads_session_user?: false
                  }
                }
     end

@@ -142,12 +142,14 @@ defmodule Hologram.Compiler do
   @typedoc """
   What the data layer keeps of a page's reach between compiles: whether the page's client code
   reaches a permission check (see `pages_checking_permissions/1`), the components among the modules
-  it reaches, sorted, and those modules, the struct types it names included.
+  it reaches, sorted, those modules, the struct types it names included, and whether one of those
+  components reads the session user from the context.
   """
   @type kept_page_reach :: %{
           checks_permissions?: boolean,
           components: [module],
-          modules: MapSet.t(module)
+          modules: MapSet.t(module),
+          reads_session_user?: boolean
         }
 
   @typedoc """
@@ -361,6 +363,11 @@ defmodule Hologram.Compiler do
   other rows it reads. Only when the given module info PLT records a user entity type: a data model
   without one has no grant store, so no page checks permissions against anything.
 
+  A page reading the session user from the context downloads the user window (see
+  `Hologram.Auth.user_window/2`): the client answers the context from its database on every render,
+  so the session user's row has to be held there, and kept current, like any row a query reads. Only
+  when the given module info PLT records a user entity type, for the same reason.
+
   The window ids are derived with whether the build checks permissions on the client (see
   `permission_checking?/2`), since a checking build's windows download the related rows the rules
   read, and a page has to name the windows the registered queries hold.
@@ -370,7 +377,8 @@ defmodule Hologram.Compiler do
   @spec build_page_windows(%{module => kept_page_reach}, %{module => component_queries}, PLT.t()) ::
           %{module => list(String.t())}
   def build_page_windows(reach_by_page, component_queries, module_info_plt) do
-    grant_store? = Reflection.user_entity(module_info_plt) != nil
+    user_entity = Reflection.user_entity(module_info_plt)
+    grant_store? = user_entity != nil
     permission_checking? = permission_checking?(reach_by_page, module_info_plt)
 
     # Each component's window ids are derived once, however many pages reach it.
@@ -403,6 +411,15 @@ defmodule Hologram.Compiler do
           [grants_window_id() | window_ids]
         else
           window_ids
+        end
+
+      # Deduplicated for the same reason: a page querying the user entity whole reaches the user
+      # window by two routes.
+      page_window_ids =
+        if grant_store? and reach.reads_session_user? do
+          [user_window_id(user_entity, permission_checking?) | page_window_ids]
+        else
+          page_window_ids
         end
 
       sorted_window_ids =
@@ -741,9 +758,10 @@ defmodule Hologram.Compiler do
   Folds what each page's client code reaches, as `list_reach_by_page/2` lists it, into what the data
   layer keeps of it (see `kept_page_reach`), keyed by page module. The components among the reached
   modules are told by the given module info PLT, and the page is one of them: a page declares derived
-  fields as a component does, and their queries are its own. The pages checking permissions are given as
-  `pages_checking_permissions/1` lists them, from the pages' reach on the call graph BEFORE manually
-  ported MFAs are removed.
+  fields as a component does, and their queries are its own. A page reads the session user when one
+  of its components declares a prop taking it from the context (`from_context: {Hologram, :user}`).
+  The pages checking permissions are given as `pages_checking_permissions/1` lists them, from the
+  pages' reach on the call graph BEFORE manually ported MFAs are removed.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_kept_page_reach_3/README.md
   """
@@ -766,7 +784,8 @@ defmodule Hologram.Compiler do
       kept_reach = %{
         checks_permissions?: MapSet.member?(checking_pages, page_module),
         components: components,
-        modules: MapSet.new(modules)
+        modules: MapSet.new(modules),
+        reads_session_user?: Enum.any?(components, &reads_session_user?/1)
       }
 
       {page_module, kept_reach}
@@ -891,9 +910,10 @@ defmodule Hologram.Compiler do
   query has no authority to claim on either tier.
 
   The grants window is among the windows when the given entity types hold the role grant store,
-  which a data model does exactly when it designates a user entity type. Whether the build has a page
-  checking permissions on the client is given (see `permission_checking?/2`): such a client's
-  windows also download the related rows its types' rules read.
+  which a data model does exactly when it designates a user entity type. So is the user window (see
+  `Hologram.Auth.user_window/2`). Whether the build has a page checking permissions on the client is
+  given (see `permission_checking?/2`): such a client's windows also download the related rows its
+  types' rules read, the user window's among them.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/elixir/compiler/build_queries_3/README.md
   """
@@ -921,6 +941,7 @@ defmodule Hologram.Compiler do
       entries
       |> Map.new(fn {_id, entry} -> {entry.window_id, entry.window} end)
       |> put_grants_window(entity_types)
+      |> put_user_window(entity_types, permission_checking?)
 
     %{
       derived_queries: derived_queries_index(component_queries),
@@ -5310,6 +5331,15 @@ defmodule Hologram.Compiler do
     end)
   end
 
+  # A page module defines no props, so it never reads anything from the context through one.
+  # TODO: what this decides has to outlive the windows, see the TODO on Auth.user_window/2.
+  defp reads_session_user?(module) do
+    Reflection.has_function?(module, :__props__, 0) and
+      Enum.any?(module.__props__(), fn {_name, _type, opts} ->
+        opts[:from_context] == {Hologram, :user}
+      end)
+  end
+
   defp render_derived_queries(derived_queries) do
     derived_queries
     |> Enum.map(fn {module, names} ->
@@ -5732,6 +5762,28 @@ defmodule Hologram.Compiler do
     end
   end
 
+  # Registered whenever the data model designates a user entity type, for the reason the grants
+  # window is: the build decides whether any client subscribes, and an entry nothing asks for costs
+  # one map key.
+  defp put_user_window(windows, entity_types, permission_checking?) do
+    # The first by name, as Reflection.user_entity/1 picks it for the page windows.
+    user_entity =
+      entity_types
+      |> Enum.filter(&Reflection.user_entity?/1)
+      |> Enum.sort()
+      |> List.first()
+
+    case user_entity do
+      nil ->
+        windows
+
+      user_entity ->
+        window = Auth.user_window(user_entity, permission_checking?)
+
+        Map.put_new(windows, Registry.id(window), window)
+    end
+  end
+
   defp queried_entity_types(term) do
     nested_types =
       term.include
@@ -5924,6 +5976,12 @@ defmodule Hologram.Compiler do
 
   defp grants_window_id do
     Registry.id(Auth.grants_window())
+  end
+
+  defp user_window_id(user_entity, permission_checking?) do
+    user_entity
+    |> Auth.user_window(permission_checking?)
+    |> Registry.id()
   end
 
   defp window_id(term, permission_checking?) do

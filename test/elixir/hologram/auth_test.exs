@@ -17,6 +17,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Query.Window
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
@@ -2469,6 +2470,25 @@ defmodule Hologram.AuthTest do
 
     test "returns nil for an anonymous session" do
       assert user_id() == nil
+    end
+  end
+
+  describe "user_window/2" do
+    test "downloads every row of the given user entity type" do
+      assert user_window(Module14, false) == %Query{entity: Module14}
+    end
+
+    # The user fixture's rule reads no relationship, so a type whose rule delegates through one
+    # stands in for a user type that does.
+    test "embeds the rows the type's rules read when a client checks permissions" do
+      checking_window = user_window(Module8, true)
+
+      assert checking_window ==
+               Module8
+               |> Stage.normalize()
+               |> Window.derive(true)
+
+      assert checking_window != user_window(Module8, false)
     end
   end
 
