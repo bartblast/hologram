@@ -612,6 +612,96 @@ defmodule Hologram.DB.MapperTest do
       end
     end
 
+    test "rejects entities deriving the same name for a sort key index" do
+      defmodule InlineEntityFixture24 do
+        use Hologram.Entity
+
+        attribute :b_c, :string
+      end
+
+      defmodule InlineEntityFixture24B do
+        use Hologram.Entity
+
+        attribute :c, :string
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "db_mapper_test_inline_entity_fixture24_b_c_$sort_$idx" is derived from attribute :b_c in Hologram.DB.MapperTest.InlineEntityFixture24, attribute :c in Hologram.DB.MapperTest.InlineEntityFixture24B\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture24, InlineEntityFixture24B], [])
+      end
+    end
+
+    test "rejects entities deriving the same name for a unique attribute index" do
+      defmodule InlineEntityFixture25 do
+        use Hologram.Entity
+
+        attribute :b_c, :integer, unique: true
+      end
+
+      defmodule InlineEntityFixture25B do
+        use Hologram.Entity
+
+        attribute :c, :integer, unique: true
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "db_mapper_test_inline_entity_fixture25_b_c_$uidx" is derived from attribute :b_c in Hologram.DB.MapperTest.InlineEntityFixture25, attribute :c in Hologram.DB.MapperTest.InlineEntityFixture25B\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture25, InlineEntityFixture25B], [])
+      end
+    end
+
+    test "rejects entities deriving the same name for a reference index" do
+      defmodule InlineEntityFixture26 do
+        use Hologram.Entity
+
+        relationship :b_c, Module1
+      end
+
+      defmodule InlineEntityFixture26B do
+        use Hologram.Entity
+
+        relationship :c, Module1
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "db_mapper_test_inline_entity_fixture26_b_c_id_$idx" is derived from relationship :b_c in Hologram.DB.MapperTest.InlineEntityFixture26, relationship :c in Hologram.DB.MapperTest.InlineEntityFixture26B\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([InlineEntityFixture26, InlineEntityFixture26B], [])
+      end
+    end
+
+    test "rejects an entity deriving the role grant store's index name" do
+      defmodule Elixir.HologramRole do
+        use Hologram.Entity
+
+        attribute :grant, :integer, unique: true
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "hologram_role_grant_$uidx" is derived from attribute :grant in HologramRole, the role grant store\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        derive!([Module14, HologramRole], [])
+      end
+    end
+
     test "rejects entities deriving the same enum type name" do
       defmodule InlineEntityFixture15 do
         use Hologram.Entity
@@ -667,6 +757,67 @@ defmodule Hologram.DB.MapperTest do
   end
 
   describe "derive_from_model!/1" do
+    # Four join tables in two colliding pairs, and one reverse index name all four derive - which
+    # neither pair's line reports, so it gets a line of its own.
+    test "reports an index two colliding join table pairs share" do
+      r = String.duplicate("r", 37)
+
+      relationships = [
+        {Pppppppppppppp, :xx_yy_zz_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr},
+        {Pppppppppppppp.XxYyZz, :rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr},
+        {PpppppppppppppXx, :yy_zz_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr},
+        {PpppppppppppppXx.Yy, :zz_rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr}
+      ]
+
+      model = %{
+        entities:
+          Map.new(relationships, fn {entity_type, relationship} ->
+            {entity_type,
+             %{attributes: [], relationships: [{relationship, [entity_type], []}], roles: []}}
+          end),
+        roles: %{},
+        user_entity: nil
+      }
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "target_id_4b8e857b_$idx" is derived from relationship :#{r} in Pppppppppppppp.XxYyZz, relationship :xx_yy_zz_#{r} in Pppppppppppppp, relationship :yy_zz_#{r} in PpppppppppppppXx, relationship :zz_#{r} in PpppppppppppppXx.Yy
+          * join table "xx_yy_zz_#{r}_7523ea5b_$join" is derived from relationship :#{r} in Pppppppppppppp.XxYyZz, relationship :xx_yy_zz_#{r} in Pppppppppppppp
+          * join table "yy_zz_#{r}_7523ea5b_$join" is derived from relationship :yy_zz_#{r} in PpppppppppppppXx, relationship :zz_#{r} in PpppppppppppppXx.Yy\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> derive_from_model!(model) end
+    end
+
+    # A cut join table name keeps its relationship and a digest, which a module path can spell
+    # out in full - so a join table's primary key and an entity's can meet.
+    test "rejects a join table's primary key cut to an entity's primary key" do
+      relationship = :a_relationship_name_longer_than_thirty_three_bytes_x1
+      entity_type = :"Elixir.ARelationshipNameLongerThanThirtyThreeBytes.9e7c7fc8"
+
+      model = %{
+        entities: %{
+          Nonexistent.Post => %{
+            attributes: [],
+            relationships: [{relationship, [Nonexistent.Post], []}],
+            roles: []
+          },
+          entity_type => %{attributes: [], relationships: [], roles: []}
+        },
+        roles: %{},
+        user_entity: nil
+      }
+
+      expected_msg =
+        normalize_newlines("""
+        colliding derived names - rename the declarations so that every derived name is unique:
+          * index "a_relationship_name_longer_than_thirty_three_bytes_9e7c7fc8_$pk" is derived from relationship :a_relationship_name_longer_than_thirty_three_bytes_x1 in Nonexistent.Post, the primary key of :"Elixir.ARelationshipNameLongerThanThirtyThreeBytes.9e7c7fc8"\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn -> derive_from_model!(model) end
+    end
+
     test "derives the same mapping as derive!/2" do
       entity_types = Reflection.list_entities()
       role_modules = Reflection.list_roles()

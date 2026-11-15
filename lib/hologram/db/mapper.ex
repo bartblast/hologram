@@ -78,7 +78,8 @@ defmodule Hologram.DB.Mapper do
 
   Runs every derivation check exactly once - table name collisions, required to-one cycles,
   per-entity column collisions, and cross-entity within-kind derived name collisions (join
-  tables and enum types, whose single-underscore seams can merge to the same name across
+  tables, enum types, and entity index names with the primary key constraints sharing
+  their namespace, whose single-underscore seams can merge to the same name across
   entities) - and returns a map from entity type module to its mapping: :table (the table
   name), :pk_constraint (the derived `<table>_$pk` constraint name), :columns (as returned
   by columns/1), :indexes (index name to %{columns:, nulls_distinct:, unique:} - a
@@ -115,21 +116,35 @@ defmodule Hologram.DB.Mapper do
 
     validate_model_cycles!(entities)
 
-    mapping =
+    # The entity's own index entries carry the declaration each derives from, which the :indexes
+    # map drops - the collision check names both sides, and a map would also merge away a
+    # duplicate inside one entity before the check saw it.
+    derived =
       Map.new(entities, fn {entity_type, entry} ->
         segments = table_segments(entity_type)
+        index_entries = entity_index_entries(entity_type, entry, segments)
 
-        {entity_type,
-         %{
-           table: table_name(entity_type),
-           pk_constraint: fit_identifier(segments, [], "$pk"),
-           columns: columns_from_entry(entity_type, entry),
-           indexes: entity_indexes(entity_type, entry, segments),
-           join_tables: join_tables_from_entry(entity_type, entry)
-         }}
+        entity_mapping = %{
+          table: table_name(entity_type),
+          pk_constraint: fit_identifier(segments, [], "$pk"),
+          columns: columns_from_entry(entity_type, entry),
+          indexes:
+            Map.new(index_entries, fn {name, definition, _declaration} -> {name, definition} end),
+          join_tables: join_tables_from_entry(entity_type, entry)
+        }
+
+        {entity_type, {entity_mapping, index_entries}}
       end)
 
-    validate_derived_names!(mapping)
+    mapping =
+      Map.new(derived, fn {entity_type, {entity_mapping, _entries}} ->
+        {entity_type, entity_mapping}
+      end)
+
+    index_entries =
+      Map.new(derived, fn {entity_type, {_entity_mapping, entries}} -> {entity_type, entries} end)
+
+    validate_derived_names!(mapping, index_entries)
 
     mapping
   end
@@ -352,7 +367,7 @@ defmodule Hologram.DB.Mapper do
       |> Enum.map(fn {name, target, opts} ->
         column_name = reference_column_name(name)
 
-        # A unique reference is indexed by its unique index instead (see entity_indexes/3).
+        # A unique reference is indexed by its unique index instead (see entity_index_entries/3).
         index =
           if Keyword.get(opts, :unique) == true do
             nil
@@ -470,32 +485,32 @@ defmodule Hologram.DB.Mapper do
   # do: a prefix is not unique.
   # TODO: a unique index over a hash expression lifts the bound for unbounded strings, once a
   # declaration needs it - it teaches the whole index chain an expression shape.
-  defp entity_indexes(entity_type, entry, segments) do
-    attribute_indexes =
+  defp entity_index_entries(entity_type, entry, segments) do
+    attribute_entries =
       entry.attributes
       |> Enum.filter(fn {_name, _type, opts} -> Keyword.get(opts, :unique) == true end)
-      |> Map.new(fn {name, _type, _opts} ->
+      |> Enum.map(fn {name, _type, _opts} ->
         column_name = Atom.to_string(name)
 
         {fit_identifier(segments, [column_name], "$uidx"),
-         %{columns: [column_name], nulls_distinct: true, unique: true}}
+         %{columns: [column_name], nulls_distinct: true, unique: true},
+         "attribute #{inspect(name)} in #{inspect(entity_type)}"}
       end)
 
-    reference_indexes =
+    reference_entries =
       entry.relationships
       |> Enum.filter(fn {_name, type, opts} ->
         not is_list(type) and Keyword.get(opts, :unique) == true
       end)
-      |> Map.new(fn {name, _type, _opts} ->
+      |> Enum.map(fn {name, _type, _opts} ->
         column_name = reference_column_name(name)
 
         {fit_identifier(segments, [column_name], "$uidx"),
-         %{columns: [column_name], nulls_distinct: true, unique: true}}
+         %{columns: [column_name], nulls_distinct: true, unique: true},
+         "relationship #{inspect(name)} in #{inspect(entity_type)}"}
       end)
 
-    attribute_indexes
-    |> Map.merge(reference_indexes)
-    |> Map.merge(framework_indexes(entity_type))
+    attribute_entries ++ reference_entries ++ framework_index_entries(entity_type)
   end
 
   defp enum_values(:enum, opts) do
@@ -546,17 +561,15 @@ defmodule Hologram.DB.Mapper do
   # type-wide and global grant shapes, so identical rows with nils must still collide. The
   # columns are the store's own identity list, which its id derivation reads too - one list, so
   # the two cannot disagree on what a grant is.
-  defp framework_indexes(Hologram.Auth.RoleGrant) do
-    %{
-      "hologram_role_grant_$uidx" => %{
-        columns: RoleGrant.identity_columns(),
-        nulls_distinct: false,
-        unique: true
-      }
-    }
+  defp framework_index_entries(Hologram.Auth.RoleGrant) do
+    [
+      {"hologram_role_grant_$uidx",
+       %{columns: RoleGrant.identity_columns(), nulls_distinct: false, unique: true},
+       "the role grant store"}
+    ]
   end
 
-  defp framework_indexes(_entity_type), do: %{}
+  defp framework_index_entries(_entity_type), do: []
 
   defp id_column do
     %{
@@ -572,6 +585,51 @@ defmodule Hologram.DB.Mapper do
       index: nil,
       source: :system
     }
+  end
+
+  # Index names live in one namespace per schema, across tables, and a primary key is backed by
+  # an index of its own name - so they are checked against each other. Foreign key names need no
+  # check: PostgreSQL scopes them to their table, where they come from distinct column names. A
+  # join table's own index and primary key are listed too, since a cut can leave them in the same
+  # shape as an entity's - each carries its join table's name, so a collision that only repeats
+  # one between the join tables themselves is left to that report.
+  defp index_name_entries(entity_type, entity_mapping, entity_index_entries) do
+    column_entries =
+      entity_mapping.columns
+      |> Enum.filter(& &1.index)
+      |> Enum.map(fn %{index: index, source: {kind, declaration_name}} ->
+        declaration_kind = if kind == :relationship, do: "relationship", else: "attribute"
+        {index, "#{declaration_kind} #{inspect(declaration_name)} in #{inspect(entity_type)}"}
+      end)
+
+    own_entries =
+      Enum.map(entity_index_entries, fn {name, _definition, declaration} ->
+        {name, declaration}
+      end)
+
+    pk_entry = {entity_mapping.pk_constraint, "the primary key of #{inspect(entity_type)}"}
+
+    entity_entries =
+      Enum.map([pk_entry | column_entries ++ own_entries], fn {name, declaration} ->
+        %{kind: "index", derived_name: name, declaration: declaration, join_table: nil}
+      end)
+
+    join_table_entries =
+      Enum.flat_map(entity_mapping.join_tables, fn join_table ->
+        declaration =
+          "relationship #{inspect(join_table.relationship)} in #{inspect(entity_type)}"
+
+        Enum.map([join_table.reverse_index, join_table.pk_constraint], fn name ->
+          %{
+            kind: "index",
+            derived_name: name,
+            declaration: declaration,
+            join_table: join_table.name
+          }
+        end)
+      end)
+
+    entity_entries ++ join_table_entries
   end
 
   defp join_identifier(parts, nil), do: Enum.join(parts, "_")
@@ -819,7 +877,7 @@ defmodule Hologram.DB.Mapper do
     :ok
   end
 
-  defp validate_derived_names!(mapping) do
+  defp validate_derived_names!(mapping, index_entries) do
     entries =
       Enum.flat_map(mapping, fn {entity_type, entity_mapping} ->
         enum_type_entries =
@@ -845,14 +903,28 @@ defmodule Hologram.DB.Mapper do
             }
           end)
 
-        enum_type_entries ++ join_table_entries
+        enum_type_entries ++
+          join_table_entries ++
+          index_name_entries(entity_type, entity_mapping, index_entries[entity_type])
       end)
 
-    collisions =
+    shared_names =
       entries
       |> Enum.group_by(&{&1.kind, &1.derived_name})
       |> Enum.filter(fn {_key, group} -> length(group) > 1 end)
       |> Enum.sort()
+
+    # One join table's two objects end in different kinds, so a name its objects alone share
+    # comes from two declarations deriving that join table - which its own line reports.
+    collisions =
+      Enum.reject(shared_names, fn {_key, group} ->
+        match?(
+          [join_table] when is_binary(join_table),
+          group
+          |> Enum.map(&Map.get(&1, :join_table))
+          |> Enum.uniq()
+        )
+      end)
 
     if collisions != [] do
       descriptions =
