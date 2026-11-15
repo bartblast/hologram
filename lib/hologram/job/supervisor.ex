@@ -7,6 +7,14 @@ defmodule Hologram.Job.Supervisor do
   # would keep waiting on a listener that is gone, which nothing reports: it would fall back to its
   # poll and simply be slower for good. And one whose lock connection ended would carry on with a
   # run whose lock went with the session - a run every other node takes to be abandoned.
+  #
+  # A database that is away takes down nothing here. Both connections wait for it rather than
+  # failing (see Hologram.DB.Config.held_connection_opts/1), and the worker waits for its lock
+  # connection as it starts, so nothing crashes meanwhile. A drop ends each process that sees it
+  # once, and each counts as a restart: both connections, and the worker too when it was inside a
+  # transaction on the pool - three at most, within the limit of 3 in 5 seconds, and the worker
+  # that replaces them waits rather than crashing again. A worker whose lock connection is up but
+  # whose pool is not yet crashes on each pass, once per poll and checkout, about 9 seconds.
 
   use Supervisor
 

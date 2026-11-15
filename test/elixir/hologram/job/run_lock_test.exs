@@ -6,6 +6,7 @@ defmodule Hologram.Job.RunLockTest do
 
   alias Hologram.Entity
   alias Hologram.Job.RunLock
+  alias Hologram.Test.TCPProxy
   alias Postgrex.SimpleConnection
 
   # What a run selects the database tests by: they are the ones that need a server.
@@ -15,6 +16,24 @@ defmodule Hologram.Job.RunLockTest do
   # node or another, would be.
   defp start_session(opts \\ []) do
     start_supervised!(Supervisor.child_spec({RunLock, opts}, id: make_ref(), restart: :temporary))
+  end
+
+  # Started on a port that refuses connections until the test starts a proxy there, trying again
+  # often enough for a test to sit through several tries.
+  defp start_refused_session(opts \\ []) do
+    port = TCPProxy.closed_port()
+
+    {port, start_session(Keyword.merge([port: port, reconnect_backoff: 50], opts))}
+  end
+
+  defp start_proxy(port) do
+    start_supervised!(Supervisor.child_spec({TCPProxy, port}, id: make_ref()))
+  end
+
+  defp session_state(session) do
+    {_state_name, %{state: {RunLock, state}}} = :sys.get_state(session)
+
+    state
   end
 
   defp query!(session, statement) do
@@ -83,6 +102,59 @@ defmodule Hologram.Job.RunLockTest do
 
       release(holder, id)
       assert acquire(other, id)
+    end
+  end
+
+  describe "await_connected/1" do
+    test "answers at once when the connection has its session" do
+      assert await_connected(start_session()) == :ok
+    end
+
+    test "waits while the database refuses connections, until the session has its settings" do
+      capture_log(fn ->
+        {port, session} = start_refused_session(parameters: [idle_session_timeout: "60000"])
+
+        task = Task.async(fn -> await_connected(session) end)
+        refute Task.yield(task, 200)
+
+        start_proxy(port)
+
+        assert Task.await(task) == :ok
+        assert %Postgrex.Result{rows: [["0"]]} = query!(session, "SHOW idle_session_timeout")
+      end)
+    end
+
+    test "answers every caller waiting" do
+      capture_log(fn ->
+        {port, session} = start_refused_session()
+
+        tasks = for _caller <- 1..2, do: Task.async(fn -> await_connected(session) end)
+        assert [{_first, nil}, {_second, nil}] = Task.yield_many(tasks, 200)
+
+        start_proxy(port)
+
+        assert Task.await_many(tasks) == [:ok, :ok]
+      end)
+    end
+
+    test "exits when the connection ends before it has a session" do
+      capture_log(fn ->
+        {_port, session} = start_refused_session()
+        test_pid = self()
+
+        {caller, monitor_ref} =
+          spawn_monitor(fn ->
+            send(test_pid, :waiting)
+            await_connected(session)
+          end)
+
+        assert_receive :waiting
+        wait_until(fn -> length(session_state(session).waiting) == 1 end)
+
+        :ok = :gen_statem.stop(session)
+
+        assert_receive {:DOWN, ^monitor_ref, :process, ^caller, {:normal, _call}}, 2_000
+      end)
     end
   end
 
@@ -181,6 +253,35 @@ defmodule Hologram.Job.RunLockTest do
       wait_until(fn -> acquire(other, id) end)
     end
 
+    test "keeps trying while the database refuses connections" do
+      capture_log(fn ->
+        {_port, session} = start_refused_session()
+        monitor_ref = Process.monitor(session)
+
+        refute_receive {:DOWN, ^monitor_ref, :process, ^session, _reason}, 500
+      end)
+    end
+
+    # Without a session there is no socket to send the statement on, and a caller that did not wait
+    # must not take the connection down.
+    test "fails a call made before it has a session, and stays up" do
+      capture_log(fn ->
+        {port, session} = start_refused_session(idle_interval: 100)
+
+        assert_raise Postgrex.Error, ~r/has no session yet/, fn ->
+          acquire(session, Entity.generate_id())
+        end
+
+        # The failed call arms the idle ping while there is no socket, which the backoff being
+        # below the idle interval keeps from firing - the connection still connects.
+        Process.sleep(200)
+        start_proxy(port)
+
+        assert await_connected(session) == :ok
+        assert acquire(session, Entity.generate_id())
+      end)
+    end
+
     # What the worker beside it relies on: a session that ended took its locks with it, so the
     # process holding it must not carry on as if it still had them.
     test "ends when its session ends" do
@@ -191,7 +292,52 @@ defmodule Hologram.Job.RunLockTest do
       capture_log(fn ->
         query!(start_session(), "SELECT pg_terminate_backend(#{backend_pid})")
 
-        assert_receive {:DOWN, ^monitor_ref, :process, ^session, _reason}, 30_000
+        assert_receive {:DOWN, ^monitor_ref, :process, ^session, {:shutdown, :connection_lost}},
+                       30_000
+      end)
+    end
+
+    test "ends when its link drops, and the server frees its locks" do
+      id = Entity.generate_id()
+      port = TCPProxy.closed_port()
+      proxy = start_proxy(port)
+      session = start_session(port: port)
+      monitor_ref = Process.monitor(session)
+
+      assert acquire(session, id)
+
+      capture_log(fn ->
+        TCPProxy.close_all(proxy)
+
+        assert_receive {:DOWN, ^monitor_ref, :process, ^session, {:shutdown, :connection_lost}},
+                       2_000
+      end)
+
+      other = start_session()
+      wait_until(fn -> acquire(other, id) end)
+    end
+
+    # Nothing calls the connection after it connects, so only the ping it arms itself notices.
+    test "ends when its link goes silent with nothing in flight" do
+      port = TCPProxy.closed_port()
+      proxy = start_proxy(port)
+
+      session =
+        start_session(
+          port: port,
+          idle_interval: 100,
+          ping_timeout: 100,
+          reconnect_backoff: 50,
+          sync_connect: true
+        )
+
+      monitor_ref = Process.monitor(session)
+
+      capture_log(fn ->
+        TCPProxy.freeze(proxy)
+
+        assert_receive {:DOWN, ^monitor_ref, :process, ^session, {:shutdown, :connection_lost}},
+                       2_000
       end)
     end
 

@@ -28,10 +28,10 @@ defmodule Hologram.Job.Worker do
   because the announcements are an optimization over the poll rather than the mechanism: without
   one a job still runs, no sooner than `:poll_interval_ms` after it was created.
 
-  `:run_lock` names the Hologram.Job.RunLock connection the worker holds its run locks on. Every
-  lock it holds is given up as it starts: a worker restarted on its own finds its predecessor's
-  still held on a session that is still up, and the row of the run that crashed would look live
-  for good.
+  `:run_lock` names the Hologram.Job.RunLock connection the worker holds its run locks on. The
+  worker waits for it to connect, then gives up every lock it holds as it starts: a worker
+  restarted on its own finds its predecessor's still held on a session that is still up, and the
+  row of the run that crashed would look live for good.
 
   `:pass` is what one sweep of the given job types does, and answers how many jobs it ran. It
   defaults to `Hologram.Job.Runner.pass/2` on the `:run_lock` connection, so `:run_lock` is
@@ -72,7 +72,11 @@ defmodule Hologram.Job.Worker do
 
   @impl GenServer
   def handle_continue(:start_listening, state) do
-    if state.run_lock, do: RunLock.release_all(state.run_lock)
+    if state.run_lock do
+      # While the database is away the worker waits here, running nothing and crashing on nothing.
+      RunLock.await_connected(state.run_lock)
+      RunLock.release_all(state.run_lock)
+    end
 
     if state.notifications, do: listen_for_writes(state.notifications)
 

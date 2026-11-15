@@ -11,11 +11,13 @@ defmodule Hologram.Job.RunLock do
   # it, with no process left to do so.
   #
   # A connection of its own, outside the pool: a session lock stays with the connection that took
-  # it, which a pooled one cannot promise. It does not reconnect, because a session that ended took
-  # its locks with it, and a worker carrying on would be running a job that looks abandoned to every
-  # other node. Losing the connection ends this process, and the worker is restarted beside it. It
-  # pings the server while idle, which is how a link that went dead is noticed rather than waited
-  # on - once a call has been made, which arms the ping, and the worker makes one as it starts.
+  # it, which a pooled one cannot promise. Held for as long as its session lasts (see
+  # Hologram.DB.Config.held_connection_opts/1): while the database refuses connections it keeps
+  # trying, and the worker waits for it in await_connected/1 before anything else. It does not
+  # reconnect a session it had, because a session that ended took its locks with it, and a worker
+  # carrying on would be running a job that looks abandoned to every other node. Losing the session
+  # ends this process, and the worker is restarted beside it. It pings the server while idle, which
+  # is how a link that went dead is noticed rather than waited on.
 
   @behaviour Postgrex.SimpleConnection
 
@@ -59,7 +61,9 @@ defmodule Hologram.Job.RunLock do
   should wait on a run. Locks taken twice by one session stack, so each lock taken needs exactly
   one release.
 
-  Exits when the server has not answered within 5 seconds, with the lock possibly taken.
+  Exits when the server has not answered within 5 seconds, with the lock possibly taken. Raises
+  when the connection has no session yet (see await_connected/1), like release/2 and
+  release_all/1.
   """
   @spec acquire(GenServer.server(), String.t()) :: boolean
   def acquire(connection, id) do
@@ -67,6 +71,19 @@ defmodule Hologram.Job.RunLock do
       query!(connection, "SELECT pg_try_advisory_lock(#{key(id)})", @acquire_timeout_ms)
 
     taken == "t"
+  end
+
+  @doc """
+  Returns :ok once the connection has a session with its settings applied - at once when it has
+  one already.
+
+  Waits as long as the database refuses connections. Every other call made before then fails, so
+  the worker makes this one first. Exits if the connection ends first - when the server refuses
+  the session settings, or the session is lost before they are applied.
+  """
+  @spec await_connected(GenServer.server()) :: :ok
+  def await_connected(connection) do
+    SimpleConnection.call(connection, :await_connected, :infinity)
   end
 
   @doc """
@@ -96,7 +113,7 @@ defmodule Hologram.Job.RunLock do
   Gives up the run lock of the job with the given id on the given connection, and returns :ok.
 
   A lock the session does not hold is left as it is - PostgreSQL answers with a warning, which is
-  ignored.
+  ignored. Raises when the connection has no session yet (see await_connected/1).
   """
   @spec release(GenServer.server(), String.t()) :: :ok
   def release(connection, id) do
@@ -107,6 +124,8 @@ defmodule Hologram.Job.RunLock do
 
   @doc """
   Gives up every run lock the given connection holds, and returns :ok.
+
+  Raises when the connection has no session yet (see await_connected/1).
   """
   @spec release_all(GenServer.server()) :: :ok
   def release_all(connection) do
@@ -122,35 +141,69 @@ defmodule Hologram.Job.RunLock do
   which is how a connection reaches another database on the same server - advisory locks are per
   database, so the connection must reach the one the jobs are in.
 
-  It returns without waiting on the server and connects right after. A call made meanwhile waits
-  for the connect, and a connect that fails ends the process.
+  It returns without waiting on the server, and keeps trying to connect while the database
+  refuses it (see Hologram.DB.Config.held_connection_opts/1, which the options also override).
   """
   @spec start_link(keyword) :: GenServer.on_start()
   def start_link(opts) do
-    connection_opts =
-      opts
-      |> Config.connection_opts()
-      |> Keyword.merge(auto_reconnect: false, sync_connect: false)
-
-    SimpleConnection.start_link(__MODULE__, nil, connection_opts)
+    SimpleConnection.start_link(__MODULE__, nil, Config.held_connection_opts(opts))
   end
 
   @impl SimpleConnection
-  def handle_call({:query, statement}, from, state) do
+  def handle_call(:await_connected, from, %{connected: true} = state) do
+    SimpleConnection.reply(from, :ok)
+
+    {:noreply, state}
+  end
+
+  def handle_call(:await_connected, from, state) do
+    {:noreply, %{state | waiting: [from | state.waiting]}}
+  end
+
+  def handle_call({:query, statement}, from, %{connected: true} = state) do
     {:query, statement, %{state | from: from}}
   end
 
+  # Without a session there is no socket to send the statement on. Failed in the caller rather than
+  # here, so a caller that did not wait (see await_connected/1) does not take the connection down.
+  def handle_call({:query, _statement}, from, state) do
+    SimpleConnection.reply(from, %Postgrex.Error{
+      message: "the run lock connection has no session yet, see await_connected/1"
+    })
+
+    {:noreply, state}
+  end
+
+  # SimpleConnection keeps the idle ping off after a connect (it drops what handle_connect/1
+  # returns), so without the message below a session nobody calls would never be pinged.
   @impl SimpleConnection
   def handle_connect(state) do
+    send(self(), :arm_ping)
+
     {:query, @session_settings, %{state | from: nil}}
   end
+
+  @impl SimpleConnection
+  @spec handle_disconnect(map) :: no_return
+  def handle_disconnect(_state), do: Config.end_lost_session!()
+
+  # :arm_ping, and anything else - the connection traps exits.
+  @impl SimpleConnection
+  def handle_info(_message, state), do: {:noreply, state}
 
   # The session settings are the only statement nobody waits on. Refused, they end the connection:
   # a session without them is the one a server can end under a run still going.
   @impl SimpleConnection
   def handle_result(%Postgrex.Error{} = error, %{from: nil}), do: raise(error)
 
-  def handle_result(_results, %{from: nil} = state), do: {:noreply, state}
+  # The session is usable once its settings are applied, not as soon as it opens.
+  def handle_result(_results, %{from: nil} = state) do
+    state.waiting
+    |> Enum.reverse()
+    |> Enum.each(&SimpleConnection.reply(&1, :ok))
+
+    {:noreply, %{state | connected: true, waiting: []}}
+  end
 
   def handle_result(results_or_error, state) do
     SimpleConnection.reply(state.from, results_or_error)
@@ -159,12 +212,13 @@ defmodule Hologram.Job.RunLock do
   end
 
   @impl SimpleConnection
-  def init(_args), do: {:ok, %{from: nil}}
+  def init(_args), do: {:ok, %{connected: false, from: nil, waiting: []}}
 
   @impl SimpleConnection
   def notify(_channel, _payload, _state), do: :ok
 
-  # Waits as long as the server takes unless given a timeout: the server answers or the connection
+  # Raises at once when the connection has no session yet (see await_connected/1). Otherwise waits
+  # as long as the server takes unless given a timeout: the server answers or the connection
   # breaks, which stops the connection process and exits the caller. A link that goes silent
   # mid-call is not pinged, so it breaks only when the operating system gives up retransmitting.
   # Only taking a lock is bounded (see @acquire_timeout_ms): a release comes after the claim's or
