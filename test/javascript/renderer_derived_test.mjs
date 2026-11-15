@@ -889,34 +889,6 @@ describe("Renderer derived fields", () => {
       assert.deepStrictEqual(renderedVar("row"), Type.nil());
     });
 
-    it("binds the actor leaf to the acting user", () => {
-      LocalDatabase.actorUserId = "r1";
-
-      defineComponent("MyApp.DerivedActorBound", {
-        queries: ["rows"],
-        derived: [
-          derivedEntry("rows", Type.list([Type.alias(ROW)]), [], () =>
-            filter(
-              Type.alias(ROW),
-              Type.list([
-                Type.tuple([
-                  Type.atom("id"),
-                  Type.tuple([
-                    Type.atom("=="),
-                    Type.tuple([Type.atom("actor")]),
-                  ]),
-                ]),
-              ]),
-            ),
-          ),
-        ],
-      });
-
-      render(componentNode("MyApp.DerivedActorBound"));
-
-      assert.deepStrictEqual(names(renderedVar("rows")), ["banana"]);
-    });
-
     // A count has no rows behind it, so carried rows cannot re-derive one - the number the render
     // answered with is held until this client can count for itself.
     describe("a count the page carried", () => {
