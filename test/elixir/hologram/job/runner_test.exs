@@ -224,6 +224,36 @@ defmodule Hologram.Job.RunnerTest do
       assert catch_exit(pass([Module3], dead))
     end
 
+    test "fails a running job whose run lock nobody holds, and does not count it", %{
+      run_lock: run_lock
+    } do
+      job = Job.create!(Module1)
+
+      # Running with no lock held, the way a node that stopped mid-run leaves it.
+      :ok = EntityOperations.update(Module1, job.id, %{status: :running})
+
+      assert pass([Module1], run_lock) == 0
+
+      row = EntityOperations.get(Module1, job.id)
+
+      assert row.status == :failed
+
+      assert row.error ==
+               "the run was cut short before its outcome was recorded - the node stopped, the worker crashed or lost its connection to the database, or the outcome write failed - so run/1 may have done all, part or none of its work"
+    end
+
+    test "runs the queued jobs of a type it has swept", %{run_lock: run_lock} do
+      abandoned = Job.create!(Module1)
+      queued = Job.create!(Module1)
+
+      :ok = EntityOperations.update(Module1, abandoned.id, %{status: :running})
+
+      assert pass([Module1], run_lock) == 1
+
+      assert EntityOperations.get(Module1, abandoned.id).status == :failed
+      assert EntityOperations.get(Module1, queued.id).status == :done
+    end
+
     test "leaves a job another worker has claimed, and does not count it", %{run_lock: run_lock} do
       claimed = job(:ok)
       queued = job(:ok)
@@ -292,12 +322,26 @@ defmodule Hologram.Job.RunnerTest do
       refute lock_free?(job.id)
     end
 
-    # A row left running with its lock given up is one a later sweep can fail.
-    test "gives up the run lock when recording the outcome raises", %{run_lock: run_lock} do
+    # Another node's sweep failed the row while run/1 ran - its lock was lost mid-run, so the run
+    # looked abandoned - and that verdict is what the row keeps.
+    test "keeps the failure a sweep recorded while the job ran", %{run_lock: run_lock} do
+      job = job(:swept)
+
+      assert process(Module3, job.id, run_lock) == :done
+
+      row = EntityOperations.get(Module3, job.id)
+
+      assert row.status == :failed
+      assert row.error == "swept"
+      assert lock_free?(job.id)
+    end
+
+    test "records nothing for a job whose row is gone", %{run_lock: run_lock} do
       job = job(:delete_self)
 
-      assert_raise Hologram.MisuseError, fn -> process(Module3, job.id, run_lock) end
+      assert process(Module3, job.id, run_lock) == :done
 
+      assert EntityOperations.get(Module3, job.id) == nil
       assert lock_free?(job.id)
     end
 

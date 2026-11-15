@@ -35,6 +35,10 @@ defmodule Hologram.Job do
   Refuse the transaction and the job never existed, so nothing runs. Let it commit and the job
   runs once, as the user who enqueued it.
 
+  A run cut short before its outcome is recorded - the node stopping, the worker crashing or
+  losing its connection to the database, the outcome write failing - is later failed by a worker
+  looking for jobs, with an error saying so: run/1 may have done all, part or none of its work.
+
   Attributes and relationships are what a job carries, so they are declared and typed rather
   than passed as a payload: a declaration is what a policy can name and what a migration can
   move forward.
@@ -111,8 +115,8 @@ defmodule Hologram.Job do
   The job is written as a row of its type, in whatever transaction the caller is already in, with
   its status queued and its actor the acting user - nobody, on the trusted tier. It runs once,
   after that transaction commits: a worker calls the job type's run/1 with the job, under the
-  acting user's authority, and records the outcome on it. A transaction that rolls back leaves no
-  job, so nothing runs.
+  acting user's authority, and records the outcome on it - or fails it, when the run is cut short
+  before that. A transaction that rolls back leaves no job, so nothing runs.
 
   Returns {:ok, job} with the written job, or {:error, violations} naming each attribute or
   reference that broke its declaration - the same answers, and the same checks, as writing any

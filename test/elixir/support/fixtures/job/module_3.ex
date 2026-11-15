@@ -24,6 +24,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
       :raise,
       :record_actor,
       :record_order,
+      :swept,
       :throw
     ]
 
@@ -44,7 +45,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
     :ok
   end
 
-  # Takes its own row away, so recording the outcome has no row to write to and raises.
+  # Takes its own row away, so recording the outcome has no row to write to.
   def run(%{outcome: :delete_self} = job) do
     :ok = EntityOperations.delete(__MODULE__, job.id)
 
@@ -71,6 +72,13 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
 
   def run(%{outcome: :record_order} = job) do
     Process.put(:ran_order, [job.id | Process.get(:ran_order, [])])
+
+    :ok
+  end
+
+  # Fails its own row, standing for a pass on another node that found the run's lock gone.
+  def run(%{outcome: :swept} = job) do
+    :ok = EntityOperations.update(__MODULE__, job.id, %{error: "swept", status: :failed})
 
     :ok
   end

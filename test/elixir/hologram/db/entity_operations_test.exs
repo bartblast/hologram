@@ -1124,6 +1124,13 @@ defmodule Hologram.DB.EntityOperationsTest do
   end
 
   describe "get/3" do
+    test "locks the row for no key update with lock: :no_key_update" do
+      {:ok, created_entity} = create(Module1.new())
+
+      assert get(Module1, created_entity.id, lock: :no_key_update) == created_entity
+      assert "RowShareLock" in relation_lock_modes(Module1)
+    end
+
     test "locks the row for share with lock: :share" do
       {:ok, created_entity} = create(Module1.new())
 

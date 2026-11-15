@@ -160,7 +160,8 @@ defmodule Hologram.Job.Worker do
     # A data model under a hold can't be read until it is released (see
     # Hologram.Entity.Model.hold/0). The pass is skipped rather than crashed, which would restart
     # this process on every wake for as long as the hold stands, and the next poll or wake runs it.
-    # A job already running when the hold lands can't record its outcome, so it stays running.
+    # A job already running when the hold lands can't record its outcome, so it gives up its run
+    # lock with the row still running, and a pass after the hold fails it as cut short.
     Hologram.StaleModelError -> state
   end
 end
