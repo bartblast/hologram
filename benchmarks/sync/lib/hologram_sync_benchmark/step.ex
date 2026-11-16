@@ -247,9 +247,12 @@ defmodule HologramSyncBenchmark.Step do
         (last_at - committed_at) / 1_000
       end
 
+    committed = Map.new(writes, &{&1.number, &1.committed_at})
+
     raw = %{
       db: DB.stats_delta(stats_after, stats_before),
       last_delivery_ms: last_delivery_ms,
+      leaked: Measure.leaks(committed, Tuple.to_list(reports), spec.expected),
       writes: writes
     }
 
@@ -265,7 +268,8 @@ defmodule HologramSyncBenchmark.Step do
       # figure overstates and the delivery figure leaves them out.
       cut_short: Enum.count(raw.writes, &(not &1.delivered?)),
       db: per_write(adjust(raw.db, idle.db), @isolated_writes),
-      last_delivery_ms: Measure.percentile(raw.last_delivery_ms, 50)
+      last_delivery_ms: Measure.percentile(raw.last_delivery_ms, 50),
+      leaked: raw.leaked
     }
   end
 

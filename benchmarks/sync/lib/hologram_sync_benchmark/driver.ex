@@ -282,7 +282,8 @@ defmodule HologramSyncBenchmark.Driver do
   # the cuts count on their own.
   defp passed?(result, opts) do
     filled?(result.fill, opts) and result.isolated.cut_short == 0 and
-      result.session_cuts == 0 and delivered?(result.steady, opts)
+      result.isolated.leaked == 0 and result.session_cuts == 0 and
+      delivered?(result.steady, opts)
   end
 
   # What failed a step with writes, for the figure's note.
@@ -292,6 +293,8 @@ defmodule HologramSyncBenchmark.Driver do
     [
       Sweep.fill_reasons(fill, opts[:fill_timeout]),
       isolated.cut_short > 0 && "#{isolated.cut_short} single writes never reached everyone",
+      isolated.leaked > 0 &&
+        count_of(isolated.leaked, "single write delivery", "single write deliveries") <> " leaked",
       steady.missing > 0 && count_of(steady.missing, "delivery", "deliveries") <> " missing",
       steady.leaked > 0 && "#{steady.leaked} deliveries leaked",
       steady.streams_lost > 0 && count_of(steady.streams_lost, "stream", "streams") <> " lost",
