@@ -871,7 +871,7 @@ defmodule Hologram.DBTest do
         |> create()
 
       expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Entity.Module2 "#{entity.id}")
+        ~s(not allowed to update Hologram.Test.Fixtures.Entity.Module2 "#{entity.id}" - no allow line that holds covers :c)
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(Entity.generate_id(), fn ->

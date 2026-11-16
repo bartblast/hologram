@@ -35,6 +35,9 @@ defmodule Hologram.DB.WriterTest do
   alias Hologram.Test.Fixtures.Policy.Module10, as: PolicyModule10
   alias Hologram.Test.Fixtures.Policy.Module11, as: PolicyModule11
   alias Hologram.Test.Fixtures.Policy.Module2
+  alias Hologram.Test.Fixtures.Policy.Module36
+  alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
+  alias Hologram.Test.Fixtures.Policy.Module39, as: ChannelMessage
 
   defp create_user(email) do
     %{email: email}
@@ -404,7 +407,7 @@ defmodule Hologram.DB.WriterTest do
         |> DB.create!()
 
       expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{target.id}")
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{target.id}" - no allow line that holds covers :public)
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(user, fn ->
@@ -496,7 +499,7 @@ defmodule Hologram.DB.WriterTest do
       EntityOperations.update(Module1, entity.id, priority: 1)
 
       expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :public)
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(user, fn ->
@@ -714,6 +717,219 @@ defmodule Hologram.DB.WriterTest do
     end
   end
 
+  # Policy.Module38 lets anyone set the topic and the tags while a channel isn't archived, its owner
+  # rename it and move it to a parent, anyone change all but :archived and :owner on a channel named
+  # "open", and its owner change anything once it is archived.
+  describe "update/1 of the fields a line covers" do
+    defp create_channel(values) do
+      values
+      |> Channel.new()
+      |> DB.create!()
+    end
+
+    defp denied_fields(channel, fields) do
+      ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module38 "#{channel.id}" - no allow line that holds covers #{fields})
+    end
+
+    test "lands a change of a field a holding line covers" do
+      member = create_user("field-member-1@example.com")
+      channel = create_channel(name: "general")
+
+      assert as_user(member, fn ->
+               channel
+               |> put_attribute(:topic, "news")
+               |> update()
+             end) ==
+               :ok
+
+      assert DB.read(Channel, channel.id).topic == "news"
+    end
+
+    test "refuses a change of a field no holding line covers, naming it" do
+      member = create_user("field-member-2@example.com")
+      channel = create_channel(name: "general")
+
+      assert_error AccessDeniedError, denied_fields(channel, ":name"), fn ->
+        as_user(member, fn ->
+          channel
+          |> put_attribute(:name, "mine")
+          |> update()
+        end)
+      end
+
+      assert DB.read(Channel, channel.id).name == "general"
+    end
+
+    test "refuses a write mixing covered and uncovered fields, naming the uncovered ones" do
+      member = create_user("field-member-3@example.com")
+      channel = create_channel(name: "general")
+
+      assert_error AccessDeniedError, denied_fields(channel, ":name, :parent"), fn ->
+        as_user(member, fn ->
+          channel
+          |> put_attribute(:topic, "news")
+          |> put_attribute(:name, "mine")
+          |> put_attribute(:parent_id, nil)
+          |> update()
+        end)
+      end
+
+      assert DB.read(Channel, channel.id).topic == nil
+    end
+
+    test "lands a write whose fields different lines cover" do
+      owner = create_user("field-owner-1@example.com")
+      channel = create_channel(name: "general", owner_id: owner.id)
+
+      assert as_user(owner, fn ->
+               channel
+               |> put_attribute(:topic, "news")
+               |> put_attribute(:name, "renamed")
+               |> update()
+             end) == :ok
+
+      assert %{name: "renamed", topic: "news"} = DB.read(Channel, channel.id)
+    end
+
+    test "covers a to-one's reference field by its relationship's name" do
+      owner = create_user("field-owner-2@example.com")
+      member = create_user("field-member-4@example.com")
+
+      parent =
+        []
+        |> Module36.new()
+        |> DB.create!()
+
+      channel = create_channel(name: "general", owner_id: owner.id)
+
+      assert as_user(owner, fn ->
+               channel
+               |> put_attribute(:parent_id, parent.id)
+               |> update()
+             end) == :ok
+
+      assert_error AccessDeniedError, denied_fields(channel, ":parent"), fn ->
+        as_user(member, fn ->
+          channel
+          |> put_attribute(:parent_id, nil)
+          |> update()
+        end)
+      end
+    end
+
+    test "covers an edge of a to-many by its relationship's name" do
+      member = create_user("field-member-5@example.com")
+
+      tag =
+        [token: "t"]
+        |> Module15.new()
+        |> DB.create!()
+
+      open = create_channel(name: "general")
+      archived = create_channel(name: "general", archived: true)
+
+      assert as_user(member, fn ->
+               open
+               |> add_relationship(:tags, tag.id)
+               |> update()
+             end) == :ok
+
+      assert_error AccessDeniedError, denied_fields(archived, ":tags"), fn ->
+        as_user(member, fn ->
+          archived
+          |> add_relationship(:tags, tag.id)
+          |> update()
+        end)
+      end
+    end
+
+    test "covers a counter moved by an amount" do
+      member = create_user("field-member-6@example.com")
+      open = create_channel(name: "open")
+      general = create_channel(name: "general")
+
+      assert as_user(member, fn ->
+               open
+               |> increment(:sent_count, 1)
+               |> update()
+             end) == :ok
+
+      assert DB.read(Channel, open.id).sent_count == 1
+
+      assert_error AccessDeniedError, denied_fields(general, ":sent_count"), fn ->
+        as_user(member, fn ->
+          general
+          |> increment(:sent_count, 1)
+          |> update()
+        end)
+      end
+    end
+
+    test "covers every field but the ones an except line lists" do
+      member = create_user("field-member-7@example.com")
+      channel = create_channel(name: "open")
+
+      assert as_user(member, fn ->
+               channel
+               |> put_attribute(:name, "lobby")
+               |> update()
+             end) ==
+               :ok
+
+      lobby = DB.read(Channel, channel.id)
+      reopened = create_channel(name: "open")
+
+      assert_error AccessDeniedError, denied_fields(reopened, ":archived"), fn ->
+        as_user(member, fn ->
+          reopened
+          |> put_attribute(:archived, true)
+          |> update()
+        end)
+      end
+
+      assert lobby.name == "lobby"
+    end
+
+    test "covers every field with a line covering the whole row" do
+      owner = create_user("field-owner-3@example.com")
+      other = create_user("field-other-1@example.com")
+      channel = create_channel(name: "general", owner_id: owner.id, archived: true)
+
+      assert as_user(owner, fn ->
+               channel
+               |> put_attribute(:archived, false)
+               |> put_attribute(:owner_id, other.id)
+               |> update()
+             end) == :ok
+
+      assert %{archived: false, owner_id: owner_id} = DB.read(Channel, channel.id)
+      assert owner_id == other.id
+    end
+
+    # Module39 delegates its update to the channel's :update, which the lines covering the whole row
+    # answer alone - so setting a channel's topic grants nothing on its messages.
+    test "counts no field-limited line for a delegation asking :update" do
+      member = create_user("field-member-8@example.com")
+      channel = create_channel(name: "general")
+
+      message =
+        [channel_id: channel.id]
+        |> ChannelMessage.new()
+        |> DB.create!()
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module39 "#{message.id}" - no allow line that holds covers :body)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(member, fn ->
+          message
+          |> put_attribute(:body, "hi")
+          |> update()
+        end)
+      end
+    end
+  end
+
   describe "update/3" do
     test "raises for a role grant without an acting user" do
       expected_msg =
@@ -743,7 +959,7 @@ defmodule Hologram.DB.WriterTest do
         |> DB.create!()
 
       expected_msg =
-        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}")
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module1 "#{entity.id}" - no allow line that holds covers :public)
 
       assert_error AccessDeniedError, expected_msg, fn ->
         as_user(user, fn -> update(Module1, entity.id, public: true) end)
@@ -755,6 +971,24 @@ defmodule Hologram.DB.WriterTest do
 
       assert as_user(user, fn -> update(Module1, entity.id, public: true) end) == :ok
       assert DB.read(Module1, entity.id).public == true
+    end
+
+    test "judges the fields it changes, a reference field by its relationship's name" do
+      member = create_user("type-indexed-member@example.com")
+
+      channel =
+        [name: "general"]
+        |> Channel.new()
+        |> DB.create!()
+
+      assert as_user(member, fn -> update(Channel, channel.id, topic: "news") end) == :ok
+
+      expected_msg =
+        ~s(not allowed to update Hologram.Test.Fixtures.Policy.Module38 "#{channel.id}" - no allow line that holds covers :name, :parent)
+
+      assert_error AccessDeniedError, expected_msg, fn ->
+        as_user(member, fn -> update(Channel, channel.id, name: "mine", parent_id: nil) end)
+      end
     end
 
     test "raises when the row does not exist" do

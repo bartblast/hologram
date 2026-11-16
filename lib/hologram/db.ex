@@ -491,10 +491,13 @@ defmodule Hologram.DB do
   The misuses named above raise rather than returning, as does a constraint violation the
   mapping does not explain.
 
-  With an acting user set, the update is evaluated against that user's policies for :update,
-  against the row as it stands, read FOR UPDATE - naming the row by type and id carries no
-  claim, so update/1 is the spelling for one on another operation's authority. The grant rows
-  the answer rests on are held until the update commits, so a revocation of one of them lands
+  With an acting user set, the update is evaluated against that user's update rules, against the
+  row as it stands, read FOR UPDATE: every field it changes - a reference field counting as its
+  relationship - has to be covered by a rule that holds, a field-limited line naming it (`only:`,
+  `except:`) or a line covering the whole row, and Hologram.AccessDeniedError names the fields none
+  covers. Naming the row by type and id carries no claim, so update/1 is the spelling for one on
+  another operation's authority. The grant rows the answer rests on are held until the update
+  commits, so a revocation of one of them lands
   after the update, and a grant made meanwhile is not seen - the update is refused where a moment
   later it would pass. Every related row a rule reads - a `via:` target, or a row along a path -
   is held the same way, so a change to it lands after the update. Without an acting user the
@@ -523,10 +526,13 @@ defmodule Hologram.DB do
   The attribute changes go first and the edges follow, so a refused value leaves the edges unapplied
   and an edge that raises takes the values with it.
 
-  With an acting user set, the write is evaluated against that user's policies for :update - or
-  for the operation the entity claims through authorize/2 - and raises
-  Hologram.AccessDeniedError when no rule grants it. The row is read FOR UPDATE first and the
-  claim is evaluated against it as it stands, before the recorded changes apply, so a rule
+  With an acting user set, the write is evaluated against that user's update rules, or against
+  the rules of the operation the entity claims through authorize/2, and raises
+  Hologram.AccessDeniedError when no rule grants it. Every field it changes - a value put or moved, a to-one's reference field as its
+  relationship, an edge as its to-many relationship - has to be covered by an update rule that
+  holds: a field-limited line naming it (`only:`, `except:`) or a line covering the whole row. The
+  refusal names the fields none covers. The row is read FOR UPDATE first and the rules are
+  evaluated against it as it stands, before the recorded changes apply, so a rule
   describing the state a change leaves ("an editor may pin a note that is not pinned") reads
   the way it reads in a template. Nothing can change the row between the evaluation and the
   write, and the grant rows the answer rests on are held until the write commits, so a

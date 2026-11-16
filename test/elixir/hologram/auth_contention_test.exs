@@ -850,7 +850,7 @@ defmodule Hologram.AuthContentionTest do
     assert cross_with_revoking_batch(context, update) == {
              %Hologram.AccessDeniedError{
                message:
-                 "not allowed to update Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}"
+                 "not allowed to update Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} - no allow line that holds covers :priority"
              },
              {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
            }
@@ -866,7 +866,7 @@ defmodule Hologram.AuthContentionTest do
     assert cross_with_revoking_batch(context, update) == {
              %Hologram.AccessDeniedError{
                message:
-                 "not allowed to update Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)}"
+                 "not allowed to update Hologram.Test.Fixtures.Policy.Module1 #{inspect(resource.id)} - no allow line that holds covers :priority"
              },
              {:ok, %{"status" => "confirmed", "dropped" => %{}, "kept" => %{}}}
            }

@@ -121,6 +121,39 @@ defmodule Hologram.Auth do
     evaluate(user_or_id, operation, entity, source)
   end
 
+  # The fields among the given ones of an update of the given row that no update rule holding for the
+  # given user covers, sorted - none when the user may change them all. A field is covered by the
+  # field-limited lines naming it and by every line covering the whole row (see
+  # Hologram.Policy.field_rules/2). Each rule is evaluated once however many fields it covers, with
+  # the grants taken from the given source as can?/4 takes them. The fields are not validated: the
+  # Writer passes what a write changed, and can? what it validated.
+  @doc false
+  @spec uncovered_fields(
+          struct | Server.identity_id() | nil,
+          struct,
+          list(atom),
+          list(struct) | :held | :stored
+        ) :: list(atom)
+  def uncovered_fields(user_or_id, %entity_type{} = row, fields, source) do
+    policy = Policy.build(entity_type)
+    checker = &check_requirement(&1, &2, &3, source)
+    actor_user_id = acting_user_id(user_or_id)
+
+    {uncovered, _held_by_rule} =
+      fields
+      |> Enum.uniq()
+      |> Enum.reduce({[], %{}}, fn field, {uncovered, held_by_rule} ->
+        rules = Policy.field_rules(policy, field)
+
+        case covered?(rules, row, actor_user_id, checker, held_by_rule) do
+          {true, held_by_rule} -> {uncovered, held_by_rule}
+          {false, held_by_rule} -> {[field | uncovered], held_by_rule}
+        end
+      end)
+
+    Enum.sort(uncovered)
+  end
+
   # The id of the row a chain of to-one relationships ends at, or nil when any hop along the way
   # is empty. The intermediate rows are read raw, the way a render's delegation reads its target:
   # what is being asked is where the chain LEADS, and a read that applied the intermediate row's
@@ -682,6 +715,27 @@ defmodule Hologram.Auth do
     Enum.any?(entity_type.__roles__(), fn {name, opts} ->
       name == role and Keyword.get(opts, :granted_to) == :creator
     end)
+  end
+
+  # Whether one of the given rules holds, reusing the answers already known for rules other fields
+  # share - a rule covering several fields reads the grants and rows it rests on once.
+  defp covered?([], _row, _actor_user_id, _checker, held_by_rule), do: {false, held_by_rule}
+
+  defp covered?([rule | later_rules], row, actor_user_id, checker, held_by_rule) do
+    {holds?, held_by_rule} =
+      case Map.fetch(held_by_rule, rule) do
+        {:ok, holds?} ->
+          {holds?, held_by_rule}
+
+        :error ->
+          holds? = Evaluator.rule_matches?(rule, row, actor_user_id, checker)
+
+          {holds?, Map.put(held_by_rule, rule, holds?)}
+      end
+
+    if holds?,
+      do: {true, held_by_rule},
+      else: covered?(later_rules, row, actor_user_id, checker, held_by_rule)
   end
 
   defp delegates?(nil, _actor_user_id, _operation, _source), do: false

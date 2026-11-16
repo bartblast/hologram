@@ -31,6 +31,7 @@ defmodule Hologram.MutationTest do
   alias Hologram.Test.Fixtures.Mutation.Module3, as: MutationModule3
   alias Hologram.Test.Fixtures.Mutation.Module4, as: MutationModule4
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module38, as: Channel
 
   # A row whose author is the given user, whose writes `when: author_id == user_id()` grants that
   # user - write rules that need no role grant, on a multi-column type.
@@ -700,6 +701,172 @@ defmodule Hologram.MutationTest do
 
         assert reason =~ "not allowed to update Hologram.Test.Fixtures.Mutation.Module4"
       end
+    end
+
+    # Policy.Module38 lets anyone set a channel's topic while it isn't archived, and only its owner
+    # rename it.
+    test "lands a browser update of a field a holding line covers" do
+      member = create_user("batch-field-member-1@example.com")
+
+      channel =
+        [name: "general"]
+        |> Channel.new()
+        |> DB.create!()
+
+      write =
+        update_write(Channel, channel.id, %{"topic" => "news"}, stamp: stamp_above(channel))
+
+      assert {:ok, %{"status" => "confirmed"}} = run(envelope([write]), server(member.id))
+      assert EntityOperations.get(Channel, channel.id).topic == "news"
+    end
+
+    test "refuses a browser update of a field no holding line covers" do
+      member = create_user("batch-field-member-2@example.com")
+
+      channel =
+        [name: "general"]
+        |> Channel.new()
+        |> DB.create!()
+
+      write =
+        update_write(Channel, channel.id, %{"name" => "mine"}, stamp: stamp_above(channel))
+
+      assert {:ok, %{"status" => "rejected", "write" => 0, "reason" => reason}} =
+               run(envelope([write]), server(member.id))
+
+      assert reason =~ "no allow line that holds covers :name"
+      assert EntityOperations.get(Channel, channel.id).name == "general"
+    end
+
+    # Judged by everything it names, before the merge: whether a write is refused doesn't turn on
+    # which of its values lose to another writer's.
+    test "refuses a browser update naming an uncovered field whose value loses the merge" do
+      member = create_user("batch-field-member-3@example.com")
+
+      channel =
+        [name: "general"]
+        |> Channel.new()
+        |> DB.create!()
+
+      newer = channel.__meta__.revisions.name + 1_000_000
+
+      set_revisions(Channel, channel.id, %{"name" => newer})
+
+      write =
+        update_write(Channel, channel.id, %{"name" => "mine", "topic" => "news"},
+          based_on: %{"name" => channel.__meta__.revisions.name},
+          stamp: newer - 1
+        )
+
+      assert {:ok, %{"status" => "rejected", "write" => 0, "reason" => reason}} =
+               run(envelope([write]), server(member.id))
+
+      assert reason =~ "no allow line that holds covers :name"
+      assert EntityOperations.get(Channel, channel.id).topic == nil
+    end
+
+    # A write whose every value loses answers with the columns it lost to, which is an answer for
+    # whoever may change them.
+    test "refuses a browser update whose every value loses, from a user no line lets change it" do
+      member = create_user("batch-field-member-4@example.com")
+
+      channel =
+        [name: "secret plans"]
+        |> Channel.new()
+        |> DB.create!()
+
+      newer = channel.__meta__.revisions.name + 1_000_000
+
+      set_revisions(Channel, channel.id, %{"name" => newer})
+
+      write =
+        update_write(Channel, channel.id, %{"name" => "x"},
+          based_on: %{"name" => channel.__meta__.revisions.name},
+          stamp: newer - 1
+        )
+
+      assert {:ok, %{"status" => "rejected", "write" => 0, "reason" => reason} = answer} =
+               run(envelope([write]), server(member.id))
+
+      assert reason =~ "no allow line that holds covers :name"
+      refute Map.has_key?(answer, "kept")
+    end
+
+    test "refuses a stale browser delete from an anonymous session, answering no row" do
+      channel =
+        [name: "secret plans"]
+        |> Channel.new()
+        |> DB.create!()
+
+      newer = channel.__meta__.revisions.name + 1_000_000
+
+      set_revisions(Channel, channel.id, %{"name" => newer})
+
+      write =
+        delete_write(Channel, channel.id,
+          based_on: %{"name" => channel.__meta__.revisions.name},
+          stamp: newer - 1
+        )
+
+      assert {:ok, %{"status" => "rejected", "write" => 0} = answer} =
+               run(envelope([write]), server())
+
+      refute Map.has_key?(answer, "kept")
+    end
+
+    test "judges a counter a browser moves by the lines covering it" do
+      member = create_user("batch-field-member-6@example.com")
+
+      open =
+        [name: "open"]
+        |> Channel.new()
+        |> DB.create!()
+
+      general =
+        [name: "general"]
+        |> Channel.new()
+        |> DB.create!()
+
+      moved = update_write(Channel, open.id, nil, deltas: %{"sent_count" => 1}, stamp: stamp())
+
+      refused =
+        update_write(Channel, general.id, nil, deltas: %{"sent_count" => 1}, stamp: stamp())
+
+      assert {:ok, %{"status" => "confirmed"}} = run(envelope([moved]), server(member.id))
+      assert EntityOperations.get(Channel, open.id).sent_count == 1
+
+      assert {:ok, %{"status" => "rejected", "reason" => reason}} =
+               run(envelope([refused]), server(member.id))
+
+      assert reason =~ "no allow line that holds covers :sent_count"
+    end
+
+    # A dropped delete answers with the whole row it lost to, which is an answer for whoever may
+    # delete it - Policy.Module38 lets nobody.
+    test "refuses a stale browser delete from a user who may not delete, answering no row" do
+      member = create_user("batch-field-member-5@example.com")
+
+      channel =
+        [name: "secret plans"]
+        |> Channel.new()
+        |> DB.create!()
+
+      newer = channel.__meta__.revisions.name + 1_000_000
+
+      set_revisions(Channel, channel.id, %{"name" => newer})
+
+      write =
+        delete_write(Channel, channel.id,
+          based_on: %{"name" => channel.__meta__.revisions.name},
+          stamp: newer - 1
+        )
+
+      assert {:ok, %{"status" => "rejected", "write" => 0, "reason" => reason} = answer} =
+               run(envelope([write]), server(member.id))
+
+      assert reason =~ "not allowed to delete Hologram.Test.Fixtures.Policy.Module38"
+      refute Map.has_key?(answer, "kept")
+      assert EntityOperations.get(Channel, channel.id) != nil
     end
 
     # Module2's roles extend nothing, so under a bare grant_role line each role may grant only
