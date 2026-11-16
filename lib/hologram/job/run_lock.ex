@@ -64,9 +64,6 @@ defmodule Hologram.Job.RunLock do
   # logs that it is not supported on each connect. They bound only a direct connection: behind a
   # pooler or a proxy the server's peer is the pooler, whose own keepalives toward the node bound
   # how long the session and its locks live.
-  #
-  # A pid or a local name rather than any GenServer.server(): a call left unanswered kills the
-  # connection, which needs it to be a process here.
   @session_settings """
   SET idle_session_timeout = 0;
   SET tcp_keepalives_idle = 30;
@@ -241,12 +238,31 @@ defmodule Hologram.Job.RunLock do
   @impl SimpleConnection
   def notify(_channel, _payload, _state), do: :ok
 
+  # A kill can't be trapped, so the DOWN of a local process comes at once.
+  defp kill_and_await(pid) do
+    ref = Process.monitor(pid)
+    Process.exit(pid, :kill)
+
+    receive do
+      {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+    end
+  end
+
   # Raises at once when the connection has no session yet (see await_connected/1). Otherwise waits
   # for the server's answer up to @call_timeout_ms, and on the timeout kills the connection before
   # exiting the caller. A connection that breaks meanwhile stops, which exits the caller too.
   #
-  # The name is resolved once, before the call, so the connection killed is the one that left it
-  # unanswered rather than a replacement registered since.
+  # A pid or a local name rather than any GenServer.server(): a call left unanswered kills the
+  # connection, which needs it to be a process here. The name is resolved once, before the call,
+  # so the connection killed is the one that left it unanswered rather than a replacement
+  # registered since.
+  #
+  # The caller exits only once the connection is gone. A kill takes effect when the connection is
+  # next scheduled, so a caller exiting at once can reach a rest_for_one supervisor first: the
+  # caller is restarted on its own, then again with the connection - two restarts for one timeout.
+  # A dying process sends its link exits before its monitor DOWNs, so the supervisor already has
+  # the connection's exit when the caller gets the DOWN. That is how the runtime works rather than
+  # a documented guarantee, and getting it wrong costs one restart more, still within the limit.
   defp query!(connection, statement) do
     server = GenServer.whereis(connection) || connection
 
@@ -254,7 +270,7 @@ defmodule Hologram.Job.RunLock do
       SimpleConnection.call(server, {:query, statement}, @call_timeout_ms)
     catch
       :exit, {:timeout, _call} = reason ->
-        if is_pid(server), do: Process.exit(server, :kill)
+        if is_pid(server), do: kill_and_await(server)
 
         exit(reason)
     else

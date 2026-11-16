@@ -15,8 +15,8 @@ defmodule Hologram.Job.Supervisor do
   # transaction on the pool - three at most, within the limit of 3 in 5 seconds, and the worker
   # that replaces them waits rather than crashing again. A lock call the server leaves unanswered
   # for 5 seconds kills the lock connection, which counts once: the worker goes with it. A worker
-  # whose lock connection is up but
-  # whose pool is not yet crashes on each pass, once per poll and checkout, about 9 seconds.
+  # whose lock connection is up but whose pool is not yet crashes on each pass, once per poll and
+  # checkout, about 9 seconds.
 
   use Supervisor
 
