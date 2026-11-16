@@ -1671,6 +1671,19 @@ defmodule Hologram.Compiler.QueryExtractorTest do
       assert Enum.map(queries.admitting_count, & &1.entity) == [Entity2, Entity4]
     end
 
+    # Module4's a is a date, so the builder refuses true for it and the type drops out.
+    test "registers only the entity types whose attribute fits a value compared with it", %{
+      entity_types: entity_types,
+      ir_plt: ir_plt
+    } do
+      queries =
+        Module106
+        |> extract_derived_queries(entity_types, ir_plt)
+        |> Map.new()
+
+      assert Enum.map(queries.fitting_count, & &1.entity) == [Entity2]
+    end
+
     test "registers one entity type when only one admits a count whose entity type is an argument",
          %{entity_types: entity_types, ir_plt: ir_plt} do
       queries =
