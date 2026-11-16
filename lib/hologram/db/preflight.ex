@@ -4,6 +4,45 @@ defmodule Hologram.DB.Preflight do
   alias Hologram.DB.Codec
   alias Hologram.DB.Connection
   alias Hologram.DB.DDL
+  alias Hologram.DB.Introspection
+
+  @doc """
+  Validates that the given alter_column op's type change makes no rows repeat a key of a
+  unique index standing over its column at this moment.
+
+  Returns :ok, or raises naming the column, the key and how many keys would repeat. Two values
+  can convert to one, as the texts '1' and '01' do to int8, and under a unique index the
+  change itself would then fail. Asked right before the change applies rather than with the
+  checks of run!/3: a migration file can rename or drop, on the way, what those checks would
+  look the indexes up by. An index the run builds later is not standing yet, and is asked
+  about when it is built. The query converts the rows as the change does, so a row the change
+  cannot take fails it as it would fail the change - run!/3 counts those rows first.
+
+  An index introspection marks as not plain is hand-made, and is skipped: its key may be an
+  expression or cover part of the table, which this count cannot follow. The drift and alien
+  checks report it.
+  """
+  @spec check_cast!(%{atom => any}) :: :ok
+  def check_cast!(%{before: %{type: type}, after: %{type: type}}), do: :ok
+
+  def check_cast!(op) do
+    Introspection.schema().tables[op.table].indexes
+    |> Enum.sort_by(fn {name, _index} -> name end)
+    |> Enum.map(fn {_name, index} -> index end)
+    |> Enum.filter(&checked_cast_index?(&1, op.column))
+    |> Enum.each(fn index ->
+      statement =
+        DDL.cast_duplicate_check_statement(
+          op.table,
+          index.columns,
+          op.column,
+          op.after.type,
+          index.nulls_distinct
+        )
+
+      raise_cast_duplicate_keys!(op, index.columns, count_result(statement))
+    end)
+  end
 
   @doc """
   Validates that filling the NULLs of the given table's column with the given encoded value
@@ -18,7 +57,8 @@ defmodule Hologram.DB.Preflight do
   @spec check_fill!(%{module => %{atom => any}}, String.t(), String.t(), any) :: :ok
   def check_fill!(mapping, table, column_name, encoded_value) do
     mapping
-    |> unique_indexes_over(table, column_name)
+    |> unique_indexes(table)
+    |> Enum.filter(&(column_name in &1.columns))
     |> Enum.each(fn index ->
       statement =
         DDL.filled_duplicate_check_statement(
@@ -84,6 +124,9 @@ defmodule Hologram.DB.Preflight do
   NULLs of a column that stands (see check_fill!/4), and right before it builds an index (see
   check_unique_index!/1).
 
+  A type change asks once more right before it applies, about the unique indexes standing
+  over its column then (see check_cast!/1).
+
   An enum rebuild's removed values exclude the ones an unscoped remap carries: those rows
   follow the value to its new label rather than losing it.
   """
@@ -148,6 +191,10 @@ defmodule Hologram.DB.Preflight do
   end
 
   defp check_op!(_op, _actual, _mapping), do: :ok
+
+  defp checked_cast_index?(index, column) do
+    index.unique and not Map.has_key?(index, :non_plain) and column in index.columns
+  end
 
   defp check_cast_rows!(op, actual) do
     statement = DDL.cast_check_statement(op.table, op.column, op.before.type, op.after.type)
@@ -252,6 +299,17 @@ defmodule Hologram.DB.Preflight do
     |> Enum.find(&(&1.table == table))
   end
 
+  defp raise_cast_duplicate_keys!(_op, _columns, 0), do: :ok
+
+  defp raise_cast_duplicate_keys!(op, columns, count) do
+    key = Enum.map_join(columns, ", ", &~s("#{&1}"))
+
+    raise ~s(cannot change column "#{op.column}" on table "#{op.table}" ) <>
+            "from #{op.before.type} to #{op.after.type} - " <>
+            "#{count} #{pluralize_keys(count)} over (#{key}) would repeat once converted - " <>
+            "fix the data, or drop the unique declaration before changing the type"
+  end
+
   defp raise_duplicate_keys!(_op, 0), do: :ok
 
   defp raise_duplicate_keys!(op, count) do
@@ -287,16 +345,16 @@ defmodule Hologram.DB.Preflight do
 
   # The column indexes a mapping derives are never unique, so the entity's own index entries
   # hold every unique index of its table.
-  defp unique_indexes_over(mapping, table, column_name) do
-    case entity_mapping(mapping, table) do
-      nil ->
-        []
+  defp unique_indexes(mapping, table) do
+    indexes =
+      case entity_mapping(mapping, table) do
+        nil -> %{}
+        %{indexes: indexes} -> indexes
+      end
 
-      %{indexes: indexes} ->
-        indexes
-        |> Enum.sort_by(fn {name, _index} -> name end)
-        |> Enum.map(fn {_name, index} -> index end)
-        |> Enum.filter(&(&1.unique and column_name in &1.columns))
-    end
+    indexes
+    |> Enum.sort_by(fn {name, _index} -> name end)
+    |> Enum.map(fn {_name, index} -> index end)
+    |> Enum.filter(& &1.unique)
   end
 end

@@ -173,6 +173,64 @@ defmodule Hologram.Migration.RefusalTest do
       assert_refused(scratch, create, first_model, refused, expected_msg)
     end
 
+    # Asked right before the type change applies, against the indexes standing then: the
+    # rename later in the file leaves the checks made before any DDL nothing to find the
+    # index by.
+    test "refuses a type change that makes rows repeat a unique value", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      unique =
+        migration("20260813142237", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [unique: true],
+            line: 3
+          }
+        ])
+
+      refused =
+        migration("20260814101500", [
+          %{
+            op: :change_attribute,
+            entity: MyApp.Task,
+            name: :amount,
+            changes: [type: :integer],
+            line: 3
+          },
+          %{op: :rename_attribute, entity: MyApp.Task, from: :amount, to: :total, line: 4}
+        ])
+
+      unique_model = Model.fold(first_model, unique.ops)
+      full_model = Model.fold(unique_model, refused.ops)
+
+      expected_msg =
+        ~s(cannot change column "amount" on table "my_app_task" from text to int8 - ) <>
+          ~s{1 key over ("amount") would repeat once converted - } <>
+          "fix the data, or drop the unique declaration before changing the type"
+
+      route(scratch, fn ->
+        {:ok, _result} =
+          Connection.query(
+            ~s(UPDATE "hologram_data"."my_app_task" SET "amount" = '010' WHERE "title" = 'two')
+          )
+
+        :ok = run([create, unique], unique_model, @context)
+
+        rows_before = task_rows()
+
+        assert_error RuntimeError, expected_msg, fn ->
+          run([create, unique, refused], full_model, @context)
+        end
+
+        assert applied_versions_list() == ["20260813091522", "20260813142237"]
+        assert task_rows() == rows_before
+      end)
+    end
+
     test "refuses removing an enum value the existing rows still hold", %{
       create: create,
       first_model: first_model,

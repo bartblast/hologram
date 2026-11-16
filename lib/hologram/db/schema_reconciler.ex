@@ -297,6 +297,10 @@ defmodule Hologram.DB.SchemaReconciler do
   # type change never fills (the default holds a new-type value, the column still has
   # the old type), so pre-flight lets only NULL-free combined changes through.
   defp apply_op(%{op: :alter_column} = op, mapping) do
+    # A type change can convert two values to one, so it asks about the unique indexes
+    # standing over the column right before it applies.
+    Preflight.check_cast!(op)
+
     fill =
       if op.before.null and not op.after.null and op.before.type == op.after.type do
         Preflight.fill_value(mapping, op.table, op.column)

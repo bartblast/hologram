@@ -286,6 +286,50 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       "fix the data, keep the attribute optional: true, or drop the unique declaration"
   end
 
+  # Module2's mapping with two optional string columns "y" and "z", and a key over them.
+  defp two_string_key_context do
+    new_columns =
+      Enum.map([{"y", :y}, {"z", :z}], fn {name, attribute} ->
+        %{
+          name: name,
+          type: :string,
+          sql_type: "text",
+          collation: "C",
+          enum_values: nil,
+          default: nil,
+          null: true,
+          references: nil,
+          fk_constraint: nil,
+          index: nil,
+          source: {:attribute, attribute}
+        }
+      end)
+
+    [Module2]
+    |> reconcile_context()
+    |> update_in([:mapping, Module2, :columns], &(new_columns ++ &1))
+    |> update_mapping_indexes(Module2, fn indexes ->
+      Map.put(indexes, "test_fixtures_entity_module2_y_z_$uidx", %{
+        columns: ["y", "z"],
+        nulls_distinct: true,
+        unique: true
+      })
+    end)
+  end
+
+  # Module2's mapping with a unique index over "c".
+  defp unique_c_context do
+    [Module2]
+    |> reconcile_context()
+    |> update_mapping_indexes(Module2, fn indexes ->
+      Map.put(indexes, "test_fixtures_entity_module2_c_$uidx", %{
+        columns: ["c"],
+        nulls_distinct: true,
+        unique: true
+      })
+    end)
+  end
+
   defp unique_column_context(null) do
     new_column = %{
       name: "z",
@@ -1253,6 +1297,158 @@ defmodule Hologram.DB.SchemaReconcilerTest do
       assert_error RuntimeError, expected_msg, fn ->
         reconcile(context)
       end
+    end
+
+    test "raises when a type change makes rows repeat a unique value" do
+      reconcile(unique_c_context())
+      insert_module2_rows(["1", "01"])
+
+      context =
+        update_mapping_column(
+          unique_c_context(),
+          Module2,
+          "c",
+          &%{&1 | sql_type: "int8", collation: nil}
+        )
+
+      expected_msg =
+        ~s(cannot change column "c" on table "test_fixtures_entity_module2" ) <>
+          ~s{from text to int8 - 1 key over ("c") would repeat once converted - } <>
+          "fix the data, or drop the unique declaration before changing the type"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+
+      assert Introspection.schema() == Schema.from_mapping(unique_c_context().mapping)
+    end
+
+    test "raises when a type change makes rows repeat a key" do
+      reconcile(key_over_b_c_context([Module2]))
+      insert_module2_rows(["1", "1.0", "2"])
+
+      {:ok, _result} =
+        Connection.query(~s(UPDATE "hologram_data"."test_fixtures_entity_module2" SET "b" = 5))
+
+      context =
+        [Module2]
+        |> key_over_b_c_context()
+        |> update_mapping_column(Module2, "c", &%{&1 | sql_type: "float8", collation: nil})
+
+      expected_msg =
+        ~s(cannot change column "c" on table "test_fixtures_entity_module2" ) <>
+          ~s{from text to float8 - 1 key over ("b", "c") would repeat once converted - } <>
+          "fix the data, or drop the unique declaration before changing the type"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    # The index does not stand when the type changes, so the refusal is the index build's.
+    test "leaves rows a type change makes repeat a key the run builds to the index build" do
+      reconcile(reconcile_context([Module2]))
+      insert_module2_rows(["1", "01"])
+
+      context =
+        update_mapping_column(
+          unique_c_context(),
+          Module2,
+          "c",
+          &%{&1 | sql_type: "int8", collation: nil}
+        )
+
+      expected_msg =
+        ~s{found 1 duplicate key in "test_fixtures_entity_module2" over ("c") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    # int8 to float8 has no row check of its own: every value converts, and two past 2^53
+    # convert to one.
+    test "raises when an integer to float change makes rows repeat a key" do
+      reconcile(key_over_b_c_context([Module2]))
+      insert_module2_rows(["abc", "abc"])
+
+      Enum.each([{1, 9_007_199_254_740_992}, {2, 9_007_199_254_740_993}], fn {index, value} ->
+        {:ok, _result} =
+          Connection.query("""
+          UPDATE "hologram_data"."test_fixtures_entity_module2" SET "b" = #{value}
+          WHERE "id" = '00000000-0000-0000-0000-00000000000#{index}'
+          """)
+      end)
+
+      context =
+        [Module2]
+        |> key_over_b_c_context()
+        |> update_mapping_column(Module2, "b", &%{&1 | sql_type: "float8"})
+
+      expected_msg =
+        ~s(cannot change column "b" on table "test_fixtures_entity_module2" ) <>
+          ~s{from int8 to float8 - 1 key over ("b", "c") would repeat once converted - } <>
+          "fix the data, or drop the unique declaration before changing the type"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(context)
+      end
+    end
+
+    # Neither change alone makes the rows repeat the key: ("1", "01") and ("01", "1") do
+    # once both columns are integers. Each change asks against the rows as the one before
+    # left them.
+    test "raises when two type changes together make rows repeat a key" do
+      context = two_string_key_context()
+
+      reconcile(context)
+
+      Enum.each([{1, "1", "01"}, {2, "01", "1"}], fn {index, y_value, z_value} ->
+        {:ok, _result} =
+          Connection.query("""
+          INSERT INTO "hologram_data"."test_fixtures_entity_module2"
+            ("id", "a", "b", "c", "y", "z", "created_at", "updated_at", "$revisions")
+          VALUES ('00000000-0000-0000-0000-00000000000#{index}', TRUE, NULL, 'abc',
+                  '#{y_value}', '#{z_value}',
+                  '2026-01-01 00:00:00+00', '2026-01-01 00:00:00+00', '{}')
+          """)
+      end)
+
+      changed_context =
+        context
+        |> update_mapping_column(Module2, "y", &%{&1 | sql_type: "int8", collation: nil})
+        |> update_mapping_column(Module2, "z", &%{&1 | sql_type: "int8", collation: nil})
+
+      expected_msg =
+        ~s(cannot change column "z" on table "test_fixtures_entity_module2" ) <>
+          ~s{from text to int8 - 1 key over ("y", "z") would repeat once converted - } <>
+          "fix the data, or drop the unique declaration before changing the type"
+
+      assert_error RuntimeError, expected_msg, fn ->
+        reconcile(changed_context)
+      end
+    end
+
+    test "changes the type of a key's column when no rows repeat the key once converted" do
+      reconcile(key_over_b_c_context([Module2]))
+      insert_module2_rows(["1", "01"])
+
+      {:ok, _result} =
+        Connection.query("""
+        UPDATE "hologram_data"."test_fixtures_entity_module2" SET "b" = 5
+        WHERE "id" = '00000000-0000-0000-0000-000000000001'
+        """)
+
+      context =
+        [Module2]
+        |> key_over_b_c_context()
+        |> update_mapping_column(Module2, "c", &%{&1 | sql_type: "int8", collation: nil})
+
+      reconcile(context)
+
+      assert Introspection.schema() == Schema.from_mapping(context.mapping)
     end
 
     test "raises when making a column required while rows hold NULL" do

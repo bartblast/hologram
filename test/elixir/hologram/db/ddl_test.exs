@@ -177,6 +177,27 @@ defmodule Hologram.DB.DDLTest do
     end
   end
 
+  describe "cast_duplicate_check_statement/5" do
+    test "counts the key groups that repeat once the column is converted" do
+      statement =
+        cast_duplicate_check_statement("task", ["project_id", "slug"], "slug", "int8", true)
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{WHERE "project_id" IS NOT NULL AND "slug" IS NOT NULL } <>
+                 ~s{GROUP BY "project_id", "slug"::int8 HAVING COUNT(*) > 1) AS duplicates}
+    end
+
+    test "compares nulls as values when nulls are not distinct" do
+      statement =
+        cast_duplicate_check_statement("task", ["estimate", "slug"], "estimate", "float8", false)
+
+      assert statement ==
+               ~s{SELECT COUNT(*) FROM (SELECT 1 FROM "hologram_data"."task" } <>
+                 ~s{GROUP BY "estimate"::float8, "slug" HAVING COUNT(*) > 1) AS duplicates}
+    end
+  end
+
   describe "duplicate_check_statement/3" do
     test "counts the duplicate key groups, nulls compared as values" do
       statement = duplicate_check_statement("task", ["project_id", "slug"], false)
