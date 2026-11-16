@@ -56,7 +56,8 @@ defmodule Hologram.DB.ListenerTest do
     )
   end
 
-  # Started behind a proxy that refuses connections until the test opens it.
+  # Started behind a proxy that refuses connections until the test opens it. Each try logs, so a
+  # test that leaves it refusing stops it inside its log capture.
   defp start_refused_listener(opts \\ []) do
     proxy = start_proxy()
 
@@ -200,6 +201,8 @@ defmodule Hologram.DB.ListenerTest do
         {_proxy, listener} = start_refused_listener()
 
         assert {:eventually, _ref} = Listener.listen(listener, channel())
+
+        :gen_statem.stop(listener)
       end)
     end
   end
@@ -211,6 +214,8 @@ defmodule Hologram.DB.ListenerTest do
         ref = Process.monitor(listener)
 
         refute_receive {:DOWN, ^ref, :process, ^listener, _reason}, 10 * @backoff_ms
+
+        :gen_statem.stop(listener)
       end)
     end
 
@@ -225,6 +230,8 @@ defmodule Hologram.DB.ListenerTest do
         assert {:eventually, _listen_ref} = Task.await(task)
 
         refute_receive {:DOWN, ^ref, :process, ^listener, _reason}, 10 * @backoff_ms
+
+        :gen_statem.stop(listener)
       end)
     end
 

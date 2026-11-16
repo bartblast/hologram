@@ -69,7 +69,8 @@ defmodule Hologram.DBTest do
   end
 
   # A pool behind a proxy that refuses connections until the test opens it, giving up on a checkout
-  # and reconnecting within milliseconds rather than seconds.
+  # and reconnecting within milliseconds rather than seconds. Each try to connect logs, so a test
+  # starts it inside its log capture and stops it there with stop_unreachable_pool/0.
   defp start_unreachable_pool(proxy \\ start_supervised!(TCPProxy)) do
     port = TCPProxy.port(proxy)
 
@@ -83,24 +84,45 @@ defmodule Hologram.DBTest do
         queue_target: 10
       )
 
-    start_supervised!({Postgrex, opts})
+    start_supervised!(Supervisor.child_spec({Postgrex, opts}, id: :unreachable_pool))
+  end
+
+  defp stop_unreachable_pool, do: stop_supervised!(:unreachable_pool)
+
+  # Stops a process waiting for the database, and returns once the probe connection it may have
+  # been opening is gone too. The probe traps exits and finishes its connect before it goes, so it
+  # would otherwise log after the test's capture ended. Suspended first, so it opens no other.
+  defp stop_waiter(waiter) do
+    :erlang.suspend_process(waiter)
+    {:links, links} = Process.info(waiter, :links)
+
+    refs = for pid <- [waiter | Enum.filter(links, &is_pid/1)], do: {pid, Process.monitor(pid)}
+
+    Process.exit(waiter, :kill)
+
+    for {pid, ref} <- refs do
+      receive do
+        {:DOWN, ^ref, :process, ^pid, _reason} -> :ok
+      end
+    end
   end
 
   # The boot steps wait before they touch the database: each is left waiting on a pool that
   # cannot reach it, and stopped there.
   defp assert_waits_for_database(boot_step) do
-    pool = start_unreachable_pool()
-
     run_boot_step = fn -> apply(Hologram.DB, boot_step, []) end
 
     log =
       capture_log(fn ->
+        pool = start_unreachable_pool()
+
         {pid, monitor_ref} =
           spawn_monitor(fn -> Connection.with_connection(pool, run_boot_step) end)
 
         refute_receive {:DOWN, ^monitor_ref, :process, ^pid, _reason}, 1_000
 
-        Process.exit(pid, :kill)
+        stop_waiter(pid)
+        stop_unreachable_pool()
       end)
 
     # The configured database answers, so the wait is on the pool alone.
@@ -300,10 +322,11 @@ defmodule Hologram.DBTest do
     test "waits while the database cannot be reached, and returns once it answers" do
       proxy = start_supervised!(TCPProxy)
       port = TCPProxy.port(proxy)
-      pool = start_unreachable_pool(proxy)
 
       log =
         capture_log(fn ->
+          pool = start_unreachable_pool(proxy)
+
           task =
             Task.async(fn ->
               Connection.with_connection(pool, fn ->
@@ -319,6 +342,8 @@ defmodule Hologram.DBTest do
           TCPProxy.open(proxy)
 
           assert Task.await(task) == :ok
+
+          stop_unreachable_pool()
         end)
 
       assert log =~ "the database cannot be reached yet, trying again in 20 ms"
@@ -326,11 +351,12 @@ defmodule Hologram.DBTest do
     end
 
     test "waits while the database is starting up" do
-      pool = start_unreachable_pool()
       connection_opts = Config.connection_opts(port: start_starting_up_server())
 
       log =
         capture_log(fn ->
+          pool = start_unreachable_pool()
+
           {pid, monitor_ref} =
             spawn_monitor(fn ->
               Connection.with_connection(pool, fn ->
@@ -340,7 +366,8 @@ defmodule Hologram.DBTest do
 
           refute_receive {:DOWN, ^monitor_ref, :process, ^pid, _reason}, 1_000
 
-          Process.exit(pid, :kill)
+          stop_waiter(pid)
+          stop_unreachable_pool()
         end)
 
       assert log =~ "the database cannot be reached yet"
@@ -350,15 +377,18 @@ defmodule Hologram.DBTest do
     # A server that is down and settings that are wrong look the same through the pool, and only
     # the first is worth waiting for.
     test "raises when the database cannot be connected to for a reason other than being away" do
-      pool = start_unreachable_pool()
       connection_opts = Config.connection_opts(database: "hologram_no_such_database")
 
       capture_log(fn ->
+        pool = start_unreachable_pool()
+
         assert_raise Postgrex.Error, ~r/hologram_no_such_database/, fn ->
           Connection.with_connection(pool, fn ->
             await_database(connection_opts: connection_opts, retry_interval_ms: 10)
           end)
         end
+
+        stop_unreachable_pool()
       end)
     end
 

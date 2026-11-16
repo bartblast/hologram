@@ -19,7 +19,8 @@ defmodule Hologram.Job.RunLockTest do
   end
 
   # Started behind a proxy that refuses connections until the test opens it, trying again often
-  # enough for a test to sit through several tries.
+  # enough for a test to sit through several tries. Each try logs, so a test that leaves it
+  # refusing stops it inside its log capture.
   defp start_refused_session(opts \\ []) do
     proxy = start_proxy()
     opts = Keyword.merge([port: TCPProxy.port(proxy), reconnect_backoff: 50], opts)
@@ -278,6 +279,8 @@ defmodule Hologram.Job.RunLockTest do
         monitor_ref = Process.monitor(session)
 
         refute_receive {:DOWN, ^monitor_ref, :process, ^session, _reason}, 500
+
+        :gen_statem.stop(session)
       end)
     end
 
