@@ -49,6 +49,30 @@ defmodule Hologram.Auth do
   end
 
   @doc """
+  Returns the window a client reading the session user from the context downloads: every row of
+  the given user entity type, narrowed per client by the policy the read path applies - so the
+  session user's own row reaches the client whenever its read rules admit it, and changes to it
+  keep reaching it.
+
+  Every row rather than the session user's alone: a window runs once per node for every session
+  holding it, so nothing in it can name one session's user. The read rules decide how much more
+  arrives - one row for a type only its own user may read, every row for one anybody may read.
+
+  Derived with whether the build checks permissions on the client, as every registered query's
+  window is, so the build (which decides which pages subscribe to it) and the query cache (which
+  resolves the id back to a term) name one window and not two.
+  """
+  # TODO: when #1603 removes windows, the session user's row has to keep syncing - the user type
+  # must stay among the types browser code reads (#1600) whenever a page reads {Hologram, :user},
+  # or every from_context {Hologram, :user} prop goes stale again (#1450).
+  @spec user_window(module, boolean) :: Query.t()
+  def user_window(user_entity, permission_checking?) do
+    user_entity
+    |> Stage.normalize()
+    |> Window.derive(permission_checking?)
+  end
+
+  @doc """
   Returns the grant rows answering the permission checks a render ran - the rows the given
   {user id, scope} pairs ask about, read as the session user.
 
