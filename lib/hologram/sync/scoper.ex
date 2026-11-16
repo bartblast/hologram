@@ -66,7 +66,7 @@ defmodule Hologram.Sync.Scoper do
     read_types = Registry.entity_types(term)
 
     Enum.reduce(read_types, read_types, fn entity_type, types ->
-      [:read, :verdicts]
+      [:read, {:verdicts}]
       |> Enum.flat_map(&Map.get(edges, {entity_type, &1}, []))
       |> Enum.reduce(types, &add_edge_types/2)
     end)

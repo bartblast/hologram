@@ -145,9 +145,9 @@ defmodule Hologram.PolicyTest do
       end
 
       assert AllowEntityFixture.__policies__() == [
-               {:read, nil, nil, []},
-               {:update, :editor, nil, []},
-               {:publish, nil, nil, []}
+               {:read, nil, nil, [], nil, nil},
+               {:update, :editor, nil, [], nil, nil},
+               {:publish, nil, nil, [], nil, nil}
              ]
     end
 
@@ -210,8 +210,8 @@ defmodule Hologram.PolicyTest do
       end
 
       assert DuplicateLineEntityFixture.__policies__() == [
-               {:read, nil, nil, []},
-               {:read, nil, nil, []}
+               {:read, nil, nil, [], nil, nil},
+               {:read, nil, nil, [], nil, nil}
              ]
     end
 
@@ -280,9 +280,9 @@ defmodule Hologram.PolicyTest do
       assert NestedEntityFixture.__roles__() == [{:viewer, []}]
 
       assert NestedEntityFixture.__policies__() == [
-               {:read, :viewer, nil, []},
-               {:update, :viewer, nil, []},
-               {:delete, :viewer, nil, []}
+               {:read, :viewer, nil, [], nil, nil},
+               {:update, :viewer, nil, [], nil, nil},
+               {:delete, :viewer, nil, [], nil, nil}
              ]
 
       # A line taken through two hops names the module whose body wrote it, not the last hop.
@@ -459,6 +459,120 @@ defmodule Hologram.PolicyTest do
                ],
                update: [%{predicates: [], to: [{:rel, [:parent, :parent], [:viewer]}], via: nil}]
              }
+    end
+  end
+
+  describe "build/1 for named lines" do
+    test "keys a named line under its name as well as its operation" do
+      defmodule NamedUpdateLineFixture do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        role :owner
+
+        allow :read
+        allow :update, as: :archive, to: :owner, when: archived == false
+      end
+
+      archive_rule = %{predicates: [{:archived, :==, false}], to: [{:own, [:owner]}], via: nil}
+
+      assert build(NamedUpdateLineFixture) == %{
+               :archive => [archive_rule],
+               :read => [%{predicates: [], to: nil, via: nil}],
+               :update => [archive_rule]
+             }
+    end
+
+    test "keys every line sharing a name under it, in declaration order" do
+      defmodule SharedNameFixture do
+        use Hologram.Entity
+
+        role :admin
+        role :owner
+
+        allow :update, as: :archive, to: :owner
+        allow :update, to: :admin
+        allow :update, as: :archive, to: :admin, when: id != nil
+      end
+
+      owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      admin_rule = %{predicates: [], to: [{:own, [:admin]}], via: nil}
+      conditional_admin_rule = %{predicates: [{:id, :!=, nil}], to: [{:own, [:admin]}], via: nil}
+
+      assert build(SharedNameFixture) == %{
+               :archive => [owner_rule, conditional_admin_rule],
+               :update => [owner_rule, admin_rule, conditional_admin_rule]
+             }
+    end
+
+    test "keys a named read line under its name, beside the read rules queries apply" do
+      defmodule NamedReadLineFixture do
+        use Hologram.Entity
+
+        attribute :draft, :boolean, default: false
+
+        allow :read, when: draft == false
+        allow :read, as: :see_drafts, when: draft == true
+      end
+
+      draft_rule = %{predicates: [{:draft, :==, true}], to: nil, via: nil}
+
+      assert build(NamedReadLineFixture) == %{
+               :read => [%{predicates: [{:draft, :==, false}], to: nil, via: nil}, draft_rule],
+               :see_drafts => [draft_rule]
+             }
+    end
+
+    test "keys named create and delete lines under their names" do
+      defmodule NamedCreateDeleteFixture do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create, as: :draft
+        allow :delete, as: :purge, when: archived == true
+      end
+
+      purge_rule = %{predicates: [{:archived, :==, true}], to: nil, via: nil}
+
+      assert build(NamedCreateDeleteFixture) == %{
+               :create => [%{predicates: [], to: nil, via: nil}],
+               :delete => [purge_rule],
+               :draft => [%{predicates: [], to: nil, via: nil}],
+               :purge => [purge_rule]
+             }
+    end
+
+    # A bare grant line covers the roles its holders may hand out, and a type declaring none has
+    # none to cover - so the line compiles to no rule, its name to no key, and can? answers no, as
+    # it does for the same line unnamed.
+    test "keys a named grant lifecycle line covering no role under no name" do
+      defmodule UncoveringNamedGrantFixture do
+        use Hologram.Entity
+
+        allow :grant_role, as: :invite, to: Hologram.Test.Fixtures.Role.Module1
+      end
+
+      assert build(UncoveringNamedGrantFixture) == %{}
+      assert :invite in operations(UncoveringNamedGrantFixture)
+    end
+
+    test "keys a named grant lifecycle line's per-role rules under its name, each once" do
+      defmodule NamedGrantLineFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :owner, extends: :editor
+
+        allow :grant_role, as: :invite, to: :owner
+        allow {:grant_role, :editor}, as: :invite, to: :editor
+      end
+
+      owner_rule = %{predicates: [], to: [{:own, [:owner]}], via: nil}
+      editor_rule = %{predicates: [], to: [{:own, [:editor, :owner]}], via: nil}
+
+      assert build(NamedGrantLineFixture)[:invite] == [owner_rule, editor_rule]
     end
   end
 
@@ -1465,6 +1579,27 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "operations/1" do
+    test "returns the names the allow lines carry beside the framework's operations" do
+      defmodule NamedOperationsFixture do
+        use Hologram.Entity
+
+        allow :update, as: :archive
+        allow :delete, as: :purge
+      end
+
+      assert operations(NamedOperationsFixture) == [
+               :archive,
+               :create,
+               :delete,
+               :grant_role,
+               :purge,
+               :read,
+               :read_roles,
+               :revoke_role,
+               :update
+             ]
+    end
+
     test "returns the framework's operations and the ones the allow lines name, sorted" do
       assert operations(Policy.Module1) == [
                :archive,
@@ -1737,6 +1872,16 @@ defmodule Hologram.PolicyTest do
 
     test "passes an operation an allow line on the entity type names" do
       assert validate_operation!(Policy.Module1, :archive) == :ok
+    end
+
+    test "passes a name an allow line on the entity type carries" do
+      defmodule NamedOperationFixture do
+        use Hologram.Entity
+
+        allow :update, as: :archive
+      end
+
+      assert validate_operation!(NamedOperationFixture, :archive) == :ok
     end
 
     test "passes a role tuple naming a role the entity type declares" do

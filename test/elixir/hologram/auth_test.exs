@@ -33,6 +33,8 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module23, as: PolicyCard
   alias Hologram.Test.Fixtures.Policy.Module24, as: PolicyShelf
   alias Hologram.Test.Fixtures.Policy.Module25, as: PolicyProfile
+  alias Hologram.Test.Fixtures.Policy.Module36
+  alias Hologram.Test.Fixtures.Policy.Module37
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
@@ -274,6 +276,86 @@ defmodule Hologram.AuthTest do
 
     test "denies a framework operation the entity type declares no rule for" do
       refute can?("018f4571-a1b2-7c3d-8e4f-000000000001", :create, %Module1{public: true})
+    end
+
+    test "answers a name by the lines carrying it" do
+      owner = create_user("named-owner@example.com")
+      other = create_user("named-other@example.com")
+
+      channel =
+        [owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      assert can?(owner, :archive, channel)
+      refute can?(other, :archive, channel)
+    end
+
+    test "answers a named line's operation by it as well" do
+      owner = create_user("named-operation-owner@example.com")
+      other = create_user("named-operation-other@example.com")
+
+      channel =
+        [owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      assert can?(owner, :update, channel)
+      refute can?(other, :update, channel)
+    end
+
+    test "delegates to a name the related row's lines carry" do
+      owner = create_user("named-delegation-owner@example.com")
+      other = create_user("named-delegation-other@example.com")
+
+      channel =
+        [owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      message =
+        [channel_id: channel.id]
+        |> Module37.new()
+        |> DB.create!()
+
+      assert can?(owner, :moderate, message)
+      refute can?(other, :moderate, message)
+    end
+
+    # Module36 grants every update of an open channel through a line without the name, which the
+    # name doesn't answer by.
+    test "answers a name by its own lines alone" do
+      owner = create_user("named-alone-owner@example.com")
+      other = create_user("named-alone-other@example.com")
+
+      channel =
+        [name: "open", owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      assert can?(other, :update, channel)
+      refute can?(other, :archive, channel)
+    end
+
+    # Module37's :moderate line asks the channel's :archive name and its :edit line, a bare via,
+    # asks the channel's :update - so on an open channel anyone may edit but only its owner moderate.
+    test "delegates to a name alone, and through a bare via to the operation" do
+      owner = create_user("named-bare-owner@example.com")
+      other = create_user("named-bare-other@example.com")
+
+      channel =
+        [name: "open", owner_id: owner.id]
+        |> Module36.new()
+        |> DB.create!()
+
+      message =
+        [channel_id: channel.id]
+        |> Module37.new()
+        |> DB.create!()
+
+      assert can?(other, :edit, message)
+      refute can?(other, :moderate, message)
+      assert can?(owner, :moderate, message)
     end
 
     test "matches a rule referencing the acting user" do

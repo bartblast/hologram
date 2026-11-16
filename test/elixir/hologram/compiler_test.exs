@@ -93,6 +93,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Policy.Module2, as: ParentPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module20, as: TaskPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module24, as: ShelfPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module36, as: NamedChannel
   alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module7, as: AttributeComparisonPolicyEntity
@@ -4044,6 +4045,38 @@ defmodule Hologram.CompilerTest do
                js,
                ~s/"operations":["archive","create","delete","grant_role","publish","read",/ <>
                  ~s/"read_roles","revoke_role","update"],/
+             )
+    end
+
+    # A name is a key of the policy, as an operation is, so the client asks it the same way and
+    # refuses a name nothing carries with the same sentence.
+    test "bakes a named line under its name and names it among the operations", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([NamedChannel])}
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"operations":["archive","create","delete","grant_role","read","read_roles",/ <>
+                 ~s/"revoke_role","update"],/
+             )
+
+      assert String.contains?(
+               js,
+               ~s/"policy":{"archive":[{"predicates":[["owner_id","==",{"actor":true}]]/
              )
     end
 

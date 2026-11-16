@@ -233,6 +233,9 @@ defmodule Hologram.Policy do
   A rule grants its operation when its predicates hold, one of its grant references is held, and the
   related row grants the operation its delegation names - and a policy grants its operation when any
   of its rules does.
+  A named line (`as:`) is keyed under its name as well as its operation, so a name is asked the way
+  an operation is - by can?, and by a delegation naming it. For a grant lifecycle line the name
+  holds the line's per-role rules.
   The grant lifecycle operations grant_role and revoke_role are compiled per role: a line naming a
   role, or a list of them, yields one {operation, role} key per role, and a bare line yields one per
   declared role its holders may cover - a holder's own role and every role it extends, so nobody is
@@ -256,16 +259,17 @@ defmodule Hologram.Policy do
     Model.ensure_released!()
 
     entity_type.__policies__()
-    |> Enum.map(fn {operation, to, via, predicates} ->
+    |> Enum.flat_map(fn {operation, to, via, predicates, name, _fields} ->
       rule = %{
         predicates: Stage.predicate_triples!(entity_type, predicates),
         to: build_to(entity_type, to),
         via: delegation(operation, via)
       }
 
-      {operation, rule}
+      keyed_rules = expand_role_operation(entity_type, {operation, rule})
+
+      keyed_rules ++ named_rules(name, keyed_rules)
     end)
-    |> Enum.flat_map(&expand_role_operation(entity_type, &1))
     |> Enum.group_by(fn {operation, _rule} -> operation end, fn {_operation, rule} -> rule end)
     |> put_role_operation_unions()
   end
@@ -520,15 +524,17 @@ defmodule Hologram.Policy do
   def operation_key({name, role_name}), do: "#{name}:#{role_name}"
 
   @doc """
-  Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every operation an allow line on the type names - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
+  Returns the operations the given entity type can be asked about, sorted: the framework's own seven, and every operation an allow line on the type names, and every name an allow line carries - its own lines and the ones taken from its policy modules alike, since both land in __policies__/0.
 
   A per-role line (allow {:grant_role, role}) names the framework operation, which is already in the list.
   """
   @spec operations(module) :: list(atom)
   def operations(entity_type) do
     entity_type.__policies__()
-    |> Enum.map(fn {operation, _to, _via, _predicates} -> operation end)
-    |> Enum.filter(&is_atom/1)
+    |> Enum.flat_map(fn {operation, _to, _via, _predicates, name, _fields} ->
+      [operation, name]
+    end)
+    |> Enum.filter(&(is_atom(&1) and &1 != nil))
     |> Enum.concat(@framework_operations)
     |> Enum.uniq()
     |> Enum.sort()
@@ -648,7 +654,7 @@ defmodule Hologram.Policy do
   @doc """
   Refuses an operation the given entity type cannot be asked about, or returns :ok.
 
-  A framework operation always passes. An atom passes when an allow line on the entity type names it. A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role. Anything else raises Hologram.MisuseError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
+  A framework operation always passes. An atom passes when an allow line on the entity type declares it as its operation or carries it as its name (`as:`). A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role. Anything else raises Hologram.MisuseError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
 
   The client mirrors the same refusals in validateOperation in assets/js/model.mjs - a hand-ported pair, so a change here is a change there.
   """
@@ -1191,6 +1197,16 @@ defmodule Hologram.Policy do
         Map.put(acc, operation, union)
       end
     end)
+  end
+
+  # A named line's rules, keyed under its name - each rule once, since a grant lifecycle line
+  # expanded per role can yield the same rule for several roles.
+  defp named_rules(nil, _keyed_rules), do: []
+
+  defp named_rules(name, keyed_rules) do
+    keyed_rules
+    |> Enum.map(fn {_key, rule} -> {name, rule} end)
+    |> Enum.uniq()
   end
 
   # The quantifier clauses among the given ones, those in a disjunction's alternatives included.

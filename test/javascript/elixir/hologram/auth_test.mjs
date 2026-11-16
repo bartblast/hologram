@@ -2900,6 +2900,25 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // A named line is baked under its name as well as its operation, the build keeping the name's
+    // own rules apart from the operation's other lines.
+    it("answers a name by its own rules alone", () => {
+      defineModel({
+        archive: [rule({predicates: [["public", "==", true]]})],
+        update: [rule({predicates: [["public", "==", true]]}), rule()],
+      });
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("update"), document()),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("archive"), document()),
+        Type.boolean(false),
+      );
+    });
+
     it("denies a framework operation the type declares no rule for", () => {
       assert.deepStrictEqual(
         can(Type.bitstring(ALICE), Type.atom("update"), document()),

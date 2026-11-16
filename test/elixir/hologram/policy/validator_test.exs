@@ -1538,7 +1538,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate members.pending for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture123 - members.pending reads members.muted, which is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+        "invalid predicate members.pending for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture123 - members.pending reads members.muted, which is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture123, InlinePolicyFixture123Member], [])
@@ -1576,7 +1576,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :masked for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture103 - :masked reads :token, which is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+        "invalid predicate :masked for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture103 - :masked reads :token, which is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture103], [])
@@ -1724,7 +1724,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture33 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture33 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture33], [])
@@ -1749,7 +1749,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture110 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture110 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture109, InlinePolicyFixture110], [])
@@ -1776,7 +1776,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture118 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+        "invalid predicate seats.code for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture118 - seats.code is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture117, InlinePolicyFixture118], [])
@@ -1793,7 +1793,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate author.password_hash for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture51 - author.password_hash is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+        "invalid predicate author.password_hash for allow :update in Hologram.Policy.ValidatorTest.InlinePolicyFixture51 - author.password_hash is server_only, and the client cannot decide :update locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module14, InlinePolicyFixture51], [])
@@ -1811,7 +1811,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture36 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture36 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture36], [])
@@ -1830,7 +1830,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture39 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.InlinePolicyFixture39 - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([InlinePolicyFixture39], [])
@@ -1847,6 +1847,253 @@ defmodule Hologram.Policy.ValidatorTest do
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([Module1], [InvalidTargetRoleFixture1])
+      end
+    end
+  end
+
+  describe "validate_model!/2 for named lines" do
+    test "accepts one name on several lines of one operation" do
+      defmodule NamedLinesFixture do
+        use Hologram.Entity
+
+        role :admin
+        role :owner
+
+        allow :update, as: :archive, to: :owner
+        allow :update, as: :archive, to: :admin
+      end
+
+      assert validate_model!([NamedLinesFixture, Module14], []) == :ok
+    end
+
+    test "accepts one name on a bare grant lifecycle line and a per-role one" do
+      defmodule NamedGrantLinesFixture do
+        use Hologram.Entity
+
+        role :editor
+        role :owner
+
+        allow :grant_role, as: :invite, to: :owner
+        allow {:grant_role, :editor}, as: :invite, to: :editor
+      end
+
+      assert validate_model!([NamedGrantLinesFixture, Module14], []) == :ok
+    end
+
+    test "rejects one name on lines of two operations" do
+      defmodule TwoOperationNameFixture do
+        use Hologram.Entity
+
+        allow :update, as: :archive
+        allow :delete, as: :archive
+      end
+
+      expected_msg =
+        "invalid as option :archive for allow :delete in Hologram.Policy.ValidatorTest.TwoOperationNameFixture - :archive already names allow :update in Hologram.Policy.ValidatorTest.TwoOperationNameFixture, and a name labels the lines of one operation"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TwoOperationNameFixture], [])
+      end
+    end
+
+    test "rejects one name on grant_role and revoke_role lines" do
+      defmodule GrantRevokeNameFixture do
+        use Hologram.Entity
+
+        role :owner
+
+        allow :grant_role, as: :manage, to: :owner
+        allow :revoke_role, as: :manage, to: :owner
+      end
+
+      expected_msg =
+        "invalid as option :manage for allow :revoke_role in Hologram.Policy.ValidatorTest.GrantRevokeNameFixture - :manage already names allow :grant_role in Hologram.Policy.ValidatorTest.GrantRevokeNameFixture, and a name labels the lines of one operation"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([GrantRevokeNameFixture, Module14], [])
+      end
+    end
+
+    test "rejects a name spelling an operation another allow line declares" do
+      defmodule CustomOperationNameFixture do
+        use Hologram.Entity
+
+        allow :archive
+        allow :update, as: :archive
+      end
+
+      expected_msg =
+        "invalid as option :archive for allow :update in Hologram.Policy.ValidatorTest.CustomOperationNameFixture - an allow line of Hologram.Policy.ValidatorTest.CustomOperationNameFixture declares :archive as an operation, and a name can't spell one"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([CustomOperationNameFixture], [])
+      end
+    end
+
+    test "rejects a name spelling an operation a later allow line declares" do
+      defmodule LaterCustomOperationNameFixture do
+        use Hologram.Entity
+
+        allow :update, as: :archive
+        allow :archive
+      end
+
+      expected_msg =
+        "invalid as option :archive for allow :update in Hologram.Policy.ValidatorTest.LaterCustomOperationNameFixture - an allow line of Hologram.Policy.ValidatorTest.LaterCustomOperationNameFixture declares :archive as an operation, and a name can't spell one"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([LaterCustomOperationNameFixture], [])
+      end
+    end
+
+    test "names both policies a name on two operations comes from" do
+      defmodule UpdateNamePolicy do
+        use Hologram.Policy
+
+        allow :update, as: :archive
+      end
+
+      defmodule DeleteNamePolicy do
+        use Hologram.Policy
+
+        allow :delete, as: :archive
+      end
+
+      defmodule TakenTwoOperationNameFixture do
+        use Hologram.Entity
+
+        policy Hologram.Policy.ValidatorTest.UpdateNamePolicy
+        policy Hologram.Policy.ValidatorTest.DeleteNamePolicy
+      end
+
+      expected_msg =
+        "invalid as option :archive for allow :delete in Hologram.Policy.ValidatorTest.TakenTwoOperationNameFixture, taken from Hologram.Policy.ValidatorTest.DeleteNamePolicy - :archive already names allow :update in Hologram.Policy.ValidatorTest.TakenTwoOperationNameFixture, taken from Hologram.Policy.ValidatorTest.UpdateNamePolicy, and a name labels the lines of one operation"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([TakenTwoOperationNameFixture], [])
+      end
+    end
+
+    # The browser decides a named read line through can?, over values it holds - a server-only
+    # attribute isn't one.
+    test "rejects a named read line testing a server-only attribute" do
+      defmodule NamedServerOnlyReadFixture do
+        use Hologram.Entity
+
+        attribute :secret, :boolean, default: false, server_only: true
+
+        allow :read, when: secret == false
+        allow :read, as: :peek, when: secret == true
+      end
+
+      expected_msg =
+        "invalid predicate :secret for allow :read, as: :peek in Hologram.Policy.ValidatorTest.NamedServerOnlyReadFixture - :secret is server_only, and the client cannot decide :peek locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NamedServerOnlyReadFixture], [])
+      end
+    end
+
+    # The line's chain sits under its name and under :update alike, and the name is reported
+    # whatever it sorts as.
+    test "describes a named line reading through a type nobody may read by its name" do
+      defmodule LateNameChainTarget do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create
+      end
+
+      defmodule LateNameChainSource do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Policy.ValidatorTest.LateNameChainTarget
+
+        allow :read
+        allow :update, as: :zap, when: parent.archived == false
+      end
+
+      expected_msg =
+        "allow :update, as: :zap in Hologram.Policy.ValidatorTest.LateNameChainSource reads Hologram.Policy.ValidatorTest.LateNameChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.LateNameChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([LateNameChainTarget, LateNameChainSource], [])
+      end
+    end
+
+    test "accepts a via option asking for a name the related entity type carries" do
+      defmodule NamedDelegationTarget do
+        use Hologram.Entity
+
+        allow :read
+        allow :update, as: :archive
+      end
+
+      defmodule NamedDelegationSource do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Policy.ValidatorTest.NamedDelegationTarget
+
+        allow :read
+        allow :update, via: {:archive, parent}
+      end
+
+      assert validate_model!([NamedDelegationTarget, NamedDelegationSource], []) == :ok
+    end
+
+    test "rejects a via cycle through a name" do
+      defmodule NamedCycleEntityA do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.NamedCycleEntityB, optional: true
+
+        allow :update, as: :archive, via: {:archive, peer}
+      end
+
+      defmodule NamedCycleEntityB do
+        use Hologram.Entity
+
+        relationship :peer, Hologram.Policy.ValidatorTest.NamedCycleEntityA, optional: true
+
+        allow :update, as: :archive, via: {:archive, peer}
+      end
+
+      expected_msg =
+        normalize_newlines("""
+        cyclic policy delegation for allow :update, as: :archive - a via chain can't return to the entity type it starts from:
+          * Hologram.Policy.ValidatorTest.NamedCycleEntityA (via {:archive, :peer}) -> Hologram.Policy.ValidatorTest.NamedCycleEntityB (via {:archive, :peer}) -> Hologram.Policy.ValidatorTest.NamedCycleEntityA\
+        """)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NamedCycleEntityA, NamedCycleEntityB], [])
+      end
+    end
+
+    # A browser decides a named read line through can?, so it holds the rows the line reads - which
+    # the type's bare read rules, decided by the server alone, never need.
+    test "rejects a named read line reading through a type nobody may read" do
+      defmodule NamedReadChainTarget do
+        use Hologram.Entity
+
+        attribute :archived, :boolean, default: false
+
+        allow :create
+      end
+
+      defmodule NamedReadChainSource do
+        use Hologram.Entity
+
+        relationship :parent, Hologram.Policy.ValidatorTest.NamedReadChainTarget
+
+        allow :read, as: :see, when: parent.archived == false
+      end
+
+      expected_msg =
+        "allow :read, as: :see in Hologram.Policy.ValidatorTest.NamedReadChainSource reads Hologram.Policy.ValidatorTest.NamedReadChainTarget through parent, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on Hologram.Policy.ValidatorTest.NamedReadChainTarget, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        validate_model!([NamedReadChainTarget, NamedReadChainSource], [])
       end
     end
   end
@@ -2146,7 +2393,7 @@ defmodule Hologram.Policy.ValidatorTest do
       end
 
       expected_msg =
-        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.TakenServerOnlyEntity, taken from Hologram.Policy.ValidatorTest.TakenServerOnlyPolicy - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+        "invalid predicate :token for allow :publish in Hologram.Policy.ValidatorTest.TakenServerOnlyEntity, taken from Hologram.Policy.ValidatorTest.TakenServerOnlyPolicy - :token is server_only, and the client cannot decide :publish locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         validate_model!([TakenServerOnlyEntity], [])

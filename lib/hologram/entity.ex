@@ -134,11 +134,14 @@ defmodule Hologram.Entity do
         def __attributes__, do: Enum.sort(@__attributes__)
 
         @doc """
-        Returns the list of policy definitions for the compiled entity type, in declaration order.
+        Returns the list of policy definitions for the compiled entity type, in declaration order, each as {operation, to, via, predicates, name, fields}: name is the line's as: option or nil, and fields is nil (a line covering the whole row).
         Policy rules are OR'd, so the order carries no semantics - it is preserved to keep reflection output readable against the source.
         """
         @spec __policies__() ::
-                list({Hologram.Entity.operation(), term, atom | {atom, atom} | nil, keyword})
+                list(
+                  {Hologram.Entity.operation(), term, atom | {atom, atom} | nil, keyword,
+                   atom | nil, nil}
+                )
         def __policies__, do: Enum.reverse(@__policies__)
 
         @doc false
@@ -178,6 +181,13 @@ defmodule Hologram.Entity do
 
   An allow line grants the given operation, and every key on it is an option:
 
+    * `as:` - a name for the line, an atom: `allow :update, as: :archive, to: :owner`. The line
+      still grants its operation, and the name lets `can?` ask about it alone,
+      `can?(user, :archive, channel)`, and a `via:` delegate to it, `via: {:archive, channel}`.
+      The name labels the line, it doesn't narrow it - a named update line grants every update
+      its other options allow. Several lines of one operation may share a name, and `can?` is true
+      when any of them holds. A name can't be a framework operation, and one name can't label lines
+      of two operations (`allow :grant_role` and `allow {:grant_role, role}` are one operation).
     * `to:` - who holds the operation: a role name (`:editor`), a global role module (`Admin`), a
       role held on the row a to-one relationship, or a path of them, points at as
       `{role, relationship}` (`{:editor, project}`, `{:owner, trip.user}`), a role held on a whole
@@ -446,7 +456,8 @@ defmodule Hologram.Entity do
     Validator.validate_allow!(module, operation, spec)
 
     policy =
-      {operation, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.get(spec, :when, [])}
+      {operation, Keyword.get(spec, :to), Keyword.get(spec, :via), Keyword.get(spec, :when, []),
+       Keyword.get(spec, :as), nil}
 
     Module.put_attribute(module, :__policies__, policy)
     Module.put_attribute(module, :__policy_sources__, source)

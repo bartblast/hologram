@@ -408,9 +408,36 @@ defmodule Hologram.Policy.EdgesTest do
     # Both rules' anys over a derived set are answered by the server's verdict, which reads what the
     # two sets read.
     test "derives the verdict edges of anys over derived sets" do
-      assert derive([EdgeBoard])[{EdgeBoard, :verdicts}] == [
+      assert derive([EdgeBoard])[{EdgeBoard, {:verdicts}}] == [
                {:set_attributes, [:cards], EdgeCard, [:board_id, :id, :rank]},
                {:set_edges, [:cards, :tags], EdgeCard, [:tags]}
+             ]
+    end
+
+    # The verdict edges are keyed by a tuple, so a line named :verdicts keeps its own edges beside
+    # them rather than taking their place.
+    test "keeps a line named verdicts apart from the verdict edges" do
+      defmodule VerdictsNamedProject do
+        use Hologram.Entity
+
+        relationship :labels, [Hologram.Policy.EdgesTest.EdgeLabel]
+
+        allow :read
+        allow :update, as: :verdicts, when: any(labels)
+        allow :delete, when: none(label <- labels, label.name == "x")
+      end
+
+      edges = derive([VerdictsNamedProject])
+
+      assert edges[{VerdictsNamedProject, :verdicts}] == [
+               {:set_edges, [:labels], VerdictsNamedProject, [:labels]}
+             ]
+
+      assert edges[{VerdictsNamedProject, :update}] == edges[{VerdictsNamedProject, :verdicts}]
+
+      assert edges[{VerdictsNamedProject, {:verdicts}}] == [
+               {:set_attributes, [:labels], EdgeLabel, [:name]},
+               {:set_edges, [:labels], VerdictsNamedProject, [:labels]}
              ]
     end
 
@@ -487,17 +514,17 @@ defmodule Hologram.Policy.EdgesTest do
 
     # The delete rule's none is answered from the server's verdict, sent with every project, so what
     # it reads is named apart from the operations - beside the operation's own edges.
-    test "names what the deciding quantifiers read under :verdicts" do
-      assert derive([EdgeProject])[{EdgeProject, :verdicts}] == [
+    test "names what the deciding quantifiers read under {:verdicts}" do
+      assert derive([EdgeProject])[{EdgeProject, {:verdicts}}] == [
                {:set_attributes, [:labels], EdgeLabel, [:name]},
                {:set_edges, [:labels], EdgeProject, [:labels]}
              ]
     end
 
-    test "names no :verdicts edges for a type with no deciding quantifier" do
+    test "names no {:verdicts} edges for a type with no deciding quantifier" do
       refute [EdgeLabel]
              |> derive()
-             |> Map.has_key?({EdgeLabel, :verdicts})
+             |> Map.has_key?({EdgeLabel, {:verdicts}})
     end
 
     test "lifts a set's edges through a delegation" do

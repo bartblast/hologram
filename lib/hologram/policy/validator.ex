@@ -94,10 +94,29 @@ defmodule Hologram.Policy.Validator do
   # callsites are not scanned yet, which the compiler's whole-program call graph analysis covers.
   defp declares_identity_features?(entity_type) do
     entity_type.__roles__() != [] or
-      Enum.any?(entity_type.__policies__(), fn {_operation, to, _via, _predicates} ->
+      Enum.any?(entity_type.__policies__(), fn {_operation, to, _via, _predicates, _name, _fields} ->
         to != nil
       end)
   end
+
+  # A key of the compiled policy as the line behind it was written: a name as the line naming it,
+  # anything else as the operation it is.
+  defp describe_key(entity_type, key) do
+    named_line =
+      Enum.find(entity_type.__policies__(), fn {_operation, _to, _via, _predicates, name, _fields} ->
+        name == key
+      end)
+
+    case named_line do
+      {operation, _to, _via, _predicates, name, _fields} -> describe_line(operation, name)
+      nil -> "allow #{inspect(key)}"
+    end
+  end
+
+  defp describe_line(operation, nil), do: "allow #{inspect(operation)}"
+
+  defp describe_line(operation, name),
+    do: "allow #{inspect(line_operation(operation))}, as: #{inspect(name)}"
 
   # An option as a message quotes it: written as it was, a relationship as inspect/1 spells it and
   # a path dotted - {:update, stop.trip}, {:owner, trip.user}.
@@ -238,14 +257,16 @@ defmodule Hologram.Policy.Validator do
   # Reported for one operation at a time, the alphabetically first among the operations the cycles
   # start from once rotated - one message names one operation, which is what its header says.
   defp raise_via_cycles!(cycles) do
-    {operation, operation_cycles} =
+    # Grouped by the key and by the line it stands for on the type a cycle starts from, so a name
+    # labelling a different operation on another type heads a message of its own.
+    {{_operation, line}, operation_cycles} =
       cycles
       |> Enum.map(&canonicalize_via_cycle/1)
       |> Enum.uniq()
-      |> Enum.group_by(fn [{_entity_type, operation, _via, _source} | _later_hops] ->
-        operation
+      |> Enum.group_by(fn [{entity_type, operation, _via, _source} | _later_hops] ->
+        {operation, describe_key(entity_type, operation)}
       end)
-      |> Enum.min_by(fn {operation, _operation_cycles} -> operation end)
+      |> Enum.min_by(fn {key, _operation_cycles} -> key end)
 
     descriptions =
       operation_cycles
@@ -254,7 +275,7 @@ defmodule Hologram.Policy.Validator do
 
     raise Hologram.CompileError,
       message:
-        "cyclic policy delegation for allow #{inspect(operation)} - a via chain can't return to the entity type it starts from:\n#{descriptions}"
+        "cyclic policy delegation for #{line} - a via chain can't return to the entity type it starts from:\n#{descriptions}"
   end
 
   # A type whose rows some session may read - the grant store's are, through rules the framework
@@ -266,12 +287,19 @@ defmodule Hologram.Policy.Validator do
     |> Kernel.!=([])
   end
 
+  # A named line's chains sit under its name and its operation alike, so the names come first: the
+  # first unreadable hop is then reported as the line that was written, whatever its name sorts as.
   defp related_chain_operations(entity_type) do
+    names =
+      Enum.map(entity_type.__policies__(), fn {_operation, _to, _via, _predicates, name, _fields} ->
+        name
+      end)
+
     entity_type
     |> Policy.build()
     |> Map.keys()
     |> Enum.reject(&(&1 == :read))
-    |> Enum.sort()
+    |> Enum.sort_by(&{&1 not in names, &1})
   end
 
   # A relationship name, or a path - two or more of them.
@@ -399,9 +427,11 @@ defmodule Hologram.Policy.Validator do
   end
 
   defp validate_entity_policies!(entity_type) do
-    entity_type.__policies__()
-    |> Enum.zip(entity_type.__policy_sources__())
-    |> Enum.each(&validate_policy_line!(entity_type, &1))
+    lines = Enum.zip(entity_type.__policies__(), entity_type.__policy_sources__())
+
+    Enum.each(lines, &validate_policy_line!(entity_type, &1))
+
+    validate_rule_names!(entity_type, lines)
   end
 
   defp validate_gate_line!(operation, to, via, predicates, location) do
@@ -501,16 +531,19 @@ defmodule Hologram.Policy.Validator do
     end
   end
 
-  defp validate_policy_line!(entity_type, {{operation, to, via, predicates}, source}) do
+  defp validate_policy_line!(
+         entity_type,
+         {{operation, to, via, predicates, name, _fields}, source}
+       ) do
     location = location(entity_type, source)
 
     validate_to!(entity_type, operation, to, location)
     validate_via!(entity_type, operation, via, location)
-    validate_predicates!(entity_type, operation, predicates, location)
+    validate_predicates!(entity_type, operation, name, predicates, location)
     validate_gate_operation!(entity_type, operation, to, via, predicates, location)
   end
 
-  defp validate_predicates!(entity_type, operation, predicates, location) do
+  defp validate_predicates!(entity_type, operation, name, predicates, location) do
     predicates
     |> unquantified_predicates()
     |> Stage.written_names()
@@ -518,7 +551,7 @@ defmodule Hologram.Policy.Validator do
 
     clauses = Stage.predicate_triples!(entity_type, predicates)
 
-    validate_server_only_predicates!(entity_type, operation, clauses, location)
+    validate_server_only_predicates!(entity_type, {operation, name}, clauses, location)
 
     :ok
   rescue
@@ -554,7 +587,7 @@ defmodule Hologram.Policy.Validator do
       [{entity_type, operation, chain, hop_type} | _later_hops] ->
         raise Hologram.CompileError,
           message:
-            "allow #{inspect(operation)} in #{inspect(entity_type)} reads #{inspect(hop_type)} through #{Enum.join(chain, ".")}, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on #{inspect(hop_type)}, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
+            "#{describe_key(entity_type, operation)} in #{inspect(entity_type)} reads #{inspect(hop_type)} through #{Enum.join(chain, ".")}, which declares no allow :read line - no browser ever holds such a row, so a permission check there answers no while the server may answer yes. Declare an allow :read line on #{inspect(hop_type)}, as narrow as it needs to be, so a browser checking this rule holds the rows it reads"
     end
   end
 
@@ -628,12 +661,13 @@ defmodule Hologram.Policy.Validator do
   # the row's presence already proves the predicate held - the client never evaluates it.
   # Every other operation is decided locally (can?), which needs the value, so there the
   # reference is rejected.
-  defp validate_server_only_predicates!(_entity_type, :read, _clauses, _location), do: :ok
+  # A named read line is exempt no more than any other: the browser decides it through can?.
+  defp validate_server_only_predicates!(_entity_type, {:read, nil}, _clauses, _location), do: :ok
 
   # A derived field reads what its definition reads, written in place, so the refusal names the field
   # the condition wrote and the attribute it reads. A quantifier over a derived set is answered from
   # the server's verdict alone, never over rows a client holds, so what it reads there is left out.
-  defp validate_server_only_predicates!(entity_type, operation, clauses, location) do
+  defp validate_server_only_predicates!(entity_type, line, clauses, location) do
     clauses
     |> Stage.predicate_references()
     |> Enum.reject(fn {written_names, _name} ->
@@ -645,7 +679,7 @@ defmodule Hologram.Policy.Validator do
       entity_type
       |> Derived.expanded_references([written])
       |> Enum.each(
-        &validate_server_only_reference!(entity_type, operation, &1, written_spelled, location)
+        &validate_server_only_reference!(entity_type, line, &1, written_spelled, location)
       )
     end)
   end
@@ -654,7 +688,7 @@ defmodule Hologram.Policy.Validator do
   # is server-only.
   defp validate_server_only_reference!(
          entity_type,
-         operation,
+         {operation, rule_name},
          {relationship_names, name},
          written_spelled,
          location
@@ -671,7 +705,7 @@ defmodule Hologram.Policy.Validator do
 
       raise Hologram.CompileError,
         message:
-          "invalid predicate #{written_spelled} for allow #{inspect(operation)} in #{location} - #{what} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+          "invalid predicate #{written_spelled} for #{describe_line(operation, rule_name)} in #{location} - #{what} is server_only, and the client cannot decide #{inspect(rule_name || operation)} locally over a value it never holds. Server-only predicates are legal on allow :read lines without a name only, where the row's presence already proves them"
     end
   end
 
@@ -831,12 +865,19 @@ defmodule Hologram.Policy.Validator do
   defp via_declarations(entity_type) do
     entity_type.__policies__()
     |> Enum.zip(entity_type.__policy_sources__())
-    |> Enum.reject(fn {{_operation, _to, via, _predicates}, _source} -> is_nil(via) end)
-    |> Enum.map(fn {{operation, _to, via, _predicates}, source} ->
+    |> Enum.reject(fn {{_operation, _to, via, _predicates, _name, _fields}, _source} ->
+      is_nil(via)
+    end)
+    |> Enum.flat_map(fn {{operation, _to, via, _predicates, name, _fields}, source} ->
       {delegated_operation, relationship_names} = Policy.delegation(operation, via)
       target_type = Entity.path_target(entity_type, relationship_names)
+      edge = {via, {target_type, delegated_operation}, source}
 
-      {{entity_type, operation}, {via, {target_type, delegated_operation}, source}}
+      # A named line is keyed under its name as well, so a delegation asking for the name leaves
+      # from there too.
+      [operation, name]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&{{entity_type, &1}, edge})
     end)
   end
 
@@ -848,6 +889,64 @@ defmodule Hologram.Policy.Validator do
     entity_types
     |> Enum.flat_map(&via_declarations/1)
     |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+  end
+
+  defp other_operation_line?({first_operation, _source}, operation),
+    do: first_operation != operation
+
+  defp other_operation_line?(nil, _operation), do: false
+
+  # The operation a line belongs to: a per-role grant lifecycle line is its operation's, so one name
+  # may label the bare line and the per-role ones alike.
+  defp line_operation({operation, _role_or_roles}), do: operation
+
+  defp line_operation(operation), do: operation
+
+  # A name is a key of the compiled policy, as an operation is, so it must mean one thing: the
+  # lines of one operation. A name labelling lines of two would make can? ask about both at once,
+  # and one spelling an operation an allow line of the type declares would merge into that
+  # operation's rules.
+  defp validate_rule_names!(entity_type, lines) do
+    declared_operations =
+      lines
+      |> Enum.map(fn {{operation, _to, _via, _predicates, _name, _fields}, _source} ->
+        line_operation(operation)
+      end)
+      |> Enum.uniq()
+
+    _first_line_by_name =
+      lines
+      |> Enum.filter(fn {{_operation, _to, _via, _predicates, name, _fields}, _source} ->
+        name
+      end)
+      |> Enum.reduce(%{}, fn {{operation, _to, _via, _predicates, name, _fields}, source}, seen ->
+        validate_rule_name!(entity_type, operation, name, source, seen, declared_operations)
+
+        Map.put_new(seen, name, {line_operation(operation), source})
+      end)
+
+    :ok
+  end
+
+  defp validate_rule_name!(entity_type, operation, name, source, seen, declared_operations) do
+    location = location(entity_type, source)
+
+    cond do
+      name in declared_operations ->
+        raise Hologram.CompileError,
+          message:
+            "invalid as option #{inspect(name)} for allow #{inspect(operation)} in #{location} - an allow line of #{inspect(entity_type)} declares #{inspect(name)} as an operation, and a name can't spell one"
+
+      other_operation_line?(Map.get(seen, name), line_operation(operation)) ->
+        {first_operation, first_source} = Map.fetch!(seen, name)
+
+        raise Hologram.CompileError,
+          message:
+            "invalid as option #{inspect(name)} for allow #{inspect(operation)} in #{location} - #{inspect(name)} already names allow #{inspect(first_operation)} in #{location(entity_type, first_source)}, and a name labels the lines of one operation"
+
+      true ->
+        :ok
+    end
   end
 
   # A relationship or a path, alone or in an {operation, relationship} tuple naming the operation

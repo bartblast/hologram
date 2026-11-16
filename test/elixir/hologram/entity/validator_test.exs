@@ -551,7 +551,7 @@ defmodule Hologram.Entity.ValidatorTest do
         allow :read
       end
 
-      assert InlineEntityFixture71.__policies__() == [{:read, nil, nil, []}]
+      assert InlineEntityFixture71.__policies__() == [{:read, nil, nil, [], nil, nil}]
     end
 
     test "accepts a condition through a path" do
@@ -562,7 +562,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       assert InlineEntityFixture105.__policies__() == [
-               {:read, nil, nil, [{[:parent, :public], {:==, true}}]}
+               {:read, nil, nil, [{[:parent, :public], {:==, true}}], nil, nil}
              ]
     end
 
@@ -574,7 +574,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       assert InlineEntityFixture107.__policies__() == [
-               {:update, {:owner, [:trip, :user]}, nil, []}
+               {:update, {:owner, [:trip, :user]}, nil, [], nil, nil}
              ]
     end
 
@@ -589,7 +589,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       assert InlineEntityFixture96.__policies__() == [
-               {{:grant_role, :viewer}, :editor, nil, []}
+               {{:grant_role, :viewer}, :editor, nil, [], nil, nil}
              ]
     end
 
@@ -604,7 +604,7 @@ defmodule Hologram.Entity.ValidatorTest do
       end
 
       assert InlineEntityFixture97.__policies__() == [
-               {{:revoke_role, [:viewer, :editor]}, :editor, nil, []}
+               {{:revoke_role, [:viewer, :editor]}, :editor, nil, [], nil, nil}
              ]
     end
 
@@ -673,6 +673,120 @@ defmodule Hologram.Entity.ValidatorTest do
           use Hologram.Entity
 
           allow :read, via: nil
+        end
+      end
+    end
+
+    test "accepts a name" do
+      defmodule NamedLineFixture do
+        use Hologram.Entity
+
+        allow :update, as: :archive
+      end
+
+      assert NamedLineFixture.__policies__() == [{:update, nil, nil, [], :archive, nil}]
+    end
+
+    test "rejects a nil as option" do
+      expected_msg =
+        "invalid as option nil for allow :update in Hologram.Entity.ValidatorTest.NilAsOptionFixture - omit the option instead"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NilAsOptionFixture do
+          use Hologram.Entity
+
+          allow :update, as: nil
+        end
+      end
+    end
+
+    test "rejects a name that is not an atom" do
+      expected_msg =
+        ~s(invalid as option "archive" for allow :update in Hologram.Entity.ValidatorTest.StringAsOptionFixture - the as option must be an atom naming the rule)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule StringAsOptionFixture do
+          use Hologram.Entity
+
+          allow :update, as: "archive"
+        end
+      end
+    end
+
+    test "rejects a boolean name" do
+      expected_msg =
+        "invalid as option true for allow :update in Hologram.Entity.ValidatorTest.BooleanAsOptionFixture - the as option must be an atom naming the rule"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule BooleanAsOptionFixture do
+          use Hologram.Entity
+
+          allow :update, as: true
+        end
+      end
+    end
+
+    test "rejects a name that is not a plain atom (1)" do
+      expected_msg =
+        "invalid as option MyApp.User for allow :update in Hologram.Entity.ValidatorTest.NonPlainAsOptionFixture1 - a name is a plain atom, like :archive"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NonPlainAsOptionFixture1 do
+          use Hologram.Entity
+
+          allow :update, as: MyApp.User
+        end
+      end
+    end
+
+    test "rejects a name that is not a plain atom (2)" do
+      expected_msg =
+        ~s(invalid as option :"grant_role:editor" for allow :update in Hologram.Entity.ValidatorTest.NonPlainAsOptionFixture2 - a name is a plain atom, like :archive)
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NonPlainAsOptionFixture2 do
+          use Hologram.Entity
+
+          allow :update, as: :"grant_role:editor"
+        end
+      end
+    end
+
+    test "rejects a name that is not a plain atom (3)" do
+      expected_msg =
+        "invalid as option :Archive for allow :update in Hologram.Entity.ValidatorTest.NonPlainAsOptionFixture3 - a name is a plain atom, like :archive"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NonPlainAsOptionFixture3 do
+          use Hologram.Entity
+
+          allow :update, as: :Archive
+        end
+      end
+    end
+
+    test "rejects a name that is not a plain atom (4)" do
+      expected_msg =
+        "invalid as option :__proto__ for allow :update in Hologram.Entity.ValidatorTest.NonPlainAsOptionFixture4 - a name is a plain atom, like :archive"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule NonPlainAsOptionFixture4 do
+          use Hologram.Entity
+
+          allow :update, as: :__proto__
+        end
+      end
+    end
+
+    test "rejects a name spelling a framework operation" do
+      expected_msg =
+        "invalid as option :delete for allow :update in Hologram.Entity.ValidatorTest.FrameworkAsOptionFixture - a name can't be a framework operation, since can? and via ask those by the same atom"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule FrameworkAsOptionFixture do
+          use Hologram.Entity
+
+          allow :update, as: :delete
         end
       end
     end

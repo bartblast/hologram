@@ -5,6 +5,7 @@ defmodule Hologram.Entity.Validator do
   alias Hologram.DB.Codec
   alias Hologram.Entity
   alias Hologram.MisuseError
+  alias Hologram.Policy
   alias Hologram.Query.Stage
   alias Hologram.Reflection
 
@@ -19,7 +20,7 @@ defmodule Hologram.Entity.Validator do
 
   # The allow options whose nil value reaches the declaration, to be refused there - a when: nil is
   # refused where it is written, as no condition.
-  @policy_option_names [:to, :via]
+  @policy_option_names [:as, :to, :via]
 
   @reserved_names [:created_at, :id, :updated_at]
 
@@ -223,6 +224,7 @@ defmodule Hologram.Entity.Validator do
     validate_opts_shape!(module, "allow", operation, spec)
 
     Enum.each(@policy_option_names, &validate_policy_option_value!(module, operation, spec, &1))
+    validate_as_opt!(module, operation, spec)
     validate_to_opt_shape!(module, operation, spec)
     validate_when_opt_shape!(module, operation, spec)
 
@@ -1593,6 +1595,46 @@ defmodule Hologram.Entity.Validator do
     end
 
     :ok
+  end
+
+  # A name labels a line for can? and via:, which ask the framework's operations by the same atoms,
+  # so a name spelling one would be asked for that operation instead and never answer as itself.
+  defp validate_as_opt!(module, operation, spec) do
+    case Keyword.fetch(spec, :as) do
+      {:ok, name} when not is_atom(name) or is_boolean(name) ->
+        raise Hologram.CompileError,
+          message:
+            "invalid as option #{inspect(name)} for allow #{inspect(operation)} in #{inspect(module)} - the as option must be an atom naming the rule"
+
+      {:ok, name} ->
+        cond do
+          name in Policy.framework_operations() ->
+            raise Hologram.CompileError,
+              message:
+                "invalid as option #{inspect(name)} for allow #{inspect(operation)} in #{inspect(module)} - a name can't be a framework operation, since can? and via ask those by the same atom"
+
+          # The browser's policy spells a key as text, a per-role key as two names joined by a
+          # colon, so a name spelled otherwise could read as another key there - and a module
+          # is no name at all. A leading double underscore is a name JavaScript objects reserve
+          # (__proto__), which the baked policy is one of.
+          not plain_name?(name) ->
+            raise Hologram.CompileError,
+              message:
+                "invalid as option #{inspect(name)} for allow #{inspect(operation)} in #{inspect(module)} - a name is a plain atom, like :archive"
+
+          true ->
+            :ok
+        end
+
+      :error ->
+        :ok
+    end
+  end
+
+  defp plain_name?(name) do
+    name
+    |> Atom.to_string()
+    |> String.match?(~r/\A(?!__)[a-z_][a-zA-Z0-9_]*[?!]?\z/)
   end
 
   # The shape is structural, so it is checked where it is written - the references themselves

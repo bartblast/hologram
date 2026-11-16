@@ -2768,8 +2768,8 @@ defmodule Hologram.Compiler do
   Refuses an entity operation the build asks about that nothing declares, or returns :ok.
 
   Every literal ask `operation_asks/2` reads is judged against the build's whole vocabulary - the
-  framework's operations and every operation an allow line on any of the given entity types
-  names - because the entity argument's type is not known at the ask. A role tuple's role has to
+  framework's operations and every operation or name an allow line on any of the given entity
+  types carries - because the entity argument's type is not known at the ask. A role tuple's role has to
   be one some entity type declares. A computed operation passes here and is judged at run time,
   by `Hologram.Policy.validate_operation!/2` and its client twin, which know the type.
 
