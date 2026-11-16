@@ -21,6 +21,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Channel
   alias HologramFeatureTests.Entities.Document
   alias HologramFeatureTests.Entities.Folder
+  alias HologramFeatureTests.Entities.Inspection
   alias HologramFeatureTests.Entities.Item
   alias HologramFeatureTests.Entities.Label
   alias HologramFeatureTests.Entities.Leg
@@ -33,6 +34,8 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Project
   alias HologramFeatureTests.Entities.ProjectMember
+  alias HologramFeatureTests.Entities.Report
+  alias HologramFeatureTests.Entities.ReportNote
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
@@ -951,6 +954,7 @@ defmodule HologramFeatureTests.Helpers do
         Channel,
         Document,
         Folder,
+        Inspection,
         Item,
         KillWorker,
         Label,
@@ -964,6 +968,8 @@ defmodule HologramFeatureTests.Helpers do
         Product,
         Project,
         ProjectMember,
+        Report,
+        ReportNote,
         RestockItem,
         Review,
         RoleGrant,

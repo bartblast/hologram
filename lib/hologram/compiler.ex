@@ -2997,7 +2997,7 @@ defmodule Hologram.Compiler do
   defp quantified_type(hops, [entity_type | _types_above]),
     do: Derived.path_target(entity_type, hops)
 
-  # The verdict key and the read types of a deciding quantifier standing in a rule's predicates, as
+  # The verdict key and the read types of a deciding clause standing in a rule's predicates, as
   # members of its object - none for any other clause.
   defp render_verdict_members(clause, {entity_type, operation}) do
     if Policy.deciding_quantifier?(entity_type, clause) do
@@ -5219,7 +5219,17 @@ defmodule Hologram.Compiler do
     render_json_object(members ++ render_verdict_members(clause, verdict_context))
   end
 
-  defp render_policy_clause(types, {name, operator, value}, _verdict_context) do
+  # A deciding predicate standing in a rule's predicates - one reading a server-only attribute,
+  # whose value no client holds - is the key the server's verdict on it is sent under and the types it
+  # reads alone, since the client answers it from the verdict and nothing else.
+  defp render_policy_clause(types, {_name, _operator, _value} = clause, verdict_context) do
+    case render_verdict_members(clause, verdict_context) do
+      [] -> render_policy_triple(types, clause)
+      members -> render_json_object(members)
+    end
+  end
+
+  defp render_policy_triple(types, {name, operator, value}) do
     name_js = render_derived_name(name)
 
     operator_js =
