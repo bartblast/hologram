@@ -229,10 +229,16 @@ defmodule Hologram.Realtime.SSE do
     end
   end
 
-  # No `connection` header: HTTP/2 forbids connection-specific header fields and treats a
-  # response carrying one as malformed, which WebKit enforces by dropping the stream. The
-  # header buys nothing where it is legal either, since HTTP/1.1 keeps connections alive by
-  # default and the adapter writes the header itself when a version needs it spelled out.
+  # Over HTTP/1.x the connection is closed once the stream ends. A server can keep it alive for
+  # the next request, and Bandit runs that request in the same process, which still holds what the
+  # stream left behind: its PubSub subscriptions, its registry entry and its timers. The client's
+  # next stream would then get each broadcast once per stream the connection ran, and the registry
+  # would close it as superseding itself. Closed, the process ends and takes all of that with it,
+  # as it does when the client goes. A stream ends this way when its sync session is cut.
+  #
+  # No `connection` header over HTTP/2: it forbids connection-specific header fields and treats a
+  # response carrying one as malformed, which WebKit enforces by dropping the stream. Each stream
+  # runs in a process of its own there.
   #
   # Public so tests can exercise the prep step without entering the blocking
   # message-pump loop.
@@ -242,7 +248,16 @@ defmodule Hologram.Realtime.SSE do
     conn
     |> Plug.Conn.put_resp_header("cache-control", "no-cache")
     |> Plug.Conn.put_resp_header("content-type", "text/event-stream")
+    |> close_after_stream()
     |> Plug.Conn.send_chunked(200)
+  end
+
+  defp close_after_stream(conn) do
+    if Plug.Conn.get_http_protocol(conn) in [:"HTTP/1.0", :"HTTP/1.1"] do
+      Plug.Conn.put_resp_header(conn, "connection", "close")
+    else
+      conn
+    end
   end
 
   # Public so tests can step the pump one message at a time without spawning
@@ -261,6 +276,7 @@ defmodule Hologram.Realtime.SSE do
       Keyword.get(opts, :receipts_refresh_interval_ms, @receipts_refresh_interval_ms)
 
     adapter = Keyword.get(opts, :adapter, Adapters.Passive)
+    sync_session = Keyword.get(opts, :sync_session)
 
     receive do
       {:add_sub_receipts, receipts} ->
@@ -370,6 +386,14 @@ defmodule Hologram.Realtime.SSE do
         end
 
       {:close, _reason} ->
+        {:halt, conn}
+
+      # The sync session ended, cut for a client it can no longer speak for. The link takes the
+      # stream down with it, but a server whose connection process traps exits, as Bandit's does,
+      # hands the exit over as a message instead, and the stream would stay open with nothing left
+      # to send on it. Ended, it sends the client through the doors again. A session the stream
+      # replaced on a change of identity is no longer this one, so its exit is passed over.
+      {:EXIT, ^sync_session, _reason} ->
         {:halt, conn}
 
       # A live reload whose compile failed, Elixir's or Hologram's. Forwarded as it came:

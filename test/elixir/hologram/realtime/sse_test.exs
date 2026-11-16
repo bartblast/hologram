@@ -571,8 +571,19 @@ defmodule Hologram.Realtime.SSETest do
 
       assert result.resp_headers == [
                {"cache-control", "no-cache"},
-               {"content-type", "text/event-stream"}
+               {"content-type", "text/event-stream"},
+               {"connection", "close"}
              ]
+    end
+
+    # HTTP/2 forbids connection-specific header fields, and WebKit drops a stream carrying one.
+    test "sends no connection header over HTTP/2" do
+      %{adapter: {adapter, payload}} = conn = Plug.Test.conn(:get, "/")
+      conn = %{conn | adapter: {adapter, %{payload | http_protocol: :"HTTP/2"}}}
+
+      result = prepare(conn)
+
+      refute List.keymember?(result.resp_headers, "connection", 0)
     end
 
     test "opens a chunked response with status 200" do
@@ -1134,6 +1145,27 @@ defmodule Hologram.Realtime.SSETest do
       send(self(), {:close, :superseded})
 
       assert {:halt, ^conn} = process_message(conn, nil, nil)
+    end
+  end
+
+  describe "process_message/4 on {:EXIT, ...}" do
+    # A cut session's client can only be caught up by coming back, which it does once the stream
+    # ends - left open, it would wait on a stream nothing writes to again.
+    test "halts when the sync session ended" do
+      conn = prepared_test_conn()
+      session = spawn(fn -> :ok end)
+      send(self(), {:EXIT, session, :behind_the_ring})
+
+      assert {:halt, ^conn} = process_message(conn, nil, nil, sync_session: session)
+    end
+
+    test "continues when a session the stream replaced ended" do
+      conn = prepared_test_conn()
+      replaced_session = spawn(fn -> :ok end)
+      session = spawn(fn -> :ok end)
+      send(self(), {:EXIT, replaced_session, :normal})
+
+      assert {:cont, ^conn} = process_message(conn, nil, nil, sync_session: session)
     end
   end
 
