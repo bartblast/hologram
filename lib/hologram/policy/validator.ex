@@ -532,11 +532,11 @@ defmodule Hologram.Policy.Validator do
   # A rule reading a related row through a type nobody may read answers no in every browser - the
   # row never reaches one - while the server reads the row as stored and may answer yes, the
   # client-locality defect validate_server_only_predicates!/4 refuses for a value, one relationship
-  # away. A type's own read rules are left out for the same reason they are there: a row reaches
-  # the browser only once the server's read rules admitted it, so the browser never decides them.
-  # A rule delegating to a read rule is not a read rule, and its chains stay checked. So are the
-  # chains a deciding quantifier reads only, which the server's verdict answers over the rows as
-  # stored (see Hologram.Policy.held_chains/2).
+  # away. A type's own read rules are left out, though the browser does decide them in
+  # can?(user, :read, row), and answers no over a row it doesn't hold where the server may answer
+  # yes (#1656). A rule delegating to a read rule is not a read rule, and its chains stay checked.
+  # The chains a deciding clause reads are not, since the server's verdict answers it over the rows
+  # as stored (see Hologram.Policy.held_chains/2).
   defp validate_readable_chains!(entity_types) do
     unreadable_hops =
       for entity_type <- Enum.sort(entity_types),
@@ -623,11 +623,10 @@ defmodule Hologram.Policy.Validator do
     :ok
   end
 
-  # Read predicates may reference server-only attributes: a row reaches the client only after
-  # the server's read policy admitted it, and the client cannot write a server-only value, so
-  # the row's presence already proves the predicate held - the client never evaluates it.
-  # Every other operation is decided locally (can?), which needs the value, so there the
-  # reference is rejected.
+  # Read predicates may reference server-only attributes: a client answers one from the server's
+  # verdict on the row it was sent (see Hologram.Policy.deciding_quantifier?/2), and a read is asked
+  # about rows as they were sent. Every other operation is asked about a struct being changed, which
+  # the verdict on the stored row says nothing about, so there the reference is rejected.
   defp validate_server_only_predicates!(_entity_type, :read, _clauses, _location), do: :ok
 
   # A derived field reads what its definition reads, written in place, so the refusal names the field
@@ -671,7 +670,7 @@ defmodule Hologram.Policy.Validator do
 
       raise Hologram.CompileError,
         message:
-          "invalid predicate #{written_spelled} for allow #{inspect(operation)} in #{location} - #{what} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, where the row's presence already proves them"
+          "invalid predicate #{written_spelled} for allow #{inspect(operation)} in #{location} - #{what} is server_only, and the client cannot decide #{inspect(operation)} locally over a value it never holds. Server-only predicates are legal on allow :read only, which a client answers from the server's verdict on the row it was sent"
     end
   end
 
