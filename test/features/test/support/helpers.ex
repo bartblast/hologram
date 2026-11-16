@@ -62,42 +62,52 @@ defmodule HologramFeatureTests.Helpers do
   @sync_session_initial_call {Session, :init, 1}
 
   def assert_client_error(session, expected_module, expected_msg, fun) do
-    fun.()
-    wait_for_js_error(session)
+    # The page keeps the last Hologram error it raised, so one an earlier step raised would answer
+    # for a plain JavaScript error fun raises - it's cleared first. A JavaScript error already
+    # logged fails the test here, before fun runs, rather than counting as fun's.
+    Browser.execute_script(session, "delete globalThis.Hologram?.['lastBoxedError'];")
 
-    # An error the browser raises comes out of fun or the wait as Wallaby.JSError, and the wait
-    # otherwise only times out - so getting here means nothing was raised.
-    flunk(
-      "Expected #{inspect(expected_module)} to be raised in the browser, but nothing was raised"
-    )
-  rescue
-    Wallaby.JSError ->
-      script = "return globalThis.Hologram?.['lastBoxedError'];"
+    try do
+      fun.()
+      wait_for_js_error(session)
 
-      Browser.execute_script(session, script, [], fn result ->
-        assert result["module"] == inspect(expected_module),
-               "Expected exception #{inspect(expected_module)} but got #{result["module"]} (#{result["message"]})"
+      # An error the browser raises comes out of fun or the wait as Wallaby.JSError, and the wait
+      # otherwise only times out - so getting here means nothing was raised.
+      flunk(
+        "Expected #{inspect(expected_module)} to be raised in the browser, but nothing was raised"
+      )
+    rescue
+      Wallaby.JSError ->
+        script = "return globalThis.Hologram?.['lastBoxedError'];"
 
-        message = fn expected_display, actual_msg ->
-          """
-          Wrong message for #{inspect(expected_module)}
-          expected:
-            "#{expected_display}"
-          actual:
-            "#{actual_msg}"\
-          """
-        end
+        Browser.execute_script(session, script, [], fn result ->
+          assert result,
+                 "Expected exception #{inspect(expected_module)} but the page holds no Elixir exception for the JavaScript error it raised"
 
-        # A regex is matched rather than compared, and shows as its source - it has no
-        # string form to interpolate.
-        if is_regex(expected_msg) do
-          assert result["message"] =~ expected_msg,
-                 message.(Regex.source(expected_msg), result["message"])
-        else
-          assert result["message"] == expected_msg,
-                 message.(expected_msg, result["message"])
-        end
-      end)
+          assert result["module"] == inspect(expected_module),
+                 "Expected exception #{inspect(expected_module)} but got #{result["module"]} (#{result["message"]})"
+
+          message = fn expected_display, actual_msg ->
+            """
+            Wrong message for #{inspect(expected_module)}
+            expected:
+              "#{expected_display}"
+            actual:
+              "#{actual_msg}"\
+            """
+          end
+
+          # A regex is matched rather than compared, and shows as its source - it has no
+          # string form to interpolate.
+          if is_regex(expected_msg) do
+            assert result["message"] =~ expected_msg,
+                   message.(Regex.source(expected_msg), result["message"])
+          else
+            assert result["message"] == expected_msg,
+                   message.(expected_msg, result["message"])
+          end
+        end)
+    end
   end
 
   def assert_count(session, css_selector, count) do
