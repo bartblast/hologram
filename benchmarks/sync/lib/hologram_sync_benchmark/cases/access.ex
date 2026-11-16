@@ -25,8 +25,9 @@ defmodule HologramSyncBenchmark.Cases.Access do
 
   @poll_ms 100
 
-  # How long a change may take to reach every client before the step stops waiting: past the
-  # pass limit, so a slow change is still timed rather than cut off.
+  # How long a write may take to reach every client before the step stops waiting. A change
+  # waits twice its pass limit when that's longer, so a slow change is still timed rather than
+  # cut off.
   @wait_ms 120_000
 
   # A few writes before anything is measured, so the node's pooled connections and caches are
@@ -91,7 +92,9 @@ defmodule HologramSyncBenchmark.Cases.Access do
   # Archiving or unarchiving the project, timed from its commit until every client has counted
   # every doc arriving as the delta that change makes: each client's target is what it had
   # counted before plus every doc.
-  defp change(peer, clients, conn, project_id, archived, kind, docs) do
+  defp change(peer, clients, conn, project_id, archived, kind, opts) do
+    docs = opts[:docs]
+    wait_ms = max(@wait_ms, opts[:access_limit] * 2_000)
     targets = Enum.map(clients, &(Client.report(&1).counted[kind] + docs))
 
     stats_before = DB.settled_stats(conn)
@@ -99,7 +102,7 @@ defmodule HologramSyncBenchmark.Cases.Access do
     poller = Measure.start_memory_peak(peer)
 
     committed_at = Peer.rpc(peer, Writer, :update, [Project, project_id, :archived, archived])
-    done? = await_counts(clients, kind, targets, System.monotonic_time(:millisecond) + @wait_ms)
+    done? = await_counts(clients, kind, targets, System.monotonic_time(:millisecond) + wait_ms)
 
     cpu_after = Measure.cpu_sample(peer)
     peak = Measure.stop_memory_peak(poller)
@@ -226,14 +229,14 @@ defmodule HologramSyncBenchmark.Cases.Access do
       {hide, stats_after_hide} =
         if filled? do
           :ok = warm_up(peer, clients, first_marker)
-          change(peer, clients, conn, context.project_id, true, :unsync, opts[:docs])
+          change(peer, clients, conn, context.project_id, true, :unsync, opts)
         else
           {skipped(), DB.settled_stats(conn)}
         end
 
       {show, stats_after_show} =
         if hide.done? do
-          change(peer, clients, conn, context.project_id, false, :put, opts[:docs])
+          change(peer, clients, conn, context.project_id, false, :put, opts)
         else
           {skipped(), stats_after_hide}
         end
