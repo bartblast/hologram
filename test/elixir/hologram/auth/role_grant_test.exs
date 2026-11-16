@@ -329,7 +329,10 @@ defmodule Hologram.Auth.RoleGrantTest do
     # The applier reads a present grant back by the id these columns derive, which is right only
     # while a conflict on the index IS a conflict on the derived primary key.
     test "names exactly the columns the grant store's unique index is over" do
-      %{columns: index_columns} = DB.mapping()[RoleGrant].indexes["hologram_role_grant_$uidx"]
+      %{columns: index_columns} =
+        DB.mapping()[RoleGrant].indexes[
+          "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx"
+        ]
 
       assert index_columns == RoleGrant.identity_columns()
     end
