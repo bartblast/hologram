@@ -14,4 +14,5 @@ defmodule Hologram.Test.Fixtures.Policy.Readers.Module17 do
   allow :close, when: any(card <- open_cards, card.author_id != user_id())
   allow :lock, when: none(card <- cards, card.done == true or card.author_id == user_id())
   allow :move, when: all(card <- cards, card.author_id == user_id())
+  allow :share, when: any(card <- open_cards, card.author_id == user_id() or card.done == true)
 end

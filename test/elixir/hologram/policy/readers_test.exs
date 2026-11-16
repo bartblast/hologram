@@ -383,6 +383,13 @@ defmodule Hologram.Policy.ReadersTest do
                :unlisted
     end
 
+    test "an any with an alternative naming nobody is unlisted" do
+      clause =
+        {:any, {[:open_cards], [or: [[{:author_id, :==, {:actor}}], [{:done, :==, true}]]]}}
+
+      assert verdict_class(Module17, clause) == :unlisted
+    end
+
     test "an any whose condition bounds nobody is unlisted" do
       assert verdict_class(Module17, {:any, {[:open_cards], [{:author_id, :!=, {:actor}}]}}) ==
                :unlisted
