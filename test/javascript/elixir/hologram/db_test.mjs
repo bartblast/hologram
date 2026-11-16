@@ -446,6 +446,16 @@ describe("Elixir_Hologram_DB", () => {
       );
     });
 
+    it("prints a query term passed where an entity struct goes", () => {
+      const term = filter(task, predicates([["done", Type.boolean(true)]]));
+
+      assertBoxedError(
+        () => create(term),
+        "Hologram.MisuseError",
+        `create takes an entity struct, got: ${JSON.stringify(term)}`,
+      );
+    });
+
     // What C7a proves is the ENTRY the batch carries; these prove the same write is readable
     // through the database's own getters the moment it is made, which is the seam the whole
     // issue turns on. No production code stands between them - the batch is in the overlay from
@@ -762,6 +772,16 @@ describe("Elixir_Hologram_DB", () => {
         () => update(held()),
         "Hologram.MisuseError",
         "update takes recorded changes - put values with put_attribute, move counters with increment or decrement, and edges with add_relationship or delete_relationship. A field set directly on the struct is not recorded: writing the whole struct would overwrite concurrent changes to fields you didn't touch.",
+      );
+    });
+
+    it("prints a query term passed where an entity struct goes", () => {
+      const term = filter(task, predicates([["done", Type.boolean(true)]]));
+
+      assertBoxedError(
+        () => update(term),
+        "Hologram.MisuseError",
+        `update takes an entity struct, got: ${JSON.stringify(term)}`,
       );
     });
 
@@ -1105,6 +1125,16 @@ describe("Elixir_Hologram_DB", () => {
         () => deleteEntity(Type.bitstring("x")),
         "Hologram.MisuseError",
         'delete takes an entity struct, got: "x"',
+      );
+    });
+
+    it("prints a query term passed where an entity struct goes", () => {
+      const term = filter(task, predicates([["done", Type.boolean(true)]]));
+
+      assertBoxedError(
+        () => deleteEntity(term),
+        "Hologram.MisuseError",
+        `delete takes an entity struct, got: ${JSON.stringify(term)}`,
       );
     });
 
@@ -1590,10 +1620,12 @@ describe("Elixir_Hologram_DB", () => {
     });
 
     it("raises when the first argument is not an entity type module", () => {
+      const term = filter(task, predicates([["done", Type.boolean(true)]]));
+
       assertBoxedError(
-        () => readById(filter(task, predicates([])), Type.bitstring(ID_1)),
+        () => readById(term, Type.bitstring(ID_1)),
         "Hologram.MisuseError",
-        /is not an entity type module - a by-id read takes the entity type, a query term is read with read\/1$/,
+        `${JSON.stringify(term)} is not an entity type module - a by-id read takes the entity type, a query term is read with read/1`,
       );
     });
 

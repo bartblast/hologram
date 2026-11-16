@@ -597,6 +597,38 @@ export default class DataLayer {
     return SyncStream.rowsChangedSinceRender;
   }
 
+  // Based on read_session_user/2 (renderer.ex)
+  //
+  // The session user's row as this client holds it, boxed the way the server hands it over as the
+  // {Hologram, :user} context: the row of the user entity type whose id is the acting user's, or
+  // nil when nobody is signed in or no such row is held. The client holds only rows its user may
+  // read, so a row the read rules deny is nil here as it is on the server.
+  //
+  // Answered on every render rather than read from the context the page arrived with, so a write
+  // to the row - this client's own or one the stream delivers - reaches every prop reading it.
+  //
+  // Looked up by id rather than run as a query: every render of every page asks, and a query
+  // would scan the whole user table, which holds every user the session user may read. The answer
+  // is the one the query would give - the row as the pending writes leave it, boxed with nothing
+  // included.
+  //
+  // WARNING: must match read_session_user/2 (renderer.ex).
+  static sessionUser() {
+    const userEntity = globalThis.Hologram.sync.userEntity;
+    const actorUserId = LocalDatabase.actorUserId;
+
+    const row =
+      actorUserId === null
+        ? null
+        : LocalDatabase.getRow(userEntity, actorUserId);
+
+    // Compared as the query compares, since a table is a plain object: an id spelled like one of
+    // its inherited members would find that member rather than a row.
+    return row && row.id === actorUserId
+      ? Model.box(userEntity, row)
+      : Type.nil();
+  }
+
   // The one signal that actually means the network is worth trying again. A batch whose send got
   // no answer is still pending, and this is what wakes the queue that stopped behind it.
   static streamOpened() {

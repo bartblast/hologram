@@ -746,7 +746,7 @@ export default class Interpreter {
   // TODO: implement opts param
   static inspect(term, opts = Type.keywordList()) {
     // Cases ordered by expected frequency (most common first)
-    switch (term.type) {
+    switch (term?.type) {
       case "atom":
         return Interpreter.#inspectAtom(term, opts);
 
@@ -779,6 +779,9 @@ export default class Interpreter {
 
       case "port":
         return `#Port<${term.segments.join(".")}>`;
+
+      default:
+        return Interpreter.#inspectUnboxed(term);
     }
   }
 
@@ -2451,6 +2454,21 @@ export default class Interpreter {
       term.data.map((elem) => Interpreter.inspect(elem, opts)).join(", ") +
       "}"
     );
+  }
+
+  // A value no boxed type describes - a query term, which the query stages
+  // build as a plain object, passed where something else goes - prints as its
+  // JSON, so a message names what it was handed rather than "undefined". JSON
+  // answers undefined for a function, a symbol or undefined, which print as
+  // String spells them, and throws on a cycle or a BigInt, which print as
+  // their object tag ("[object Object]") - neither may lose the message being
+  // built.
+  static #inspectUnboxed(term) {
+    try {
+      return JSON.stringify(term) ?? String(term);
+    } catch {
+      return Object.prototype.toString.call(term);
+    }
   }
 
   // Mirrors List.ascii_printable?/1 on a proper, nonempty list: 7..13 are the
