@@ -117,6 +117,15 @@ defmodule Hologram.QueryTest do
                    fn -> Code.eval_string(code) end
     end
 
+    test "raises on a pinned actor" do
+      actor = {:actor}
+
+      expected_msg =
+        "a filter can't name the acting user - only a policy condition can, got: [c_id: {:==, {:actor}}] - to filter by a user's id, pin a variable holding it: ^user_id"
+
+      assert_error Hologram.MisuseError, expected_msg, fn -> filter(Module3, c_id == ^actor) end
+    end
+
     test "compares a derived value" do
       assert filter(Module32, message_count > 3).filter == [{:message_count, :>, 3}]
     end

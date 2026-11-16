@@ -37,8 +37,8 @@ defineRuntimeGlobals();
 registerWebApis();
 
 describe("Durability", () => {
-  // Named for the store layout and the model the runtime globals below declare.
-  const DATABASE_NAME = "hologram.1.model-a";
+  // Named for the store layout, and the protocol and the model the runtime globals below declare.
+  const DATABASE_NAME = "hologram.1.7.model-a";
 
   // Installed for this suite and taken back down after it, never at module scope: mocha runs every
   // file in one process, and `open()` reads the absence of indexedDB as "this browser cannot
@@ -74,7 +74,7 @@ describe("Durability", () => {
   let raw = [];
 
   beforeEach(async () => {
-    globalThis.Hologram.sync = {modelHash: "model-a"};
+    globalThis.Hologram.sync = {modelHash: "model-a", protocolVersion: 7};
 
     Clock.reset();
     LocalDatabase.reset();
@@ -514,16 +514,17 @@ describe("Durability", () => {
   });
 
   describe("open()", () => {
-    // A bundle carrying another store layout, or on another model, must open a database of its
-    // own - which is what stops two tabs on different versions from ever sharing one.
-    it("names the database for the layout of the store and the model it speaks", async () => {
+    // A bundle carrying another store layout, speaking another protocol or on another model, must
+    // open a database of its own - which is what stops two tabs on different versions from ever
+    // sharing one, or a group.
+    it("names the database for the layout of the store, the protocol and the model it speaks", async () => {
       await Durability.open();
 
       const names = (await globalThis.indexedDB.databases()).map(
         (db) => db.name,
       );
 
-      assert.include(names, "hologram.1.model-a");
+      assert.include(names, DATABASE_NAME);
     });
 
     it("opens in indexeddb mode and creates the three object stores", async () => {
@@ -1381,7 +1382,7 @@ describe("Durability", () => {
       assert.isNull(resumed.cursor);
       assert.equal(resumed.seq, 0);
 
-      assert.equal((await readAll("entities", "hologram.1.model-a")).length, 1);
+      assert.equal((await readAll("entities", DATABASE_NAME)).length, 1);
     });
 
     // Their rows are what SOMEBODY ELSE was allowed to see, and a resuming stream is told what

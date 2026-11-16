@@ -53,6 +53,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module13, as: Entity13
   alias Hologram.Test.Fixtures.Entity.Module14, as: UserEntity
   alias Hologram.Test.Fixtures.Entity.Module15, as: Entity15
+  alias Hologram.Test.Fixtures.Entity.Module17, as: Entity17
   alias Hologram.Test.Fixtures.Entity.Module19, as: Entity19
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Entity.Module26, as: Entity26
@@ -74,6 +75,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module46, as: Entity46
   alias Hologram.Test.Fixtures.Entity.Module47, as: Entity47
   alias Hologram.Test.Fixtures.Entity.Module48, as: Entity48
+  alias Hologram.Test.Fixtures.Entity.Module50, as: Entity50
+  alias Hologram.Test.Fixtures.Entity.Module51, as: Entity51
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
@@ -86,7 +89,11 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Page.Module7, as: PageModule7
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module12, as: PathPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module17, as: ProjectPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module18, as: MemberPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module19, as: LabelPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module2, as: ParentPolicyEntity
+  alias Hologram.Test.Fixtures.Policy.Module20, as: TaskPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module24, as: ShelfPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module5, as: DelegationPolicyEntity
   alias Hologram.Test.Fixtures.Policy.Module6, as: DisjunctionPolicyEntity
@@ -181,6 +188,7 @@ defmodule Hologram.CompilerTest do
     model_hash: "my_model_hash",
     policy_hash: nil,
     role_modules: [],
+    synced_types: [],
     user_entity: nil
   }
 
@@ -287,6 +295,18 @@ defmodule Hologram.CompilerTest do
       derive_kept_reach(pages, call_graph, module_info_plt, permission_checking_pages)
 
     build_sync_constants(reach_by_page, component_queries, module_info_plt)
+  end
+
+  # What the data layer keeps of one page whose client code names only the given modules and
+  # reaches no component, checking permissions on the client or not.
+  defp mentioning_reach(modules, checks_permissions?) do
+    %{
+      PageModule18 => %{
+        checks_permissions?: checks_permissions?,
+        components: [],
+        modules: MapSet.new(modules)
+      }
+    }
   end
 
   defp user_window_id(permission_checking?) do
@@ -2387,6 +2407,7 @@ defmodule Hologram.CompilerTest do
                model_hash: nil,
                policy_hash: nil,
                role_modules: [],
+               synced_types: [],
                user_entity: nil
              }
     end
@@ -2408,6 +2429,112 @@ defmodule Hologram.CompilerTest do
     # every entity type it enforces.
     test "records the hash of every entity type's rules", %{sync_constants: sync_constants} do
       assert sync_constants.policy_hash == Policy.hash(Reflection.list_entities())
+    end
+
+    # No page's client code mentions Entity1, so only the queries can put it here.
+    test "syncs the types the queries the given pages reach read", %{
+      sync_constants: sync_constants
+    } do
+      assert Entity1 in sync_constants.synced_types
+    end
+
+    # The browser answers a query over the rows it holds, so the rows an include embeds are synced
+    # like the rows the query returns. PageModule22's query reaches Entity1 only through one.
+    test "syncs the types those queries reach only through an include", %{
+      call_graph: call_graph,
+      module_info_plt: module_info_plt
+    } do
+      sync_constants = derive_sync_constants([PageModule22], call_graph, module_info_plt, [])
+
+      assert Entity1 in sync_constants.synced_types
+    end
+
+    # Client-side actions read and write the types they name, which no query has to read.
+    test "syncs a type the given pages mention without querying", %{
+      sync_constants: sync_constants
+    } do
+      assert Entity4 in sync_constants.synced_types
+    end
+
+    test "leaves out of the synced types a type no query reads and no page mentions", %{
+      sync_constants: sync_constants
+    } do
+      refute Entity10 in sync_constants.synced_types
+    end
+
+    # Like an audit log: a type with rules ships them to every client, but no browser code reads
+    # its rows, so no browser gets any.
+    test "leaves out of the synced types a policied type nothing reads", %{
+      module_info_plt: module_info_plt
+    } do
+      sync_constants =
+        build_sync_constants(mentioning_reach([Entity4], false), %{}, module_info_plt)
+
+      assert MapSet.member?(sync_constants.entity_types, PolicyEntity)
+      refute PolicyEntity in sync_constants.synced_types
+    end
+
+    # A browser never decides a read rule, and with no page checking permissions it answers no
+    # other rule either, so the rows the rules read are no use to it.
+    test "syncs none of the types the rules read when no page checks permissions", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = mentioning_reach([PathPolicyEntity], false)
+
+      assert build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types == [
+               PathPolicyEntity
+             ]
+    end
+
+    # A checking browser answers every rule of the types it holds over the rows it holds. The
+    # path's rules read Entity17 through `link`, DelegationPolicyEntity through `parent`,
+    # PolicyEntity through `parent.parent` and ParentPolicyEntity through the `publish` rule
+    # PolicyEntity delegates to its own parent. A checking browser holds grant rows too.
+    test "syncs the types every rule reads and the grant type when a page checks permissions", %{
+      module_info_plt: module_info_plt
+    } do
+      reach_by_page = mentioning_reach([PathPolicyEntity], true)
+
+      assert build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types == [
+               RoleGrant,
+               Entity17,
+               PolicyEntity,
+               PathPolicyEntity,
+               ParentPolicyEntity,
+               DelegationPolicyEntity
+             ]
+    end
+
+    # Client code checks only rows of the types it queries or mentions, so a project the task's
+    # update rule reads is synced, while the members only the project's own rules read are not.
+    test "syncs the types the rules read one step out", %{module_info_plt: module_info_plt} do
+      reach_by_page = mentioning_reach([TaskPolicyEntity], true)
+
+      synced_types = build_sync_constants(reach_by_page, %{}, module_info_plt).synced_types
+
+      assert ProjectPolicyEntity in synced_types
+      refute MemberPolicyEntity in synced_types
+    end
+
+    # Entity51's read rule delegates to Entity50, which declares no rule, so no one may read an
+    # Entity50 row and the client's model leaves the type out - a row of it could not be read back.
+    test "syncs only types of the client's model", %{module_info_plt: module_info_plt} do
+      sync_constants =
+        build_sync_constants(mentioning_reach([Entity51], true), %{}, module_info_plt)
+
+      refute MapSet.member?(sync_constants.entity_types, Entity50)
+      assert sync_constants.synced_types == [RoleGrant, Entity51]
+    end
+
+    # No user entity type, no grant store to check permissions against, so no page checks them.
+    test "syncs none of the types the rules read when the data model designates no user entity type",
+         %{module_info_plt: module_info_plt} do
+      reach_by_page = mentioning_reach([PathPolicyEntity], true)
+      plt_without_user_entity = without_user_entity(module_info_plt)
+
+      assert build_sync_constants(reach_by_page, %{}, plt_without_user_entity).synced_types == [
+               PathPolicyEntity
+             ]
     end
   end
 
@@ -4564,8 +4691,8 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(js, ~s/"grant_role:owner":[#{owner_rule}],/)
     end
 
-    # The acting user is named rather than carried: the client binds its own id at evaluation,
-    # the way the query kernel binds an actor leaf.
+    # The acting user is named rather than carried: the client binds its own id when it evaluates
+    # the rule.
     test "names the acting user in a rule that references them", %{
       ir_plt: ir_plt,
       runtime_mfas: runtime_mfas

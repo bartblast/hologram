@@ -14,7 +14,7 @@ import ManuallyPortedElixirHologramEntity from "../../assets/js/elixir/hologram/
 import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
-import QueryKernel from "../../assets/js/query_kernel.mjs";
+import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
 import Tabs from "../../assets/js/tabs.mjs";
@@ -43,7 +43,6 @@ describe("DataLayer", () => {
 
       Model.reset();
       LocalDatabase.reset();
-      LocalDatabase.actorUserId = null;
       GlobalRegistry.set("connectPageModule", null);
 
       LocalDatabase.putRow(TASK, {
@@ -62,7 +61,6 @@ describe("DataLayer", () => {
 
     afterEach(() => {
       LocalDatabase.reset();
-      LocalDatabase.actorUserId = null;
       delete globalThis.Hologram.sync;
     });
 
@@ -377,21 +375,6 @@ describe("DataLayer", () => {
       );
 
       assert.deepStrictEqual(boxedTasks(result), allTasks());
-    });
-
-    it("runs the query as the acting user", () => {
-      const running = sinon.spy(QueryKernel, "run");
-
-      LocalDatabase.actorUserId = "u1";
-
-      DataLayer.answerDerivedQuery(
-        "MyApp.Listing",
-        Type.atom("tasks"),
-        [],
-        DataLayer.normalizeQuery(Type.alias(TASK)),
-      );
-
-      assert.deepStrictEqual(running.firstCall.args[1], {actorUserId: "u1"});
     });
   });
 
@@ -867,6 +850,30 @@ describe("DataLayer", () => {
     });
   });
 
+  describe("rendered()", () => {
+    afterEach(() => {
+      SyncStream.stopReason = null;
+    });
+
+    it("puts the notice up in a tab the server stopped", () => {
+      const updating = sinon.stub(ReloadNotice, "update");
+
+      SyncStream.stopReason = "model_hash";
+
+      DataLayer.rendered();
+
+      sinon.assert.calledOnceWithExactly(updating, true);
+    });
+
+    it("leaves the notice down in a tab the server serves", () => {
+      const updating = sinon.stub(ReloadNotice, "update");
+
+      DataLayer.rendered();
+
+      sinon.assert.calledOnceWithExactly(updating, false);
+    });
+  });
+
   describe("restore()", () => {
     let adopting, flushing, posting, readying, resuming;
 
@@ -939,6 +946,37 @@ describe("DataLayer", () => {
       SyncStream.rowsChangedSinceRender = true;
 
       assert.isTrue(DataLayer.rowsChangedSinceRender());
+    });
+  });
+
+  describe("saved()", () => {
+    it("waits for what this tab sealed to be written down", async () => {
+      const recording = sinon.stub(Batches, "recorded").resolves([]);
+
+      await DataLayer.saved();
+
+      sinon.assert.calledOnce(recording);
+    });
+
+    // A store write that never answers would otherwise leave a link doing nothing.
+    it("stops waiting after three seconds", async () => {
+      const clock = sinon.useFakeTimers();
+
+      sinon.stub(Batches, "recorded").returns(new Promise(() => {}));
+
+      let settled = false;
+
+      DataLayer.saved().then(() => {
+        settled = true;
+      });
+
+      await clock.tickAsync(2999);
+
+      assert.isFalse(settled);
+
+      await clock.tickAsync(1);
+
+      assert.isTrue(settled);
     });
   });
 
@@ -1048,6 +1086,22 @@ describe("DataLayer", () => {
       LocalDatabase.actorUserId = undefined;
 
       assert.deepStrictEqual(DataLayer.sessionUser(), Type.nil());
+    });
+  });
+
+  describe("stopped()", () => {
+    afterEach(() => {
+      SyncStream.stopReason = null;
+    });
+
+    it("is true once the server stopped serving the tab", () => {
+      SyncStream.stopReason = "protocol_version";
+
+      assert.isTrue(DataLayer.stopped());
+    });
+
+    it("is false while the server serves it", () => {
+      assert.isFalse(DataLayer.stopped());
     });
   });
 

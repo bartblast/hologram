@@ -1627,6 +1627,37 @@ defmodule Hologram.Entity.ValidatorTest do
       assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
     end
 
+    # The database names derived from an attribute join it with single underscores, so one at
+    # its ends or two in a row would put __ into them - `post__draft_$uidx`, `draft__$sort`.
+    test "rejects an attribute name starting or ending with an underscore or holding two in a row" do
+      for {name, index} <- Enum.with_index([:_draft, :draft_, :dr__aft]) do
+        module_name = "Hologram.Entity.ValidatorTest.UnderscoreAttr#{index}"
+
+        expected_msg =
+          "invalid name #{inspect(name)} used for attribute in #{module_name} - a declared name can't start or end with _ or hold __, since the database names derived from it would hold __"
+
+        code = """
+        defmodule #{module_name} do
+          use Hologram.Entity
+
+          attribute #{inspect(name)}, :string
+        end
+        """
+
+        assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+      end
+    end
+
+    test "accepts an attribute name with single underscores between its words" do
+      defmodule InlineEntityFixture165 do
+        use Hologram.Entity
+
+        attribute :draft_status, :string
+      end
+
+      assert [{:draft_status, :string, []}] = InlineEntityFixture165.__attributes__()
+    end
+
     test "rejects reserved system attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
@@ -1686,6 +1717,18 @@ defmodule Hologram.Entity.ValidatorTest do
   end
 
   describe "validate_derived!/4" do
+    # A derived field reaches no database name, so the underscore rule for attributes and
+    # relationships doesn't apply to it.
+    test "accepts a derived field name starting with an underscore" do
+      defmodule InlineEntityFixture166 do
+        use Hologram.Entity
+
+        derived :_copy, :integer, fn -> 1 end
+      end
+
+      assert [{:_copy, :integer, []}] = InlineEntityFixture166.__derived__()
+    end
+
     test "accepts each kind of type" do
       defmodule InlineEntityFixture142 do
         use Hologram.Entity
@@ -2663,6 +2706,53 @@ defmodule Hologram.Entity.ValidatorTest do
       assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
     end
 
+    # An inverse stores nothing, but the rule stays the same for it, so a relationship keeps it
+    # when it stops being an inverse.
+    test "rejects an inverse relationship name starting with an underscore" do
+      expected_msg =
+        "invalid name :_posts used for relationship in Hologram.Entity.ValidatorTest.UnderscoreInverse - a declared name can't start or end with _ or hold __, since the database names derived from it would hold __"
+
+      code = """
+      defmodule Hologram.Entity.ValidatorTest.UnderscoreInverse do
+        use Hologram.Entity
+
+        relationship :_posts, [Hologram.Test.Fixtures.Entity.Module1], inverse: author
+      end
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+    end
+
+    test "accepts a relationship name with single underscores between its words" do
+      defmodule InlineEntityFixture167 do
+        use Hologram.Entity
+
+        relationship :draft_owner, Hologram.Test.Fixtures.Entity.Module1
+      end
+
+      assert [{:draft_owner, Hologram.Test.Fixtures.Entity.Module1, []}] =
+               InlineEntityFixture167.__relationships__()
+    end
+
+    test "rejects a relationship name starting or ending with an underscore or holding two in a row" do
+      for {name, index} <- Enum.with_index([:_owner, :owner_, :ow__ner]) do
+        module_name = "Hologram.Entity.ValidatorTest.UnderscoreRelationship#{index}"
+
+        expected_msg =
+          "invalid name #{inspect(name)} used for relationship in #{module_name} - a declared name can't start or end with _ or hold __, since the database names derived from it would hold __"
+
+        code = """
+        defmodule #{module_name} do
+          use Hologram.Entity
+
+          relationship #{inspect(name)}, Hologram.Test.Fixtures.Entity.Module1
+        end
+        """
+
+        assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+      end
+    end
+
     test "rejects reserved system attribute names" do
       for reserved_name <- [:created_at, :id, :updated_at] do
         module_name =
@@ -3111,6 +3201,45 @@ defmodule Hologram.Entity.ValidatorTest do
   end
 
   describe "validate_use_opts!/2" do
+    test "rejects an entity type module name whose table name would hold __" do
+      expected_msg =
+        ~s(invalid entity type module name Hologram.Entity.ValidatorTest.Blog_Post - its segment "blog__post" in the derived table name can't start or end with _ or hold __, so drop the underscores from the module name)
+
+      code = """
+      defmodule Hologram.Entity.ValidatorTest.Blog_Post do
+        use Hologram.Entity
+      end
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+    end
+
+    test "rejects an entity type module name with the offending segment before the last one" do
+      expected_msg =
+        ~s(invalid entity type module name Hologram.Entity.ValidatorTest.Blog_Ctx.Post - its segment "blog__ctx" in the derived table name can't start or end with _ or hold __, so drop the underscores from the module name)
+
+      code = """
+      defmodule Hologram.Entity.ValidatorTest.Blog_Ctx.Post do
+        use Hologram.Entity
+      end
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+    end
+
+    test "rejects an entity type module name whose table name segment would end with _" do
+      expected_msg =
+        ~s(invalid entity type module name Hologram.Entity.ValidatorTest.BlogPost_ - its segment "blog_post_" in the derived table name can't start or end with _ or hold __, so drop the underscores from the module name)
+
+      code = """
+      defmodule Hologram.Entity.ValidatorTest.BlogPost_ do
+        use Hologram.Entity
+      end
+      """
+
+      assert_error Hologram.CompileError, expected_msg, fn -> Code.eval_string(code) end
+    end
+
     test "accepts the user option" do
       defmodule InlineEntityFixture78 do
         use Hologram.Entity, user: true

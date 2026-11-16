@@ -7,6 +7,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
   use Hologram.Job
 
   alias Hologram.Auth
+  alias Hologram.DB.EntityOperations
   alias Hologram.Test.Fixtures.Entity.Module2, as: Entity2
   alias Hologram.Test.Fixtures.Job.Module1
 
@@ -14,6 +15,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
     values: [
       :create_next,
       :create_row,
+      :delete_self,
       :error,
       :exit,
       :garbage,
@@ -22,6 +24,7 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
       :raise,
       :record_actor,
       :record_order,
+      :swept,
       :throw
     ]
 
@@ -38,6 +41,13 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
     %{c: "by job"}
     |> Entity2.new()
     |> Hologram.DB.create!()
+
+    :ok
+  end
+
+  # Takes its own row away, so recording the outcome has no row to write to.
+  def run(%{outcome: :delete_self} = job) do
+    :ok = EntityOperations.delete(__MODULE__, job.id)
 
     :ok
   end
@@ -62,6 +72,13 @@ defmodule Hologram.Test.Fixtures.Job.Module3 do
 
   def run(%{outcome: :record_order} = job) do
     Process.put(:ran_order, [job.id | Process.get(:ran_order, [])])
+
+    :ok
+  end
+
+  # Fails its own row, standing for a pass on another node that found the run's lock gone.
+  def run(%{outcome: :swept} = job) do
+    :ok = EntityOperations.update(__MODULE__, job.id, %{error: "swept", status: :failed})
 
     :ok
   end

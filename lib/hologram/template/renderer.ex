@@ -18,7 +18,6 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Entity
   alias Hologram.Entity.Derived
   alias Hologram.Entity.NotIncluded
-  alias Hologram.Entity.Validator
   alias Hologram.Identifier
   alias Hologram.Query
   alias Hologram.Query.Stage
@@ -1699,7 +1698,7 @@ defmodule Hologram.Template.Renderer do
   defp read_session_user(nil, _user_id), do: nil
 
   defp read_session_user(user_entity, user_id) do
-    if Validator.attribute_value_valid?(user_id, :uuid) do
+    if Auth.canonical_id(user_id) do
       term =
         user_entity
         |> Query.filter(id: ^user_id)

@@ -1501,6 +1501,28 @@ describe("Hologram", () => {
       assert.match(eventTargetNode.__hologramId__, UUID_REGEX);
     });
 
+    // The page is loaded afresh, so asking the server for it first would render it twice.
+    it("hands the page to the browser without fetching it in a tab the server stopped serving", async () => {
+      const navigating = sinon.stub(Hologram, "navigateBrowserTo");
+
+      Hologram.dataLayer = {saved: async () => null, stopped: () => true};
+
+      try {
+        Hologram.executeLoadPrefetchedPageAction(
+          loadPrefetchedPageAction,
+          eventTargetNode,
+        );
+
+        await waitForEventLoop();
+
+        sinon.assert.notCalled(clientFetchPageStub);
+        sinon.assert.calledOnceWithExactly(navigating, pagePath);
+      } finally {
+        navigating.restore();
+        Hologram.dataLayer = null;
+      }
+    });
+
     it("doesn't add a Hologram ID to an event target DOM node that already has one", () => {
       eventTargetNode.__hologramId__ = "dummy_hologram_id";
 
@@ -1820,6 +1842,19 @@ describe("Hologram", () => {
     it("adds a Hologram ID to an event target DOM node that doesn't have one", () => {
       Hologram.executePrefetchPageAction(prefetchPageAction, eventTargetNode);
       assert.match(eventTargetNode.__hologramId__, UUID_REGEX);
+    });
+
+    // The page will be loaded afresh rather than from what a prefetch would bring.
+    it("prefetches nothing in a tab the server stopped serving", () => {
+      Hologram.dataLayer = {stopped: () => true};
+
+      try {
+        Hologram.executePrefetchPageAction(prefetchPageAction, eventTargetNode);
+      } finally {
+        Hologram.dataLayer = null;
+      }
+
+      sinon.assert.notCalled(clientFetchPageDataStub);
     });
 
     it("doesn't add a Hologram ID to an event target DOM node that already has one", () => {
@@ -3317,6 +3352,41 @@ describe("Hologram", () => {
       sinon.assert.notCalled(fetchPageStub);
     });
 
+    // The hop was asked for before the server stopped serving the tab, and answered after.
+    it("waits for the store before handing over a redirect hop that names no page in a tab stopped meanwhile", async () => {
+      let notPage, record;
+
+      fetchPageStub.callsFake((_toParam, _onSuccess, onNotPage) => {
+        notPage = onNotPage;
+      });
+
+      await Hologram.loadNewPage("/clicked", redirectTo("/target"));
+
+      Hologram.dataLayer = {
+        saved: () =>
+          new Promise((resolve) => {
+            record = resolve;
+          }),
+        stopped: () => true,
+      };
+
+      try {
+        notPage();
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, []);
+
+        record();
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, ["/target"]);
+      } finally {
+        Hologram.dataLayer = null;
+      }
+    });
+
     it("follows a redirect by asking for the page it names", async () => {
       fetchPageStub.callsFake((toParam, _onSuccess, _onNotPage) => {
         assert.equal(
@@ -4145,6 +4215,204 @@ describe("Hologram", () => {
       });
     });
 
+    // The next page would run the same code the server can no longer serve.
+    describe("a page for a tab the server stopped serving", () => {
+      let frames, record, replaceLocationStub;
+
+      beforeEach(() => {
+        frames = [];
+        window.requestAnimationFrame = (callback) => frames.push(callback);
+        replaceLocationStub = sinon.stub(Hologram, "replaceBrowserLocation");
+
+        Hologram.dataLayer = {
+          saved: () =>
+            new Promise((resolve) => {
+              record = resolve;
+            }),
+          stopped: () => true,
+        };
+      });
+
+      afterEach(() => {
+        replaceLocationStub.restore();
+        delete window.requestAnimationFrame;
+        Hologram.dataLayer = null;
+        removeBundleScripts();
+      });
+
+      it("is handed to the browser once what the person wrote is saved", async () => {
+        const loading = Hologram.loadNewPage(
+          "/target",
+          payloadFor("stopped-1"),
+        );
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, []);
+
+        record();
+        await loading;
+
+        assert.deepStrictEqual(assignedUrls, ["/target"]);
+        assert.deepStrictEqual(frames, []);
+        assert.isNull(bundleScript("stopped-1"));
+      });
+
+      // The address bar shows the entry's URL already, and a replace to it would only jump within
+      // the document when the URL has a fragment.
+      it("reloads the entry the browser went to when it was meant for one", async () => {
+        const reloading = sinon.stub(Hologram, "reloadBrowserLocation");
+        const entryPath = window.location.pathname + window.location.search;
+
+        try {
+          const loading = Hologram.loadNewPage(
+            entryPath,
+            payloadFor("stopped-2"),
+            0,
+            "history-entry-stopped",
+          );
+
+          record();
+          await loading;
+
+          sinon.assert.calledOnce(reloading);
+          sinon.assert.notCalled(replaceLocationStub);
+          assert.deepStrictEqual(assignedUrls, []);
+        } finally {
+          reloading.restore();
+        }
+      });
+
+      // The path of an entry asked for again carries its fragment, and a replace to it would only
+      // jump within the document.
+      it("reloads the entry the browser went to when its URL has a fragment", async () => {
+        const reloading = sinon.stub(Hologram, "reloadBrowserLocation");
+        const entryPath = window.location.pathname + window.location.search;
+
+        try {
+          const loading = Hologram.loadNewPage(
+            `${entryPath}#section`,
+            payloadFor("stopped-7"),
+            0,
+            "history-entry-stopped",
+          );
+
+          record();
+          await loading;
+
+          sinon.assert.calledOnce(reloading);
+          sinon.assert.notCalled(replaceLocationStub);
+        } finally {
+          reloading.restore();
+        }
+      });
+
+      // The entry's page redirected, and the hop's answer arrived once the tab was stopped. Asking
+      // for the entry's URL again could redirect elsewhere, so the browser goes where the server
+      // sent it, in place of the entry.
+      it("puts the page a redirect led to in place of the entry the browser went to", async () => {
+        const reloading = sinon.stub(Hologram, "reloadBrowserLocation");
+
+        try {
+          const loading = Hologram.loadNewPage(
+            "/redirected-to",
+            payloadFor("stopped-6"),
+            1,
+            "history-entry-stopped",
+          );
+
+          record();
+          await loading;
+
+          sinon.assert.calledOnceWithExactly(
+            replaceLocationStub,
+            "/redirected-to",
+          );
+
+          sinon.assert.notCalled(reloading);
+          assert.deepStrictEqual(assignedUrls, []);
+        } finally {
+          reloading.restore();
+        }
+      });
+
+      // Loaded afresh either way, and only once what the person wrote is in the store.
+      it("waits for the store when the page was also described for another identity", async () => {
+        IdentityTracker.init("tag-1");
+
+        try {
+          const identityPeriod = IdentityTracker.period;
+          IdentityTracker.observe("tag-2");
+
+          const loading = Hologram.loadNewPage("/target", {
+            ...payloadFor("stopped-4"),
+            identityPeriod,
+          });
+
+          await waitForEventLoop();
+
+          assert.deepStrictEqual(assignedUrls, []);
+
+          record();
+          await loading;
+
+          assert.deepStrictEqual(assignedUrls, ["/target"]);
+        } finally {
+          clearIdentityTracker();
+        }
+      });
+
+      // Handed over as it was asked for: the server follows its own redirect.
+      it("is handed to the browser when it is a redirect", async () => {
+        const loading = Hologram.loadNewPage("/clicked", redirectTo("/target"));
+
+        record();
+        await loading;
+
+        assert.deepStrictEqual(assignedUrls, ["/clicked"]);
+        sinon.assert.notCalled(fetchPageStub);
+      });
+
+      it("is not handed over when another navigation took over while saving", async () => {
+        const loading = Hologram.loadNewPage("/first", payloadFor("stopped-3"));
+
+        await waitForEventLoop();
+
+        Hologram.navigationCount += 1;
+
+        record();
+        await loading;
+
+        assert.deepStrictEqual(assignedUrls, []);
+      });
+
+      // The stop can arrive while the snapshot is saved or the frame is awaited.
+      it("is handed to the browser when the stop arrives before the frame that shows it", async () => {
+        const stopped = sinon.stub().returns(false);
+
+        Hologram.dataLayer = {saved: async () => null, stopped};
+
+        await Hologram.loadNewPage("/target", payloadFor("stopped-5"));
+
+        stopped.returns(true);
+        frames[0]();
+
+        await waitForEventLoop();
+
+        assert.deepStrictEqual(assignedUrls, ["/target"]);
+        assert.isNull(bundleScript("stopped-5"));
+      });
+
+      it("is shown as usual in a tab the server serves", async () => {
+        Hologram.dataLayer = {stopped: () => false};
+
+        await Hologram.loadNewPage("/target", payloadFor("served-1"));
+
+        assert.deepStrictEqual(assignedUrls, []);
+        assert.equal(frames.length, 1);
+      });
+    });
+
     // A prefetch kept across a logout, or a response read before one.
     describe("a page described for an identity that has since changed", () => {
       let frames, pushStateStub, reloadStub;
@@ -4903,6 +5171,144 @@ describe("Hologram", () => {
     afterEach(() => {
       clearIdentityTracker();
       Hologram.pageIdentityPeriod = null;
+    });
+
+    // The entry's page would run the same code the server can no longer serve.
+    describe("in a tab the server stopped serving", () => {
+      let record, reloadStub;
+
+      beforeEach(() => {
+        reloadStub = sinon.stub(Hologram, "reloadBrowserLocation");
+
+        Hologram.dataLayer = {
+          saved: () =>
+            new Promise((resolve) => {
+              record = resolve;
+            }),
+          stopped: () => true,
+        };
+      });
+
+      // A popstate that read a snapshot advanced the registry's epoch, which leaves a navigation
+      // under way until a mount closes it - and these tests never mount.
+      afterEach(() => {
+        reloadStub.restore();
+        Hologram.dataLayer = null;
+        Hologram.domEpoch = 0;
+        Hologram.registryEpoch = 0;
+      });
+
+      it("loads the entry afresh once what the person wrote is saved", async () => {
+        const restoring = Hologram.handlePopstateEvent({
+          state: "history-stopped-1",
+        });
+
+        await waitForEventLoop();
+
+        sinon.assert.notCalled(reloadStub);
+
+        record();
+        await restoring;
+
+        sinon.assert.calledOnce(reloadStub);
+      });
+
+      it("leaves the entry to a navigation that took over while saving", async () => {
+        const restoring = Hologram.handlePopstateEvent({
+          state: "history-stopped-2",
+        });
+
+        await waitForEventLoop();
+
+        Hologram.navigationCount += 1;
+
+        record();
+        await restoring;
+
+        sinon.assert.notCalled(reloadStub);
+      });
+
+      // The stop can arrive while the snapshot is read.
+      it("loads the entry afresh when the stop arrives while the snapshot is read", async () => {
+        const saving = sinon.stub().resolves(null);
+        const stopped = sinon.stub();
+
+        stopped.onFirstCall().returns(false);
+        stopped.returns(true);
+
+        Hologram.dataLayer = {saved: saving, stopped};
+
+        await Hologram.handlePopstateEvent({state: "history-stopped-4"});
+
+        sinon.assert.calledOnce(saving);
+        sinon.assert.calledOnce(reloadStub);
+      });
+
+      // Or while the page's bundle is asked for, before the snapshot is restored.
+      it("loads the entry afresh when the stop arrives before the snapshot is restored", async () => {
+        const saving = sinon.stub().resolves(null);
+        const stopped = sinon.stub().returns(false);
+
+        Hologram.dataLayer = {saved: saving, stopped};
+
+        sessionStorage.setItem(
+          "hologram_page_snapshot_history-stopped-5",
+          Serializer.serialize(
+            {
+              componentRegistryEntries: Type.map(),
+              identityPeriod: IdentityTracker.period,
+              instanceId: "popstate-instance",
+              pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Module7"),
+              pageParams: Type.map(),
+              scrollPosition: [0, 0],
+              subscriptionReceipts: [],
+            },
+            "client",
+          ),
+        );
+
+        const fetchStub = sinon
+          .stub(Client, "fetchPageDigest")
+          .callsFake((_pageModule, onSuccess) => {
+            stopped.returns(true);
+
+            return onSuccess("stopped-5-digest");
+          });
+
+        const historyId = Hologram.historyId;
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-stopped-5"});
+        } finally {
+          fetchStub.restore();
+          sessionStorage.clear();
+
+          document.head
+            .querySelectorAll("script[src^='/hologram/']")
+            .forEach((script) => script.remove());
+
+          ScriptRegistry.statuses.clear();
+          MountGate.require([]);
+          MountGate.cancel();
+        }
+
+        sinon.assert.calledOnce(saving);
+        sinon.assert.calledOnce(reloadStub);
+        assert.equal(Hologram.historyId, historyId);
+      });
+
+      // The browser scrolls to a #fragment of the page on screen, which is not leaving it.
+      it("leaves a jump to a fragment of the page on screen alone", async () => {
+        Hologram.historyId = "history-stopped-3";
+
+        try {
+          await Hologram.handlePopstateEvent({state: "history-stopped-3"});
+        } finally {
+          Hologram.historyId = null;
+        }
+
+        sinon.assert.notCalled(reloadStub);
+      });
     });
 
     // The history's side of the navigation boundary. The handler needs a page to restore, and
@@ -6956,6 +7362,35 @@ describe("Hologram", () => {
       Hologram.render();
 
       assert.isFalse(SyncStream.rowsChangedSinceRender);
+    });
+
+    // What a tab the server stopped shows the person is put up after the patch.
+    it("tells the data layer it finished, after the patch", () => {
+      const patching = sinon.stub();
+
+      stubRender(patching);
+      setDataLayer();
+
+      const rendered = sinon.stub(Hologram.dataLayer, "rendered");
+
+      Hologram.render();
+
+      sinon.assert.calledOnce(rendered);
+      sinon.assert.callOrder(patching, rendered);
+    });
+
+    it("tells the data layer nothing when the render raised", () => {
+      stubRender(() => {
+        throw new Error("template raised");
+      });
+
+      setDataLayer();
+
+      const rendered = sinon.stub(Hologram.dataLayer, "rendered");
+
+      assert.throws(() => Hologram.render(), "template raised");
+
+      sinon.assert.notCalled(rendered);
     });
 
     describe("Phoenix's live reload iframe", () => {

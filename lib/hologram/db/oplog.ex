@@ -35,11 +35,17 @@ defmodule Hologram.DB.Oplog do
 
   @data_ops [:del_entity, :patch_entity, :put_entity]
 
+  # PostgreSQL binds at most 65,535 parameters per statement, and each row takes one per column -
+  # so a write appending more effects than that allows, like the delete of a row with thousands of
+  # edges, goes in as several statements.
+  @max_rows_per_insert div(65_535, length(@columns))
+
   @relationship_ops [:add_relationship, :del_relationship]
 
   @doc """
   Appends the given effects to the log in the caller's transaction, and wakes the dispatchers
-  listening for them. Appending nothing does nothing.
+  listening for them. Appending nothing does nothing. A large append goes in as several statements,
+  all in the caller's transaction, and wakes the dispatchers once.
 
   An effect names its `:op`, the `:entity_type` and `:entity_id` it happened to, and what the op
   carries: `:data` for `:put_entity` (every attribute), `:patch_entity` (the changed ones) and
@@ -71,21 +77,14 @@ defmodule Hologram.DB.Oplog do
   @spec append(list(map)) :: :ok
   def append([]), do: :ok
 
-  # sobelow_skip ["SQL.Query"]
   def append(effects) do
     model_hash = Model.hash()
     actor_id = Codec.encode(Context.actor_user_id(), :uuid)
     mutation_ref = Ref.get()
 
-    values = Enum.flat_map(effects, &row(&1, model_hash, actor_id, mutation_ref))
-
-    column_list = Enum.map_join(@columns, ", ", &Mapper.quote_identifier/1)
-    row_list = row_placeholders(length(effects))
-
-    statement =
-      "INSERT INTO #{qualified_table()} (#{column_list}) VALUES #{row_list}"
-
-    {:ok, _result} = Connection.query(statement, values)
+    effects
+    |> Enum.chunk_every(@max_rows_per_insert)
+    |> Enum.each(&insert(&1, model_hash, actor_id, mutation_ref))
 
     notify()
   end
@@ -347,6 +346,19 @@ defmodule Hologram.DB.Oplog do
       tx: tx,
       type: entity_type(type)
     }
+  end
+
+  # sobelow_skip ["SQL.Query"]
+  defp insert(effects, model_hash, actor_id, mutation_ref) do
+    values = Enum.flat_map(effects, &row(&1, model_hash, actor_id, mutation_ref))
+
+    column_list = Enum.map_join(@columns, ", ", &Mapper.quote_identifier/1)
+    row_list = row_placeholders(length(effects))
+
+    statement =
+      "INSERT INTO #{qualified_table()} (#{column_list}) VALUES #{row_list}"
+
+    {:ok, _result} = Connection.query(statement, values)
   end
 
   defp notify do
