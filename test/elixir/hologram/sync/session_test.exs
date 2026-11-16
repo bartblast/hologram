@@ -19,6 +19,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.DB.Oplog
   alias Hologram.DB.QueryRunner
   alias Hologram.Entity
+  alias Hologram.Mutation.Record
   alias Hologram.Policy
   alias Hologram.Policy.Edges
   alias Hologram.Query
@@ -27,6 +28,7 @@ defmodule Hologram.Sync.SessionTest do
   alias Hologram.Sync.Cursor
   alias Hologram.Sync.Evaluator
   alias Hologram.Sync.Evaluators
+  alias Hologram.Sync.Fill
   alias Hologram.Sync.Frame
   alias Hologram.Sync.PageWindows
   alias Hologram.Sync.ResultStore
@@ -66,6 +68,7 @@ defmodule Hologram.Sync.SessionTest do
   @public_project_window "w_public_project"
   @reach_window "w_reach"
   @replica_id "0192b1e9-7a2b-7c3d-8e4f-5a6b7c8d9e0f"
+  @types_hash "00112233445566778899aabbccddeeff"
 
   setup do
     setup_query_cache(QueryCacheStub, false)
@@ -73,6 +76,7 @@ defmodule Hologram.Sync.SessionTest do
 
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
       entries: %{},
+      synced_types: [Module2, PolicyModule1, PolicyModule5],
       windows: %{
         @board_window => Stage.normalize(Module2),
         @other_window => Stage.normalize(PolicyModule1),
@@ -173,6 +177,9 @@ defmodule Hologram.Sync.SessionTest do
       |> Keyword.put_new(:client, self())
       |> Keyword.put_new(:page, @page)
       |> Keyword.put_new(:policy_hash, @policy_hash)
+      |> Keyword.put_new(:types_hash, @types_hash)
+      |> Keyword.put_new(:read_fill, &read_fill_in_sandbox/4)
+      |> Keyword.put_new(:read_named, &read_named_in_sandbox/4)
 
     session = start_supervised!(Supervisor.child_spec({Session, opts}, id: make_ref()))
 
@@ -188,6 +195,26 @@ defmodule Hologram.Sync.SessionTest do
       :ok -> :ok
       {:already, :allowed} -> :ok
     end
+  end
+
+  # The fill and a catch-up's reading again read in a snapshot of their own, which the test's
+  # connection cannot open: it is inside the test's transaction, and a savepoint of the session's
+  # would share names with the test's own. So the session reads in the test's transaction, which is
+  # the one snapshot every read here sees.
+  #
+  # And it traps exits from here on, so the end of a test stops it between two messages rather than
+  # in the middle of a read: a process killed while it reads takes the test's connection down with
+  # it, and the next test's with that.
+  defp read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types) do
+    Process.flag(:trap_exit, true)
+
+    Fill.read_now(entity_type, actor_user_id, replica_id, synced_types)
+  end
+
+  defp read_named_in_sandbox(ids_by_type, actor_user_id, replica_id, synced_types) do
+    Process.flag(:trap_exit, true)
+
+    Fill.read_named_now(ids_by_type, actor_user_id, replica_id, synced_types)
   end
 
   defp resume_opts(opts) do
@@ -235,7 +262,29 @@ defmodule Hologram.Sync.SessionTest do
     fn ->
       allow_into_sandbox(self(), test_pid)
 
-      Catchup.gap(cursor, actor_user_id, @policy_hash)
+      Catchup.gap(cursor, actor_user_id, @policy_hash, @types_hash)
+    end
+  end
+
+  # Every delta the fill sends a first arrival, up to the marker saying it holds everything.
+  defp await_fill(acc \\ []) do
+    receive do
+      {:sync_deltas, _cursor, deltas, _applied_seq} -> await_fill(acc ++ deltas)
+      {:sync_synced, :all, _cursor} -> acc
+      {:sync_synced, {:types, _types}, _cursor} -> await_fill(acc)
+    after
+      1_000 -> flunk("the client was never told it holds everything")
+    end
+  end
+
+  # The scopes of the completeness markers in the order they arrive, up to the one saying the client
+  # holds everything.
+  defp synced_scopes(acc \\ []) do
+    receive do
+      {:sync_synced, :all, _cursor} -> Enum.reverse([:all | acc])
+      {:sync_synced, scope, _cursor} -> synced_scopes([scope | acc])
+    after
+      1_000 -> flunk("the client was never told it holds everything")
     end
   end
 
@@ -266,7 +315,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
       assert Evaluators.live() == [{@board_window, Stage.normalize(Module2)}]
     end
 
@@ -276,7 +325,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
 
       live_window_ids =
         Evaluators.live()
@@ -291,7 +340,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
       assert Evaluators.live() == []
     end
 
@@ -301,7 +350,7 @@ defmodule Hologram.Sync.SessionTest do
 
       session = start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
       assert Process.alive?(session)
       assert Evaluators.live() == [{@board_window, Stage.normalize(Module2)}]
     end
@@ -311,7 +360,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window])
 
       start_session!([])
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
 
       other_client = spawn_link(fn -> Process.sleep(:infinity) end)
 
@@ -336,6 +385,185 @@ defmodule Hologram.Sync.SessionTest do
 
       refute_receive {:sync_deltas, _cursor, _more, _applied_seq}, 100
       refute Enum.any?(deltas, &(&1.id == untouched.id))
+    end
+
+    # The fill sent the row though no window carries it, so no window's round can say what it is
+    # now - it is read as it stands, through the read rules.
+    test "tells a returning client about a row no window carries as it stands" do
+      row =
+        %{public: true, priority: 5}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [%{gap_effect(row.id) | type: PolicyModule1}])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert [%{data: %{priority: 5}, id: id, op: :put_entity}] = deltas
+      assert id == row.id
+    end
+
+    test "tells a returning client to drop a row no window carries that is gone" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      DB.delete(PolicyModule1, row.id)
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [%{gap_effect(row.id) | type: PolicyModule1}])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               %{id: row.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # The row read again carries the replica's batches confirmed by the time it was read, which the
+    # gap's effects can say nothing of.
+    test "names the number read with a row no window carries" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      Connection.transaction(fn ->
+        Record.claim!(@replica_id, 5, nil, "h")
+        Record.complete!(@replica_id, 5, %{"dropped" => %{}, "status" => "confirmed"})
+      end)
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(
+        applied_seq: 3,
+        gap: [%{gap_effect(row.id) | type: PolicyModule1}],
+        replica_id: @replica_id
+      )
+
+      assert_receive {:sync_deltas, _cursor, [%{id: id, op: :put_entity}], 5}
+      assert id == row.id
+    end
+
+    test "tells a returning client to drop a row no window carries that it may no longer read" do
+      row = DB.create!(PolicyModule1.new())
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(gap: [%{gap_effect(row.id) | type: PolicyModule1}])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert deltas == [
+               %{id: row.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Policy.Module1"}
+             ]
+    end
+
+    # The label gained a message through an edge of the message's, and the label's own set of
+    # messages is the client's to file - so the label is read with its set, though no window
+    # carries either row.
+    test "hands over the target of an edge no window carries, with its set" do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        synced_types: [Module2, Module28, Module29],
+        windows: %{@board_window => Stage.normalize(Module2)}
+      })
+
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      message =
+        %{body: "hi", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      EntityOperations.add_relationship(Module28, message.id, :labels, label.id)
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      edge =
+        message.id
+        |> gap_effect()
+        |> Map.merge(%{
+          data: %{"relationship" => "labels", "target_id" => label.id},
+          op: :add_relationship,
+          type: Module28
+        })
+
+      start_session!(gap: [edge])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+
+      assert [%{data: %{messages: [message_id]}, op: :put_entity}] =
+               Enum.filter(deltas, &(&1.id == label.id))
+
+      assert message_id == message.id
+      assert [%{op: :put_entity}] = Enum.filter(deltas, &(&1.id == message.id))
+    end
+
+    # A child's container files the set, the child no set of its own, so only the container is read.
+    test "reads again only the target of an edge that files the edge's set" do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        synced_types: [Module2, PolicyModule1, PolicyParent],
+        windows: %{@board_window => Stage.normalize(Module2)}
+      })
+
+      container = DB.create!(PolicyParent.new())
+      child = DB.create!(PolicyModule1.new())
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      edge =
+        container.id
+        |> gap_effect()
+        |> Map.merge(%{
+          data: %{"relationship" => "children", "target_id" => child.id},
+          op: :add_relationship,
+          type: PolicyParent
+        })
+
+      test_pid = self()
+
+      read_named = fn ids_by_type, actor_user_id, replica_id, synced_types ->
+        send(test_pid, {:read_named, ids_by_type})
+
+        read_named_in_sandbox(ids_by_type, actor_user_id, replica_id, synced_types)
+      end
+
+      start_session!(gap: [edge], read_named: read_named)
+
+      assert_receive {:read_named, ids_by_type}
+      assert ids_by_type == %{PolicyParent => [container.id]}
+    end
+
+    test "reads nothing again when every row the gap names is a window's" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      test_pid = self()
+
+      read_named = fn ids_by_type, actor_user_id, replica_id, synced_types ->
+        send(test_pid, {:read_named, ids_by_type})
+
+        read_named_in_sandbox(ids_by_type, actor_user_id, replica_id, synced_types)
+      end
+
+      start_session!(gap: [gap_effect(moved.id)], read_named: read_named)
+
+      assert_receive {:sync_synced, :all, _cursor}
+      refute_received {:read_named, _ids_by_type}
     end
 
     # A client away long enough to need a replay may have had batches of its own applied while it
@@ -399,7 +627,7 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, first_cursor, [%{id: id}], first_applied_seq}
 
       assert {Cursor.decode(first_cursor), id, first_applied_seq} ==
-               {{:ok, 900, 1, @policy_hash}, moved.id, 4}
+               {{:ok, 900, 1, @policy_hash, @types_hash}, moved.id, 4}
     end
 
     # A gap arrives in batches rather than one frame, so the memory a replay costs is bounded by
@@ -424,11 +652,11 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0}, gap: gap)
 
       assert_receive {:sync_deltas, first_cursor, first_deltas, _applied_seq}
-      assert Cursor.decode(first_cursor) == {:ok, 900, 2, @policy_hash}
+      assert Cursor.decode(first_cursor) == {:ok, 900, 2, @policy_hash, @types_hash}
       assert length(first_deltas) == 2
 
       assert_receive {:sync_deltas, second_cursor, second_deltas, _applied_seq}
-      assert Cursor.decode(second_cursor) == {:ok, 900, 4, @policy_hash}
+      assert Cursor.decode(second_cursor) == {:ok, 900, 4, @policy_hash, @types_hash}
       assert length(second_deltas) == 2
     end
 
@@ -472,7 +700,7 @@ defmodule Hologram.Sync.SessionTest do
 
       # Received in this order, so the client never reads its own store while it is still stale.
       assert_receive {:sync_deltas, _cursor, _deltas, _applied_seq}
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
     end
 
     test "keeps telling a returning client the news once it has been caught up" do
@@ -497,7 +725,7 @@ defmodule Hologram.Sync.SessionTest do
       moved = create("before leaving")
       untouched = create("untouched while away")
       {tx, seq} = last_place()
-      cursor = Cursor.encode(tx, seq, @policy_hash)
+      cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
 
       DB.update(Module2, moved.id, %{c: "moved while away"})
 
@@ -512,11 +740,16 @@ defmodule Hologram.Sync.SessionTest do
          gap_end: gap_end,
          page: @page,
          policy_hash: @policy_hash,
-         read_gap: read_gap_from(cursor)}
+         read_gap: read_gap_from(cursor),
+         read_named: &read_named_in_sandbox/4,
+         types_hash: @types_hash}
       )
 
       assert_receive {:sync_deltas, frame_cursor, deltas, _applied_seq}
-      assert Cursor.decode(frame_cursor) == {:ok, gap_end_tx, gap_end_seq, @policy_hash}
+
+      assert Cursor.decode(frame_cursor) ==
+               {:ok, gap_end_tx, gap_end_seq, @policy_hash, @types_hash}
+
       assert [%{data: data, id: id, op: :put_entity}] = deltas
       assert id == moved.id
       assert data.c == "moved while away"
@@ -529,7 +762,7 @@ defmodule Hologram.Sync.SessionTest do
     test "cuts the client off when the log says it has to be sent everything again" do
       moved = create("before leaving")
       {tx, seq} = last_place()
-      cursor = Cursor.encode(tx, seq, @policy_hash)
+      cursor = Cursor.encode(tx, seq, @policy_hash, @types_hash)
 
       DB.update(Module2, moved.id, %{c: "moved while away"})
       DB.update(Module2, moved.id, %{c: "moved again while away"})
@@ -548,7 +781,8 @@ defmodule Hologram.Sync.SessionTest do
             client: test_pid,
             page: @page,
             policy_hash: @policy_hash,
-            read_gap: read_gap
+            read_gap: read_gap,
+            types_hash: @types_hash
           )
 
           Process.sleep(:infinity)
@@ -569,7 +803,6 @@ defmodule Hologram.Sync.SessionTest do
     defp caught_up_deltas(acc \\ []) do
       receive do
         {:sync_deltas, _cursor, deltas, _applied_seq} -> caught_up_deltas(acc ++ deltas)
-        {:sync_synced, :page, _cursor} -> caught_up_deltas(acc)
         {:sync_synced, :all, _cursor} -> acc
       after
         1_000 -> flunk("the client was never told it was caught up")
@@ -579,7 +812,7 @@ defmodule Hologram.Sync.SessionTest do
     defp cursor_now do
       {tx, seq} = last_place()
 
-      Cursor.encode(tx, seq, @policy_hash)
+      Cursor.encode(tx, seq, @policy_hash, @types_hash)
     end
 
     defp deltas_for(deltas, row) do
@@ -1338,12 +1571,100 @@ defmodule Hologram.Sync.SessionTest do
       assert deltas_for(caught_up_deltas(), child) == []
     end
 
-    test "takes away once a row that left every window and that the gap names" do
+    defp start_with_departed_label!(label) do
+      :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
+        entries: %{},
+        synced_types: [Module2, Module28, Module29, PolicyModule1],
+        windows: %{
+          @board_window => Stage.normalize(Module2),
+          @other_window => other_window_term()
+        }
+      })
+
+      message =
+        %{body: "hi", position: 1}
+        |> Module28.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      edge =
+        message.id
+        |> gap_effect()
+        |> Map.merge(%{
+          data: %{"relationship" => "labels", "target_id" => label.id},
+          op: :add_relationship,
+          type: Module28
+        })
+
+      session = start_session!(gap: [edge])
+
+      ResultStore.put(@board_window, 1, [%{message | labels: [label]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [message])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+    end
+
+    # The label left every window and is named only as the target of an edge whose set it files.
+    # It is read again and found, so it is handed over - not taken away first and handed back.
+    test "hands over once a departed target of a named edge the client may read" do
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      start_with_departed_label!(label)
+
+      assert [%{op: :put_entity}] = deltas_for(caught_up_deltas(), label)
+    end
+
+    test "takes away a departed target of a named edge that is gone" do
+      label =
+        %{name: "urgent"}
+        |> Module29.new()
+        |> DB.create!()
+
+      # Gone before the catch-up reads it, though the windows' rounds still carried it.
+      DB.delete(Module29, label.id)
+      start_with_departed_label!(label)
+
+      assert deltas_for(caught_up_deltas(), label) == [
+               %{id: label.id, op: :unsync_entity, type: "Hologram.Test.Fixtures.Entity.Module29"}
+             ]
+    end
+
+    # The row left every window, but the client may still read it, and since the fill it holds
+    # every row it may read - so it is handed over as it stands, once, rather than taken away.
+    test "hands over once a row that left every window, that the gap names and the client may read" do
       child =
         %{public: true}
         |> PolicyModule1.new()
         |> DB.create!()
 
+      parent = DB.create!(PolicyParent.new())
+
+      windows(%{@page => [@board_window, @other_window]})
+      hold_silently(@board_window)
+      hold_silently(@other_window)
+
+      session = start_session!(gap: [%{gap_effect(child.id) | type: PolicyModule1}])
+
+      ResultStore.put(@board_window, 1, [%{parent | children: [child]}])
+      send(session, {:round, @board_window, 1, [], nil})
+      ResultStore.put(@board_window, 2, [parent])
+      send(session, {:round, @board_window, 2, [], nil})
+
+      finish_filling(session, @other_window)
+
+      assert [%{op: :put_entity}] = deltas_for(caught_up_deltas(), child)
+    end
+
+    test "takes away once a row that left every window, that the gap names and the client may not read" do
+      child = DB.create!(PolicyModule1.new())
       parent = DB.create!(PolicyParent.new())
 
       windows(%{@page => [@board_window, @other_window]})
@@ -1810,6 +2131,7 @@ defmodule Hologram.Sync.SessionTest do
     test "tells a row two windows hold as the window that took in its change has it" do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        synced_types: [Module2, PolicyModule5],
         windows: %{
           @board_window => Stage.normalize(Module2),
           @other_window => other_window_term(),
@@ -2033,7 +2355,7 @@ defmodule Hologram.Sync.SessionTest do
       # row a revoked grant covered.
       assert_receive {:sync_deltas, _cursor, _gap_deltas, _applied_seq}
       assert_receive {:sync_deltas, _cursor, _shift_deltas, _applied_seq}
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
     end
 
     test "dates the shift no further than the read that decided the client resumes", %{
@@ -2057,7 +2379,7 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:sync_deltas, shift_cursor, shift_deltas, _applied_seq}
       assert [%{id: id, op: :unsync_entity}] = shift_deltas
       assert id == revoked.id
-      assert Cursor.decode(shift_cursor) == {:ok, 900, 7, @policy_hash}
+      assert Cursor.decode(shift_cursor) == {:ok, 900, 7, @policy_hash, @types_hash}
     end
 
     # The shift is judged per window and merged by id: a window with nothing to say about grants
@@ -2335,7 +2657,9 @@ defmodule Hologram.Sync.SessionTest do
       assert live_window_ids == [@board_window, @other_window]
     end
 
-    test "says the client's page is answerable while the rest is still arriving" do
+    # A window's first round tells nothing to a client being filled, and the fill reads after every
+    # first round, so one window that never reports holds the whole fill back.
+    test "fills nothing while a window has not had its first round" do
       windows(%{@page => [@board_window], @other_page => [@other_window]})
       hold_windows([@board_window])
 
@@ -2345,47 +2669,42 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
-      refute_receive {:sync_synced, :all, _cursor}, 100
+      refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+      refute_receive {:sync_synced, _scope, _cursor}, 100
     end
 
-    test "says every page is answerable once the last window has filled" do
-      windows(%{@page => [@board_window], @other_page => [@other_window]})
+    test "says each synced type is complete, the page's types first, then everything" do
+      windows(%{@page => [@other_window], @other_page => [@board_window]})
       hold_windows([@board_window, @other_window])
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
-      assert_receive {:sync_synced, :all, _cursor}
+      assert synced_scopes() == [
+               {:types, [PolicyModule1]},
+               {:types, [Module2]},
+               {:types, [PolicyModule5]},
+               :all
+             ]
     end
 
-    test "says a page reading nothing is answerable at once, and waits for the rest" do
-      windows(%{@other_page => [@other_window]})
-      hold_windows([@other_window])
-
-      start_session!([])
-
-      assert_receive {:sync_synced, :page, _cursor}
-      assert_receive {:sync_synced, :all, _cursor}
-    end
-
-    test "says both at once for a build downloading nothing" do
+    test "fills every synced type for a build with no windows" do
       windows(%{})
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, {:types, [Module2]}, nil}
+      assert_receive {:sync_synced, {:types, [PolicyModule1]}, nil}
+      assert_receive {:sync_synced, {:types, [PolicyModule5]}, nil}
       assert_receive {:sync_synced, :all, _cursor}
     end
 
-    test "says each scope once, however many windows fill after it" do
+    test "says each marker once, however many windows fill after it" do
       windows(%{@page => [@board_window], @other_page => [@other_window]})
       hold_windows([@board_window, @other_window])
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
-      assert_receive {:sync_synced, :all, _cursor}
+      await_fill()
 
       Evaluator.round(@board_window, [])
       Evaluator.round(@other_window, [])
@@ -2403,32 +2722,32 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0})
 
       assert_receive {:sync_synced, :all, cursor}
-      assert cursor == Cursor.encode(200, 0, @policy_hash)
+      assert cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
     end
 
-    # The claim a place makes is "everything up to here is applied", which a client holding one
-    # page of several cannot honour.
-    test "names no place while only a first arrival's own page is answerable" do
-      windows(%{@page => [@board_window], @other_page => [@other_window]})
+    # The claim a place makes is "everything up to here is applied", which a client holding some
+    # types of several cannot honour.
+    test "names no place on the types markers of a first arrival" do
+      windows(%{@page => [@board_window]})
       hold_windows([@board_window])
-      hold_silently(@other_window)
 
       start_session!(fill_place: {200, 0})
 
-      assert_receive {:sync_synced, :page, cursor}
+      assert_receive {:sync_synced, {:types, [Module2]}, cursor}
       assert cursor == nil
     end
 
-    # A client that came back kept what it had and is told only what moved, so it holds a whole
-    # pot from its first frame - and its page marker is as honourable a claim as its last.
-    test "names a place on the page marker of a client that came back" do
+    # A client that came back kept what it had and is told only what moved, so nothing is filled
+    # and nothing is complete type by type - it is told it holds everything, with a place.
+    test "tells a client that came back it holds everything, with a place" do
       windows(%{@page => [@board_window], @other_page => [@other_window]})
       hold_windows([@board_window, @other_window])
 
       start_session!(fill_place: {200, 0}, gap: [])
 
-      assert_receive {:sync_synced, :page, cursor}
-      assert cursor == Cursor.encode(200, 0, @policy_hash)
+      assert_receive {:sync_synced, :all, cursor}
+      assert cursor == Cursor.encode(200, 0, @policy_hash, @types_hash)
+      refute_received {:sync_synced, {:types, _types}, _cursor}
     end
   end
 
@@ -2458,8 +2777,155 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
       refute_receive {:sync_deltas, _cursor, _deltas, _applied_seq}, 100
+    end
+
+    test "fills a synced type no window reads" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!([])
+
+      assert Enum.any?(await_fill(), &(&1.id == row.id))
+    end
+
+    # The window's first round was read before the change and tells nothing; the fill reads after
+    # every first round, so the change is in what it sends.
+    test "sends a row as it stands past a window's first round" do
+      task = create("before")
+      windows(%{@page => [@board_window]})
+      prefill([@board_window])
+
+      DB.update(Module2, task.id, %{c: "after"})
+
+      start_session!([])
+
+      assert [%{data: %{c: "after"}}] = Enum.filter(await_fill(), &(&1.id == task.id))
+    end
+
+    # The window's first round still shows the row, but by the time the fill reads, the client may
+    # not see it. Once it may again, the window's next round has to hand it over whole - a client
+    # that never got the row passes over a patch.
+    test "hands over a row the fill passed over whole once a window shows it again" do
+      row =
+        %{public: true}
+        |> PolicyModule1.new()
+        |> DB.create!()
+
+      windows(%{@page => [@other_window]})
+      prefill([@other_window])
+
+      DB.update(PolicyModule1, row.id, %{public: false})
+
+      start_session!([])
+
+      refute Enum.any?(await_fill(), &(&1.id == row.id))
+
+      DB.update(PolicyModule1, row.id, %{public: true})
+
+      Evaluator.round(@other_window, [
+        {200,
+         [
+           %{
+             data: %{public: "whatever the log said"},
+             entity_id: row.id,
+             mutation_ref: nil,
+             op: :patch_entity,
+             type: PolicyModule1
+           }
+         ]}
+      ])
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert [%{id: id, op: :put_entity}] = deltas
+      assert id == row.id
+    end
+
+    # The number is what lands the client's pending batches on these rows, so it is the one read
+    # with them - a batch confirmed since the session began is in them.
+    test "carries the number read with the rows" do
+      create("first")
+
+      Connection.transaction(fn ->
+        Record.claim!(@replica_id, 5, nil, "h")
+        Record.complete!(@replica_id, 5, %{"dropped" => %{}, "status" => "confirmed"})
+      end)
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(applied_seq: 3, replica_id: @replica_id)
+
+      assert_receive {:sync_deltas, nil, _deltas, 5}
+    end
+
+    # Every batch the session's own number counts committed before the read, so its writes are in
+    # the rows too.
+    test "never names a number below the one the session was given" do
+      create("first")
+
+      Connection.transaction(fn ->
+        Record.claim!(@replica_id, 5, nil, "h")
+        Record.complete!(@replica_id, 5, %{"dropped" => %{}, "status" => "confirmed"})
+      end)
+
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      start_session!(applied_seq: 7, replica_id: @replica_id)
+
+      assert_receive {:sync_deltas, nil, _deltas, 7}
+    end
+
+    # A round reaching the session while it fills waits behind the fill, and is told against what
+    # the fill sent once it is over.
+    test "tells a round that arrived during the fill once the fill is over" do
+      task = create("before")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      test_pid = self()
+
+      read_fill = fn entity_type, actor_user_id, replica_id, synced_types ->
+        if entity_type == Module2 do
+          send(test_pid, {:filling, self()})
+
+          receive do
+            :round_sent -> :ok
+          end
+        end
+
+        read_fill_in_sandbox(entity_type, actor_user_id, replica_id, synced_types)
+      end
+
+      start_session!(read_fill: read_fill)
+
+      assert_receive {:filling, session}
+
+      DB.update(Module2, task.id, %{c: "after"})
+      Evaluator.round(@board_window, transactions(task.id, ["c"]))
+
+      # The evaluator stores the round before it sends it, so it is the session's mailbox that says
+      # the round is waiting behind the fill.
+      wait_until(fn ->
+        {:messages, messages} = Process.info(session, :messages)
+
+        Enum.any?(messages, &match?({:round, @board_window, 2, _transactions, _place}, &1))
+      end)
+
+      send(session, :round_sent)
+
+      assert [%{data: %{c: "after"}}] = Enum.filter(await_fill(), &(&1.id == task.id))
+
+      assert_receive {:sync_deltas, _cursor, deltas, _applied_seq}
+      assert [%{id: id, op: :patch_entity}] = deltas
+      assert id == task.id
     end
 
     test "sends only the rows this client may read" do
@@ -2511,7 +2977,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!([])
 
       assert_receive {:sync_deltas, _cursor, _board_deltas, _applied_seq}
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
     end
 
     test "says it is done immediately for a page reaching no window" do
@@ -2519,7 +2985,7 @@ defmodule Hologram.Sync.SessionTest do
 
       start_session!([])
 
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
     end
 
     test "reads the round a running evaluator already has rather than asking for another" do
@@ -2528,7 +2994,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window])
 
       start_session!([])
-      assert_receive {:sync_deltas, _cursor, _first_deltas, _applied_seq}
+      await_fill()
 
       test_pid = self()
       other_client = spawn_link(fn -> forward(test_pid) end)
@@ -2538,6 +3004,9 @@ defmodule Hologram.Sync.SessionTest do
       assert_receive {:forwarded, {:sync_deltas, _cursor, deltas, _applied_seq}}
       assert [%{data: data, op: :put_entity}] = deltas
       assert data.id == task.id
+
+      # Filled to the end before the test lets go of the connection the fill reads on.
+      assert_receive {:forwarded, {:sync_synced, :all, _cursor}}
       assert ResultStore.versions(@board_window) == [1]
     end
   end
@@ -2598,7 +3067,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window])
 
       start_session!([])
-      assert_receive {:sync_synced, :page, _cursor}
+      assert_receive {:sync_synced, :all, _cursor}
 
       task = create("appeared later")
       Evaluator.round(@board_window, [])
@@ -2740,6 +3209,7 @@ defmodule Hologram.Sync.SessionTest do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        synced_types: [Module2],
         windows: %{
           @board_window => Stage.normalize(Module2),
           @other_window => other_window_term()
@@ -2778,7 +3248,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), nil)
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash, @types_hash}
     end
 
     # A returning client kept what it had, so it can date its store from the first frame - there is
@@ -2792,7 +3262,7 @@ defmodule Hologram.Sync.SessionTest do
       start_session!(fill_place: {200, 0}, gap: [gap_effect(moved.id, {900, 7})])
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash, @types_hash}
     end
 
     # The session's own read can reach further than the one that decided the client resumes, and
@@ -2810,7 +3280,7 @@ defmodule Hologram.Sync.SessionTest do
       )
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash, @types_hash}
     end
 
     test "dates no replayed batch when the read that decided the client resumes found nothing" do
@@ -2840,7 +3310,24 @@ defmodule Hologram.Sync.SessionTest do
       )
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7, other_policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, other_policy_hash, @types_hash}
+    end
+
+    test "dates its places with the types it was started with" do
+      moved = create("moved while away")
+      windows(%{@page => [@board_window]})
+      hold_windows([@board_window])
+
+      other_types_hash = "ffeeddccbbaa99887766554433221100"
+
+      start_session!(
+        fill_place: {200, 0},
+        gap: [gap_effect(moved.id, {900, 7})],
+        types_hash: other_types_hash
+      )
+
+      assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash, other_types_hash}
     end
 
     # A window the page map reaches but the query cache no longer holds - what a live reload leaves
@@ -2861,7 +3348,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 7})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 7, @policy_hash, @types_hash}
     end
 
     test "claims the place of the window furthest behind, not the one furthest ahead" do
@@ -2870,8 +3357,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window, @other_window])
 
       start_session!(fill_place: {200, 0})
-      assert_receive {:sync_deltas, _board_cursor, _board_deltas, _applied_seq}
-      assert_receive {:sync_deltas, _other_cursor, _other_deltas, _applied_seq}
+      await_fill()
 
       # Only the board window advances. The other window is still back at the fill place, and a
       # frame claiming the board's place would tell the client it is caught up past changes the
@@ -2880,7 +3366,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 0})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 200, 0, @policy_hash, @types_hash}
     end
 
     test "claims the newer place once every window has caught up to it" do
@@ -2889,8 +3375,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window, @other_window])
 
       start_session!(fill_place: {200, 0})
-      assert_receive {:sync_deltas, _board_cursor, _board_deltas, _applied_seq}
-      assert_receive {:sync_deltas, _other_cursor, _other_deltas, _applied_seq}
+      await_fill()
 
       Evaluator.round(@other_window, [], {900, 0})
 
@@ -2898,7 +3383,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {900, 0})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash, @types_hash}
     end
 
     # A round arriving out of order must not walk a window's place backwards: both places it could
@@ -2917,7 +3402,7 @@ defmodule Hologram.Sync.SessionTest do
       Evaluator.round(@board_window, transactions(task.id, ["c"]), {500, 0})
 
       assert_receive {:sync_deltas, cursor, _deltas, _applied_seq}
-      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash}
+      assert Cursor.decode(cursor) == {:ok, 900, 0, @policy_hash, @types_hash}
     end
   end
 
@@ -2943,6 +3428,7 @@ defmodule Hologram.Sync.SessionTest do
     test "tells nothing of another window's round queued ahead of the cut" do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        synced_types: [Module2],
         windows: %{
           @board_window => Stage.normalize(Module2),
           @other_window => other_window_term()
@@ -3016,7 +3502,12 @@ defmodule Hologram.Sync.SessionTest do
       connection =
         spawn(fn ->
           {:ok, session} =
-            Session.start_link(client: test_pid, page: @page, policy_hash: @policy_hash)
+            Session.start_link(
+              client: test_pid,
+              page: @page,
+              policy_hash: @policy_hash,
+              types_hash: @types_hash
+            )
 
           send(test_pid, {:connected, session})
 
@@ -3024,7 +3515,7 @@ defmodule Hologram.Sync.SessionTest do
         end)
 
       assert_receive {:connected, session}
-      assert_receive {:sync_deltas, _cursor, _first_deltas, _applied_seq}
+      assert_receive {:sync_synced, :all, _cursor}
 
       ref = Process.monitor(connection)
       send(session, {:round, @board_window, 999, [], nil})
@@ -3037,6 +3528,7 @@ defmodule Hologram.Sync.SessionTest do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        synced_types: [Module2],
         windows: %{
           @board_window => Stage.normalize(Module2),
           @other_window => other_window_term()
@@ -3052,8 +3544,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window, @other_window])
 
       start_session!([])
-      assert_receive {:sync_deltas, _cursor, _board_deltas, _applied_seq}
-      assert_receive {:sync_deltas, _cursor, _other_deltas, _applied_seq}
+      await_fill()
 
       # The row leaves one window without leaving the database, so the other still carries it -
       # and a client that keeps the row has been told nothing, which is no frame at all.
@@ -3069,8 +3560,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@board_window, @other_window])
 
       start_session!([])
-      assert_receive {:sync_deltas, _cursor, _board_deltas, _applied_seq}
-      assert_receive {:sync_deltas, _cursor, _other_deltas, _applied_seq}
+      await_fill()
 
       DB.delete(Module2, task.id)
 
@@ -3090,6 +3580,7 @@ defmodule Hologram.Sync.SessionTest do
     setup do
       :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
         entries: %{},
+        synced_types: [Module2, Module26, Module28, Module29, Module3],
         windows: %{
           @bare_label_window => Stage.normalize(Module29),
           @board_window => Stage.normalize(Module2),
@@ -3158,8 +3649,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@include_window])
 
       start_session!([])
-      assert_receive {:sync_deltas, _fill_cursor, _fill, _applied_seq}
-      assert_receive {:sync_synced, :all, _cursor}
+      await_fill()
 
       source
       |> delete_relationship(:a, child.id)
@@ -3198,8 +3688,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@inverse_window])
 
       start_session!([])
-      assert_receive {:sync_deltas, _fill_cursor, fill, _applied_seq}
-      assert_receive {:sync_synced, :all, _cursor}
+      fill = await_fill()
 
       assert Enum.any?(fill, &(&1.op == :put_entity and &1.id == message.id))
 
@@ -3266,8 +3755,7 @@ defmodule Hologram.Sync.SessionTest do
       hold_windows([@label_window])
 
       start_session!([])
-      assert_receive {:sync_deltas, _label_cursor, _label_fill, _applied_seq}
-      assert_receive {:sync_synced, :all, _cursor}
+      await_fill()
 
       DB.delete!(message)
 
@@ -3723,6 +4211,7 @@ defmodule Hologram.Sync.SessionTest do
     :persistent_term.put(QueryCacheStub.persistent_term_key(), %{
       entries: %{},
       permission_checking?: true,
+      synced_types: [PolicyModule1, PolicyProject],
       windows: %{
         @project_window => Stage.normalize(PolicyProject),
         @other_window => Stage.normalize(PolicyModule1),

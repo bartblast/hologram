@@ -134,10 +134,15 @@ defmodule Hologram.Compiler do
 
   @typedoc """
   The registered queries of one component or page: the normalized terms its derived fields build
-  (see `Hologram.Compiler.QueryExtractor.extract_derived_queries/3`) and the names of the derived
-  fields that build one.
+  (see `Hologram.Compiler.QueryExtractor.extract_derived_queries/3`), the names of the derived
+  fields that build one, and the entity types each derived field building a count reads, sorted
+  (see `extract_component_queries/3`).
   """
-  @type component_queries :: %{derived_queries: [atom], terms: [Query.t()]}
+  @type component_queries :: %{
+          count_types: %{atom => [module]},
+          derived_queries: [atom],
+          terms: [Query.t()]
+        }
 
   @typedoc """
   What the data layer keeps of a page's reach between compiles: whether the page's client code
@@ -162,6 +167,7 @@ defmodule Hologram.Compiler do
   What the client's data layer is compiled with (see `build_sync_constants/3`).
   """
   @type sync_constants :: %{
+          derived_count_types: %{module => %{atom => [module]}},
           derived_queries: %{module => [atom]},
           entity_types: MapSet.t(module),
           model_hash: String.t() | nil,
@@ -1674,6 +1680,12 @@ defmodule Hologram.Compiler do
   `component_queries`). The entity types are the ones of the build, over which a query whose entity
   type is an argument is replayed.
 
+  A derived field building a count gets the entity types its count terms read (see
+  `Hologram.Query.Registry.entity_types/1`), the union over its branches: the client answers the
+  count from the server's number until it holds every row of those types, then counts its own. The
+  types a branch building rows reads are not among them - rows are answered from what the client
+  holds from the start.
+
   The IR the derived fields' functions are walked over is read from the given IR PLT, the
   compile's, and the components it lacks are built into it first, in one go.
 
@@ -1696,6 +1708,7 @@ defmodule Hologram.Compiler do
       terms = Enum.flat_map(derived_queries, fn {_name, derived_terms} -> derived_terms end)
 
       queries = %{
+        count_types: count_types(derived_queries),
         derived_queries: Enum.map(derived_queries, fn {name, _terms} -> name end),
         terms: terms
       }
@@ -2343,6 +2356,11 @@ defmodule Hologram.Compiler do
   keyed by component - the fields the client answers from its database rather than computing a
   value of.
 
+  `:derived_count_types` are the entity types each of those fields building a count reads, keyed
+  by component and then by field (see `extract_component_queries/3`) - what the client waits to
+  hold every row of before it counts for itself rather than showing the server's number. A
+  component with no such field is left out.
+
   When the given module info PLT records a user entity type, the grant type joins the entity
   types: a client holds grant rows, and a row of a type the model does not name cannot be read back
   at all. No query names that type - the grants window is registered rather than extracted - so it
@@ -2450,6 +2468,7 @@ defmodule Hologram.Compiler do
     user_entity = Reflection.user_entity(module_info_plt)
 
     %{
+      derived_count_types: derived_count_types(component_modules, component_queries),
       derived_queries: derived_queries(component_modules, component_queries),
       entity_types: entity_types,
       model_hash: model_hash(all_entity_types, role_modules),
@@ -2464,9 +2483,10 @@ defmodule Hologram.Compiler do
   @doc """
   Builds the JavaScript statement that sets the client's data layer constants,
   `globalThis.Hologram.sync`, from the given sync constants (see `build_sync_constants/3`): the
-  derived fields whose function builds a query, the global roles with the role modules carrying
-  each, the model of the entity types the client holds, the hash of the project's data model, the
-  hash of the rules it was rendered with, the sync protocol version, and the user entity type.
+  entity types each derived field building a count reads, the derived fields whose function builds
+  a query, the global roles with the role modules carrying each, the model of the entity types the
+  client holds, the hash of the project's data model, the hash of the rules it was rendered with,
+  the sync protocol version, and the user entity type.
 
   What the runtime bundle was built against, said by the bundle itself. It has to be baked in
   rather than handed over at page render: the check these answer is whether a client's JAVASCRIPT
@@ -2500,13 +2520,14 @@ defmodule Hologram.Compiler do
     else
       model = render_entity_model(sync_constants.entity_types)
 
+      count_types = render_derived_count_types(sync_constants.derived_count_types)
       derived_queries = render_derived_queries(sync_constants.derived_queries)
       expanded_roles = render_global_expanded_roles(sync_constants.role_modules)
 
       policy_hash = Jason.encode!(sync_constants.policy_hash)
       user_entity = render_user_entity(sync_constants.user_entity)
 
-      ~s/globalThis.Hologram.sync = {derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, userEntity: #{user_entity}};/
+      ~s/globalThis.Hologram.sync = {countTypes: #{count_types}, derivedQueries: #{derived_queries}, expandedRoles: #{expanded_roles}, model: #{model}, modelHash: "#{sync_constants.model_hash}", policyHash: #{policy_hash}, protocolVersion: #{Frame.protocol_version()}, userEntity: #{user_entity}};/
     end
   end
 
@@ -4014,6 +4035,32 @@ defmodule Hologram.Compiler do
     Reflection.has_function?(module, :__derived__, 0) and module.__derived__() != []
   end
 
+  # The entity types each derived field building a count reads, over every branch building one. A
+  # field with no count branch is left out.
+  defp count_types(derived_queries) do
+    derived_queries
+    |> Enum.map(fn {name, terms} ->
+      types =
+        terms
+        |> Enum.filter(&(&1.cardinality == :count))
+        |> Enum.reduce(MapSet.new(), &MapSet.union(&2, Registry.entity_types(&1)))
+        |> Enum.sort()
+
+      {name, types}
+    end)
+    |> Enum.reject(fn {_name, types} -> types == [] end)
+    |> Map.new()
+  end
+
+  # The count types of each component, keyed by component. A component with none is left out, which
+  # the client reads as none - and a count it finds no types for waits for the whole pot.
+  defp derived_count_types(component_modules, component_queries) do
+    component_modules
+    |> Enum.map(&{&1, Map.fetch!(component_queries, &1).count_types})
+    |> Enum.reject(fn {_module, count_types} -> count_types == %{} end)
+    |> Map.new()
+  end
+
   # The derived fields of each component whose function builds a query, which the renderers run
   # as one. A component with none is left out, which the client reads as none.
   defp derived_queries(component_modules, component_queries) do
@@ -5392,6 +5439,26 @@ defmodule Hologram.Compiler do
     Enum.filter(modules, fn module ->
       match?({:ok, %{component?: true}}, PLT.get(module_info_plt, module))
     end)
+  end
+
+  defp render_derived_count_types(derived_count_types) do
+    derived_count_types
+    |> Enum.map(fn {module, count_types} ->
+      spelled_fields =
+        count_types
+        |> Enum.map(fn {name, types} ->
+          spelled_types =
+            types
+            |> Enum.map(&Codec.encode_enum_value/1)
+            |> Jason.encode!()
+
+          {Atom.to_string(name), spelled_types}
+        end)
+        |> render_json_object()
+
+      {Codec.encode_enum_value(module), spelled_fields}
+    end)
+    |> render_json_object()
   end
 
   # A page module defines no props, so it never reads anything from the context through one.
