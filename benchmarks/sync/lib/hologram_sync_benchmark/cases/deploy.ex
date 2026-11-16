@@ -117,7 +117,12 @@ defmodule HologramSyncBenchmark.Cases.Deploy do
         :ok
       end,
       clients: tenants.clients,
-      counts: Enum.filter(@counts, &(&1 <= users)),
+      # Fewer users than the smallest count still get a step, of every user.
+      counts:
+        case Enum.filter(@counts, &(&1 <= users)) do
+          [] -> [users]
+          counts -> counts
+        end,
       options: [tenants.data],
       page: "HologramSyncBenchmark.TasksPage",
       seed: tenants.seed,
