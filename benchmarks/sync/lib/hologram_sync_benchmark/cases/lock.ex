@@ -86,18 +86,21 @@ defmodule HologramSyncBenchmark.Cases.Lock do
 
   @doc """
   Runs the given number of writers on the given cards for the given time, each updating cards
-  of its own in turn, and returns how many writes went through. Runs on the server node.
+  of its own in turn, and returns how many writes went through and the milliseconds until the
+  last of them finished. Runs on the server node.
   """
-  @spec write_cards(tuple, pos_integer, pos_integer) :: non_neg_integer
+  @spec write_cards(tuple, pos_integer, pos_integer) :: {non_neg_integer, float}
   def write_cards(ids, count, duration_ms) do
-    deadline = System.monotonic_time(:millisecond) + duration_ms
+    timed(fn ->
+      deadline = System.monotonic_time(:millisecond) + duration_ms
 
-    0..(count - 1)
-    |> Task.async_stream(&write_cards_until(ids, &1, count, deadline, 0),
-      max_concurrency: count,
-      timeout: :infinity
-    )
-    |> Enum.sum_by(fn {:ok, writes} -> writes end)
+      0..(count - 1)
+      |> Task.async_stream(&write_cards_until(ids, &1, count, deadline, 0),
+        max_concurrency: count,
+        timeout: :infinity
+      )
+      |> Enum.sum_by(fn {:ok, writes} -> writes end)
+    end)
   end
 
   # Writers, the sampler, the listener and the server node's pool all hold connections, and
@@ -172,25 +175,27 @@ defmodule HologramSyncBenchmark.Cases.Lock do
         connection
       end
 
-    {commits, lock} =
-      with_sampler(fn ->
-        deadline = System.monotonic_time(:millisecond) + duration_ms
-
-        connections
-        |> Task.async_stream(&write_until(&1, deadline, notify?),
-          max_concurrency: count,
-          timeout: :infinity
-        )
-        |> Enum.sum_by(fn {:ok, commits} -> commits end)
-      end)
+    {{commits, elapsed_ms}, lock} =
+      with_sampler(fn -> timed(fn -> write_all(connections, duration_ms, notify?) end) end)
 
     Enum.each(connections, &GenServer.stop/1)
     if listener, do: stop_listener(listener)
 
-    result = %{lock: lock, per_second: commits * 1_000 / duration_ms, writers: count}
+    result = %{lock: lock, per_second: commits * 1_000 / elapsed_ms, writers: count}
     IO.puts("  #{if notify?, do: "notify", else: "plain"}, #{count} writers: #{summary(result)}")
 
     result
+  end
+
+  defp write_all(connections, duration_ms, notify?) do
+    deadline = System.monotonic_time(:millisecond) + duration_ms
+
+    connections
+    |> Task.async_stream(&write_until(&1, deadline, notify?),
+      max_concurrency: length(connections),
+      timeout: :infinity
+    )
+    |> Enum.sum_by(fn {:ok, commits} -> commits end)
   end
 
   defp hologram_writes(conn, counts, duration_ms) do
@@ -216,7 +221,7 @@ defmodule HologramSyncBenchmark.Cases.Lock do
     Peer.with_peer(fn peer ->
       ids = Peer.rpc(peer, Writer, :ids, [Card])
 
-      {writes, lock} =
+      {{writes, elapsed_ms}, lock} =
         with_sampler(fn ->
           Peer.rpc(peer, __MODULE__, :write_cards, [ids, count, duration_ms])
         end)
@@ -224,7 +229,7 @@ defmodule HologramSyncBenchmark.Cases.Lock do
       result = %{
         autovacuum_ran: DB.autovacuum_runs(conn) != autovacuum_before,
         lock: lock,
-        per_second: writes * 1_000 / duration_ms,
+        per_second: writes * 1_000 / elapsed_ms,
         writers: count
       }
 
@@ -428,6 +433,16 @@ defmodule HologramSyncBenchmark.Cases.Lock do
 
       write_cards_until(ids, writer, count, deadline, writes + 1)
     end
+  end
+
+  # The given function's result and the milliseconds it took. Writers check the deadline before a
+  # write, so the last writes finish past it, and a rate over the set duration would count them
+  # in less time than they took.
+  defp timed(fun) do
+    started_at = System.monotonic_time(:microsecond)
+    result = fun.()
+
+    {result, (System.monotonic_time(:microsecond) - started_at) / 1_000}
   end
 
   defp write_until(conn, deadline, notify?, commits \\ 0) do
