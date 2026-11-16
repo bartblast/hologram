@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Helpers do
-  import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
+  import ExUnit.Assertions, only: [assert: 2, assert_raise: 3, flunk: 1]
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Test.FeatureHelpers, only: [visit: 2, visit: 3]
 
@@ -64,6 +64,12 @@ defmodule HologramFeatureTests.Helpers do
   def assert_client_error(session, expected_module, expected_msg, fun) do
     fun.()
     wait_for_js_error(session)
+
+    # An error the browser raises comes out of fun or the wait as Wallaby.JSError, and the wait
+    # otherwise only times out - so getting here means nothing was raised.
+    flunk(
+      "Expected #{inspect(expected_module)} to be raised in the browser, but nothing was raised"
+    )
   rescue
     Wallaby.JSError ->
       script = "return globalThis.Hologram?.['lastBoxedError'];"
