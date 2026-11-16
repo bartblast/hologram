@@ -274,6 +274,33 @@ defmodule Hologram.DB.QueryRunnerTest do
       assert disjunction_readable_ids(user.id) == Enum.sort([own_entity.id, shared_entity.id])
     end
 
+    # A session's user id may be any string, integer or atom, and one that isn't an id Hologram
+    # generates names no user entity, so it reads what a visitor reads - as Auth.can?/3 answers it.
+    test "answers a session user id in a spelling Hologram doesn't generate as a visitor" do
+      user = create_policy_user("runner_23@example.com")
+
+      %{author_id: user.id}
+      |> PolicyModule6.new()
+      |> DB.create!()
+
+      shared_entity =
+        %{shared: true}
+        |> PolicyModule6.new()
+        |> DB.create!()
+
+      for session_user_id <- [
+            String.replace(user.id, "-", ""),
+            String.upcase(user.id),
+            user.id <> "\n",
+            "abc",
+            7,
+            :admin,
+            false
+          ] do
+        assert disjunction_readable_ids(session_user_id) == [shared_entity.id]
+      end
+    end
+
     # A visitor holds no row through the alternative naming the acting user, the authorless row
     # included - only the alternative naming nobody admits anything.
     test "answers a visitor through the alternative naming nobody" do

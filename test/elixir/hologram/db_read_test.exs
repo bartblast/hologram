@@ -5,6 +5,7 @@ defmodule Hologram.DBReadTest do
   import Hologram.Test, only: [as_user: 2]
 
   alias Hologram.Auth
+  alias Hologram.Auth.Context
   alias Hologram.DB
   alias Hologram.Entity
   alias Hologram.MisuseError
@@ -16,6 +17,7 @@ defmodule Hologram.DBReadTest do
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
   alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
+  alias Hologram.Test.Fixtures.Policy.Module6, as: PolicyModule6
 
   defp create_module_2_entity(values) do
     values
@@ -34,6 +36,33 @@ defmodule Hologram.DBReadTest do
   end
 
   describe "read/1" do
+    # A session's user id may be any string, integer or atom, and one that isn't an id Hologram
+    # generates names no user entity, so it reads what a visitor reads. false is an acting user
+    # too, never the trusted tier.
+    test "reads under a session user id Hologram doesn't generate as a visitor would" do
+      user = create_user("db_read_foreign_id@example.com")
+
+      %{author_id: user.id}
+      |> PolicyModule6.new()
+      |> DB.create!()
+
+      shared_entity =
+        %{shared: true}
+        |> PolicyModule6.new()
+        |> DB.create!()
+
+      for session_user_id <- [String.replace(user.id, "-", ""), "abc", 7, :admin, false] do
+        ids =
+          Context.with_actor(session_user_id, fn ->
+            PolicyModule6
+            |> DB.read()
+            |> Enum.map(& &1.id)
+          end)
+
+        assert ids == [shared_entity.id]
+      end
+    end
+
     test "counts only the rows the acting user may read" do
       user = create_user("db_read_count@example.com")
       granted_entity = create_policy_module_2_entity()
