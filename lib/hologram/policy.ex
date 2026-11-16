@@ -692,7 +692,7 @@ defmodule Hologram.Policy do
   @doc """
   Refuses an operation the given entity type cannot be asked about, or returns :ok.
 
-  A framework operation always passes. An atom passes when an allow line on the entity type declares it as its operation or carries it as its name (`as:`). A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role. Anything else raises Hologram.MisuseError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
+  A framework operation always passes. An atom passes when an allow line on the entity type declares it as its operation or carries it as its name (`as:`). A {:grant_role, role} or {:revoke_role, role} tuple passes when the entity type declares the role, and an {:update, field} or {:update, fields} tuple when every field it names is one of `update_fields/1` - a list naming at least one. Anything else raises Hologram.MisuseError naming what the entity type does declare - so a typo or a renamed operation fails at the line that asks, on the tier asking, instead of being denied as if the rules had been consulted.
 
   The client mirrors the same refusals in validateOperation in assets/js/model.mjs - a hand-ported pair, so a change here is a change there.
   """
@@ -721,10 +721,28 @@ defmodule Hologram.Policy do
     end
   end
 
-  def validate_operation!(entity_type, operation) when is_tuple(operation) do
+  def validate_operation!(entity_type, {:update, []} = operation) do
     raise MisuseError,
       message:
-        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - {:update, fields} names at least one field"
+  end
+
+  def validate_operation!(entity_type, {:update, field_names} = operation)
+      when is_list(field_names) do
+    if List.improper?(field_names) do
+      raise MisuseError, message: unknown_tuple_message(entity_type, operation)
+    end
+
+    Enum.each(field_names, &validate_update_field!(entity_type, operation, &1))
+  end
+
+  def validate_operation!(entity_type, {:update, field_name} = operation)
+      when is_atom(field_name) do
+    validate_update_field!(entity_type, operation, field_name)
+  end
+
+  def validate_operation!(entity_type, operation) when is_tuple(operation) do
+    raise MisuseError, message: unknown_tuple_message(entity_type, operation)
   end
 
   # Nothing production reaches here - can?/3 refuses a shape this far off before asking, and
@@ -733,7 +751,7 @@ defmodule Hologram.Policy do
   def validate_operation!(entity_type, operation) do
     raise MisuseError,
       message:
-        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role}"
+        "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - an entity operation is an atom, {:grant_role, role} / {:revoke_role, role} or {:update, field} / {:update, fields}"
   end
 
   @doc """
@@ -1494,11 +1512,32 @@ defmodule Hologram.Policy do
     "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - its allow lines declare #{declared}, and the framework's own operations are #{join_names(@framework_operations)}"
   end
 
+  defp unknown_tuple_message(entity_type, operation) do
+    "unknown operation #{inspect(operation)} for #{inspect(entity_type)} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
+  end
+
+  defp update_fields_description([]), do: "it has no field an update sets"
+
+  defp update_fields_description(field_names),
+    do: "the fields an update sets are #{Enum.map_join(field_names, ", ", &inspect/1)}"
+
   defp validate_policy_module!(module, policy_module) do
     if not Reflection.policy?(policy_module) do
       raise Hologram.CompileError,
         message:
           "invalid policy #{inspect(policy_module)} taken in #{inspect(module)} - #{inspect(policy_module)} is not a policy module (define it with use Hologram.Policy)"
+    end
+  end
+
+  defp validate_update_field!(entity_type, operation, field_name) do
+    update_fields = update_fields(entity_type)
+
+    if field_name in update_fields do
+      :ok
+    else
+      raise MisuseError,
+        message:
+          "unknown field #{inspect(field_name)} in #{inspect(operation)} for #{inspect(entity_type)} - #{update_fields_description(update_fields)}"
     end
   end
 

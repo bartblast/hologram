@@ -1702,6 +1702,28 @@ describe("Model", () => {
       );
     });
 
+    it("passes an update tuple naming a field an update of the entity type sets", () => {
+      Model.validateOperation(
+        TASK,
+        Type.tuple([Type.atom("update"), Type.atom("title")]),
+      );
+
+      Model.validateOperation(
+        TASK,
+        Type.tuple([Type.atom("update"), Type.atom("project")]),
+      );
+    });
+
+    it("passes an update tuple naming a list of fields an update of the entity type sets", () => {
+      Model.validateOperation(
+        TASK,
+        Type.tuple([
+          Type.atom("update"),
+          Type.list([Type.atom("title"), Type.atom("tags")]),
+        ]),
+      );
+    });
+
     it("raises on an operation no allow line on the type names", () => {
       assertBoxedError(
         () => Model.validateOperation(PROJECT, Type.atom("pin")),
@@ -1742,6 +1764,97 @@ describe("Model", () => {
       );
     });
 
+    it("raises on an update tuple naming a field no update of the entity type sets", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([Type.atom("update"), Type.atom("project_id")]),
+          ),
+        "Hologram.MisuseError",
+        "unknown field :project_id in {:update, :project_id} for MyApp.Task - the fields an update sets are :done, :due_on, :internal_notes, :position, :project, :starts_at, :status, :tags, :title, :weight",
+      );
+    });
+
+    it("raises on an update list naming a field no update of the entity type sets", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([
+              Type.atom("update"),
+              Type.list([Type.atom("title"), Type.atom("updated_at")]),
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "unknown field :updated_at in {:update, [:title, :updated_at]} for MyApp.Task - the fields an update sets are :done, :due_on, :internal_notes, :position, :project, :starts_at, :status, :tags, :title, :weight",
+      );
+    });
+
+    it("raises on an update tuple naming a field that is neither an atom nor a list", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([Type.atom("update"), Type.bitstring("title")]),
+          ),
+        "Hologram.MisuseError",
+        'unknown operation {:update, "title"} for MyApp.Task - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}',
+      );
+    });
+
+    it("raises on an update tuple naming an improper list", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([
+              Type.atom("update"),
+              Type.improperList([Type.atom("title"), Type.atom("tags")]),
+            ]),
+          ),
+        "Hologram.MisuseError",
+        "unknown operation {:update, [:title | :tags]} for MyApp.Task - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}",
+      );
+    });
+
+    it("raises on an update list naming no field", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            TASK,
+            Type.tuple([Type.atom("update"), Type.list([])]),
+          ),
+        "Hologram.MisuseError",
+        "unknown operation {:update, []} for MyApp.Task - {:update, fields} names at least one field",
+      );
+    });
+
+    it("raises on an update tuple naming a job's framework attribute", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            NOTIFY,
+            Type.tuple([Type.atom("update"), Type.atom("status")]),
+          ),
+        "Hologram.MisuseError",
+        `unknown field :status in {:update, :status} for ${NOTIFY} - the fields an update sets are :reason`,
+      );
+    });
+
+    // A type with no entry stands for one declaring nothing, the server's fieldless fixture.
+    it("raises on an update tuple for an entity type no update sets a field of", () => {
+      assertBoxedError(
+        () =>
+          Model.validateOperation(
+            "MyApp.Fieldless",
+            Type.tuple([Type.atom("update"), Type.atom("title")]),
+          ),
+        "Hologram.MisuseError",
+        "unknown field :title in {:update, :title} for MyApp.Fieldless - it has no field an update sets",
+      );
+    });
+
     it("raises on a tuple whose name is not a grant lifecycle operation", () => {
       assertBoxedError(
         () =>
@@ -1750,7 +1863,7 @@ describe("Model", () => {
             Type.tuple([Type.atom("publish"), Type.atom("editor")]),
           ),
         "Hologram.MisuseError",
-        "unknown operation {:publish, :editor} for MyApp.Project - the operation tuples are {:grant_role, role} and {:revoke_role, role}",
+        "unknown operation {:publish, :editor} for MyApp.Project - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}",
       );
     });
   });

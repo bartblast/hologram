@@ -27,7 +27,8 @@ defmodule Hologram.Entity do
   @type id :: String.t()
 
   @typedoc """
-  An entity operation - an atom, or a grant lifecycle operation naming the role (or roles) it covers.
+  An entity operation - an atom, a grant lifecycle operation naming the role (or roles) it covers, or
+  an update naming the field (or fields) it changes.
   """
   @type operation :: atom | {atom, atom | list(atom)}
 

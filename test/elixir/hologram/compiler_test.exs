@@ -10105,6 +10105,96 @@ defmodule Hologram.CompilerTest do
       assert validate_operations!([Entity1], graph, plt) == :ok
     end
 
+    test "doesn't raise for an update tuple naming a field some entity type's update sets" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!(@declaring_model, graph, single_ask_plt("{:update, :title}")) ==
+               :ok
+    end
+
+    test "doesn't raise for an update list naming fields some entity types' updates set" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!(
+               @declaring_model,
+               graph,
+               single_ask_plt("{:update, [:title, :author]}")
+             ) ==
+               :ok
+    end
+
+    test "doesn't raise for an update list holding a computed field" do
+      plt =
+        asker_plt(~S"""
+        defmodule Hologram.Test.Fixtures.Compiler.OperationAsker do
+          def f(user, field, entity), do: Hologram.Auth.can?(user, {:update, [:title, field]}, entity)
+        end
+        """)
+
+      graph = asker_graph([{:f, 3, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!(@declaring_model, graph, plt) == :ok
+    end
+
+    test "doesn't raise for an update list holding a literal that is not an atom" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!(
+               @declaring_model,
+               graph,
+               single_ask_plt(~s({:update, [:title, "x"]}))
+             ) ==
+               :ok
+    end
+
+    test "doesn't raise for a grant lifecycle tuple naming a list of roles" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      assert validate_operations!(
+               @declaring_model,
+               graph,
+               single_ask_plt("{:grant_role, [:editr]}")
+             ) ==
+               :ok
+    end
+
+    test "raises on an update tuple naming a field no entity type's update sets" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown field :titel in {:update, :titel} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - no entity type has a field an update sets by that name"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(@declaring_model, graph, single_ask_plt("{:update, :titel}"))
+      end
+    end
+
+    test "raises on an update list naming a field no entity type's update sets" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown field :parent_id in {:update, [:title, :parent_id]} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - no entity type has a field an update sets by that name"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(
+          @declaring_model,
+          graph,
+          single_ask_plt("{:update, [:title, :parent_id]}")
+        )
+      end
+    end
+
+    test "raises on an update list naming no field" do
+      graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
+
+      expected_msg =
+        "unknown operation {:update, []} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - {:update, fields} names at least one field"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_operations!(@declaring_model, graph, single_ask_plt("{:update, []}"))
+      end
+    end
+
     test "raises on an operation no entity type declares" do
       graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
 
@@ -10131,7 +10221,7 @@ defmodule Hologram.CompilerTest do
       graph = asker_graph([{:f, 2, {Hologram.Auth, :can?, 3}}])
 
       expected_msg =
-        "unknown operation {:publish, :editor} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation {:publish, :editor} in Hologram.Test.Fixtures.Compiler.OperationAsker.f/2 (line 2) - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
         validate_operations!(@declaring_model, graph, single_ask_plt("{:publish, :editor}"))

@@ -804,12 +804,59 @@ function grants(entityType, row, operation, actorUserId) {
   );
 }
 
+// The fields an {:update, field} or {:update, fields} ask names, or null for any other operation.
+// The names are not validated here - Model.validateOperation refuses an unknown one, or an empty
+// list, in the server's words.
+function askedFields(operation) {
+  if (!Type.isTuple(operation) || operation.data.length !== 2) {
+    return null;
+  }
+
+  const [name, fields] = operation.data;
+
+  if (!Type.isAtom(name) || name.value !== "update") {
+    return null;
+  }
+
+  if (Type.isAtom(fields)) {
+    return [fields];
+  }
+
+  return Type.isProperList(fields) ? fields.data : null;
+}
+
+// Whether some update rule covering each of the given fields holds: a field's own key's rules,
+// then the rules covering the whole row - Hologram.Policy.field_rules/2 as the server reads it. A
+// field's key is the one Policy.operation_key/1 gives {:update, field} - a hand-ported pair, so a
+// change there is a change here. A rule covering the whole row is matched once however many
+// fields ask it.
+function coversFields(entry, entityType, entity, fields, actorUserId) {
+  const matched = new Map();
+
+  const holds = (rule) => {
+    if (!matched.has(rule)) {
+      matched.set(rule, ruleMatches(rule, entityType, entity, actorUserId));
+    }
+
+    return matched.get(rule);
+  };
+
+  const wholeRowRules = entry.policy.update ?? [];
+
+  return fields.every((field) =>
+    (entry.policy[`update:${field.value}`] ?? [])
+      .concat(wholeRowRules)
+      .some(holds),
+  );
+}
+
 // The key an entity operation is baked under: an atom as its name, a per-role grant lifecycle
-// operation or a field of an update as the two names joined by a colon. Policy.operation_key/1 is the twin on the server
-// (rendered by Compiler.render_policy/2), and the two must agree.
+// operation as the two names joined by a colon. Policy.operation_key/1 is the twin on the server
+// (rendered by Compiler.render_policy/2), and the two must agree - a field of an update is keyed
+// the same way, in coversFields.
 //
-// A tuple naming a LIST of roles is refused: the DSL takes one as sugar for a line per role, so
-// no rule is keyed by it - and can? asks about one role at a time.
+// A grant lifecycle tuple naming a LIST of roles is refused: the DSL takes one as sugar for a line
+// per role, so no rule is keyed by it - and can? asks about one role at a time.
 function operationKey(operation) {
   if (Type.isAtom(operation)) {
     return operation.value;
@@ -822,7 +869,11 @@ function operationKey(operation) {
       return `${name.value}:${role.value}`;
     }
 
-    if (Type.isAtom(name) && Type.isList(role)) {
+    if (
+      Type.isAtom(name) &&
+      ["grant_role", "revoke_role"].includes(name.value) &&
+      Type.isList(role)
+    ) {
       Interpreter.raiseMisuseError(
         `can? asks about one role - ${Interpreter.inspect(operation)} names several`,
       );
@@ -830,7 +881,7 @@ function operationKey(operation) {
   }
 
   Interpreter.raiseMisuseError(
-    "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+    "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple",
   );
 }
 
@@ -1013,7 +1064,8 @@ const Elixir_Hologram_Auth = {
     );
 
     const actorUserId = unboxActorUserId(userOrId);
-    const operationName = operationKey(operation);
+    const fields = askedFields(operation);
+    const operationName = fields === null ? operationKey(operation) : null;
 
     // An entry absent from a build is a type that declares NO policy - the build ships an entry
     // for every policied type, whether a page reaches it or not, precisely so this read can mean
@@ -1029,6 +1081,12 @@ const Elixir_Hologram_Auth = {
     // operation fails here, at the line that asks, rather than answering no as if the rules had
     // been consulted.
     Model.validateOperation(entityType, operation);
+
+    if (fields !== null) {
+      return Type.boolean(
+        coversFields(entry, entityType, entity, fields, actorUserId),
+      );
+    }
 
     const rules = entry.policy[operationName] ?? [];
 

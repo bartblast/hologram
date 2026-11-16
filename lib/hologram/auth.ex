@@ -28,7 +28,7 @@ defmodule Hologram.Auth do
 
   # The shape refusal can?/3 shares with its client twin (operationKey in
   # assets/js/elixir/hologram/auth.mjs) - a hand-ported pair, pinned on both tiers.
-  @operation_shape_message "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+  @operation_shape_message "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
   @doc """
   Returns the window a client checking permissions locally downloads: every grant row, narrowed
@@ -88,8 +88,15 @@ defmodule Hologram.Auth do
   The operation is an atom, or `{:grant_role, role}` / `{:revoke_role, role}` asking about one role -
   the bare `:grant_role` or `:revoke_role` asks whether the user may grant or revoke some role at all.
   A tuple naming several roles raises: can? asks about one role at a time.
+
+  `{:update, field}` asks whether the user may change that field: some update line covering it
+  holds, a line limited with `only:` or `except:` or one covering the whole row. `{:update, fields}`
+  asks the same of every field in the list, each covered by some line that holds - what an update
+  changing them all needs. The bare `:update` counts only the lines covering the whole row. A field
+  is one of `Hologram.Policy.update_fields/1`, a to-one by its relationship name.
   """
-  @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom}, struct) :: boolean
+  @spec can?(struct | Server.identity_id() | nil, atom | {atom, atom | list(atom)}, struct) ::
+          boolean
   def can?(user_or_id, operation, entity) do
     evaluate(user_or_id, operation, entity, :stored)
   end
@@ -112,7 +119,7 @@ defmodule Hologram.Auth do
   @doc false
   @spec can?(
           struct | Server.identity_id() | nil,
-          atom | {atom, atom},
+          atom | {atom, atom | list(atom)},
           struct,
           list(struct) | :held
         ) ::
@@ -802,9 +809,6 @@ defmodule Hologram.Auth do
   # An own-scope check matches the row naming the entity AND the type-wide row, which is why
   # nil rides in the id list beside the ids - the store keeps the two apart by that column being
   # null, and a membership list holding nil compiles to "= ANY(...) OR IS NULL".
-  # The DSL takes a list of roles as sugar for one line per role, so there is no rule keyed by a
-  # list to answer - and "all of them" and "any of them" are each other's opposite, so neither is
-  # chosen silently.
   defp entity_reference(entity) when is_struct(entity) do
     {entity.__struct__, validate_id!(entity.id, "entity")}
   end
@@ -813,9 +817,25 @@ defmodule Hologram.Auth do
 
   defp entity_type_value(entity_type), do: Codec.encode_enum_value(entity_type)
 
-  defp evaluate(_user_or_id, {_name, role_names} = operation, _entity, _source)
-       when is_list(role_names) do
+  # The DSL takes a list of roles as sugar for one line per role, so there is no rule keyed by a
+  # list to answer - and "all of them" and "any of them" are each other's opposite, so neither is
+  # chosen silently.
+  defp evaluate(_user_or_id, {name, role_names} = operation, _entity, _source)
+       when name in [:grant_role, :revoke_role] and is_list(role_names) do
     raise MisuseError, "can? asks about one role - #{inspect(operation)} names several"
+  end
+
+  # A field is covered by its own key's rules and the whole row's, so it is answered through the
+  # coverage the Writer judges an update by rather than through one key's rules.
+  defp evaluate(user_or_id, {:update, field_names} = operation, entity, source)
+       when is_atom(field_names) or is_list(field_names) do
+    if is_list(field_names) and List.improper?(field_names) do
+      raise MisuseError, @operation_shape_message
+    end
+
+    Policy.validate_operation!(entity.__struct__, operation)
+
+    uncovered_fields(user_or_id, entity, List.wrap(field_names), source) == []
   end
 
   defp evaluate(_user_or_id, {name, role_name}, _entity, _source)

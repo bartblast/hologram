@@ -381,6 +381,85 @@ defmodule Hologram.AuthTest do
       refute can?(other, :update, message)
     end
 
+    test "answers a field through the field-limited lines covering it" do
+      user_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      channel = %Module38{archived: false, name: "general"}
+
+      assert can?(user_id, {:update, :topic}, channel)
+      assert can?(user_id, {:update, :tags}, channel)
+      refute can?(user_id, {:update, :name}, channel)
+    end
+
+    test "answers a field through the lines covering the whole row" do
+      owner_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      other_id = "018f4571-a1b2-7c3d-8e4f-000000000002"
+      channel = %Module38{archived: true, name: "general", owner_id: owner_id}
+
+      assert can?(owner_id, {:update, :archived}, channel)
+      refute can?(other_id, {:update, :archived}, channel)
+    end
+
+    test "answers a field an except line leaves out through the other lines" do
+      user_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      channel = %Module38{archived: true, name: "open"}
+
+      assert can?(user_id, {:update, :sent_count}, channel)
+      refute can?(user_id, {:update, :owner}, channel)
+    end
+
+    test "answers a list of fields when some holding line covers each" do
+      user_id = "018f4571-a1b2-7c3d-8e4f-000000000001"
+      channel = %Module38{archived: false, name: "open"}
+
+      assert can?(user_id, {:update, [:topic, :sent_count]}, channel)
+      refute can?(user_id, {:update, [:topic, :owner]}, channel)
+    end
+
+    test "raises on a field no update of the entity type sets" do
+      expected_msg =
+        "unknown field :owner_id in {:update, :owner_id} for Hologram.Test.Fixtures.Policy.Module38 - the fields an update sets are :archived, :name, :owner, :parent, :sent_count, :tags, :topic"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, :owner_id}, %Module38{})
+      end
+    end
+
+    test "raises on a list of fields naming one that is not an atom" do
+      expected_msg =
+        "unknown field 1 in {:update, [1, :topic]} for Hologram.Test.Fixtures.Policy.Module38 - the fields an update sets are :archived, :name, :owner, :parent, :sent_count, :tags, :topic"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, [1, :topic]}, %Module38{})
+      end
+    end
+
+    test "raises on an update tuple naming a field that is not an atom" do
+      expected_msg =
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, "topic"}, %Module38{})
+      end
+    end
+
+    test "raises on an improper list of fields" do
+      expected_msg =
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, [:topic | :name]}, %Module38{})
+      end
+    end
+
+    test "raises on an update list naming no field" do
+      expected_msg =
+        "unknown operation {:update, []} for Hologram.Test.Fixtures.Policy.Module38 - {:update, fields} names at least one field"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:update, []}, %Module38{})
+      end
+    end
+
     test "matches a rule referencing the acting user" do
       entity = %Module1{author_id: "018f4571-a1b2-7c3d-8e4f-000000000002"}
 
@@ -690,7 +769,7 @@ defmodule Hologram.AuthTest do
     # atom nor a role tuple" in test/javascript/elixir/hologram/auth_test.mjs. Always update both.
     test "raises on a role tuple whose members are not atoms" do
       expected_msg =
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, "viewer"}, %Module1{
@@ -699,9 +778,20 @@ defmodule Hologram.AuthTest do
       end
     end
 
+    test "raises on a list in a tuple naming no grant lifecycle operation" do
+      expected_msg =
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
+
+      assert_error MisuseError, expected_msg, fn ->
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:delete, [:public]}, %Module1{
+          public: true
+        })
+      end
+    end
+
     test "raises on a tuple that is not a pair" do
       expected_msg =
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, :editor, :extra}, %Module1{
@@ -712,7 +802,7 @@ defmodule Hologram.AuthTest do
 
     test "raises on an operation that is neither an atom nor a tuple" do
       expected_msg =
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", "read", %Module1{public: true})
@@ -730,7 +820,7 @@ defmodule Hologram.AuthTest do
 
     test "raises on a tuple whose name is not a grant lifecycle operation" do
       expected_msg =
-        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
 
       assert_error MisuseError, expected_msg, fn ->
         can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:publish, :editor}, %Module1{public: true})

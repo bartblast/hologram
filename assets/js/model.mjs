@@ -324,16 +324,14 @@ export default class Model {
     return `${name}$sort`;
   }
 
-  // The way back over the same boundary: a value written in a query becomes the way the wire
-  // spells it, because that is what the rows it will be compared against hold. A date written as
-  // a date compares with a date written as a string only if one of them stops being what it was,
-  // and the rows cannot be the ones to change.
   // The client's Hologram.Policy.validate_operation!/2: refuses an operation the given entity type
   // cannot be asked about, with the server's own sentences (pinned as pairs in
   // test/elixir/hologram/policy_test.exs and test/javascript/model_test.mjs). A framework
   // operation always passes. An atom passes when the type's baked operations list names it. A
   // {:grant_role, role} / {:revoke_role, role} tuple - a two-tuple of atoms, which is the caller's
-  // shape check to make - passes when the type's baked roles name the role.
+  // shape check to make - passes when the type's baked roles name the role, and an {:update, field}
+  // or {:update, fields} tuple - a field atom or a proper list - when every field it names is one
+  // of #updateFields, a list naming at least one.
   //
   // Read off the raw baked entry, as can?/3 and the role check read it: entry() normalizes the
   // keys the write path indexes into and carries neither of these. A hand-built entry without them
@@ -366,9 +364,17 @@ export default class Model {
 
     const [name, role] = operation.data;
 
+    if (
+      name.value === "update" &&
+      (Type.isAtom(role) || Type.isProperList(role))
+    ) {
+      Model.#validateUpdateFields(type, baked, operation);
+      return;
+    }
+
     if (!["grant_role", "revoke_role"].includes(name.value)) {
       Interpreter.raiseMisuseError(
-        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the operation tuples are {:grant_role, role} and {:revoke_role, role}`,
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}`,
       );
     }
 
@@ -386,6 +392,10 @@ export default class Model {
     }
   }
 
+  // The way back over the same boundary: a value written in a query becomes the way the wire
+  // spells it, because that is what the rows it will be compared against hold. A date written as
+  // a date compares with a date written as a string only if one of them stops being what it was,
+  // and the rows cannot be the ones to change.
   static unbox(value, attributeType) {
     if (Type.isNil(value)) {
       return null;
@@ -961,5 +971,48 @@ export default class Model {
     const second = Model.#pad(Model.#field(value, "second").value, 2);
 
     return `${hour}:${minute}:${second}.${Model.#pad(fraction, 6)}`;
+  }
+
+  // The client's Hologram.Policy.update_fields/1, read off the raw baked entry: the declared
+  // attributes but the system ones and a job's framework-owned ones, and every forward
+  // relationship, a to-one by its relationship name - sorted, as the server sorts atoms.
+  static #updateFields(baked) {
+    const frameworkAttributes = baked?.frameworkAttributes ?? [];
+
+    const attributes = Object.keys(baked?.attributes ?? {}).filter(
+      (name) =>
+        !Model.systemAttributes.includes(name) &&
+        !frameworkAttributes.includes(name),
+    );
+
+    return attributes.concat(Object.keys(baked?.relationships ?? {})).sort();
+  }
+
+  static #validateUpdateFields(type, baked, operation) {
+    const fields = operation.data[1];
+
+    if (Type.isList(fields) && fields.data.length === 0) {
+      Interpreter.raiseMisuseError(
+        `unknown operation ${Interpreter.inspect(operation)} for ${type} - {:update, fields} names at least one field`,
+      );
+    }
+
+    const updateFields = Model.#updateFields(baked);
+    const asked = Type.isList(fields) ? fields.data : [fields];
+
+    const unknown = asked.find(
+      (field) => !Type.isAtom(field) || !updateFields.includes(field.value),
+    );
+
+    if (unknown !== undefined) {
+      const described =
+        updateFields.length === 0
+          ? "it has no field an update sets"
+          : `the fields an update sets are ${updateFields.map((name) => `:${name}`).join(", ")}`;
+
+      Interpreter.raiseMisuseError(
+        `unknown field ${Interpreter.inspect(unknown)} in ${Interpreter.inspect(operation)} for ${type} - ${described}`,
+      );
+    }
   }
 }

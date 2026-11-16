@@ -1983,6 +1983,12 @@ defmodule Hologram.PolicyTest do
   end
 
   describe "validate_operation!/2" do
+    defmodule FieldlessFixture do
+      use Hologram.Entity
+
+      allow :read
+    end
+
     test "passes every framework operation on an entity type declaring nothing" do
       Enum.each(framework_operations(), fn operation ->
         assert validate_operation!(Module1, operation) == :ok
@@ -2006,6 +2012,78 @@ defmodule Hologram.PolicyTest do
     test "passes a role tuple naming a role the entity type declares" do
       assert validate_operation!(Policy.Module1, {:grant_role, :editor}) == :ok
       assert validate_operation!(Policy.Module1, {:revoke_role, :viewer}) == :ok
+    end
+
+    test "passes an update tuple naming a field an update of the entity type sets" do
+      assert validate_operation!(Policy.Module1, {:update, :public}) == :ok
+      assert validate_operation!(Policy.Module1, {:update, :parent}) == :ok
+    end
+
+    test "passes an update tuple naming a list of fields an update of the entity type sets" do
+      assert validate_operation!(Policy.Module1, {:update, [:public, :parent]}) == :ok
+    end
+
+    test "raises on an update tuple naming a field no update of the entity type sets" do
+      expected_msg =
+        "unknown field :parent_id in {:update, :parent_id} for Hologram.Test.Fixtures.Policy.Module1 - the fields an update sets are :author, :parent, :priority, :public"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:update, :parent_id})
+      end
+    end
+
+    test "raises on an update list naming a field no update of the entity type sets" do
+      expected_msg =
+        "unknown field :updated_at in {:update, [:public, :updated_at]} for Hologram.Test.Fixtures.Policy.Module1 - the fields an update sets are :author, :parent, :priority, :public"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:update, [:public, :updated_at]})
+      end
+    end
+
+    test "raises on an update tuple naming a field that is neither an atom nor a list" do
+      expected_msg =
+        ~s(unknown operation {:update, "public"} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields})
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:update, "public"})
+      end
+    end
+
+    test "raises on an update tuple naming an improper list" do
+      expected_msg =
+        "unknown operation {:update, [:public | :parent]} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:update, [:public | :parent]})
+      end
+    end
+
+    test "raises on an update list naming no field" do
+      expected_msg =
+        "unknown operation {:update, []} for Hologram.Test.Fixtures.Policy.Module1 - {:update, fields} names at least one field"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Policy.Module1, {:update, []})
+      end
+    end
+
+    test "raises on an update tuple naming a job's framework attribute" do
+      expected_msg =
+        "unknown field :status in {:update, :status} for Hologram.Test.Fixtures.Job.Module3 - the fields an update sets are :outcome"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(Hologram.Test.Fixtures.Job.Module3, {:update, :status})
+      end
+    end
+
+    test "raises on an update tuple for an entity type no update sets a field of" do
+      expected_msg =
+        "unknown field :title in {:update, :title} for Hologram.PolicyTest.FieldlessFixture - it has no field an update sets"
+
+      assert_error MisuseError, expected_msg, fn ->
+        validate_operation!(FieldlessFixture, {:update, :title})
+      end
     end
 
     test "raises on an operation no allow line on the entity type names" do
@@ -2055,7 +2133,7 @@ defmodule Hologram.PolicyTest do
 
     test "raises on a tuple whose name is not a grant lifecycle operation" do
       expected_msg =
-        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, {:publish, :editor})
@@ -2064,7 +2142,7 @@ defmodule Hologram.PolicyTest do
 
     test "raises on a tuple that is not a pair" do
       expected_msg =
-        "unknown operation {:grant_role, :editor, :extra} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
+        "unknown operation {:grant_role, :editor, :extra} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}"
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, {:grant_role, :editor, :extra})
@@ -2073,7 +2151,7 @@ defmodule Hologram.PolicyTest do
 
     test "raises on an operation that is neither an atom nor a tuple" do
       expected_msg =
-        ~s(unknown operation "read" for Hologram.Test.Fixtures.Policy.Module1 - an entity operation is an atom, or {:grant_role, role} / {:revoke_role, role})
+        ~s(unknown operation "read" for Hologram.Test.Fixtures.Policy.Module1 - an entity operation is an atom, {:grant_role, role} / {:revoke_role, role} or {:update, field} / {:update, fields})
 
       assert_error MisuseError, expected_msg, fn ->
         validate_operation!(Policy.Module1, wrap_term("read"))

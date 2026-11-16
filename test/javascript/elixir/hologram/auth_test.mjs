@@ -79,6 +79,11 @@ describe("Elixir_Hologram_Auth", () => {
       ...overrides,
     });
 
+  const updateOf = (fields) => Type.tuple([Type.atom("update"), fields]);
+
+  const SHAPE_MESSAGE =
+    "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple";
+
   const grantRow = (overrides) => ({
     id: `grant-${Object.values(overrides).join("-")}`,
     entity_id: null,
@@ -2868,7 +2873,7 @@ describe("Elixir_Hologram_Auth", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
         "Hologram.MisuseError",
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple",
       );
     });
 
@@ -2881,7 +2886,7 @@ describe("Elixir_Hologram_Auth", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
         "Hologram.MisuseError",
-        "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple",
+        "can? takes an operation atom, a {:grant_role, role} / {:revoke_role, role} tuple or an {:update, field} / {:update, fields} tuple",
       );
     });
   });
@@ -2919,6 +2924,168 @@ describe("Elixir_Hologram_Auth", () => {
       );
     });
 
+    // A field-limited line is baked under update:<field> for each field it covers, and a field is
+    // answered by those rules and the ones covering the whole row - never by the bare update key
+    // alone.
+    it("answers a field through the field-limited lines covering it", () => {
+      defineModel({
+        "update:title": [rule({predicates: [["public", "==", false]]})],
+      });
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), updateOf(Type.atom("title")), document()),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), updateOf(Type.atom("summary")), document()),
+        Type.boolean(false),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), Type.atom("update"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers a field through the lines covering the whole row", () => {
+      defineModel({update: [rule({predicates: [["public", "==", true]]})]});
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          updateOf(Type.atom("folder")),
+          document({public: true}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), updateOf(Type.atom("folder")), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers a list of fields through field-limited and whole-row lines together", () => {
+      defineModel({
+        "update:title": [rule()],
+        update: [rule({predicates: [["public", "==", true]]})],
+      });
+
+      const fields = updateOf(
+        Type.list([Type.atom("title"), Type.atom("summary")]),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), fields, document({public: true})),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), fields, document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("answers a list of fields when some holding line covers each", () => {
+      defineModel({
+        "update:summary": [rule({predicates: [["public", "==", true]]})],
+        "update:title": [rule()],
+      });
+
+      const fields = (...names) =>
+        updateOf(Type.list(names.map((name) => Type.atom(name))));
+
+      assert.deepStrictEqual(
+        can(
+          Type.bitstring(ALICE),
+          fields("title", "summary"),
+          document({public: true}),
+        ),
+        Type.boolean(true),
+      );
+
+      assert.deepStrictEqual(
+        can(Type.bitstring(ALICE), fields("title", "summary"), document()),
+        Type.boolean(false),
+      );
+    });
+
+    it("raises on a field no update of the entity type sets", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.bitstring(ALICE),
+            updateOf(Type.atom("folder_id")),
+            document(),
+          ),
+        "Hologram.MisuseError",
+        "unknown field :folder_id in {:update, :folder_id} for MyApp.Document - the fields an update sets are :author_id, :count, :due_on, :folder, :held_at, :priority, :public, :rating, :released_on, :stage, :status, :summary, :tags, :title",
+      );
+    });
+
+    it("raises on a list of fields naming one that is not an atom", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.bitstring(ALICE),
+            updateOf(Type.list([Type.integer(1), Type.atom("title")])),
+            document(),
+          ),
+        "Hologram.MisuseError",
+        "unknown field 1 in {:update, [1, :title]} for MyApp.Document - the fields an update sets are :author_id, :count, :due_on, :folder, :held_at, :priority, :public, :rating, :released_on, :stage, :status, :summary, :tags, :title",
+      );
+    });
+
+    it("raises on an update tuple naming a field that is not an atom", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.bitstring(ALICE),
+            updateOf(Type.bitstring("title")),
+            document(),
+          ),
+        "Hologram.MisuseError",
+        SHAPE_MESSAGE,
+      );
+    });
+
+    it("raises on an improper list of fields", () => {
+      assertBoxedError(
+        () =>
+          can(
+            Type.bitstring(ALICE),
+            updateOf(
+              Type.improperList([Type.atom("title"), Type.atom("summary")]),
+            ),
+            document(),
+          ),
+        "Hologram.MisuseError",
+        SHAPE_MESSAGE,
+      );
+    });
+
+    it("raises on an update list naming no field", () => {
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), updateOf(Type.list([])), document()),
+        "Hologram.MisuseError",
+        "unknown operation {:update, []} for MyApp.Document - {:update, fields} names at least one field",
+      );
+    });
+
+    it("raises on a list in a tuple naming no grant lifecycle operation", () => {
+      const operation = Type.tuple([
+        Type.atom("delete"),
+        Type.list([Type.atom("public")]),
+      ]);
+
+      assertBoxedError(
+        () => can(Type.bitstring(ALICE), operation, document()),
+        "Hologram.MisuseError",
+        SHAPE_MESSAGE,
+      );
+    });
+
     it("denies a framework operation the type declares no rule for", () => {
       assert.deepStrictEqual(
         can(Type.bitstring(ALICE), Type.atom("update"), document()),
@@ -2940,7 +3107,7 @@ describe("Elixir_Hologram_Auth", () => {
       assertBoxedError(
         () => can(Type.bitstring(ALICE), operation, document()),
         "Hologram.MisuseError",
-        "unknown operation {:publish, :editor} for MyApp.Document - the operation tuples are {:grant_role, role} and {:revoke_role, role}",
+        "unknown operation {:publish, :editor} for MyApp.Document - the operation tuples are {:grant_role, role}, {:revoke_role, role}, {:update, field} and {:update, fields}",
       );
     });
 
