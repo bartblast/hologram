@@ -203,14 +203,16 @@ describe("LocalDatabase", () => {
     const PROJECT = "MyApp.Project";
     const TASK = "MyApp.Task";
 
-    it("drops the carried counts and the scope marks", () => {
+    it("drops the carried counts and the completeness marks", () => {
       LocalDatabase.syncCounts = {"MyApp.Component/todos/": 3};
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markTypesSynced([TASK]);
+      LocalDatabase.markAllSynced();
 
       LocalDatabase.beginRefill();
 
       assert.deepStrictEqual(LocalDatabase.syncCounts, {});
-      assert.isFalse(LocalDatabase.isSynced("all"));
+      assert.isFalse(LocalDatabase.isAllSynced());
+      assert.isFalse(LocalDatabase.isTypeSynced(TASK));
     });
 
     // The whole point of marking rather than dropping: the screen goes on showing what it showed,
@@ -240,7 +242,7 @@ describe("LocalDatabase", () => {
 
       LocalDatabase.beginRefill();
       LocalDatabase.unmarkCarried(TASK, "t1");
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markAllSynced();
 
       assert.deepStrictEqual(LocalDatabase.getRow(TASK, "t1"), {
         id: "t1",
@@ -412,32 +414,57 @@ describe("LocalDatabase", () => {
     });
   });
 
-  describe("isSynced()", () => {
-    it("answers false before the scope's marker arrived", () => {
-      assert.isFalse(LocalDatabase.isSynced("page"));
+  describe("isAllSynced()", () => {
+    it("answers false before the marker arrived", () => {
+      assert.isFalse(LocalDatabase.isAllSynced());
     });
 
-    it("answers true once the scope is marked", () => {
-      LocalDatabase.markSynced("page");
+    it("answers true once everything is marked", () => {
+      LocalDatabase.markAllSynced();
 
-      assert.isTrue(LocalDatabase.isSynced("page"));
+      assert.isTrue(LocalDatabase.isAllSynced());
     });
 
-    it("marks each scope on its own", () => {
-      LocalDatabase.markSynced("page");
+    it("answers false while only types are marked", () => {
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
 
-      assert.isFalse(LocalDatabase.isSynced("all"));
+      assert.isFalse(LocalDatabase.isAllSynced());
     });
   });
 
-  describe("markSynced()", () => {
+  describe("isTypeSynced()", () => {
+    it("answers false before the type's marker arrived", () => {
+      assert.isFalse(LocalDatabase.isTypeSynced("MyApp.Task"));
+    });
+
+    it("answers true once the type is marked", () => {
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
+
+      assert.isTrue(LocalDatabase.isTypeSynced("MyApp.Task"));
+    });
+
+    it("marks each type on its own", () => {
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
+
+      assert.isFalse(LocalDatabase.isTypeSynced("MyApp.Project"));
+    });
+
+    // Everything complete is every type complete, the ones no marker named included.
+    it("answers true for any type once everything is marked", () => {
+      LocalDatabase.markAllSynced();
+
+      assert.isTrue(LocalDatabase.isTypeSynced("MyApp.Task"));
+    });
+  });
+
+  describe("markAllSynced()", () => {
     // What a page still carries when the whole pot declares itself complete was never this
     // client's to hold - a grant revoked between the render and the connect leaves exactly that.
     it("drops a carried row the fill never delivered", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
       LocalDatabase.markCarried("MyApp.Task", "t1");
 
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markAllSynced();
 
       assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
       assert.deepEqual(LocalDatabase.carriedEntries(), []);
@@ -448,35 +475,34 @@ describe("LocalDatabase", () => {
       LocalDatabase.markCarried("MyApp.Task", "t1");
       LocalDatabase.unmarkCarried("MyApp.Task", "t1");
 
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markAllSynced();
 
       assert.deepEqual(LocalDatabase.getRow("MyApp.Task", "t1"), {
         id: "t1",
         title: "Draft copy",
       });
+    });
+
+    it("sweeps nothing when told again", () => {
+      LocalDatabase.markAllSynced();
+
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "carried since"});
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+
+      LocalDatabase.markAllSynced();
+
+      assert.isNotNull(LocalDatabase.getRow("MyApp.Task", "t1"));
     });
 
     it("keeps a row no page carried", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
 
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markAllSynced();
 
       assert.deepEqual(LocalDatabase.getRow("MyApp.Task", "t1"), {
         id: "t1",
         title: "Draft copy",
       });
-    });
-
-    // The page scope says one page's rows are complete, which says nothing about a row another
-    // page carried - only the whole pot's marker can call one an orphan.
-    it("sweeps nothing at the page scope", () => {
-      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
-      LocalDatabase.markCarried("MyApp.Task", "t1");
-
-      LocalDatabase.markSynced("page");
-
-      assert.deepEqual(LocalDatabase.carriedEntries(), [["MyApp.Task", "t1"]]);
-      assert.isNotNull(LocalDatabase.getRow("MyApp.Task", "t1"));
     });
 
     // A swept row takes its relationship facts with it, the way any row leaving the pot does.
@@ -485,12 +511,80 @@ describe("LocalDatabase", () => {
       LocalDatabase.addFact("MyApp.Project", "tasks", "p1", "t1");
       LocalDatabase.markCarried("MyApp.Project", "p1");
 
-      LocalDatabase.markSynced("all");
+      LocalDatabase.markAllSynced();
 
       assert.deepEqual(
         LocalDatabase.getTargetIds("MyApp.Project", "tasks", "p1"),
         new Set(),
       );
+    });
+  });
+
+  describe("markTypesSynced()", () => {
+    // The fill sends every row of a type the client may see before the type's marker, so a row of
+    // it still held only because a page carried it, or from before a refill, is not the client's.
+    it("drops a carried row of a marked type the fill never delivered", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
+
+      assert.isNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+      assert.deepEqual(LocalDatabase.carriedEntries(), []);
+    });
+
+    it("keeps a carried row of a marked type the fill delivered", () => {
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+      LocalDatabase.unmarkCarried("MyApp.Task", "t1");
+
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
+
+      assert.isNotNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+    });
+
+    // A type's marker says nothing about another type's rows, which may still be on their way.
+    it("keeps a carried row of a type no marker named", () => {
+      LocalDatabase.putRow("MyApp.Project", {id: "p1", name: "Board"});
+      LocalDatabase.markCarried("MyApp.Project", "p1");
+
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
+
+      assert.deepEqual(LocalDatabase.carriedEntries(), [
+        ["MyApp.Project", "p1"],
+      ]);
+      assert.isNotNull(LocalDatabase.getRow("MyApp.Project", "p1"));
+    });
+
+    // A mark told again - a tab of the group posting its state on every join - is no new word about
+    // a row a page carried since, which the stream has yet to deliver.
+    it("sweeps nothing for a type already marked", () => {
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
+
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "carried since"});
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
+
+      assert.isNotNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+    });
+
+    it("sweeps nothing once everything is marked", () => {
+      LocalDatabase.markAllSynced();
+
+      LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "carried since"});
+      LocalDatabase.markCarried("MyApp.Task", "t1");
+
+      LocalDatabase.markTypesSynced(["MyApp.Task"]);
+
+      assert.isNotNull(LocalDatabase.getRow("MyApp.Task", "t1"));
+    });
+
+    it("marks every type it is given", () => {
+      LocalDatabase.markTypesSynced(["MyApp.Project", "MyApp.Task"]);
+
+      assert.isTrue(LocalDatabase.isTypeSynced("MyApp.Project"));
+      assert.isTrue(LocalDatabase.isTypeSynced("MyApp.Task"));
     });
   });
 
@@ -773,16 +867,22 @@ describe("LocalDatabase", () => {
     });
   });
 
-  describe("syncedScopes()", () => {
-    it("answers nothing before any marker has arrived", () => {
-      assert.deepStrictEqual(LocalDatabase.syncedScopes(), []);
+  describe("syncedState()", () => {
+    it("answers nothing complete before any marker has arrived", () => {
+      assert.deepStrictEqual(LocalDatabase.syncedState(), {
+        all: false,
+        types: [],
+      });
     });
 
-    it("answers the scopes marked so far", () => {
-      LocalDatabase.markSynced("all");
-      LocalDatabase.markSynced("page");
+    it("answers what has been marked so far", () => {
+      LocalDatabase.markTypesSynced(["MyApp.Task", "MyApp.Project"]);
+      LocalDatabase.markAllSynced();
 
-      assert.sameMembers(LocalDatabase.syncedScopes(), ["all", "page"]);
+      const state = LocalDatabase.syncedState();
+
+      assert.isTrue(state.all);
+      assert.sameMembers(state.types, ["MyApp.Project", "MyApp.Task"]);
     });
   });
 
@@ -851,11 +951,12 @@ describe("LocalDatabase", () => {
   });
 
   describe("reset()", () => {
-    it("drops the rows, the facts, the scope marks and what a page carried", () => {
+    it("drops the rows, the facts, the completeness marks and what a page carried", () => {
       LocalDatabase.putRow("MyApp.Task", {id: "t1", title: "Draft copy"});
       LocalDatabase.addFact("MyApp.Project", "tasks", "p1", "t1");
       LocalDatabase.markCarried("MyApp.Task", "t1");
-      LocalDatabase.markSynced("page");
+      LocalDatabase.markTypesSynced(["MyApp.Project"]);
+      LocalDatabase.markAllSynced();
 
       LocalDatabase.reset();
 
@@ -868,7 +969,8 @@ describe("LocalDatabase", () => {
         new Set(),
       );
 
-      assert.isFalse(LocalDatabase.isSynced("page"));
+      assert.isFalse(LocalDatabase.isAllSynced());
+      assert.isFalse(LocalDatabase.isTypeSynced("MyApp.Project"));
     });
   });
 });

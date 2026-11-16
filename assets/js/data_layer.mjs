@@ -4,7 +4,6 @@ import Batches from "./batches.mjs";
 import Bitstring from "./bitstring.mjs";
 import Deltas from "./deltas.mjs";
 import Durability from "./durability.mjs";
-import GlobalRegistry from "./global_registry.mjs";
 import Interpreter from "./interpreter.mjs";
 import LocalDatabase from "./local_database.mjs";
 import ManuallyPortedElixirHologramAuth from "./elixir/hologram/auth.mjs";
@@ -580,7 +579,7 @@ export default class DataLayer {
     // - and whatever arrived while it was starting up is applied now, in the order it arrived.
     Tabs.ready();
 
-    // And what the store could not tell it is asked for: the completeness scopes, which nothing
+    // And what the store could not tell it is asked for: what is complete, which nothing
     // writes down, and the place and the identity as they stand in the tab that has them.
     Tabs.post({kind: "joined"});
 
@@ -597,6 +596,38 @@ export default class DataLayer {
     return SyncStream.rowsChangedSinceRender;
   }
 
+  // Based on read_session_user/2 (renderer.ex)
+  //
+  // The session user's row as this client holds it, boxed the way the server hands it over as the
+  // {Hologram, :user} context: the row of the user entity type whose id is the acting user's, or
+  // nil when nobody is signed in or no such row is held. The client holds only rows its user may
+  // read, so a row the read rules deny is nil here as it is on the server.
+  //
+  // Answered on every render rather than read from the context the page arrived with, so a write
+  // to the row - this client's own or one the stream delivers - reaches every prop reading it.
+  //
+  // Looked up by id rather than run as a query: every render of every page asks, and a query
+  // would scan the whole user table, which holds every user the session user may read. The answer
+  // is the one the query would give - the row as the pending writes leave it, boxed with nothing
+  // included.
+  //
+  // WARNING: must match read_session_user/2 (renderer.ex).
+  static sessionUser() {
+    const userEntity = globalThis.Hologram.sync.userEntity;
+    const actorUserId = LocalDatabase.actorUserId;
+
+    const row =
+      actorUserId === null
+        ? null
+        : LocalDatabase.getRow(userEntity, actorUserId);
+
+    // Compared as the query compares, since a table is a plain object: an id spelled like one of
+    // its inherited members would find that member rather than a row.
+    return row && row.id === actorUserId
+      ? Model.box(userEntity, row)
+      : Type.nil();
+  }
+
   // The one signal that actually means the network is worth trying again. A batch whose send got
   // no answer is still pending, and this is what wakes the queue that stopped behind it.
   static streamOpened() {
@@ -608,9 +639,11 @@ export default class DataLayer {
   //
   // A count has no rows behind it, so carrying rows cannot answer one: until the fill is complete
   // for the rows it counts, counting locally would count a pot that is still filling and report a
-  // number climbing towards the truth. The marker says when that stops - the page's own scope for
-  // the page this client connected on, whose rows the server declares complete first, and the
-  // whole pot's for any page reached since, whose rows are only promised at "all".
+  // number climbing towards the truth. The markers say when that stops - one per entity type, once
+  // the client holds every row of it it may see, and the whole pot's. A count reads the types the
+  // build worked out for its field (`countTypes`), and counts for itself once every one of them is
+  // marked, on whichever page and in whichever tab. A field the build listed no types for waits for
+  // the whole pot.
   //
   // The key names the component, the prop or derived field, and the arguments its function was
   // called with - which is what tells two instances of one component apart - spelled the way the
@@ -622,10 +655,7 @@ export default class DataLayer {
       return null;
     }
 
-    const scope =
-      module === GlobalRegistry.get("connectPageModule") ? "page" : "all";
-
-    if (LocalDatabase.isSynced(scope)) {
+    if ($.#countsLocally(module, name)) {
       return null;
     }
 
@@ -634,6 +664,19 @@ export default class DataLayer {
       .join(",")}`;
 
     return LocalDatabase.syncCounts[key] ?? null;
+  }
+
+  static #countsLocally(module, name) {
+    if (LocalDatabase.isAllSynced()) {
+      return true;
+    }
+
+    const types = globalThis.Hologram.sync?.countTypes?.[module]?.[name.value];
+
+    return (
+      types !== undefined &&
+      types.every((type) => LocalDatabase.isTypeSynced(type))
+    );
   }
 
   // Code point order, which is the order Elixir sorts UTF-8 binaries in - where JavaScript's own

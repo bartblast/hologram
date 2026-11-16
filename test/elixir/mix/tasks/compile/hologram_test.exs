@@ -1833,7 +1833,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
         module_infos: module_infos
       } = cache_state()
 
-      removed_reach = %{checks_permissions?: false, components: [], modules: MapSet.new()}
+      removed_reach = %{
+        checks_permissions?: false,
+        components: [],
+        modules: MapSet.new(),
+        reads_session_user?: false
+      }
+
       pages = Map.put(data_layer.pages, :removed_page, removed_reach)
       Cache.put_data_layer(%{data_layer | pages: pages})
 
@@ -1856,7 +1862,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         module_infos: module_infos
       } = cache_state()
 
-      removed_entry = %{derived_queries: [], terms: []}
+      removed_entry = %{count_types: %{}, derived_queries: [], terms: []}
       components = Map.put(data_layer.components, :removed_component, removed_entry)
       Cache.put_data_layer(%{data_layer | components: components})
 

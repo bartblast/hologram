@@ -96,6 +96,13 @@ export default class ComponentRegistry {
     ComponentRegistry.currentDerivedCids.add(key);
   }
 
+  // Optimized (mutates emitted_context field in-place)
+  static putComponentEmittedContext(cid, emittedContext) {
+    const entry = ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1];
+    const componentStruct = entry.data["atom(struct)"][1];
+    componentStruct.data["atom(emitted_context)"][1] = emittedContext;
+  }
+
   // Optimized (mutates props field in-place)
   static putComponentProps(cid, props) {
     const entry = ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1];
