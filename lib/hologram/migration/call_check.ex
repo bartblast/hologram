@@ -1,23 +1,24 @@
 defmodule Hologram.Migration.CallCheck do
   @moduledoc false
 
+  alias Hologram.Migration.FieldAccess.Definitions
+
   # What a migration does to a row must never change after it is applied, so its code
-  # may call only what does not change with the app: its own functions and the standard
-  # library's modules that work on values. A call to one of the app's modules, a
-  # dependency's or Hologram's would change whenever they do, and so would a call to a
-  # module chosen at runtime - through apply/3, Function.capture/3, mod.fun() or a function
-  # that evaluates code. The allowed modules are listed rather than the dispatching ones
-  # refused, so a dispatching function nobody thought of is refused too.
+  # may call only what gives the same result for the same arguments, whatever the app, the
+  # machine or the moment: its own functions and the standard library's functions that
+  # compute on the values they are given. A call to one of the app's modules, a
+  # dependency's or Hologram's would change whenever they do, a call to a module chosen at
+  # runtime - through apply/3, Function.capture/3, mod.fun() or a function that evaluates
+  # code - whenever the value does, and a read of the clock, the environment, a random
+  # source or a time zone database on every run. The allowed functions are listed rather
+  # than the others refused, so a function nobody thought of is refused too.
   #
-  # A standard function can call a module given to it as a value, too: Enum.sort/2 a
-  # sorter's compare/2, Date.new/4 a calendar's functions, to_string/1 the String.Chars
-  # implementation of a map whose __struct__ names the module. So the code may hold no
-  # module outside the allowed ones - an op's entity types aside, in the fields that name
-  # them - may not build an atom from a string, which could spell one, and may not read its
-  # own ops back, which would hand it those entity types. A macro's code is checked like a
-  # function's - one the migration itself calls has run by the time the check does, but the
-  # build still fails. An Erlang parse transform is refused, as it rewrites the code after
-  # the debug info read here.
+  # Field access on a value, x.field, compiles into a strict map read (see
+  # Hologram.Migration.FieldAccess), as Elixir would otherwise call x's function when x
+  # holds a module; one the rewrite did not reach is refused. A macro's code is checked like
+  # a function's - one the migration itself calls has run by the time the check does, but
+  # the build still fails. An Erlang parse transform is refused, as it rewrites the code
+  # after the debug info read here.
   #
   # Code that ran while the module compiled - a call in the module body, another module's
   # macro - left only its results in the bytecode, so it is checked through the modules the
@@ -29,129 +30,533 @@ defmodule Hologram.Migration.CallCheck do
   # attribute only a function reads, is not used at compile time. The record covers the
   # whole file, so a second module in a migration file is checked along with it.
   #
-  # Known blind spots: m.fun without parentheses compiles like the field access row.name,
-  # which stays allowed, though it calls the function when m holds a module (Elixir warns
-  # when it runs), and raising a module held in a variable calls its exception/1; an
-  # Erlang module of the app, its name a plain atom, passes as a value; a module-body call
-  # to a module chosen at runtime names no module; a module-body call to Hologram.Migration
-  # cannot be told apart from the use that requires it; and a call that reads the
-  # environment, the clock or a random source passes, though its value can differ per build
-  # or boot - DateTime.now/1 reads the time zone database the app configured.
+  # Known blind spots: a standard function given a module as a value calls it - a sorter
+  # for Enum.sort/2, a calendar for Date.new/4, and the protocol implementation, Access,
+  # message/1 or __escape__/1 of a map given its __struct__ at runtime, File.Stream's among
+  # them, which reads and writes files - and so do raising a module held in a variable and
+  # an error_info naming one; the module body, which runs once per build, is checked by the
+  # modules it used rather than by function, so beyond the environment modules listed below
+  # it may read the clock, the machine, files or configuration through other standard
+  # functions - Date.utc_today/0, node/0, __DIR__, :filelib - and reach a module chosen at
+  # runtime, a listed one or Hologram.Migration among them; a DateTime built by hand in a
+  # zone other than UTC sends the date arithmetic to the time zone database; a map's
+  # iteration order follows the order its atom keys were created in the VM; inspect/1
+  # follows the default inspect function the app may set; an exception's message can name
+  # loaded modules; and Logger's level decides whether a log message is built at all.
 
-  # Modules whose every function works on the values it is given, and a struct of which a
-  # migration may build. The protocols dispatch on the value's type, and a migration holds
-  # no value of the app's types: it builds none and calls nothing that returns one.
-  @allowed_modules [
-    Access,
-    Atom,
-    Base,
-    Bitwise,
-    Calendar,
-    Calendar.ISO,
-    Collectable,
-    Date,
-    Date.Range,
-    DateTime,
-    Duration,
-    Enum,
-    Enumerable,
-    Exception,
-    Float,
-    Function,
-    IO,
-    Inspect,
-    Integer,
-    JSON,
-    Kernel,
-    Keyword,
-    List,
-    List.Chars,
-    Map,
-    MapSet,
-    NaiveDateTime,
-    Range,
-    Regex,
-    Stream,
-    String,
-    String.Chars,
-    Time,
-    Tuple,
-    URI,
-    Version,
-    Version.Requirement,
-    :base64,
-    :binary,
-    :calendar,
-    # The quote machinery a defguard or a defmacro with unquote compiles into.
-    :elixir_quote,
-    :lists,
-    :maps,
-    :math,
-    :re,
-    :string,
-    :ordsets,
-    :proplists,
-    :queue,
-    :sets,
-    :unicode,
-    :uri_string
-  ]
-
-  # Functions of the allowed modules that call a module given as a value, reach code or
-  # processes outside the migration, return a module the app chose, or build an atom from a
-  # string.
-  @refused_functions %{
-    Calendar => [:get_time_zone_database, :put_time_zone_database],
-    Collectable => [:__protocol__, :impl_for, :impl_for!],
-    Enumerable => [:__protocol__, :impl_for, :impl_for!],
-    Function => [:capture],
-    # Those reading input, and those writing to a device given - any registered process.
-    IO => [
-      :binread,
-      :binstream,
-      :getn,
-      :gets,
-      :read,
-      :stream,
-      binwrite: 2,
-      inspect: 3,
-      puts: 2,
-      write: 2
-    ],
-    Inspect => [:__protocol__, :impl_for, :impl_for!],
-    Kernel => [
-      :apply,
-      :function_exported?,
-      :macro_exported?,
-      :send,
-      :spawn,
-      :spawn_link,
-      :spawn_monitor,
-      :struct,
-      :struct!
-    ],
-    List => [:to_atom, :to_existing_atom],
-    List.Chars => [:__protocol__, :impl_for, :impl_for!],
-    String => [:to_atom, :to_existing_atom],
-    String.Chars => [:__protocol__, :impl_for, :impl_for!]
-  }
-
-  # Single functions of modules not allowed whole: Logger's logging - not its
-  # configuration, which installs the app's handlers and translators - raise/1 with a
-  # message held in a variable, the guard check of a defguard, Macro's name conversions,
-  # and the hashing and formatting of :crypto and :io_lib, whose other functions load
-  # engines or read atoms from text.
+  # The functions a migration may call, by module: :all for a module whose every function
+  # computes on its arguments only, otherwise the functions by name, or by name and arity.
   @allowed_functions %{
-    :crypto => [:hash, :hash_final, :hash_init, :hash_update, :mac, :strong_rand_bytes],
-    :io_lib => [:format, :fwrite],
+    Access => :all,
+    Atom => :all,
+    Base => :all,
+    Bitwise => :all,
+    Calendar => [:compatible_calendars?, :strftime, :truncate],
+    Collectable => [:into],
+    Date => [
+      :add,
+      :after?,
+      :before?,
+      :beginning_of_month,
+      :beginning_of_week,
+      :compare,
+      :convert,
+      :convert!,
+      :day_of_era,
+      :day_of_week,
+      :day_of_year,
+      :days_in_month,
+      :diff,
+      :end_of_month,
+      :end_of_week,
+      :from_erl,
+      :from_erl!,
+      :from_gregorian_days,
+      :from_iso8601,
+      :from_iso8601!,
+      :leap_year?,
+      :months_in_year,
+      :new,
+      :new!,
+      :quarter_of_year,
+      :range,
+      :shift,
+      :to_erl,
+      :to_gregorian_days,
+      :to_iso8601,
+      :to_iso_days,
+      :to_string,
+      :year_of_era
+    ],
+    # Those that take a time zone are left out - they read the time zone database.
+    DateTime => [
+      :add,
+      :after?,
+      :before?,
+      :compare,
+      :convert,
+      :convert!,
+      :diff,
+      :from_gregorian_seconds,
+      :from_iso8601,
+      :from_unix,
+      :from_unix!,
+      :shift,
+      :to_date,
+      :to_gregorian_seconds,
+      :to_iso8601,
+      :to_naive,
+      :to_string,
+      :to_time,
+      :to_unix,
+      :truncate
+    ],
+    # The struct Date.range/2 returns, which has no functions of its own.
+    Date.Range => [],
+    Duration => :all,
+    # The quote machinery a defguard or a defmacro with unquote compiles into.
+    :elixir_quote => :all,
+    Enum => [
+      # What x in list compiles into on Elixir 1.20.
+      :__in__,
+      :all?,
+      :any?,
+      :at,
+      :chunk,
+      :chunk_by,
+      :chunk_every,
+      :chunk_while,
+      :concat,
+      :count,
+      :count_until,
+      :dedup,
+      :dedup_by,
+      :drop,
+      :drop_every,
+      :drop_while,
+      :each,
+      :empty?,
+      :fetch,
+      :fetch!,
+      :filter,
+      :filter_map,
+      :find,
+      :find_index,
+      :find_value,
+      :flat_map,
+      :flat_map_reduce,
+      :frequencies,
+      :frequencies_by,
+      :group_by,
+      :intersperse,
+      :into,
+      :join,
+      :map,
+      :map_every,
+      :map_intersperse,
+      :map_join,
+      :map_reduce,
+      :max,
+      :max_by,
+      :member?,
+      :min,
+      :min_by,
+      :min_max,
+      :min_max_by,
+      :partition,
+      :product,
+      :product_by,
+      :reduce,
+      :reduce_while,
+      :reject,
+      :reverse,
+      :reverse_slice,
+      :scan,
+      :slice,
+      :slide,
+      :sort,
+      :sort_by,
+      :split,
+      :split_while,
+      :split_with,
+      :sum,
+      :sum_by,
+      :take,
+      :take_every,
+      :take_while,
+      :to_list,
+      :uniq,
+      :uniq_by,
+      :unzip,
+      :with_index,
+      :zip,
+      :zip_reduce,
+      :zip_with
+    ],
+    Enumerable => [:count, :member?, :reduce, :slice],
+    # Not format/3 and its like, whose stacktraces name the Elixir version and the paths.
+    Exception => [:exception?, :message, :normalize],
+    Float => :all,
+    Function => [:identity],
+    Integer => :all,
+    IO => [
+      :chardata_to_string,
+      :iodata_empty?,
+      :iodata_length,
+      :iodata_to_binary,
+      :warn,
+      inspect: 1,
+      inspect: 2,
+      puts: 1,
+      write: 1
+    ],
+    JSON => :all,
+    Kernel => [
+      :!=,
+      :!==,
+      :*,
+      :**,
+      :+,
+      :++,
+      :-,
+      :--,
+      :/,
+      :<,
+      :<=,
+      :==,
+      :===,
+      :=~,
+      :>,
+      :>=,
+      :abs,
+      :binary_part,
+      :binary_slice,
+      :bit_size,
+      :byte_size,
+      :ceil,
+      :div,
+      :elem,
+      :exit,
+      :floor,
+      :get_and_update_in,
+      :get_in,
+      :hd,
+      :inspect,
+      :is_atom,
+      :is_binary,
+      :is_bitstring,
+      :is_boolean,
+      :is_float,
+      :is_function,
+      :is_integer,
+      :is_list,
+      :is_map,
+      :is_map_key,
+      :is_number,
+      :is_pid,
+      :is_port,
+      :is_reference,
+      :is_tuple,
+      :length,
+      :map_size,
+      :max,
+      :min,
+      :not,
+      :pop_in,
+      :put_elem,
+      :put_in,
+      :rem,
+      :round,
+      :throw,
+      :tl,
+      :trunc,
+      :tuple_size,
+      :update_in
+    ],
+    # raise/1 with a message held in a variable.
     Kernel.Utils => [:raise],
-    Logger => [:__do_log__, :__should_log__, :bare_log, :flush, :level, :metadata],
+    Keyword => :all,
+    List => [
+      :ascii_printable?,
+      :delete,
+      :delete_at,
+      :duplicate,
+      :ends_with?,
+      :first,
+      :first!,
+      :flatten,
+      :foldl,
+      :foldr,
+      :improper?,
+      :insert_at,
+      :keydelete,
+      :keyfind,
+      :keyfind!,
+      :keymember?,
+      :keyreplace,
+      :keysort,
+      :keystore,
+      :keytake,
+      :last,
+      :last!,
+      :myers_difference,
+      :pop_at,
+      :replace_at,
+      :starts_with?,
+      :to_atom,
+      :to_charlist,
+      :to_float,
+      :to_integer,
+      :to_string,
+      :to_tuple,
+      :update_at,
+      :wrap,
+      :zip
+    ],
+    List.Chars => [:to_charlist],
+    # The logging the Logger macros compile into.
+    Logger => [:__do_log__, :__should_log__, :bare_log],
     Macro => [:camelize, :escape, :to_string, :underscore, :var],
-    Macro.Env => [:in_guard?]
+    # The guard check of a defguard.
+    Macro.Env => [:in_guard?],
+    # Not from_struct/1, which calls a module given as a value.
+    Map => [
+      :delete,
+      :drop,
+      :equal?,
+      :fetch,
+      :fetch!,
+      :filter,
+      :from_keys,
+      :get,
+      :get_and_update,
+      :get_and_update!,
+      :get_lazy,
+      :has_key?,
+      :intersect,
+      :keys,
+      :map,
+      :merge,
+      :new,
+      :pop,
+      :pop!,
+      :pop_lazy,
+      :put,
+      :put_new,
+      :put_new_lazy,
+      :reject,
+      :replace,
+      :replace!,
+      :replace_lazy,
+      :size,
+      :split,
+      :split_with,
+      :take,
+      :to_list,
+      :update,
+      :update!,
+      :values
+    ],
+    MapSet => :all,
+    NaiveDateTime => [
+      :add,
+      :after?,
+      :before?,
+      :beginning_of_day,
+      :compare,
+      :convert,
+      :convert!,
+      :diff,
+      :end_of_day,
+      :from_erl,
+      :from_erl!,
+      :from_gregorian_seconds,
+      :from_iso8601,
+      :from_iso8601!,
+      :new,
+      :new!,
+      :shift,
+      :to_date,
+      :to_erl,
+      :to_gregorian_seconds,
+      :to_iso8601,
+      :to_string,
+      :to_time,
+      :truncate
+    ],
+    Range => :all,
+    # Not version/0, which names the PCRE build.
+    Regex => [
+      :compile,
+      :compile!,
+      :escape,
+      :import,
+      :match?,
+      :named_captures,
+      :names,
+      :opts,
+      :re_pattern,
+      :recompile,
+      :recompile!,
+      :regex?,
+      :replace,
+      :run,
+      :scan,
+      :source,
+      :split,
+      :to_embed
+    ],
+    Stream => [
+      :chunk,
+      :chunk_by,
+      :chunk_every,
+      :chunk_while,
+      :concat,
+      :cycle,
+      :dedup,
+      :dedup_by,
+      :drop,
+      :drop_every,
+      :drop_while,
+      :duplicate,
+      :each,
+      :filter,
+      :filter_map,
+      :flat_map,
+      :from_index,
+      :intersperse,
+      :into,
+      :iterate,
+      :map,
+      :map_every,
+      :reject,
+      :repeatedly,
+      :resource,
+      :run,
+      :scan,
+      :take,
+      :take_every,
+      :take_while,
+      :transform,
+      :unfold,
+      :uniq,
+      :uniq_by,
+      :with_index,
+      :zip,
+      :zip_with
+    ],
+    String => [
+      :at,
+      :bag_distance,
+      :byte_slice,
+      :capitalize,
+      :chunk,
+      :codepoints,
+      :contains?,
+      :count,
+      :downcase,
+      :duplicate,
+      :ends_with?,
+      :equivalent?,
+      :first,
+      :graphemes,
+      :jaro_distance,
+      :last,
+      :length,
+      :match?,
+      :myers_difference,
+      :next_codepoint,
+      :next_grapheme,
+      :next_grapheme_size,
+      :normalize,
+      :pad_leading,
+      :pad_trailing,
+      :printable?,
+      :replace,
+      :replace_invalid,
+      :replace_leading,
+      :replace_prefix,
+      :replace_suffix,
+      :replace_trailing,
+      :reverse,
+      :slice,
+      :split,
+      :split_at,
+      :splitter,
+      :starts_with?,
+      :to_atom,
+      :to_charlist,
+      :to_float,
+      :to_integer,
+      :trim,
+      :trim_leading,
+      :trim_trailing,
+      :upcase,
+      :valid?
+    ],
+    String.Chars => [:to_string],
+    Time => [
+      :add,
+      :after?,
+      :before?,
+      :compare,
+      :convert,
+      :convert!,
+      :diff,
+      :from_erl,
+      :from_erl!,
+      :from_iso8601,
+      :from_iso8601!,
+      :from_seconds_after_midnight,
+      :new,
+      :new!,
+      :shift,
+      :to_erl,
+      :to_iso8601,
+      :to_seconds_after_midnight,
+      :to_string,
+      :truncate
+    ],
+    Tuple => :all,
+    URI => [
+      :append_path,
+      :append_query,
+      :char_reserved?,
+      :char_unescaped?,
+      :char_unreserved?,
+      :decode,
+      :decode_query,
+      :decode_www_form,
+      :encode,
+      :encode_query,
+      :encode_www_form,
+      :merge,
+      :new,
+      :new!,
+      :parse,
+      :query_decoder,
+      :to_string
+    ],
+    :base64 => :all,
+    :binary => :all,
+    :crypto => [:hash, :hash_final, :hash_init, :hash_update, :mac],
+    :io_lib => [:format, :fwrite],
+    :lists => :all,
+    :maps => :all,
+    :math => :all,
+    :ordsets => :all,
+    :proplists => :all,
+    :queue => :all,
+    :re => [:compile, :grun, :import, :inspect, :replace, :run, :split],
+    :sets => :all,
+    :string => :all,
+    :unicode => :all,
+    :uri_string => :all
   }
 
-  # The :erlang functions that compute on values only - the ones Kernel compiles into, and
-  # their like. The rest of :erlang reaches processes, ports, code loading and dispatch.
+  # The :erlang functions that compute on their arguments only - the ones Kernel compiles
+  # into, and their like. The rest of :erlang reaches processes, ports, code loading,
+  # dispatch, the clock and the node.
   @erlang_functions [
     :*,
     :+,
@@ -175,6 +580,7 @@ defmodule Hologram.Migration.CallCheck do
     :atom_to_list,
     :band,
     :binary_part,
+    :binary_to_atom,
     :binary_to_float,
     :binary_to_integer,
     :binary_to_list,
@@ -191,7 +597,6 @@ defmodule Hologram.Migration.CallCheck do
     :div,
     :element,
     :error,
-    :exit,
     :float,
     :float_to_binary,
     :float_to_list,
@@ -218,6 +623,7 @@ defmodule Hologram.Migration.CallCheck do
     :is_reference,
     :is_tuple,
     :length,
+    :list_to_atom,
     :list_to_binary,
     :list_to_bitstring,
     :list_to_float,
@@ -225,12 +631,10 @@ defmodule Hologram.Migration.CallCheck do
     :list_to_tuple,
     :make_tuple,
     :map_get,
-    :make_ref,
     :md5,
     :map_size,
     :max,
     :min,
-    :node,
     :not,
     :or,
     :orelse,
@@ -238,29 +642,42 @@ defmodule Hologram.Migration.CallCheck do
     :raise,
     :rem,
     :round,
-    :self,
     :setelement,
     :split_binary,
-    :term_to_binary,
     :throw,
     :tl,
     :trunc,
     :tuple_size,
     :tuple_to_list,
-    :unique_integer,
-    :xor
+    :xor,
+    exit: 1
   ]
 
-  # exit/2 signals another process.
-  @refused_erlang_calls [exit: 2]
-
-  # The op map fields that name entity types and roles, and those of an op's opts,
-  # changes and resolve! payload.
-  @entity_fields [:entity, :from, :role, :to, :type]
-
-  @entity_option_fields [:extends, :type]
-
-  @entity_payload_fields [:added, :deleted, :from, :to]
+  # Standard modules that can read the environment, the clock or a random source, or evaluate
+  # code - refused at compile time too, where the module body could keep what they return in
+  # an attribute an op reads. The record names modules, so their pure functions, like
+  # Path.join/2, are refused there along with the rest, and so is a require or an import of
+  # one.
+  @environment_modules [
+    Application,
+    Code,
+    File,
+    Node,
+    Path,
+    Port,
+    Process,
+    System,
+    :application,
+    :code,
+    :crypto,
+    :ets,
+    :file,
+    :init,
+    :os,
+    :persistent_term,
+    :rand,
+    :random
+  ]
 
   # Elixir's applications a release ships - the others (Mix, ExUnit, IEx) are absent from
   # one, so a call to them fails at runtime anyway.
@@ -268,14 +685,13 @@ defmodule Hologram.Migration.CallCheck do
 
   @doc """
   Validates that the compiled migration module given by its env and bytecode calls only
-  its own functions and the standard library's modules that work on values. No remote
-  call, function capture or struct literal names another module, no call goes to a module
-  chosen at runtime, and the code holds no other module but the entity types and roles its
-  ops name, builds no atom from a string and does not read its own ops back. The module
-  compiles through no parse transform, and neither requires a module outside the standard
-  libraries nor used one while it compiled, `Hologram.Migration` aside, which its `use`
-  requires. Returns :ok, or raises Hologram.CompileError naming each refused reference,
-  with its line where it has one.
+  its own functions and the standard library's functions that compute on the values they
+  are given. No remote call, function capture or struct literal names another function or
+  module, no call goes to a module chosen at runtime, and no field access is left that
+  could call one. The module compiles through no parse transform, and neither requires a
+  module outside the standard libraries nor used one while it compiled, `Hologram.Migration`
+  and the definitions it imports aside, which its `use` requires. Returns :ok, or raises
+  Hologram.CompileError naming each refused reference, with its line where it has one.
 
   Reads the module's debug info, which `use Hologram.Migration` keeps for every migration
   module.
@@ -287,25 +703,27 @@ defmodule Hologram.Migration.CallCheck do
     code_references =
       bytecode
       |> definitions!(env.module, file)
-      |> collect_references()
+      |> collect_references(env.module)
 
     # A module the code names already has a line to show, which says more.
     code_modules =
       MapSet.new(code_references, fn
         {:call, module, _fun, _arity, _line} -> module
         {:struct, module, _line} -> module
-        {:module, module, _line} -> module
-        {_dynamic_or_own_ops, _line} -> nil
+        {_dynamic_field_or_receive, _line} -> nil
       end)
+
+    used_modules = compile_time_modules(env)
 
     compile_time_references =
       env.requires
-      |> Enum.concat(compile_time_modules(env))
+      |> Enum.concat(used_modules)
       |> Enum.uniq()
       |> Enum.reject(
-        &(&1 in [Hologram.Migration, env.module] or MapSet.member?(code_modules, &1))
+        &(&1 in [Hologram.Migration, Definitions, env.module] or
+            (MapSet.member?(code_modules, &1) and &1 not in @environment_modules))
       )
-      |> refused_compile_time_modules()
+      |> refused_compile_time_modules(used_modules)
 
     refused =
       code_references
@@ -324,46 +742,31 @@ defmodule Hologram.Migration.CallCheck do
     :ok
   end
 
-  # The ops it reads back would hand it the modules they name.
-  defp allowed?({:call, migration, :__hologram_migration__, _arity, _line}, migration) do
-    false
-  end
-
   defp allowed?({:call, migration, _fun, _arity, _line}, migration), do: true
 
   defp allowed?({:call, :erlang, fun, arity, _line}, _migration) do
-    fun in @erlang_functions and {fun, arity} not in @refused_erlang_calls
+    fun in @erlang_functions or {fun, arity} in @erlang_functions
   end
 
   defp allowed?({:call, module, fun, arity, _line}, _migration) do
     case @allowed_functions do
-      %{^module => funs} ->
-        fun in funs
-
-      _other ->
-        refused = Map.get(@refused_functions, module, [])
-        allowed_module?(module) and fun not in refused and {fun, arity} not in refused
+      %{^module => :all} -> true
+      %{^module => funs} -> fun in funs or {fun, arity} in funs
+      _other -> exception_function?(module, fun, arity)
     end
   end
 
-  defp allowed?({:struct, module, _line}, _migration), do: allowed_module?(module)
+  defp allowed?({:struct, migration, _line}, migration), do: true
 
-  defp allowed?({:module, migration, _line}, migration), do: true
-
-  defp allowed?({:module, module, _line}, _migration) do
-    allowed_module?(module) or Map.has_key?(@allowed_functions, module)
+  defp allowed?({:struct, module, _line}, _migration) do
+    Map.has_key?(@allowed_functions, module) or exception?(module)
   end
-
-  defp allowed?({:own_ops, _line}, _migration), do: false
 
   defp allowed?({:dynamic, _line}, _migration), do: false
 
-  # An Elixir exception is raised with its exception/1 and read with its message/1.
-  defp allowed_module?(module) do
-    module in @allowed_modules or
-      (Code.ensure_loaded?(module) and function_exported?(module, :exception, 1) and
-         :application.get_application(module) == {:ok, :elixir})
-  end
+  defp allowed?({:field, _line}, _migration), do: false
+
+  defp allowed?({:receive, _line}, _migration), do: false
 
   # Function.capture/3 and apply/2,3 compile into these.
   defp call_name(:erlang, :apply, arity), do: "apply/#{arity}"
@@ -372,72 +775,29 @@ defmodule Hologram.Migration.CallCheck do
 
   defp call_name(module, fun, arity), do: Exception.format_mfa(module, fun, arity)
 
-  # The generated __hologram_migration__/0 holds the op maps, whose entity type fields are
-  # where a migration names app modules; anywhere else, a module name is refused.
-  defp collect_references(definitions) do
-    Enum.reduce(definitions, [], fn
-      {{:__hologram_migration__, 0}, :def, _line, [[], [], body]}, acc ->
-        migration_references(body, acc)
-
-      {_name_arity, _kind, line, parts}, acc ->
-        walk(parts, line, acc)
+  defp collect_references(definitions, migration) do
+    definitions
+    |> Enum.reduce([], fn {_name_arity, _kind, line, [args, guards, body]}, acc ->
+      walk([args, body], line, guard_references(guards, line) ++ acc)
     end)
+    |> walk_struct_fields(migration)
   end
 
-  defp migration_references(
-         {:%{}, _meta,
-          [
-            version: _version,
-            path: _path,
-            ops: {{:., _dot_meta, [List, :flatten]}, _call_meta, [ops]}
-          ]},
-         acc
-       ) do
-    walk_ops(ops, acc)
+  # A field read in a guard compiles into a map read, which never calls a module.
+  defp guard_references(guards, line) do
+    guards
+    |> walk(line, [])
+    |> Enum.reject(&match?({:field, _line}, &1))
   end
 
-  defp migration_references(body, acc), do: walk(body, nil, acc)
-
-  defp walk_ops(ops, acc) when is_list(ops), do: Enum.reduce(ops, acc, &walk_ops/2)
-
-  defp walk_ops({:%{}, _meta, [{:op, _op} | _rest] = fields}, acc) do
-    line = Keyword.get(fields, :line)
-
-    Enum.reduce(fields, acc, fn
-      {key, value}, acc when key in @entity_fields ->
-        walk_entity_types(value, line, acc)
-
-      {key, value}, acc when key in [:changes, :opts] ->
-        walk_fields(value, @entity_option_fields, line, acc)
-
-      {:payload, payload}, acc ->
-        walk_fields(payload, @entity_payload_fields, line, acc)
-
-      {_key, value}, acc ->
-        walk(value, line, acc)
-    end)
+  # An Elixir exception is raised with its exception/1 and read with its message/1.
+  defp exception?(module) do
+    Code.ensure_loaded?(module) and function_exported?(module, :exception, 1) and
+      :application.get_application(module) == {:ok, :elixir}
   end
 
-  defp walk_ops(other, acc), do: walk(other, nil, acc)
-
-  defp walk_fields(fields, entity_fields, line, acc) when is_list(fields) do
-    Enum.reduce(fields, acc, fn
-      {key, value}, acc when is_atom(key) ->
-        if key in entity_fields,
-          do: walk_entity_types(value, line, acc),
-          else: walk(value, line, acc)
-
-      other, acc ->
-        walk(other, line, acc)
-    end)
-  end
-
-  defp walk_fields(other, _entity_fields, line, acc), do: walk(other, line, acc)
-
-  defp walk_entity_types(value, line, acc) do
-    if is_atom(value) or (is_list(value) and Enum.all?(value, &is_atom/1)),
-      do: acc,
-      else: walk(value, line, acc)
+  defp exception_function?(module, fun, arity) do
+    {fun, arity} in [exception: 1, message: 1] and exception?(module)
   end
 
   # Walks expanded code, carrying the nearest line. A variable's context and a node's
@@ -455,19 +815,14 @@ defmodule Hologram.Migration.CallCheck do
     remote_reference(module, fun, arity, line, acc)
   end
 
-  # Field access, as on a map - Elixir compiles m.fun without parentheses the same.
+  # Field access the rewrite did not reach, which calls a function when the value is a
+  # module, or a call with parentheses on a value.
   defp walk({{:., _meta, [receiver, fun]}, call_meta, []}, line, acc)
        when not is_atom(receiver) and is_atom(fun) do
     line = line(call_meta, line)
+    reference = if call_meta[:no_parens], do: {:field, line}, else: {:dynamic, line}
 
-    acc =
-      cond do
-        fun == :__hologram_migration__ -> [{:own_ops, line} | acc]
-        call_meta[:no_parens] -> acc
-        true -> [{:dynamic, line} | acc]
-      end
-
-    walk(receiver, line, acc)
+    walk(receiver, line, [reference | acc])
   end
 
   defp walk({{:., meta, [module, fun]}, _call_meta, args}, line, acc)
@@ -476,23 +831,21 @@ defmodule Hologram.Migration.CallCheck do
     walk(args, line, remote_reference(module, fun, length(args), line, acc))
   end
 
-  # A refused struct's fields are left out: they hold its defaults, the struct says it all.
+  # Its fields are walked once the struct is known to be allowed: a refused one's hold its
+  # defaults, and the struct says it all.
   defp walk({:%, meta, [module, fields]}, line, acc) when is_atom(module) do
     line = line(meta, line)
-    acc = [{:struct, module, line} | acc]
-
-    if allowed_module?(module), do: walk(fields, line, acc), else: acc
+    [{:struct, module, line, fields} | acc]
   end
 
-  # A pattern binding a struct's module, %module{} - the module can only be an allowed one,
-  # the migration building no other struct.
+  # A pattern binding a struct's module, %module{}.
   defp walk({:%, meta, [module, fields]}, line, acc) do
     line = line(meta, line)
     walk(fields, line, walk(module, line, acc))
   end
 
   # A struct held as a value, like an attribute's, compiles into a map with its
-  # __struct__ - and so does one forged to reach a module's protocol implementations.
+  # __struct__.
   defp walk({:%{}, meta, fields} = map, line, acc) when is_list(fields) do
     case List.keyfind(fields, :__struct__, 0) do
       {:__struct__, module} when is_atom(module) ->
@@ -507,10 +860,9 @@ defmodule Hologram.Migration.CallCheck do
     end
   end
 
-  # A local call or capture of the ops function, which would hand the code the modules
-  # the ops name.
-  defp walk({:__hologram_migration__, meta, _args}, line, acc) do
-    [{:own_ops, line(meta, line)} | acc]
+  # A message from the mailbox is whatever another process sent.
+  defp walk({:receive, meta, args}, line, acc) when is_list(args) do
+    [{:receive, line(meta, line)} | acc]
   end
 
   defp walk({_name, _meta, context}, _line, acc) when is_atom(context), do: acc
@@ -525,15 +877,24 @@ defmodule Hologram.Migration.CallCheck do
     Enum.reduce(list, acc, &walk(&1, line, &2))
   end
 
-  defp walk(atom, line, acc) when is_atom(atom) do
-    name = Atom.to_string(atom)
-
-    if String.starts_with?(name, "Elixir."),
-      do: [{:module, atom, line} | acc],
-      else: acc
-  end
-
   defp walk(_literal, _line, acc), do: acc
+
+  defp walk_struct_fields(references, migration) do
+    Enum.flat_map(references, fn
+      {:struct, module, line, fields} ->
+        reference = {:struct, module, line}
+
+        if allowed?(reference, migration) do
+          field_references = walk(fields, line, [])
+          [reference | walk_struct_fields(field_references, migration)]
+        else
+          [reference]
+        end
+
+      reference ->
+        [reference]
+    end)
+  end
 
   defp walk_node({form, meta, args}, line, acc) do
     line = line(meta, line)
@@ -603,23 +964,31 @@ defmodule Hologram.Migration.CallCheck do
 
   defp location(file, line), do: "#{file}:#{line}"
 
-  # Each refused module is judged once - :missing for a module the code path does not hold
-  # (yet: in a fresh build, an app module the compiler has not reached is not there),
-  # :outside for the rest.
+  # Each refused module is judged once - :environment for a standard module the module body
+  # used that reads the environment (one only required, as Elixir requires Application in
+  # every module, reads nothing), :missing for a module the code path does not hold (yet: in
+  # a fresh build, an app module the compiler has not reached is not there), :outside for
+  # the rest.
   # A module defined in the migration's file besides it - a nested defmodule, a defimpl - is
-  # compiled through these, and its code is not checked here.
-  defp refused_compile_time_modules(modules) do
+  # compiled through :elixir_module, and its code is not checked here.
+  defp refused_compile_time_modules(modules, used_modules) do
     standard_dirs = standard_library_dirs()
 
     modules
     |> Enum.flat_map(fn
-      module when module in [:elixir_module, Protocol] ->
+      :elixir_module ->
         [:other_module]
 
       module ->
-        case standing(module, standard_dirs) do
-          :standard -> []
-          reason -> [{:compile_time, module, reason}]
+        cond do
+          module in @environment_modules and module in used_modules ->
+            [{:compile_time, module, :environment}]
+
+          standing(module, standard_dirs) == :standard ->
+            []
+
+          true ->
+            [{:compile_time, module, standing(module, standard_dirs)}]
         end
     end)
     |> Enum.uniq()
@@ -633,16 +1002,18 @@ defmodule Hologram.Migration.CallCheck do
     {line || 0, "  #{location(file, line)} - builds a %#{inspect(module)}{} struct"}
   end
 
-  defp refusal_line({:module, module, line}, file) do
-    {line || 0, "  #{location(file, line)} - holds the module #{inspect(module)}"}
-  end
-
   defp refusal_line(:other_module, file) do
     {0, "  #{file} - defines a module besides the migration"}
   end
 
-  defp refusal_line({:own_ops, line}, file) do
-    {line || 0, "  #{location(file, line)} - reads the migration's own ops"}
+  defp refusal_line({:receive, line}, file) do
+    {line || 0, "  #{location(file, line)} - receives a message"}
+  end
+
+  defp refusal_line({:field, line}, file) do
+    {line || 0,
+     "  #{location(file, line)} - reads a field outside the definitions use " <>
+       "Hologram.Migration imports, where it could call a module's function"}
   end
 
   defp refusal_line({:transform, module}, file) do
@@ -654,24 +1025,34 @@ defmodule Hologram.Migration.CallCheck do
   end
 
   defp refusal_line({:compile_time, module, reason}, file) do
-    suffix = if reason == :missing, do: ", which is not compiled yet or cannot be found", else: ""
+    suffix =
+      case reason do
+        :environment -> ", which can read the environment, the clock or a random source"
+        :missing -> ", which is not compiled yet or cannot be found"
+        :outside -> ""
+      end
 
     {0, "  #{file} - uses #{inspect(module)} at compile time#{suffix}"}
   end
 
+  # The hint says how to name a module without using it at compile time.
+  defp module_hint?({:compile_time, _module, reason}), do: reason != :environment
+
+  defp module_hint?(_reference), do: false
+
   defp refusal_message(lines, compile_time_references) do
     hint =
-      if Enum.any?(compile_time_references, &match?({:compile_time, _module, _reason}, &1)),
+      if Enum.any?(compile_time_references, &module_hint?/1),
         do:
           "\nAn op reading an attribute that holds a module uses the module at compile " <>
             "time - if that is the case here, write the module in the op itself.",
         else: ""
 
-    "a migration may call only its own functions and the standard library's modules that " <>
-      "work on values, like Kernel, String, Enum, Map and Date, and may hold no other module " <>
-      "than the entity types and roles its ops name - what it does to rows must never " <>
-      "change after it is applied, and the app's, its dependencies' and Hologram's modules " <>
-      "change with them, as does a module chosen at runtime:\n" <>
+    "a migration may call only its own functions and the standard library's functions " <>
+      "that compute on the values they are given, like most of Kernel, String, Enum, Map " <>
+      "and Date - what it does to rows must never change after it is applied, and the " <>
+      "app's, its dependencies' and Hologram's modules change with them, as do a module " <>
+      "chosen at runtime, the clock, the environment and random sources:\n" <>
       Enum.join(lines, "\n") <> hint
   end
 

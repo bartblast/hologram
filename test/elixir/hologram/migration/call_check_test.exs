@@ -2,11 +2,11 @@ defmodule Hologram.Migration.CallCheckTest do
   use Hologram.Test.BasicCase, async: true
 
   @refusal_head "a migration may call only its own functions and the standard library's " <>
-                  "modules that work on values, like Kernel, String, Enum, Map and Date, and " <>
-                  "may hold no other module than the entity types and roles its ops name - " <>
-                  "what it does to rows must never change after it is applied, and the app's, " <>
-                  "its dependencies' and Hologram's modules change with them, as does a " <>
-                  "module chosen at runtime:\n"
+                  "functions that compute on the values they are given, like most of Kernel, " <>
+                  "String, Enum, Map and Date - what it does to rows must never change after it " <>
+                  "is applied, and the app's, its dependencies' and Hologram's modules change " <>
+                  "with them, as do a module chosen at runtime, the clock, the environment and " <>
+                  "random sources:\n"
 
   @compile_time_hint "\nAn op reading an attribute that holds a module uses the module at " <>
                        "compile time - if that is the case here, write the module in the op " <>
@@ -165,7 +165,8 @@ defmodule Hologram.Migration.CallCheckTest do
 
       expected_msg =
         @refusal_head <>
-          "  app/migrations/20260813091522.ex:7 - holds the module MyApp.User"
+          "  app/migrations/20260813091522.ex - uses MyApp.User at compile time, " <>
+          "which is not compiled yet or cannot be found" <> @compile_time_hint
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         compile_migration("20260813091522", body)
@@ -192,19 +193,14 @@ defmodule Hologram.Migration.CallCheckTest do
                compile_migration("20260813091522", body).__hologram_migration__().ops
     end
 
-    test "refuses an attribute naming a module, read by a function" do
+    test "passes an attribute naming a module, read by a function" do
       body = """
       @entity MyApp.Task
 
       def entity, do: @entity
       """
 
-      expected_msg =
-        @refusal_head <> "  app/migrations/20260813091522.ex:6 - holds the module MyApp.Task"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        compile_migration("20260813091522", body)
-      end
+      assert compile_migration("20260813091522", body).entity() == MyApp.Task
     end
 
     test "passes the standard libraries used in the module body, read by an op" do
@@ -462,18 +458,129 @@ defmodule Hologram.Migration.CallCheckTest do
       end
     end
 
-    test "refuses a module given to a standard function as a value" do
+    test "refuses reading the clock, the environment, a random source or the node" do
       body = ~S"""
-      def sorted(list), do: Enum.sort(list, MyApp.Order)
-      def date, do: Date.new(2026, 1, 1, MyApp.Calendar)
-      def now, do: DateTime.now("Europe/Warsaw", MyApp.TimeZoneDatabase)
+      def a, do: DateTime.utc_now()
+      def b, do: Date.utc_today()
+      def c, do: NaiveDateTime.local_now()
+      def d, do: Time.utc_now()
+      def e, do: System.get_env("HOME")
+      def f, do: Application.get_env(:hologram, :env)
+      def g, do: Enum.random([1, 2])
+      def h, do: :rand.uniform()
+      def i, do: {self(), make_ref(), node()}
+      def j, do: :erlang.unique_integer()
+      def k, do: :crypto.strong_rand_bytes(1)
+      def l, do: String.to_existing_atom("a")
       """
 
       expected_msg =
         @refusal_head <>
-          "  app/migrations/20260813091522.ex:4 - holds the module MyApp.Order\n" <>
-          "  app/migrations/20260813091522.ex:5 - holds the module MyApp.Calendar\n" <>
-          "  app/migrations/20260813091522.ex:6 - holds the module MyApp.TimeZoneDatabase"
+          "  app/migrations/20260813091522.ex:4 - calls DateTime.utc_now/0\n" <>
+          "  app/migrations/20260813091522.ex:5 - calls Date.utc_today/0\n" <>
+          "  app/migrations/20260813091522.ex:6 - calls NaiveDateTime.local_now/0\n" <>
+          "  app/migrations/20260813091522.ex:7 - calls Time.utc_now/0\n" <>
+          "  app/migrations/20260813091522.ex:8 - calls System.get_env/1\n" <>
+          "  app/migrations/20260813091522.ex:9 - calls Application.get_env/2\n" <>
+          "  app/migrations/20260813091522.ex:10 - calls Enum.random/1\n" <>
+          "  app/migrations/20260813091522.ex:11 - calls :rand.uniform/0\n" <>
+          "  app/migrations/20260813091522.ex:12 - calls :erlang.make_ref/0\n" <>
+          "  app/migrations/20260813091522.ex:12 - calls :erlang.node/0\n" <>
+          "  app/migrations/20260813091522.ex:12 - calls :erlang.self/0\n" <>
+          "  app/migrations/20260813091522.ex:13 - calls :erlang.unique_integer/0\n" <>
+          "  app/migrations/20260813091522.ex:14 - calls :crypto.strong_rand_bytes/1\n" <>
+          "  app/migrations/20260813091522.ex:15 - calls :erlang.binary_to_existing_atom/1"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses a function that calls a module given as a value or names the versions installed" do
+      body = ~S"""
+      def a(struct), do: Map.from_struct(struct)
+      def b, do: Regex.version()
+      def c(error), do: Exception.format(:error, error, [])
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex:4 - calls Map.from_struct/1\n" <>
+          "  app/migrations/20260813091522.ex:5 - calls Regex.version/0\n" <>
+          "  app/migrations/20260813091522.ex:6 - calls Exception.format/3"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses receiving a message" do
+      body = ~S"""
+      def next, do: receive(do: (message -> message), after: (0 -> :none))
+      """
+
+      expected_msg =
+        @refusal_head <> "  app/migrations/20260813091522.ex:4 - receives a message"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses a random source the module body used, though a function uses its module" do
+      body = ~S"""
+      @salt :crypto.strong_rand_bytes(4)
+
+      change_entity MyApp.Task do
+        add_attribute :salt, :string, default: Base.encode16(@salt)
+      end
+
+      def hash(text), do: :crypto.hash(:md5, text)
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex - uses :crypto at compile time, which can read " <>
+          "the environment, the clock or a random source"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses the environment read in the module body" do
+      body = ~S"""
+      @home System.get_env("HOME")
+
+      change_entity MyApp.Task do
+        add_attribute :home, :string, default: @home
+      end
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex - uses System at compile time, which can read " <>
+          "the environment, the clock or a random source"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
+    end
+
+    test "refuses the date and time functions that read the time zone database" do
+      body = ~S"""
+      def a(naive), do: DateTime.from_naive!(naive, "Etc/UTC")
+      def b(date, time), do: DateTime.new!(date, time)
+      def c(datetime), do: DateTime.shift_zone!(datetime, "Europe/Warsaw")
+      def d, do: DateTime.now!("Etc/UTC")
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex:4 - calls DateTime.from_naive!/2\n" <>
+          "  app/migrations/20260813091522.ex:5 - calls DateTime.new!/2\n" <>
+          "  app/migrations/20260813091522.ex:6 - calls DateTime.shift_zone!/2\n" <>
+          "  app/migrations/20260813091522.ex:7 - calls DateTime.now!/1"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         compile_migration("20260813091522", body)
@@ -488,24 +595,6 @@ defmodule Hologram.Migration.CallCheckTest do
       expected_msg =
         @refusal_head <>
           "  app/migrations/20260813091522.ex:4 - builds a %MyApp.Thing{} struct"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        compile_migration("20260813091522", body)
-      end
-    end
-
-    test "refuses building an atom from a string" do
-      body = ~S"""
-      def atom(name), do: String.to_atom(name)
-      def existing(name), do: List.to_existing_atom(name)
-      def interpolated(name), do: :"Elixir.#{name}"
-      """
-
-      expected_msg =
-        @refusal_head <>
-          "  app/migrations/20260813091522.ex:4 - calls :erlang.binary_to_atom/1\n" <>
-          "  app/migrations/20260813091522.ex:5 - calls :erlang.list_to_existing_atom/1\n" <>
-          "  app/migrations/20260813091522.ex:6 - calls :erlang.binary_to_atom/2"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         compile_migration("20260813091522", body)
@@ -542,56 +631,6 @@ defmodule Hologram.Migration.CallCheckTest do
         @refusal_head <>
           "  app/migrations/20260813091522.ex:4 - calls Logger.add_translator/1\n" <>
           "  app/migrations/20260813091522.ex:5 - calls :erlang.exit/2"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        compile_migration("20260813091522", body)
-      end
-    end
-
-    test "refuses a module held in a macro" do
-      body = ~S"""
-      defmacro order, do: MyApp.Order
-      """
-
-      expected_msg =
-        @refusal_head <>
-          "  app/migrations/20260813091522.ex:4 - holds the module MyApp.Order"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        compile_migration("20260813091522", body)
-      end
-    end
-
-    test "refuses reading the migration's own ops back" do
-      body = ~S"""
-      create_entity MyApp.Order
-
-      def order, do: __hologram_migration__()
-      def capture, do: &__hologram_migration__/0
-      """
-
-      expected_msg =
-        @refusal_head <>
-          "  app/migrations/20260813091522.ex:6 - reads the migration's own ops\n" <>
-          "  app/migrations/20260813091522.ex:7 - reads the migration's own ops"
-
-      assert_error Hologram.CompileError, expected_msg, fn ->
-        compile_migration("20260813091522", body)
-      end
-    end
-
-    test "refuses modules named in an op outside its entity type fields" do
-      body = ~S"""
-      change_entity MyApp.Task do
-        add_attribute :code, :string, default: MyApp.Order
-        add_attribute :name, :string, default: inspect(%{op: :forged, entity: MyApp.Order}.entity)
-      end
-      """
-
-      expected_msg =
-        @refusal_head <>
-          "  app/migrations/20260813091522.ex:5 - holds the module MyApp.Order\n" <>
-          "  app/migrations/20260813091522.ex:6 - holds the module MyApp.Order"
 
       assert_error Hologram.CompileError, expected_msg, fn ->
         compile_migration("20260813091522", body)
@@ -637,15 +676,135 @@ defmodule Hologram.Migration.CallCheckTest do
       end)
     end
 
-    test "refuses a struct of the migration's own" do
+    test "passes a struct of the migration's own" do
       body = """
       defstruct [:code]
+
+      def new(code), do: %__MODULE__{code: code}
       """
 
-      %{message: message} =
-        assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
+      assert compile_migration("20260813091522", body).new("a").code == "a"
+    end
 
-      assert message =~ "app/migrations/20260813091522.ex:4 - builds a %"
+    test "compiles field access on a value into a strict map read" do
+      body = """
+      def name(row), do: row.name
+      def city(row), do: put_in(row.address.city, "Warsaw").address.city
+      """
+
+      module = compile_migration("20260813091522", body)
+
+      assert module.name(%{name: "a"}) == "a"
+      struct = Map.put(~D[2026-01-01], :name, "b")
+
+      assert module.name(struct) == "b"
+      assert module.city(%{address: %{city: "Cracow"}}) == "Warsaw"
+
+      assert_raise KeyError, fn -> module.name(%{}) end
+      assert_raise BadMapError, fn -> module.name(Hologram.Test.Fixtures.Migration.Module1) end
+    end
+
+    test "compiles field access into a strict map read wherever Elixir allows it" do
+      body = ~S"""
+      defguard is_seven(row) when row.id == 7
+
+      def path(row), do: get_in(row.a.b)
+      def kernel_path(row), do: Kernel.put_in(row.a.b, 1).a.b
+      def bracket_path(row, item), do: put_in(row.items[item.id], :new).items
+      def data(row), do: get_in(row.data, [:a])
+      def average(rows), do: Enum.map(rows, &(&1.total / &1.count))
+      def seven?(row) when is_seven(row), do: true
+      def seven?(_row), do: false
+      def body_seven?(row), do: is_seven(row)
+      def piped_path(row), do: row.data |> get_in(row.path)
+      def piped_put(row), do: row.data |> put_in(row.path, 9)
+      def piped_macro(row), do: row.a.b |> put_in(2)
+      def piped_update(row), do: row.a.b |> update_in(&(&1 + 1))
+      def receiver(receive), do: receive
+
+      for field <- [:title] do
+        def unquote(field)(row), do: row.unquote(field)
+      end
+
+      for module <- [:math] do
+        def pi, do: unquote(module).pi
+      end
+
+      defmacro name_of(value), do: quote(do: unquote(value).name)
+
+      def via_macro(row), do: name_of(row)
+      """
+
+      module = compile_migration("20260813091522", body)
+
+      assert module.path(%{a: %{b: 1}}) == 1
+      assert module.kernel_path(%{a: %{b: 0}}) == 1
+      assert module.bracket_path(%{items: %{1 => :old}}, %{id: 1}) == %{1 => :new}
+      assert module.data(%{data: %{a: 2}}) == 2
+      assert module.average([%{total: 6, count: 3}]) == [2.0]
+      assert module.seven?(%{id: 7})
+      assert module.body_seven?(%{id: 7})
+      assert module.piped_path(%{data: %{a: 1}, path: [:a]}) == 1
+      assert module.piped_put(%{data: %{a: 1}, path: [:a]}) == %{a: 9}
+      assert module.piped_macro(%{a: %{b: 1}}) == %{a: %{b: 2}}
+      assert module.piped_update(%{a: %{b: 1}}) == %{a: %{b: 2}}
+      assert module.receiver(1) == 1
+      assert module.title(%{title: "a"}) == "a"
+      assert module.pi() == :math.pi()
+      assert module.via_macro(%{name: "b"}) == "b"
+
+      assert_raise BadMapError, fn -> module.data(Hologram.Test.Fixtures.Migration.Module1) end
+
+      assert_raise BadMapError, fn ->
+        module.body_seven?(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn ->
+        module.via_macro(Hologram.Test.Fixtures.Migration.Module1)
+      end
+
+      assert_raise BadMapError, fn -> module.title(Hologram.Test.Fixtures.Migration.Module1) end
+    end
+
+    test "takes a path apart in an op, Kernel-qualified or piped" do
+      body = """
+      @config %{a: %{b: "x"}}
+
+      change_entity MyApp.Task do
+        add_attribute :code, :string, default: Kernel.get_in(@config.a.b)
+        add_attribute :name, :string, default: (@config.a.b |> Kernel.put_in("y")).a.b
+      end
+      """
+
+      assert [%{opts: [default: "x"]}, %{opts: [default: "y"]}] =
+               compile_migration("20260813091522", body).__hologram_migration__().ops
+    end
+
+    test "compiles field access in an op into a strict map read" do
+      body = """
+      change_entity MyApp.Task do
+        add_attribute :name, :string, default: holder().name
+      end
+
+      def holder, do: Hologram.Test.Fixtures.Migration.Module1
+      """
+
+      assert_raise BadMapError, fn -> compile_migration("20260813091522", body) end
+    end
+
+    test "refuses field access the strict map read did not reach" do
+      body = """
+      Kernel.def(value(module), do: module.value)
+      """
+
+      expected_msg =
+        @refusal_head <>
+          "  app/migrations/20260813091522.ex:4 - reads a field outside the definitions use " <>
+          "Hologram.Migration imports, where it could call a module's function"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        compile_migration("20260813091522", body)
+      end
     end
 
     test "refuses a module defined besides the migration" do
@@ -665,21 +824,6 @@ defmodule Hologram.Migration.CallCheckTest do
           compile_migration("20260813091522", body)
         end
       end)
-    end
-
-    test "refuses reading the migration's own ops back through the module" do
-      body = """
-      create_entity MyApp.Order
-
-      def remote, do: __MODULE__.__hologram_migration__()
-      def field(module), do: module.__hologram_migration__
-      """
-
-      %{message: message} =
-        assert_raise Hologram.CompileError, fn -> compile_migration("20260813091522", body) end
-
-      assert message =~ ~r"ex:6 - calls .*V20260813091522\.__hologram_migration__/0\n"
-      assert message =~ "ex:7 - reads the migration's own ops"
     end
 
     test "passes guards, macros, raise with a message held in a variable and reraise" do
@@ -706,9 +850,9 @@ defmodule Hologram.Migration.CallCheckTest do
         IO.inspect(row.id, label: "row")
 
         {Enum.map(rows, & &1.id), Function.identity(1), Duration.new!(day: 1),
-         Version.parse!("1.0.0"), JSON.encode!(%{a: 1}), Date.range(~D[2026-01-01], ~D[2026-01-02]),
-         :base64.encode("a"), :calendar.valid_date(2026, 1, 1), :io_lib.format("~p", [1]),
-         :crypto.hash(:sha256, "a"), self(), make_ref(), node()}
+         JSON.encode!(%{a: 1}), Date.range(~D[2026-01-01], ~D[2026-01-02]),
+         :base64.encode("a"), :io_lib.format("~p", [1]), :crypto.hash(:sha256, "a"),
+         Enum.sort(rows, :desc), String.to_atom("a"), :"Elixir.#{row.id}"}
       end
 
       def range?(%Date.Range{}), do: true
@@ -739,6 +883,7 @@ defmodule Hologram.Migration.CallCheckTest do
       end
 
       def checks(x) when x in 1..5, do: for(i <- 1..x, i > 1, into: %{}, do: {i, i * 2})
+      def member?(x, list), do: x in list and x not in Enum.reverse(list)
       def checks(x) when is_binary(x), do: raise(ArgumentError, "bad #{inspect(x)}")
       def checks(x), do: raise("bad #{x}")
 
@@ -751,7 +896,7 @@ defmodule Hologram.Migration.CallCheckTest do
       def times do
         {~D[2026-01-01], ~U[2026-01-01 00:00:00Z], ~N[2026-01-01 00:00:00], ~T[10:00:00],
          Date.add(~D[2026-01-01], 1), DateTime.from_iso8601("2026-01-01T00:00:00Z"),
-         Calendar.ISO.valid_date?(2026, 1, 1)}
+         DateTime.from_unix!(0), DateTime.add(~U[2026-01-01 00:00:00Z], 1, :day)}
       end
 
       def matches(value) do

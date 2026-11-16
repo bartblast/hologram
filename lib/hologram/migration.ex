@@ -31,13 +31,16 @@ defmodule Hologram.Migration do
   module's own functions and read its attributes, an attribute read giving the value it holds
   at the op's line.
 
-  A migration's code may call only its own functions and the standard library's modules
-  that work on values - Kernel, String, Enum, Map, Date and their like - so what it does
-  never changes with the app. The build refuses a call to any other module, a call to a
-  module chosen at runtime, like `apply/3` or `mod.fun()`, and a module outside the standard
-  libraries that the module body uses while it compiles. The code may also hold no other
-  module than the entity types and roles its ops name: a standard function given a module,
-  like a sorter for `Enum.sort/2`, calls it.
+  A migration's functions and ops may call only its own functions and the standard
+  library's functions that compute on the values they are given - most of Kernel, String,
+  Enum, Map, Date and their like - so what it does to rows never changes once it is
+  applied. The build refuses a call to any other function, the app's and those reading the
+  clock, the environment, a random source or the time zone database among them, and a call
+  to a module chosen at runtime, like `apply/3` or `mod.fun()`. Field access on a value,
+  like `row.name`, reads only a map or struct: given a module, it raises rather than calling
+  the module's function. The module body, which runs once per build, is checked by the
+  modules it uses: the build refuses one outside the standard libraries, and the standard
+  ones that read the environment, like System, File and Application.
 
   One op declares nothing an entity type declares of itself: `designate_user_entity`
   records which entity type is the app's user, the designation `use Hologram.Entity,
@@ -65,6 +68,7 @@ defmodule Hologram.Migration do
   """
 
   alias Hologram.Migration.CallCheck
+  alias Hologram.Migration.FieldAccess
   alias Hologram.Migration.Loader
 
   # A migration module's file name is its version - 14 UTC timestamp digits, nothing else.
@@ -147,6 +151,36 @@ defmodule Hologram.Migration do
           resolve!: 2
         ]
 
+      # Field access on a value compiles into a strict map read (see
+      # Hologram.Migration.FieldAccess.Definitions).
+      import Kernel,
+        except: [
+          def: 1,
+          def: 2,
+          defguard: 1,
+          defguardp: 1,
+          defmacro: 1,
+          defmacro: 2,
+          defmacrop: 1,
+          defmacrop: 2,
+          defp: 1,
+          defp: 2
+        ]
+
+      import Hologram.Migration.FieldAccess.Definitions,
+        only: [
+          def: 1,
+          def: 2,
+          defguard: 1,
+          defguardp: 1,
+          defmacro: 1,
+          defmacro: 2,
+          defmacrop: 1,
+          defmacrop: 2,
+          defp: 1,
+          defp: 2
+        ]
+
       # The call check reads the module's debug info - kept for migration modules even where
       # the project compiles without it, as a test run does.
       @compile {:debug_info, true}
@@ -164,6 +198,7 @@ defmodule Hologram.Migration do
       env.module
       |> Module.get_attribute(@ops_attribute)
       |> Enum.reverse()
+      |> FieldAccess.rewrite()
 
     version = Path.basename(env.file, ".ex")
     path = Path.relative_to_cwd(env.file)
