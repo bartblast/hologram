@@ -22,7 +22,8 @@ defmodule HologramSyncBenchmark.Peer do
 
   @app :hologram_sync_benchmark
 
-  @cookie :hologram_sync_benchmark
+  # Where both nodes' distribution listens, so only this machine can reach them.
+  @loopback {127, 0, 0, 1}
 
   @copied_env_apps [:hologram, :logger, :phoenix, :phoenix_pubsub, @app]
 
@@ -106,16 +107,31 @@ defmodule HologramSyncBenchmark.Peer do
   """
   @spec start_distribution! :: :ok
   def start_distribution! do
-    {_output, 0} = System.cmd("epmd", ["-daemon"])
+    # An epmd already running keeps the address it has, but it only hands out ports.
+    {_output, 0} = System.cmd("epmd", ["-daemon"], env: [{"ERL_EPMD_ADDRESS", "127.0.0.1"}])
+
+    # A node's name doesn't pick the address it listens on, and the default is every interface.
+    Application.put_env(:kernel, :inet_dist_use_interface, @loopback)
 
     case Node.start(:"bench@127.0.0.1", name_domain: :longnames) do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
+      {:ok, _pid} ->
+        # Fresh for each run, since a node that knows the cookie can run any code on these.
+        Node.set_cookie(random_cookie())
+
+      {:error, {:already_started, _pid}} ->
+        :ok
     end
 
-    Node.set_cookie(@cookie)
-
     :ok
+  end
+
+  defp random_cookie do
+    32
+    |> :crypto.strong_rand_bytes()
+    |> Base.url_encode64(padding: false)
+    # One atom a run, which a cookie has to be.
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+    |> String.to_atom()
   end
 
   @doc """
@@ -134,7 +150,13 @@ defmodule HologramSyncBenchmark.Peer do
       :peer.start(%{
         name: :bench_server,
         host: ~c"127.0.0.1",
-        args: [~c"-setcookie", Atom.to_charlist(@cookie)],
+        args: [
+          ~c"-setcookie",
+          Atom.to_charlist(Node.get_cookie()),
+          ~c"-kernel",
+          ~c"inet_dist_use_interface",
+          ~c"#{inspect(@loopback)}"
+        ],
         env: [{~c"HOLOGRAM_ENV", ~c"test"}, {~c"HOLOGRAM_START", ~c"1"}]
       })
 
