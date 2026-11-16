@@ -2,6 +2,8 @@ defmodule HologramFeatureTests.MutationsPage do
   use Hologram.Page
   use Hologram.DB
 
+  import Hologram.Commons.TestUtils, only: [wrap_term: 1]
+
   alias HologramFeatureTests.Components.Mutations.Items
   alias HologramFeatureTests.Components.Mutations.Jobs
   alias HologramFeatureTests.Components.Mutations.Notes
@@ -26,6 +28,7 @@ defmodule HologramFeatureTests.MutationsPage do
       <button $click={command: :create_restock_job}> Create restock job </button>
       <button $click={command: :log_in}> Log in </button>
       <button $click="put_author"> Put author </button>
+      <button $click="read_query_by_id"> Read query by id </button>
       <button $click={command: :restock_item}> Restock item </button>
     </p>
     <Notes cid="notes" />
@@ -42,6 +45,17 @@ defmodule HologramFeatureTests.MutationsPage do
     [body: "unsaved"]
     |> Note.new()
     |> put_attribute(:author, nil)
+
+    component
+  end
+
+  # A query goes where the entity type does, so the by-id read refuses it in the browser - naming
+  # the query it was handed.
+  def action(:read_query_by_id, _params, component) do
+    Note
+    |> take(10)
+    |> wrap_term()
+    |> DB.read("018f0000-0000-7000-8000-000000000001")
 
     component
   end

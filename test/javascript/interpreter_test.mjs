@@ -4863,6 +4863,42 @@ describe("Interpreter", () => {
         assert.equal(result, "{1, 2, 3}");
       });
     });
+
+    // A query term is the value that reaches this - the query stages build it as a plain object.
+    describe("value with no boxed type", () => {
+      it("plain object", () => {
+        const term = {entity: "MyApp.Task", filter: [["done", "==", true]]};
+        const result = Interpreter.inspect(term);
+
+        assert.equal(
+          result,
+          '{"entity":"MyApp.Task","filter":[["done","==",true]]}',
+        );
+      });
+
+      it("inside a boxed value", () => {
+        const term = {entity: "MyApp.Task"};
+        const result = Interpreter.inspect(Type.list([Type.integer(1), term]));
+
+        assert.equal(result, '[1, {"entity":"MyApp.Task"}]');
+      });
+
+      it("null", () => {
+        assert.equal(Interpreter.inspect(null), "null");
+      });
+
+      it("undefined", () => {
+        assert.equal(Interpreter.inspect(undefined), "undefined");
+      });
+
+      it("object JSON can't encode", () => {
+        const cyclic = {};
+        cyclic.self = cyclic;
+
+        assert.equal(Interpreter.inspect(cyclic), "[object Object]");
+        assert.equal(Interpreter.inspect({count: 1n}), "[object Object]");
+      });
+    });
   });
 
   describe("inspectModuleJsName()", () => {
