@@ -277,10 +277,12 @@ defmodule HologramSyncBenchmark.Driver do
   end
 
   # Every client filled in time, every write reached every client it should have and no other,
-  # each single write within the wait, and the steady writes' p99 stayed within the limit.
+  # each single write within the wait, no session was cut, and the steady writes' p99 stayed
+  # within the limit. A session cut after the last write it should have had misses nothing, so
+  # the cuts count on their own.
   defp passed?(result, opts) do
     filled?(result.fill, opts) and result.isolated.cut_short == 0 and
-      delivered?(result.steady, opts)
+      result.session_cuts == 0 and delivered?(result.steady, opts)
   end
 
   # What failed a step with writes, for the figure's note.
