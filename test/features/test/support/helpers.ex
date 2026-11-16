@@ -32,6 +32,7 @@ defmodule HologramFeatureTests.Helpers do
   alias HologramFeatureTests.Entities.Product
   alias HologramFeatureTests.Entities.Project
   alias HologramFeatureTests.Entities.ProjectMember
+  alias HologramFeatureTests.Entities.Reaction
   alias HologramFeatureTests.Entities.Review
   alias HologramFeatureTests.Entities.Ship
   alias HologramFeatureTests.Entities.Shop
@@ -944,6 +945,7 @@ defmodule HologramFeatureTests.Helpers do
         Product,
         Project,
         ProjectMember,
+        Reaction,
         RestockItem,
         Review,
         RoleGrant,
