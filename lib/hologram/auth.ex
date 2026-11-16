@@ -469,12 +469,12 @@ defmodule Hologram.Auth do
   defdelegate user_id, to: Context, as: :actor_user_id
 
   @doc """
-  Returns the server's verdict on each deciding quantifier of the given row's type (see
+  Returns the server's verdict on each deciding clause of the given row's type (see
   `Hologram.Policy.deciding_quantifiers/1`) for the given user, keyed by its verdict key: whether
   the clause holds for the row, read as stored - what a client answers such a clause by, since the
-  rows it holds of a set can't decide one for certain. Empty for a type with none. Takes nil for an
-  anonymous session. A clause several keys share - one written for several operations, or a grant
-  lifecycle line expanded per role - is answered once.
+  rows it holds of a set can't decide one for certain, and it never holds a server-only value. Empty
+  for a type with none. Takes nil for an anonymous session. A clause several keys share - one
+  written for several operations, or a grant lifecycle line expanded per role - is answered once.
   """
   @spec verdicts(Server.identity_id() | nil, struct) :: %{String.t() => boolean}
   def verdicts(actor_user_id, %entity_type{} = row) do
