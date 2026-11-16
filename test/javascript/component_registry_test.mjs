@@ -310,6 +310,51 @@ describe("ComponentRegistry", () => {
     });
   });
 
+  describe("putComponentEmittedContext()", () => {
+    const newEmittedContext = Type.map([
+      [Type.atom("context_b"), Type.integer(2)],
+    ]);
+
+    // Built fresh in each test rather than reused from the module-level fixtures: the write is
+    // in-place, so a shared struct would carry it into the tests that run after.
+    function buildEntry(module, emittedContext, state) {
+      return Type.map([
+        [Type.atom("module"), module],
+        [
+          Type.atom("struct"),
+          Type.componentStruct({emittedContext: emittedContext, state: state}),
+        ],
+      ]);
+    }
+
+    it("overwrites the emitted context, leaving the struct's other fields alone", () => {
+      ComponentRegistry.entries = Type.map([
+        [cid3, buildEntry(module3, emittedContext3, state3)],
+      ]);
+
+      ComponentRegistry.putComponentEmittedContext(cid3, newEmittedContext);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getEntry(cid3),
+        buildEntry(module3, newEmittedContext, state3),
+      );
+    });
+
+    it("leaves the other components alone", () => {
+      ComponentRegistry.entries = Type.map([
+        [cid3, buildEntry(module3, emittedContext3, state3)],
+        [cid4, buildEntry(module1, emittedContext1, state1)],
+      ]);
+
+      ComponentRegistry.putComponentEmittedContext(cid3, newEmittedContext);
+
+      assert.deepStrictEqual(
+        ComponentRegistry.getEntry(cid4),
+        buildEntry(module1, emittedContext1, state1),
+      );
+    });
+  });
+
   describe("putComponentProps()", () => {
     const oldProps = Type.map([[Type.atom("prop_a"), Type.integer(1)]]);
     const newProps = Type.map([[Type.atom("prop_b"), Type.integer(2)]]);

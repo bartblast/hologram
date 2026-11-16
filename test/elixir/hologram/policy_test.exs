@@ -685,6 +685,45 @@ defmodule Hologram.PolicyTest do
              )
     end
 
+    # No client holds a server-only value, wherever the clause reads it.
+    test "holds for a predicate on a server-only attribute" do
+      report = Hologram.PolicyTest.ServerOnlyReport
+
+      assert deciding_quantifier?(report, {:reviewed, :==, true})
+      assert deciding_quantifier?(report, {:reviewed_on, :!=, nil})
+    end
+
+    test "holds for a predicate on a server-only attribute a path leads to" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.ServerOnlyComment,
+               {[:report, :reviewed], :==, true}
+             )
+    end
+
+    test "holds for a predicate whose operand names a server-only attribute" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.ServerOnlyReport,
+               {:title, :==, {:attribute, :reviewed}}
+             )
+    end
+
+    test "holds for an any whose condition reads a server-only attribute of the set's rows" do
+      assert deciding_quantifier?(
+               Hologram.PolicyTest.ServerOnlyReport,
+               {:any, {[:comments], [{:flagged, :==, true}]}}
+             )
+    end
+
+    test "holds for an any whose condition reads a server-only attribute of the row above" do
+      clause = {:any, {[:comments], [{:body, :==, {:attribute, {:outer, 1, :reviewed}}}]}}
+
+      assert deciding_quantifier?(Hologram.PolicyTest.ServerOnlyReport, clause)
+    end
+
+    test "fails for a predicate on a stored attribute of a type with a server-only one" do
+      refute deciding_quantifier?(Hologram.PolicyTest.ServerOnlyReport, {:title, :==, "x"})
+    end
+
     test "fails for an any alone and for a predicate" do
       project = Hologram.PolicyTest.VerdictProject
 
@@ -730,6 +769,29 @@ defmodule Hologram.PolicyTest do
       allow :read
     end
 
+    defmodule ServerOnlyReport do
+      use Hologram.Entity
+
+      attribute :reviewed, :boolean, server_only: true
+      attribute :reviewed_on, :date, server_only: true, optional: true
+      attribute :title, :string
+
+      relationship :comments, [Hologram.PolicyTest.ServerOnlyComment], inverse: report
+
+      allow :read, when: reviewed == true or title == "x"
+    end
+
+    defmodule ServerOnlyComment do
+      use Hologram.Entity
+
+      attribute :body, :string
+      attribute :flagged, :boolean, server_only: true
+
+      relationship :report, ServerOnlyReport, optional: true
+
+      allow :read
+    end
+
     # The read rule's any reads no none or all, so the browser answers it from the rows it holds -
     # the others are keyed by their operation and clause.
     test "returns the deciding quantifiers of every operation, keyed" do
@@ -746,6 +808,15 @@ defmodule Hologram.PolicyTest do
                  {verdict_key(VerdictProject, :delete, none_clause), none_clause},
                  {verdict_key(VerdictProject, :update, update_clause), update_clause}
                ])
+    end
+
+    # The stored alternative beside it is answered from the row the client holds.
+    test "returns a predicate on a server-only attribute standing in an alternative" do
+      clause = {:reviewed, :==, true}
+
+      assert deciding_quantifiers(ServerOnlyReport) == [
+               {verdict_key(ServerOnlyReport, :read, clause), clause}
+             ]
     end
   end
 
@@ -1992,6 +2063,37 @@ defmodule Hologram.PolicyTest do
     test "returns the types along a set its condition reads nothing on" do
       assert verdict_reads(Hologram.PolicyTest.VerdictProject, {:none, {[:labels], []}}) ==
                Enum.sort([Hologram.PolicyTest.VerdictLabel, Hologram.PolicyTest.VerdictProject])
+    end
+
+    # No client write can carry a server-only value, and a struct a pending write changed isn't the
+    # stored row the verdict is about, so no unanswered write moves it.
+    test "returns no type for a predicate reading only server-only attributes of the row" do
+      report = Hologram.PolicyTest.ServerOnlyReport
+
+      assert verdict_reads(report, {:reviewed, :==, true}) == []
+      assert verdict_reads(report, {:reviewed_on, :!=, nil}) == []
+    end
+
+    test "returns the rule's type for a server-only clause also reading a stored attribute" do
+      report = Hologram.PolicyTest.ServerOnlyReport
+
+      assert verdict_reads(report, {:title, :==, {:attribute, :reviewed}}) == [report]
+    end
+
+    # A quantifier reads its set even when its condition names only the row above.
+    test "returns the types along a set whose condition names only the row's server-only attribute" do
+      report = Hologram.PolicyTest.ServerOnlyReport
+      clause = {:any, {[:comments], [{{:outer, 1, :reviewed}, :==, true}]}}
+
+      assert verdict_reads(report, clause) ==
+               Enum.sort([report, Hologram.PolicyTest.ServerOnlyComment])
+    end
+
+    test "returns the types along a path to a server-only attribute" do
+      comment = Hologram.PolicyTest.ServerOnlyComment
+
+      assert verdict_reads(comment, {[:report, :reviewed], :==, true}) ==
+               Enum.sort([comment, Hologram.PolicyTest.ServerOnlyReport])
     end
   end
 
