@@ -2,6 +2,7 @@
 
 import {assert, defineRuntimeGlobals, sinon} from "./support/helpers.mjs";
 
+import Batch from "../../assets/js/batch.mjs";
 import Batches from "../../assets/js/batches.mjs";
 import DataLayer from "../../assets/js/data_layer.mjs";
 import Deltas from "../../assets/js/deltas.mjs";
@@ -14,6 +15,7 @@ import ManuallyPortedElixirHologramEntity from "../../assets/js/elixir/hologram/
 import ManuallyPortedElixirHologramJob from "../../assets/js/elixir/hologram/job.mjs";
 import ManuallyPortedElixirHologramQueryStage from "../../assets/js/elixir/hologram/query/stage.mjs";
 import Model from "../../assets/js/model.mjs";
+import Overlay from "../../assets/js/overlay.mjs";
 import ReloadNotice from "../../assets/js/reload_notice.mjs";
 import Replica from "../../assets/js/replica.mjs";
 import SyncStream from "../../assets/js/sync_stream.mjs";
@@ -1018,6 +1020,7 @@ describe("DataLayer", () => {
     afterEach(() => {
       LocalDatabase.reset();
       LocalDatabase.actorUserId = null;
+      Overlay.reset();
       delete globalThis.Hologram.sync;
     });
 
@@ -1049,6 +1052,27 @@ describe("DataLayer", () => {
         email$sort: "ann@example.org",
         id: "u1",
       });
+
+      assert.deepStrictEqual(
+        field(DataLayer.sessionUser(), "email"),
+        Type.bitstring("ann@example.org"),
+      );
+    });
+
+    // The server confirms a write within moments and syncs the row back, so a feature test can't
+    // tell the pending write from the synced row.
+    it("answers the row with this tab's pending writes applied", () => {
+      const batch = new Batch("users");
+
+      batch.append({
+        data: {email: "ann@example.org"},
+        id: "u1",
+        op: "update",
+        stamp: 1,
+        type: USER,
+      });
+
+      Overlay.push(batch);
 
       assert.deepStrictEqual(
         field(DataLayer.sessionUser(), "email"),
