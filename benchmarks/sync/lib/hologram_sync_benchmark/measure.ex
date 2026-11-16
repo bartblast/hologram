@@ -336,18 +336,24 @@ defmodule HologramSyncBenchmark.Measure do
   end
 
   @doc """
-  Turns on scheduler wall time and holds it on for as long as the calling process lives, which
-  never returns. Runs on the server node, in a process of its own.
+  Turns on scheduler wall time, tells the given process it's on, and holds it on for as long as
+  the calling process lives, which never returns. Runs on the server node, in a process of its
+  own.
 
   The flag counts per process that turned it on and goes off when the last of them exits, so
   turning it on from a call would leave it on only for that call.
   """
-  @spec hold_scheduler_wall_time :: no_return
-  def hold_scheduler_wall_time do
+  @spec hold_scheduler_wall_time(pid) :: no_return
+  def hold_scheduler_wall_time(owner) do
     :erlang.system_flag(:scheduler_wall_time, true)
+    send(owner, {:scheduler_wall_time_on, self()})
 
+    hold()
+  end
+
+  defp hold do
     receive do
-      :never -> hold_scheduler_wall_time()
+      :never -> hold()
     end
   end
 end

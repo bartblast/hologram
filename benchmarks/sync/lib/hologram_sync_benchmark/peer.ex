@@ -28,6 +28,9 @@ defmodule HologramSyncBenchmark.Peer do
 
   @endpoint HologramSyncBenchmarkWeb.Endpoint
 
+  # How long a booting node may take to turn scheduler wall time on, far longer than it needs.
+  @holder_timeout_ms 5_000
+
   # Where the server node logs, relative to this app's folder, new for each peer. Its console
   # output would otherwise be relayed to the driver's terminal, where a step that kills thousands
   # of streams would bury the report.
@@ -251,9 +254,15 @@ defmodule HologramSyncBenchmark.Peer do
     # as it starts.
     :ok = rpc(peer, :logger, :remove_handler, [:default])
 
-    _holder = Node.spawn(peer.node, HologramSyncBenchmark.Measure, :hold_scheduler_wall_time, [])
+    # Waited on, so the first CPU sample can't come before the flag is on.
+    holder =
+      Node.spawn(peer.node, HologramSyncBenchmark.Measure, :hold_scheduler_wall_time, [self()])
 
-    :ok
+    receive do
+      {:scheduler_wall_time_on, ^holder} -> :ok
+    after
+      @holder_timeout_ms -> raise "scheduler wall time never came on on the server node"
+    end
   end
 
   defp await_node_down(node, 0), do: raise("#{inspect(node)} did not stop")
