@@ -16,11 +16,12 @@ defmodule Hologram.Migration.FieldAccess do
   # the path. Their function arities take a plain value.
   @path_macros [get_and_update_in: 2, get_in: 1, pop_in: 1, put_in: 2, update_in: 2]
 
-  # Kernel as written, or as an op's arguments hold it, its alias expanded.
+  # Kernel as written, with or without the Elixir prefix, or as an op's arguments hold it,
+  # its alias expanded.
   defguardp is_kernel(ast)
             when ast == Kernel or
                    (is_tuple(ast) and tuple_size(ast) == 3 and elem(ast, 0) == :__aliases__ and
-                      elem(ast, 2) == [:Kernel])
+                      elem(ast, 2) in [[:Kernel], [:"Elixir", :Kernel]])
 
   @doc """
   Returns the quoted definition of the given kind - :def, :defp, :defmacro, :defmacrop,

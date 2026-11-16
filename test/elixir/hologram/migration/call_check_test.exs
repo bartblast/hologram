@@ -733,6 +733,7 @@ defmodule Hologram.Migration.CallCheckTest do
 
       def path(row), do: get_in(row.a.b)
       def kernel_path(row), do: Kernel.put_in(row.a.b, 1).a.b
+      def elixir_kernel_path(row), do: Elixir.Kernel.get_in(row.a.b)
       def bracket_path(row, item), do: put_in(row.items[item.id], :new).items
       def data(row), do: get_in(row.data, [:a])
       def average(rows), do: Enum.map(rows, &(&1.total / &1.count))
@@ -743,6 +744,7 @@ defmodule Hologram.Migration.CallCheckTest do
       def piped_put(row), do: row.data |> put_in(row.path, 9)
       def piped_macro(row), do: row.a.b |> put_in(2)
       def piped_update(row), do: row.a.b |> update_in(&(&1 + 1))
+      def elixir_kernel_piped(row), do: row.a.b |> Elixir.Kernel.put_in(3)
       def receiver(receive), do: receive
 
       for field <- [:title] do
@@ -762,6 +764,7 @@ defmodule Hologram.Migration.CallCheckTest do
 
       assert module.path(%{a: %{b: 1}}) == 1
       assert module.kernel_path(%{a: %{b: 0}}) == 1
+      assert module.elixir_kernel_path(%{a: %{b: 4}}) == 4
       assert module.bracket_path(%{items: %{1 => :old}}, %{id: 1}) == %{1 => :new}
       assert module.data(%{data: %{a: 2}}) == 2
       assert module.average([%{total: 6, count: 3}]) == [2.0]
@@ -771,6 +774,7 @@ defmodule Hologram.Migration.CallCheckTest do
       assert module.piped_put(%{data: %{a: 1}, path: [:a]}) == %{a: 9}
       assert module.piped_macro(%{a: %{b: 1}}) == %{a: %{b: 2}}
       assert module.piped_update(%{a: %{b: 1}}) == %{a: %{b: 2}}
+      assert module.elixir_kernel_piped(%{a: %{b: 1}}) == %{a: %{b: 3}}
       assert module.receiver(1) == 1
       assert module.title(%{title: "a"}) == "a"
       assert module.pi() == :math.pi()

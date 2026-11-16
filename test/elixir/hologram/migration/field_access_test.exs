@@ -49,6 +49,7 @@ defmodule Hologram.Migration.FieldAccessTest do
                "put_in(row.items[:erlang.map_get(:id, item)], 1)"
 
       assert unchanged?("Kernel.update_in(row.a, f)")
+      assert unchanged?("Elixir.Kernel.update_in(row.a, f)")
       assert unchanged?("get_in(row.a.b)")
     end
 
@@ -63,6 +64,7 @@ defmodule Hologram.Migration.FieldAccessTest do
                ":erlang.map_get(:data, row) |> put_in(:erlang.map_get(:path, row), 1)"
 
       assert rewritten("row.a.b |> Kernel.put_in(1)") == "row.a.b |> Kernel.put_in(1)"
+      assert unchanged?("row.a.b |> Elixir.Kernel.put_in(1)")
     end
 
     test "leaves a field of an unquote fragment's value to be decided once it is unquoted" do
