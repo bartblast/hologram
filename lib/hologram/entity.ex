@@ -375,6 +375,24 @@ defmodule Hologram.Entity do
   The fields are attributes and to-one relationships, two or more, named as they are declared,
   and an entity type takes any number of keys. A single field is unique through its own option,
   `attribute :slug, :string, unique: true`.
+
+  A create or an update that would leave a row sharing a key with another row is refused, and
+  every field of the key carries the reason, `{:unique, fields}`, a to-one named by its
+  reference field:
+
+      {:error,
+       %{
+         slug: [unique: [:workspace_id, :slug]],
+         workspace_id: [unique: [:workspace_id, :slug]]
+       }}
+
+  A row holding nil in a field of the key repeats nothing. The strings of a key share one index
+  entry, so each takes a `{:max_bytes, max_bytes}` bound smaller than a unique string's own.
+
+  The refusal comes from the server, where the other rows are. A client writes the row to its
+  own store first, online or not, and the server refuses the whole batch the write arrived in
+  when the key is taken by then: on the client a row the batch created goes away and one it
+  updated goes back to what it held, and the app is told the reason. Two devices creating the same key offline have the second one's batch refused.
   """
   @spec unique(list(atom)) :: Macro.t()
   defmacro unique(fields) do

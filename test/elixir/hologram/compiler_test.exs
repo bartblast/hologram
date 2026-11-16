@@ -9645,6 +9645,8 @@ defmodule Hologram.CompilerTest do
                "d" => %{"max_bytes" => 886, "optional" => true},
                "e" => %{"max_bytes" => 886, "optional" => true},
                "f" => %{"max_bytes" => 886, "optional" => true},
+               "flag" => %{"optional" => true},
+               "held_at" => %{"optional" => true},
                "kind" => %{"optional" => true},
                "slug" => %{"max_bytes" => 2673, "optional" => true, "unique" => true},
                "title" => %{"optional" => true}

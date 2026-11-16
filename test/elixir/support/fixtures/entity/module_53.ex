@@ -10,6 +10,8 @@ defmodule Hologram.Test.Fixtures.Entity.Module53 do
   attribute :d, :string, optional: true
   attribute :e, :string, optional: true
   attribute :f, :string, optional: true
+  attribute :flag, :boolean, optional: true
+  attribute :held_at, :datetime, optional: true
   attribute :kind, :enum, values: [:x, :y], optional: true
   attribute :slug, :string, optional: true, unique: true
   attribute :title, :string, optional: true
@@ -20,7 +22,9 @@ defmodule Hologram.Test.Fixtures.Entity.Module53 do
   unique [:b, :d]
   unique [:c, :kind, :owner]
   unique [:d, :e, :f]
+  unique [:flag, :held_at, :kind, :owner]
   unique [:kind, :slug]
 
   allow :read
+  allow :update
 end

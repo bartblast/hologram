@@ -332,10 +332,12 @@ defmodule Hologram.Entity.ValidatorTest do
       assert unique_string_max_bytes(Module52) == %{slug: 2665}
     end
 
+    #   [:name, :count]                              -> 2692 - 8 - 11 = 2673
     #   [:s1, :n1, :s2, :n2, :s3, :n3, :s4, :n4, :u] -> (2692 - 32 - 16 - 44) / 4 = 650
     #   [:s5, :n1, :s6, :n2, :n3]                    -> (2692 - 24 - 22) / 2 = 1323
     test "sets every other column aside for a long key" do
       assert unique_string_max_bytes(Module54) == %{
+               name: 2673,
                s1: 650,
                s2: 650,
                s3: 650,
