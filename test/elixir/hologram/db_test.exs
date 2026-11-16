@@ -68,9 +68,11 @@ defmodule Hologram.DBTest do
     answer_starting_up(listen_socket, error_response)
   end
 
-  # A pool on a port that refuses connections until a proxy starts there, giving up on a checkout
+  # A pool behind a proxy that refuses connections until the test opens it, giving up on a checkout
   # and reconnecting within milliseconds rather than seconds.
-  defp start_unreachable_pool(port \\ TCPProxy.closed_port()) do
+  defp start_unreachable_pool(proxy \\ start_supervised!(TCPProxy)) do
+    port = TCPProxy.port(proxy)
+
     opts =
       Config.connection_opts(
         backoff_max: 50,
@@ -296,8 +298,9 @@ defmodule Hologram.DBTest do
     end
 
     test "waits while the database cannot be reached, and returns once it answers" do
-      port = TCPProxy.closed_port()
-      pool = start_unreachable_pool(port)
+      proxy = start_supervised!(TCPProxy)
+      port = TCPProxy.port(proxy)
+      pool = start_unreachable_pool(proxy)
 
       log =
         capture_log(fn ->
@@ -313,13 +316,13 @@ defmodule Hologram.DBTest do
 
           refute Task.yield(task, 200)
 
-          start_supervised!({TCPProxy, port})
+          TCPProxy.open(proxy)
 
           assert Task.await(task) == :ok
         end)
 
       assert log =~ "the database cannot be reached yet, trying again in 20 ms"
-      assert log =~ "connection refused"
+      assert log =~ "tcp recv (idle): closed"
     end
 
     test "waits while the database is starting up" do

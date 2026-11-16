@@ -2,26 +2,26 @@ defmodule Hologram.Test.TCPProxy do
   @moduledoc false
 
   # Stands between a connection and the configured database, so that a test can decide what the
-  # link does: a port nothing listens on refuses connections, a proxy started on it later makes the
-  # database reachable, close_all/1 drops every session it carries, and freeze/1 makes them go
-  # silent - nothing is forwarded either way and nothing is closed, the way a link that stopped
-  # carrying packets looks to both ends.
+  # link does: a proxy refuses connections until open/1 makes the database reachable through it,
+  # close_all/1 drops every session it carries, and freeze/1 makes them go silent - nothing is
+  # forwarded either way and nothing is closed, the way a link that stopped carrying packets looks
+  # to both ends.
+  #
+  # It holds its port from the start rather than leaving it free until it opens, since a free port
+  # can be taken meanwhile by anything else binding one - another test's proxy among them.
+  #
+  # Refusing means accepting a connection, reading the client's startup message, then closing it.
+  # The client sees a connect that failed, as it would a refused one. Closing straight after
+  # accepting would race Postgrex, which raises rather than failing the connect when the peer is
+  # gone before its handshake reads the peer's address (#1667). The whole message is read, so
+  # nothing unread makes the close a reset, and the client always fails the same way.
 
   use GenServer
 
   alias Hologram.DB.Config
 
-  @doc """
-  Returns a port nothing listens on, for a connection to be refused on until a proxy starts there.
-  """
-  @spec closed_port() :: :inet.port_number()
-  def closed_port do
-    {:ok, socket} = :gen_tcp.listen(0, [])
-    {:ok, port} = :inet.port(socket)
-    :ok = :gen_tcp.close(socket)
-
-    port
-  end
+  # How long a refused connection may take to send its startup message before it is closed anyway.
+  @startup_timeout_ms :timer.seconds(5)
 
   @doc """
   Closes both ends of every connection the proxy carries, and returns :ok once they are closed.
@@ -38,20 +38,32 @@ defmodule Hologram.Test.TCPProxy do
   def freeze(proxy), do: GenServer.call(proxy, :freeze)
 
   @doc """
-  Starts a proxy listening on the given port and forwarding each connection to the configured
-  database.
+  Forwards every connection accepted from now on to the configured database, and returns :ok.
   """
-  @spec start_link(:inet.port_number()) :: GenServer.on_start()
-  def start_link(port), do: GenServer.start_link(__MODULE__, port)
+  @spec open(GenServer.server()) :: :ok
+  def open(proxy), do: GenServer.call(proxy, :open)
+
+  @doc """
+  Returns the port the proxy listens on.
+  """
+  @spec port(GenServer.server()) :: :inet.port_number()
+  def port(proxy), do: GenServer.call(proxy, :port)
+
+  @doc """
+  Starts a proxy listening on a free port, refusing connections until open/1.
+  """
+  @spec start_link(keyword) :: GenServer.on_start()
+  def start_link(_opts \\ []), do: GenServer.start_link(__MODULE__, nil)
 
   @impl GenServer
-  def init(port) do
-    {:ok, listen_socket} = :gen_tcp.listen(port, [:binary, active: false, reuseaddr: true])
+  def init(nil) do
+    {:ok, listen_socket} = :gen_tcp.listen(0, [:binary, active: false])
+    {:ok, port} = :inet.port(listen_socket)
     proxy = self()
 
     spawn_link(fn -> accept_loop(listen_socket, proxy) end)
 
-    {:ok, %{carriers: [], listen_socket: listen_socket}}
+    {:ok, %{carriers: [], listen_socket: listen_socket, open?: false, port: port}}
   end
 
   @impl GenServer
@@ -74,6 +86,17 @@ defmodule Hologram.Test.TCPProxy do
     {:reply, :ok, state}
   end
 
+  def handle_call(:new_carrier, _from, %{open?: false} = state) do
+    refuser =
+      spawn_link(fn ->
+        receive do
+          {:client, client} -> refuse(client)
+        end
+      end)
+
+    {:reply, refuser, state}
+  end
+
   def handle_call(:new_carrier, _from, state) do
     carrier =
       spawn_link(fn ->
@@ -83,6 +106,14 @@ defmodule Hologram.Test.TCPProxy do
       end)
 
     {:reply, carrier, %{state | carriers: [carrier | state.carriers]}}
+  end
+
+  def handle_call(:open, _from, state) do
+    {:reply, :ok, %{state | open?: true}}
+  end
+
+  def handle_call(:port, _from, state) do
+    {:reply, state.port, state}
   end
 
   defp accept_loop(listen_socket, proxy) do
@@ -110,6 +141,11 @@ defmodule Hologram.Test.TCPProxy do
     forward(client, upstream, false)
   end
 
+  defp close(client, upstream) do
+    :gen_tcp.close(client)
+    :gen_tcp.close(upstream)
+  end
+
   defp forward(client, upstream, frozen?) do
     receive do
       {:tcp, ^client, data} ->
@@ -134,8 +170,12 @@ defmodule Hologram.Test.TCPProxy do
     end
   end
 
-  defp close(client, upstream) do
+  # The startup message opens with its length, which counts itself.
+  defp refuse(client) do
+    with {:ok, <<length::32>>} <- :gen_tcp.recv(client, 4, @startup_timeout_ms) do
+      :gen_tcp.recv(client, length - 4, @startup_timeout_ms)
+    end
+
     :gen_tcp.close(client)
-    :gen_tcp.close(upstream)
   end
 end

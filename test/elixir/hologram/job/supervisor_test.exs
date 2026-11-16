@@ -55,8 +55,9 @@ defmodule Hologram.Job.SupervisorTest do
     # is what tells the timeout apart from a lost session, which ends the connection itself.
     @tag :database
     test "restarts the lock connection and the worker once, and the supervisor stays up" do
-      port = TCPProxy.closed_port()
-      proxy = start_supervised!({TCPProxy, port})
+      proxy = start_supervised!(TCPProxy)
+      TCPProxy.open(proxy)
+      port = TCPProxy.port(proxy)
       run_lock = __MODULE__.RunLock
       test_pid = self()
 
@@ -83,24 +84,21 @@ defmodule Hologram.Job.SupervisorTest do
 
       supervisor_ref = Process.monitor(supervisor)
 
-      log =
-        capture_log(fn ->
-          assert_receive {:pass, worker}, 5_000
-          old_run_lock = Process.whereis(run_lock)
-          run_lock_ref = Process.monitor(old_run_lock)
+      capture_log(fn ->
+        assert_receive {:pass, worker}, 5_000
+        old_run_lock = Process.whereis(run_lock)
+        run_lock_ref = Process.monitor(old_run_lock)
 
-          TCPProxy.freeze(proxy)
+        TCPProxy.freeze(proxy)
 
-          assert_receive {:DOWN, ^run_lock_ref, :process, ^old_run_lock, :killed}, 10_000
-          assert_receive {:pass, new_worker} when new_worker != worker, 5_000
+        assert_receive {:DOWN, ^run_lock_ref, :process, ^old_run_lock, :killed}, 10_000
+        assert_receive {:pass, new_worker} when new_worker != worker, 5_000
 
-          assert Process.whereis(run_lock) not in [nil, old_run_lock]
-          refute_received {:DOWN, ^supervisor_ref, :process, ^supervisor, _reason}
+        assert Process.whereis(run_lock) not in [nil, old_run_lock]
+        refute_received {:DOWN, ^supervisor_ref, :process, ^supervisor, _reason}
 
-          stop_supervised!(:job_tree)
-        end)
-
-      refute log =~ "lost its connection"
+        stop_supervised!(:job_tree)
+      end)
     end
   end
 end

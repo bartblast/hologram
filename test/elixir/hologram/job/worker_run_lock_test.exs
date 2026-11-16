@@ -34,7 +34,8 @@ defmodule Hologram.Job.WorkerRunLockTest do
   # every pass.
   test "waits for its run lock connection before anything else" do
     test_pid = self()
-    port = TCPProxy.closed_port()
+    proxy = start_supervised!(TCPProxy)
+    port = TCPProxy.port(proxy)
 
     capture_log(fn ->
       run_lock =
@@ -53,7 +54,7 @@ defmodule Hologram.Job.WorkerRunLockTest do
       refute_receive :passed, 300
       assert Process.alive?(worker)
 
-      start_supervised!({TCPProxy, port})
+      TCPProxy.open(proxy)
 
       assert_receive :passed, 2_000
     end)

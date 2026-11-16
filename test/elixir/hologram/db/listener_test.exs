@@ -56,19 +56,19 @@ defmodule Hologram.DB.ListenerTest do
     )
   end
 
-  # Started on a port that refuses connections until the test starts a proxy there.
+  # Started behind a proxy that refuses connections until the test opens it.
   defp start_refused_listener(opts \\ []) do
-    port = TCPProxy.closed_port()
+    proxy = start_proxy()
 
-    {port, start_listener(Keyword.put(opts, :port, port))}
+    {proxy, start_listener(Keyword.put(opts, :port, TCPProxy.port(proxy)))}
   end
 
   defp start_connected_listener(opts \\ []) do
     start_listener(Keyword.put(opts, :sync_connect, true))
   end
 
-  defp start_proxy(port) do
-    start_supervised!(Supervisor.child_spec({TCPProxy, port}, id: make_ref()))
+  defp start_proxy do
+    start_supervised!(Supervisor.child_spec(TCPProxy, id: make_ref()))
   end
 
   describe "child_spec/1" do
@@ -197,7 +197,7 @@ defmodule Hologram.DB.ListenerTest do
 
     test "answers :eventually while the database refuses connections" do
       capture_log(fn ->
-        {_port, listener} = start_refused_listener()
+        {_proxy, listener} = start_refused_listener()
 
         assert {:eventually, _ref} = Listener.listen(listener, channel())
       end)
@@ -207,7 +207,7 @@ defmodule Hologram.DB.ListenerTest do
   describe "while the database refuses connections" do
     test "keeps trying rather than ending" do
       capture_log(fn ->
-        {_port, listener} = start_refused_listener()
+        {_proxy, listener} = start_refused_listener()
         ref = Process.monitor(listener)
 
         refute_receive {:DOWN, ^ref, :process, ^listener, _reason}, 10 * @backoff_ms
@@ -218,7 +218,7 @@ defmodule Hologram.DB.ListenerTest do
     # listening on the channel ends with it.
     test "stays up when a process listening meanwhile exits" do
       capture_log(fn ->
-        {_port, listener} = start_refused_listener()
+        {_proxy, listener} = start_refused_listener()
         ref = Process.monitor(listener)
 
         task = Task.async(fn -> Listener.listen(listener, channel()) end)
@@ -230,7 +230,7 @@ defmodule Hologram.DB.ListenerTest do
 
     test "listens for a process that listened after another one exited, once the database is reachable" do
       capture_log(fn ->
-        {port, listener} = start_refused_listener()
+        {proxy, listener} = start_refused_listener()
         channel = channel()
 
         task = Task.async(fn -> Listener.listen(listener, channel) end)
@@ -239,7 +239,7 @@ defmodule Hologram.DB.ListenerTest do
 
         assert {:eventually, ref} = Listener.listen(listener, channel)
 
-        start_proxy(port)
+        TCPProxy.open(proxy)
 
         assert_notified(listener, ref, channel)
       end)
@@ -247,12 +247,12 @@ defmodule Hologram.DB.ListenerTest do
 
     test "listens on the channels registered meanwhile once the database is reachable" do
       capture_log(fn ->
-        {port, listener} = start_refused_listener()
+        {proxy, listener} = start_refused_listener()
         channel = channel()
 
         assert {:eventually, ref} = Listener.listen(listener, channel)
 
-        start_proxy(port)
+        TCPProxy.open(proxy)
 
         assert_notified(listener, ref, channel)
       end)
@@ -271,9 +271,9 @@ defmodule Hologram.DB.ListenerTest do
 
   describe "a lost session" do
     test "ends the connection rather than reconnecting it" do
-      port = TCPProxy.closed_port()
-      proxy = start_proxy(port)
-      listener = start_connected_listener(port: port)
+      proxy = start_proxy()
+      TCPProxy.open(proxy)
+      listener = start_connected_listener(port: TCPProxy.port(proxy))
       ref = Process.monitor(listener)
 
       log =
@@ -288,9 +288,16 @@ defmodule Hologram.DB.ListenerTest do
 
     # Nothing calls the connection after it connects, so only the ping it arms itself notices.
     test "is noticed when the link goes silent with nothing in flight" do
-      port = TCPProxy.closed_port()
-      proxy = start_proxy(port)
-      listener = start_connected_listener(port: port, idle_interval: 100, ping_timeout: 100)
+      proxy = start_proxy()
+      TCPProxy.open(proxy)
+
+      listener =
+        start_connected_listener(
+          port: TCPProxy.port(proxy),
+          idle_interval: 100,
+          ping_timeout: 100
+        )
+
       ref = Process.monitor(listener)
 
       capture_log(fn ->
