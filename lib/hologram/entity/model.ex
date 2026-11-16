@@ -304,7 +304,11 @@ defmodule Hologram.Entity.Model do
     validate_added_enum_values!(op)
     validate_backfill_value!(op)
 
-    add_member(model, op.entity, :attributes, "attribute", {op.name, op.type, op.opts})
+    added = add_member(model, op.entity, :attributes, "attribute", {op.name, op.type, op.opts})
+
+    validate_key_name_free!(model, op.entity, "attribute", op.name)
+
+    added
   end
 
   defp apply_op(%{op: :add_enum_value} = op, model) do
@@ -322,7 +326,11 @@ defmodule Hologram.Entity.Model do
 
     validate_unique_relationship!(member, op.entity)
 
-    add_member(model, op.entity, :relationships, "relationship", member)
+    added = add_member(model, op.entity, :relationships, "relationship", member)
+
+    validate_key_name_free!(model, op.entity, "relationship", op.name)
+
+    added
   end
 
   defp apply_op(%{op: :add_role, entity: _entity} = op, model) do
@@ -344,6 +352,16 @@ defmodule Hologram.Entity.Model do
     put_in(model, [:roles, op.role], %{extends: extends})
   end
 
+  defp apply_op(%{op: :add_unique} = op, model) do
+    entry = fetch_entity!(model, op.entity)
+
+    validate_key_shape!(op)
+    Enum.each(op.fields, &validate_key_field!(entry, op, &1))
+    validate_key_absent!(entry, op)
+
+    put_in(model, [:entities, op.entity, :uniques], Enum.sort([op.fields | entry.uniques]))
+  end
+
   defp apply_op(%{op: :change_attribute} = op, model) do
     update_member(
       model,
@@ -363,6 +381,7 @@ defmodule Hologram.Entity.Model do
         member = {name, new_type, normalize_opts(new_opts)}
 
         validate_unique_relationship!(member, op.entity)
+        validate_key_relationship!(model, op.entity, member)
 
         member
     end)
@@ -395,7 +414,11 @@ defmodule Hologram.Entity.Model do
   end
 
   defp apply_op(%{op: :delete_attribute} = op, model) do
-    delete_member(model, op.entity, :attributes, "attribute", op.name)
+    deleted = delete_member(model, op.entity, :attributes, "attribute", op.name)
+
+    validate_no_key!(model, op.entity, "attribute", op.name)
+
+    deleted
   end
 
   defp apply_op(%{op: :delete_entity} = op, model) do
@@ -426,7 +449,11 @@ defmodule Hologram.Entity.Model do
   end
 
   defp apply_op(%{op: :delete_relationship} = op, model) do
-    delete_member(model, op.entity, :relationships, "relationship", op.name)
+    deleted = delete_member(model, op.entity, :relationships, "relationship", op.name)
+
+    validate_no_key!(model, op.entity, "relationship", op.name)
+
+    deleted
   end
 
   defp apply_op(%{op: :delete_role, entity: _entity} = op, model) do
@@ -460,6 +487,19 @@ defmodule Hologram.Entity.Model do
     update_in(model, [:roles], &Map.delete(&1, op.role))
   end
 
+  defp apply_op(%{op: :delete_unique} = op, model) do
+    keys = members!(model, op.entity, :uniques)
+
+    if op.fields not in keys do
+      raise Hologram.CompileError,
+        message:
+          "no such key #{inspect(op.fields)} on #{inspect(op.entity)} " <>
+            "at this point in migration history#{existing_keys_note(keys, op.fields)}"
+    end
+
+    put_in(model, [:entities, op.entity, :uniques], keys -- [op.fields])
+  end
+
   # A data op folds to nothing: the model term carries declarations, and deleting rows
   # declares nothing. It rides the history so the file states the deletion it performs.
   defp apply_op(%{op: :delete_role_grants}, model), do: model
@@ -479,7 +519,12 @@ defmodule Hologram.Entity.Model do
   end
 
   defp apply_op(%{op: :rename_attribute} = op, model) do
-    rename_member(model, op.entity, :attributes, "attribute", op.from, op.to)
+    renamed = rename_member(model, op.entity, :attributes, "attribute", op.from, op.to)
+
+    validate_key_name_free!(model, op.entity, "attribute", op.to)
+    validate_key_rename!(model, op, "attribute", :relationships)
+
+    rename_key_field(renamed, op.entity, op.from, op.to)
   end
 
   defp apply_op(%{op: :rename_entity} = op, model) do
@@ -502,7 +547,12 @@ defmodule Hologram.Entity.Model do
   end
 
   defp apply_op(%{op: :rename_relationship} = op, model) do
-    rename_member(model, op.entity, :relationships, "relationship", op.from, op.to)
+    renamed = rename_member(model, op.entity, :relationships, "relationship", op.from, op.to)
+
+    validate_key_name_free!(model, op.entity, "relationship", op.to)
+    validate_key_rename!(model, op, "relationship", :attributes)
+
+    rename_key_field(renamed, op.entity, op.from, op.to)
   end
 
   defp apply_op(%{op: :rename_role, entity: _entity} = op, model) do
@@ -595,6 +645,20 @@ defmodule Hologram.Entity.Model do
     end
 
     put_members(model, entity_type, list_key, Enum.reject(members, &(elem(&1, 0) == name)))
+  end
+
+  # What the entity type does hold, for the op that named a key it does not: the same fields
+  # in the order the key keeps them, or its keys - one a rename earlier in the file respelled
+  # is among them.
+  defp existing_keys_note([], _fields), do: ""
+
+  defp existing_keys_note(keys, fields) do
+    sorted_fields = if is_list(fields) and not List.improper?(fields), do: Enum.sort(fields)
+
+    case Enum.find(keys, &(Enum.sort(&1) == sorted_fields)) do
+      nil -> " - its keys are: #{Enum.map_join(keys, ", ", &inspect/1)}"
+      key -> " - the key over these fields is #{inspect(key)}"
+    end
   end
 
   defp extending_roles(model, entity_type, name) do
@@ -695,6 +759,12 @@ defmodule Hologram.Entity.Model do
     model
     |> fetch_entity!(entity_type)
     |> Map.fetch!(list_key)
+  end
+
+  defp naming_key(model, entity_type, name) do
+    model
+    |> members!(entity_type, :uniques)
+    |> Enum.find(&(name in &1))
   end
 
   defp normalize_member({name, type, opts}), do: {name, type, normalize_opts(opts)}
@@ -825,6 +895,16 @@ defmodule Hologram.Entity.Model do
     new_opts = if opts[:default] == op.from, do: Keyword.put(opts, :default, op.to), else: opts
 
     {renamed, new_opts}
+  end
+
+  # A key names its fields, so it follows the rename of one: the index stays, over the same
+  # column under its new name.
+  defp rename_key_field(model, entity_type, from, to) do
+    update_in(model, [:entities, entity_type, :uniques], fn keys ->
+      keys
+      |> Enum.map(&retarget_targets(&1, from, to))
+      |> Enum.sort()
+    end)
   end
 
   defp rename_member(model, entity_type, list_key, kind, from, to) do
@@ -1103,6 +1183,145 @@ defmodule Hologram.Entity.Model do
           "#{inspect(target)}, and role grants reference #{inspect(designation)} rows - " <>
           "add `delete_role_grants()` above it, which empties the role grant store in " <>
           "the same migration"
+  end
+
+  # The declaration refuses these too, so only a hand-written op reaches them: two keys over the
+  # same fields in any order would build two indexes refusing the same rows.
+  defp validate_key_absent!(entry, op) do
+    sorted_fields = Enum.sort(op.fields)
+
+    case Enum.find(entry.uniques, &(Enum.sort(&1) == sorted_fields)) do
+      nil ->
+        :ok
+
+      existing ->
+        raise Hologram.CompileError,
+          message:
+            "key #{inspect(existing)} already exists on #{inspect(op.entity)} " <>
+              "at this point in migration history"
+    end
+  end
+
+  # A key's index is over columns of the entity's own table: an attribute has one, a to-one
+  # has its reference, and a to-many keeps its references in a join table.
+  defp validate_key_field!(entry, op, field) do
+    relationship = List.keyfind(entry.relationships, field, 0)
+
+    cond do
+      member?(entry.attributes, field) and relationship != nil ->
+        raise Hologram.CompileError,
+          message:
+            "key #{inspect(op.fields)} on #{inspect(op.entity)} names #{inspect(field)}, " <>
+              "which is both an attribute and a relationship at this point in migration " <>
+              "history - a key names one field"
+
+      member?(entry.attributes, field) ->
+        :ok
+
+      match?({_name, [_target], _opts}, relationship) ->
+        raise Hologram.CompileError,
+          message:
+            "key #{inspect(op.fields)} on #{inspect(op.entity)} names #{inspect(field)}, " <>
+              "a to-many relationship at this point in migration history - a to-many holds " <>
+              "no reference a row could repeat"
+
+      relationship != nil ->
+        :ok
+
+      true ->
+        raise Hologram.CompileError,
+          message:
+            "key #{inspect(op.fields)} on #{inspect(op.entity)} names #{inspect(field)}, " <>
+              "which is not an attribute or a to-one relationship of it at this point in " <>
+              "migration history"
+    end
+  end
+
+  # A key names its fields bare, so the name of one belongs to a single member while the key
+  # stands: an attribute and a relationship sharing it would leave the key meaning either.
+  # The declaration refuses the shared name outright - a replay meets it only between the
+  # ops of a member changing kind, and the diff takes the key away before those. Asked of
+  # a name a member is about to take (here), and of a key's own field renamed onto a name
+  # the other kind of member holds (see validate_key_rename!/4).
+  defp validate_key_name_free!(model, entity_type, kind, name) do
+    case naming_key(model, entity_type, name) do
+      nil ->
+        :ok
+
+      key ->
+        raise Hologram.CompileError,
+          message:
+            "#{kind} #{inspect(name)} on #{inspect(entity_type)} would share its name with " <>
+              "a field of key #{inspect(key)} at this point in migration history - delete " <>
+              "the key first with `delete_unique #{inspect(key)}`"
+    end
+  end
+
+  defp validate_key_rename!(model, op, kind, other_list_key) do
+    key = naming_key(model, op.entity, op.from)
+    other_members = members!(model, op.entity, other_list_key)
+
+    if key != nil and member?(other_members, op.to) do
+      raise Hologram.CompileError,
+        message:
+          "#{kind} #{inspect(op.from)} on #{inspect(op.entity)} is named by key " <>
+            "#{inspect(key)}, and the name #{inspect(op.to)} is taken by another member " <>
+            "at this point in migration history - delete the key first with " <>
+            "`delete_unique #{inspect(key)}`"
+    end
+
+    :ok
+  end
+
+  # A to-one that becomes a to-many loses the reference column a key over it indexes.
+  defp validate_key_relationship!(model, entity_type, {name, [_target], _opts}) do
+    case naming_key(model, entity_type, name) do
+      nil ->
+        :ok
+
+      key ->
+        raise Hologram.CompileError,
+          message:
+            "relationship #{inspect(name)} on #{inspect(entity_type)} becomes to-many, and " <>
+              "key #{inspect(key)} names it at this point in migration history - a to-many " <>
+              "holds no reference a row could repeat - delete the key first with " <>
+              "`delete_unique #{inspect(key)}`"
+    end
+  end
+
+  defp validate_key_relationship!(_model, _entity_type, _member), do: :ok
+
+  # The declaration's own bounds: a one-field key is spelled unique: true on the field, and
+  # an index holds 32 columns at most.
+  defp validate_key_shape!(op) do
+    valid? =
+      is_list(op.fields) and not List.improper?(op.fields) and
+        Enum.all?(op.fields, &is_atom/1) and length(op.fields) in 2..32 and
+        Enum.uniq(op.fields) == op.fields
+
+    if not valid? do
+      raise Hologram.CompileError,
+        message:
+          "invalid key #{inspect(op.fields)} on #{inspect(op.entity)} - " <>
+            "a key is a list of 2 to 32 distinct field names"
+    end
+  end
+
+  # A key cannot outlive a field it names, and dropping it with the field would loosen what
+  # the rows may repeat without the file saying so - the same reason a designation change
+  # has to carry its own delete_role_grants line.
+  defp validate_no_key!(model, entity_type, kind, name) do
+    case naming_key(model, entity_type, name) do
+      nil ->
+        :ok
+
+      key ->
+        raise Hologram.CompileError,
+          message:
+            "#{kind} #{inspect(name)} on #{inspect(entity_type)} is named by key " <>
+              "#{inspect(key)} at this point in migration history - delete the key first " <>
+              "with `delete_unique #{inspect(key)}`"
+    end
   end
 
   # The declaration refuses a unique to-many, so only a hand-written op reaches this - a unique

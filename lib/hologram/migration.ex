@@ -32,6 +32,10 @@ defmodule Hologram.Migration do
   needs one of these: a `backfill:`, a `default:` on the declaration, or making the
   attribute optional. Without any of them the apply refuses, naming the table and how many
   rows would have been left without a value.
+
+  A key declared with `unique` is a member of its entity type like any other: `add_unique`
+  and `delete_unique` take the key's fields in declared order. A key follows a rename of a
+  field it names, and stands in the way of deleting one - the file deletes the key first.
   """
 
   @locals_without_parens [
@@ -43,6 +47,7 @@ defmodule Hologram.Migration do
     add_relationship: 3,
     add_role: 1,
     add_role: 2,
+    add_unique: 1,
     change_attribute: 2,
     change_relationship: 2,
     change_role: 2,
@@ -52,6 +57,7 @@ defmodule Hologram.Migration do
     delete_enum_value: 2,
     delete_relationship: 1,
     delete_role: 1,
+    delete_unique: 1,
     designate_user_entity: 1,
     rename_attribute: 2,
     rename_entity: 2,
@@ -355,6 +361,19 @@ defmodule Hologram.Migration do
     end
   end
 
+  defp member_op({:add_unique, meta, [fields]}, entity_type, caller) do
+    line = statement_line(meta, caller)
+
+    quote do
+      %{
+        op: :add_unique,
+        entity: unquote(entity_type),
+        fields: unquote(fields),
+        line: unquote(line)
+      }
+    end
+  end
+
   defp member_op({:change_attribute, meta, [name, changes]}, entity_type, caller) do
     line = statement_line(meta, caller)
 
@@ -445,6 +464,19 @@ defmodule Hologram.Migration do
         op: :delete_role,
         entity: unquote(entity_type),
         name: unquote(name),
+        line: unquote(line)
+      }
+    end
+  end
+
+  defp member_op({:delete_unique, meta, [fields]}, entity_type, caller) do
+    line = statement_line(meta, caller)
+
+    quote do
+      %{
+        op: :delete_unique,
+        entity: unquote(entity_type),
+        fields: unquote(fields),
         line: unquote(line)
       }
     end

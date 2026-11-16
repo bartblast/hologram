@@ -173,6 +173,28 @@ defmodule Hologram.Migration.RefusalTest do
       assert_refused(scratch, create, first_model, refused, expected_msg)
     end
 
+    # The third row repeats the first one's amount and status under a title of its own, so
+    # only the key over both is repeated.
+    test "refuses a key over rows that repeat it", %{
+      create: create,
+      first_model: first_model,
+      scratch: scratch
+    } do
+      route(scratch, fn -> insert_task("three", "10", "done") end)
+
+      refused =
+        migration("20260813142237", [
+          %{op: :add_unique, entity: MyApp.Task, fields: [:amount, :status], line: 3}
+        ])
+
+      expected_msg =
+        ~s{found 1 duplicate key in "my_app_task" over ("amount", "status") - } <>
+          "a unique index cannot be built while rows repeat a key - " <>
+          "update the rows or drop the unique declaration"
+
+      assert_refused(scratch, create, first_model, refused, expected_msg)
+    end
+
     # Asked right before the type change applies, against the indexes standing then: the
     # rename later in the file leaves the checks made before any DDL nothing to find the
     # index by.

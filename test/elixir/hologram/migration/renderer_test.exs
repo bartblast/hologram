@@ -255,6 +255,96 @@ defmodule Hologram.Migration.RendererTest do
       assert create_index.concurrently == true
     end
 
+    test "builds a key's index of a table born in the file inside the transaction" do
+      ops = [
+        %{op: :create_entity, entity: MyApp.User, line: 3},
+        %{op: :create_entity, entity: MyApp.Task, line: 4},
+        %{op: :add_attribute, entity: MyApp.Task, name: :slug, type: :string, opts: [], line: 5},
+        %{
+          op: :add_relationship,
+          entity: MyApp.Task,
+          name: :owner,
+          type: MyApp.User,
+          opts: [],
+          line: 6
+        },
+        %{op: :add_unique, entity: MyApp.Task, fields: [:owner, :slug], line: 7}
+      ]
+
+      result = render(ops, Model.empty())
+
+      assert result.tail == []
+
+      assert %{columns: ["owner_id", "slug"], nulls_distinct: true} =
+               Enum.find(
+                 result.transactional,
+                 &(&1.op == :create_index and &1.index == "my_app_task_owner_id_slug_$uidx")
+               )
+
+      assert result.post_model.entities[MyApp.Task].uniques == [[:owner, :slug]]
+    end
+
+    test "builds a key's index of a table that predates the file in the tail" do
+      pre = model(%{MyApp.Task => %{attributes: [{:kind, :string, []}, {:slug, :string, []}]}})
+
+      ops = [%{op: :add_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.transactional == []
+      assert [create_index] = result.tail
+
+      assert create_index.index == "my_app_task_kind_slug_$uidx"
+      assert create_index.columns == ["kind", "slug"]
+      assert create_index.unique == true
+      assert create_index.concurrently == true
+    end
+
+    test "renders a deleted key as its index drop" do
+      pre =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:slug, :string, []}],
+            uniques: [[:kind, :slug]]
+          }
+        })
+
+      ops = [%{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.tail == []
+      assert [%{op: :drop_index, index: "my_app_task_kind_slug_$uidx"}] = result.transactional
+    end
+
+    test "renders a key whose field order changed as its index dropped and built again" do
+      pre =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:slug, :string, []}],
+            uniques: [[:kind, :slug]]
+          }
+        })
+
+      ops = [
+        %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug], line: 3},
+        %{op: :add_unique, entity: MyApp.Task, fields: [:slug, :kind], line: 4}
+      ]
+
+      result = render(ops, pre)
+
+      assert [%{op: :drop_index, index: "my_app_task_kind_slug_$uidx"}] = result.transactional
+
+      assert [
+               %{
+                 op: :create_index,
+                 index: "my_app_task_slug_kind_$uidx",
+                 columns: ["slug", "kind"]
+               }
+             ] =
+               result.tail
+    end
+
     test "builds a unique reference index of a table born in the file inside the transaction" do
       ops = [
         %{op: :create_entity, entity: MyApp.Task, line: 3},
@@ -531,6 +621,142 @@ defmodule Hologram.Migration.RendererTest do
                  to: "my_app_task_creator_id_$uidx"
                }
              ]
+    end
+
+    test "renames a key's index with an attribute it names" do
+      pre =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :integer, []}, {:slug, :integer, []}],
+            uniques: [[:kind, :slug]]
+          }
+        })
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3}]
+
+      result = render(ops, pre)
+
+      assert result.tail == []
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "slug", to: "handle"},
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_kind_slug_$uidx",
+                 to: "my_app_task_kind_handle_$uidx"
+               }
+             ]
+
+      assert result.post_model.entities[MyApp.Task].uniques == [[:kind, :handle]]
+    end
+
+    test "renames a key's index with a to-one relationship it names" do
+      pre =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:slug, :integer, []}],
+            relationships: [{:owner, MyApp.User, []}],
+            uniques: [[:owner, :slug]]
+          },
+          MyApp.User => %{}
+        })
+
+      ops = [
+        %{op: :rename_relationship, entity: MyApp.Task, from: :owner, to: :author, line: 3}
+      ]
+
+      result = render(ops, pre)
+
+      assert Enum.filter(result.transactional, &(&1.op == :rename_index)) == [
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_owner_id_$idx",
+                 to: "my_app_task_author_id_$idx"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_owner_id_slug_$uidx",
+                 to: "my_app_task_author_id_slug_$uidx"
+               }
+             ]
+    end
+
+    test "renames the index of every key naming a renamed attribute" do
+      pre =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :integer, []}, {:size, :integer, []}, {:slug, :integer, []}],
+            uniques: [[:kind, :slug], [:slug, :size]]
+          }
+        })
+
+      ops = [%{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3}]
+
+      result = render(ops, pre)
+
+      assert Enum.filter(result.transactional, &(&1.op == :rename_index)) == [
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_kind_slug_$uidx",
+                 to: "my_app_task_kind_handle_$uidx"
+               },
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_slug_size_$uidx",
+                 to: "my_app_task_handle_size_$uidx"
+               }
+             ]
+    end
+
+    test "renders a field rename followed by a change of the key naming it, in file order" do
+      pre =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :integer, []}, {:size, :integer, []}, {:slug, :integer, []}],
+            uniques: [[:kind, :slug]]
+          }
+        })
+
+      ops = [
+        %{op: :rename_attribute, entity: MyApp.Task, from: :slug, to: :handle, line: 3},
+        %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :handle], line: 4},
+        %{op: :add_unique, entity: MyApp.Task, fields: [:handle, :size], line: 5}
+      ]
+
+      result = render(ops, pre)
+
+      assert result.transactional == [
+               %{op: :rename_column, table: "my_app_task", from: "slug", to: "handle"},
+               %{
+                 op: :rename_index,
+                 from: "my_app_task_kind_slug_$uidx",
+                 to: "my_app_task_kind_handle_$uidx"
+               },
+               %{op: :drop_index, index: "my_app_task_kind_handle_$uidx"}
+             ]
+
+      assert [%{op: :create_index, index: "my_app_task_handle_size_$uidx"}] = result.tail
+      assert result.post_model.entities[MyApp.Task].uniques == [[:handle, :size]]
+    end
+
+    test "renames a key's index with its entity" do
+      pre =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :integer, []}, {:slug, :integer, []}],
+            uniques: [[:kind, :slug]]
+          }
+        })
+
+      ops = [%{op: :rename_entity, from: MyApp.Task, to: MyApp.Chore, line: 3}]
+
+      result = render(ops, pre)
+
+      assert %{
+               op: :rename_index,
+               from: "my_app_task_kind_slug_$uidx",
+               to: "my_app_chore_kind_slug_$uidx"
+             } in result.transactional
     end
 
     test "renames a unique attribute's index with its entity" do

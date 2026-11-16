@@ -251,6 +251,32 @@ defmodule Hologram.MigrationTest do
              }
     end
 
+    test "returns key member ops with the entity type injected" do
+      result =
+        change_entity MyApp.Task do
+          add_unique([:workspace, :slug])
+          delete_unique([:kind, :slug])
+        end
+
+      assert [add_op, delete_op] = result
+
+      assert add_op == %{
+               op: :add_unique,
+               entity: MyApp.Task,
+               fields: [:workspace, :slug],
+               line: add_op.line
+             }
+
+      assert delete_op == %{
+               op: :delete_unique,
+               entity: MyApp.Task,
+               fields: [:kind, :slug],
+               line: delete_op.line
+             }
+
+      assert add_op.line != delete_op.line
+    end
+
     test "returns a one-op list for a single-statement block" do
       result =
         change_entity MyApp.Task do

@@ -64,6 +64,72 @@ defmodule Hologram.Migration.GeneratorTest do
       assert File.read!(path) == expected
     end
 
+    @tag :database
+    test "writes a key after the members it names, in a history that builds its index" do
+      dir = migrations_dir!("writes_key")
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:slug, :string, []}],
+            uniques: [[:slug, :kind]]
+          }
+        })
+
+      assert {:ok, path, 0} = generate(dir, current, @timestamp)
+
+      expected =
+        normalize_newlines("""
+        use Hologram.Migration
+
+        create_entity MyApp.Task do
+          add_attribute :kind, :string
+          add_attribute :slug, :string
+          add_unique [:slug, :kind]
+        end
+        """)
+
+      assert File.read!(path) == expected
+      assert generate(dir, current, @timestamp) == :nothing_to_do
+    end
+
+    @tag :database
+    test "finds nothing to do once a key's field is renamed in the history" do
+      create = """
+      use Hologram.Migration
+
+      create_entity MyApp.Task do
+        add_attribute :kind, :string
+        add_attribute :name, :string
+        add_unique [:kind, :name]
+      end
+      """
+
+      rename = """
+      use Hologram.Migration
+
+      change_entity MyApp.Task do
+        rename_attribute :name, :title
+      end
+      """
+
+      dir =
+        migrations_dir!("key_follows_rename", [
+          {"20260813091522.exs", create},
+          {"20260813101522.exs", rename}
+        ])
+
+      current =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:kind, :string, []}, {:title, :string, []}],
+            uniques: [[:kind, :title]]
+          }
+        })
+
+      assert generate(dir, current, ~U[2026-08-13 11:15:22Z]) == :nothing_to_do
+    end
+
     test "returns the question count of a generated draft" do
       contents = """
       use Hologram.Migration
@@ -425,6 +491,8 @@ defmodule Hologram.Migration.GeneratorTest do
           %{op: :change_role, entity: MyApp.Task, name: :editor, changes: [granted_to: :creator]},
           %{op: :rename_role, entity: MyApp.Task, from: :moderator, to: :maintainer},
           %{op: :delete_role, entity: MyApp.Task, name: :viewer},
+          %{op: :add_unique, entity: MyApp.Task, fields: [:workspace, :slug]},
+          %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug]},
           %{
             op: :add_enum_value,
             entity: MyApp.Task,
@@ -454,6 +522,7 @@ defmodule Hologram.Migration.GeneratorTest do
       use Hologram.Migration
 
       change_entity MyApp.Task do
+        delete_unique [:kind, :slug]
         change_attribute :estimate, default: nil, type: :float
         delete_attribute :legacy
         add_relationship :tags, [MyApp.Tag], optional: true
@@ -464,6 +533,7 @@ defmodule Hologram.Migration.GeneratorTest do
         change_role :editor, granted_to: :creator
         rename_role :moderator, :maintainer
         delete_role :viewer
+        add_unique [:workspace, :slug]
         add_enum_value :status, :doing, after: :todo
         rename_enum_value :status, :done, :completed
         delete_enum_value :status, :draft
@@ -571,6 +641,152 @@ defmodule Hologram.Migration.GeneratorTest do
       assert render(plan) == normalize_newlines(expected)
     end
 
+    test "says what each answer does to the keys withheld with the question" do
+      plan = %{
+        ops: [%{op: :add_unique, entity: MyApp.Task, fields: [:slug, :title]}],
+        questions: [
+          %{
+            kind: :attributes,
+            entity: MyApp.Task,
+            deleted: [:name],
+            added: [:title],
+            hints: [{:rename, :name, :title}],
+            withheld_ops: [
+              %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :name]},
+              %{op: :add_attribute, entity: MyApp.Task, name: :title, type: :string, opts: []},
+              %{op: :delete_attribute, entity: MyApp.Task, name: :name},
+              %{op: :add_unique, entity: MyApp.Task, fields: [:kind, :title]}
+            ]
+          }
+        ]
+      }
+
+      expected = """
+      use Hologram.Migration
+
+      change_entity MyApp.Task do
+        # RESOLVE: :name disappeared from the attributes - :title appeared.
+        # Write the ops that express what happened, then delete the resolve! line. API:
+        #   rename_attribute :old, :new             - the column is renamed, its data kept
+        #   delete_attribute :name                  - the column and its data are dropped
+        #   add_attribute :name, :type, opts        - a new column, empty for existing rows
+        # Looks likely: rename_attribute :name, :title
+        # Key [:kind, :name] names what disappeared - a rename carries it along, a delete needs delete_unique [:kind, :name] first
+        # Key [:kind, :title] names what appeared - the next generated file adds it if the answer leaves it out
+        resolve! :attributes, deleted: [:name], added: [:title]
+        add_unique [:slug, :title]
+      end
+      """
+
+      assert render(plan) == normalize_newlines(expected)
+    end
+
+    test "warns when the ops below a question take a field from a key withheld with it" do
+      plan = %{
+        ops: [
+          %{op: :delete_relationship, entity: MyApp.Task, name: :workspace},
+          %{
+            op: :change_relationship,
+            entity: MyApp.Task,
+            name: :owner,
+            changes: [type: [MyApp.User]]
+          },
+          %{
+            op: :change_relationship,
+            entity: MyApp.Task,
+            name: :team,
+            changes: [type: MyApp.Group]
+          },
+          %{op: :delete_attribute, entity: MyApp.Task, name: :legacy}
+        ],
+        questions: [
+          %{
+            kind: :attributes,
+            entity: MyApp.Task,
+            deleted: [:slug],
+            added: [:handle],
+            hints: [],
+            withheld_ops: [
+              %{
+                op: :delete_unique,
+                entity: MyApp.Task,
+                fields: [:workspace, :owner, :team, :slug]
+              }
+            ]
+          }
+        ]
+      }
+
+      rendered = render(plan)
+
+      assert rendered =~
+               "# Key [:workspace, :owner, :team, :slug] names what disappeared - a rename carries it along, a delete needs delete_unique [:workspace, :owner, :team, :slug] first - the ops below take :workspace, :owner from it, so a rename leaves the key needing a delete_unique of its own\n"
+    end
+
+    # The answer to the fill question brings an attribute under the name the relationship
+    # still holds, and the replay refuses that while a key names it.
+    test "renders the keys that leave above the questions of their block" do
+      plan = %{
+        ops: [
+          %{op: :delete_unique, entity: MyApp.Task, fields: [:owner, :slug]},
+          %{op: :delete_relationship, entity: MyApp.Task, name: :owner},
+          %{op: :add_unique, entity: MyApp.Task, fields: [:owner, :slug]}
+        ],
+        questions: [
+          %{
+            kind: :fill,
+            entity: MyApp.Task,
+            attributes: [:owner],
+            members: [{:owner, :string, []}],
+            withheld_ops: []
+          }
+        ]
+      }
+
+      rendered = render(plan)
+
+      assert [
+               "use Hologram.Migration",
+               "",
+               "change_entity MyApp.Task do",
+               "  delete_unique [:owner, :slug]",
+               "  # RESOLVE: :owner is required" <> _rest | lines
+             ] = String.split(rendered, "\n")
+
+      assert Enum.take(lines, -5) == [
+               "  resolve! :fill, attributes: [:owner]",
+               "  delete_relationship :owner",
+               "  add_unique [:owner, :slug]",
+               "end",
+               ""
+             ]
+
+      answered =
+        String.replace(
+          rendered,
+          "  resolve! :fill, attributes: [:owner]",
+          ~s(  add_attribute :owner, :string, backfill: "x")
+        )
+
+      replayed =
+        model(%{
+          MyApp.Task => %{
+            attributes: [{:slug, :string, []}],
+            relationships: [{:owner, MyApp.User, []}],
+            uniques: [[:owner, :slug]]
+          }
+        })
+
+      ops = Loader.load_string!(answered, "20260813091522.exs")
+
+      assert Model.fold(replayed, ops).entities[MyApp.Task] == %{
+               attributes: [{:owner, :string, []}, {:slug, :string, []}],
+               relationships: [],
+               roles: [],
+               uniques: [[:owner, :slug]]
+             }
+    end
+
     test "renders an entity question at the top level" do
       plan = %{
         ops: [],
@@ -668,6 +884,9 @@ defmodule Hologram.Migration.GeneratorTest do
         %{op: :rename_entity, from: MyApp.Draft, to: MyApp.Sketch},
         %{op: :create_entity, entity: MyApp.Comment},
         %{op: :add_attribute, entity: MyApp.Comment, name: :body, type: :string, opts: []},
+        %{op: :add_attribute, entity: MyApp.Comment, name: :kind, type: :string, opts: []},
+        %{op: :add_unique, entity: MyApp.Comment, fields: [:kind, :body]},
+        %{op: :delete_unique, entity: MyApp.Task, fields: [:kind, :slug]},
         %{
           op: :add_enum_value,
           entity: MyApp.Task,

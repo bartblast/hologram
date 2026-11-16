@@ -226,6 +226,27 @@ defmodule Hologram.Migration.Generator do
     |> Enum.map_join("\n", &"#{@indent}#{&1}")
   end
 
+  # A key naming a member the question asks about is withheld with it, and the two answers
+  # treat it differently - said here, because the replay refuses a delete without its line,
+  # and refuses the ops below when a renamed key still names what they take away.
+  defp key_lines(question, ops) do
+    delete_lines =
+      for %{op: :delete_unique, fields: fields} <- question.withheld_ops do
+        key = inspect(fields)
+
+        "Key #{key} names what disappeared - a rename carries it along, " <>
+          "a delete needs delete_unique #{key} first#{taken_fields_note(fields, ops)}"
+      end
+
+    add_lines =
+      for %{op: :add_unique, fields: fields} <- question.withheld_ops do
+        "Key #{inspect(fields)} names what appeared - the next generated file adds it " <>
+          "if the answer leaves it out"
+      end
+
+    delete_lines ++ add_lines
+  end
+
   defp name_list(names) do
     Enum.map_join(names, ", ", &inspect/1)
   end
@@ -295,6 +316,10 @@ defmodule Hologram.Migration.Generator do
     render_call("add_role", [role], op.opts)
   end
 
+  defp render_op(%{op: :add_unique} = op) do
+    render_call("add_unique", [op.fields], [])
+  end
+
   defp render_op(%{op: :change_attribute} = op) do
     render_call("change_attribute", [op.name], op.changes)
   end
@@ -337,6 +362,10 @@ defmodule Hologram.Migration.Generator do
 
   defp render_op(%{op: :delete_role, role: role}) do
     render_call("delete_role", [role], [])
+  end
+
+  defp render_op(%{op: :delete_unique} = op) do
+    render_call("delete_unique", [op.fields], [])
   end
 
   # The one op with parens: a zero-arity call written bare parses as a variable rather
@@ -407,7 +436,7 @@ defmodule Hologram.Migration.Generator do
   # The draft form: the detected facts, the op API that expresses them, what looks
   # likely - and the resolve! line the human deletes once the ops are written. No
   # resolution is ever emitted as code: the lazy path must not be the destructive one.
-  defp render_question(%{kind: :fill} = question) do
+  defp render_question(%{kind: :fill} = question, _ops) do
     fact_lines = [
       "RESOLVE: #{name_list(question.attributes)} #{plural_verb(question.attributes)} required, " <>
         "and #{inspect(question.entity)} already holds rows - they need a value.",
@@ -422,7 +451,7 @@ defmodule Hologram.Migration.Generator do
     render_comment_block(fact_lines ++ api_lines, question)
   end
 
-  defp render_question(%{kind: :user_entity} = question) do
+  defp render_question(%{kind: :user_entity} = question, _ops) do
     fact_lines = [
       "RESOLVE: #{designation_summary(question)} - role grants reference " <>
         "#{inspect(question.from)} rows, so they cannot follow it.",
@@ -437,7 +466,7 @@ defmodule Hologram.Migration.Generator do
     render_comment_block(fact_lines ++ api_lines, question)
   end
 
-  defp render_question(question) do
+  defp render_question(question, ops) do
     fact_lines = [
       "RESOLVE: #{name_list(question.deleted)} disappeared from #{subject(question)} - " <>
         "#{name_list(question.added)} appeared.",
@@ -451,7 +480,10 @@ defmodule Hologram.Migration.Generator do
 
     hint_lines = Enum.map(question.hints, &"Looks likely: #{render_hint(&1, question)}")
 
-    render_comment_block(fact_lines ++ api_lines ++ hint_lines, question)
+    render_comment_block(
+      fact_lines ++ api_lines ++ hint_lines ++ key_lines(question, ops),
+      question
+    )
   end
 
   defp render_comment_block(lines, question) do
@@ -485,21 +517,25 @@ defmodule Hologram.Migration.Generator do
 
   # An entity block whose ops include the creation renders as create_entity - the
   # creation itself is the header, never a member line. Questions come first inside the
-  # block, so what needs a human is what a reader meets.
+  # block, so what needs a human is what a reader meets - after the keys that leave, though:
+  # an answer is written where its question sits, and one that brings a member under a name
+  # a leaving key still holds would be refused with the key's delete two lines below it.
   defp render_section({:block, entity_type, ops, questions}) do
     {creations, member_ops} = Enum.split_with(ops, &(&1.op == :create_entity))
+    {key_deletes, later_ops} = Enum.split_with(member_ops, &(&1.op == :delete_unique))
     verb = if creations == [], do: "change_entity", else: "create_entity"
 
-    question_lines = Enum.map(questions, &indent(render_question(&1)))
-    op_lines = Enum.map(member_ops, &"#{@indent}#{render_op(&1)}")
-    body = Enum.join(question_lines ++ op_lines, "\n")
+    key_delete_lines = Enum.map(key_deletes, &"#{@indent}#{render_op(&1)}")
+    question_lines = Enum.map(questions, &indent(render_question(&1, later_ops)))
+    op_lines = Enum.map(later_ops, &"#{@indent}#{render_op(&1)}")
+    body = Enum.join(key_delete_lines ++ question_lines ++ op_lines, "\n")
 
     "#{verb} #{inspect(entity_type)} do\n#{body}\nend"
   end
 
   defp render_section({:flat, op}), do: render_op(op)
 
-  defp render_section({:question, question}), do: render_question(question)
+  defp render_section({:question, question}), do: render_question(question, [])
 
   defp rename_verb(:attributes), do: "rename_attribute"
 
@@ -520,6 +556,27 @@ defmodule Hologram.Migration.Generator do
   defp subject(%{kind: :relationships}), do: "the relationships"
 
   defp subject(%{kind: :roles}), do: "the roles"
+
+  # The fields of a key that the ops written below the question delete, or turn into a
+  # to-many: a rename keeps the key, respelled, and those ops then pull a field from under it.
+  defp taken_fields_note(fields, ops) do
+    taken =
+      for %{name: name} = op <- ops, name in fields, takes_key_field?(op), uniq: true, do: name
+
+    if taken == [] do
+      ""
+    else
+      " - the ops below take #{name_list(taken)} from it, so a rename leaves the key " <>
+        "needing a delete_unique of its own"
+    end
+  end
+
+  defp takes_key_field?(%{op: op}) when op in [:delete_attribute, :delete_relationship], do: true
+
+  defp takes_key_field?(%{op: :change_relationship, changes: changes}),
+    do: is_list(Keyword.get(changes, :type))
+
+  defp takes_key_field?(_op), do: false
 
   defp verify_finalized(:nothing_to_do, dir, current_model) do
     migrations = Loader.load_dir!(dir)
