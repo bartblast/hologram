@@ -989,6 +989,35 @@ defmodule Hologram.Template.RendererDerivedTest do
       assert context_user.email == "renderer_5@example.com"
     end
 
+    test "carries the session user's row with the page" do
+      user =
+        %{email: "renderer_6@example.com", password_hash: "hash_4kWq"}
+        |> Module14.new()
+        |> DB.create!()
+
+      %{mount_data: mount_data} =
+        render_page(Module131, %{}, %Server{user_id: user.id}, @page_opts)
+
+      assert [row] = mount_data.sync_rows.put_entity[inspect(Module14)]
+      assert row.id == user.id
+      assert row.email == "renderer_6@example.com"
+      refute Map.has_key?(row, :password_hash)
+    end
+
+    test "carries no user row for an anonymous session" do
+      %{mount_data: mount_data} = render_page(Module131, %{}, %Server{}, @page_opts)
+
+      assert mount_data.sync_rows == %{}
+    end
+
+    test "carries no user row when no row carries the session user id" do
+      server = %Server{user_id: Entity.generate_id()}
+
+      %{mount_data: mount_data} = render_page(Module131, %{}, server, @page_opts)
+
+      assert mount_data.sync_rows == %{}
+    end
+
     test "exposes nil for an anonymous session" do
       html = render_page_html(Module131)
 
@@ -1005,6 +1034,18 @@ defmodule Hologram.Template.RendererDerivedTest do
 
     test "exposes nil for a session user id that is not a canonical entity id" do
       html = render_page_html(Module131, %Server{user_id: 7})
+
+      assert String.contains?(html, "current user = none")
+    end
+
+    # The validator's pattern takes the newline the uuid encoder refuses.
+    test "exposes nil for a session user's id followed by a newline" do
+      user =
+        %{email: "newline@example.com"}
+        |> Module14.new()
+        |> DB.create!()
+
+      html = render_page_html(Module131, %Server{user_id: user.id <> "\n"})
 
       assert String.contains?(html, "current user = none")
     end

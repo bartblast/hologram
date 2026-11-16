@@ -242,7 +242,6 @@ describe("Renderer derived fields", () => {
     ComponentRegistry.clear();
     Model.reset();
     LocalDatabase.reset();
-    LocalDatabase.actorUserId = null;
     GlobalRegistry.set("connectPageModule", null);
     SyncStream.rowsChangedSinceRender = false;
 
@@ -889,34 +888,6 @@ describe("Renderer derived fields", () => {
       assert.deepStrictEqual(renderedVar("row"), Type.nil());
     });
 
-    it("binds the actor leaf to the acting user", () => {
-      LocalDatabase.actorUserId = "r1";
-
-      defineComponent("MyApp.DerivedActorBound", {
-        queries: ["rows"],
-        derived: [
-          derivedEntry("rows", Type.list([Type.alias(ROW)]), [], () =>
-            filter(
-              Type.alias(ROW),
-              Type.list([
-                Type.tuple([
-                  Type.atom("id"),
-                  Type.tuple([
-                    Type.atom("=="),
-                    Type.tuple([Type.atom("actor")]),
-                  ]),
-                ]),
-              ]),
-            ),
-          ),
-        ],
-      });
-
-      render(componentNode("MyApp.DerivedActorBound"));
-
-      assert.deepStrictEqual(names(renderedVar("rows")), ["banana"]);
-    });
-
     // A count has no rows behind it, so carried rows cannot re-derive one - the number the render
     // answered with is held until this client can count for itself.
     describe("a count the page carried", () => {
@@ -1507,6 +1478,173 @@ describe("Renderer derived fields", () => {
           "derived",
         ),
         Type.map([[Type.atom("label"), Type.bitstring("ada!")]]),
+      );
+    });
+  });
+
+  // The client answers the context from its own database on every render, the way it answers a
+  // derived field holding a query.
+  describe("the session user context", () => {
+    const USER = "MyApp.User";
+    const PAGE_CID = Type.bitstring("page");
+    const userKey = Type.tuple([Type.alias("Hologram"), Type.atom("user")]);
+
+    const serverUser = Type.struct(USER, [
+      [Type.atom("email"), Type.bitstring("server@example.com")],
+    ]);
+
+    const putUserRow = (email) =>
+      LocalDatabase.putRow(USER, {email, email$sort: email, id: "u1"});
+
+    const renderedUserEmail = () =>
+      fieldOf(
+        fieldOf(renderedVarsByModule["MyApp.UserLayout"], "current_user"),
+        "email",
+      );
+
+    const renderUserPage = () =>
+      Renderer.renderPage(Type.alias("MyApp.UserPage"), Type.map());
+
+    beforeEach(() => {
+      globalThis.Hologram.sync.model[USER] = {
+        attributes: {email: "string", id: "uuid"},
+        relationships: {},
+        serverOnly: [],
+      };
+
+      globalThis.Hologram.sync.userEntity = USER;
+      LocalDatabase.actorUserId = "u1";
+      putUserRow("ann@example.com");
+
+      defineComponent("MyApp.UserPage", {});
+
+      defineFunction("MyApp.UserPage", "__layout_module__", 0, () =>
+        Type.alias("MyApp.UserLayout"),
+      );
+
+      defineFunction("MyApp.UserPage", "__layout_props__", 0, () =>
+        Type.list(),
+      );
+
+      defineFunction("MyApp.UserPage", "__params__", 0, () => Type.list());
+
+      defineComponent("MyApp.UserLayout", {
+        props: [
+          declaration("current_user", [[Type.atom("from_context"), userKey]]),
+        ],
+      });
+
+      ComponentRegistry.putEntry(
+        PAGE_CID,
+        Type.map([
+          [Type.atom("module"), Type.alias("MyApp.UserPage")],
+          [
+            Type.atom("struct"),
+            Type.componentStruct({
+              emittedContext: Type.map([
+                [userKey, serverUser],
+                [Type.atom("theme"), Type.bitstring("dark")],
+              ]),
+            }),
+          ],
+        ]),
+      );
+    });
+
+    it("hands a from_context prop the session user's row as the database holds it", () => {
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        renderedUserEmail(),
+        Type.bitstring("ann@example.com"),
+      );
+    });
+
+    it("hands it the row as it stands at each render", () => {
+      renderUserPage();
+      putUserRow("ann@example.org");
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        renderedUserEmail(),
+        Type.bitstring("ann@example.org"),
+      );
+    });
+
+    it("holds the answer in the page's emitted context", () => {
+      renderUserPage();
+
+      const user = Erlang_Maps["get/2"](
+        userKey,
+        fieldOf(
+          ComponentRegistry.getComponentStruct(PAGE_CID),
+          "emitted_context",
+        ),
+      );
+
+      assert.deepStrictEqual(
+        fieldOf(user, "email"),
+        Type.bitstring("ann@example.com"),
+      );
+    });
+
+    it("leaves the page's other context values alone", () => {
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](
+          Type.atom("theme"),
+          fieldOf(
+            ComponentRegistry.getComponentStruct(PAGE_CID),
+            "emitted_context",
+          ),
+        ),
+        Type.bitstring("dark"),
+      );
+    });
+
+    // The server's value is the row as the page was rendered, and the database says it is gone.
+    it("hands nil when the database holds no row of the session user", () => {
+      LocalDatabase.actorUserId = "u2";
+
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        fieldOf(renderedVarsByModule["MyApp.UserLayout"], "current_user"),
+        Type.nil(),
+      );
+    });
+
+    it("hands nil for an anonymous session", () => {
+      LocalDatabase.actorUserId = null;
+
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        fieldOf(renderedVarsByModule["MyApp.UserLayout"], "current_user"),
+        Type.nil(),
+      );
+    });
+
+    it("keeps the server's value when the build's model holds no user entity type", () => {
+      globalThis.Hologram.sync.userEntity = null;
+
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        renderedUserEmail(),
+        Type.bitstring("server@example.com"),
+      );
+    });
+
+    it("keeps the server's value in a build with no data layer", () => {
+      Hologram.dataLayer = null;
+
+      renderUserPage();
+
+      assert.deepStrictEqual(
+        renderedUserEmail(),
+        Type.bitstring("server@example.com"),
       );
     });
   });

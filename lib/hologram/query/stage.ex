@@ -141,6 +141,11 @@ defmodule Hologram.Query.Stage do
   # term with a source, whose owning type it names. The triple stores it as an attribute of the row
   # one level out of the term - {:attribute, {:outer, levels, name}}, as many levels as the clause
   # is nested under quantifiers, plus one - and it is judged as any attribute of another row is.
+  #
+  # The {:actor} leaf user_id() lowers to is refused anywhere in a filter, however it got there: a
+  # filter means the same rows whoever asks, and the read policy is what narrows them to each user.
+  # A policy condition names it through predicate_triples!/2 instead. A derived field's query can't
+  # pin the acting user's id either, so its refusal says why its value can't depend on them.
   @doc false
   @spec filter(module | Query.t(), Query.predicates()) :: Query.t()
   def filter(query, predicates) do
@@ -150,6 +155,20 @@ defmodule Hologram.Query.Stage do
       raise MisuseError,
         message:
           "filter predicates must be a list of name and value pairs - a name being an attribute or a path - got: #{inspect(predicates)}"
+    end
+
+    if term.source == nil do
+      refuse_actor!(
+        predicates,
+        "a filter",
+        "to filter by a user's id, pin a variable holding it: ^user_id"
+      )
+    else
+      refuse_actor!(
+        predicates,
+        "a derived field's query",
+        "a derived value is the same whoever reads it"
+      )
     end
 
     if term.source == nil and row_field?(predicates) do
@@ -350,6 +369,10 @@ defmodule Hologram.Query.Stage do
     end)
   end
 
+  # Returns the clauses the given data-form predicates build for a row of the given type - what a
+  # policy condition and a derived field's condition are built with. Unlike a filter it takes the
+  # actor leaf, which a policy condition names the acting user with, so a caller that must not
+  # refuses it with refuse_actor!/3 first.
   @doc false
   @spec predicate_triples!(module, Query.predicates()) :: list(Query.clause())
   def predicate_triples!(entity_type, predicates), do: scoped_triples!([entity_type], predicates)
@@ -393,6 +416,23 @@ defmodule Hologram.Query.Stage do
   @spec put_attribute(Entity.t(), atom, any) :: Entity.t()
   def put_attribute(entity, name, value) do
     put_attribute(entity, [{name, value}])
+  end
+
+  # Raises when the given data-form predicates hold the actor leaf user_id() lowers to anywhere. The
+  # acting user is a value only a policy condition names: a filter, a derived field's query and a
+  # derived field's condition mean the same rows whoever asks, so the given subject says which of
+  # them refuses it, and the given fix what to write instead. It runs before the triples are built,
+  # so the reason comes first, before any check of what the leaf is compared with.
+  @doc false
+  @spec refuse_actor!(Query.predicates(), String.t(), String.t()) :: :ok
+  def refuse_actor!(predicates, subject, fix) do
+    if actor_value?(predicates) do
+      raise MisuseError,
+        message:
+          "#{subject} can't name the acting user - only a policy condition can, got: #{inspect(predicates)} - #{fix}"
+    end
+
+    :ok
   end
 
   # Returns every chain of relationships the given filter clauses follow from the queried row, each
@@ -521,6 +561,21 @@ defmodule Hologram.Query.Stage do
         []
     end)
   end
+
+  # Whether data-form predicates hold the actor leaf anywhere - as a value, an operand, a
+  # membership element, inside a disjunction or a quantifier's condition. No attribute value is a
+  # one-element tuple, so the leaf can't be anything else.
+  defp actor_value?({:actor}), do: true
+
+  defp actor_value?(list) when is_list(list), do: Enum.any?(list, &actor_value?/1)
+
+  defp actor_value?(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> actor_value?()
+  end
+
+  defp actor_value?(_value), do: false
 
   # A path is defined where it ends, so its last name is looked up on the type its relationships
   # lead to.
@@ -713,19 +768,17 @@ defmodule Hologram.Query.Stage do
     {:or, Enum.map(alternatives, &scoped_triples!(scope, &1))}
   end
 
-  # A stage on an entity struct: the struct's type, or a refusal naming the stage.
-  defp entity_type!(%{__struct__: entity_type}, stage) do
+  # A stage on an entity struct: the struct's type, or a refusal naming the stage and printing what
+  # it was handed - a query term passed where its rows belong prints as the term.
+  defp entity_type!(%{__struct__: entity_type} = subject, stage) do
     if Reflection.entity?(entity_type) do
       entity_type
     else
-      raise MisuseError,
-        message: "#{stage} takes an entity struct, got: #{inspect(%{__struct__: entity_type})}"
+      raise_not_entity_struct!(subject, stage)
     end
   end
 
-  defp entity_type!(subject, stage) do
-    raise MisuseError, message: "#{stage} takes an entity struct, got: #{inspect(subject)}"
-  end
+  defp entity_type!(subject, stage), do: raise_not_entity_struct!(subject, stage)
 
   defp enum_values(entity_type, name) do
     {_name, :enum, opts} = attribute_definition(entity_type, name)
@@ -1334,6 +1387,11 @@ defmodule Hologram.Query.Stage do
   end
 
   defp quantifier_value?(_value), do: false
+
+  @spec raise_not_entity_struct!(any, String.t()) :: no_return
+  defp raise_not_entity_struct!(subject, stage) do
+    raise MisuseError, message: "#{stage} takes an entity struct, got: #{inspect(subject)}"
+  end
 
   @spec raise_unknown_included_name!(atom, module) :: no_return
   defp raise_unknown_included_name!(name, entity_type) do

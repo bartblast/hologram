@@ -124,7 +124,23 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_policy_module6",
                "test_fixtures_policy_module7",
                "test_fixtures_policy_module8",
-               "test_fixtures_policy_module9"
+               "test_fixtures_policy_module9",
+               "test_fixtures_policy_readers_module1",
+               "test_fixtures_policy_readers_module10",
+               "test_fixtures_policy_readers_module11",
+               "test_fixtures_policy_readers_module12",
+               "test_fixtures_policy_readers_module12_lists_$join",
+               "test_fixtures_policy_readers_module13",
+               "test_fixtures_policy_readers_module13_lists_$join",
+               "test_fixtures_policy_readers_module14",
+               "test_fixtures_policy_readers_module2",
+               "test_fixtures_policy_readers_module3",
+               "test_fixtures_policy_readers_module4",
+               "test_fixtures_policy_readers_module5",
+               "test_fixtures_policy_readers_module6",
+               "test_fixtures_policy_readers_module7",
+               "test_fixtures_policy_readers_module8",
+               "test_fixtures_policy_readers_module9"
              ]
     end
 
@@ -271,6 +287,118 @@ defmodule Hologram.DB.IntrospectionTest do
              }
     end
 
+    # One table, one index per case: the definition carries :non_plain only when the index
+    # differs from the plain btree over whole columns every derived index is.
+    defp index_definition(index_clause) do
+      create_statement = ~s{CREATE TABLE "hologram_data"."shaped" ("a" text, "b" int8)}
+      {:ok, _result} = Connection.query(create_statement)
+
+      {:ok, _result} =
+        Connection.query(~s{CREATE #{index_clause}})
+
+      schema().tables["shaped"].indexes["shaped_$idx"]
+    end
+
+    test "marks no reason on a plain index, nulls not distinct included" do
+      definition =
+        index_definition(
+          ~s{UNIQUE INDEX "shaped_$idx" ON "hologram_data"."shaped" ("a", "b") NULLS NOT DISTINCT}
+        )
+
+      assert definition == %{columns: ["a", "b"], nulls_distinct: false, unique: true}
+    end
+
+    test "marks an index with a predicate" do
+      definition =
+        index_definition(~s{INDEX "shaped_$idx" ON "hologram_data"."shaped" ("a") WHERE "b" > 0})
+
+      assert definition.non_plain == [:predicate]
+    end
+
+    test "marks an index over an expression" do
+      definition =
+        index_definition(~s{INDEX "shaped_$idx" ON "hologram_data"."shaped" (lower("a"), "b")})
+
+      assert definition.non_plain == [:expression]
+    end
+
+    test "marks an index with INCLUDE columns" do
+      definition =
+        index_definition(~s{INDEX "shaped_$idx" ON "hologram_data"."shaped" ("a") INCLUDE ("b")})
+
+      assert definition.non_plain == [:include]
+    end
+
+    test "marks an index built with another access method" do
+      definition =
+        index_definition(~s{INDEX "shaped_$idx" ON "hologram_data"."shaped" USING hash ("a")})
+
+      assert definition.non_plain == [:method]
+    end
+
+    test "marks an index with a non-default sort order" do
+      definition =
+        index_definition(~s{INDEX "shaped_$idx" ON "hologram_data"."shaped" ("b" DESC)})
+
+      assert definition.non_plain == [:sort_order]
+    end
+
+    test "marks an index with a non-default operator class" do
+      definition =
+        index_definition(
+          ~s{INDEX "shaped_$idx" ON "hologram_data"."shaped" ("a" text_pattern_ops)}
+        )
+
+      assert definition.non_plain == [:operator_class]
+    end
+
+    test "marks an index with a collation other than its column's" do
+      definition =
+        index_definition(~s{INDEX "shaped_$idx" ON "hologram_data"."shaped" ("a" COLLATE "C")})
+
+      assert definition.non_plain == [:collation]
+    end
+
+    test "marks an index an owning constraint backs" do
+      create_statement = ~s{CREATE TABLE "hologram_data"."shaped" ("a" text, "b" int8)}
+
+      constraint_statement =
+        ~s{ALTER TABLE "hologram_data"."shaped" ADD CONSTRAINT "shaped_$idx" UNIQUE ("a")}
+
+      {:ok, _result} = Connection.query(create_statement)
+      {:ok, _result} = Connection.query(constraint_statement)
+
+      assert schema().tables["shaped"].indexes["shaped_$idx"].non_plain == [:constraint]
+    end
+
+    test "marks no reason on a unique index a foreign key references" do
+      index_definition(~s{UNIQUE INDEX "shaped_$idx" ON "hologram_data"."shaped" ("b")})
+
+      {:ok, _result} =
+        Connection.query("""
+        CREATE TABLE "hologram_data"."referencing" (
+          "b" int8 REFERENCES "hologram_data"."shaped" ("b")
+        )
+        """)
+
+      {:ok, _result} =
+        Connection.query("""
+        ALTER TABLE "hologram_data"."shaped"
+          ADD COLUMN "c" int8 REFERENCES "hologram_data"."shaped" ("b")
+        """)
+
+      refute Map.has_key?(schema().tables["shaped"].indexes["shaped_$idx"], :non_plain)
+    end
+
+    test "lists every reason an index has, sorted" do
+      definition =
+        index_definition(
+          ~s{INDEX "shaped_$idx" ON "hologram_data"."shaped" ("b" DESC) WHERE "b" > 0}
+        )
+
+      assert definition.non_plain == [:predicate, :sort_order]
+    end
+
     test "excludes primary-key-backing indexes" do
       create_statement = """
       CREATE TABLE "hologram_data"."pk_indexed" (
@@ -286,7 +414,7 @@ defmodule Hologram.DB.IntrospectionTest do
 
     test "introspects the fixture join table reverse index" do
       assert schema().tables["test_fixtures_entity_module3_a_$join"].indexes == %{
-               "test_fixtures_entity_module3_a_$join_target_id_$idx" => %{
+               "test_fixtures_entity_module3_a_$join_target_id_source_id_$idx" => %{
                  columns: ["target_id", "source_id"],
                  nulls_distinct: true,
                  unique: false
@@ -301,11 +429,23 @@ defmodule Hologram.DB.IntrospectionTest do
       assert foreign_keys["granted_by_id"].on_delete == :no_action
     end
 
-    test "introspects the role grant unique index comparing nulls as values" do
-      assert schema().tables["hologram_role_grant"].indexes["hologram_role_grant_$uidx"] == %{
+    test "introspects the role grant store's unique index comparing nulls as values" do
+      assert schema().tables["hologram_role_grant"].indexes[
+               "hologram_role_grant_user_id_entity_type_entity_id_role_$uidx"
+             ] == %{
                columns: ["user_id", "entity_type", "entity_id", "role"],
                nulls_distinct: false,
                unique: true
+             }
+    end
+
+    test "introspects the role grant store's entity index" do
+      assert schema().tables["hologram_role_grant"].indexes[
+               "hologram_role_grant_entity_type_entity_id_role_$idx"
+             ] == %{
+               columns: ["entity_type", "entity_id", "role"],
+               nulls_distinct: true,
+               unique: false
              }
     end
 
@@ -427,7 +567,21 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Policy.Module6",
                  "Hologram.Test.Fixtures.Policy.Module7",
                  "Hologram.Test.Fixtures.Policy.Module8",
-                 "Hologram.Test.Fixtures.Policy.Module9"
+                 "Hologram.Test.Fixtures.Policy.Module9",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module1",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module10",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module11",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module12",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module13",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module14",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module2",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module3",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module4",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module5",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module6",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module7",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module8",
+                 "Hologram.Test.Fixtures.Policy.Readers.Module9"
                ],
                "hologram_role_grant_role_$enum" => [
                  "Hologram.Test.Fixtures.Role.Module1",

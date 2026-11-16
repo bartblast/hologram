@@ -17,6 +17,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Policy
   alias Hologram.Query
   alias Hologram.Query.Stage
+  alias Hologram.Query.Window
   alias Hologram.Sync.Carry
   alias Hologram.Test.Fixtures.Entity.Module14
   alias Hologram.Test.Fixtures.Policy.Module1
@@ -36,6 +37,7 @@ defmodule Hologram.AuthTest do
   alias Hologram.Test.Fixtures.Policy.Module4
   alias Hologram.Test.Fixtures.Policy.Module5
   alias Hologram.Test.Fixtures.Policy.Module8
+  alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
   alias Hologram.Test.Fixtures.Role
 
   defp create_user(email) do
@@ -268,18 +270,51 @@ defmodule Hologram.AuthTest do
     end
 
     test "denies an operation when no rule matches" do
-      refute can?("user_id_1", :read, %Module1{public: false})
+      refute can?("018f4571-a1b2-7c3d-8e4f-000000000001", :read, %Module1{public: false})
     end
 
     test "denies a framework operation the entity type declares no rule for" do
-      refute can?("user_id_1", :create, %Module1{public: true})
+      refute can?("018f4571-a1b2-7c3d-8e4f-000000000001", :create, %Module1{public: true})
     end
 
     test "matches a rule referencing the acting user" do
-      entity = %Module1{author_id: "user_id_2"}
+      entity = %Module1{author_id: "018f4571-a1b2-7c3d-8e4f-000000000002"}
 
-      assert can?("user_id_2", :archive, entity)
-      refute can?("user_id_3", :archive, entity)
+      assert can?("018f4571-a1b2-7c3d-8e4f-000000000002", :archive, entity)
+      refute can?("018f4571-a1b2-7c3d-8e4f-000000000003", :archive, entity)
+    end
+
+    # A session's user id may be any string, integer or atom, and one that names no user entity is
+    # anonymous to the rules - as somebody holding nothing, an inequality on the acting user would
+    # grant it every row it doesn't own. The browser answers the same ids the same way, in
+    # describe "a user id in a spelling Hologram doesn't generate" of
+    # test/javascript/elixir/hologram/auth_test.mjs. Always update both together.
+    test "answers a user id in a spelling Hologram doesn't generate as an anonymous session" do
+      unowned = %ReadersModule5{owner_id: nil}
+
+      for user_id <- [
+            "018F4571-A1B2-7C3D-8E4F-000000000001",
+            "018f4571a1b27c3d8e4f000000000001",
+            "018f4571-a1b2-7c3d-8e4f-000000000001\n",
+            "user_id_1",
+            7,
+            false,
+            :admin
+          ] do
+        assert can?("018f4571-a1b2-7c3d-8e4f-000000000001", :read, unowned)
+        refute can?(user_id, :read, unowned)
+        assert can?(user_id, :read, %Module1{public: true})
+      end
+    end
+
+    test "answers a user struct whose id Hologram doesn't generate as an anonymous session" do
+      user = %Module14{id: "018F4571-A1B2-7C3D-8E4F-000000000001"}
+
+      refute can?(user, :read, %ReadersModule5{owner_id: nil})
+    end
+
+    test "answers a user struct with no id as an anonymous session" do
+      refute can?(%Module14{id: nil}, :read, %ReadersModule5{owner_id: nil})
     end
 
     test "grants a condition on a path" do
@@ -554,7 +589,9 @@ defmodule Hologram.AuthTest do
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("user_id_1", {:grant_role, "viewer"}, %Module1{public: true})
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, "viewer"}, %Module1{
+          public: true
+        })
       end
     end
 
@@ -563,7 +600,9 @@ defmodule Hologram.AuthTest do
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("user_id_1", {:grant_role, :editor, :extra}, %Module1{public: true})
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, :editor, :extra}, %Module1{
+          public: true
+        })
       end
     end
 
@@ -572,7 +611,7 @@ defmodule Hologram.AuthTest do
         "can? takes an operation atom or a {:grant_role, role} / {:revoke_role, role} tuple"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("user_id_1", "read", %Module1{public: true})
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", "read", %Module1{public: true})
       end
     end
 
@@ -581,7 +620,7 @@ defmodule Hologram.AuthTest do
         "unknown operation :transfer for Hologram.Test.Fixtures.Policy.Module1 - its allow lines declare :archive and :publish, and the framework's own operations are :create, :delete, :grant_role, :read, :read_roles, :revoke_role and :update"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("user_id_1", :transfer, %Module1{public: true})
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", :transfer, %Module1{public: true})
       end
     end
 
@@ -590,7 +629,7 @@ defmodule Hologram.AuthTest do
         "unknown operation {:publish, :editor} for Hologram.Test.Fixtures.Policy.Module1 - the operation tuples are {:grant_role, role} and {:revoke_role, role}"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("user_id_1", {:publish, :editor}, %Module1{public: true})
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:publish, :editor}, %Module1{public: true})
       end
     end
 
@@ -599,7 +638,7 @@ defmodule Hologram.AuthTest do
         "unknown role :editr in {:grant_role, :editr} for Hologram.Test.Fixtures.Policy.Module1 - declared roles are: :editor, :maintainer, :owner, :viewer"
 
       assert_error MisuseError, expected_msg, fn ->
-        can?("user_id_1", {:grant_role, :editr}, %Module1{public: true})
+        can?("018f4571-a1b2-7c3d-8e4f-000000000001", {:grant_role, :editr}, %Module1{public: true})
       end
     end
   end
@@ -693,7 +732,39 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  describe "canonical_id/1" do
+    test "returns an id in the spelling Hologram generates" do
+      id = Entity.generate_id()
+
+      assert canonical_id(id) == id
+    end
+
+    test "returns nil for any other value" do
+      id = Entity.generate_id()
+
+      for value <- [String.upcase(id), String.replace(id, "-", ""), id <> "\n", "", 7, false, nil] do
+        assert canonical_id(value) == nil
+      end
+    end
+  end
+
   describe "can?/4" do
+    test "answers a user id in a spelling Hologram doesn't generate as an anonymous session" do
+      user = create_user("user_168@example.com")
+      entity = %Module1{id: Entity.generate_id()}
+
+      grant = %RoleGrant{
+        user_id: user.id,
+        entity_type: Module1,
+        entity_id: entity.id,
+        role: :viewer
+      }
+
+      assert can?(user.id, :read, entity, [grant])
+      refute can?(String.upcase(user.id), :read, entity, [grant])
+      refute can?(7, :read, %ReadersModule5{owner_id: nil}, [])
+    end
+
     test "answers from the given grants rather than the stored ones" do
       user = create_user("user_60@example.com")
       entity = %Module1{id: Entity.generate_id()}
@@ -1439,6 +1510,23 @@ defmodule Hologram.AuthTest do
       assert_error MisuseError, expected_msg, fn -> grant_role("nope", Role.Module1) end
     end
 
+    test "raises on a map with no id as the user it is" do
+      expected_msg =
+        "invalid user id %{} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+
+      assert_error MisuseError, expected_msg, fn -> grant_role(%{}, Role.Module1) end
+    end
+
+    test "raises on a canonical id followed by a newline" do
+      user = create_user("user_167@example.com")
+      user_id = user.id <> "\n"
+
+      expected_msg =
+        "invalid user id #{inspect(user_id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+
+      assert_error MisuseError, expected_msg, fn -> grant_role(user_id, Role.Module1) end
+    end
+
     test "raises on a user that does not exist" do
       user_id = Entity.generate_id()
 
@@ -1992,6 +2080,15 @@ defmodule Hologram.AuthTest do
       refute has_role?("not-an-id", Role.Module1)
     end
 
+    # The validator's pattern takes the newline the uuid encoder refuses.
+    test "answers false for a canonical id followed by a newline" do
+      user = create_user("user_166@example.com")
+
+      grant_role(user, Role.Module1)
+
+      refute has_role?(user.id <> "\n", Role.Module1)
+    end
+
     # A check inside a render is recorded, so the rows answering it travel with the page.
     test "records the question for the render that asked it" do
       user = create_user("user_131@example.com")
@@ -2100,6 +2197,15 @@ defmodule Hologram.AuthTest do
       resource = create_resource()
 
       refute has_role?("not-an-id", :editor, resource)
+    end
+
+    test "answers false for a canonical id followed by a newline" do
+      user = create_user("user_169@example.com")
+      resource = create_resource()
+
+      grant_role(user, :editor, resource)
+
+      refute has_role?(user.id <> "\n", :editor, resource)
     end
 
     test "matches the type-wide grant alone on a struct with no id" do
@@ -2234,6 +2340,17 @@ defmodule Hologram.AuthTest do
   end
 
   describe "revoke_role/3" do
+    test "raises on a canonical id followed by a newline" do
+      user = create_user("user_170@example.com")
+      resource = create_resource()
+      user_id = user.id <> "\n"
+
+      expected_msg =
+        "invalid user id #{inspect(user_id)} - entity ids are canonical lowercase 8-4-4-4-12 UUID strings"
+
+      assert_error MisuseError, expected_msg, fn -> revoke_role(user_id, :owner, resource) end
+    end
+
     test "removes an instance grant" do
       user = create_user("user_28@example.com")
       resource = create_resource()
@@ -2472,6 +2589,25 @@ defmodule Hologram.AuthTest do
     end
   end
 
+  describe "user_window/2" do
+    test "downloads every row of the given user entity type" do
+      assert user_window(Module14, false) == %Query{entity: Module14}
+    end
+
+    # The user fixture's rule reads no relationship, so a type whose rule delegates through one
+    # stands in for a user type that does.
+    test "embeds the rows the type's rules read when a client checks permissions" do
+      checking_window = user_window(Module8, true)
+
+      assert checking_window ==
+               Module8
+               |> Stage.normalize()
+               |> Window.derive(true)
+
+      assert checking_window != user_window(Module8, false)
+    end
+  end
+
   # A row not created yet has nothing in any set of its, so its verdicts are answered without a
   # read - the sets of a row as stored are read through the same checker can?/3 uses.
   describe "verdicts/2" do
@@ -2493,6 +2629,14 @@ defmodule Hologram.AuthTest do
       relationship :board, VerdictBoard, optional: true
 
       allow :read
+    end
+
+    defmodule VerdictReport do
+      use Hologram.Entity
+
+      attribute :reviewed, :boolean, server_only: true
+
+      allow :read, when: reviewed == true
     end
 
     defp verdict_key(operation, clause), do: Policy.verdict_key(VerdictBoard, operation, clause)
@@ -2518,6 +2662,22 @@ defmodule Hologram.AuthTest do
                archive_key() => false,
                delete_key() => true
              }
+    end
+
+    test "answers a user id in a spelling Hologram doesn't generate as a visitor's" do
+      user_id = Entity.generate_id()
+
+      for other_spelling <- [String.upcase(user_id), 7, false] do
+        assert verdicts(other_spelling, %VerdictBoard{}) == verdicts(nil, %VerdictBoard{})
+      end
+    end
+
+    # The row as stored holds the value no client is sent.
+    test "answers a predicate on a server-only attribute over the row's value" do
+      key = Policy.verdict_key(VerdictReport, :read, {:reviewed, :==, true})
+
+      assert verdicts(nil, %VerdictReport{reviewed: true}) == %{key => true}
+      assert verdicts(nil, %VerdictReport{reviewed: false}) == %{key => false}
     end
 
     test "answers nothing for a type with no deciding quantifier" do

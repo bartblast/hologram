@@ -897,6 +897,16 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
+    it("prints a query term passed where an entity struct goes", () => {
+      const term = take(task, Type.integer(10));
+
+      assertBoxedError(
+        () => increment(term, Type.atom("count"), Type.integer(1)),
+        "Hologram.MisuseError",
+        `increment takes an entity struct, got: ${JSON.stringify(term)}`,
+      );
+    });
+
     it("raises when the struct's field holds nil", () => {
       assertBoxedError(
         () =>
@@ -1217,6 +1227,16 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => putAttribute(task, predicates([])),
         "Hologram.MisuseError",
         "put_attribute takes an entity struct, got: MyApp.Task",
+      );
+    });
+
+    it("prints a query term passed where an entity struct goes", () => {
+      const term = take(task, Type.integer(10));
+
+      assertBoxedError(
+        () => putAttribute(term, predicates([])),
+        "Hologram.MisuseError",
+        `put_attribute takes an entity struct, got: ${JSON.stringify(term)}`,
       );
     });
 
@@ -1649,24 +1669,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       ]);
     });
 
-    it("reads the actor leaf", () => {
-      const value = Type.tuple([Type.atom("actor")]);
-      const query = filter(task, predicates([["id", value]]));
-
-      assert.deepStrictEqual(query.filter, [["id", "==", {actor: true}]]);
-    });
-
-    // The operand is the same {:actor} tuple the bare leaf is.
-    it("reads the actor leaf under an equality operator", () => {
-      const value = Type.tuple([
-        Type.atom("!="),
-        Type.tuple([Type.atom("actor")]),
-      ]);
-      const query = filter(task, predicates([["id", value]]));
-
-      assert.deepStrictEqual(query.filter, [["id", "!=", {actor: true}]]);
-    });
-
     it("reads a bare attribute operand as equality", () => {
       const query = filter(
         booking,
@@ -1848,17 +1850,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       assert.deepStrictEqual(query.filter, [
         [["owner", "logins"], ">=", 1],
         [["owner", "logins"], "<=", 3],
-      ]);
-    });
-
-    it("reads the actor leaf on a path to a uuid attribute", () => {
-      const query = filter(
-        booking,
-        pathPredicates(["owner", "id"], Type.tuple([Type.atom("actor")])),
-      );
-
-      assert.deepStrictEqual(query.filter, [
-        [["owner", "id"], "==", {actor: true}],
       ]);
     });
 
@@ -2321,17 +2312,6 @@ describe("Elixir_Hologram_Query_Stage", () => {
       );
     });
 
-    // The actor leaf carries an entity id, so it compares only against names holding one.
-    it("raises on an actor leaf over a non-uuid attribute", () => {
-      const value = Type.tuple([Type.atom("actor")]);
-
-      assertBoxedError(
-        () => filter(task, predicates([["title", value]])),
-        "Hologram.MisuseError",
-        "user_id() requires a uuid attribute - attribute :title in MyApp.Task has type :string",
-      );
-    });
-
     it("raises on a disjunction with no alternatives", () => {
       assertBoxedError(
         () => filter(task, predicates([["or", Type.list([])]])),
@@ -2393,6 +2373,97 @@ describe("Elixir_Hologram_Query_Stage", () => {
         () => filter(task, predicates([["or", value]])),
         "Hologram.MisuseError",
         "unknown attribute :x in MyApp.Task - known attributes: :created_at, :done, :due_on, :id, :position, :starts_at, :status, :title",
+      );
+    });
+  });
+
+  // The acting user is a value only a policy condition names, so a filter refuses the actor leaf
+  // user_id() lowers to wherever it sits - pinned in, since a written user_id() never lowers in a
+  // filter.
+  describe("filter/2 - the acting user", () => {
+    const actor = Type.tuple([Type.atom("actor")]);
+
+    const op = (operator, value) => Type.tuple([Type.atom(operator), value]);
+
+    // The message spells the predicates as the Elixir stage inspects them.
+    const assertActorRefused = (query, predicates, spelled) => {
+      assertBoxedError(
+        () => filter(query, predicates),
+        "Hologram.MisuseError",
+        `a filter can't name the acting user - only a policy condition can, got: ${spelled} - to filter by a user's id, pin a variable holding it: ^user_id`,
+      );
+    };
+
+    it("raises on the actor as a value", () => {
+      assertActorRefused(task, predicates([["id", actor]]), "[id: {:actor}]");
+    });
+
+    // The test stand-in for Macro.inspect_atom/3 quotes an operator's name, which the bundle's
+    // transpiled function doesn't.
+    it("raises on the actor under an equality operator", () => {
+      assertActorRefused(
+        task,
+        predicates([["id", op("==", actor)]]),
+        '[id: {:"==", {:actor}}]',
+      );
+
+      assertActorRefused(
+        task,
+        predicates([["id", op("!=", actor)]]),
+        '[id: {:"!=", {:actor}}]',
+      );
+    });
+
+    it("raises on the actor compared with a path", () => {
+      assertActorRefused(
+        booking,
+        Type.list([
+          Type.tuple([Type.list([Type.atom("owner"), Type.atom("id")]), actor]),
+        ]),
+        "[{[:owner, :id], {:actor}}]",
+      );
+    });
+
+    it("raises on the actor in an alternative", () => {
+      const alternatives = Type.list([
+        predicates([["id", actor]]),
+        predicates([["done", Type.boolean(true)]]),
+      ]);
+
+      assertActorRefused(
+        task,
+        predicates([["or", alternatives]]),
+        "[or: [[id: {:actor}], [done: true]]]",
+      );
+    });
+
+    it("raises on the actor in a quantifier's condition", () => {
+      const condition = Type.tuple([
+        Type.list([Type.atom("messages")]),
+        predicates([["id", actor]]),
+      ]);
+
+      assertActorRefused(
+        Type.alias(CHANNEL),
+        predicates([["any", condition]]),
+        "[any: {[:messages], [id: {:actor}]}]",
+      );
+    });
+
+    // The refusal comes before the check of what the actor is compared with.
+    it("raises on the actor compared with an attribute that isn't a uuid", () => {
+      assertActorRefused(
+        task,
+        predicates([["title", actor]]),
+        "[title: {:actor}]",
+      );
+    });
+
+    it("raises on the actor in a membership list", () => {
+      assertActorRefused(
+        task,
+        predicates([["id", op("in", Type.list([actor]))]]),
+        "[id: {:in, [{:actor}]}]",
       );
     });
   });

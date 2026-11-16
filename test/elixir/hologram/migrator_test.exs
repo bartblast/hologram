@@ -875,6 +875,36 @@ defmodule Hologram.MigratorTest do
     end
   end
 
+  describe "describe_difference/1" do
+    test "describes a renamed index" do
+      op = %{op: :rename_index, table: "task", from: "task_old_$idx", to: "task_new_$idx"}
+
+      assert describe_difference(op) ==
+               ~s(index "task_old_$idx" on table "task" is named outside the derived scheme - the model derives "task_new_$idx")
+    end
+
+    test "describes an index nothing derives with the ways it isn't plain" do
+      op = %{op: :drop_index, index: "task_project_id_$idx", non_plain: [:include, :predicate]}
+
+      assert describe_difference(op) ==
+               ~s|index "task_project_id_$idx" is not derived from the model (it has INCLUDE columns, a predicate)|
+    end
+
+    test "describes a renamed enum type" do
+      op = %{op: :rename_enum_type, from: "task_old_$enum", to: "task_status_$enum"}
+
+      assert describe_difference(op) ==
+               ~s(enum type "task_old_$enum" is named outside the derived scheme - the model derives "task_status_$enum")
+    end
+
+    test "describes a renamed table" do
+      op = %{op: :rename_table, from: "task_tags_$join", to: "task_labels_$join"}
+
+      assert describe_difference(op) ==
+               ~s(table "task_tags_$join" is named outside the derived scheme - the model derives "task_labels_$join")
+    end
+  end
+
   describe "ensure_managed!/1" do
     test "claims a virgin database for migrations" do
       assert ensure_managed!(@context) == :claimed

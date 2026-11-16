@@ -34,10 +34,24 @@ defmodule Hologram.DB.QueryCompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module5
   alias Hologram.Test.Fixtures.Entity.Module6
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
+  alias Hologram.Test.Fixtures.Policy.Module13, as: PolicyModule13
+  alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
   alias Hologram.Test.Fixtures.Policy.Module2, as: PolicyModule2
+  alias Hologram.Test.Fixtures.Policy.Module3, as: PolicyModule3
   alias Hologram.Test.Fixtures.Policy.Module5, as: PolicyModule5
+  alias Hologram.Test.Fixtures.Policy.Module6, as: PolicyModule6
   alias Hologram.Test.Fixtures.Policy.Module8, as: PolicyModule8
   alias Hologram.Test.Fixtures.Policy.Module9, as: PolicyModule9
+  alias Hologram.Test.Fixtures.Policy.Readers.Module1, as: ReadersModule1
+  alias Hologram.Test.Fixtures.Policy.Readers.Module10, as: ReadersModule10
+  alias Hologram.Test.Fixtures.Policy.Readers.Module12, as: ReadersModule12
+  alias Hologram.Test.Fixtures.Policy.Readers.Module13, as: ReadersModule13
+  alias Hologram.Test.Fixtures.Policy.Readers.Module2, as: ReadersModule2
+  alias Hologram.Test.Fixtures.Policy.Readers.Module3, as: ReadersModule3
+  alias Hologram.Test.Fixtures.Policy.Readers.Module4, as: ReadersModule4
+  alias Hologram.Test.Fixtures.Policy.Readers.Module5, as: ReadersModule5
+  alias Hologram.Test.Fixtures.Policy.Readers.Module8, as: ReadersModule8
+  alias Hologram.Test.Fixtures.Policy.Readers.Module9, as: ReadersModule9
   alias Hologram.Test.Fixtures.Role
 
   defp hop(number, entity_type, selected, correlated_on) do
@@ -770,12 +784,40 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       rules = [%{predicates: [], to: nil, via: {:delete, [:parent]}}]
 
-      assert %{sql: sql} = compile(term, mapping, %{rules: rules})
+      assert %{params: [], sql: sql} = compile(term, mapping, %{rules: rules})
 
-      assert String.contains?(
-               sql,
-               ~s|"test_fixtures_policy_module1"."parent_id" AND FALSE)|
-             )
+      assert String.contains?(sql, ~s| WHERE FALSE ORDER BY|)
+    end
+
+    test "numbers the slots of the rules after a dropped one from where it started" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
+      term = Stage.normalize(PolicyModule1)
+
+      rules = [
+        %{predicates: [{:priority, :>=, 3}], to: nil, via: nil},
+        %{predicates: [{:author_id, :==, {:actor}}], to: nil, via: {:delete, [:parent]}},
+        %{predicates: [{:public, :==, true}], to: [{:own, [:viewer]}], via: nil}
+      ]
+
+      assert %{params: [{:value, 3}, {:value, true}, :actor | _grant_slots], sql: sql} =
+               compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s|WHERE (("priority" >= $1) OR ("public" = $2 AND |)
+      assert String.contains?(sql, ~s|"$rg"."user_id" = $3 |)
+    end
+
+    test "drops a rule whose delegation never holds from the group, with its slots" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
+      term = Stage.normalize(PolicyModule1)
+
+      rules = [
+        %{predicates: [{:priority, :==, 1}], to: nil, via: {:delete, [:parent]}},
+        %{predicates: [{:public, :==, true}], to: nil, via: nil}
+      ]
+
+      assert %{params: [{:value, true}], sql: sql} = compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE "public" = $1 ORDER BY|)
     end
 
     test "composes a delegation alongside the rule's own predicates" do
@@ -1583,6 +1625,166 @@ defmodule Hologram.DB.QueryCompilerTest do
 
       assert String.contains?(sql, ~s( WHERE "id" = $1))
       assert String.contains?(sql, ~s( AND "a" = $2))
+    end
+  end
+
+  describe "compile/2 - acting user expressions" do
+    # A statement deciding for many users at once reads each one off a row of its own, so the policy
+    # names the column it is read from instead of binding a slot.
+    @actor_sql ~s|"$x"."$user"|
+
+    test "compares a name to the expression" do
+      mapping = Mapper.derive!([Module14], [])
+      term = Stage.normalize(Module14)
+      rules = [%{predicates: [{:id, :==, {:actor}}], to: nil, via: nil}]
+
+      assert %{params: [], sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE "id" = "$x"."$user" |)
+    end
+
+    test "compares a name to the expression in an inequality, nil kept unequal" do
+      mapping = Mapper.derive!([Module14, PolicyModule6], [])
+      term = Stage.normalize(PolicyModule6)
+      rules = [%{predicates: [{:author_id, :!=, {:actor}}], to: nil, via: nil}]
+
+      assert %{params: [], sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      assert String.contains?(
+               sql,
+               ~s| WHERE ("author_id" != "$x"."$user" OR "author_id" IS NULL) |
+             )
+    end
+
+    test "reads the expression inside a quantifier's condition" do
+      mapping = Mapper.derive!([Module14, ReadersModule1, ReadersModule2, ReadersModule3], [])
+      term = Stage.normalize(ReadersModule1)
+      policy = %{actor_sql: @actor_sql, rules: Policy.build(ReadersModule1)[:read]}
+
+      assert %{params: [], sql: sql} = compile(term, mapping, policy)
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_readers_module2" | <>
+                 ~s|AS "$q1" WHERE "$q1"."project_id" = "test_fixtures_policy_readers_module1"."id" | <>
+                 ~s|AND "user_id" = "$x"."$user")|
+             )
+    end
+
+    test "looks grants up for the expression" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
+      term = Stage.normalize(PolicyModule1)
+      rules = [%{predicates: [], to: [{:own, [:owner]}], via: nil}]
+
+      assert %{params: params, sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      refute :actor in params
+      assert String.contains?(sql, ~s|WHERE "$rg"."user_id" = "$x"."$user" AND "$rg"."role"|)
+    end
+
+    test "carries the expression into a delegated policy" do
+      mapping = Mapper.derive!([Module14, PolicyModule1, PolicyModule2, RoleGrant], [])
+      term = Stage.normalize(PolicyModule1)
+      rules = [%{predicates: [], to: nil, via: {:read, [:parent]}}]
+
+      assert %{params: params, sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      refute :actor in params
+
+      assert String.contains?(
+               sql,
+               ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module1"."parent_id" | <>
+                 ~s|AND EXISTS (SELECT 1 FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+                 ~s|WHERE "$rg"."user_id" = "$x"."$user" |
+             )
+    end
+
+    test "carries the expression into the read policy of an included type" do
+      mapping =
+        Mapper.derive!([Module14, PolicyModule1, PolicyModule2, PolicyModule3, RoleGrant], [])
+
+      term =
+        PolicyModule3
+        |> include(children)
+        |> Stage.normalize()
+
+      policy = %{actor_sql: @actor_sql, rules: Policy.build(PolicyModule3)[:read]}
+
+      assert %{params: params, sql: sql} = compile(term, mapping, policy)
+
+      refute :actor in params
+      assert String.contains?(sql, ~s|WHERE "$rg"."user_id" = "$x"."$user" |)
+    end
+
+    test "carries the expression into the carried rules of a delegation, disjunctions included" do
+      mapping =
+        Mapper.derive!([Module14, PolicyModule1, PolicyModule2, PolicyModule5, RoleGrant], [])
+
+      term = Stage.normalize(PolicyModule5)
+
+      carried_rule = %{
+        predicates: [{:or, [[{:author_id, :==, {:actor}}], [{:public, :==, true}]]}],
+        to: nil,
+        via: nil
+      }
+
+      rules = [%{predicates: [], to: nil, via: {:read, [:parent], [carried_rule]}}]
+
+      assert %{params: [{:value, true}], sql: sql} =
+               compile(term, mapping, %{actor_sql: @actor_sql, rules: rules})
+
+      assert String.contains?(
+               sql,
+               ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module5"."parent_id" | <>
+                 ~s|AND (("author_id" = "$x"."$user") OR ("public" = $1)))|
+             )
+    end
+
+    test "binds the acting user's slot without an expression" do
+      mapping = Mapper.derive!([Module14], [])
+      term = Stage.normalize(Module14)
+      rules = [%{predicates: [{:id, :==, {:actor}}], to: nil, via: nil}]
+
+      assert %{params: [:actor], sql: sql} = compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE "id" = $1 |)
+    end
+  end
+
+  describe "compile/2 - delegations carrying their rules" do
+    test "asks the related row the carried rules only" do
+      mapping =
+        Mapper.derive!([Module14, PolicyModule1, PolicyModule2, PolicyModule5, RoleGrant], [])
+
+      term = Stage.normalize(PolicyModule5)
+      public_rule = %{predicates: [{:public, :==, true}], to: nil, via: nil}
+      rules = [%{predicates: [], to: nil, via: {:read, [:parent], [public_rule]}}]
+
+      assert compile(term, mapping, %{rules: rules}) == %{
+               params: [{:value, true}],
+               sql:
+                 ~s|SELECT "id", "parent_id", "created_at", "updated_at", "$revisions" | <>
+                   ~s|FROM "hologram_data"."test_fixtures_policy_module5" | <>
+                   ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_module1" | <>
+                   ~s|AS "$d1" WHERE "$d1"."id" = "test_fixtures_policy_module5"."parent_id" | <>
+                   ~s|AND "public" = $1) ORDER BY "id" ASC|
+             }
+    end
+
+    test "never holds when it carries no rules" do
+      mapping =
+        Mapper.derive!([Module14, PolicyModule1, PolicyModule2, PolicyModule5, RoleGrant], [])
+
+      term = Stage.normalize(PolicyModule5)
+      rules = [%{predicates: [], to: nil, via: {:read, [:parent], []}}]
+
+      assert %{params: [], sql: sql} = compile(term, mapping, %{rules: rules})
+
+      assert String.contains?(sql, ~s| WHERE FALSE ORDER BY|)
     end
   end
 
@@ -2720,6 +2922,21 @@ defmodule Hologram.DB.QueryCompilerTest do
              )
     end
 
+    test "carries an acting user expression into a hop's read policy" do
+      mapping = path_mapping([Module14, PathSource2, PathTarget2])
+      term = path_term(PathSource2, [{[:target, :name], "x"}])
+      rules = Policy.build(PathSource2)[:read]
+
+      assert %{params: [{:value, "x"}], sql: sql} =
+               compile(term, mapping, %{actor_sql: ~s|"$x"."$user"|, rules: rules})
+
+      assert String.contains?(
+               sql,
+               ~s|WHERE "$p1"."id" = "#{Mapper.table_name(PathSource2)}"."target_id" | <>
+                 ~s|AND "owner_id" = "$x"."$user") = $1|
+             )
+    end
+
     # A policy decides by the rows as stored, so the hop of a rule's own condition applies no read
     # policy even inside a policied statement.
     test "reads a path inside a policy rule raw" do
@@ -3520,6 +3737,432 @@ defmodule Hologram.DB.QueryCompilerTest do
                ~s|AND strpos(COALESCE("body_$search", "body_$sort"), | <>
                  ~s|COALESCE("test_fixtures_entity_module26"."name_$search", "test_fixtures_entity_module26"."name_$sort")) > 0)|
              )
+    end
+  end
+
+  describe "recheck/3" do
+    @recheck_mapping Mapper.derive!(
+                       [
+                         Module14,
+                         Module41,
+                         PolicyModule1,
+                         PolicyModule13,
+                         PolicyModule19,
+                         PolicyModule2,
+                         PolicyModule3,
+                         PolicyModule5,
+                         PolicyModule6,
+                         PolicyModule8,
+                         ReadersModule1,
+                         ReadersModule10,
+                         ReadersModule12,
+                         ReadersModule13,
+                         ReadersModule2,
+                         ReadersModule3,
+                         ReadersModule4,
+                         ReadersModule5,
+                         ReadersModule8,
+                         ReadersModule9,
+                         RoleGrant
+                       ],
+                       [Role.Module1, Role.Module2]
+                     )
+
+    defp recheck_sql(entity_type, anonymous_sql, everyone_sql, readers_sql) do
+      table_name = Mapper.table_name(entity_type)
+
+      columns =
+        @recheck_mapping
+        |> Map.fetch!(entity_type)
+        |> Map.fetch!(:columns)
+        |> Enum.reject(&Mapper.derived?/1)
+        |> Enum.map_join(", ", &~s|"#{&1.name}"|)
+
+      ~s|SELECT * FROM (SELECT #{columns}, "$e"."$everyone", | <>
+        ~s|#{anonymous_sql} AS "$anonymous", #{readers_sql} AS "$readers" | <>
+        ~s|FROM "hologram_data"."#{table_name}" | <>
+        ~s|CROSS JOIN LATERAL (SELECT #{everyone_sql} AS "$everyone" OFFSET 0) AS "$e" | <>
+        ~s|WHERE "#{table_name}"."id" = ANY($1::uuid[]) OFFSET 0) AS "$rows" | <>
+        ~s|WHERE "$everyone" OR "$anonymous" OR cardinality("$readers") > 0|
+    end
+
+    defp tested_readers_sql(condition_sql) do
+      ~s|CASE WHEN "$e"."$everyone" THEN '{}'::uuid[] | <>
+        ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" | <>
+        ~s|FROM (SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user")) AS "$c"("$reader") | <>
+        ~s|WHERE #{condition_sql}) END|
+    end
+
+    defp listed_readers_sql(candidates_sql, condition_sql) do
+      ~s|CASE WHEN "$e"."$everyone" THEN '{}'::uuid[] | <>
+        ~s|ELSE ARRAY(SELECT DISTINCT "$c"."$reader" | <>
+        ~s|FROM (#{candidates_sql}) AS "$c"("$reader") | <>
+        ~s|WHERE ("$c"."$reader" IN | <>
+        ~s|(SELECT "$u"."$user" FROM unnest($2::uuid[]) AS "$u"("$user"))) IS TRUE | <>
+        ~s|AND #{condition_sql}) END|
+    end
+
+    defp readers_table(entity_type), do: ~s|"#{Mapper.table_name(entity_type)}"|
+
+    test "decides a type whose rule admits everyone once per row" do
+      assert recheck(PolicyModule3, @recheck_mapping, false) == %{
+               params: [:ids],
+               sql: recheck_sql(PolicyModule3, "FALSE", "TRUE", "'{}'::uuid[]")
+             }
+    end
+
+    test "decides a type whose rules answer the same for every user once per row, never NULL" do
+      assert recheck(Module41, @recheck_mapping, false) == %{
+               params: [:ids, {:value, true}],
+               sql: recheck_sql(Module41, "FALSE", ~s|("public" = $2) IS TRUE|, "'{}'::uuid[]")
+             }
+    end
+
+    test "finds the readers a rule compares the acting user to from the row" do
+      assert recheck(ReadersModule2, @recheck_mapping, false) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule2,
+                   "FALSE",
+                   "FALSE",
+                   listed_readers_sql(~s|SELECT "user_id"|, ~s|"user_id" = "$c"."$reader"|)
+                 )
+             }
+    end
+
+    test "tests every user for a type with a rule that can't list its readers" do
+      assert recheck(ReadersModule5, @recheck_mapping, false) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule5,
+                   "FALSE",
+                   "FALSE",
+                   tested_readers_sql(~s|("owner_id" != "$c"."$reader" OR "owner_id" IS NULL)|)
+                 )
+             }
+    end
+
+    defp candidates_sql(sql) do
+      [_sql, candidates_sql] =
+        Regex.run(
+          ~r/ARRAY\(SELECT DISTINCT "\$c"."\$reader" FROM \((.*)\) AS "\$c"\("\$reader"\) WHERE \("\$c"/,
+          sql
+        )
+
+      candidates_sql
+    end
+
+    defp grant_candidate_sql(roles_slot, type_slot, scope_sql) do
+      ~s|SELECT "$rg"."user_id" FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+        ~s|WHERE "$rg"."role" = ANY($#{roles_slot}::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+        ~s|AND "$rg"."entity_type" = | <>
+        ~s|$#{type_slot}::"hologram_data"."hologram_role_grant_entity_type_$enum" AND #{scope_sql}|
+    end
+
+    test "finds the holders of a rule's own and type-wide roles" do
+      child = readers_table(PolicyModule1)
+
+      assert %{params: params, sql: sql} = recheck(PolicyModule1, @recheck_mapping, false)
+
+      assert candidates_sql(sql) ==
+               "(" <>
+                 grant_candidate_sql(
+                   8,
+                   9,
+                   ~s|("$rg"."entity_id" = #{child}."id" OR "$rg"."entity_id" IS NULL)|
+                 ) <>
+                 ") UNION (" <> grant_candidate_sql(10, 11, ~s|"$rg"."entity_id" IS NULL|) <> ")"
+
+      assert Enum.slice(params, 7, 4) == [
+               {:value, ["viewer"]},
+               {:value, "Hologram.Test.Fixtures.Policy.Module1"},
+               {:value, ["admin"]},
+               {:value, "Hologram.Test.Fixtures.Policy.Module2"}
+             ]
+    end
+
+    test "finds the holders of a role on a related row" do
+      assert %{sql: sql} = recheck(PolicyModule13, @recheck_mapping, false)
+
+      assert candidates_sql(sql) ==
+               grant_candidate_sql(
+                 5,
+                 6,
+                 ~s|"$rg"."entity_id" = #{readers_table(PolicyModule13)}."parent_id"|
+               )
+    end
+
+    test "finds the holders of roles on the entity a grant names, and of global roles" do
+      grant = readers_table(RoleGrant)
+
+      assert %{sql: sql} = recheck(RoleGrant, @recheck_mapping, false)
+
+      global_sql =
+        ~s|SELECT "$rg"."user_id" FROM "hologram_data"."hologram_role_grant" AS "$rg" | <>
+          ~s|WHERE "$rg"."role" = ANY($14::"hologram_data"."hologram_role_grant_role_$enum"[]) | <>
+          ~s|AND "$rg"."entity_type" IS NULL AND "$rg"."entity_id" IS NULL|
+
+      assert candidates_sql(sql) ==
+               ~s|(SELECT "user_id") UNION (| <>
+                 grant_candidate_sql(10, 11, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 ") UNION ((" <>
+                 grant_candidate_sql(12, 13, ~s|"$rg"."entity_id" = #{grant}."entity_id"|) <>
+                 ") UNION (" <> global_sql <> "))"
+    end
+
+    test "finds the readers of a delegation on the row it leads to" do
+      assert %{sql: sql} = recheck(ReadersModule4, @recheck_mapping, false)
+
+      assert candidates_sql(sql) ==
+               ~s|SELECT "$cd1"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module1" AS "$d1" | <>
+                 ~s|CROSS JOIN LATERAL (SELECT "$cq1"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module2" AS "$q1" | <>
+                 ~s|CROSS JOIN LATERAL (SELECT "user_id") AS "$cq1"("$reader") | <>
+                 ~s|WHERE "$q1"."project_id" = "$d1"."id") AS "$cd1"("$reader") | <>
+                 ~s|WHERE "$d1"."id" = #{readers_table(ReadersModule4)}."project_id"|
+    end
+
+    test "follows a path to the row a delegation or a role reference names" do
+      chain_sql =
+        ~s|(SELECT "$p1"."parent_id" FROM "hologram_data"."test_fixtures_policy_module1" AS "$p1" | <>
+          ~s|WHERE "$p1"."id" = #{readers_table(ReadersModule13)}."parent_id")|
+
+      delegation_sql =
+        ~s|SELECT "$cd1"."$reader" FROM "hologram_data"."test_fixtures_policy_module2" AS "$d1" | <>
+          ~s|CROSS JOIN LATERAL (| <>
+          grant_candidate_sql(
+            22,
+            23,
+            ~s|("$rg"."entity_id" = "$d1"."id" OR "$rg"."entity_id" IS NULL)|
+          ) <>
+          ~s|) AS "$cd1"("$reader") WHERE "$d1"."id" = #{chain_sql}|
+
+      reference_sql = grant_candidate_sql(24, 25, ~s|"$rg"."entity_id" = #{chain_sql}|)
+
+      assert %{sql: sql} = recheck(ReadersModule13, @recheck_mapping, false)
+
+      candidates = candidates_sql(sql)
+
+      assert String.ends_with?(candidates, ~s|(#{delegation_sql}) UNION (#{reference_sql})|)
+    end
+
+    test "finds the readers of a delegation to a delegating type two rows away" do
+      assert %{sql: sql} = recheck(PolicyModule8, @recheck_mapping, false)
+
+      grants_sql =
+        "(" <>
+          grant_candidate_sql(
+            8,
+            9,
+            ~s|("$rg"."entity_id" = "$d2"."id" OR "$rg"."entity_id" IS NULL)|
+          ) <> ") UNION (" <> grant_candidate_sql(10, 11, ~s|"$rg"."entity_id" IS NULL|) <> ")"
+
+      assert candidates_sql(sql) ==
+               ~s|SELECT "$cd1"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_module5" AS "$d1" | <>
+                 ~s|CROSS JOIN LATERAL (SELECT "$cd2"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_module1" AS "$d2" | <>
+                 ~s|CROSS JOIN LATERAL (#{grants_sql}) AS "$cd2"("$reader") | <>
+                 ~s|WHERE "$d2"."id" = "$d1"."parent_id") AS "$cd1"("$reader") | <>
+                 ~s|WHERE "$d1"."id" = #{readers_table(PolicyModule8)}."parent_id"|
+    end
+
+    test "finds the readers of an any over a path from the set the path reaches" do
+      assert %{sql: sql} = recheck(ReadersModule3, @recheck_mapping, false)
+
+      assert String.contains?(
+               sql,
+               ~s|FROM (SELECT "$cq1"."$reader" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module2" AS "$q1" | <>
+                 ~s|CROSS JOIN LATERAL (SELECT "user_id") AS "$cq1"("$reader") | <>
+                 ~s|WHERE "$q1"."project_id" = (SELECT "$p1"."id" | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module1" AS "$p1" | <>
+                 ~s|WHERE "$p1"."id" = #{readers_table(ReadersModule3)}."project_id")) | <>
+                 ~s|AS "$c"("$reader")|
+             )
+    end
+
+    test "finds the readers of nested, flattened and outer-row quantifiers and of disjunctions" do
+      board = readers_table(ReadersModule8)
+
+      assert %{params: params, sql: sql} = recheck(ReadersModule8, @recheck_mapping, false)
+
+      nested_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "$cq2"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module10" AS "$q2" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "assignee_id") AS "$cq2"("$reader") | <>
+          ~s|WHERE "$q2"."list_id" = "$q1"."id") AS "$cq1"("$reader") | <>
+          ~s|WHERE "$q1"."board_id" = #{board}."id")|
+
+      alternatives_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL ((SELECT "lead_id") UNION (SELECT "deputy_id")) | <>
+          ~s|AS "$cq1"("$reader") WHERE "$q1"."board_id" = #{board}."id")|
+
+      flattened_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module10" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "reviewer_id") AS "$cq1"("$reader") | <>
+          ~s|WHERE EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_readers_module9" | <>
+          ~s|AS "$s1_1" WHERE "$s1_1"."board_id" = #{board}."id" AND "$q1"."list_id" = "$s1_1"."id"))|
+
+      outer_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL (SELECT #{board}."owner_id") AS "$cq1"("$reader") | <>
+          ~s|WHERE "$q1"."board_id" = #{board}."id")|
+
+      owner_sql = ~s|(SELECT "owner_id")|
+
+      path_sql =
+        ~s|(SELECT (SELECT "$p1"."id" FROM "hologram_data"."test_fixtures_entity_module14" | <>
+          ~s|AS "$p1" WHERE "$p1"."id" = #{board}."sponsor_id"))|
+
+      derived_sql =
+        ~s|(SELECT "$cq1"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "$cq2"."$reader" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module10" AS "$q2" | <>
+          ~s|CROSS JOIN LATERAL (SELECT "watcher_id") AS "$cq2"("$reader") | <>
+          ~s|WHERE "$q2"."id" IN (SELECT "$s2"."id" | <>
+          ~s|FROM "hologram_data"."test_fixtures_policy_readers_module10" AS "$s2" | <>
+          ~s|WHERE "$s2"."list_id" = "$q1"."id" AND "done" = $9)) AS "$cq1"("$reader") | <>
+          ~s|WHERE "$q1"."board_id" = #{board}."id")|
+
+      candidates_sql =
+        Enum.join(
+          [
+            nested_sql,
+            alternatives_sql,
+            flattened_sql,
+            outer_sql,
+            owner_sql,
+            path_sql,
+            derived_sql
+          ],
+          " UNION "
+        )
+
+      assert Enum.at(params, 8) == {:value, false}
+
+      assert String.contains?(
+               sql,
+               ~s|FROM (#{candidates_sql}) AS "$c"("$reader") WHERE ("$c"."$reader" IN|
+             )
+    end
+
+    test "splits a type's rules into those deciding for everyone and those depending on the user" do
+      assert recheck(PolicyModule6, @recheck_mapping, false) == %{
+               params: [:ids, :users, {:value, true}],
+               sql:
+                 recheck_sql(
+                   PolicyModule6,
+                   "FALSE",
+                   ~s|("shared" = $3) IS TRUE|,
+                   listed_readers_sql(~s|SELECT "author_id"|, ~s|"author_id" = "$c"."$reader"|)
+                 )
+             }
+    end
+
+    test "still reads the users beside a rule admitting everyone" do
+      assert recheck(ReadersModule10, @recheck_mapping, false) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule10,
+                   "FALSE",
+                   "TRUE",
+                   listed_readers_sql(
+                     ~s|SELECT "assignee_id"|,
+                     ~s|"assignee_id" = "$c"."$reader"|
+                   )
+                 )
+             }
+    end
+
+    test "admits nobody for a type with no read rules, reading no users" do
+      assert recheck(PolicyModule19, @recheck_mapping, false) == %{
+               params: [:ids],
+               sql: recheck_sql(PolicyModule19, "FALSE", "FALSE", "'{}'::uuid[]")
+             }
+    end
+
+    # A rule answering the same for everyone admits anonymous users too, and $everyone holds its
+    # answer, so it isn't decided a second time for them.
+    test "decides anonymous users by the rules depending on the user alone, folded for nobody" do
+      assert recheck(PolicyModule6, @recheck_mapping, true) == %{
+               params: [:ids, :users, {:value, true}],
+               sql:
+                 recheck_sql(
+                   PolicyModule6,
+                   "FALSE",
+                   ~s|("shared" = $3) IS TRUE|,
+                   listed_readers_sql(~s|SELECT "author_id"|, ~s|"author_id" = "$c"."$reader"|)
+                 )
+             }
+    end
+
+    test "admits anonymous users through the part of a rule depending on the user naming nobody" do
+      join_table = ~s|"hologram_data"."test_fixtures_policy_readers_module12_lists_$join"|
+
+      assert %{params: params, sql: sql} = recheck(ReadersModule12, @recheck_mapping, true)
+
+      board = readers_table(ReadersModule12)
+
+      assert Enum.at(params, 5) == {:value, true}
+      assert length(params) == 20
+
+      assert String.contains?(
+               sql,
+               ~s|"$e"."$everyone", (EXISTS (SELECT 1 | <>
+                 ~s|FROM "hologram_data"."test_fixtures_policy_readers_module9" AS "$q1" | <>
+                 ~s|WHERE "$q1"."id" IN (SELECT "$qj1"."target_id" FROM #{join_table} AS "$qj1" | <>
+                 ~s|WHERE "$qj1"."source_id" = #{board}."id") AND "open" = $6)) IS TRUE | <>
+                 ~s|AS "$anonymous"|
+             )
+    end
+
+    test "leaves a rule admitting everyone to $everyone, anonymous users included" do
+      assert recheck(ReadersModule10, @recheck_mapping, true) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule10,
+                   "FALSE",
+                   "TRUE",
+                   listed_readers_sql(
+                     ~s|SELECT "assignee_id"|,
+                     ~s|"assignee_id" = "$c"."$reader"|
+                   )
+                 )
+             }
+    end
+
+    test "admits no anonymous user when every rule names the acting user" do
+      assert recheck(ReadersModule1, @recheck_mapping, true) == %{
+               params: [:ids, :users],
+               sql:
+                 recheck_sql(
+                   ReadersModule1,
+                   "FALSE",
+                   "FALSE",
+                   listed_readers_sql(
+                     ~s|SELECT "$cq1"."$reader" | <>
+                       ~s|FROM "hologram_data"."test_fixtures_policy_readers_module2" AS "$q1" | <>
+                       ~s|CROSS JOIN LATERAL (SELECT "user_id") AS "$cq1"("$reader") | <>
+                       ~s|WHERE "$q1"."project_id" = "test_fixtures_policy_readers_module1"."id"|,
+                     ~s|EXISTS (SELECT 1 FROM "hologram_data"."test_fixtures_policy_readers_module2" | <>
+                       ~s|AS "$q1" WHERE "$q1"."project_id" = "test_fixtures_policy_readers_module1"."id" | <>
+                       ~s|AND "user_id" = "$c"."$reader")|
+                   )
+                 )
+             }
     end
   end
 

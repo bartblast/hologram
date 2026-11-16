@@ -254,7 +254,8 @@ defmodule Hologram.Query.Expression do
   one side of `and` or `or` or as a quantifier's condition, on a quantifier written without a
   binding beside its condition, with a binding and no condition, as `all` with no condition, with
   a name already bound around it, or with a source that is pinned or no relationship, on a bound
-  row compared whole, on a search the way `condition/2` refuses one, and on anything else.
+  row compared whole, on a search the way `condition/2` refuses one, on `user_id()`, which only a
+  policy condition names, and on anything else.
   """
   @spec predicates(Macro.t(), Macro.Env.t()) :: Macro.t()
   def predicates({:^, _meta, [expr]}, _env), do: expr
@@ -262,6 +263,18 @@ defmodule Hologram.Query.Expression do
   def predicates(list, env) when is_list(list), do: Enum.map(list, &keyword_entry!(&1, env))
 
   def predicates(ast, env), do: predicate_list!(ast, @filter_names, env)
+
+  # A filter means the same rows whoever asks, so it can't name the acting user the way a policy
+  # condition does - the acting user's id is a value of the surrounding code, pinned like any other.
+  # Hologram.Query.Stage refuses the actor leaf in the same words when it is pinned in.
+  @spec acting_user_error!(Macro.t(), Macro.Env.t()) :: no_return
+  defp acting_user_error!(ast, env) do
+    compile_error!(
+      "a filter can't name the acting user - only a policy condition can, got: #{Macro.to_string(ast)} - to filter by a user's id, pin a variable holding it: ^user_id",
+      ast,
+      env
+    )
+  end
 
   # A path joins the slot of its first hop, or opens one where it first appears - so paths sharing
   # a first hop merge, a bare name is a path with no tail, and elements that are not paths keep
@@ -363,9 +376,10 @@ defmodule Hologram.Query.Expression do
     compile_error!("#{name} is a bound row - #{fix}", ast, env)
   end
 
-  # The acting user is a value only a policy condition can name - a filter has no acting user to
-  # scope by. A paren-less user_id can only be the call missing its parens there, since a policy
-  # has no variables in scope, so it is refused as that rather than as a forgotten pin.
+  # The acting user is a value only a policy condition can name - a filter means the same rows
+  # whoever asks, so value!/4, keyword_value!/3 and membership!/3 refuse user_id() there. A
+  # paren-less user_id can only be the call missing its parens in a condition, since a policy has
+  # no variables in scope, so it is refused as that rather than as a forgotten pin.
   defp comparison_operand!({:user_id, _meta, []}, %{kind: :condition}, _env),
     do: Macro.escape({:actor})
 
@@ -563,6 +577,9 @@ defmodule Hologram.Query.Expression do
       literal?(value) ->
         value
 
+      call = user_id_call(value) ->
+        acting_user_error!(call, env)
+
       bare_name?(value) or path?(value) ->
         forgotten_pin!(
           value,
@@ -638,6 +655,9 @@ defmodule Hologram.Query.Expression do
 
     {operator, meta, lowered_bounds}
   end
+
+  defp membership!({:user_id, _meta, []} = ast, %{kind: :filter}, env),
+    do: acting_user_error!(ast, env)
 
   defp membership!(ast, _names, env) do
     compile_error!(
@@ -1101,7 +1121,29 @@ defmodule Hologram.Query.Expression do
     )
   end
 
+  # The user_id() call written anywhere in a keyword value the data form spells - an operator
+  # tuple's operand, a membership list's element, a range bound - so the reason comes before the
+  # hint for the expression it means, which would only be refused in turn. A pinned expression is
+  # the surrounding code's own, so it is not looked into.
+  defp user_id_call({:^, _meta, [_expr]}), do: nil
+
+  defp user_id_call({:user_id, _meta, []} = call), do: call
+
+  defp user_id_call(list) when is_list(list), do: Enum.find_value(list, &user_id_call/1)
+
+  defp user_id_call({left, right}), do: user_id_call(left) || user_id_call(right)
+
+  defp user_id_call({:{}, _meta, elems}), do: user_id_call(elems)
+
+  defp user_id_call({operator, _meta, bounds}) when operator in @range_operators,
+    do: user_id_call(bounds)
+
+  defp user_id_call(_ast), do: nil
+
   defp value!({:^, _meta, [expr]}, _description, _names, _env), do: expr
+
+  defp value!({:user_id, _meta, []} = ast, _description, %{kind: :filter}, env),
+    do: acting_user_error!(ast, env)
 
   defp value!(ast, description, names, env) do
     cond do
