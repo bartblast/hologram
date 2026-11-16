@@ -4,6 +4,7 @@ defmodule Hologram.Policy.ReadersTest do
   import Hologram.Policy.Readers
 
   alias Hologram.Auth.RoleGrant
+  alias Hologram.Policy
   alias Hologram.Test.Fixtures.Entity.Module14, as: EntityModule14
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
@@ -15,6 +16,10 @@ defmodule Hologram.Policy.ReadersTest do
   alias Hologram.Test.Fixtures.Policy.Readers.Module1
   alias Hologram.Test.Fixtures.Policy.Readers.Module11
   alias Hologram.Test.Fixtures.Policy.Readers.Module12
+  alias Hologram.Test.Fixtures.Policy.Readers.Module15
+  alias Hologram.Test.Fixtures.Policy.Readers.Module17
+  alias Hologram.Test.Fixtures.Policy.Readers.Module18
+  alias Hologram.Test.Fixtures.Policy.Readers.Module19
   alias Hologram.Test.Fixtures.Policy.Readers.Module2
   alias Hologram.Test.Fixtures.Policy.Readers.Module3
   alias Hologram.Test.Fixtures.Policy.Readers.Module4
@@ -304,6 +309,119 @@ defmodule Hologram.Policy.ReadersTest do
 
     test "classifies the rules of the given operation" do
       assert classify(Module2, :update) == []
+    end
+  end
+
+  describe "classify_verdicts/1" do
+    defp verdict_class(entity_type, clause) do
+      entity_type
+      |> classify_verdicts()
+      |> Enum.find_value(fn {classified, _keys, class} -> if classified == clause, do: class end)
+    end
+
+    test "a clause naming nobody is independent" do
+      assert verdict_class(Module15, {:none, {[:cards], []}}) == :independent
+    end
+
+    test "a server-only predicate naming nobody is independent" do
+      assert verdict_class(Module18, {:reviewed, :==, true}) == :independent
+    end
+
+    test "an equality on the acting user answers no for the users it can't name" do
+      assert verdict_class(Module18, {:steward_id, :==, {:actor}}) ==
+               {:listed, {:actor_equal, :steward_id}, false}
+    end
+
+    test "an equality on a path answers no for the users the value it reaches can't name" do
+      assert verdict_class(Module19, {[:report, :steward_id], :==, {:actor}}) ==
+               {:listed, {:actor_equal, [:report, :steward_id]}, false}
+    end
+
+    test "an any bounded by its condition answers no for the users its set can't name" do
+      clause = {:any, {[:open_cards], [{:author_id, :==, {:actor}}]}}
+
+      assert verdict_class(Module15, clause) ==
+               {:listed, {:any, [:open_cards], {:actor_equal, :author_id}}, false}
+    end
+
+    test "a none bounded by its condition answers yes for the users its set can't name" do
+      clause = {:none, {[:cards], [{:author_id, :==, {:actor}}]}}
+
+      assert verdict_class(Module15, clause) ==
+               {:listed, {:any, [:cards], {:actor_equal, :author_id}}, true}
+    end
+
+    test "an inequality on the acting user is unlisted" do
+      assert verdict_class(Module19, {[:report, :steward_id], :!=, {:actor}}) == :unlisted
+    end
+
+    test "an any over a derived set naming nobody is independent" do
+      assert verdict_class(Module15, {:any, {[:open_cards], [{:done, :==, false}]}}) ==
+               :independent
+    end
+
+    test "a none bounded by every alternative of its condition answers yes for the users none names" do
+      clause =
+        {:none,
+         {[:cards], [or: [[{:author_id, :==, {:actor}}], [{:reviewer_id, :==, {:actor}}]]]}}
+
+      assert verdict_class(Module15, clause) ==
+               {:listed,
+                {:any, [:cards],
+                 {:or, [{:actor_equal, :author_id}, {:actor_equal, :reviewer_id}]}}, true}
+    end
+
+    test "an all of one inequality on the acting user answers yes for the users its set can't name" do
+      clause = {:all, {[:cards], [{:author_id, :!=, {:actor}}]}}
+
+      assert verdict_class(Module15, clause) ==
+               {:listed, {:any, [:cards], {:actor_equal, :author_id}}, true}
+    end
+
+    test "any other all naming the acting user is unlisted" do
+      assert verdict_class(Module17, {:all, {[:cards], [{:author_id, :==, {:actor}}]}}) ==
+               :unlisted
+    end
+
+    test "an any whose condition bounds nobody is unlisted" do
+      assert verdict_class(Module17, {:any, {[:open_cards], [{:author_id, :!=, {:actor}}]}}) ==
+               :unlisted
+    end
+
+    test "a none whose condition bounds nobody is unlisted" do
+      clause = {:none, {[:cards], [or: [[{:done, :==, true}], [{:author_id, :==, {:actor}}]]]}}
+
+      assert verdict_class(Module17, clause) == :unlisted
+    end
+
+    test "a clause several operations share is one entry with every key" do
+      clause = {:none, {[:cards], [{:author_id, :==, {:actor}}]}}
+
+      assert {^clause, keys, _class} =
+               Module15
+               |> classify_verdicts()
+               |> Enum.find(&(elem(&1, 0) == clause))
+
+      assert keys == [
+               Policy.verdict_key(Module15, :archive, clause),
+               Policy.verdict_key(Module15, :update, clause)
+             ]
+    end
+
+    test "lists the clauses in the order of their first keys" do
+      operations =
+        Module15
+        |> classify_verdicts()
+        |> Enum.map(fn {_clause, [key | _rest], _class} ->
+          [operation | _digest] = String.split(key, ":")
+          operation
+        end)
+
+      assert operations == ["archive", "close", "delete", "hide", "pin", "review"]
+    end
+
+    test "a type with no deciding clause has none" do
+      assert classify_verdicts(Module1) == []
     end
   end
 end
