@@ -93,6 +93,36 @@ defmodule Hologram.DB.Connection do
     end
   end
 
+  # A read of several statements that have to agree with each other - rows and a number read beside
+  # them - each statement of an ordinary transaction reading the database as it stands when the
+  # statement starts, so a commit landing between two of them is in one and not the other. A
+  # REPEATABLE READ transaction reads every statement from the snapshot its first one took, and a
+  # READ ONLY one takes no lock a writer could wait on. Inside an enclosing transaction (the test
+  # sandbox included) the function runs as a savepoint instead: the isolation of a transaction is
+  # set before its first statement, and the enclosing one decided it already.
+  @doc false
+  @spec snapshot((-> any)) :: {:ok, any} | {:error, any}
+  def snapshot(fun) do
+    case Process.get(@transaction_key) do
+      nil ->
+        run_transaction(
+          fn ->
+            Postgrex.query!(
+              current_connection(),
+              "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY",
+              []
+            )
+
+            fun.()
+          end,
+          with_timeout_opt([])
+        )
+
+      _enclosing ->
+        transaction(fun)
+    end
+  end
+
   @doc false
   @spec transaction((-> any), keyword) :: {:ok, any} | {:error, any}
   def transaction(fun, opts \\ []) do

@@ -1,7 +1,9 @@
 defmodule HologramFeatureTests.SSEResponseTest do
-  # No browser: the browsers the suite drives accept the header this test refutes, so the
-  # response is read with an HTTP client that hands back the headers as the server sent
+  # No browser: the browsers the suite drives accept the header this test refutes over HTTP/2,
+  # so the response is read with an HTTP client that hands back the headers as the server sent
   # them. Over HTTPS the client negotiates HTTP/2, the protocol where the header is illegal.
+  # Over HTTP/1.1 the stream asks for its connection to close once it ends, so the next request
+  # runs in a process that holds nothing the stream left behind.
   use ExUnit.Case, async: false
 
   alias Hologram.Realtime.Handshake
@@ -12,7 +14,7 @@ defmodule HologramFeatureTests.SSEResponseTest do
   # never coming.
   @recv_timeout_ms 5_000
 
-  test "the SSE response carries no connection-specific header" do
+  test "the SSE response carries a connection header only where it is legal" do
     {session_id, cookie} = mint_session()
     instance_id = "sse-response-test-instance-id"
     handshake_id = "sse-response-test-handshake-#{:erlang.unique_integer([:positive])}"
@@ -43,6 +45,14 @@ defmodule HologramFeatureTests.SSEResponseTest do
 
     assert status == 200
     assert List.keyfind(headers, "content-type", 0) == {"content-type", "text/event-stream"}
+    assert_connection_header(protocol, headers)
+  end
+
+  defp assert_connection_header(:http1, headers) do
+    assert List.keyfind(headers, "connection", 0) == {"connection", "close"}
+  end
+
+  defp assert_connection_header(:http2, headers) do
     refute List.keymember?(headers, "connection", 0)
   end
 

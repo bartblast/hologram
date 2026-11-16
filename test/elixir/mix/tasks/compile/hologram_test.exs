@@ -1862,7 +1862,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         module_infos: module_infos
       } = cache_state()
 
-      removed_entry = %{derived_queries: [], terms: []}
+      removed_entry = %{count_types: %{}, derived_queries: [], terms: []}
       components = Map.put(data_layer.components, :removed_component, removed_entry)
       Cache.put_data_layer(%{data_layer | components: components})
 

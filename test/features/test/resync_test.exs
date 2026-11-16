@@ -79,16 +79,6 @@ defmodule HologramFeatureTests.ResyncTest do
     end
   end
 
-  defp assert_no_place(session) do
-    assert_script_result(session, @place_script, nil)
-  end
-
-  defp truncate_oplog do
-    {:ok, _result} = Connection.query(~s(TRUNCATE "hologram_system"."oplog"), [])
-
-    :ok
-  end
-
   # The feature this issue exists for, and it FAILS against the framework as it was before it: an
   # emptied database answers the action's read with nothing, the action raises before it can set
   # the result, and the row it raised over is on the screen the whole time.
