@@ -203,9 +203,15 @@ defmodule HologramSyncBenchmark.Cases.Lock do
 
     {_seeding, nil} = Seeding.board!(conn, Card, max_writers * 10)
 
-    # The pool needs a connection for each writer, on top of what the node uses itself.
+    # One size for every writer count: the most writers need a connection each, on top of what
+    # the node uses itself.
     database = Application.get_env(:hologram, :database, [])
-    Application.put_env(:hologram, :database, Keyword.put(database, :pool_size, max_writers + 5))
+
+    Application.put_env(
+      :hologram,
+      :database,
+      Keyword.put(database, :pool_size, pool_size(counts))
+    )
 
     try do
       Enum.map(counts, &hologram_step(conn, &1, duration_ms))
@@ -279,7 +285,8 @@ defmodule HologramSyncBenchmark.Cases.Lock do
         "for #{opts[:lock_duration]} s each",
       "plain and notify writers run on connections of the driver's own, into a scratch table, " <>
         "notify with one connection listening; Hologram's run on the server node, with a pool " <>
-        "as big as its writers plus 5 and no client connected",
+        "of #{pool_size(counts)} connections at every writer count, the most writers plus 5, " <>
+        "and no client connected",
       "the lock is one for the whole server; \"held\" is the share of samples, every " <>
         "#{@sample_ms} ms, it was held in, \"queued\" the writers waiting for it on average, " <>
         "as a share of all writers, and \"other databases\" the share of samples a holder was in " <>
@@ -295,6 +302,8 @@ defmodule HologramSyncBenchmark.Cases.Lock do
     {most, [last]} = Enum.split(counts, -1)
     "#{Enum.join(most, ", ")} and #{last}"
   end
+
+  defp pool_size(counts), do: Enum.max(counts) + 5
 
   defp percent(nil), do: nil
 

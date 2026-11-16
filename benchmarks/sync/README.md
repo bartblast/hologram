@@ -238,7 +238,7 @@ Clients per node: **at least 100**
 Run 2026-11-15 16:25 UTC on commit d1837e12f, Apple M1 Pro, 10 cores, 16 GB, macOS 26.6.2, load average 9.95 when the run started, PostgreSQL 15.14 (Homebrew), synchronous_commit on, fsync on, wal_sync_method open_datasync, Elixir 1.20.0 on OTP 29.
 
 - 1, 2, 4, 8, 16 and 32 writers at once, for 10 s each
-- plain and notify writers run on connections of the driver's own, into a scratch table, notify with one connection listening; Hologram's run on the server node, with a pool as big as its writers plus 5 and no client connected
+- plain and notify writers run on connections of the driver's own, into a scratch table, notify with one connection listening; Hologram's run on the server node, with a pool of 37 connections at every writer count, the most writers plus 5, and no client connected
 - the lock is one for the whole server; "held" is the share of samples, every 50 ms, it was held in, "queued" the writers waiting for it on average, as a share of all writers, and "other databases" the share of samples a holder was in another database, which measures what else on the server notifies
 - a notifying commit costs more than a plain one even with one writer, where nothing queues, so only the growth past the 1-writer row can be the lock
 
