@@ -1334,6 +1334,36 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert MapSet.difference(macro_fields, fixture_fields) == MapSet.new()
   end
 
+  describe "migrations directory check" do
+    setup %{opts: opts} do
+      app_dir = Path.join(@tmp_dir, "migrations_check_app")
+      migrations_dir = Path.join([app_dir, "app", "migrations"])
+
+      File.mkdir_p!(migrations_dir)
+
+      migrations_dir
+      |> Path.join("20260813091522.ex")
+      |> File.write!("")
+
+      [opts: Keyword.put(opts, :app_dir, app_dir)]
+    end
+
+    # The project's elixirc_paths compile no app/ directory, so the file is left out.
+    test "refuses a build that leaves out the migration files app/migrations/ holds", %{
+      opts: opts
+    } do
+      assert_raise Hologram.CompileError, ~r/app\/migrations\/ holds migration files/, fn ->
+        run(opts)
+      end
+    end
+
+    test "checks nothing for language server builds", %{opts: opts} do
+      ls_opts = Keyword.put(opts, :build_dir, Path.join(opts[:build_dir], ".expert"))
+
+      assert run(ls_opts) == :noop
+    end
+  end
+
   describe "compiler skipping" do
     setup do
       # A validation with Hologram off fills the model caches from the beams.

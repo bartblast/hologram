@@ -8,6 +8,9 @@ defmodule Mix.Tasks.Holo.Check.Migration do
 
       $ mix holo.check.migration
 
+  The history is the project's migration modules, compiled from `app/migrations/` - the
+  task refuses to run when the project does not compile `app/migrations/`.
+
   Three checks, and any failure exits non-zero: no draft still holds resolve! ops,
   the history folds to the model, and the replayed history produces the model's
   schema on a scratch database.
@@ -27,7 +30,11 @@ defmodule Mix.Tasks.Holo.Check.Migration do
   def run(_args) do
     model = Model.from_modules(Reflection.list_entities(), Reflection.list_roles())
 
-    Checker.check!(Loader.migrations_dir(), model)
+    # Only for its refusal when the project does not compile app/migrations/ - the
+    # migrations are read from the compiled modules.
+    Loader.migrations_dir!()
+
+    Checker.check!(Loader.list!(), model)
 
     print("migrations check passed")
   rescue
