@@ -33,6 +33,32 @@ defmodule Hologram.Entity.Validator do
   # repetitive value would fit - but a rule a developer can hold has to be about length alone.
   @unique_string_max_bytes 2692
 
+  # What a column that is not a string takes of a compound key's index entry, in bytes: its
+  # width rounded up to 8, which covers the padding between it and a fixed-width column ahead
+  # of it. A to-one's reference is a uuid.
+  @unique_key_column_bytes %{
+    boolean: 8,
+    date: 8,
+    datetime: 8,
+    enum: 8,
+    float: 8,
+    integer: 8,
+    reference: 16,
+    time: 8,
+    uuid: 16
+  }
+
+  # The most fields a key may name: PostgreSQL builds no index over more columns.
+  @unique_key_max_fields 32
+
+  # What each string of a compound key gives up beside its bytes: the 4 of its length header,
+  # up to 3 of padding ahead of the header, which aligns to 4, and up to 7 before the next
+  # column when that one aligns to 8, as an integer does. Counted from one 8-byte boundary to
+  # the next, the three never come to more than 11. 8 would be the round figure and is not
+  # enough - four strings, each ahead of an integer, overflow the entry with it. A string
+  # alone in its index needs none of it: @unique_string_max_bytes is measured.
+  @unique_key_string_overhead_bytes 11
+
   @valid_attribute_opts [
     :default,
     :format,
@@ -179,9 +205,38 @@ defmodule Hologram.Entity.Validator do
   end
 
   @doc """
+  Returns the most bytes each string attribute of the given entity type may hold so that every
+  unique index over it can carry the value, by attribute name. A string no unique index holds
+  is absent.
+
+  A `unique: true` string has the whole of a btree entry. The strings of a key declared with
+  unique share one: what the key's other columns take is set aside, and the strings split the
+  rest evenly, so each bound is about the attribute's own length whatever the other fields
+  hold. A string under several unique indexes takes the smallest of its bounds. The split is
+  conservative - an entry may fit past it - because a rule a developer can hold has to be
+  about one value's length alone.
+  """
+  @spec unique_string_max_bytes(module) :: %{atom => pos_integer}
+  def unique_string_max_bytes(entity_type) do
+    attributes = entity_type.__attributes__()
+    types = attribute_types(attributes)
+
+    own_bounds =
+      for {name, :string, opts} <- attributes, Keyword.get(opts, :unique) == true, into: %{} do
+        {name, @unique_string_max_bytes}
+      end
+
+    Enum.reduce(entity_type.__uniques__(), own_bounds, fn fields, bounds ->
+      fields
+      |> key_string_bounds(types)
+      |> Map.merge(bounds, fn _name, key_bound, bound -> min(key_bound, bound) end)
+    end)
+  end
+
+  @doc """
   Validates the given data map against the given entity type's declared attributes.
   Returns :ok, or {:error, errors} where errors is a name-sorted list of {name, reason} pairs.
-  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum), {:in, range} (an integer value outside the declared range), {:length, length} (a string not matching the declared exact length), {:min_length, min_length} (a string shorter than the declared minimum), {:max_length, max_length} (a string longer than the declared maximum), {:format, format} (a string not matching the declared pattern), {:max_bytes, max_bytes} (a unique string holding more bytes than its index can carry).
+  Reasons: :required (a non-optional attribute is absent or nil), :unknown (an undeclared name), {:type, type} (a value not matching the attribute type), {:values, values} (an enum value outside the declared values), {:min, min} (a value below the declared minimum), {:max, max} (a value above the declared maximum), {:in, range} (an integer value outside the declared range), {:length, length} (a string not matching the declared exact length), {:min_length, min_length} (a string shorter than the declared minimum), {:max_length, max_length} (a string longer than the declared maximum), {:format, format} (a string not matching the declared pattern), {:max_bytes, max_bytes} (a string holding more bytes than its unique index can carry, or than its share of a key's index entry).
   String lengths count Unicode code points.
   Constraint options are checked only on type-valid values - a type violation suppresses the attribute's constraint checks.
   A non-optional attribute must be present regardless of its declared default - defaults are not applied here.
@@ -204,8 +259,9 @@ defmodule Hologram.Entity.Validator do
 
     attribute_errors = Enum.flat_map(attributes, &attribute_data_errors(data, &1))
     reference_errors = Enum.flat_map(references, &reference_data_errors(data, &1))
+    bytes_errors = unique_bytes_errors(entity_type, data)
 
-    case Enum.sort(unknown_errors ++ attribute_errors ++ reference_errors) do
+    case Enum.sort(unknown_errors ++ attribute_errors ++ reference_errors ++ bytes_errors) do
       [] -> :ok
       errors -> {:error, errors}
     end
@@ -280,6 +336,7 @@ defmodule Hologram.Entity.Validator do
             [{name, :unknown}]
         end
       end)
+      |> Kernel.++(unique_bytes_errors(entity_type, changes))
       |> Enum.sort()
 
     if errors == [], do: :ok, else: {:error, errors}
@@ -502,8 +559,9 @@ defmodule Hologram.Entity.Validator do
   since a key may name fields declared below it.
 
   Returns :ok, or raises Hologram.CompileError located at the first declaration that is not a list
-  of two or more distinct attribute and to-one relationship names, or that repeats the fields of
-  an earlier one in any order.
+  of 2 to 32 distinct attribute and to-one relationship names, that repeats the fields of
+  an earlier one in any order, or that names a string whose default holds more bytes than the
+  key's index entry leaves it.
   """
   @spec validate_uniques!(module) :: :ok
   def validate_uniques!(module) do
@@ -523,6 +581,7 @@ defmodule Hologram.Entity.Validator do
       validate_unique_shape!(module, fields, location)
       Enum.each(fields, &validate_unique_field!(module, fields, &1, location))
       validate_unique_repeat!(module, fields, earlier, location)
+      validate_unique_defaults!(module, fields, location)
     end)
 
     :ok
@@ -598,6 +657,10 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  defp attribute_types(attributes) do
+    Map.new(attributes, fn {name, type, _opts} -> {name, type} end)
+  end
+
   defp bound_errors(name, value, type, opts) do
     Enum.flat_map([:min, :max], &bound_key_errors(name, value, type, opts, &1))
   end
@@ -655,8 +718,7 @@ defmodule Hologram.Entity.Validator do
     bound_errors(name, value, type, opts) ++
       in_errors(name, value, opts) ++
       length_errors(name, value, opts) ++
-      format_errors(name, value, opts) ++
-      unique_bytes_errors(name, value, type, opts)
+      format_errors(name, value, opts)
   end
 
   defp declared_fields(module) do
@@ -881,6 +943,24 @@ defmodule Hologram.Entity.Validator do
     end)
   end
 
+  # The share of one btree entry each string of the given key may fill, by name - empty for a
+  # key over no string.
+  defp key_string_bounds(fields, types) do
+    {strings, others} = Enum.split_with(fields, &(types[&1] == :string))
+
+    other_bytes =
+      others
+      |> Enum.map(&Map.fetch!(@unique_key_column_bytes, Map.get(types, &1, :reference)))
+      |> Enum.sum()
+
+    string_count = length(strings)
+    overhead_bytes = string_count * @unique_key_string_overhead_bytes
+
+    Map.new(strings, fn name ->
+      {name, div(@unique_string_max_bytes - other_bytes - overhead_bytes, string_count)}
+    end)
+  end
+
   defp length_errors(name, value, opts) do
     case Keyword.take(opts, [:length, :min_length, :max_length]) do
       [] ->
@@ -1012,17 +1092,29 @@ defmodule Hologram.Entity.Validator do
     Map.new(roles, fn {name, opts} -> {name, List.wrap(Keyword.get(opts, :extends, []))} end)
   end
 
-  # Only a unique string carries the bound - it is its index's, not the type's, and it is checked in
-  # bytes, not code points, because that is what the index stores.
-  defp unique_bytes_errors(name, value, :string, opts) do
-    if Keyword.get(opts, :unique) == true and byte_size(value) > @unique_string_max_bytes do
-      [{name, {:max_bytes, @unique_string_max_bytes}}]
-    else
-      []
+  # Only a string under a unique index carries the bound - it is the index's, not the type's, and
+  # it is checked in bytes, not code points, because that is what the index stores. Asked of the
+  # values that are strings at all: a type violation is reported alone.
+  defp unique_bytes_errors(entity_type, data) do
+    for {name, max_bytes} <- unique_string_max_bytes(entity_type),
+        value = Map.get(data, name),
+        attribute_value_valid?(value, :string),
+        byte_size(value) > max_bytes do
+      {name, {:max_bytes, max_bytes}}
     end
   end
 
-  defp unique_bytes_errors(_name, _value, _type, _opts), do: []
+  defp unique_count_refusal([]), do: "a key names two or more fields"
+
+  defp unique_count_refusal([_field]) do
+    "a single field is unique through its own option, unique: true on the attribute or the relationship"
+  end
+
+  defp unique_count_refusal(fields) when length(fields) > @unique_key_max_fields do
+    "a key names at most #{@unique_key_max_fields} fields, the most an index holds"
+  end
+
+  defp unique_count_refusal(_fields), do: nil
 
   # What the given name is in the module, as far as a key cares.
   defp unique_field_kind(module, field) do
@@ -1881,6 +1973,29 @@ defmodule Hologram.Entity.Validator do
     end
   end
 
+  # A default is a value rows are created and filled with, so one the key's index cannot carry
+  # is refused where it is written - every create leaving the attribute out would be refused
+  # for it otherwise.
+  defp validate_unique_defaults!(module, fields, location) do
+    attributes = Module.get_attribute(module, :__attributes__)
+    bounds = key_string_bounds(fields, attribute_types(attributes))
+
+    for {name, :string, opts} <- attributes,
+        max_bytes = bounds[name],
+        default = Keyword.get(opts, :default),
+        is_binary(default),
+        byte_size(default) > max_bytes do
+      raise_invalid_unique!(
+        module,
+        fields,
+        "the default value of #{inspect(name)} holds #{byte_size(default)} bytes, and the key's index leaves it at most #{max_bytes}",
+        location
+      )
+    end
+
+    :ok
+  end
+
   # What a key may name is a column of the row: a declared attribute or the reference a stored
   # to-one holds. Everything else a name can be is refused in its own words, a reference field
   # among them - a key names the relationship the way it was declared.
@@ -1959,14 +2074,8 @@ defmodule Hologram.Entity.Validator do
         fields != Enum.uniq(fields) ->
           "#{inspect(first_repeated_target(fields))} is named more than once"
 
-        match?([_field], fields) ->
-          "a single field is unique through its own option, unique: true on the attribute or the relationship"
-
-        fields == [] ->
-          "a key names two or more fields"
-
         true ->
-          nil
+          unique_count_refusal(fields)
       end
 
     if reason, do: raise_invalid_unique!(module, fields, reason, location)

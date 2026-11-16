@@ -11,6 +11,7 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.DB.SetLock
   alias Hologram.Entity
   alias Hologram.Entity.Metadata
+  alias Hologram.Entity.Validator
   alias Hologram.MisuseError
   alias Hologram.Test.Fixtures.Entity.Module1
   alias Hologram.Test.Fixtures.Entity.Module10
@@ -27,6 +28,8 @@ defmodule Hologram.DB.EntityOperationsTest do
   alias Hologram.Test.Fixtures.Entity.Module32
   alias Hologram.Test.Fixtures.Entity.Module4
   alias Hologram.Test.Fixtures.Entity.Module5
+  alias Hologram.Test.Fixtures.Entity.Module53
+  alias Hologram.Test.Fixtures.Entity.Module54
   alias Hologram.Test.Fixtures.Policy.Module1, as: PolicyModule1
   alias Hologram.Test.Fixtures.Policy.Module17, as: PolicyModule17
   alias Hologram.Test.Fixtures.Policy.Module19, as: PolicyModule19
@@ -71,6 +74,18 @@ defmodule Hologram.DB.EntityOperationsTest do
       |> create()
 
     channel
+  end
+
+  # Text PostgreSQL's compression finds nothing to shorten in, and the same on every run: hash
+  # digests of a counter, spelled in base64.
+  defp incompressible_string(byte_count) do
+    1..(div(byte_count, 44) + 1)
+    |> Enum.map_join(fn counter ->
+      :sha256
+      |> :crypto.hash(<<counter::32>>)
+      |> Base.encode64()
+    end)
+    |> binary_part(0, byte_count)
   end
 
   defp oplog_effects do
@@ -519,6 +534,71 @@ defmodule Hologram.DB.EntityOperationsTest do
       entity = Module19.new(slug: String.duplicate("a", 2693))
 
       assert create(entity) == {:error, %{slug: [max_bytes: 2692]}}
+    end
+
+    # The strings of a key share one index entry, and the share is conservative: values that
+    # hold exactly their bound fit the entry whatever the key is made of. Incompressible on
+    # purpose - the engine compresses an entry, and a repetitive value would prove nothing.
+    test "stores the strings of a key that hold exactly their share of the index entry" do
+      {:ok, owner} = create(Module1.new())
+
+      two_strings = Module53.new(a: incompressible_string(1335), b: incompressible_string(1335))
+
+      string_enum_reference =
+        Module53.new(c: incompressible_string(2657), kind: :x, owner_id: owner.id)
+
+      three_strings =
+        Module53.new(
+          d: incompressible_string(886),
+          e: incompressible_string(886),
+          f: incompressible_string(886)
+        )
+
+      enum_string = Module53.new(kind: :y, slug: incompressible_string(2673))
+
+      assert {:ok, _entity} = create(two_strings)
+      assert {:ok, _entity} = create(string_enum_reference)
+      assert {:ok, _entity} = create(three_strings)
+      assert {:ok, _entity} = create(enum_string)
+    end
+
+    # A string ahead of an integer is padded out to the integer's alignment, up to 7 bytes on
+    # top of its 4-byte header, and four of them in one key overflow the entry when a string is
+    # charged less. The lengths are the bounds themselves, read from the validator, so a bound
+    # the index cannot carry fails here whatever number it is.
+    test "stores the strings of a long key that hold exactly their share of the index entry" do
+      max_bytes = Validator.unique_string_max_bytes(Module54)
+
+      four_padded_strings =
+        Module54.new(
+          n1: 1,
+          n2: 2,
+          n3: 3,
+          n4: 4,
+          s1: incompressible_string(max_bytes.s1),
+          s2: incompressible_string(max_bytes.s2),
+          s3: incompressible_string(max_bytes.s3),
+          s4: incompressible_string(max_bytes.s4),
+          u: Entity.generate_id()
+        )
+
+      two_padded_strings =
+        Module54.new(
+          n1: 5,
+          n2: 6,
+          n3: 7,
+          s5: incompressible_string(max_bytes.s5),
+          s6: incompressible_string(max_bytes.s6)
+        )
+
+      assert {:ok, _entity} = create(four_padded_strings)
+      assert {:ok, _entity} = create(two_padded_strings)
+    end
+
+    test "returns the byte-bound violation for a key's string over its share" do
+      entity = Module53.new(a: String.duplicate("a", 1336), b: "b")
+
+      assert create(entity) == {:error, %{a: [max_bytes: 1335]}}
     end
 
     test "returns reference violations" do

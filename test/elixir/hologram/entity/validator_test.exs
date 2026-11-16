@@ -14,6 +14,9 @@ defmodule Hologram.Entity.ValidatorTest do
   alias Hologram.Test.Fixtures.Entity.Module3
   alias Hologram.Test.Fixtures.Entity.Module30
   alias Hologram.Test.Fixtures.Entity.Module4
+  alias Hologram.Test.Fixtures.Entity.Module52
+  alias Hologram.Test.Fixtures.Entity.Module53
+  alias Hologram.Test.Fixtures.Entity.Module54
 
   # Where a declaration on the given line of this file is, as a whole-model refusal spells it.
   defp location(line), do: "#{Path.relative_to_cwd(__ENV__.file)}:#{line}: "
@@ -295,6 +298,54 @@ defmodule Hologram.Entity.ValidatorTest do
     end
   end
 
+  describe "unique_string_max_bytes/1" do
+    test "gives a unique string the whole index entry" do
+      assert unique_string_max_bytes(Module19) == %{code: 2692, slug: 2692}
+    end
+
+    test "holds no string for a type with no unique index over one" do
+      assert unique_string_max_bytes(Module2) == %{}
+    end
+
+    # Each string gives up 11 bytes, a reference 16 and any other column 8, and the strings
+    # split what is left of 2692:
+    #   [:a, :b]             -> (2692 - 22) / 2 = 1335
+    #   [:b, :d]             -> 1335
+    #   [:c, :kind, :owner]  -> 2692 - 11 - 8 - 16 = 2657
+    #   [:d, :e, :f]         -> (2692 - 33) / 3 = 886, rounded down
+    #   [:kind, :slug]       -> 2692 - 8 - 11 = 2673
+    # d is in two keys and takes the smaller bound, slug is unique on its own too and takes its
+    # key's, and title is in no index.
+    test "splits a key's index entry among its strings, the smallest bound winning" do
+      assert unique_string_max_bytes(Module53) == %{
+               a: 1335,
+               b: 1335,
+               c: 2657,
+               d: 886,
+               e: 886,
+               f: 886,
+               slug: 2673
+             }
+    end
+
+    test "sets the reference aside for a key over a to-one and a string" do
+      assert unique_string_max_bytes(Module52) == %{slug: 2665}
+    end
+
+    #   [:s1, :n1, :s2, :n2, :s3, :n3, :s4, :n4, :u] -> (2692 - 32 - 16 - 44) / 4 = 650
+    #   [:s5, :n1, :s6, :n2, :n3]                    -> (2692 - 24 - 22) / 2 = 1323
+    test "sets every other column aside for a long key" do
+      assert unique_string_max_bytes(Module54) == %{
+               s1: 650,
+               s2: 650,
+               s3: 650,
+               s4: 650,
+               s5: 1323,
+               s6: 1323
+             }
+    end
+  end
+
   describe "validate/2" do
     test "returns :ok for complete valid data" do
       assert validate(Module2, %{a: true, b: 1, c: "x"}) == :ok
@@ -502,6 +553,27 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "leaves a string that is not unique unbounded" do
       assert validate(Module2, %{a: true, c: String.duplicate("a", 5000)}) == :ok
+    end
+
+    # The strings of a key share one index entry: two strings get 1335 bytes each.
+    test "accepts a key's string holding exactly its share of the index entry" do
+      assert validate(Module53, %{a: String.duplicate("a", 1335)}) == :ok
+    end
+
+    test "reports max_bytes violations for a key's string one byte over its share" do
+      assert validate(Module53, %{a: String.duplicate("a", 1336)}) ==
+               {:error, [{:a, {:max_bytes, 1335}}]}
+    end
+
+    test "reports max_bytes violations for every string of a key that is over" do
+      data = %{e: String.duplicate("a", 887), f: String.duplicate("a", 887)}
+
+      assert validate(Module53, data) ==
+               {:error, [{:e, {:max_bytes, 886}}, {:f, {:max_bytes, 886}}]}
+    end
+
+    test "reports a type violation alone for a key's field that is not a string" do
+      assert validate(Module53, %{a: 123}) == {:error, [{:a, {:type, :string}}]}
     end
 
     test "accumulates multiple constraint violations per attribute" do
@@ -1713,6 +1785,18 @@ defmodule Hologram.Entity.ValidatorTest do
 
     test "reports unknown names" do
       assert validate_changes(Module2, %{e: 1}) == {:error, [{:e, :unknown}]}
+    end
+
+    test "reports max_bytes violations for a unique string one byte over" do
+      assert validate_changes(Module19, %{slug: String.duplicate("a", 2693)}) ==
+               {:error, [{:slug, {:max_bytes, 2692}}]}
+    end
+
+    test "reports max_bytes violations for a key's string one byte over its share" do
+      assert validate_changes(Module53, %{a: String.duplicate("a", 1335)}) == :ok
+
+      assert validate_changes(Module53, %{a: String.duplicate("a", 1336)}) ==
+               {:error, [{:a, {:max_bytes, 1335}}]}
     end
   end
 
@@ -3417,6 +3501,47 @@ defmodule Hologram.Entity.ValidatorTest do
       end
     end
 
+    test "accepts a key naming as many fields as an index holds" do
+      defmodule InlineEntityFixture197 do
+        use Hologram.Entity
+
+        @fields ~w(f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 f28 f29 f30 f31 f32)a
+
+        for name <- @fields do
+          attribute name, :integer
+        end
+
+        unique @fields
+      end
+
+      assert [fields] = InlineEntityFixture197.__uniques__()
+      assert length(fields) == 32
+    end
+
+    test "rejects a key naming more fields than an index holds" do
+      fields =
+        ~w(f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 f28 f29 f30 f31 f32 f33)a
+
+      line = __ENV__.line + 15
+
+      expected_msg =
+        "#{location(line)}invalid unique #{inspect(fields)} in Hologram.Entity.ValidatorTest.InlineEntityFixture196 - a key names at most 32 fields, the most an index holds"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture196 do
+          use Hologram.Entity
+
+          @fields ~w(f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15 f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 f28 f29 f30 f31 f32 f33)a
+
+          for name <- @fields do
+            attribute name, :integer
+          end
+
+          unique @fields
+        end
+      end
+    end
+
     test "rejects a key naming no field of the entity type" do
       line = __ENV__.line + 11
 
@@ -3545,6 +3670,37 @@ defmodule Hologram.Entity.ValidatorTest do
           unique [:slug, :workspace]
         end
       end
+    end
+
+    test "rejects a key whose string declares a default over its share of the index entry" do
+      line = __ENV__.line + 12
+
+      expected_msg =
+        "#{location(line)}invalid unique [:big, :count] in Hologram.Entity.ValidatorTest.InlineEntityFixture194 - the default value of :big holds 2674 bytes, and the key's index leaves it at most 2673"
+
+      assert_error Hologram.CompileError, expected_msg, fn ->
+        defmodule InlineEntityFixture194 do
+          use Hologram.Entity
+
+          attribute :big, :string, default: String.duplicate("a", 2674)
+          attribute :count, :integer
+
+          unique [:big, :count]
+        end
+      end
+    end
+
+    test "accepts a key whose string declares a default holding exactly its share" do
+      defmodule InlineEntityFixture195 do
+        use Hologram.Entity
+
+        attribute :big, :string, default: String.duplicate("a", 2673)
+        attribute :count, :integer
+
+        unique [:big, :count]
+      end
+
+      assert InlineEntityFixture195.__uniques__() == [[:big, :count]]
     end
   end
 

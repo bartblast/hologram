@@ -75,6 +75,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Entity.Module48, as: Entity48
   alias Hologram.Test.Fixtures.Entity.Module50, as: Entity50
   alias Hologram.Test.Fixtures.Entity.Module51, as: Entity51
+  alias Hologram.Test.Fixtures.Entity.Module52, as: Entity52
+  alias Hologram.Test.Fixtures.Entity.Module53, as: Entity53
   alias Hologram.Test.Fixtures.Job.Module1, as: JobModule1
   alias Hologram.Test.Fixtures.Page.Module10, as: PageModule10
   alias Hologram.Test.Fixtures.Page.Module11, as: PageModule11
@@ -4257,7 +4259,34 @@ defmodule Hologram.CompilerTest do
 
       assert String.contains?(
                js,
-               ~s/"constraints":{"code":{"optional":true,"unique":true},"slug":{"unique":true}}/
+               ~s/"constraints":{"code":{"max_bytes":2692,"optional":true,"unique":true},/ <>
+                 ~s/"slug":{"max_bytes":2692,"unique":true}}/
+             )
+    end
+
+    # The bound is no declaration option: the server works it out from the keys the type
+    # declares, so a key's string carries it whether or not it declares anything else.
+    test "injects the byte bound a key puts on its strings", %{
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
+    } do
+      sync_constants = %{@empty_sync_constants | entity_types: MapSet.new([Entity52])}
+
+      js =
+        build_runtime_js(
+          runtime_mfas,
+          ir_plt,
+          PLT.start(),
+          MapSet.new(),
+          [],
+          build_sync_constants_js(sync_constants),
+          js_dir: @js_dir,
+          subsystems: [:data_layer]
+        )
+
+      assert String.contains?(
+               js,
+               ~s/"constraints":{"position":{"optional":true},"slug":{"max_bytes":2665}}/
              )
     end
 
@@ -9601,6 +9630,24 @@ defmodule Hologram.CompilerTest do
                  },
                  "optional" => true
                }
+             }
+    end
+
+    # The bound a key puts on its strings is the server's to work out, so a frame carries it
+    # like the runtime script does.
+    test "carries the byte bound a key puts on its strings" do
+      entry = decoded_rules([Entity53])["Hologram.Test.Fixtures.Entity.Module53"]
+
+      assert entry["constraints"] == %{
+               "a" => %{"max_bytes" => 1335, "optional" => true},
+               "b" => %{"max_bytes" => 1335, "optional" => true},
+               "c" => %{"max_bytes" => 2657, "optional" => true},
+               "d" => %{"max_bytes" => 886, "optional" => true},
+               "e" => %{"max_bytes" => 886, "optional" => true},
+               "f" => %{"max_bytes" => 886, "optional" => true},
+               "kind" => %{"optional" => true},
+               "slug" => %{"max_bytes" => 2673, "optional" => true, "unique" => true},
+               "title" => %{"optional" => true}
              }
     end
 

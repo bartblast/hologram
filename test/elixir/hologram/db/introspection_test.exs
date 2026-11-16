@@ -75,6 +75,8 @@ defmodule Hologram.DB.IntrospectionTest do
                "test_fixtures_entity_module50",
                "test_fixtures_entity_module51",
                "test_fixtures_entity_module52",
+               "test_fixtures_entity_module53",
+               "test_fixtures_entity_module54",
                "test_fixtures_entity_module6",
                "test_fixtures_entity_module6_a_$join",
                "test_fixtures_entity_module7",
@@ -528,6 +530,8 @@ defmodule Hologram.DB.IntrospectionTest do
                  "Hologram.Test.Fixtures.Entity.Module50",
                  "Hologram.Test.Fixtures.Entity.Module51",
                  "Hologram.Test.Fixtures.Entity.Module52",
+                 "Hologram.Test.Fixtures.Entity.Module53",
+                 "Hologram.Test.Fixtures.Entity.Module54",
                  "Hologram.Test.Fixtures.Entity.Module6",
                  "Hologram.Test.Fixtures.Entity.Module7",
                  "Hologram.Test.Fixtures.Entity.Module8",
@@ -635,7 +639,8 @@ defmodule Hologram.DB.IntrospectionTest do
                  "done",
                  "failed"
                ],
-               "test_fixtures_entity_module4_c_$enum" => ["x", "y"]
+               "test_fixtures_entity_module4_c_$enum" => ["x", "y"],
+               "test_fixtures_entity_module53_kind_$enum" => ["x", "y"]
              }
     end
 
